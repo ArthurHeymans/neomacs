@@ -38,11 +38,11 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceClusterState,
-    BufferTextSourceRange, BufferTextSourceSpecialDisplay, DisplayPropertyReplacementAppendItem,
-    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
-    DisplayReplacementRowAppendContext, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
+    BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
+    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementCursorPolicy,
+    DisplayReplacementMediaAppendResolution, DisplayReplacementRowAppendContext,
+    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
+    LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4925,8 +4925,9 @@ impl LayoutEngine {
                 continue;
             }
 
-            let precluster_special_display = BufferTextSourceSpecialDisplay::for_precluster_char(
+            let buffer_source_char = BufferTextSourceChar::new(
                 ch,
+                CharPos0::new(charpos as usize),
                 params.nobreak_char_display,
             );
             let buffer_row_append_context = BufferTextRowAppendContext::new(
@@ -4937,14 +4938,11 @@ impl LayoutEngine {
                 raise_span.value_or(0.0),
                 char_h,
             );
-            let buffer_source_start = CharPos0::new(charpos as usize);
-            let buffer_source_end = CharPos0::new((charpos + 1) as usize);
-            let buffer_source_range =
-                BufferTextSourceRange::new(buffer_source_start, buffer_source_end);
+            let buffer_source_range = buffer_source_char.range();
 
             // Control characters: render as ^X notation
-            if let Some(special_display) = precluster_special_display
-                .as_ref()
+            if let Some(special_display) = buffer_source_char
+                .precluster_special_display()
                 .filter(|display| display.is_control())
             {
                 flush_run(&self.run_buf, ligatures);
@@ -5086,8 +5084,9 @@ impl LayoutEngine {
             }
 
             // Nobreak character display (U+00A0 non-breaking space, U+00AD soft hyphen)
-            if let Some(special_display) =
-                precluster_special_display.filter(|display| display.is_nobreak())
+            if let Some(special_display) = buffer_source_char
+                .precluster_special_display()
+                .filter(|display| display.is_nobreak())
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
@@ -5095,7 +5094,7 @@ impl LayoutEngine {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
                 }
-                let nobreak_item = special_display.into_append_item();
+                let nobreak_item = special_display.clone().into_append_item();
                 if let Some((_progress, position)) = buffer_row_append_context
                     .append_item_source_range_to_text_row_and_emit(
                         &row_geometry,
@@ -5127,11 +5126,10 @@ impl LayoutEngine {
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
-            let cluster_state = BufferTextSourceClusterState::for_char(ch, cluster_tail);
+            let cluster_state = buffer_source_char.cluster_state(cluster_tail);
 
             // Glyphless character detection (C1 controls, format chars, etc.)
-            if let Some(special_display) =
-                BufferTextSourceSpecialDisplay::for_cluster_state(cluster_state)
+            if let Some(special_display) = buffer_source_char.cluster_special_display(cluster_tail)
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();

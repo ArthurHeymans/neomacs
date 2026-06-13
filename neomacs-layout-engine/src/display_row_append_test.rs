@@ -2305,6 +2305,42 @@ fn buffer_text_source_special_display_names_cluster_policy() {
 }
 
 #[test]
+fn buffer_text_source_char_names_range_and_precluster_policy() {
+    let source_char = BufferTextSourceChar::new('\u{00A0}', CharPos0::new(4), 2);
+
+    assert_eq!(
+        source_char.range(),
+        BufferTextSourceRange::new(CharPos0::new(4), CharPos0::new(5))
+    );
+    assert_eq!(
+        source_char.precluster_special_display(),
+        Some(&BufferTextSourceSpecialDisplay::Nobreak(
+            BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }
+        ))
+    );
+}
+
+#[test]
+fn buffer_text_source_char_names_cluster_policy() {
+    let source_char = BufferTextSourceChar::new('\u{FE0F}', CharPos0::new(1), 2);
+    let cluster_tail = Some(('\u{2764}', false));
+
+    assert_eq!(
+        source_char.cluster_state(cluster_tail),
+        BufferTextSourceClusterState::for_char('\u{FE0F}', cluster_tail)
+    );
+    assert_eq!(source_char.cluster_special_display(cluster_tail), None);
+
+    let standalone_joiner = BufferTextSourceChar::new('\u{200D}', CharPos0::new(2), 2);
+    assert_eq!(
+        standalone_joiner.cluster_special_display(None),
+        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+            '\u{200D}', None
+        ))
+    );
+}
+
+#[test]
 fn buffer_text_source_append_item_names_fallback_width_policy() {
     assert_eq!(
         BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_policy(),
