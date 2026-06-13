@@ -16,7 +16,7 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, TextWindowBegin, WindowOutputEmitter,
-    begin_text_window_output,
+    begin_text_window_output, finish_text_window_output_rows,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -6341,15 +6341,7 @@ impl LayoutEngine {
 
         // --- GlyphMatrix builder: finalize text rows, then emit chrome rows
         // into their real glyph-matrix slots before closing the window. ---
-        for metric in output_emitter.row_metrics() {
-            self.matrix_builder.set_row_metrics(
-                metric.row,
-                metric.pixel_y,
-                metric.height,
-                metric.ascent,
-            );
-        }
-        self.matrix_builder.end_row();
+        finish_text_window_output_rows(&mut self.matrix_builder, &output_emitter);
         if reserve_right_special_col {
             let target_col = if reserve_right_border_col {
                 matrix_cols.saturating_sub(2)

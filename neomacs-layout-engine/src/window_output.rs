@@ -220,6 +220,16 @@ pub(crate) fn begin_text_window_output(
     TextMatrixRowOutput::new(builder, output_emitter, evaluator).begin(request.first_row);
 }
 
+pub(crate) fn finish_text_window_output_rows(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &WindowOutputEmitter,
+) {
+    for metric in output_emitter.row_metrics() {
+        builder.set_row_metrics(metric.row, metric.pixel_y, metric.height, metric.ascent);
+    }
+    builder.end_row();
+}
+
 pub(crate) trait DisplayProgressSink {
     #[cfg(test)]
     fn emit_text_progress(
