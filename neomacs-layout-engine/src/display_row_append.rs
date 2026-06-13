@@ -1209,26 +1209,25 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn measure_special_source_char_width_or_active_face_fallback_to_text_row(
+    pub(crate) fn measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        source_char: &BufferTextSourceChar,
         face_resolver: &FaceResolver,
-        special_display: &BufferTextSourceSpecialDisplay,
-        position: DisplayRowPosition,
+        request: BufferTextSpecialSourceCharMeasureRequest,
     ) -> f32 {
+        let parts = request.into_parts();
         self.measure_item_source_range_width_or_active_face_fallback_to_text_row(
             geometry,
             builder,
             evaluator,
             font_metrics,
-            source_char.range(),
+            parts.range,
             face_resolver,
-            special_display.clone().into_append_item(),
-            position,
+            parts.special_display.into_append_item(),
+            parts.position,
         )
     }
 
@@ -1770,6 +1769,41 @@ struct BufferTextSpecialSourceCharAppendRequestParts {
     position: DisplayRowPosition,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSpecialSourceCharMeasureRequest {
+    range: BufferTextSourceRange,
+    special_display: BufferTextSourceSpecialDisplay,
+    position: DisplayRowPosition,
+}
+
+impl BufferTextSpecialSourceCharMeasureRequest {
+    pub(crate) fn new(
+        source_char: &BufferTextSourceChar,
+        special_display: &BufferTextSourceSpecialDisplay,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            range: source_char.range(),
+            special_display: special_display.clone(),
+            position,
+        }
+    }
+
+    fn into_parts(self) -> BufferTextSpecialSourceCharMeasureRequestParts {
+        BufferTextSpecialSourceCharMeasureRequestParts {
+            range: self.range,
+            special_display: self.special_display,
+            position: self.position,
+        }
+    }
+}
+
+struct BufferTextSpecialSourceCharMeasureRequestParts {
+    range: BufferTextSourceRange,
+    special_display: BufferTextSourceSpecialDisplay,
+    position: DisplayRowPosition,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextResolvedSourceCharAppendRequest {
     range: BufferTextSourceRange,
@@ -1778,24 +1812,16 @@ pub(crate) struct BufferTextResolvedSourceCharAppendRequest {
 }
 
 impl BufferTextResolvedSourceCharAppendRequest {
-    pub(crate) fn new(
-        source_char: &BufferTextSourceChar,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
-        position: DisplayRowPosition,
-    ) -> Self {
-        Self {
-            range: source_char.range(),
-            resolved_advance,
-            position,
-        }
-    }
-
     fn into_parts(self) -> BufferTextResolvedSourceCharAppendRequestParts {
         BufferTextResolvedSourceCharAppendRequestParts {
             range: self.range,
             resolved_advance: self.resolved_advance,
             position: self.position,
         }
+    }
+
+    pub(crate) fn advance_px(self) -> f32 {
+        self.resolved_advance.advance_px()
     }
 }
 
@@ -1839,6 +1865,17 @@ impl<'text> BufferTextSourceCharAdvanceRequest<'text> {
             range: self.range,
             position: self.position,
             cluster: self.cluster,
+        }
+    }
+
+    pub(crate) fn resolved_append_request(
+        self,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+    ) -> BufferTextResolvedSourceCharAppendRequest {
+        BufferTextResolvedSourceCharAppendRequest {
+            range: self.range,
+            resolved_advance,
+            position: self.position,
         }
     }
 }

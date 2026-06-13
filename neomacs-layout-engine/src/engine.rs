@@ -38,9 +38,9 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextResolvedSourceCharAppendRequest, BufferTextRowAppendContext,
-    BufferTextSourceAdvanceResolver, BufferTextSourceChar, BufferTextSourceCharAdvanceRequest,
-    BufferTextSpecialSourceCharAppendRequest, DisplayPropertyReplacementAppendItem,
+    BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
+    BufferTextSourceCharAdvanceRequest, BufferTextSpecialSourceCharAppendRequest,
+    BufferTextSpecialSourceCharMeasureRequest, DisplayPropertyReplacementAppendItem,
     DisplayPropertyReplacementAppendRequest, DisplayPropertyReplacementAppendResolveRequest,
     DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
     DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
@@ -5052,16 +5052,19 @@ impl LayoutEngine {
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
+                let measure_request = BufferTextSpecialSourceCharMeasureRequest::new(
+                    &buffer_source_char,
+                    special_display,
+                    DisplayRowPosition { x_px: x, col },
+                );
                 let needed_width = buffer_row_append_context
-                    .measure_special_source_char_width_or_active_face_fallback_to_text_row(
+                    .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
                         &row_geometry,
                         &mut self.matrix_builder,
                         evaluator,
                         &mut self.font_metrics,
-                        &buffer_source_char,
                         face_resolver,
-                        special_display,
-                        DisplayRowPosition { x_px: x, col },
+                        measure_request,
                     );
 
                 // Check if the renderer-measured caret notation fits.
@@ -5290,7 +5293,8 @@ impl LayoutEngine {
                     face_resolver,
                     advance_request,
                 );
-            let advance = resolved_advance.advance_px();
+            let append_request = advance_request.resolved_append_request(resolved_advance);
+            let advance = append_request.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > text_append_surface.right_edge() {
                 flush_run(&self.run_buf, ligatures);
@@ -5540,11 +5544,6 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let append_request = BufferTextResolvedSourceCharAppendRequest::new(
-                &buffer_source_char,
-                resolved_advance,
-                append_position,
-            );
             let appended = buffer_row_append_context
                 .append_resolved_source_char_request_to_text_row(
                     &append_geometry,
