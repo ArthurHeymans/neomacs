@@ -16,12 +16,13 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowCursor,
-    TextWindowDecorativeCursor, TextWindowDisplayRange, TextWindowLineNumberMargin,
-    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
-    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
-    finish_text_matrix_row_output, finish_text_window_output_rows,
+    TextWindowCursorEffects, TextWindowDecorativeCursor, TextWindowDisplayRange,
+    TextWindowLineNumberMargin, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
+    finish_and_end_text_matrix_row_output, finish_text_matrix_row_output,
+    finish_text_window_output_rows, install_text_window_cursor_effects,
     install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
     publish_text_window_cursor, publish_text_window_decorative_cursor,
     record_text_window_display_range,
@@ -3474,8 +3475,13 @@ impl LayoutEngine {
 
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
         if let Some(effects) = params.cursor_effects.clone() {
-            self.matrix_builder
-                .set_window_cursor_effects(params.window_id, effects);
+            install_text_window_cursor_effects(
+                &mut self.matrix_builder,
+                TextWindowCursorEffects {
+                    window_id: params.window_id,
+                    effects,
+                },
+            );
         }
 
         let char_w = params.char_width;

@@ -7,6 +7,7 @@ use super::TextMatrixRowOutput;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
 use super::TextWindowCursor;
+use super::TextWindowCursorEffects;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
 use super::TextWindowLineNumberMargin;
@@ -20,6 +21,7 @@ use super::emit_text_matrix_row_transition_with_limit;
 use super::emit_text_window_line_number_margin;
 use super::finish_and_end_text_matrix_row_output;
 use super::finish_text_matrix_row_output;
+use super::install_text_window_cursor_effects;
 use super::install_text_window_right_edge_markers;
 use super::mark_current_text_row_truncated_left;
 use super::publish_text_window_cursor;
@@ -657,6 +659,25 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     assert_eq!(state.cursors[0].slot_id.row, 3);
     assert_eq!(state.cursors[0].slot_id.col, 5);
     assert_eq!(state.cursor_effects_by_window.get(&77), Some(&effects));
+}
+
+#[test]
+fn install_text_window_cursor_effects_records_window_effect_profile() {
+    let mut builder = GlyphMatrixBuilder::new();
+    let effects = EffectsConfig::default();
+
+    install_text_window_cursor_effects(
+        &mut builder,
+        TextWindowCursorEffects {
+            window_id: 42,
+            effects: effects.clone(),
+        },
+    );
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert_eq!(state.cursor_effects_by_window.get(&42), Some(&effects));
+    assert!(state.cursors.is_empty());
+    assert!(state.phys_cursor.is_none());
 }
 
 #[test]

@@ -201,6 +201,12 @@ pub(crate) struct TextWindowDecorativeCursor {
     pub(crate) effects: Option<EffectsConfig>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TextWindowCursorEffects {
+    pub(crate) window_id: i64,
+    pub(crate) effects: EffectsConfig,
+}
+
 impl TextWindowCursor {
     fn row(self) -> usize {
         self.slot_id.row as usize
@@ -445,7 +451,13 @@ pub(crate) fn publish_text_window_decorative_cursor(
     cursor: TextWindowDecorativeCursor,
 ) {
     if let Some(effects) = cursor.effects {
-        builder.set_window_cursor_effects(cursor.window_id, effects);
+        install_text_window_cursor_effects(
+            builder,
+            TextWindowCursorEffects {
+                window_id: cursor.window_id,
+                effects,
+            },
+        );
     }
     builder.push_cursor(
         cursor.window_id,
@@ -457,6 +469,13 @@ pub(crate) fn publish_text_window_decorative_cursor(
         cursor.style,
         cursor.color,
     );
+}
+
+pub(crate) fn install_text_window_cursor_effects(
+    builder: &mut GlyphMatrixBuilder,
+    request: TextWindowCursorEffects,
+) {
+    builder.set_window_cursor_effects(request.window_id, request.effects);
 }
 
 pub(crate) fn current_text_window_cluster_tail(
