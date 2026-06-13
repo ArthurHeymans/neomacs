@@ -91,6 +91,22 @@ pub(crate) struct InactiveMinibufferDisplayRowRequest<'face> {
     pub(crate) base_face: &'face ResolvedFace,
 }
 
+pub(crate) struct EchoMinibufferDisplayRowsRequest<'face> {
+    pub(crate) window_id: u64,
+    pub(crate) window_bounds: Rect,
+    pub(crate) text_bounds: Rect,
+    pub(crate) selected: bool,
+    pub(crate) text_width: f32,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) row_height: f32,
+    pub(crate) base_face: &'face ResolvedFace,
+    pub(crate) message: Value,
+    pub(crate) max_rows: usize,
+    pub(crate) truncate_lines: bool,
+    pub(crate) reserve_right_special_col: bool,
+}
+
 fn window_chrome_glyph_row_role(kind: WindowChromeKind) -> GlyphRowRole {
     match kind {
         WindowChromeKind::TabLine => GlyphRowRole::TabLine,
@@ -282,6 +298,46 @@ impl LayoutEngine {
             )
             .expect("empty Lisp string should render an inactive minibuffer row");
         install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
+        self.matrix_builder.end_window();
+    }
+
+    pub(crate) fn render_echo_minibuffer_window(
+        &mut self,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        face_ids: &mut FrameFaceIdAllocator,
+        request: EchoMinibufferDisplayRowsRequest<'_>,
+    ) {
+        let rows = self.render_minibuffer_echo_rows(
+            request.window_bounds.y,
+            request.text_width,
+            request.char_width,
+            request.ascent,
+            request.row_height,
+            request.base_face,
+            face_resolver,
+            display_host,
+            request.message,
+            request.max_rows,
+            request.truncate_lines,
+            request.reserve_right_special_col,
+            face_ids,
+        );
+        let max_rows = rows.len().clamp(1, request.max_rows.max(1));
+        let cols = (request.text_width / request.char_width.max(1.0))
+            .ceil()
+            .max(1.0) as usize;
+        self.matrix_builder.begin_window_with_text_bounds(
+            request.window_id,
+            max_rows,
+            cols,
+            request.window_bounds,
+            request.text_bounds,
+            request.selected,
+        );
+        for (row_index, rendered) in rows.iter().enumerate() {
+            install_rendered_display_row(&mut self.matrix_builder, rendered, row_index);
+        }
         self.matrix_builder.end_window();
     }
 

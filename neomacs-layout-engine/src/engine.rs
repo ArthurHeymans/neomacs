@@ -6,7 +6,8 @@
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number};
 use super::display_status_line::{
-    FrameTabBarDisplayRowRender, InactiveMinibufferDisplayRowRequest, WindowChromeDisplayRowRequest,
+    EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
+    InactiveMinibufferDisplayRowRequest, WindowChromeDisplayRowRequest,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -25,7 +26,7 @@ use crate::display_property::{DisplayReplacementProperty, classify_display_prope
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowMeasurementPolicy, DisplayRowRenderStop, DisplayRowSourceState, WindowChromeKind,
-    insert_resolved_display_row_face, install_rendered_display_row,
+    insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
     BufferTextFragmentAppendMeasurement, DisplayRowAppendArea, DisplayRowAppendFrame,
@@ -3849,35 +3850,26 @@ impl LayoutEngine {
             let truncate_echo_lines = message_truncate_lines(evaluator);
             let frame_rows = frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
-            let rows = self.render_minibuffer_echo_rows(
-                params.bounds.y,
-                text_width,
-                char_w,
-                default_face_ascent,
-                char_h,
-                default_resolved,
+            self.render_echo_minibuffer_window(
                 face_resolver,
                 evaluator.display_host.as_deref(),
-                echo_message,
-                max_mini,
-                truncate_echo_lines,
-                reserve_right_special_col,
                 &mut face_ids,
+                EchoMinibufferDisplayRowsRequest {
+                    window_id: params.window_id as u64,
+                    window_bounds: params.bounds,
+                    text_bounds: params.text_bounds,
+                    selected: params.selected,
+                    text_width,
+                    char_width: char_w,
+                    ascent: default_face_ascent,
+                    row_height: char_h,
+                    base_face: default_resolved,
+                    message: echo_message,
+                    max_rows: max_mini,
+                    truncate_lines: truncate_echo_lines,
+                    reserve_right_special_col,
+                },
             );
-            let max_rows_echo = rows.len().clamp(1, max_mini);
-            let cols_echo = (text_width / char_w).ceil().max(1.0) as usize;
-            self.matrix_builder.begin_window_with_text_bounds(
-                params.window_id as u64,
-                max_rows_echo,
-                cols_echo,
-                params.bounds,
-                params.text_bounds,
-                params.selected,
-            );
-            for (row_index, rendered) in rows.iter().enumerate() {
-                install_rendered_display_row(&mut self.matrix_builder, rendered, row_index);
-            }
-            self.matrix_builder.end_window();
             return;
         }
 
