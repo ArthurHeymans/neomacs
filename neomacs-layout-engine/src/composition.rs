@@ -13,6 +13,7 @@
 //! glyph-id gstring arrive in a later phase.
 
 use crate::unicode::{is_cluster_extender, is_regional_indicator, is_wide_char};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
 
 /// Display columns occupied by a base character before clustering.
 ///
@@ -30,8 +31,8 @@ pub(crate) fn base_width_cols(ch: char) -> u8 {
 
 /// Whether `ch` continues the grapheme cluster of the previously emitted
 /// text glyph, given that glyph's `tail` — `(last_char,
-/// is_lone_regional_indicator)` from
-/// `GlyphMatrixBuilder::last_text_cluster_tail`, or `None` at a row start.
+/// is_lone_regional_indicator)` from the current display row, or `None`
+/// at a row start.
 ///
 /// A character continues the cluster when it is a cluster extender
 /// (combining mark, variation selector, ZWJ, skin-tone modifier), when it
@@ -44,6 +45,20 @@ pub(crate) fn continues_cluster(ch: char, tail: Option<(char, bool)>) -> bool {
     is_cluster_extender(ch)
         || matches!(tail, Some((prev, _)) if prev == '\u{200D}')
         || (is_regional_indicator(ch as u32) && matches!(tail, Some((_, true))))
+}
+
+/// Return `(last_char, is_lone_regional_indicator)` for the last
+/// non-padding text glyph in `row`. This is the shared display-row view
+/// used by row builders and live text-window output to decide whether the
+/// next source character continues a grapheme cluster or contextual run.
+pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {
+    let area = &row.glyphs[GlyphArea::Text.index()];
+    let glyph = area.iter().rev().find(|g| !g.padding)?;
+    match &glyph.glyph_type {
+        GlyphType::Char { ch } => Some((*ch, is_regional_indicator(*ch as u32))),
+        GlyphType::Composite { text } => text.chars().last().map(|ch| (ch, false)),
+        _ => None,
+    }
 }
 
 /// A zero-width *composition joiner / selector*: a format character that the
@@ -126,7 +141,7 @@ pub(crate) fn complex_script(ch: char) -> Option<ComplexScript> {
 ///
 /// Unlike [`continues_cluster`], a run member is NOT zero-width — it occupies
 /// its own column. `tail` is the previously emitted glyph's
-/// `(last_char, _)` from `GlyphMatrixBuilder::last_text_cluster_tail`.
+/// `(last_char, _)` from the current display row.
 pub(crate) fn continues_complex_run(ch: char, tail: Option<(char, bool)>) -> bool {
     match (complex_script(ch), tail) {
         (Some(script), Some((prev, _))) => complex_script(prev) == Some(script),

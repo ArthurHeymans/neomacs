@@ -663,23 +663,8 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    /// Return `(last_char, is_lone_regional_indicator)` for the last
-    /// non-padding text glyph in the current row. Used to decide whether
-    /// the next character continues its grapheme cluster for the cases
-    /// whose members are not themselves `is_cluster_extender` characters:
-    /// ZWJ emoji sequences (the char after a `U+200D`) and flag pairs
-    /// (a second regional indicator following a lone one). Returns `None`
-    /// at a row start or when the last glyph cannot host a cluster.
     pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {
-        let area = &row.glyphs[GlyphArea::Text.index()];
-        let glyph = area.iter().rev().find(|g| !g.padding)?;
-        match &glyph.glyph_type {
-            GlyphType::Char { ch } => {
-                Some((*ch, crate::unicode::is_regional_indicator(*ch as u32)))
-            }
-            GlyphType::Composite { text } => text.chars().last().map(|c| (c, false)),
-            _ => None,
-        }
+        crate::composition::last_text_cluster_tail_in_row(row)
     }
 
     pub fn last_text_cluster_tail(&self) -> Option<(char, bool)> {

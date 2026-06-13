@@ -14,6 +14,7 @@ use super::TextWindowRightEdgeMarkerColumn;
 use super::TextWindowRightEdgeMarkers;
 use super::WindowOutputEmitter;
 use super::close_text_window_output;
+use super::current_text_window_cluster_tail;
 use super::emit_text_matrix_row_transition;
 use super::emit_text_matrix_row_transition_with_limit;
 use super::emit_text_window_line_number_margin;
@@ -656,6 +657,27 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     assert_eq!(state.cursors[0].slot_id.row, 3);
     assert_eq!(state.cursors[0].slot_id.col, 5);
     assert_eq!(state.cursor_effects_by_window.get(&77), Some(&effects));
+}
+
+#[test]
+fn current_text_window_cluster_tail_reports_live_text_row_tail() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+
+    assert_eq!(current_text_window_cluster_tail(&builder), None);
+
+    builder.push_wide_char('\u{1F1EF}', 3, 100);
+    assert_eq!(
+        current_text_window_cluster_tail(&builder),
+        Some(('\u{1F1EF}', true))
+    );
+
+    builder.push_cluster_continuation('\u{1F1F5}', 3, 101);
+    assert_eq!(
+        current_text_window_cluster_tail(&builder),
+        Some(('\u{1F1F5}', false))
+    );
 }
 
 #[test]

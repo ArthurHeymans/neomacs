@@ -1,4 +1,6 @@
-use crate::composition::{base_width_cols, continues_cluster, continues_complex_run};
+use crate::composition::{
+    base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_row,
+};
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
     DisplayLengthExpr, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
@@ -872,7 +874,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             return;
         }
 
-        let tail = GlyphMatrixBuilder::last_text_cluster_tail_in_row(&self.row);
+        let tail = last_text_cluster_tail_in_row(&self.row);
         if continues_cluster(ch, tail) {
             GlyphMatrixBuilder::push_cluster_continuation_to_row(
                 &mut self.row,
@@ -944,7 +946,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 .pixel_width;
         }
 
-        let tail = GlyphMatrixBuilder::last_text_cluster_tail_in_row(&self.row);
+        let tail = last_text_cluster_tail_in_row(&self.row);
         if continues_cluster(ch, tail) {
             return 0.0;
         }

@@ -459,6 +459,12 @@ pub(crate) fn publish_text_window_decorative_cursor(
     );
 }
 
+pub(crate) fn current_text_window_cluster_tail(
+    builder: &GlyphMatrixBuilder,
+) -> Option<(char, bool)> {
+    builder.last_text_cluster_tail()
+}
+
 pub(crate) fn finish_text_window_output_rows(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,

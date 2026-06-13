@@ -18,12 +18,13 @@ use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowCursor,
     TextWindowDecorativeCursor, TextWindowDisplayRange, TextWindowLineNumberMargin,
     TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
-    finish_and_end_text_matrix_row_output, finish_text_matrix_row_output,
-    finish_text_window_output_rows, install_text_window_right_edge_markers,
-    mark_current_text_row_truncated_left, publish_text_window_cursor,
-    publish_text_window_decorative_cursor, record_text_window_display_range,
+    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
+    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
+    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
+    finish_text_matrix_row_output, finish_text_window_output_rows,
+    install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
+    publish_text_window_cursor, publish_text_window_decorative_cursor,
+    record_text_window_display_range,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -5318,7 +5319,7 @@ impl LayoutEngine {
             // glyphless. Only suppress glyphless handling when there is a
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
-            let cluster_tail = self.matrix_builder.last_text_cluster_tail();
+            let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
             let is_cluster_continuation = crate::composition::continues_cluster(ch, cluster_tail);
             // Only emoji/text composition joiners (ZWJ, variation selectors,
             // tag chars) are absorbed — not C1 controls, bidi marks, or
