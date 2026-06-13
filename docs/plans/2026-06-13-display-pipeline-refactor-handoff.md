@@ -36,6 +36,24 @@ cargo check -p neomacs-layout-engine
 
 `cargo nextest run -p neomacs-layout-engine` passed with 1053 tests. Do not use `cargo test`; the project owner explicitly requested `cargo nextest`.
 
+Uncommitted continuation work after this handoff:
+
+- `DisplayRowSpec` has been contained to `display_row.rs`; external tests/callers now use `DisplayRowSourceRenderRequest` or request-native helpers.
+- Main buffer ordinary text and several special buffer item paths now append through shared source append requests; complex shaping keeps a premeasured policy only where the buffer walker still needs it for wrap/cursor decisions.
+- Replacement-string display sources now use the renderer-owned font metrics slot through render policy measurement callbacks.
+- The dormant `neomacs-layout-engine::display_backend` / `display_row_sink` scaffolding has been deleted. It represented an older backend-oriented width path and was no longer wired into production layout.
+- Latest local verification:
+
+  ```bash
+  cargo fmt --check
+  git diff --check
+  cargo check -p neomacs-layout-engine
+  cargo nextest run -p neomacs-layout-engine display_row display_row_append
+  cargo nextest run -p neomacs-layout-engine
+  ```
+
+  Full layout-engine nextest passed with 1030 tests after deleting the dormant backend tests.
+
 ## Why This Refactor Exists
 
 The bugs that triggered this work were not isolated rendering accidents. They all came from the same architectural split:
@@ -201,10 +219,10 @@ Goal: make all row text use one measurement/advance path.
 Look for:
 
 ```bash
-rg -n "char_advance|font_char_width|pixel_width|produce_glyph_with_pixel_width" neomacs-layout-engine/src
+rg -n "font_char_width|pixel_width|from_char_advances|text_char_advance_px_at_position_with_measurement" neomacs-layout-engine/src
 ```
 
-Current issue: some paths still derive placement from older `char_advance` or face-width assumptions before row rendering. The row renderer should own measured text advance for all row kinds.
+Current issue: some paths still derive placement from face-width assumptions or precomputed per-character advances before row rendering. The row renderer should own measured text advance for all row kinds.
 
 Do not remove a path until tests cover:
 
