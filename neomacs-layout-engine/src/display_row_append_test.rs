@@ -1843,7 +1843,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
 }
 
 #[test]
-fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_buffer_source_item() {
+fn append_buffer_control_char_fragment_to_text_row_and_emit_builds_buffer_source_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()

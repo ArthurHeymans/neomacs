@@ -913,9 +913,7 @@ impl BufferTextFragmentAdvanceResolver {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
-    B: LayoutBufferView + ?Sized,
->(
+fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -926,6 +924,7 @@ pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     face_id: u32,
+    append_kind: DisplayRowAppendKind,
     kind: DisplayItemKind,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
@@ -948,7 +947,6 @@ pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
         buffer.layout_char_pos_to_emacs_byte_pos(end),
     );
 
-    let append_kind = DisplayRowAppendKind::from_display_item_kind(&kind)?;
     let append_spec = frame.append_spec(position, face_id, append_kind);
     let item = source.item(RenderFaceRef::FaceId(face_id), kind);
     let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
@@ -993,7 +991,7 @@ pub(crate) fn append_buffer_control_char_fragment_to_text_row_and_emit<
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_buffer_text_item_fragment_to_text_row_and_emit(
+    append_buffer_display_item_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1004,6 +1002,7 @@ pub(crate) fn append_buffer_control_char_fragment_to_text_row_and_emit<
         face_resolver,
         base_face,
         face_id,
+        DisplayRowAppendKind::ControlChar,
         DisplayItemKind::ControlChar { ch },
         frame,
         position,
@@ -1028,7 +1027,7 @@ pub(crate) fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit<
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_buffer_text_item_fragment_to_text_row_and_emit(
+    append_buffer_display_item_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1039,6 +1038,7 @@ pub(crate) fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit<
         face_resolver,
         base_face,
         face_id,
+        DisplayRowAppendKind::SourceMappedText,
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(mapped_text)),
         frame,
         position,
@@ -1064,7 +1064,7 @@ pub(crate) fn append_buffer_glyphless_fragment_to_text_row_and_emit<
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_buffer_text_item_fragment_to_text_row_and_emit(
+    append_buffer_display_item_fragment_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1075,6 +1075,7 @@ pub(crate) fn append_buffer_glyphless_fragment_to_text_row_and_emit<
         face_resolver,
         base_face,
         face_id,
+        DisplayRowAppendKind::Glyphless,
         DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }),
         frame,
         position,
@@ -1153,7 +1154,9 @@ pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let face_id = render_face_ref_id(item.face, fallback_face_id);
-    let request = DisplayRowSourceAppendRequest::for_frame(frame, position, face_id, base_face);
+    let append_spec =
+        frame.append_spec(position, face_id, DisplayRowAppendKind::DisplayReplacement);
+    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,
@@ -1539,23 +1542,6 @@ pub(crate) enum DisplayRowAppendKind {
     Glyphless,
     DisplayReplacement,
     DisplayReplacementString,
-}
-
-impl DisplayRowAppendKind {
-    pub(crate) fn from_display_item_kind(kind: &DisplayItemKind) -> Option<Self> {
-        match kind {
-            DisplayItemKind::TextRun(_) => Some(Self::SourceText),
-            DisplayItemKind::SourceMappedText(_) => Some(Self::SourceMappedText),
-            DisplayItemKind::ControlChar { .. } => Some(Self::ControlChar),
-            DisplayItemKind::Glyphless(_) => Some(Self::Glyphless),
-            DisplayItemKind::Stretch(_) | DisplayItemKind::MediaReplacement(_) => {
-                Some(Self::DisplayReplacement)
-            }
-            DisplayItemKind::RowBreak(_)
-            | DisplayItemKind::CursorAnchor(_)
-            | DisplayItemKind::HitTestAnchor(_) => None,
-        }
-    }
 }
 
 pub(crate) struct DisplayRowAppendSpec {
