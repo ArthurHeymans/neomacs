@@ -2389,7 +2389,7 @@ impl SourceMappedTextWidthByFace {
     }
 }
 
-impl DisplayReplacementStringItemMeasurementPolicy for SourceMappedTextWidthByFace {
+impl DisplayRowRenderPolicy for SourceMappedTextWidthByFace {
     fn measurement_for(
         &mut self,
         item: &crate::display_item::DisplayItem,

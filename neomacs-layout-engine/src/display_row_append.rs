@@ -1080,15 +1080,6 @@ pub(crate) fn append_buffer_glyphless_fragment_to_text_row_and_emit<
     )
 }
 
-pub(crate) trait DisplayReplacementStringItemMeasurementPolicy {
-    fn measurement_for(
-        &mut self,
-        item: &DisplayItem,
-        face_id: u32,
-        font_metrics: &mut Option<FontMetricsService>,
-    ) -> DisplayRowItemMeasurement;
-}
-
 pub(crate) struct DisplayReplacementStringItemMeasurer {
     active_face_state: DisplayRowActiveFaceState,
 }
@@ -1101,7 +1092,7 @@ impl DisplayReplacementStringItemMeasurer {
     }
 }
 
-impl DisplayReplacementStringItemMeasurementPolicy for DisplayReplacementStringItemMeasurer {
+impl DisplayRowRenderPolicy for DisplayReplacementStringItemMeasurer {
     fn measurement_for(
         &mut self,
         item: &DisplayItem,
@@ -1119,10 +1110,10 @@ impl DisplayReplacementStringItemMeasurementPolicy for DisplayReplacementStringI
 }
 
 struct DisplayReplacementStringRenderPolicy<'a, M> {
-    item_measurer: &'a mut M,
+    item_policy: &'a mut M,
 }
 
-impl<M: DisplayReplacementStringItemMeasurementPolicy> DisplayRowRenderPolicy
+impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
     for DisplayReplacementStringRenderPolicy<'_, M>
 {
     fn stop_before_item(&mut self, item: &DisplayItem) -> bool {
@@ -1135,7 +1126,7 @@ impl<M: DisplayReplacementStringItemMeasurementPolicy> DisplayRowRenderPolicy
         face_id: u32,
         font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
-        self.item_measurer
+        self.item_policy
             .measurement_for(item, face_id, font_metrics)
     }
 
@@ -1272,7 +1263,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
-    item_measurer: &mut impl DisplayReplacementStringItemMeasurementPolicy,
+    item_policy: &mut impl DisplayRowRenderPolicy,
 ) -> DisplayRowPosition {
     let append_spec = frame.append_spec(
         position,
@@ -1282,7 +1273,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     let request =
         DisplayRowSourceAppendRequest::from_append_spec(append_spec, fallback_face_id, base_face);
     let mut source_state = DisplayRowSourceState::default();
-    let mut render_policy = DisplayReplacementStringRenderPolicy { item_measurer };
+    let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
     let Some(outcome) = render_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -1315,7 +1306,7 @@ pub(crate) fn append_display_replacement_string_fragment_to_text_row(
     face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
-    item_measurer: &mut impl DisplayReplacementStringItemMeasurementPolicy,
+    item_policy: &mut impl DisplayRowRenderPolicy,
 ) -> DisplayRowPosition {
     let DisplayTextStorage::LispString(text_value) = fragment.storage else {
         return position;
@@ -1340,7 +1331,7 @@ pub(crate) fn append_display_replacement_string_fragment_to_text_row(
         face_ids,
         frame,
         position,
-        item_measurer,
+        item_policy,
     )
 }
 

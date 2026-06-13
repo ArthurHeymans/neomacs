@@ -4543,7 +4543,7 @@ impl LayoutEngine {
                                 &active_face_state,
                                 char_h,
                             );
-                            let mut item_measurer =
+                            let mut item_policy =
                                 DisplayReplacementStringItemMeasurer::from_active_face_state(
                                     &active_face_state,
                                 );
@@ -4561,7 +4561,7 @@ impl LayoutEngine {
                                 &mut face_ids,
                                 append_frame,
                                 DisplayRowPosition { x_px: x, col },
-                                &mut item_measurer,
+                                &mut item_policy,
                             );
                             x = position.x_px;
                             col = position.col;

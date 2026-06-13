@@ -2228,13 +2228,12 @@ fn replacement_string_item_measurer_returns_direct_text_run_plan() {
         ),
     );
 
-    let measurement =
-        crate::display_row_append::DisplayReplacementStringItemMeasurementPolicy::measurement_for(
-            &mut measurer,
-            &item,
-            7,
-            &mut font_metrics,
-        );
+    let measurement = crate::display_row::DisplayRowRenderPolicy::measurement_for(
+        &mut measurer,
+        &item,
+        7,
+        &mut font_metrics,
+    );
 
     let crate::display_row_builder::DisplayRowItemMeasurement::TextRun(measurement) = measurement
     else {
