@@ -1316,7 +1316,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_source_char_advance_request_to_text_row(
+    fn resolve_source_char_advance_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         resolver: &mut BufferTextSourceAdvanceResolver,
@@ -1340,6 +1340,29 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             parts.position,
             parts.cluster,
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_source_char_advance_request_to_append_request(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        resolver: &mut BufferTextSourceAdvanceResolver,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        request: BufferTextSourceCharAdvanceRequest<'_>,
+    ) -> BufferTextResolvedSourceCharAppendRequest {
+        let resolved_advance = self.resolve_source_char_advance_request_to_text_row(
+            geometry,
+            resolver,
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            request,
+        );
+        request.resolved_append_request(resolved_advance)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1913,7 +1936,7 @@ impl<'text> BufferTextSourceCharAdvanceRequest<'text> {
         }
     }
 
-    pub(crate) fn resolved_append_request(
+    fn resolved_append_request(
         self,
         resolved_advance: ResolvedBufferTextSourceAdvance,
     ) -> BufferTextResolvedSourceCharAppendRequest {

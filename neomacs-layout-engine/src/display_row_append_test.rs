@@ -1866,7 +1866,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     let mut advance_resolver = BufferTextSourceAdvanceResolver::default();
     let advance_request =
         source_char.advance_request_at(b"a", 0, DisplayRowPosition { x_px: 0.0, col: 0 }, None);
-    let resolved_advance = append_context.resolve_source_char_advance_request_to_text_row(
+    let request = append_context.resolve_source_char_advance_request_to_append_request(
         &geometry,
         &mut advance_resolver,
         &mut builder,
@@ -1875,7 +1875,6 @@ fn buffer_text_source_append_context_appends_source_char() {
         &face_resolver,
         advance_request,
     );
-    let request = advance_request.resolved_append_request(resolved_advance);
     assert_eq!(request.advance_px(), 8.0);
     let (_progress, end) = append_context
         .append_resolved_source_char_request_to_text_row(

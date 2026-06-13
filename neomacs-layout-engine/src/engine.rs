@@ -5262,8 +5262,8 @@ impl LayoutEngine {
                 append_position,
                 cluster_tail,
             );
-            let resolved_advance = buffer_row_append_context
-                .resolve_source_char_advance_request_to_text_row(
+            let append_request = buffer_row_append_context
+                .resolve_source_char_advance_request_to_append_request(
                     &append_geometry,
                     &mut buffer_text_advance,
                     &mut self.matrix_builder,
@@ -5272,7 +5272,6 @@ impl LayoutEngine {
                     face_resolver,
                     advance_request,
                 );
-            let append_request = advance_request.resolved_append_request(resolved_advance);
             let advance = append_request.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > text_append_surface.right_edge() {
