@@ -54,6 +54,7 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
 use smallvec::SmallVec;
 use std::collections::{BTreeSet, HashMap};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::backend::BackendError;
 use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
@@ -66,6 +67,7 @@ use crate::emacs_core::eval::{
     restore_scratch_gc_roots, save_scratch_gc_roots,
 };
 use crate::emacs_core::intern::{SymId, intern};
+use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{Value, ValueKind};
 use crate::tagged::header::ConsCell;
 use crate::tagged::value::{
@@ -124,6 +126,11 @@ pub const STATUS_DEOPT: i64 = 0;
 /// Native return code: a runtime call raised a non-local `Flow`; take it with
 /// [`take_pending_flow`] and propagate.
 pub const STATUS_SIGNAL: i64 = 2;
+
+/// Debug-build counter of speculated direct-call shim entries (test evidence
+/// that `find_spec_sites` + the spec lowering actually engage).
+#[cfg(debug_assertions)]
+pub(crate) static SPEC_CALL_COUNT: AtomicU64 = AtomicU64::new(0);
 
 /// Take the `Flow` stashed by a shim that returned [`STATUS_SIGNAL`].
 pub fn take_pending_flow() -> Option<Flow> {
@@ -705,6 +712,86 @@ extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut
     status
 }
 
+/// Speculated direct call (`Op::Call` whose callee slot provably holds a
+/// constant symbol that was fbound to a bytecode object at compile time).
+/// Quit poll FIRST (the interpreter's Op::Call order — quit processing can run
+/// lisp, including fset), then the validity check: if `ctx.obarray`'s
+/// function_epoch still equals this site's armed epoch, NO function binding
+/// anywhere has changed since the binding was observed equal to `expected`,
+/// so the callee object is still reachable through the obarray and calling it
+/// directly is exactly equivalent to resolving the symbol — minus the
+/// resolution. On an epoch move, re-validate THIS binding: unchanged -> re-arm
+/// the slot and proceed direct; changed -> strict symbol call (fset/advice
+/// take effect immediately, GNU default-settings parity).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`]; `slot` points into the
+/// owning CompiledLeaf's spec_slots (alive whenever its code runs).
+extern "C" fn neovm_jit_call_spec(
+    ctx: *mut u8,
+    sym: i64,
+    expected: i64,
+    slot: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    // Debug-build evidence that speculation actually engages (tests assert on
+    // it; release builds carry no counter).
+    #[cfg(debug_assertions)]
+    SPEC_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    let mut args = LispArgVec::new();
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` argument words at
+        // `args_ptr` (its call-args stack slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match ctx.maybe_quit() {
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+        Ok(()) => {
+            // SAFETY: slot points into the executing leaf's spec_slots.
+            let slot = unsafe { &*(slot as *const AtomicU64) };
+            let epoch = ctx.obarray.function_epoch();
+            let armed = slot.load(Ordering::Relaxed) == epoch || {
+                let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
+                if cur.is_some_and(|v| v.bits() as i64 == expected) {
+                    slot.store(epoch, Ordering::Relaxed);
+                    true
+                } else {
+                    false
+                }
+            };
+            let target = if armed {
+                Value::from_bits(expected as usize)
+            } else {
+                Value::from_sym_id(SymId(sym as u32))
+            };
+            push_scratch_gc_root(target);
+            let mut vm = Vm::from_context(ctx);
+            match vm.call_for_jit(target, args) {
+                Ok(value) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = value.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            }
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
 /// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
 /// Compiled bodies have no local handlers (handler opcodes bail), so a throw
 /// always propagates out — exactly the interpreter's `resume_nonlocal` once no
@@ -1155,6 +1242,11 @@ pub struct CompiledLeaf {
     /// the `cleanup_bytecode_frame` parity unwind — and requires a non-null
     /// vmctx.
     has_binds: bool,
+    /// Armed-epoch slots for direct-call speculation sites: slot k holds the
+    /// obarray function_epoch at which site k's callee binding was last
+    /// validated. Generated code holds raw pointers into this Box (stable:
+    /// boxed slice, owned here, code only runs under a live Rc of this leaf).
+    spec_slots: Box<[AtomicU64]>,
     /// Whether the body registers handler frames (`condition-case`/`catch`).
     /// When set, [`call`](Self::call) truncates `ctx.condition_stack` back to
     /// the entry depth on every exit (before the specpdl unwind, exactly like
@@ -1366,6 +1458,15 @@ fn params_on_stack(f: &ByteCodeFunction) -> bool {
 /// Dynamic-binding bytecode (params bound via `varbind`, not on the stack)
 /// still bails.
 pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, CompileError> {
+    compile_bytecode_function_with(f, None)
+}
+
+/// [`compile_bytecode_function`] with the compiling thread's obarray for
+/// direct-call speculation.
+pub fn compile_bytecode_function_with(
+    f: &ByteCodeFunction,
+    obarray: Option<&Obarray>,
+) -> Result<CompiledLeaf, CompileError> {
     let required = f.params.required.len();
     let nonrest = required + f.params.optional.len();
     let has_rest = f.params.rest.is_some();
@@ -1375,11 +1476,12 @@ pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, C
         // find them.
         return Err(CompileError::TakesArguments);
     }
-    let mut leaf = lower_leaf_with_map(
+    let mut leaf = lower_leaf_full(
         &f.ops,
         &f.constants,
         native_arity,
         f.gnu_byte_offset_map.as_deref(),
+        obarray,
     )?;
     leaf.required = required;
     leaf.has_rest = has_rest;
@@ -1740,6 +1842,7 @@ struct RtRefs {
     builtin_slice: FuncRef,
     named_builtin: FuncRef,
     save_window_excursion: FuncRef,
+    call_spec: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1902,6 +2005,17 @@ fn declare_rt_refs(
     let named_id = declare(module, "neovm_jit_named_builtin", &sig_named)?;
     // (vmctx, body, out_ptr) -> status.
     let swe_id = declare(module, "neovm_jit_save_window_excursion", &sig_varref)?;
+    // (vmctx, sym, expected, slot_ptr, args_ptr, nargs, out_ptr) -> status.
+    let mut sig_spec = Signature::new(call_conv);
+    sig_spec.params.push(AbiParam::new(ptr_ty));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(ptr_ty));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(ptr_ty));
+    sig_spec.returns.push(AbiParam::new(i64t));
+    let call_spec_id = declare(module, "neovm_jit_call_spec", &sig_spec)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1938,6 +2052,7 @@ fn declare_rt_refs(
         builtin_slice: module.declare_func_in_func(slice_id, func),
         named_builtin: module.declare_func_in_func(named_id, func),
         save_window_excursion: module.declare_func_in_func(swe_id, func),
+        call_spec: module.declare_func_in_func(call_spec_id, func),
     })
 }
 
@@ -2060,6 +2175,7 @@ fn lower_simple_op(
     rt: Option<&RtCtx>,
     handlers: &[HandlerStatic],
     pending: &mut Vec<PendingDispatch>,
+    spec: Option<(u32, u64, i64)>,
     op: &Op,
 ) -> Result<(), CompileError> {
     match op {
@@ -2397,9 +2513,22 @@ fn lower_simple_op(
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
             let n_val = fb.ins().iconst(types::I64, n as i64);
-            let call = fb
-                .ins()
-                .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
+            // Speculated direct call: the callee slot holds a constant symbol
+            // whose compile-time binding was a bytecode object — call through
+            // the epoch-validated spec shim instead (Apply never speculates).
+            let spec = spec.filter(|_| matches!(op, Op::Call(_)));
+            let call = if let Some((sym, expected, slot_ptr)) = spec {
+                let sym_v = fb.ins().iconst(types::I64, sym as i64);
+                let exp_v = fb.ins().iconst(types::I64, expected as i64);
+                let slot_v = fb.ins().iconst(types::I64, slot_ptr);
+                fb.ins().call(
+                    rt.refs.call_spec,
+                    &[vmctx, sym_v, exp_v, slot_v, args_addr, n_val, out_addr],
+                )
+            } else {
+                fb.ins()
+                    .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr])
+            };
             let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
                 fb.ins().call(rt.refs.gc_restore, &[s]);
@@ -2769,6 +2898,78 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
 /// stack depth at the push)`. The list at any program point is the stack of
 /// `PushConditionCase`/`PushCatch` frames not yet popped, outermost first.
 type HandlerStatic = (usize, usize);
+
+/// A speculated direct-call site: an `Op::Call` whose callee slot provably
+/// holds the constant symbol `sym`, fbound at compile time to the bytecode
+/// object `expected_bits`. `slot` indexes the leaf's armed-epoch slots.
+struct SpecSite {
+    sym: u32,
+    expected_bits: u64,
+    slot: usize,
+}
+
+/// Find direct-call speculation sites: the byte-compiler's standard call
+/// shape `Constant(f) arg-push* Call(n)` where every op between the callee
+/// push and its call only PUSHES new slots (Constant/Nil/True/Dup/StackRef —
+/// the callee slot can't be rewritten), no jump target lands inside the
+/// window, and `f` is currently fbound to a BYTECODE object.
+///
+/// Bytecode callees only, deliberately: a subr's behavior can be rewritten in
+/// place via `register_global_subr_entry` WITHOUT a function_epoch bump, so
+/// epoch-validated speculation on subr bindings would be unsound until that
+/// hole is closed. An epoch-equal check on a bytecode binding, by contrast,
+/// proves the binding still names the same immutable bytecode object.
+fn find_spec_sites(
+    ops: &[Op],
+    constants: &[Value],
+    leaders: &[usize],
+    obarray: &Obarray,
+) -> HashMap<usize, SpecSite> {
+    let mut sites = HashMap::new();
+    let mut next_slot = 0usize;
+    'outer: for i in 0..ops.len() {
+        let Op::Constant(cidx) = &ops[i] else {
+            continue;
+        };
+        let Some(sym_val) = constants.get(*cidx as usize) else {
+            continue;
+        };
+        let Some(sym_id) = sym_val.as_symbol_id() else {
+            continue;
+        };
+        let mut pushes = 0usize;
+        let mut j = i + 1;
+        let call_idx = loop {
+            if j >= ops.len() || leaders.binary_search(&j).is_ok() {
+                continue 'outer;
+            }
+            match ops[j] {
+                Op::Constant(_) | Op::Nil | Op::True | Op::Dup | Op::StackRef(_) => {
+                    pushes += 1;
+                    j += 1;
+                }
+                Op::Call(n) if n as usize == pushes => break j,
+                _ => continue 'outer,
+            }
+        };
+        let Some(binding) = obarray.symbol_function_id(sym_id) else {
+            continue;
+        };
+        if binding.get_bytecode_data().is_none() {
+            continue;
+        }
+        sites.insert(
+            call_idx,
+            SpecSite {
+                sym: sym_id.0,
+                expected_bits: binding.bits() as u64,
+                slot: next_slot,
+            },
+        );
+        next_slot += 1;
+    }
+    sites
+}
 
 /// Resolve the static target set of the `Op::Switch` at `i`: the byte
 /// compiler always pushes the jump table as a constant immediately before the
@@ -3384,8 +3585,38 @@ pub fn lower_leaf_with_map(
     arity: usize,
     offset_map: Option<&[GnuByteOffsetMapEntry]>,
 ) -> Result<CompiledLeaf, CompileError> {
+    lower_leaf_full(ops, constants, arity, offset_map, None)
+}
+
+/// [`lower_leaf_with_map`] plus the compiling thread's obarray, enabling
+/// direct-call speculation (constant-symbol callees bound to bytecode get
+/// epoch-validated direct calls; see [`find_spec_sites`]).
+pub fn lower_leaf_full(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    offset_map: Option<&[GnuByteOffsetMapEntry]>,
+    obarray: Option<&Obarray>,
+) -> Result<CompiledLeaf, CompileError> {
     let cfg = analyze_cfg(ops, constants, offset_map, arity)?;
     let n = ops.len();
+    // Direct-call speculation sites + their armed-epoch slots. The Box's heap
+    // storage is address-stable: slot pointers are baked into the generated
+    // code as immediates and the Box moves into the CompiledLeaf at the end.
+    let (spec_sites, spec_slots): (HashMap<usize, SpecSite>, Box<[AtomicU64]>) = match obarray {
+        Some(ob) => {
+            let sites = find_spec_sites(ops, constants, &cfg.leaders, ob);
+            let slots: Box<[AtomicU64]> = (0..sites.len()).map(|_| AtomicU64::new(0)).collect();
+            // Arm every slot with the epoch the bindings were observed at; any
+            // bump before first execution self-heals via shim re-validation.
+            let epoch = ob.function_epoch();
+            for site in sites.values() {
+                slots[site.slot].store(epoch, Ordering::Relaxed);
+            }
+            (sites, slots)
+        }
+        None => (HashMap::new(), Box::from([])),
+    };
 
     let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
@@ -3459,6 +3690,7 @@ pub fn lower_leaf_with_map(
         "neovm_jit_save_window_excursion",
         neovm_jit_save_window_excursion as *const u8,
     );
+    builder.symbol("neovm_jit_call_spec", neovm_jit_call_spec as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -3907,17 +4139,27 @@ pub fn lower_leaf_with_map(
                             .pop()
                             .ok_or(CompileError::UnsupportedOp("unbalanced-pophandler"))?;
                     }
-                    other => lower_simple_op(
-                        &mut fb,
-                        &mut deopt,
-                        &mut signal_exit,
-                        constants,
-                        &mut stack,
-                        rt.as_ref(),
-                        &handlers,
-                        &mut pending,
-                        other,
-                    )?,
+                    other => {
+                        let spec = spec_sites.get(&i).map(|site| {
+                            (
+                                site.sym,
+                                site.expected_bits,
+                                &spec_slots[site.slot] as *const AtomicU64 as i64,
+                            )
+                        });
+                        lower_simple_op(
+                            &mut fb,
+                            &mut deopt,
+                            &mut signal_exit,
+                            constants,
+                            &mut stack,
+                            rt.as_ref(),
+                            &handlers,
+                            &mut pending,
+                            spec,
+                            other,
+                        )?
+                    }
                 }
             }
             if !terminated {
@@ -3996,6 +4238,7 @@ pub fn lower_leaf_with_map(
                 Op::PushConditionCase(_) | Op::PushConditionCaseRaw(_) | Op::PushCatch(_)
             )
         }),
+        spec_slots,
         entry,
         _module: module,
     })

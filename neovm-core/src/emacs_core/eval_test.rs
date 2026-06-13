@@ -12698,6 +12698,222 @@ fn jit_save_window_excursion_through_funcall_seam() {
     assert!(ev.funcall_general_untraced(mk_bad(false), vec![]).is_err());
 }
 
+/// End-to-end: direct-call speculation — a hot caller whose callee slot is a
+/// constant symbol bound to bytecode calls it through the epoch-validated
+/// spec shim. fset MUST take effect immediately (GNU default semantics):
+/// across calls, after unrelated epoch bumps (re-arm path), and for
+/// non-bytecode replacements (permanent slow path).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_direct_call_speculation_tracks_redefinition() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let mk_times = |k: i64| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
+        f.constants = vec![Value::make_int(k)];
+        f.max_stack = 16;
+        Value::make_bytecode(f)
+    };
+    let g_sym = Value::symbol("jit-spec-g");
+    let ValueKind::Symbol(g_id) = g_sym.kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(g_id, mk_times(2));
+
+    // Hot caller (lambda (x) (jit-spec-g x)) — the exact speculation shape:
+    // Constant(sym) StackRef Call(1).
+    let mk_caller = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+        f.constants = vec![g_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let hot = mk_caller(true);
+    let cold = mk_caller(false);
+    let five = vec![Value::make_int(5)];
+
+    // 1) Speculated direct call (compile-time binding = doubler) — and prove
+    //    the spec shim engaged (the generic path would also compute 10).
+    let spec_before =
+        crate::emacs_core::jit::compile::SPEC_CALL_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(10)
+    );
+    assert!(
+        crate::emacs_core::jit::compile::SPEC_CALL_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+            > spec_before,
+        "the speculated call site must route through the spec shim"
+    );
+    // 2) Redefine: MUST take effect on the next call (epoch moved, binding
+    //    differs -> strict symbol path).
+    ev.obarray.set_symbol_function_id(g_id, mk_times(3));
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(15)
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(cold, five.clone()).unwrap(),
+        Value::make_int(15),
+        "interpreter agrees"
+    );
+    // 3) Unrelated epoch bump (different symbol): caller still correct.
+    let other = Value::symbol("jit-spec-unrelated");
+    let ValueKind::Symbol(other_id) = other.kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(other_id, mk_times(7));
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(15)
+    );
+    // 4) Replace with a non-bytecode callable (interpreted lambda): the spec
+    //    site stays disarmed and the symbol path resolves it.
+    let lam = ev
+        .eval_str("(lambda (x) (* x 10))")
+        .expect("lambda evaluates");
+    ev.obarray.set_symbol_function_id(g_id, lam);
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(50)
+    );
+    // 5) fmakunbound: the call must now signal void-function.
+    ev.obarray.fmakunbound_id(g_id);
+    assert!(ev.funcall_general_untraced(hot, five).is_err());
+}
+
+/// The strictest case: the callee redefines ITSELF mid-caller — the second
+/// speculated site in the same native frame must see the new binding (the
+/// interpreter resolves per call; the spec shim's per-call epoch check must
+/// match it exactly).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_direct_call_speculation_mid_execution_redefinition() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let h_sym = Value::symbol("jit-spec-h");
+    let ValueKind::Symbol(h_id) = h_sym.kind() else {
+        panic!("symbol expected");
+    };
+    // h2: (lambda () 2)
+    let mut h2 = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    h2.lexical = true;
+    h2.ops = vec![Op::Constant(0), Op::Return];
+    h2.constants = vec![Value::make_int(2)];
+    h2.max_stack = 16;
+    let h2_val = Value::make_bytecode(h2);
+    // h1: (lambda () (fset 'jit-spec-h h2) 1) — redefines itself, returns 1.
+    let mut h1 = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    h1.lexical = true;
+    h1.ops = vec![
+        Op::Constant(0), // 'fset
+        Op::Constant(1), // 'jit-spec-h
+        Op::Constant(2), // h2
+        Op::Call(2),
+        Op::Pop,
+        Op::Constant(3), // 1
+        Op::Return,
+    ];
+    h1.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)];
+    h1.max_stack = 16;
+    ev.obarray
+        .set_symbol_function_id(h_id, Value::make_bytecode(h1));
+
+    // Hot caller: (lambda () (list (jit-spec-h) (jit-spec-h))) — both call
+    // sites speculate on h1 at compile time.
+    let mk_caller = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::Constant(0),
+            Op::Call(0),
+            Op::Constant(0),
+            Op::Call(0),
+            Op::List(2),
+            Op::Return,
+        ];
+        f.constants = vec![h_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    use crate::emacs_core::print::print_value;
+    // First invocation: site 1 hits h1 (which fsets h -> h2); site 2 MUST
+    // already see h2.
+    let r = ev
+        .funcall_general_untraced(mk_caller(true), vec![])
+        .expect("native caller runs");
+    assert_eq!(print_value(&r), "(1 2)");
+    // Second invocation: both sites see h2.
+    let hot2 = mk_caller(true);
+    let r = ev
+        .funcall_general_untraced(hot2, vec![])
+        .expect("native caller runs");
+    assert_eq!(print_value(&r), "(2 2)");
+    // Interpreter differential on a fresh pair: reinstall h1 and compare.
+    // (Rebuild h1 since the previous one's constants still hold h2.)
+    let mut h1b = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    h1b.lexical = true;
+    h1b.ops = vec![
+        Op::Constant(0),
+        Op::Constant(1),
+        Op::Constant(2),
+        Op::Call(2),
+        Op::Pop,
+        Op::Constant(3),
+        Op::Return,
+    ];
+    h1b.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)];
+    h1b.max_stack = 16;
+    ev.obarray
+        .set_symbol_function_id(h_id, Value::make_bytecode(h1b));
+    let r = ev
+        .funcall_general_untraced(mk_caller(false), vec![])
+        .expect("interpreted caller runs");
+    assert_eq!(print_value(&r), "(1 2)", "interpreter agrees on strictness");
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();

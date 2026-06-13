@@ -20,7 +20,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::compile::{CompiledLeaf, NativeRun, compile_bytecode_function, take_pending_flow};
+use super::compile::{CompiledLeaf, NativeRun, compile_bytecode_function_with, take_pending_flow};
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::Context;
@@ -103,12 +103,17 @@ pub fn try_run_compiled(
     }
     let leaf: Option<Rc<CompiledLeaf>> = COMPILED.with(|cache| {
         let mut cache = cache.borrow_mut();
-        match cache
-            .entry(id)
-            .or_insert_with(|| match compile_bytecode_function(func) {
+        match cache.entry(id).or_insert_with(|| {
+            // SAFETY: the seam-provided Context is dormant for the whole
+            // native dispatch (see neovm_jit_call's contract); this is a
+            // shared read of its obarray for compile-time speculation.
+            // A null ctx (shim-free test bodies) just disables speculation.
+            let obarray = (!ctx.is_null()).then(|| unsafe { &(*ctx).obarray });
+            match compile_bytecode_function_with(func, obarray) {
                 Ok(leaf) => CacheEntry::Compiled(Rc::new(leaf)),
                 Err(_) => CacheEntry::NotCompilable,
-            }) {
+            }
+        }) {
             // Only run native for a valid call (lambda-list range); a mismatch
             // is a wrong-arg-count call the interpreter must signal.
             CacheEntry::Compiled(leaf) if leaf.accepts(args.len()) => Some(Rc::clone(leaf)),
