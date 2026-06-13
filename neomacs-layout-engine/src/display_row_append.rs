@@ -2520,10 +2520,10 @@ impl DisplayPropertyReplacementAppendItem {
         font_metrics: &mut Option<FontMetricsService>,
         current_x: f32,
         content_x: f32,
-        face_metrics: DisplayRowMeasuredFaceMetrics,
         params: &WindowParams,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<Self> {
+        let face_metrics = active_face_state.metrics();
         if display_property.is_string_replacement() {
             DisplayReplacementStringAppendItem::display_property_string(
                 value,

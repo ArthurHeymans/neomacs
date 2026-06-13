@@ -2990,7 +2990,6 @@ fn display_property_replacement_append_item_resolves_string_replacement() {
         &mut font_metrics,
         0.0,
         0.0,
-        active_face.metrics(),
         &test_display_space_window_params(),
         None,
     )
@@ -3026,7 +3025,6 @@ fn display_property_replacement_append_item_resolves_stretch_replacement() {
         &mut font_metrics,
         0.0,
         0.0,
-        active_face.metrics(),
         &test_display_space_window_params(),
         None,
     )
@@ -3065,7 +3063,6 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
         &mut font_metrics,
         0.0,
         0.0,
-        active_face.metrics(),
         &test_display_space_window_params(),
         None,
     )
@@ -3097,7 +3094,6 @@ fn display_property_replacement_append_item_names_cursor_policy() {
         &mut font_metrics,
         0.0,
         0.0,
-        active_face.metrics(),
         &test_display_space_window_params(),
         None,
     )

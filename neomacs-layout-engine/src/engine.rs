@@ -4455,7 +4455,6 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                         x,
                         content_x,
-                        face_metrics,
                         params,
                         evaluator.display_host.as_deref(),
                     ) {
