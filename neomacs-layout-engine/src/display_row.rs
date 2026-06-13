@@ -1302,31 +1302,6 @@ impl DisplayRowRenderBounds {
     }
 }
 
-impl<'a> DisplayRowSpec<'a> {
-    #[cfg(test)]
-    pub(crate) fn from_base_face(
-        geometry: DisplayRowGeometry,
-        face_ids: &mut FrameFaceIdAllocator,
-        base_face: &'a ResolvedFace,
-        role: GlyphRowRole,
-        symbol_values: std::collections::HashMap<String, Value>,
-    ) -> Self {
-        let base_face_id = if base_face.face_id != 0 {
-            base_face.face_id
-        } else {
-            face_ids.allocate()
-        };
-        Self {
-            render_bounds: DisplayRowRenderBounds::whole_row(geometry.width),
-            geometry,
-            base_face_id,
-            base_face,
-            role,
-            symbol_values,
-        }
-    }
-}
-
 pub(crate) fn install_rendered_display_row(
     builder: &mut GlyphMatrixBuilder,
     rendered: &RenderedDisplayRow,

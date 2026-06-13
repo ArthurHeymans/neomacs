@@ -20,6 +20,23 @@ fn base_face() -> crate::neovm_bridge::ResolvedFace {
     resolver.default_face().clone()
 }
 
+fn display_row_spec_from_base_face<'a>(
+    geometry: DisplayRowGeometry,
+    face_ids: &mut FrameFaceIdAllocator,
+    base_face: &'a crate::neovm_bridge::ResolvedFace,
+    role: GlyphRowRole,
+    symbol_values: std::collections::HashMap<String, Value>,
+) -> DisplayRowSpec<'a> {
+    DisplayRowSourceRenderRequest::from_base_face(
+        geometry,
+        face_ids,
+        base_face,
+        role,
+        symbol_values,
+    )
+    .display_row_spec()
+}
+
 #[derive(Default)]
 struct RecordingDisplayRowMediaHost {
     image_requests: Mutex<Vec<ImageResolveRequest>>,
@@ -122,7 +139,7 @@ fn display_row_spec_allocates_dynamic_base_face_id_through_allocator() {
     face.face_id = 0;
     let mut face_ids = FrameFaceIdAllocator::new(42);
 
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 80.0,
@@ -385,7 +402,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -417,7 +434,7 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -519,7 +536,7 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     test_base_face.font_char_width = 8.0;
     test_base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 16.0,
@@ -554,7 +571,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     test_base_face.font_char_width = 8.0;
     test_base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let mut spec = DisplayRowSpec::from_base_face(
+    let mut spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -595,7 +612,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     test_base_face.font_char_width = 8.0;
     test_base_face.font_ascent = 12.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let mut spec = DisplayRowSpec::from_base_face(
+    let mut spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -895,7 +912,7 @@ fn render_lisp_display_row_output_with_symbols(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -972,7 +989,7 @@ fn render_buffer_display_row_with_properties(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -1120,7 +1137,7 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 4.0,
             width: 240.0,
@@ -1176,7 +1193,7 @@ fn render_tab_line_with_media_host(
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 4.0,
             width: 240.0,
@@ -1622,7 +1639,7 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2323,7 +2340,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
         }],
     );
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2359,7 +2376,7 @@ fn layout_engine_renders_display_text_fragment_with_render_context() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face().clone();
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2482,7 +2499,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2534,7 +2551,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let mut spec = DisplayRowSpec::from_base_face(
+    let mut spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2597,7 +2614,7 @@ fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = DisplayRowSpec::from_base_face(
+    let spec = display_row_spec_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 80.0,
