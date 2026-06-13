@@ -1176,6 +1176,36 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_source_char_advance_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        resolver: &mut BufferTextSourceAdvanceResolver,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &[u8],
+        byte_idx: usize,
+        source_char: &BufferTextSourceChar,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+        cluster: BufferTextSourceClusterState,
+    ) -> ResolvedBufferTextSourceAdvance {
+        self.resolve_source_range_advance_to_text_row(
+            geometry,
+            resolver,
+            builder,
+            evaluator,
+            font_metrics,
+            text,
+            byte_idx,
+            source_char.range(),
+            face_resolver,
+            position,
+            cluster,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_resolved_source_range_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
@@ -1202,6 +1232,32 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             self.active_face.face_id(),
             resolved_advance,
             frame,
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_resolved_source_char_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        source_char: &BufferTextSourceChar,
+        face_resolver: &FaceResolver,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.append_resolved_source_range_to_text_row(
+            geometry,
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            source_char.range(),
+            face_resolver,
+            resolved_advance,
             position,
         )
     }

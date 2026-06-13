@@ -4938,7 +4938,6 @@ impl LayoutEngine {
                 raise_span.value_or(0.0),
                 char_h,
             );
-            let buffer_source_range = buffer_source_char.range();
 
             // Control characters: render as ^X notation
             if let Some(special_display) = buffer_source_char
@@ -5160,7 +5159,7 @@ impl LayoutEngine {
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
             let resolved_advance = buffer_row_append_context
-                .resolve_source_range_advance_to_text_row(
+                .resolve_source_char_advance_to_text_row(
                     &append_geometry,
                     &mut buffer_text_advance,
                     &mut self.matrix_builder,
@@ -5168,7 +5167,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &text,
                     ch_start_byte_idx,
-                    buffer_source_range,
+                    &buffer_source_char,
                     face_resolver,
                     append_position,
                     cluster_state,
@@ -5425,13 +5424,13 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = buffer_row_append_context.append_resolved_source_range_to_text_row(
+            let appended = buffer_row_append_context.append_resolved_source_char_to_text_row(
                 &append_geometry,
                 &mut self.matrix_builder,
                 &mut output_emitter,
                 evaluator,
                 &mut self.font_metrics,
-                buffer_source_range,
+                &buffer_source_char,
                 face_resolver,
                 resolved_advance,
                 append_position,

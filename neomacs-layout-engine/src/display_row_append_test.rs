@@ -1861,14 +1861,15 @@ fn buffer_text_source_append_context_appends_source_char() {
 
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
     let (_progress, end) = append_context
-        .append_resolved_source_range_to_text_row(
+        .append_resolved_source_char_to_text_row(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+            &source_char,
             &face_resolver,
             ResolvedBufferTextSourceAdvance::natural(8.0),
             DisplayRowPosition { x_px: 0.0, col: 0 },
