@@ -21,7 +21,8 @@ use crate::display_item::RenderFaceRef;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowGeometry, DisplayRowOwner, DisplayRowRenderContext,
     DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRenderRequest, DisplayRowSourceState,
-    MeasuredDisplayRow, RenderedDisplayRow, install_measured_window_display_row,
+    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, install_measured_frame_chrome_row,
+    install_measured_window_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -33,7 +34,7 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
@@ -56,6 +57,11 @@ fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<Render
         faces: Vec::new(),
         media: Vec::new(),
     }]
+}
+
+pub(crate) enum FrameTabBarDisplayRowRender {
+    Empty,
+    Measured(MeasuredDisplayRow),
 }
 
 impl LayoutEngine {
@@ -129,6 +135,60 @@ impl LayoutEngine {
             output_emitter.finish_chrome_progress(measured_row.output_progress());
         }
         measured_row
+    }
+
+    pub(crate) fn render_frame_tab_bar_display_row(
+        &mut self,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        face_ids: &mut FrameFaceIdAllocator,
+        row_index: u32,
+        y: f32,
+        width: f32,
+        height: f32,
+        char_width: f32,
+        tab_bar_face: &ResolvedFace,
+        rendered_text: DisplayTextFragment,
+    ) -> Option<FrameTabBarDisplayRowRender> {
+        let row_spec = DisplayRowSourceRenderRequest::from_base_face(
+            DisplayRowGeometry {
+                y,
+                width,
+                height,
+                char_width,
+                ascent: tab_bar_face.font_ascent,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
+            face_ids,
+            tab_bar_face,
+            GlyphRowRole::TabBar,
+            std::collections::HashMap::new(),
+        );
+        let mut render_context =
+            DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        let rendered = self.render_display_text_fragment_source_row_with_context(
+            row_spec,
+            rendered_text,
+            &mut render_context,
+        )?;
+        if rendered.row.glyphs[GlyphArea::Text.index()].is_empty() {
+            return Some(FrameTabBarDisplayRowRender::Empty);
+        }
+        let measured = MeasuredDisplayRow::new(
+            DisplayRowOwner::FrameChrome {
+                kind: FrameChromeKind::TabBar,
+            },
+            row_index,
+            Rect::new(0.0, y, width, height),
+            rendered,
+            DisplayRowBoundsPolicy::MeasureContent,
+        );
+        install_measured_frame_chrome_row(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+            &measured,
+        );
+        Some(FrameTabBarDisplayRowRender::Measured(measured))
     }
 
     /// Build minibuffer echo rows through the shared display-source path.

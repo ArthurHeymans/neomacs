@@ -5,6 +5,7 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number};
+use super::display_status_line::FrameTabBarDisplayRowRender;
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
@@ -20,11 +21,10 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
-    DisplayRowGeometry, DisplayRowMeasurementPolicy, DisplayRowOwner, DisplayRowRenderContext,
-    DisplayRowRenderStop, DisplayRowSourceRenderRequest, DisplayRowSourceState, FrameChromeKind,
-    MeasuredDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
-    install_measured_frame_chrome_row, install_rendered_display_row,
+    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics, DisplayRowGeometry,
+    DisplayRowMeasurementPolicy, DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop,
+    DisplayRowSourceRenderRequest, DisplayRowSourceState, WindowChromeKind,
+    insert_resolved_display_row_face, install_rendered_display_row,
 };
 use crate::display_row_append::{
     BufferTextFragmentAppendMeasurement, DisplayRowAppendArea, DisplayRowAppendFrame,
@@ -2307,7 +2307,8 @@ pub struct LayoutEngine {
     /// GNU treats the tab bar as frame-level redisplay, not as a row owned by
     /// the first leaf window. Neomacs stages those rows here and attaches them
     /// to the finished frame snapshot.
-    pending_frame_chrome_rows: Vec<neomacs_display_protocol::glyph_matrix::FrameChromeRow>,
+    pub(crate) pending_frame_chrome_rows:
+        Vec<neomacs_display_protocol::glyph_matrix::FrameChromeRow>,
     /// Frame-level tab bar metadata for render-thread hit-testing.
     pending_tab_bar: Option<neomacs_display_protocol::frame_glyphs::FrameTabBarState>,
 }
@@ -6761,53 +6762,25 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let tab_bar_spec = DisplayRowSourceRenderRequest::from_base_face(
-            DisplayRowGeometry {
-                y: tab_bar_y,
-                width,
-                height: tab_bar_height,
-                char_width: frame_params.char_width,
-                ascent: tab_bar_face.font_ascent,
-                tab_policy: DisplayTabPolicy::every(8),
-            },
-            &mut face_ids,
-            &tab_bar_face,
-            GlyphRowRole::TabBar,
-            std::collections::HashMap::new(),
-        );
-        let mut render_context = DisplayRowRenderContext::new(
+        let Some(rendered_tab_bar) = self.render_frame_tab_bar_display_row(
             face_resolver,
             evaluator.display_host.as_deref(),
             &mut face_ids,
-        );
-        let Some(rendered) = self.render_display_text_fragment_source_row_with_context(
-            tab_bar_spec,
+            row_index,
+            tab_bar_y,
+            width,
+            tab_bar_height,
+            frame_params.char_width,
+            &tab_bar_face,
             DisplayTextFragment::tab_bar(tab_bar.text),
-            &mut render_context,
         ) else {
             return None;
         };
         self.frame_face_id_counter = face_ids.finish();
-        if rendered.row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
-            .is_empty()
-        {
+        let FrameTabBarDisplayRowRender::Measured(measured) = rendered_tab_bar else {
             return None;
-        }
-        let measured = MeasuredDisplayRow::new(
-            DisplayRowOwner::FrameChrome {
-                kind: FrameChromeKind::TabBar,
-            },
-            row_index,
-            Rect::new(0.0, tab_bar_y, width, tab_bar_height),
-            rendered,
-            DisplayRowBoundsPolicy::MeasureContent,
-        );
+        };
         let actual_tab_bar_height = measured.bounds.height;
-        install_measured_frame_chrome_row(
-            &mut self.matrix_builder,
-            &mut self.pending_frame_chrome_rows,
-            &measured,
-        );
         self.pending_tab_bar = Some(neomacs_display_protocol::frame_glyphs::FrameTabBarState {
             items: tab_bar.items,
             y: tab_bar_y,
