@@ -8,15 +8,116 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplaySourceFallbackMetrics {
+    char_width: f32,
+    ascent: f32,
+    row_height: f32,
+}
+
+impl DisplaySourceFallbackMetrics {
+    pub(crate) fn new(char_width: f32, ascent: f32, row_height: f32) -> Self {
+        Self {
+            char_width,
+            ascent,
+            row_height,
+        }
+    }
+
+    pub(crate) fn char_width(self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn ascent(self) -> f32 {
+        self.ascent
+    }
+
+    pub(crate) fn row_height(self) -> f32 {
+        self.row_height
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct DisplaySourceFaceBasis<'a> {
+    face_resolver: &'a FaceResolver,
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+    canonical_face: &'a ResolvedFace,
+    fallback_metrics: DisplaySourceFallbackMetrics,
+}
+
+impl<'a> DisplaySourceFaceBasis<'a> {
+    pub(crate) fn new(
+        face_resolver: &'a FaceResolver,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        fallback_metrics: DisplaySourceFallbackMetrics,
+    ) -> Self {
+        Self {
+            face_resolver,
+            base_face_id,
+            base_face,
+            canonical_face: face_resolver.default_face(),
+            fallback_metrics,
+        }
+    }
+
+    pub(crate) fn face_resolver(self) -> &'a FaceResolver {
+        self.face_resolver
+    }
+
+    pub(crate) fn base_face_id(self) -> u32 {
+        self.base_face_id
+    }
+
+    pub(crate) fn base_face(self) -> &'a ResolvedFace {
+        self.base_face
+    }
+
+    pub(crate) fn canonical_face(self) -> &'a ResolvedFace {
+        self.canonical_face
+    }
+
+    pub(crate) fn fallback_metrics(self) -> DisplaySourceFallbackMetrics {
+        self.fallback_metrics
+    }
+
+    fn height_basis(self) -> DisplayHeightFaceBasis<'a> {
+        let fallback = self.fallback_metrics();
+        DisplayHeightFaceBasis {
+            canonical_face: self.canonical_face(),
+            base_face: self.base_face(),
+            fallback_char_width: fallback.char_width(),
+            fallback_ascent: fallback.ascent(),
+            fallback_row_height: fallback.row_height(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 pub(crate) struct DisplaySourceResolveParams<'a> {
-    pub(crate) face_resolver: &'a FaceResolver,
-    pub(crate) display_host: Option<&'a dyn DisplayHost>,
-    pub(crate) base_face: &'a ResolvedFace,
-    pub(crate) canonical_face: &'a ResolvedFace,
-    pub(crate) base_face_id: u32,
-    pub(crate) fallback_char_width: f32,
-    pub(crate) fallback_ascent: f32,
-    pub(crate) fallback_row_height: f32,
+    face_basis: DisplaySourceFaceBasis<'a>,
+    display_host: Option<&'a dyn DisplayHost>,
+}
+
+impl<'a> DisplaySourceResolveParams<'a> {
+    pub(crate) fn new(
+        face_basis: DisplaySourceFaceBasis<'a>,
+        display_host: Option<&'a dyn DisplayHost>,
+    ) -> Self {
+        Self {
+            face_basis,
+            display_host,
+        }
+    }
+
+    pub(crate) fn face_basis(self) -> DisplaySourceFaceBasis<'a> {
+        self.face_basis
+    }
+
+    fn display_host(self) -> Option<&'a dyn DisplayHost> {
+        self.display_host
+    }
 }
 
 #[derive(Default)]
@@ -90,7 +191,8 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
         face_ids: &'a mut FrameFaceIdAllocator,
         pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
     ) -> Self {
-        state.remember_face(params.base_face_id, params.base_face);
+        let face_basis = params.face_basis();
+        state.remember_face(face_basis.base_face_id(), face_basis.base_face());
         Self {
             params,
             state,
@@ -111,13 +213,15 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
     }
 
     fn resolve_height_face_ref(&mut self, face: RenderFaceRef, factor: f32) -> RenderFaceRef {
-        if self.params.fallback_char_width <= 1.0 && self.params.fallback_row_height <= 1.0 {
+        let face_basis = self.params.face_basis();
+        let fallback = face_basis.fallback_metrics();
+        if fallback.char_width() <= 1.0 && fallback.row_height() <= 1.0 {
             return face;
         }
 
         let base_face_id = match face {
             RenderFaceRef::FaceId(face_id) => face_id,
-            RenderFaceRef::Inherit => self.params.base_face_id,
+            RenderFaceRef::Inherit => face_basis.base_face_id(),
         };
         let key = DisplayHeightFaceKey {
             base_face_id,
@@ -127,18 +231,9 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
             return RenderFaceRef::FaceId(face_id);
         }
 
-        let source = self.state.resolved_face_for(face, self.params.base_face);
-        let Some(resolved) = height_adjusted_face(
-            &source,
-            DisplayHeightFaceBasis {
-                canonical_face: self.params.canonical_face,
-                base_face: self.params.base_face,
-                fallback_char_width: self.params.fallback_char_width,
-                fallback_ascent: self.params.fallback_ascent,
-                fallback_row_height: self.params.fallback_row_height,
-            },
-            factor,
-        ) else {
+        let source = self.state.resolved_face_for(face, face_basis.base_face());
+        let Some(resolved) = height_adjusted_face(&source, face_basis.height_basis(), factor)
+        else {
             return face;
         };
         if same_resolved_face(&resolved, &source) {
@@ -156,21 +251,24 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
 
 impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
+        let face_basis = self.params.face_basis();
         if let Some(cached) = self.state.cached_face(&face_value) {
             return cached;
         }
-        let Some(resolved) = self
-            .params
-            .face_resolver
-            .resolve_face_value_over(self.params.base_face, &face_value)
+        let Some(resolved) = face_basis
+            .face_resolver()
+            .resolve_face_value_over(face_basis.base_face(), &face_value)
         else {
             return base;
         };
 
-        if same_resolved_face(&resolved, self.params.base_face) {
-            self.state
-                .cache_face(face_value, self.params.base_face_id, self.params.base_face);
-            return RenderFaceRef::FaceId(self.params.base_face_id);
+        if same_resolved_face(&resolved, face_basis.base_face()) {
+            self.state.cache_face(
+                face_value,
+                face_basis.base_face_id(),
+                face_basis.base_face(),
+            );
+            return RenderFaceRef::FaceId(face_basis.base_face_id());
         }
 
         let face_id = self.face_ids.allocate();
@@ -185,13 +283,15 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
         display_prop: Value,
         face: RenderFaceRef,
     ) -> Option<DisplayItemKind> {
-        let resolved_face = self.state.resolved_face_for(face, self.params.base_face);
+        let face_basis = self.params.face_basis();
+        let fallback = face_basis.fallback_metrics();
+        let resolved_face = self.state.resolved_face_for(face, face_basis.base_face());
         resolve_display_property_media(
             &display_prop,
-            self.params.display_host,
+            self.params.display_host(),
             &resolved_face,
-            self.params.fallback_char_width,
-            self.params.fallback_row_height,
+            fallback.char_width(),
+            fallback.row_height(),
         )
     }
 }

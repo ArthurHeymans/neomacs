@@ -13,8 +13,8 @@ use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
-    DisplaySourceResolveParams, DisplaySourceResolveState, ResolvedDisplaySourceItem,
-    resolve_next_display_source_item,
+    DisplaySourceFaceBasis, DisplaySourceFallbackMetrics, DisplaySourceResolveParams,
+    DisplaySourceResolveState, ResolvedDisplaySourceItem, resolve_next_display_source_item,
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::{
@@ -1076,18 +1076,19 @@ impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
         fallback_ascent: f32,
         fallback_row_height: f32,
     ) -> Option<DisplayRowSourceStep> {
-        let resolved = self.state.next_resolved_item(
-            &mut self.source,
-            DisplaySourceResolveParams {
-                face_resolver,
-                display_host,
-                base_face,
-                canonical_face: face_resolver.default_face(),
-                base_face_id,
+        let face_basis = DisplaySourceFaceBasis::new(
+            face_resolver,
+            base_face_id,
+            base_face,
+            DisplaySourceFallbackMetrics::new(
                 fallback_char_width,
                 fallback_ascent,
                 fallback_row_height,
-            },
+            ),
+        );
+        let resolved = self.state.next_resolved_item(
+            &mut self.source,
+            DisplaySourceResolveParams::new(face_basis, display_host),
             face_ids,
         );
         resolved.item.map(|item| DisplayRowSourceStep {
@@ -1975,19 +1976,16 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut position = render_bounds.start;
         let mut source_slots = Vec::new();
         let mut media = Vec::new();
+        let face_basis = DisplaySourceFaceBasis::new(
+            face_resolver,
+            row_face.face_id,
+            base_face,
+            DisplaySourceFallbackMetrics::new(char_width, geometry.ascent, geometry.height),
+        );
         let stop = loop {
             let resolved = state.next_resolved_item(
                 source,
-                DisplaySourceResolveParams {
-                    face_resolver,
-                    display_host,
-                    base_face,
-                    canonical_face: face_resolver.default_face(),
-                    base_face_id: row_face.face_id,
-                    fallback_char_width: char_width,
-                    fallback_ascent: geometry.ascent,
-                    fallback_row_height: geometry.height,
-                },
+                DisplaySourceResolveParams::new(face_basis, display_host),
                 face_ids,
             );
             let item = resolved.item;

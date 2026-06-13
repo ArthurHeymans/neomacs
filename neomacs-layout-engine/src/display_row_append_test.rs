@@ -845,16 +845,15 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut pending_faces = Vec::new();
-    let params = crate::display_source_resolver::DisplaySourceResolveParams {
-        face_resolver: &face_resolver,
-        display_host: None,
-        base_face,
-        canonical_face: face_resolver.default_face(),
-        base_face_id: 0,
-        fallback_char_width: 8.0,
-        fallback_ascent: 12.0,
-        fallback_row_height: 16.0,
-    };
+    let params = crate::display_source_resolver::DisplaySourceResolveParams::new(
+        crate::display_source_resolver::DisplaySourceFaceBasis::new(
+            &face_resolver,
+            0,
+            base_face,
+            crate::display_source_resolver::DisplaySourceFallbackMetrics::new(8.0, 12.0, 16.0),
+        ),
+        None,
+    );
     let mut resolver = crate::display_source_resolver::DisplaySourcePropertyResolver::new(
         params,
         &mut resolve_state,
@@ -874,6 +873,32 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     assert_eq!(pending_faces.len(), 1);
     assert_eq!(pending_faces[0].face_id, 20);
     assert_eq!(pending_faces[0].resolved.fg, 0x00ff0000);
+}
+
+#[test]
+fn display_source_resolve_params_are_built_from_typed_face_basis() {
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let fallback =
+        crate::display_source_resolver::DisplaySourceFallbackMetrics::new(8.0, 12.0, 16.0);
+    let basis = crate::display_source_resolver::DisplaySourceFaceBasis::new(
+        &face_resolver,
+        7,
+        base_face,
+        fallback,
+    );
+
+    let params = crate::display_source_resolver::DisplaySourceResolveParams::new(basis, None);
+
+    assert_eq!(params.face_basis().base_face_id(), 7);
+    assert_eq!(params.face_basis().fallback_metrics(), fallback);
+    assert!(std::ptr::eq(params.face_basis().base_face(), base_face));
+    assert!(std::ptr::eq(
+        params.face_basis().canonical_face(),
+        face_resolver.default_face()
+    ));
 }
 
 #[test]
@@ -902,16 +927,15 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
         &mut source,
-        crate::display_source_resolver::DisplaySourceResolveParams {
-            face_resolver: &face_resolver,
-            display_host: None,
-            base_face,
-            canonical_face: face_resolver.default_face(),
-            base_face_id: 0,
-            fallback_char_width: 8.0,
-            fallback_ascent: 12.0,
-            fallback_row_height: 16.0,
-        },
+        crate::display_source_resolver::DisplaySourceResolveParams::new(
+            crate::display_source_resolver::DisplaySourceFaceBasis::new(
+                &face_resolver,
+                0,
+                base_face,
+                crate::display_source_resolver::DisplaySourceFallbackMetrics::new(8.0, 12.0, 16.0),
+            ),
+            None,
+        ),
         &mut resolve_state,
         &mut face_ids,
     );
@@ -949,16 +973,15 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
         &mut source,
-        crate::display_source_resolver::DisplaySourceResolveParams {
-            face_resolver: &face_resolver,
-            display_host: None,
-            base_face,
-            canonical_face: face_resolver.default_face(),
-            base_face_id: 0,
-            fallback_char_width: 8.0,
-            fallback_ascent: 12.0,
-            fallback_row_height: 16.0,
-        },
+        crate::display_source_resolver::DisplaySourceResolveParams::new(
+            crate::display_source_resolver::DisplaySourceFaceBasis::new(
+                &face_resolver,
+                0,
+                base_face,
+                crate::display_source_resolver::DisplaySourceFallbackMetrics::new(8.0, 12.0, 16.0),
+            ),
+            None,
+        ),
         &mut resolve_state,
         &mut face_ids,
     );

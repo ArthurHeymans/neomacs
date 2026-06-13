@@ -391,16 +391,17 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         let mut next_item = || {
             state.next_resolved_item(
                 &mut source,
-                crate::display_source_resolver::DisplaySourceResolveParams {
-                    face_resolver: &face_resolver,
-                    display_host: None,
-                    base_face,
-                    canonical_face: face_resolver.default_face(),
-                    base_face_id: 0,
-                    fallback_char_width: 8.0,
-                    fallback_ascent: 12.0,
-                    fallback_row_height: 16.0,
-                },
+                crate::display_source_resolver::DisplaySourceResolveParams::new(
+                    crate::display_source_resolver::DisplaySourceFaceBasis::new(
+                        &face_resolver,
+                        0,
+                        base_face,
+                        crate::display_source_resolver::DisplaySourceFallbackMetrics::new(
+                            8.0, 12.0, 16.0,
+                        ),
+                    ),
+                    None,
+                ),
                 &mut face_ids,
             )
         };
