@@ -104,7 +104,7 @@ struct NaturalDisplayRowAppendRenderPolicy;
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum BufferTextFragmentAppendMeasurement {
+enum BufferTextFragmentAppendMeasurement {
     Natural,
     ResolvedAdvance { advance_px: f32 },
 }
@@ -134,7 +134,7 @@ impl ResolvedBufferTextFragmentAdvance {
         self.advance_px
     }
 
-    pub(crate) fn append_measurement(self) -> BufferTextFragmentAppendMeasurement {
+    fn append_measurement(self) -> BufferTextFragmentAppendMeasurement {
         self.append_measurement
     }
 }
@@ -651,7 +651,7 @@ fn buffer_text_fragment_source_item<B: LayoutBufferView + ?Sized>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_measured_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
+pub(crate) fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -662,7 +662,7 @@ pub(crate) fn append_measured_buffer_text_fragment_to_text_row<B: LayoutBufferVi
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-    measurement: BufferTextFragmentAppendMeasurement,
+    resolved_advance: ResolvedBufferTextFragmentAdvance,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -673,7 +673,8 @@ pub(crate) fn append_measured_buffer_text_fragment_to_text_row<B: LayoutBufferVi
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy = BufferTextFragmentRenderPolicy::new(measurement);
+    let mut render_policy =
+        BufferTextFragmentRenderPolicy::new(resolved_advance.append_measurement());
     let outcome = render_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,

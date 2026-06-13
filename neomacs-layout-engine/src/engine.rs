@@ -49,7 +49,7 @@ use crate::display_row_append::{
     append_display_replacement_stretch_to_text_row_and_emit,
     append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
-    append_measured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
+    append_resolved_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
     render_lisp_string_source_append_to_text_row_and_emit,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -5621,7 +5621,7 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = append_measured_buffer_text_fragment_to_text_row(
+            let appended = append_resolved_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
                 evaluator,
@@ -5632,7 +5632,7 @@ impl LayoutEngine {
                 buf_id,
                 buffer,
                 active_face_state.face_id(),
-                resolved_advance.append_measurement(),
+                resolved_advance,
                 frame,
                 append_position,
             );
