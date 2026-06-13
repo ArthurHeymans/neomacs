@@ -217,6 +217,14 @@ impl<'a> Vm<'a> {
         Self { ctx }
     }
 
+    /// Truncate the bytecode operand stack to `len` — used by the JIT call shim
+    /// to remove the arguments it pushed onto `bc_buf` for the fast call path,
+    /// on every exit (success or signal), keeping the push/truncate symmetric.
+    #[cfg(feature = "jit")]
+    pub(crate) fn bc_buf_truncate(&mut self, len: usize) {
+        self.ctx.bc_buf.truncate(len);
+    }
+
     /// Set the current depth and max_depth (inherited from the Context).
     pub fn set_depth(&mut self, depth: usize, max_depth: usize) {
         self.ctx.depth = depth;
@@ -4333,6 +4341,64 @@ impl<'a> Vm<'a> {
                 }
                 None => {
                     vm.ctx.bc_buf.truncate(args_start);
+                    vm.call_function(func_val, args)
+                }
+            }
+        })?;
+        if let (Some((called_name, alias_target)), Some(writeback_args)) =
+            (writeback_names.as_ref(), writeback_args.as_ref())
+        {
+            let root_scope = self.ctx.save_vm_roots();
+            self.push_dynamic_vm_root(result);
+            for value in writeback_args.iter().copied() {
+                self.push_dynamic_vm_root(value);
+            }
+            self.maybe_writeback_mutating_first_arg(
+                called_name,
+                *alias_target,
+                writeback_args,
+                &result,
+            );
+            self.ctx.restore_vm_roots(root_scope);
+        }
+        Ok(result)
+    }
+
+    /// Like [`call_for_jit`] but the `nargs` arguments are ALREADY on `bc_buf`
+    /// at `args_start` — the JIT shim pushed them straight from its native
+    /// call-args slot, skipping the `LispArgVec` round-trip + per-arg scratch
+    /// rooting (`bc_buf` is GC-traced, so the args are rooted across the call).
+    /// The caller truncates `bc_buf` back to `args_start` afterwards. The subr
+    /// fast path reads the args in place; only the non-subr fallback
+    /// materializes a `LispArgVec` (for the traced `call_function`). Same
+    /// behaviour as `call_for_jit` — fewer copies on the hot path.
+    #[cfg(feature = "jit")]
+    pub(crate) fn call_for_jit_stack(
+        &mut self,
+        func_val: Value,
+        args_start: usize,
+        nargs: usize,
+    ) -> EvalResult {
+        let first_is_string = nargs > 0 && self.ctx.bc_buf[args_start].is_string();
+        let writeback_names = if first_is_string {
+            self.writeback_mutating_callable_names(&func_val)
+        } else {
+            None
+        };
+        let writeback_args: Option<LispArgVec> = writeback_names.as_ref().map(|_| {
+            self.ctx.bc_buf[args_start..args_start + nargs]
+                .iter()
+                .copied()
+                .collect()
+        });
+        let result = self.with_bytecode_call_depth(|vm| {
+            match vm.try_call_builtin_subr_from_stack_args(func_val, args_start, nargs) {
+                Some(result) => result,
+                None => {
+                    let args: LispArgVec = vm.ctx.bc_buf[args_start..args_start + nargs]
+                        .iter()
+                        .copied()
+                        .collect();
                     vm.call_function(func_val, args)
                 }
             }

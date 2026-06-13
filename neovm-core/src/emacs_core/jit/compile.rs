@@ -183,15 +183,10 @@ extern "C" fn neovm_jit_call(
     let func_val = Value::from_bits(func_bits as usize);
     let nargs = nargs as usize;
     let saved = save_scratch_gc_roots();
+    // The callee is not on bc_buf, so it needs an explicit scratch root across
+    // the call (which may GC); the arguments go straight onto the GC-traced
+    // bc_buf below, so they are rooted there — no LispArgVec, no per-arg root.
     push_scratch_gc_root(func_val);
-    let mut args = LispArgVec::new();
-    for i in 0..nargs {
-        // SAFETY: the generated code stored exactly `nargs` argument words at
-        // `args_ptr` (its call-args stack slot) immediately before this call.
-        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-        push_scratch_gc_root(v);
-        args.push(v);
-    }
     // SAFETY: see the function-level contract — seam-provided, dormant, single
     // mutator thread.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -201,8 +196,21 @@ extern "C" fn neovm_jit_call(
             STATUS_SIGNAL
         }
         Ok(()) => {
+            // Push the native call-args slot straight onto bc_buf (GC-traced,
+            // so the args are rooted across the call); the fast subr path reads
+            // them in place. Truncate back afterwards.
+            let args_start = ctx.bc_buf.len();
+            for i in 0..nargs {
+                // SAFETY: the generated code stored exactly `nargs` argument
+                // words at `args_ptr` (its call-args slot) immediately before
+                // this call.
+                let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+                ctx.bc_buf.push(v);
+            }
             let mut vm = Vm::from_context(ctx);
-            match vm.call_for_jit(func_val, args) {
+            let res = vm.call_for_jit_stack(func_val, args_start, nargs);
+            vm.bc_buf_truncate(args_start);
+            match res {
                 Ok(value) => {
                     // SAFETY: `out` is the generated code's result stack slot.
                     unsafe { *out = value.bits() as i64 };
