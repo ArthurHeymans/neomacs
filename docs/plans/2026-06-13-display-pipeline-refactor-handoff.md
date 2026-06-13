@@ -50,17 +50,20 @@ Continuation work after this handoff:
 - Append placement is private to `display_row_append.rs`, and append tests now build frames through `DisplayRowAppendSurface` instead of constructing lowered placement/frame internals.
 - The generic `DisplayTextRunMeasurementPlan::from_char_advances` helper has been removed. Fallback per-character text-run measurement now lives in `DisplayRowGlyphMeasurementFace`, so caller-provided char-advance construction is no longer exposed as a shared measurement-plan API.
 - Buffer text fragment append advance selection now uses typed `BufferTextFragmentAdvancePath` variants for natural face-column, natural rendered-fragment, and resolved complex-run paths instead of inline conditional policy.
+- Buffer text fragment natural fallback advance now uses typed `BufferTextFragmentNaturalFallbackAdvance` variants for tab, cluster-continuation, and face-column width policy instead of raw fallback conditionals.
 - Latest local verification:
 
   ```bash
   cargo fmt --check
-  git diff --check
   cargo check -p neomacs-layout-engine
-  cargo nextest run -p neomacs-layout-engine display_row display_row_append
+  cargo nextest run -p neomacs-layout-engine display_row_append
   cargo nextest run -p neomacs-layout-engine
+  git diff --check
+  cargo fmt --all --check
+  cargo check
   ```
 
-  Full layout-engine nextest passed with 1031 tests after deleting the dormant backend tests, adding append-measurement coverage, and removing the test-only direct append stream.
+  Full layout-engine nextest passed with 1059 tests after typing the buffer text natural fallback advance policy.
 
 ## Why This Refactor Exists
 

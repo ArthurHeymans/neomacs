@@ -270,6 +270,26 @@ fn fallback_buffer_text_fragment_natural_advance_uses_face_columns() {
 }
 
 #[test]
+fn buffer_text_fragment_natural_fallback_advance_names_width_policy() {
+    assert_eq!(
+        BufferTextFragmentNaturalFallbackAdvance::for_char('\t', false),
+        BufferTextFragmentNaturalFallbackAdvance::Tab
+    );
+    assert_eq!(
+        BufferTextFragmentNaturalFallbackAdvance::for_char('\u{301}', true),
+        BufferTextFragmentNaturalFallbackAdvance::ClusterContinuation
+    );
+    assert_eq!(
+        BufferTextFragmentNaturalFallbackAdvance::for_char('x', false),
+        BufferTextFragmentNaturalFallbackAdvance::FaceColumns { columns: 1 }
+    );
+    assert_eq!(
+        BufferTextFragmentNaturalFallbackAdvance::for_char('中', false),
+        BufferTextFragmentNaturalFallbackAdvance::FaceColumns { columns: 2 }
+    );
+}
+
+#[test]
 fn buffer_text_fragment_advance_path_names_append_measurement_policy() {
     assert_eq!(
         BufferTextFragmentAdvancePath::for_char('x', false),

@@ -163,6 +163,50 @@ impl BufferTextFragmentAdvancePath {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferTextFragmentNaturalFallbackAdvance {
+    Tab,
+    ClusterContinuation,
+    FaceColumns { columns: usize },
+}
+
+impl BufferTextFragmentNaturalFallbackAdvance {
+    fn for_char(ch: char, is_cluster_continuation: bool) -> Self {
+        if ch == '\t' {
+            Self::Tab
+        } else if is_cluster_continuation {
+            Self::ClusterContinuation
+        } else {
+            Self::FaceColumns {
+                columns: crate::composition::base_width_cols(ch) as usize,
+            }
+        }
+    }
+
+    fn resolve_to_text_row(
+        self,
+        font_metrics: &mut Option<FontMetricsService>,
+        active_face_state: &DisplayRowActiveFaceState,
+        frame: &DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        ch: char,
+    ) -> f32 {
+        match self {
+            Self::Tab => {
+                frame
+                    .geometry
+                    .tab_policy
+                    .advance_from(position, frame.face_space_width)
+                    .pixel_width
+            }
+            Self::ClusterContinuation => 0.0,
+            Self::FaceColumns { columns } => {
+                active_face_state.advance_for_columns(font_metrics, ch, columns)
+            }
+        }
+    }
+}
+
 enum BufferTextFragmentRenderPolicy {
     Natural(NaturalDisplayRowAppendRenderPolicy),
     Resolved(ResolvedFragmentAdvanceRenderPolicy),
@@ -839,18 +883,8 @@ fn fallback_buffer_text_fragment_natural_advance_to_text_row(
     ch: char,
     is_cluster_continuation: bool,
 ) -> f32 {
-    if ch == '\t' {
-        return frame
-            .geometry
-            .tab_policy
-            .advance_from(position, frame.face_space_width)
-            .pixel_width;
-    }
-    if is_cluster_continuation {
-        return 0.0;
-    }
-    let char_cols = crate::composition::base_width_cols(ch) as usize;
-    active_face_state.advance_for_columns(font_metrics, ch, char_cols)
+    BufferTextFragmentNaturalFallbackAdvance::for_char(ch, is_cluster_continuation)
+        .resolve_to_text_row(font_metrics, active_face_state, frame, position, ch)
 }
 
 impl BufferTextFragmentAdvanceResolver {
