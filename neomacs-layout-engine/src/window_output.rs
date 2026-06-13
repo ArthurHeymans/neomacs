@@ -13,13 +13,15 @@ use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::matrix_builder::GlyphMatrixBuilder;
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::frame_glyphs::{
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
+};
+use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorPos, WindowCursorSnapshot,
-    WindowDisplaySnapshot,
+    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
+    WindowCursorSnapshot, WindowDisplaySnapshot,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -168,6 +170,65 @@ pub(crate) struct TextWindowLineNumberMargin<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowCursor {
+    pub(crate) selected: bool,
+    pub(crate) window_id: i64,
+    pub(crate) charpos: usize,
+    pub(crate) slot_id: DisplaySlotId,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) ascent: f32,
+    pub(crate) style: CursorStyle,
+    pub(crate) color: Color,
+    pub(crate) cursor_fg: Color,
+    pub(crate) text_area_left: f32,
+    pub(crate) window_top: f32,
+}
+
+impl TextWindowCursor {
+    fn row(self) -> usize {
+        self.slot_id.row as usize
+    }
+
+    fn col(self) -> u16 {
+        self.slot_id.col
+    }
+
+    fn window_snapshot(self) -> WindowCursorSnapshot {
+        WindowCursorSnapshot {
+            kind: window_cursor_kind(self.style),
+            x: (self.x - self.text_area_left).round() as i64,
+            y: (self.y - self.window_top).round() as i64,
+            width: self.width.round() as i64,
+            height: self.height.round() as i64,
+            ascent: self.ascent.round() as i64,
+            row: self.row() as i64,
+            col: i64::from(self.col()),
+        }
+    }
+
+    fn phys_cursor(self) -> PhysCursor {
+        PhysCursor {
+            window_id: self.window_id,
+            charpos: self.charpos,
+            row: self.row(),
+            col: self.col(),
+            slot_id: self.slot_id,
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+            ascent: self.ascent,
+            style: self.style,
+            color: self.color,
+            cursor_fg: self.cursor_fg,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextMatrixRowGeometryTransition {
     pub(crate) finished_row: TextMatrixRowMetrics,
     pub(crate) begin_row: TextMatrixRowBegin,
@@ -182,6 +243,15 @@ pub(crate) enum TextMatrixRowTransition {
 impl TextMatrixRowTransition {
     pub(crate) fn is_exhausted(self) -> bool {
         matches!(self, Self::ExhaustedRows)
+    }
+}
+
+fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
+    match style {
+        CursorStyle::FilledBox => WindowCursorKind::FilledBox,
+        CursorStyle::Hollow => WindowCursorKind::HollowBox,
+        CursorStyle::Bar(_) => WindowCursorKind::Bar,
+        CursorStyle::Hbar(_) => WindowCursorKind::Hbar,
     }
 }
 
@@ -330,6 +400,30 @@ pub(crate) fn emit_text_window_line_number_margin(
         builder.push_left_margin_char(ch, request.face_id);
     }
     builder.push_left_margin_stretch(1, request.face_id);
+}
+
+pub(crate) fn publish_text_window_cursor(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    cursor: TextWindowCursor,
+) {
+    if !cursor.selected {
+        builder.push_cursor(
+            cursor.window_id,
+            cursor.slot_id,
+            cursor.x,
+            cursor.y,
+            cursor.width,
+            cursor.height,
+            cursor.style,
+            cursor.color,
+        );
+    }
+    builder.set_cursor_at_row(cursor.row(), cursor.col(), cursor.style);
+    output_emitter.set_phys_cursor(cursor.window_snapshot());
+    if cursor.selected {
+        builder.set_phys_cursor(cursor.phys_cursor());
+    }
 }
 
 pub(crate) fn finish_text_window_output_rows(

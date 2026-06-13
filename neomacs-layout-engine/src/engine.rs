@@ -15,14 +15,14 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowDisplayRange,
+    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowCursor, TextWindowDisplayRange,
     TextWindowLineNumberMargin, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
     WindowOutputEmitter, begin_text_window_output, close_text_window_output,
     emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
     emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
     finish_text_matrix_row_output, finish_text_window_output_rows,
     install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
-    record_text_window_display_range,
+    publish_text_window_cursor, record_text_window_display_range,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -63,8 +63,8 @@ use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint,
-    WindowInfo, WindowTransitionHint, WindowTransitionKind,
+    CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo,
+    WindowTransitionHint, WindowTransitionKind,
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -73,8 +73,7 @@ use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
-    WindowCursorSnapshot, WindowDisplaySnapshot, WindowId,
+    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorPos, WindowDisplaySnapshot, WindowId,
 };
 use strum::{EnumString, IntoStaticStr};
 
@@ -522,23 +521,6 @@ impl CursorGeometrySource {
 impl ResolvedCursorGeometry {
     fn window_id(&self) -> i64 {
         self.slot_id.window_id
-    }
-
-    fn row(&self) -> usize {
-        self.slot_id.row as usize
-    }
-
-    fn col(&self) -> u16 {
-        self.slot_id.col
-    }
-}
-
-fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
-    match style {
-        CursorStyle::FilledBox => WindowCursorKind::FilledBox,
-        CursorStyle::Hollow => WindowCursorKind::HollowBox,
-        CursorStyle::Bar(_) => WindowCursorKind::Bar,
-        CursorStyle::Hbar(_) => WindowCursorKind::Hbar,
     }
 }
 
@@ -6062,45 +6044,13 @@ impl LayoutEngine {
                     if resolved_cursor.y >= text_y
                         && resolved_cursor.y + resolved_cursor.height <= text_y + text_height
                     {
-                        // The selected window's cursor is published as the phys
-                        // cursor below; every backend draws it from there and
-                        // dedups the matching per-window CursorItem. Pushing one
-                        // for the selected window is pure redundancy (and was the
-                        // source of the "two cursors" drift), so only non-selected
-                        // windows get a per-window cursor here.
-                        if !params.selected {
-                            self.matrix_builder.push_cursor(
-                                resolved_cursor.window_id(),
-                                resolved_cursor.slot_id,
-                                resolved_cursor.x,
-                                resolved_cursor.y,
-                                resolved_cursor.width,
-                                resolved_cursor.height,
-                                resolved_cursor.style,
-                                resolved_cursor.color,
-                            );
-                        }
-                        self.matrix_builder.set_cursor_at_row(
-                            resolved_cursor.row(),
-                            resolved_cursor.col(),
-                            resolved_cursor.style,
-                        );
-                        output_emitter.set_phys_cursor(WindowCursorSnapshot {
-                            kind: window_cursor_kind(resolved_cursor.style),
-                            x: (resolved_cursor.x - text_area_left).round() as i64,
-                            y: (resolved_cursor.y - window_top).round() as i64,
-                            width: resolved_cursor.width.round() as i64,
-                            height: resolved_cursor.height.round() as i64,
-                            ascent: resolved_cursor.ascent.round() as i64,
-                            row: resolved_cursor.row() as i64,
-                            col: i64::from(resolved_cursor.col()),
-                        });
-                        if params.selected {
-                            self.matrix_builder.set_phys_cursor(PhysCursor {
+                        publish_text_window_cursor(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            TextWindowCursor {
+                                selected: params.selected,
                                 window_id: resolved_cursor.window_id(),
                                 charpos: point_charpos.max(0) as usize,
-                                row: resolved_cursor.row(),
-                                col: resolved_cursor.col(),
                                 slot_id: resolved_cursor.slot_id,
                                 x: resolved_cursor.x,
                                 y: resolved_cursor.y,
@@ -6110,8 +6060,10 @@ impl LayoutEngine {
                                 style: resolved_cursor.style,
                                 color: resolved_cursor.color,
                                 cursor_fg: resolved_cursor.cursor_fg,
-                            });
-                        }
+                                text_area_left,
+                                window_top,
+                            },
+                        );
 
                         if point_is_visible_eob {
                             tracing::debug!(

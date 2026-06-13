@@ -6,6 +6,7 @@ use super::TextMatrixRowMetrics;
 use super::TextMatrixRowOutput;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
+use super::TextWindowCursor;
 use super::TextWindowDisplayRange;
 use super::TextWindowLineNumberMargin;
 use super::TextWindowRightEdgeMarkerColumn;
@@ -19,6 +20,7 @@ use super::finish_and_end_text_matrix_row_output;
 use super::finish_text_matrix_row_output;
 use super::install_text_window_right_edge_markers;
 use super::mark_current_text_row_truncated_left;
+use super::publish_text_window_cursor;
 use super::record_text_window_display_range;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
@@ -28,8 +30,10 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::display_status_line::DisplayRowOutputProgress;
 use crate::matrix_builder::GlyphMatrixBuilder;
-use neomacs_display_protocol::frame_glyphs::{GlyphRowRole, WindowInfo};
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::frame_glyphs::{
+    CursorStyle, DisplaySlotId, GlyphRowRole, WindowInfo,
+};
+use neomacs_display_protocol::types::{Color, Rect};
 use neomacs_display_protocol::{Glyph, GlyphArea, GlyphType};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -549,6 +553,73 @@ fn emit_text_window_line_number_margin_right_aligns_text_and_trailing_separator(
     assert_char_glyph(&margin[2], '2', 7);
     assert_eq!(margin[3].glyph_type, GlyphType::Stretch { width_cols: 1 });
     assert!(margin.iter().all(|glyph| glyph.face_id == 7));
+}
+
+#[test]
+fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_cursor_item() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-selected-cursor", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(window_id.0, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_left_margin_char('1', 7);
+    builder.push_left_margin_stretch(1, 7);
+    builder.push_char('H', 3, 100);
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
+    publish_text_window_cursor(
+        &mut builder,
+        &mut emitter,
+        TextWindowCursor {
+            selected: true,
+            window_id: window_id.0 as i64,
+            charpos: 100,
+            slot_id: DisplaySlotId {
+                window_id: window_id.0 as i64,
+                row: 0,
+                col: 0,
+            },
+            x: 40.0,
+            y: 24.0,
+            width: 8.0,
+            height: 16.0,
+            ascent: 12.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            text_area_left: 16.0,
+            window_top: 8.0,
+        },
+    );
+
+    builder.end_row();
+    builder.end_window();
+    let snapshot = emitter.finish_snapshot(&mut eval, 0, 0, 0, 0);
+    let state = builder.finish(10, 1, 8.0, 16.0);
+
+    assert!(state.cursors.is_empty());
+    let phys = state.phys_cursor.expect("selected phys cursor");
+    assert_eq!(phys.slot_id.col, 2);
+    assert_eq!(state.window_matrices[0].matrix.rows[0].cursor_col, Some(2));
+
+    let live = snapshot.phys_cursor.expect("live phys cursor");
+    assert_eq!(live.x, 24);
+    assert_eq!(live.y, 16);
+    assert_eq!(live.row, 0);
+    assert_eq!(live.col, 0);
 }
 
 #[test]
