@@ -4501,8 +4501,8 @@ impl LayoutEngine {
                             );
                             let replacement_source = BufferDisplayReplacementSource::new(
                                 buf_id,
-                                charpos,
-                                text_start_byte + byte_idx,
+                                CharPos0::new(charpos.max(0) as usize),
+                                EmacsBytePos::new(text_start_byte + byte_idx),
                             );
                             let replacement_fragment = DisplayTextFragment::display_property_string(
                                 prop_val,
@@ -4617,8 +4617,8 @@ impl LayoutEngine {
                             );
                             let replacement_source = BufferDisplayReplacementSource::new(
                                 buf_id,
-                                charpos,
-                                text_start_byte + byte_idx,
+                                CharPos0::new(charpos.max(0) as usize),
+                                EmacsBytePos::new(text_start_byte + byte_idx),
                             );
                             let replacement_frame = text_append_surface.frame_for_active_face(
                                 row_geometry.append_placement(raise_span.value_or(0.0)),
@@ -4662,8 +4662,8 @@ impl LayoutEngine {
                     {
                         let replacement_source = BufferDisplayReplacementSource::new(
                             buf_id,
-                            charpos,
-                            text_start_byte + byte_idx,
+                            CharPos0::new(charpos.max(0) as usize),
+                            EmacsBytePos::new(text_start_byte + byte_idx),
                         );
                         let maybe_media_item = replacement.direct_media_item_kind().or_else(|| {
                             resolve_display_property_media(

@@ -2452,8 +2452,11 @@ fn append_display_replacement_string_fragment_to_text_row_walks_source_faces_and
             ]),
         }],
     );
-    let replacement_source =
-        crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
+    );
     let fragment = DisplayTextFragment::display_property_string(
         value,
         CharPos0::new(0),
@@ -2658,8 +2661,11 @@ fn append_display_replacement_stretch_to_text_row_and_emit_advances_output() {
         },
         DisplayTabPolicy::every(8),
     );
-    let replacement_source =
-        crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
+    );
 
     let (_progress, end) = append_display_replacement_stretch_to_text_row_and_emit(
         &mut builder,
@@ -2744,8 +2750,11 @@ fn append_display_replacement_source_mapped_text_to_text_row_and_emit_advances_o
         },
         DisplayTabPolicy::every(8),
     );
-    let replacement_source =
-        crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
+    );
 
     let (_progress, end) = append_display_replacement_source_mapped_text_to_text_row_and_emit(
         &mut builder,

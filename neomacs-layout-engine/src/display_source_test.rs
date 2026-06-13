@@ -77,7 +77,8 @@ fn text_source_char_classification_matches_display_items() {
 
 #[test]
 fn buffer_display_replacement_source_builds_items_without_appending() {
-    let source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);
+    let source =
+        BufferDisplayReplacementSource::new(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12));
 
     let stretch_item = source.stretch_item(42, DisplayReplacementBox::new(16.0, 9.0, 7.0));
     assert_eq!(stretch_item.face, RenderFaceRef::FaceId(42));
@@ -125,7 +126,8 @@ fn buffer_text_item_source_single_char_maps_one_buffer_character() {
 #[test]
 fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
     let _eval = Context::new();
-    let replacement_source = BufferDisplayReplacementSource::new(BufferId(7), 3, 12);
+    let replacement_source =
+        BufferDisplayReplacementSource::new(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12));
     let string_source =
         LispStringSourceCursor::new(1, Value::string("fallback"), RenderFaceRef::FaceId(42))
             .expect("string source");

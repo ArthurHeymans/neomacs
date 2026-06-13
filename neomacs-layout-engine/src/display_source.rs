@@ -145,12 +145,16 @@ impl DisplayReplacementBox {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BufferDisplayReplacementSource {
     buffer_id: BufferId,
-    char_pos: i64,
-    byte_pos: usize,
+    char_pos: CharPos0,
+    byte_pos: EmacsBytePos,
 }
 
 impl BufferDisplayReplacementSource {
-    pub(crate) const fn new(buffer_id: BufferId, char_pos: i64, byte_pos: usize) -> Self {
+    pub(crate) const fn new(
+        buffer_id: BufferId,
+        char_pos: CharPos0,
+        byte_pos: EmacsBytePos,
+    ) -> Self {
         Self {
             buffer_id,
             char_pos,
@@ -159,11 +163,10 @@ impl BufferDisplayReplacementSource {
     }
 
     fn span(self) -> SourceSpan {
-        let start = CharPos0::new(self.char_pos.max(0) as usize);
-        let end = CharPos0::new(self.char_pos.saturating_add(1).max(0) as usize);
+        let end = self.char_pos.add_len(CharLen::new(1));
         SourceSpan::new(
-            DisplaySourcePosition::buffer(self.buffer_id, start, EmacsBytePos::new(self.byte_pos)),
-            DisplaySourcePosition::buffer(self.buffer_id, end, EmacsBytePos::new(self.byte_pos)),
+            DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos),
+            DisplaySourcePosition::buffer(self.buffer_id, end, self.byte_pos),
         )
     }
 
