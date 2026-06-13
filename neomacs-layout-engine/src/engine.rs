@@ -40,9 +40,9 @@ use crate::display_row::{
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
     DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
-    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
-    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
-    LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
+    DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
+    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4706,25 +4706,25 @@ impl LayoutEngine {
                         display_property_byte_pos,
                     );
                     let display_property = classify_display_property(prop_val);
-                    if let Some(replacement_item) = DisplayPropertyReplacementAppendItem::resolve(
-                        &display_property,
-                        prop_val,
-                        display_property_char_pos,
-                        &text[byte_idx..],
-                        &active_face_state,
-                        &mut self.font_metrics,
-                        x,
-                        content_x,
-                        params,
-                        evaluator.display_host.as_deref(),
-                    ) {
-                        let replacement_request = DisplayPropertyReplacementAppendRequest::new(
-                            display_replacement_source,
-                            replacement_item,
-                            raise_span.value_or(0.0),
-                            char_h,
-                            DisplayRowPosition { x_px: x, col },
-                        );
+                    let replacement_resolve_request =
+                        DisplayPropertyReplacementAppendResolveRequest {
+                            display_property: &display_property,
+                            value: prop_val,
+                            replacement_source: display_replacement_source,
+                            anchor_charpos: display_property_char_pos,
+                            source_text: &text[byte_idx..],
+                            active_face_state: &active_face_state,
+                            current_x: x,
+                            content_x,
+                            params,
+                            display_host: evaluator.display_host.as_deref(),
+                            glyph_y_offset: raise_span.value_or(0.0),
+                            default_row_height: char_h,
+                            start_position: DisplayRowPosition { x_px: x, col },
+                        };
+                    if let Some(replacement_request) =
+                        replacement_resolve_request.resolve(&mut self.font_metrics)
+                    {
                         if point_in_display_replacement {
                             capture_cursor_info(
                                 &mut cursor_info,

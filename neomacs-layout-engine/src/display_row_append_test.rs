@@ -3206,6 +3206,49 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
 }
 
 #[test]
+fn display_property_replacement_append_resolve_request_builds_append_request() {
+    let _eval = Context::new();
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let value = Value::string("ab");
+    let classification = classify_display_property(value);
+    let params = test_display_space_window_params();
+    let request = DisplayPropertyReplacementAppendResolveRequest {
+        display_property: &classification,
+        value,
+        replacement_source: crate::display_source::BufferDisplayReplacementSource::new(
+            BufferId(7),
+            CharPos0::new(3),
+            EmacsBytePos::new(12),
+        ),
+        anchor_charpos: CharPos0::new(3),
+        source_text: b"x",
+        active_face_state: &active_face,
+        current_x: 24.0,
+        content_x: 8.0,
+        params: &params,
+        display_host: None,
+        glyph_y_offset: -2.0,
+        default_row_height: 18.0,
+        start_position: DisplayRowPosition { x_px: 24.0, col: 4 },
+    }
+    .resolve(&mut font_metrics)
+    .expect("display replacement append request");
+
+    assert_eq!(
+        request.cursor_policy(),
+        DisplayPropertyReplacementCursorPolicy::TextSlot {
+            width_px: 8.0,
+            stretch_like: false,
+        }
+    );
+    assert_eq!(
+        request.start_position(),
+        DisplayRowPosition { x_px: 24.0, col: 4 }
+    );
+}
+
+#[test]
 fn display_replacement_stretch_append_item_names_cursor_and_extent_policy() {
     let item = DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0);
     assert_eq!(item.width_px(), 13.0);

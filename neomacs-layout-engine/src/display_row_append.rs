@@ -2480,6 +2480,49 @@ pub(crate) enum DisplayPropertyReplacementAppendItem {
     Media(DisplayReplacementMediaAppendResolution),
 }
 
+pub(crate) struct DisplayPropertyReplacementAppendResolveRequest<'a> {
+    pub(crate) display_property: &'a DisplayPropertyClassification,
+    pub(crate) value: Value,
+    pub(crate) replacement_source: BufferDisplayReplacementSource,
+    pub(crate) anchor_charpos: CharPos0,
+    pub(crate) source_text: &'a [u8],
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) current_x: f32,
+    pub(crate) content_x: f32,
+    pub(crate) params: &'a WindowParams,
+    pub(crate) display_host: Option<&'a dyn DisplayHost>,
+    pub(crate) glyph_y_offset: f32,
+    pub(crate) default_row_height: f32,
+    pub(crate) start_position: DisplayRowPosition,
+}
+
+impl DisplayPropertyReplacementAppendResolveRequest<'_> {
+    pub(crate) fn resolve(
+        self,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> Option<DisplayPropertyReplacementAppendRequest> {
+        let item = DisplayPropertyReplacementAppendItem::resolve(
+            self.display_property,
+            self.value,
+            self.anchor_charpos,
+            self.source_text,
+            self.active_face_state,
+            font_metrics,
+            self.current_x,
+            self.content_x,
+            self.params,
+            self.display_host,
+        )?;
+        Some(DisplayPropertyReplacementAppendRequest::new(
+            self.replacement_source,
+            item,
+            self.glyph_y_offset,
+            self.default_row_height,
+            self.start_position,
+        ))
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayPropertyReplacementAppendRequest {
     replacement_source: BufferDisplayReplacementSource,
