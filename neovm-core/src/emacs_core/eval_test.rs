@@ -12752,13 +12752,16 @@ fn jit_direct_call_speculation_tracks_redefinition() {
     let five = vec![Value::make_int(5)];
 
     // 1) Speculated direct call (compile-time binding = doubler) — and prove
-    //    the spec shim engaged (the generic path would also compute 10).
+    //    the spec shim engaged (the generic path would also compute 10; the
+    //    engagement counter only exists in debug builds).
+    #[cfg(debug_assertions)]
     let spec_before =
         crate::emacs_core::jit::compile::SPEC_CALL_COUNT.load(std::sync::atomic::Ordering::Relaxed);
     assert_eq!(
         ev.funcall_general_untraced(hot, five.clone()).unwrap(),
         Value::make_int(10)
     );
+    #[cfg(debug_assertions)]
     assert!(
         crate::emacs_core::jit::compile::SPEC_CALL_COUNT.load(std::sync::atomic::Ordering::Relaxed)
             > spec_before,
@@ -13039,6 +13042,197 @@ fn jit_fib_and_loops_compile_under_precise_deopt() {
         .expect("interpreted loop runs");
     assert_eq!(native, Value::make_int(0));
     assert_eq!(native, interp, "loop with call+guards matches interpreter");
+}
+
+/// Macro-benchmark helper: hand-built recursive fib (the canonical JIT
+/// benchmark shape — self-recursive constant-symbol call, guards after the
+/// calls, only compilable since precise-PC deopt).
+#[cfg(feature = "jit")]
+fn jit_bench_fib_value(sym_name: &str, hot: bool) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let fib_sym = Value::symbol(sym_name);
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::StackRef(0),
+        Op::Constant(0),
+        Op::Lss,
+        Op::GotoIfNil(6),
+        Op::StackRef(0),
+        Op::Return,
+        Op::Constant(1),
+        Op::StackRef(1),
+        Op::Constant(2),
+        Op::Sub,
+        Op::Call(1),
+        Op::Constant(1),
+        Op::StackRef(2),
+        Op::Constant(0),
+        Op::Sub,
+        Op::Call(1),
+        Op::Add,
+        Op::Return,
+    ];
+    f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)];
+    f.max_stack = 16;
+    if hot {
+        f.runtime.set_hot_for_test();
+    }
+    Value::make_bytecode(f)
+}
+
+/// Body-dominated control benchmark: sum a countdown loop (pure arithmetic +
+/// backedges, no calls) — isolates the native-body win from call overhead.
+#[cfg(feature = "jit")]
+fn jit_bench_loop_value(hot: bool) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::Constant(0),   // 0  [n 0]
+        Op::StackRef(1),   // 1  [n acc n]      <- loop head
+        Op::Constant(0),   // 2  [n acc n 0]
+        Op::Gtr,           // 3  [n acc c]
+        Op::GotoIfNil(13), // 4  [n acc]
+        Op::StackRef(1),   // 5  [n acc n]
+        Op::StackRef(1),   // 6  [n acc n acc]
+        Op::Add,           // 7  [n acc acc']
+        Op::StackSet(1),   // 8  [n acc']
+        Op::StackRef(1),   // 9  [n acc' n]
+        Op::Sub1,          // 10 [n acc' n-1]
+        Op::StackSet(2),   // 11 [n-1 acc']
+        Op::Goto(1),       // 12 backedge
+        Op::StackRef(0),   // 13 [n acc acc]
+        Op::Return,        // 14
+    ];
+    f.constants = vec![Value::make_int(0)];
+    f.max_stack = 16;
+    if hot {
+        f.runtime.set_hot_for_test();
+    }
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_loop_native() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let f = jit_bench_loop_value(true);
+    let n = 5_000_000i64;
+    let want = Value::make_int(n * (n + 1) / 2);
+    // Warm (compiles).
+    assert_eq!(
+        ev.funcall_general_untraced(f, vec![Value::make_int(1000)])
+            .unwrap(),
+        Value::make_int(500500)
+    );
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(f, vec![Value::make_int(n)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, want);
+    panic!("BENCH native loop(5M) = {dt:?} (intentional panic so nextest prints this)");
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_loop_interp() {
+    crate::test_utils::init_test_tracing();
+    unsafe { std::env::set_var("NEOVM_JIT_THRESHOLD", "4000000000") };
+    let mut ev = Context::new();
+    let f = jit_bench_loop_value(false);
+    let n = 5_000_000i64;
+    let want = Value::make_int(n * (n + 1) / 2);
+    assert_eq!(
+        ev.funcall_general_untraced(f, vec![Value::make_int(1000)])
+            .unwrap(),
+        Value::make_int(500500)
+    );
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(f, vec![Value::make_int(n)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, want);
+    panic!("BENCH interp loop(5M) = {dt:?} (intentional panic so nextest prints this)");
+}
+
+/// `cargo nextest run --release --run-ignored ignored-only jit_bench` — run
+/// BOTH jit_bench_* tests and compare the printed timings (each pins its
+/// tier via NEOVM_JIT_THRESHOLD before the first JIT touch; nextest's
+/// process-per-test makes that sound).
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_fib_native() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fib = jit_bench_fib_value("jit-bench-fib", true);
+    let ValueKind::Symbol(id) = Value::symbol("jit-bench-fib").kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(id, fib);
+    // Warm: ensures compilation happened before timing.
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(20)])
+        .unwrap();
+    assert_eq!(r, Value::make_int(6765));
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(27)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, Value::make_int(196418));
+    panic!(
+        "BENCH native fib(27) = {:?} (intentional panic so nextest prints this)",
+        dt
+    );
+}
+
+/// Interpreter-pinned twin of [`jit_bench_fib_native`].
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_fib_interp() {
+    crate::test_utils::init_test_tracing();
+    // Pin the tier BEFORE the first hot_threshold() read in this process.
+    unsafe { std::env::set_var("NEOVM_JIT_THRESHOLD", "4000000000") };
+    let mut ev = Context::new();
+    let fib = jit_bench_fib_value("jit-bench-fib-i", false);
+    let ValueKind::Symbol(id) = Value::symbol("jit-bench-fib-i").kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(id, fib);
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(20)])
+        .unwrap();
+    assert_eq!(r, Value::make_int(6765));
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(27)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, Value::make_int(196418));
+    panic!(
+        "BENCH interp fib(27) = {:?} (intentional panic so nextest prints this)",
+        dt
+    );
 }
 
 #[test]
