@@ -48,6 +48,7 @@ Continuation work after this handoff:
 - Main buffer complex text append no longer constructs `DisplayTextRunMeasurement` in `engine.rs`; the append layer now lowers the already-resolved fragment advance into its render policy. The buffer walker still computes that advance for wrap and cursor decisions, so full width-path unification remains open.
 - Buffer text fragment append now uses one typed append helper with `BufferTextFragmentAppendMeasurement::{Natural, ResolvedAdvance}` instead of separate natural/resolved append entry points. This keeps measurement policy at the source-append boundary while the main buffer walker still decides when a resolved advance is required.
 - Append placement is private to `display_row_append.rs`, and append tests now build frames through `DisplayRowAppendSurface` instead of constructing lowered placement/frame internals.
+- The generic `DisplayTextRunMeasurementPlan::from_char_advances` helper has been removed. Fallback per-character text-run measurement now lives in `DisplayRowGlyphMeasurementFace`, so caller-provided char-advance construction is no longer exposed as a shared measurement-plan API.
 - Latest local verification:
 
   ```bash
@@ -213,12 +214,6 @@ Steps:
    cargo nextest run -p neomacs-layout-engine display_row display_row_append
    cargo nextest run -p neomacs-layout-engine
    ```
-
-Expected commit style:
-
-```bash
-git commit -m "refactor: contain display row spec lowering"
-```
 
 ### Slice 2: Retire Old Width Paths
 

@@ -18,7 +18,8 @@ use crate::display_source_resolver::{
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::{
-    ComplexTextRunAdvancePolicy, DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
+    ComplexTextRunAdvancePolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
+    DisplayTextRunMeasurementPlan,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -650,6 +651,27 @@ impl DisplayRowGlyphMeasurementFace {
         measurer.text_run_advances_px(text, self.face.face_id, self.fallback_char_width)
     }
 
+    fn fallback_text_run_measurement(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &str,
+    ) -> DisplayTextRunMeasurement {
+        let advances = text
+            .char_indices()
+            .enumerate()
+            .map(|(char_offset, (byte_offset, ch))| {
+                let columns = crate::composition::base_width_cols(ch).max(1);
+                let fallback_advance_px = self.fallback_char_width * f32::from(columns);
+                DisplayTextRunAdvance::new(
+                    char_offset,
+                    byte_offset,
+                    self.advance_for_char(font_metrics, ch, fallback_advance_px),
+                )
+            })
+            .collect();
+        DisplayTextRunMeasurement::Measured(advances)
+    }
+
     pub(crate) fn text_run_measurement(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
@@ -659,11 +681,7 @@ impl DisplayRowGlyphMeasurementFace {
         if measurement.measured_advances().is_some() {
             return measurement;
         }
-        DisplayTextRunMeasurementPlan::from_char_advances(
-            text,
-            self.fallback_char_width,
-            |ch, fallback_advance_px| self.advance_for_char(font_metrics, ch, fallback_advance_px),
-        )
+        self.fallback_text_run_measurement(font_metrics, text)
     }
 }
 

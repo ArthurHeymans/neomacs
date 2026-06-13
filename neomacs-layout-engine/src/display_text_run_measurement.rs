@@ -313,27 +313,6 @@ impl DisplayTextRunMeasurementPlan {
             DisplayTextRunMeasurement::Measured(advances)
         }
     }
-
-    pub(crate) fn from_char_advances(
-        text: &str,
-        fallback_char_width_px: f32,
-        mut advance_for_char: impl FnMut(char, f32) -> f32,
-    ) -> DisplayTextRunMeasurement {
-        let advances = text
-            .char_indices()
-            .enumerate()
-            .map(|(char_offset, (byte_offset, ch))| {
-                let columns = crate::composition::base_width_cols(ch).max(1);
-                let fallback_advance_px = fallback_char_width_px * f32::from(columns);
-                DisplayTextRunAdvance::new(
-                    char_offset,
-                    byte_offset,
-                    advance_for_char(ch, fallback_advance_px),
-                )
-            })
-            .collect();
-        DisplayTextRunMeasurement::Measured(advances)
-    }
 }
 
 #[cfg(test)]
