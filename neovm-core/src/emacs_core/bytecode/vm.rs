@@ -4331,26 +4331,40 @@ impl<'a> Vm<'a> {
         Ok(result)
     }
 
-    /// V3 speculated direct call: the caller's spec site is armed, so `callee`
-    /// is the compile-time bytecode object the symbol still names. Resolve and
-    /// cache the callee's compiled leaf in `leaf_slot`, then run it DIRECTLY
-    /// under the recursion-depth guard — skipping the `funcall_general`
-    /// dispatch and the compiled-cache hash lookup that
-    /// `call_for_jit -> call_function -> try_run_compiled` would otherwise pay
-    /// on every call. Returns `None` when the callee can't be fast-pathed (body
-    /// `NotCompilable`, or an arity mismatch the strict path must signal),
-    /// leaving the shim to fall back to `call_for_jit`.
+    /// V3 + native-to-native speculated direct call: the caller's spec site is
+    /// armed, so `callee` is the compile-time bytecode object the symbol still
+    /// names, and `args_ptr` addresses `nargs` pre-marshaled argument words (the
+    /// caller's native call-args slot). Resolve and cache the callee's compiled
+    /// leaf in `leaf_slot`, then run it DIRECTLY under the recursion-depth
+    /// guard — skipping the `funcall_general` dispatch and the compiled-cache
+    /// hash lookup that `call_for_jit` would pay.
+    ///
+    /// When the callee is a pure pass-through for this argument count (simple
+    /// fixed arity, no `&optional` nil-pad / `&rest` list), the args go
+    /// STRAIGHT to the callee's native entry — no `LispArgVec`, no per-arg
+    /// scratch rooting, no re-marshal (the per-call cost that dominates
+    /// call-heavy compiled code). Otherwise the args are marshaled and rooted
+    /// (still skipping dispatch + hash lookup). Returns `None` when the callee
+    /// can't be fast-pathed (body `NotCompilable`, or an arity mismatch the
+    /// strict path must signal), leaving the shim to fall back to
+    /// `call_for_jit`.
     ///
     /// The recursion-depth guard is applied exactly as `call_for_jit` applies
-    /// it (one increment per call): without it a deeply recursive compiled
-    /// function would exhaust the native stack instead of signalling
-    /// `max-lisp-eval-depth`. The cached leaf handle is sound because the
-    /// per-thread `COMPILED` cache never evicts (see `resolve_compiled_leaf_ptr`).
-    pub(crate) fn call_armed_callee_direct(
+    /// it (one increment per call) so deeply recursive compiled functions
+    /// signal `max-lisp-eval-depth` instead of overflowing the native stack.
+    /// The cached leaf handle is sound because the per-thread `COMPILED` cache
+    /// never evicts. The native pass-through needs no arg rooting: the caller's
+    /// `maybe_quit` already returned Ok (which does not collect) and nothing
+    /// allocates on a lisp heap before the callee's entry reads its args.
+    ///
+    /// SAFETY: `args_ptr` addresses `nargs` valid tagged words (the caller's
+    /// call-args slot, populated immediately before the spec shim was called).
+    pub(crate) fn call_armed_callee_native(
         &mut self,
         callee: Value,
         leaf_slot: &core::sync::atomic::AtomicU64,
-        args: &[Value],
+        args_ptr: *const i64,
+        nargs: usize,
     ) -> Option<Result<Value, Flow>> {
         use core::sync::atomic::Ordering;
         let bc = callee.get_bytecode_data()?;
@@ -4364,24 +4378,48 @@ impl<'a> Vm<'a> {
         // SAFETY: the COMPILED cache never evicts; `ptr` names a cache-held
         // leaf, valid for this thread's lifetime.
         let leaf = unsafe { &*ptr };
-        if !leaf.accepts(args.len()) {
+        if !leaf.accepts(nargs) {
             // Wrong arg count: defer to the strict path, which signals
             // wrong-number-of-arguments exactly as the interpreter would.
             return None;
         }
+        let pure = leaf.is_pure_passthrough(nargs);
         // Debug-build evidence that the fast path actually fires (vs silently
         // falling back to call_for_jit on every call).
         #[cfg(debug_assertions)]
-        crate::emacs_core::jit::compile::SPEC_FAST_CALL_COUNT
-            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        crate::emacs_core::jit::compile::SPEC_FAST_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
         let res = self.with_bytecode_call_depth(|vm| {
             let ctx_ptr = core::ptr::from_mut(&mut *vm.ctx);
-            match crate::emacs_core::jit::cache::run_resolved_leaf(ctx_ptr, bc, callee, leaf, args)?
-            {
+            let ran = if pure {
+                // NATIVE-TO-NATIVE: pass the caller's call-args slot straight
+                // through (no LispArgVec, no rooting, no re-marshal).
+                crate::emacs_core::jit::cache::run_resolved_leaf_native(
+                    ctx_ptr, bc, callee, leaf, args_ptr,
+                )?
+            } else {
+                // Marshaled (callee has &optional/&rest): build + root args.
+                // The spec shim's outer scratch-root scope bounds these pushes.
+                let mut args = LispArgVec::new();
+                for i in 0..nargs {
+                    // SAFETY: args_ptr addresses `nargs` valid words.
+                    let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+                    crate::emacs_core::eval::push_scratch_gc_root(v);
+                    args.push(v);
+                }
+                crate::emacs_core::jit::cache::run_resolved_leaf(ctx_ptr, bc, callee, leaf, &args)?
+            };
+            match ran {
                 Some(bits) => Ok(Value::from_bits(bits)),
-                // Plain Deopt only arises with a null ctx (not here);
-                // defensively run the callee on the interpreter.
-                None => vm.execute_with_func_value(bc, args.to_vec(), callee),
+                None => {
+                    // Plain Deopt only arises with a null ctx (not here);
+                    // defensively run the callee on the interpreter.
+                    let mut args = Vec::with_capacity(nargs);
+                    for i in 0..nargs {
+                        // SAFETY: args_ptr addresses `nargs` valid words.
+                        args.push(Value::from_bits(unsafe { *args_ptr.add(i) } as usize));
+                    }
+                    vm.execute_with_func_value(bc, args, callee)
+                }
             }
         });
         Some(res)

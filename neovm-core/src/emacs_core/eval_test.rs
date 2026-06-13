@@ -13044,6 +13044,113 @@ fn jit_fib_and_loops_compile_under_precise_deopt() {
     assert_eq!(native, interp, "loop with call+guards matches interpreter");
 }
 
+/// Native-to-native correctness across the pure/marshaled split: a speculated
+/// callee with `&optional` takes the pure pass-through path when all args are
+/// supplied (nargs == arity) and the arg-marshaling path (nil-padding) when
+/// fewer are — both must match the interpreter exactly.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_native_to_native_optional_callee_pure_and_marshaled() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    // Callee (lambda (a &optional b) (if b (+ a b) a)) as hand-built bytecode.
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: vec![crate::emacs_core::intern::SymId(2)],
+        rest: None,
+    });
+    callee.lexical = true;
+    callee.ops = vec![
+        Op::StackRef(0),  // 0: b           [a b b]
+        Op::GotoIfNil(6), // 1:             [a b]
+        Op::StackRef(1),  // 2: a           [a b a]
+        Op::StackRef(1),  // 3: b           [a b a b]
+        Op::Add,          // 4:             [a b r]
+        Op::Return,       // 5
+        Op::StackRef(1),  // 6: a           [a b a]
+        Op::Return,       // 7
+    ];
+    callee.max_stack = 16;
+    let c_sym = Value::symbol("jit-n2n-opt");
+    let ValueKind::Symbol(c_id) = c_sym.kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray
+        .set_symbol_function_id(c_id, Value::make_bytecode(callee));
+
+    // Caller with 2 args -> callee nargs==2==arity -> PURE native pass-through.
+    let mk2 = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![
+                crate::emacs_core::intern::SymId(1),
+                crate::emacs_core::intern::SymId(2),
+            ],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::Constant(0), // 'jit-n2n-opt
+            Op::StackRef(2), // a
+            Op::StackRef(2), // b
+            Op::Call(2),
+            Op::Return,
+        ];
+        f.constants = vec![c_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    // Caller with 1 arg -> callee nargs==1 < arity==2 -> MARSHALED (nil-pad b).
+    let mk1 = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+        f.constants = vec![c_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+
+    // Pure path: (callee 5 7) = 12.
+    let native = ev
+        .funcall_general_untraced(mk2(true), vec![Value::make_int(5), Value::make_int(7)])
+        .unwrap();
+    let interp = ev
+        .funcall_general_untraced(mk2(false), vec![Value::make_int(5), Value::make_int(7)])
+        .unwrap();
+    assert_eq!(native, Value::make_int(12));
+    assert_eq!(
+        native, interp,
+        "pure native pass-through matches interpreter"
+    );
+
+    // Marshaled path: (callee 5) -> b nil -> 5.
+    let native = ev
+        .funcall_general_untraced(mk1(true), vec![Value::make_int(5)])
+        .unwrap();
+    let interp = ev
+        .funcall_general_untraced(mk1(false), vec![Value::make_int(5)])
+        .unwrap();
+    assert_eq!(native, Value::make_int(5));
+    assert_eq!(
+        native, interp,
+        "marshaled (nil-pad) path matches interpreter"
+    );
+}
+
 /// V3 fast path: a speculated call to a compiled bytecode callee runs the
 /// cached leaf DIRECTLY (engagement counter proves it), and a redefinition
 /// clears the cached leaf so the new binding takes effect — same observable

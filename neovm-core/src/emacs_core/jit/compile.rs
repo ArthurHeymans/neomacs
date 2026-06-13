@@ -754,14 +754,20 @@ extern "C" fn neovm_jit_call_spec(
     SPEC_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
     let nargs = nargs as usize;
     let saved = save_scratch_gc_roots();
-    let mut args = LispArgVec::new();
-    for i in 0..nargs {
-        // SAFETY: the generated code stored exactly `nargs` argument words at
-        // `args_ptr` (its call-args stack slot) immediately before this call.
-        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-        push_scratch_gc_root(v);
-        args.push(v);
-    }
+    // Build a rooted LispArgVec from the caller's call-args slot — used only by
+    // the strict-call fallback paths (call_for_jit). The native-to-native fast
+    // path passes `args_ptr` straight through and never materializes this.
+    let read_rooted_args = || {
+        let mut args = LispArgVec::new();
+        for i in 0..nargs {
+            // SAFETY: the generated code stored exactly `nargs` argument words
+            // at `args_ptr` (its call-args slot) immediately before this call.
+            let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+            push_scratch_gc_root(v);
+            args.push(v);
+        }
+        args
+    };
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     let status = match ctx.maybe_quit() {
@@ -786,23 +792,24 @@ extern "C" fn neovm_jit_call_spec(
                 }
             };
             // Armed: the symbol still names the compile-time bytecode object.
-            // Try the V3 fast path (cached leaf, direct native call, no funcall
-            // dispatch / cache hash lookup). Fall back to the strict call on the
-            // VALUE if it can't be fast-pathed (arity / not compilable). Not
-            // armed: strict call on the SYMBOL (resolves the new binding —
-            // fset/advice take effect immediately).
+            // Try the fast path (cached leaf, native-to-native pass-through when
+            // the callee is a pure fixed-arity match — no arg marshaling at
+            // all). Fall back to the strict call on the VALUE if it can't be
+            // fast-pathed (arity / not compilable). Not armed: strict call on
+            // the SYMBOL (resolves the new binding — fset/advice take effect
+            // immediately).
             let mut vm = Vm::from_context(ctx);
             let outcome = if armed {
                 let target = Value::from_bits(expected as usize);
                 push_scratch_gc_root(target);
-                match vm.call_armed_callee_direct(target, &slot.leaf, &args) {
+                match vm.call_armed_callee_native(target, &slot.leaf, args_ptr, nargs) {
                     Some(res) => res,
-                    None => vm.call_for_jit(target, args),
+                    None => vm.call_for_jit(target, read_rooted_args()),
                 }
             } else {
                 let target = Value::from_sym_id(SymId(sym as u32));
                 push_scratch_gc_root(target);
-                vm.call_for_jit(target, args)
+                vm.call_for_jit(target, read_rooted_args())
             };
             match outcome {
                 Ok(value) => {
@@ -1383,6 +1390,40 @@ impl CompiledLeaf {
             };
             arg_bits.push(rest.bits() as i64);
         }
+        self.invoke_native(vmctx, arg_bits.as_ptr())
+    }
+
+    /// Whether a call with `nargs` arguments needs NO argument normalization
+    /// (no `&optional` nil-padding, no `&rest` list construction) — the
+    /// native-to-native pre-marshaled fast path applies only then.
+    pub(crate) fn is_pure_passthrough(&self, nargs: usize) -> bool {
+        !self.has_rest && nargs == self.arity
+    }
+
+    /// Native-to-native fast path: invoke the body with `args_ptr` addressing
+    /// EXACTLY `self.arity` pre-marshaled argument words (the caller's native
+    /// call-args slot). Valid only when [`is_pure_passthrough`](Self::is_pure_passthrough)
+    /// holds for the call's argument count — no nil-pad / rest-list step. Skips
+    /// the `LispArgVec` build and the `arg_bits` re-marshal that [`call`](Self::call)
+    /// pays, which is the per-call cost that dominates call-heavy compiled code.
+    ///
+    /// SAFETY: `args_ptr` must address `self.arity` valid tagged words that stay
+    /// live until the native entry reads them (its first block). The spec fast
+    /// path guarantees no GC safepoint runs in between: `maybe_quit` already
+    /// returned `Ok` (which does not collect) and nothing allocates on a lisp
+    /// heap before the entry consumes its args.
+    pub(crate) fn call_premarshaled(&self, vmctx: *mut u8, args_ptr: *const i64) -> NativeRun {
+        debug_assert!(!vmctx.is_null(), "native-to-native requires a Context");
+        self.invoke_native(vmctx, args_ptr)
+    }
+
+    /// The post-marshaling tail shared by [`call`](Self::call) and
+    /// [`call_premarshaled`](Self::call_premarshaled): invoke the native entry
+    /// with `args_ptr` (exactly `self.arity` words) and handle the `STATUS_*`
+    /// outcome — precise-deopt capture (no frame unwind, ownership transfers to
+    /// the resumed interpreter frame) or the `cleanup_bytecode_frame`-parity
+    /// frame unwind on a normal/signal exit.
+    fn invoke_native(&self, vmctx: *mut u8, args_ptr: *const i64) -> NativeRun {
         let mut out: i64 = 0;
         // SAFETY: `entry` is finalized native code with ABI
         // `extern "C" fn(vmctx: *mut u8, args: *const i64, out: *mut i64) -> i64`
@@ -1417,7 +1458,7 @@ impl CompiledLeaf {
         let status = unsafe {
             let f: extern "C" fn(*mut u8, *const i64, *mut i64) -> i64 =
                 core::mem::transmute(self.entry);
-            f(vmctx, arg_bits.as_ptr(), &mut out as *mut i64)
+            f(vmctx, args_ptr, &mut out as *mut i64)
         };
         if status == STATUS_DEOPT_AT {
             // Precise deopt: NO frame unwind — the resumed interpreter frame

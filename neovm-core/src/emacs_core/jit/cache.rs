@@ -171,7 +171,43 @@ pub(crate) fn run_resolved_leaf(
     leaf: &CompiledLeaf,
     args: &[Value],
 ) -> Result<Option<usize>, Flow> {
-    match leaf.call(ctx as *mut u8, args) {
+    finish_native_run(ctx, func, func_value, leaf.call(ctx as *mut u8, args))
+}
+
+/// Native-to-native variant of [`run_resolved_leaf`]: `args_ptr` addresses
+/// exactly `leaf.arity` pre-marshaled argument words (the caller's native
+/// call-args slot), and the leaf is a pure pass-through (no nil-pad / rest).
+/// Skips the `LispArgVec` build and the `arg_bits` re-marshal entirely — the
+/// per-call cost the call-heavy benchmark is dominated by.
+///
+/// SAFETY: see [`CompiledLeaf::call_premarshaled`] — `args_ptr` must address
+/// `leaf.arity` live words with no GC safepoint before the native entry reads
+/// them (the spec fast path's `maybe_quit`-returned-Ok window).
+pub(crate) fn run_resolved_leaf_native(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+    func_value: Value,
+    leaf: &CompiledLeaf,
+    args_ptr: *const i64,
+) -> Result<Option<usize>, Flow> {
+    finish_native_run(
+        ctx,
+        func,
+        func_value,
+        leaf.call_premarshaled(ctx as *mut u8, args_ptr),
+    )
+}
+
+/// Map a [`NativeRun`] outcome to the `try_run_compiled` return shape, resuming
+/// the interpreter mid-frame on a precise deopt. Shared by both resolved-leaf
+/// runners so marshaled and native-to-native calls have identical semantics.
+fn finish_native_run(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+    func_value: Value,
+    outcome: NativeRun,
+) -> Result<Option<usize>, Flow> {
+    match outcome {
         NativeRun::Ok(bits) => Ok(Some(bits)),
         NativeRun::Deopt => Ok(None),
         NativeRun::DeoptAt {
