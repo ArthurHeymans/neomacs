@@ -551,9 +551,12 @@ fn append_lisp_string_fragment_to_text_row_and_emit(
     ) else {
         return position;
     };
-    let append_spec = frame.append_spec(position, base_face_id, DisplayRowAppendKind::SourceText);
-    let request =
-        DisplayRowSourceAppendRequest::from_append_spec(append_spec, base_face_id, base_face);
+    let request = frame.source_append_request(
+        position,
+        base_face_id,
+        base_face,
+        DisplayRowAppendKind::SourceText,
+    );
     let mut source_state = DisplayRowSourceState::default();
     let Some(outcome) = render_natural_display_source_append_request_into_current_text_row_and_emit(
         builder,
@@ -679,9 +682,12 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let append_spec = frame.append_spec(position, base_face_id, DisplayRowAppendKind::SourceText);
-    let request =
-        DisplayRowSourceAppendRequest::from_append_spec(append_spec, base_face_id, base_face);
+    let request = frame.source_append_request(
+        position,
+        base_face_id,
+        base_face,
+        DisplayRowAppendKind::SourceText,
+    );
     render_natural_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -986,9 +992,12 @@ pub(crate) fn append_lisp_string_to_text_row(
     ) else {
         return position;
     };
-    let append_spec = frame.append_spec(position, base_face_id, DisplayRowAppendKind::SourceText);
-    let request =
-        DisplayRowSourceAppendRequest::from_append_spec(append_spec, base_face_id, base_face);
+    let request = frame.source_append_request(
+        position,
+        base_face_id,
+        base_face,
+        DisplayRowAppendKind::SourceText,
+    );
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
     let Some(outcome) = render_natural_display_source_append_request_into_current_text_row_and_emit(
@@ -1063,8 +1072,7 @@ fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let (item, append_kind) =
         buffer_text_fragment_source_item(fragment, buffer_id, buffer, face_id)?;
-    let append_spec = frame.append_spec(position, face_id, append_kind);
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let request = frame.source_append_request(position, face_id, base_face, append_kind);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
@@ -1272,8 +1280,7 @@ fn measure_buffer_text_fragment_append_progress_to_text_row<B: LayoutBufferView 
 ) -> Option<DisplayRowAppendProgress> {
     let (item, append_kind) =
         buffer_text_fragment_source_item(fragment, buffer_id, buffer, face_id)?;
-    let append_spec = frame.append_spec(position, face_id, append_kind);
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let request = frame.source_append_request(position, face_id, base_face, append_kind);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
@@ -1496,8 +1503,7 @@ fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView 
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let (item, append_kind) =
         buffer_display_item_fragment_source_item(fragment, buffer_id, buffer, face_id, item)?;
-    let append_spec = frame.append_spec(position, face_id, append_kind);
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let request = frame.source_append_request(position, face_id, base_face, append_kind);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
@@ -1540,8 +1546,7 @@ fn measure_buffer_display_item_fragment_append_progress_to_text_row<
 ) -> Option<DisplayRowAppendProgress> {
     let (item, append_kind) =
         buffer_display_item_fragment_source_item(fragment, buffer_id, buffer, face_id, item)?;
-    let append_spec = frame.append_spec(position, face_id, append_kind);
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let request = frame.source_append_request(position, face_id, base_face, append_kind);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
@@ -1967,9 +1972,12 @@ fn append_raw_display_replacement_item_to_text_row_and_emit(
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let face_id = render_face_ref_id(item.face, fallback_face_id);
-    let append_spec =
-        frame.append_spec(position, face_id, DisplayRowAppendKind::DisplayReplacement);
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let request = frame.source_append_request(
+        position,
+        face_id,
+        base_face,
+        DisplayRowAppendKind::DisplayReplacement,
+    );
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,
@@ -2700,13 +2708,12 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
     position: DisplayRowPosition,
     item_policy: &mut impl DisplayRowRenderPolicy,
 ) -> DisplayRowPosition {
-    let append_spec = frame.append_spec(
+    let request = frame.source_append_request(
         position,
         fallback_face_id,
+        base_face,
         DisplayRowAppendKind::DisplayReplacementString,
     );
-    let request =
-        DisplayRowSourceAppendRequest::from_append_spec(append_spec, fallback_face_id, base_face);
     let mut source_state = DisplayRowSourceState::default();
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
     let Some(outcome) = render_display_source_append_request_into_current_text_row_and_emit(
@@ -3179,6 +3186,20 @@ impl DisplayRowAppendFrame {
     ) -> DisplayRowAppendSpec {
         self.clone().at(position, face_id).append_spec(kind)
     }
+
+    fn source_append_request<'face>(
+        &self,
+        position: DisplayRowPosition,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        kind: DisplayRowAppendKind,
+    ) -> DisplayRowSourceAppendRequest<'face> {
+        DisplayRowSourceAppendRequest::from_append_spec(
+            self.append_spec(position, face_id, kind),
+            face_id,
+            base_face,
+        )
+    }
 }
 
 struct DisplayRowAppendContext {
@@ -3315,8 +3336,12 @@ fn append_synthetic_text_to_display_row(
     face_id: u32,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let item = synthetic_display_text_item(source_id, text, face_id);
-    let append_spec = frame.append_spec(position, face_id, DisplayRowAppendKind::SourceText);
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let request = frame.source_append_request(
+        position,
+        face_id,
+        base_face,
+        DisplayRowAppendKind::SourceText,
+    );
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,

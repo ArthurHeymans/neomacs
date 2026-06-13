@@ -1041,6 +1041,49 @@ fn display_row_source_append_request_uses_append_spec() {
 }
 
 #[test]
+fn display_row_append_frame_builds_source_append_request() {
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
+        DisplayRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        DisplayTabPolicy::every(4),
+    );
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = resolver.default_face();
+
+    let request = frame.source_append_request(
+        DisplayRowPosition { x_px: 18.0, col: 2 },
+        42,
+        base_face,
+        DisplayRowAppendKind::ControlChar,
+    );
+
+    let parts = request.into_render_parts();
+    assert_eq!(
+        parts.request.render_bounds().start,
+        DisplayRowPosition { x_px: 18.0, col: 2 }
+    );
+    assert_eq!(parts.request.render_bounds().max_x_px, 148.0);
+    assert_eq!(parts.request.base_face_id(), 42);
+    assert_eq!(parts.output.row, 3);
+    assert_eq!(parts.output.height, 14.0);
+}
+
+#[test]
 fn display_row_append_surface_builds_frames_with_shared_area() {
     let tab_policy = DisplayTabPolicy::every(4);
     let surface = DisplayRowAppendSurface::new(
