@@ -38,7 +38,8 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
+    BufferTextResolvedSourceCharAppendRequest, BufferTextRowAppendContext,
+    BufferTextSourceAdvanceResolver, BufferTextSourceChar,
     BufferTextSpecialSourceCharAppendRequest, DisplayPropertyReplacementAppendItem,
     DisplayPropertyReplacementAppendRequest, DisplayPropertyReplacementAppendResolveRequest,
     DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
@@ -5536,17 +5537,21 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = buffer_row_append_context.append_resolved_source_char_to_text_row(
-                &append_geometry,
-                &mut self.matrix_builder,
-                &mut output_emitter,
-                evaluator,
-                &mut self.font_metrics,
+            let append_request = BufferTextResolvedSourceCharAppendRequest::new(
                 &buffer_source_char,
-                face_resolver,
                 resolved_advance,
                 append_position,
             );
+            let appended = buffer_row_append_context
+                .append_resolved_source_char_request_to_text_row(
+                    &append_geometry,
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    append_request,
+                );
             let Some((_progress, position)) = appended else {
                 break;
             };

@@ -1378,28 +1378,27 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_resolved_source_char_to_text_row(
+    pub(crate) fn append_resolved_source_char_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        source_char: &BufferTextSourceChar,
         face_resolver: &FaceResolver,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
-        position: DisplayRowPosition,
+        request: BufferTextResolvedSourceCharAppendRequest,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let parts = request.into_parts();
         self.append_resolved_source_range_to_text_row(
             geometry,
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            source_char.range(),
+            parts.range,
             face_resolver,
-            resolved_advance,
-            position,
+            parts.resolved_advance,
+            parts.position,
         )
     }
 }
@@ -1771,6 +1770,42 @@ impl BufferTextSpecialSourceCharAppendRequest {
 struct BufferTextSpecialSourceCharAppendRequestParts {
     range: BufferTextSourceRange,
     special_display: BufferTextSourceSpecialDisplay,
+    position: DisplayRowPosition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextResolvedSourceCharAppendRequest {
+    range: BufferTextSourceRange,
+    resolved_advance: ResolvedBufferTextSourceAdvance,
+    position: DisplayRowPosition,
+}
+
+impl BufferTextResolvedSourceCharAppendRequest {
+    pub(crate) fn new(
+        source_char: &BufferTextSourceChar,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            range: source_char.range(),
+            resolved_advance,
+            position,
+        }
+    }
+
+    fn into_parts(self) -> BufferTextResolvedSourceCharAppendRequestParts {
+        BufferTextResolvedSourceCharAppendRequestParts {
+            range: self.range,
+            resolved_advance: self.resolved_advance,
+            position: self.position,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BufferTextResolvedSourceCharAppendRequestParts {
+    range: BufferTextSourceRange,
+    resolved_advance: ResolvedBufferTextSourceAdvance,
     position: DisplayRowPosition,
 }
 
