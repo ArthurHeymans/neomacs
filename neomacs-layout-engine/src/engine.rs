@@ -4848,6 +4848,8 @@ impl LayoutEngine {
                 raise_span.value_or(0.0),
                 char_h,
             );
+            let buffer_source_start = CharPos0::new(charpos as usize);
+            let buffer_source_end = CharPos0::new((charpos + 1) as usize);
 
             // Control characters: render as ^X notation
             if let Some(special_display) = precluster_special_display
@@ -4856,18 +4858,15 @@ impl LayoutEngine {
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let buffer_text_fragment = DisplayTextFragment::buffer_text(
-                    CharPos0::new(charpos as usize),
-                    CharPos0::new((charpos + 1) as usize),
-                );
                 let control_item = special_display.clone().into_append_item();
                 let needed_width = buffer_row_append_context
-                    .measure_item_width_or_active_face_fallback_to_text_row(
+                    .measure_item_source_range_width_or_active_face_fallback_to_text_row(
                         &row_geometry,
                         &mut self.matrix_builder,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_text_fragment.clone(),
+                        buffer_source_start,
+                        buffer_source_end,
                         face_resolver,
                         control_item.clone(),
                         DisplayRowPosition { x_px: x, col },
@@ -4975,13 +4974,14 @@ impl LayoutEngine {
                     let _ = face_ids.allocate();
                 }
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_item_fragment_to_text_row_and_emit(
+                    .append_item_source_range_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_text_fragment,
+                        buffer_source_start,
+                        buffer_source_end,
                         face_resolver,
                         control_item,
                         DisplayRowPosition { x_px: x, col },
@@ -5006,19 +5006,16 @@ impl LayoutEngine {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
                 }
-                let buffer_text_fragment = DisplayTextFragment::buffer_text(
-                    CharPos0::new(charpos as usize),
-                    CharPos0::new((charpos + 1) as usize),
-                );
                 let nobreak_item = special_display.into_append_item();
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_item_fragment_to_text_row_and_emit(
+                    .append_item_source_range_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_text_fragment,
+                        buffer_source_start,
+                        buffer_source_end,
                         face_resolver,
                         nobreak_item,
                         DisplayRowPosition { x_px: x, col },
@@ -5051,19 +5048,16 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
-                let buffer_text_fragment = DisplayTextFragment::buffer_text(
-                    CharPos0::new(charpos as usize),
-                    CharPos0::new((charpos + 1) as usize),
-                );
                 let glyphless_item = special_display.into_append_item();
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_item_fragment_to_text_row_and_emit(
+                    .append_item_source_range_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_text_fragment,
+                        buffer_source_start,
+                        buffer_source_end,
                         face_resolver,
                         glyphless_item,
                         DisplayRowPosition { x_px: x, col },
@@ -5079,27 +5073,25 @@ impl LayoutEngine {
 
             let append_position = DisplayRowPosition { x_px: x, col };
             let append_geometry = row_geometry;
-            let buffer_text_fragment = DisplayTextFragment::buffer_text(
-                CharPos0::new(charpos as usize),
-                CharPos0::new((charpos + 1) as usize),
-            );
 
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            let resolved_advance = buffer_row_append_context.resolve_fragment_advance_to_text_row(
-                &append_geometry,
-                &mut buffer_text_advance,
-                &mut self.matrix_builder,
-                evaluator,
-                &mut self.font_metrics,
-                &text,
-                ch_start_byte_idx,
-                buffer_text_fragment.clone(),
-                face_resolver,
-                append_position,
-                cluster_state,
-            );
+            let resolved_advance = buffer_row_append_context
+                .resolve_source_range_advance_to_text_row(
+                    &append_geometry,
+                    &mut buffer_text_advance,
+                    &mut self.matrix_builder,
+                    evaluator,
+                    &mut self.font_metrics,
+                    &text,
+                    ch_start_byte_idx,
+                    buffer_source_start,
+                    buffer_source_end,
+                    face_resolver,
+                    append_position,
+                    cluster_state,
+                );
             let advance = resolved_advance.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > text_append_surface.right_edge() {
@@ -5354,13 +5346,14 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = buffer_row_append_context.append_resolved_fragment_to_text_row(
+            let appended = buffer_row_append_context.append_resolved_source_range_to_text_row(
                 &append_geometry,
                 &mut self.matrix_builder,
                 &mut output_emitter,
                 evaluator,
                 &mut self.font_metrics,
-                buffer_text_fragment,
+                buffer_source_start,
+                buffer_source_end,
                 face_resolver,
                 resolved_advance,
                 append_position,

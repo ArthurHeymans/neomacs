@@ -1384,18 +1384,24 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
+    fn source_fragment(&self, start: CharPos0, end: CharPos0) -> DisplayTextFragment {
+        DisplayTextFragment::buffer_text(start, end)
+    }
+
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn measure_item_width_or_active_face_fallback_to_text_row(
+    pub(crate) fn measure_item_source_range_width_or_active_face_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        fragment: DisplayTextFragment,
+        start: CharPos0,
+        end: CharPos0,
         face_resolver: &FaceResolver,
         item: BufferTextFragmentAppendItem,
         position: DisplayRowPosition,
     ) -> f32 {
+        let fragment = self.source_fragment(start, end);
         self.item_active_face(geometry)
             .measure_fragment_width_or_active_face_fallback_to_text_row(
                 builder,
@@ -1409,18 +1415,20 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_item_fragment_to_text_row_and_emit(
+    pub(crate) fn append_item_source_range_to_text_row_and_emit(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        fragment: DisplayTextFragment,
+        start: CharPos0,
+        end: CharPos0,
         face_resolver: &FaceResolver,
         item: BufferTextFragmentAppendItem,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let fragment = self.source_fragment(start, end);
         self.item_active_face(geometry)
             .append_fragment_to_text_row_and_emit(
                 builder,
@@ -1435,7 +1443,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_fragment_advance_to_text_row(
+    pub(crate) fn resolve_source_range_advance_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         resolver: &mut BufferTextFragmentAdvanceResolver,
@@ -1444,11 +1452,13 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         font_metrics: &mut Option<FontMetricsService>,
         text: &[u8],
         byte_idx: usize,
-        fragment: DisplayTextFragment,
+        start: CharPos0,
+        end: CharPos0,
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
         cluster: BufferTextFragmentClusterState,
     ) -> ResolvedBufferTextFragmentAdvance {
+        let fragment = self.source_fragment(start, end);
         self.fragment_active_face(geometry)
             .resolve_advance_to_text_row(
                 resolver,
@@ -1466,18 +1476,20 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_resolved_fragment_to_text_row(
+    pub(crate) fn append_resolved_source_range_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        fragment: DisplayTextFragment,
+        start: CharPos0,
+        end: CharPos0,
         face_resolver: &FaceResolver,
         resolved_advance: ResolvedBufferTextFragmentAdvance,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let fragment = self.source_fragment(start, end);
         self.fragment_active_face(geometry)
             .append_resolved_to_text_row(
                 builder,

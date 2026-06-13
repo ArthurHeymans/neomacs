@@ -1858,17 +1858,17 @@ fn buffer_text_fragment_append_context_appends_source_char() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
-    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (_progress, end) = append_context
-        .append_resolved_fragment_to_text_row(
+        .append_resolved_source_range_to_text_row(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            fragment,
+            CharPos0::new(0),
+            CharPos0::new(1),
             &face_resolver,
             ResolvedBufferTextFragmentAdvance::natural(8.0),
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -2420,18 +2420,17 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (_progress, end) = append_context
-        .append_item_fragment_to_text_row_and_emit(
+        .append_item_source_range_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            fragment,
+            CharPos0::new(0),
+            CharPos0::new(1),
             &face_resolver,
             BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() },
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -2494,18 +2493,17 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (_progress, end) = append_context
-        .append_item_fragment_to_text_row_and_emit(
+        .append_item_source_range_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            fragment,
+            CharPos0::new(0),
+            CharPos0::new(1),
             &face_resolver,
             BufferTextFragmentAppendItem::Glyphless {
                 ch: '\u{fff0}',
