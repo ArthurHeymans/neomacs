@@ -777,26 +777,19 @@ impl<'a> LispStringSourceAppendContext<'a> {
 pub(crate) struct LispStringSourceRowAppendContext<'a> {
     source_context: LispStringSourceAppendContext<'a>,
     append_surface: &'a DisplayRowAppendSurface,
-    height_px: f32,
-    ascent_px: f32,
-    char_width_px: f32,
     glyph_y_offset: f32,
-    default_row_height: f32,
+    metrics: DisplayRowAppendMetrics,
 }
 
 impl<'a> LispStringSourceRowAppendContext<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         source: &'a mut LispStringSourceCursor,
         source_state: &'a mut DisplayRowSourceState,
         base_face_id: u32,
         base_face: &'a ResolvedFace,
         append_surface: &'a DisplayRowAppendSurface,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
         glyph_y_offset: f32,
-        default_row_height: f32,
+        metrics: DisplayRowAppendMetrics,
     ) -> Self {
         Self {
             source_context: LispStringSourceAppendContext::new(
@@ -806,11 +799,8 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
                 base_face,
             ),
             append_surface,
-            height_px,
-            ascent_px,
-            char_width_px,
             glyph_y_offset,
-            default_row_height,
+            metrics,
         }
     }
 
@@ -830,9 +820,13 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
             self.append_surface,
             geometry,
             self.glyph_y_offset,
-            self.default_row_height,
+            self.metrics.default_row_height,
         )
-        .text_row_frame(self.height_px, self.ascent_px, self.char_width_px);
+        .text_row_frame(
+            self.metrics.height,
+            self.metrics.ascent,
+            self.metrics.char_width,
+        );
         self.source_context.render_to_text_row_and_emit(
             builder,
             output_emitter,

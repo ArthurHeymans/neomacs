@@ -42,8 +42,9 @@ use crate::display_row_append::{
     BufferTextFragmentRowAppendContext, BufferTextFragmentSpecialDisplay,
     BufferTextItemRowAppendContext, DisplayPropertyReplacementAppendItem,
     DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
-    DisplayReplacementRowAppendContext, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
+    DisplayReplacementRowAppendContext, DisplayRowAppendArea, DisplayRowAppendMetrics,
+    DisplayRowAppendSurface, LispStringRowAppendContext, LispStringSourceRowAppendContext,
+    SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -2018,11 +2019,13 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         base_face.face_id(),
         base_face.face(),
         row_context.append_surface,
-        row_context.char_h,
-        row_context.default_row_ascent,
-        row_context.face_char_w,
         0.0,
-        row_context.char_h,
+        DisplayRowAppendMetrics::text_row(
+            row_context.char_h,
+            row_context.default_row_ascent,
+            row_context.face_char_w,
+            row_context.char_h,
+        ),
     );
 
     while geometry.is_within_row_limit(row_limit) {

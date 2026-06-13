@@ -2662,11 +2662,8 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         7,
         base_face,
         &surface,
-        16.0,
-        12.0,
-        8.0,
         0.0,
-        16.0,
+        DisplayRowAppendMetrics::text_row(16.0, 12.0, 8.0, 16.0),
     );
 
     let first = append_context
