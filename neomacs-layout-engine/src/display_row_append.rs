@@ -1303,6 +1303,15 @@ impl DisplayRowAppendSurface {
         DisplayRowAppendFrame::from_parts(placement, self.area, metrics, self.tab_policy.clone())
     }
 
+    pub(crate) fn frame_from_geometry_state(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        glyph_y_offset: f32,
+        metrics: DisplayRowAppendMetrics,
+    ) -> DisplayRowAppendFrame {
+        self.frame(geometry.append_placement(glyph_y_offset), metrics)
+    }
+
     pub(crate) fn frame_for_active_face(
         &self,
         placement: DisplayRowAppendPlacement,
@@ -1326,7 +1335,7 @@ pub(crate) struct DisplayRowAppendMetrics {
 }
 
 impl DisplayRowAppendMetrics {
-    pub(crate) fn new(
+    fn new(
         height: f32,
         ascent: f32,
         char_width: f32,
@@ -1340,6 +1349,15 @@ impl DisplayRowAppendMetrics {
             space_width,
             default_row_height,
         }
+    }
+
+    pub(crate) fn text_row(
+        height: f32,
+        ascent: f32,
+        char_width: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self::new(height, ascent, char_width, char_width, default_row_height)
     }
 
     pub(crate) fn from_active_face_state(
@@ -1392,7 +1410,7 @@ pub(crate) struct DisplayRowAppendFrame {
 }
 
 impl DisplayRowAppendFrame {
-    pub(crate) fn from_parts(
+    fn from_parts(
         placement: DisplayRowAppendPlacement,
         area: DisplayRowAppendArea,
         metrics: DisplayRowAppendMetrics,
@@ -1415,21 +1433,6 @@ impl DisplayRowAppendFrame {
             line_number_width: area.line_number_width,
             face_space_width: metrics.space_width,
         }
-    }
-
-    pub(crate) fn from_geometry_state(
-        geometry: &DisplayRowGeometryState,
-        glyph_y_offset: f32,
-        area: DisplayRowAppendArea,
-        metrics: DisplayRowAppendMetrics,
-        tab_policy: DisplayTabPolicy,
-    ) -> Self {
-        Self::from_parts(
-            geometry.append_placement(glyph_y_offset),
-            area,
-            metrics,
-            tab_policy,
-        )
     }
 
     fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {

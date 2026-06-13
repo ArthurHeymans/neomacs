@@ -40,9 +40,8 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem, DisplayReplacementAppendItem,
-    DisplayReplacementStringItemMeasurer, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendMetrics, DisplayRowAppendSurface,
-    append_buffer_text_item_fragment_to_text_row_and_emit,
+    DisplayReplacementStringItemMeasurer, DisplayRowAppendArea, DisplayRowAppendMetrics,
+    DisplayRowAppendSurface, append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
@@ -2070,18 +2069,14 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             break;
         }
 
-        let frame = DisplayRowAppendFrame::from_geometry_state(
+        let overlay_append_surface = DisplayRowAppendSurface::new(
+            DisplayRowAppendArea::new(content_x, max_x - content_x, max_x - content_x, 0.0),
+            text_display_tab_policy(content_x, params),
+        );
+        let frame = overlay_append_surface.frame_from_geometry_state(
             geometry,
             0.0,
-            DisplayRowAppendArea::new(content_x, max_x - content_x, max_x - content_x, 0.0),
-            DisplayRowAppendMetrics::new(
-                char_h,
-                default_row_ascent,
-                face_char_w,
-                face_char_w,
-                char_h,
-            ),
-            text_display_tab_policy(content_x, params),
+            DisplayRowAppendMetrics::text_row(char_h, default_row_ascent, face_char_w, char_h),
         );
         let Some(outcome) = render_lisp_string_source_append_to_text_row_and_emit(
             builder,
@@ -4427,10 +4422,9 @@ impl LayoutEngine {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
                         let trunc_frame = text_append_surface.frame(
                             row_geometry.append_placement(0.0),
-                            DisplayRowAppendMetrics::new(
+                            DisplayRowAppendMetrics::text_row(
                                 char_h,
                                 default_face_ascent,
-                                char_w,
                                 char_w,
                                 char_h,
                             ),

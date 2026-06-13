@@ -361,16 +361,19 @@ fn synthetic_display_text_item_builds_synthetic_text_run() {
 #[test]
 fn display_row_append_frame_builds_from_geometry_state() {
     let geometry = DisplayRowGeometryState::new(2, 40.0, 0.0, 18.0, 13.0);
-
-    let frame = DisplayRowAppendFrame::from_geometry_state(
-        &geometry,
-        3.0,
+    let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea {
             content_x: 10.0,
             width: 90.0,
             text_width: 120.0,
             line_number_width: 6.0,
         },
+        DisplayTabPolicy::every(4),
+    );
+
+    let frame = surface.frame_from_geometry_state(
+        &geometry,
+        3.0,
         DisplayRowAppendMetrics {
             height: 18.0,
             ascent: 13.0,
@@ -378,7 +381,6 @@ fn display_row_append_frame_builds_from_geometry_state() {
             space_width: 8.0,
             default_row_height: 16.0,
         },
-        DisplayTabPolicy::every(4),
     );
 
     assert_eq!(frame.row, 2);
