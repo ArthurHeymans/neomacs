@@ -1522,7 +1522,7 @@ fn lisp_string_append_context_appends_fragment_items() {
 }
 
 #[test]
-fn append_buffer_text_fragment_to_text_row_appends_source_char() {
+fn buffer_text_fragment_append_context_appends_source_char() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1560,22 +1560,20 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-    let (_progress, end) = append_resolved_buffer_text_fragment_to_text_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        fragment,
-        &face_resolver,
-        base_face,
-        buf_id,
-        &snapshot,
-        7,
-        ResolvedBufferTextFragmentAdvance::natural(8.0),
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("appended buffer fragment");
+    let append_context =
+        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let (_progress, end) = append_context
+        .append_resolved_to_text_row(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            fragment,
+            &face_resolver,
+            ResolvedBufferTextFragmentAdvance::natural(8.0),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("appended buffer fragment");
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
@@ -1657,29 +1655,27 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
         })
         .expect("current row");
 
-    let (appended, end) = append_resolved_buffer_text_fragment_to_text_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        fragment,
-        &face_resolver,
-        &base_face,
-        buf_id,
-        &snapshot,
-        7,
-        ResolvedBufferTextFragmentAdvance::natural(measured_width),
-        frame,
-        position,
-    )
-    .expect("appended buffer fragment");
+    let append_context =
+        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
+    let (appended, end) = append_context
+        .append_resolved_to_text_row(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            fragment,
+            &face_resolver,
+            ResolvedBufferTextFragmentAdvance::natural(measured_width),
+            position,
+        )
+        .expect("appended buffer fragment");
 
     assert_eq!(end.x_px - position.x_px, measured_width);
     assert_eq!(appended.metrics.width_px, measured_width);
 }
 
 #[test]
-fn append_resolved_buffer_text_fragment_to_text_row_uses_resolved_advance() {
+fn buffer_text_fragment_append_context_uses_resolved_advance() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1717,22 +1713,20 @@ fn append_resolved_buffer_text_fragment_to_text_row_uses_resolved_advance() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-    let (progress, end) = append_resolved_buffer_text_fragment_to_text_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        fragment,
-        &face_resolver,
-        base_face,
-        buf_id,
-        &snapshot,
-        7,
-        ResolvedBufferTextFragmentAdvance::resolved(13.0),
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("appended resolved buffer fragment");
+    let append_context =
+        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let (progress, end) = append_context
+        .append_resolved_to_text_row(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            fragment,
+            &face_resolver,
+            ResolvedBufferTextFragmentAdvance::resolved(13.0),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("appended resolved buffer fragment");
 
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 13.0);
@@ -1746,7 +1740,7 @@ fn append_resolved_buffer_text_fragment_to_text_row_uses_resolved_advance() {
 }
 
 #[test]
-fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
+fn buffer_text_fragment_append_context_composes_with_current_row_tail() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1787,22 +1781,20 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
-    let (progress, end) = append_resolved_buffer_text_fragment_to_text_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        fragment,
-        &face_resolver,
-        &base_face,
-        buf_id,
-        &snapshot,
-        7,
-        ResolvedBufferTextFragmentAdvance::natural(0.0),
-        frame,
-        DisplayRowPosition { x_px: 8.0, col: 1 },
-    )
-    .expect("appended combining buffer char");
+    let append_context =
+        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
+    let (progress, end) = append_context
+        .append_resolved_to_text_row(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            fragment,
+            &face_resolver,
+            ResolvedBufferTextFragmentAdvance::natural(0.0),
+            DisplayRowPosition { x_px: 8.0, col: 1 },
+        )
+        .expect("appended combining buffer char");
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 0.0);

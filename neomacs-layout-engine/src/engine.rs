@@ -39,13 +39,12 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem, BufferTextItemAppendContext,
-    DisplayReplacementAppendContext, DisplayReplacementAppendItem,
-    DisplayReplacementStringItemMeasurer, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
-    DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
-    LispStringAppendContext, SyntheticTextAppendContext,
-    append_resolved_buffer_text_fragment_to_text_row,
-    render_lisp_string_source_append_to_text_row_and_emit,
+    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
+    BufferTextFragmentAppendItem, BufferTextItemAppendContext, DisplayReplacementAppendContext,
+    DisplayReplacementAppendItem, DisplayReplacementStringItemMeasurer,
+    DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
+    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
+    SyntheticTextAppendContext, render_lisp_string_source_append_to_text_row_and_emit,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -5704,19 +5703,21 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = append_resolved_buffer_text_fragment_to_text_row(
+            let append_context = BufferTextFragmentAppendContext::new(
+                buffer,
+                buf_id,
+                active_face_state.face_id(),
+                active_face_state.resolved_face(),
+                frame,
+            );
+            let appended = append_context.append_resolved_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
                 evaluator,
                 &mut self.font_metrics,
                 buffer_text_fragment,
                 face_resolver,
-                active_face_state.resolved_face(),
-                buf_id,
-                buffer,
-                active_face_state.face_id(),
                 resolved_advance,
-                frame,
                 append_position,
             );
             let Some((_progress, position)) = appended else {

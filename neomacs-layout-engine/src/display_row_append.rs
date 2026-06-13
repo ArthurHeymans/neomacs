@@ -812,7 +812,7 @@ fn buffer_text_fragment_source_item<B: LayoutBufferView + ?Sized>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
+fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -855,6 +855,61 @@ pub(crate) fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferVi
         outcome.source_slots,
     );
     Some((progress, outcome.end))
+}
+
+pub(crate) struct BufferTextFragmentAppendContext<'a, B: LayoutBufferView + ?Sized> {
+    buffer: &'a B,
+    buffer_id: BufferId,
+    face_id: u32,
+    base_face: &'a ResolvedFace,
+    frame: DisplayRowAppendFrame,
+}
+
+impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
+    pub(crate) fn new(
+        buffer: &'a B,
+        buffer_id: BufferId,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            buffer,
+            buffer_id,
+            face_id,
+            base_face,
+            frame,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_resolved_to_text_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        resolved_advance: ResolvedBufferTextFragmentAdvance,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        append_resolved_buffer_text_fragment_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            fragment,
+            face_resolver,
+            self.base_face,
+            self.buffer_id,
+            self.buffer,
+            self.face_id,
+            resolved_advance,
+            self.frame.clone(),
+            position,
+        )
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

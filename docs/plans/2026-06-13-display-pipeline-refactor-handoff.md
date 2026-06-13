@@ -58,6 +58,7 @@ Continuation work after this handoff:
 - Display-property replacement strings, stretches, media items, and placeholders now append through `DisplayReplacementAppendContext`; `engine.rs` still owns GNU display-property classification and cursor capture, but no longer wires raw replacement source/frame/base-face append requests directly.
 - Main-buffer control chars, nobreak source-mapped text, and glyphless item append now use `BufferTextItemAppendContext`; the older raw buffer/replacement append helper functions are private implementation details of `display_row_append.rs`.
 - Main-buffer line/wrap prefixes and synthetic ellipsis/truncation markers now use `LispStringAppendContext` and `SyntheticTextAppendContext`; direct Lisp-fragment and synthetic-text append helpers are private implementation details.
+- Ordinary main-buffer text append now uses `BufferTextFragmentAppendContext`; `engine.rs` still computes resolved advances for wrap/cursor decisions, but final append request wiring is contained in `display_row_append.rs`.
 - Latest local verification:
 
   ```bash
@@ -70,7 +71,7 @@ Continuation work after this handoff:
   cargo check
   ```
 
-  Full layout-engine nextest passed with 1061 tests after grouping Lisp-fragment and synthetic text append request wiring behind typed append contexts.
+  Full layout-engine nextest passed with 1061 tests after grouping ordinary main-buffer text append request wiring behind `BufferTextFragmentAppendContext`.
 
 ## Why This Refactor Exists
 
