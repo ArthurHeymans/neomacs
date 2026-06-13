@@ -1040,39 +1040,59 @@ impl BufferTextFragmentAppendItem {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
-    B: LayoutBufferView + ?Sized,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    fragment: DisplayTextFragment,
-    buffer: &B,
+pub(crate) struct BufferTextItemAppendContext<'a, B: LayoutBufferView + ?Sized> {
+    buffer: &'a B,
     buffer_id: BufferId,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
     face_id: u32,
-    item: BufferTextFragmentAppendItem,
+    base_face: &'a ResolvedFace,
     frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_buffer_display_item_fragment_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        fragment,
-        buffer,
-        buffer_id,
-        face_resolver,
-        base_face,
-        face_id,
-        item,
-        frame,
-        position,
-    )
+}
+
+impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
+    pub(crate) fn new(
+        buffer: &'a B,
+        buffer_id: BufferId,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            buffer,
+            buffer_id,
+            face_id,
+            base_face,
+            frame,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_fragment_to_text_row_and_emit(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        item: BufferTextFragmentAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        append_buffer_display_item_fragment_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            fragment,
+            self.buffer,
+            self.buffer_id,
+            face_resolver,
+            self.base_face,
+            self.face_id,
+            item,
+            self.frame.clone(),
+            position,
+        )
+    }
 }
 
 pub(crate) struct DisplayReplacementStringItemMeasurer {
@@ -1269,7 +1289,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
+fn append_display_replacement_item_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -1298,7 +1318,7 @@ pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
+fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -1339,7 +1359,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_replacement_string_fragment_to_text_row(
+fn append_display_replacement_string_fragment_to_text_row(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,

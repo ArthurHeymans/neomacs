@@ -1765,7 +1765,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
 }
 
 #[test]
-fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_control_char_item() {
+fn buffer_text_item_append_context_builds_control_char_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1803,22 +1803,19 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_control_char_ite
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        fragment,
-        &snapshot,
-        buf_id,
-        &face_resolver,
-        base_face,
-        7,
-        BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' },
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("appended buffer text item fragment");
+    let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let (_progress, end) = append_context
+        .append_fragment_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            fragment,
+            &face_resolver,
+            BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' },
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("appended buffer text item fragment");
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
@@ -1838,7 +1835,7 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_control_char_ite
 }
 
 #[test]
-fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_mapped_item() {
+fn buffer_text_item_append_context_builds_mapped_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1872,22 +1869,19 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_mapped_item() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        fragment,
-        &snapshot,
-        buf_id,
-        &face_resolver,
-        base_face,
-        7,
-        BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() },
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("appended source-mapped buffer text item fragment");
+    let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let (_progress, end) = append_context
+        .append_fragment_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            fragment,
+            &face_resolver,
+            BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() },
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("appended source-mapped buffer text item fragment");
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
@@ -1907,7 +1901,7 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_mapped_item() {
 }
 
 #[test]
-fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_glyphless_item() {
+fn buffer_text_item_append_context_builds_glyphless_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1938,25 +1932,22 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_glyphless_item()
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        fragment,
-        &snapshot,
-        buf_id,
-        &face_resolver,
-        base_face,
-        7,
-        BufferTextFragmentAppendItem::Glyphless {
-            ch: '\u{fff0}',
-            method: GlyphlessMethod::HexCode,
-        },
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("appended glyphless buffer text item fragment");
+    let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let (_progress, end) = append_context
+        .append_fragment_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            fragment,
+            &face_resolver,
+            BufferTextFragmentAppendItem::Glyphless {
+                ch: '\u{fff0}',
+                method: GlyphlessMethod::HexCode,
+            },
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("appended glyphless buffer text item fragment");
 
     assert_eq!(end, DisplayRowPosition { x_px: 48.0, col: 6 });
     builder
