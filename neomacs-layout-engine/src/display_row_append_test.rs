@@ -6,6 +6,7 @@ use crate::display_item::{
     DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::DisplayPropertySource;
+use crate::display_property::DisplayMediaReplacementProperty;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
@@ -2588,6 +2589,63 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
     let xwidget_cursor = DisplayReplacementMediaAppendItem::new(media, &active_face, true);
     assert_eq!(xwidget_cursor.cursor_face_height_px(), 18.0);
     assert_eq!(xwidget_cursor.cursor_face_ascent_px(), 13.0);
+}
+
+#[test]
+fn display_replacement_media_append_item_resolves_direct_media_property() {
+    let active_face = test_active_face_state(7, 8.0);
+    let media = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+        xwidget_id: 17,
+        width: 42.0,
+        height: 11.0,
+    });
+    let replacement = DisplayMediaReplacementProperty::Xwidget(media);
+
+    let resolved = DisplayReplacementMediaAppendItem::resolve_display_property(
+        Value::NIL,
+        &replacement,
+        None,
+        &active_face,
+        8.0,
+        16.0,
+    )
+    .expect("direct media replacement");
+
+    match resolved {
+        DisplayReplacementMediaAppendResolution::Media(item) => {
+            assert_eq!(item.width_px(), 42.0);
+            assert_eq!(item.display_height_px(), 11.0);
+            assert_eq!(item.cursor_face_height_px(), 18.0);
+        }
+        DisplayReplacementMediaAppendResolution::Placeholder(_) => {
+            panic!("expected direct media item")
+        }
+    }
+}
+
+#[test]
+fn display_replacement_media_append_item_resolves_placeholder_item_without_host() {
+    let active_face = test_active_face_state(7, 8.0);
+
+    let resolved = DisplayReplacementMediaAppendItem::resolve_display_property(
+        Value::NIL,
+        &DisplayMediaReplacementProperty::Image,
+        None,
+        &active_face,
+        8.0,
+        16.0,
+    )
+    .expect("image placeholder");
+
+    match resolved {
+        DisplayReplacementMediaAppendResolution::Placeholder(item) => {
+            assert_eq!(
+                item,
+                DisplayReplacementSourceMappedTextAppendItem::new("[img]")
+            );
+        }
+        DisplayReplacementMediaAppendResolution::Media(_) => panic!("expected placeholder item"),
+    }
 }
 
 #[test]

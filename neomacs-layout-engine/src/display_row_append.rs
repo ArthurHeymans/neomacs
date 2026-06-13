@@ -5,6 +5,7 @@ use crate::display_item::{
     SourceSpan,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
+use crate::display_property::DisplayMediaReplacementProperty;
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
@@ -28,6 +29,7 @@ use crate::display_source::{
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
+use crate::display_source_resolver::{ResolvedDisplayReplacement, resolve_display_replacement};
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::{
@@ -41,6 +43,7 @@ use crate::unicode::decode_utf8;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
+use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
 
@@ -2176,6 +2179,12 @@ pub(crate) struct DisplayReplacementMediaAppendItem {
     cursor_face_ascent: f32,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DisplayReplacementMediaAppendResolution {
+    Media(DisplayReplacementMediaAppendItem),
+    Placeholder(DisplayReplacementSourceMappedTextAppendItem),
+}
+
 impl DisplayReplacementMediaAppendItem {
     pub(crate) fn new(
         media: DisplayMediaReplacement,
@@ -2195,6 +2204,38 @@ impl DisplayReplacementMediaAppendItem {
             media,
             cursor_face_height,
             cursor_face_ascent,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_display_property(
+        display_prop: Value,
+        replacement: &DisplayMediaReplacementProperty,
+        display_host: Option<&dyn DisplayHost>,
+        active_face_state: &DisplayRowActiveFaceState,
+        fallback_char_width: f32,
+        fallback_row_height: f32,
+    ) -> Option<DisplayReplacementMediaAppendResolution> {
+        match resolve_display_replacement(
+            display_prop,
+            replacement,
+            display_host,
+            active_face_state.resolved_face(),
+            fallback_char_width,
+            fallback_row_height,
+        )? {
+            ResolvedDisplayReplacement::Media(media) => {
+                Some(DisplayReplacementMediaAppendResolution::Media(Self::new(
+                    media,
+                    active_face_state,
+                    replacement.uses_xwidget_cursor_extents(),
+                )))
+            }
+            ResolvedDisplayReplacement::Placeholder(placeholder) => {
+                Some(DisplayReplacementMediaAppendResolution::Placeholder(
+                    DisplayReplacementSourceMappedTextAppendItem::new(placeholder),
+                ))
+            }
         }
     }
 

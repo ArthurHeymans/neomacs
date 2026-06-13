@@ -40,8 +40,8 @@ use crate::display_row::{
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem,
     BufferTextFragmentRowAppendContext, BufferTextItemRowAppendContext,
-    DisplayReplacementMediaAppendItem, DisplayReplacementRowAppendContext,
-    DisplayReplacementSourceMappedTextAppendItem, DisplayReplacementStretchAppendItem,
+    DisplayReplacementMediaAppendItem, DisplayReplacementMediaAppendResolution,
+    DisplayReplacementRowAppendContext, DisplayReplacementStretchAppendItem,
     DisplayReplacementStringAppendItem, DisplayRowAppendArea, DisplayRowAppendSurface,
     LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
 };
@@ -55,7 +55,7 @@ use crate::display_row_geometry::{
 use crate::display_source::BufferDisplayReplacementSource;
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
-    ResolvedDisplayReplacement, resolve_display_replacement, resolve_display_string_base_face,
+    resolve_display_string_base_face,
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::fontconfig::FontSizing;
@@ -4529,23 +4529,18 @@ impl LayoutEngine {
                         .as_ref()
                         .and_then(DisplayReplacementProperty::media)
                     {
-                        let resolved_replacement = resolve_display_replacement(
-                            prop_val,
-                            media_replacement,
-                            evaluator.display_host.as_deref(),
-                            active_face_state.resolved_face(),
-                            face_metrics.char_width,
-                            face_metrics.row_height,
-                        );
+                        let resolved_replacement =
+                            DisplayReplacementMediaAppendItem::resolve_display_property(
+                                prop_val,
+                                media_replacement,
+                                evaluator.display_host.as_deref(),
+                                &active_face_state,
+                                face_metrics.char_width,
+                                face_metrics.row_height,
+                            );
 
                         match resolved_replacement {
-                            Some(ResolvedDisplayReplacement::Media(media)) => {
-                                let media_item = DisplayReplacementMediaAppendItem::new(
-                                    media,
-                                    &active_face_state,
-                                    media_replacement.uses_xwidget_cursor_extents(),
-                                );
-
+                            Some(DisplayReplacementMediaAppendResolution::Media(media_item)) => {
                                 if point_in_display_replacement {
                                     capture_cursor_info(
                                         &mut cursor_info,
@@ -4596,7 +4591,9 @@ impl LayoutEngine {
                                     col = position.col;
                                 }
                             }
-                            Some(ResolvedDisplayReplacement::Placeholder(placeholder)) => {
+                            Some(DisplayReplacementMediaAppendResolution::Placeholder(
+                                placeholder_item,
+                            )) => {
                                 if point_in_display_replacement {
                                     capture_cursor_info(
                                         &mut cursor_info,
@@ -4629,9 +4626,7 @@ impl LayoutEngine {
                                         evaluator,
                                         &mut self.font_metrics,
                                         face_resolver,
-                                        DisplayReplacementSourceMappedTextAppendItem::new(
-                                            placeholder,
-                                        ),
+                                        placeholder_item,
                                         DisplayRowPosition { x_px: x, col },
                                     )
                                 {
