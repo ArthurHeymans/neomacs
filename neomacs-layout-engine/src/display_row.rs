@@ -2050,6 +2050,34 @@ pub(crate) fn measure_display_source_append_request_against_current_text_row<
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn measure_owned_display_source_append_request_against_current_text_row<
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    mut source: S,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+    request: DisplayRowSourceAppendRequest<'_>,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let mut source_state = DisplayRowSourceState::default();
+    measure_display_source_append_request_against_current_text_row(
+        builder,
+        evaluator,
+        font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        face_ids,
+        request,
+        render_policy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn measure_single_display_item_source_append_request_against_current_text_row<
     P: DisplayRowRenderPolicy,
 >(
@@ -2062,14 +2090,11 @@ pub(crate) fn measure_single_display_item_source_append_request_against_current_
     request: DisplayRowSourceAppendRequest<'_>,
     render_policy: &mut P,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
-    measure_display_source_append_request_against_current_text_row(
+    measure_owned_display_source_append_request_against_current_text_row(
         builder,
         evaluator,
         font_metrics,
-        &mut source,
-        &mut source_state,
+        SingleDisplayItemSource::new(item),
         face_resolver,
         face_ids,
         request,
