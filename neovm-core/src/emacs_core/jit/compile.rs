@@ -3058,7 +3058,7 @@ fn lower_simple_op(
 
 /// Minimum operand-stack depth a simple op requires, and its net depth change.
 /// `Err` for anything outside the supported simple subset.
-fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
+pub(crate) fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
     if let Some((arity, _, _)) = direct_builtin_spec(op) {
         // N operands -> one result.
         return Ok((arity as usize, 1 - arity as i64));
@@ -3254,12 +3254,12 @@ fn switch_static_targets(
 /// block's entry, the active-handler stack at each block's entry, the resolved
 /// static target sets of every `Op::Switch`, and the max depth seen at any
 /// block boundary.
-struct Cfg {
-    leaders: Vec<usize>,
-    entry_depth: HashMap<usize, usize>,
-    entry_handlers: HashMap<usize, Vec<HandlerStatic>>,
-    switch_targets: HashMap<usize, Vec<(i64, usize)>>,
-    max_depth: usize,
+pub(crate) struct Cfg {
+    pub(crate) leaders: Vec<usize>,
+    pub(crate) entry_depth: HashMap<usize, usize>,
+    pub(crate) entry_handlers: HashMap<usize, Vec<HandlerStatic>>,
+    pub(crate) switch_targets: HashMap<usize, Vec<(i64, usize)>>,
+    pub(crate) max_depth: usize,
 }
 
 /// Record that `target` is entered with stack depth `d`, outstanding dynamic
@@ -3310,7 +3310,7 @@ fn push_succ(
 /// Partition `ops` into basic blocks and compute the operand-stack depth at each
 /// block boundary, validating that every op is supported, jump targets are in
 /// range, depth never underflows, and every path ends in `Return`.
-fn analyze_cfg(
+pub(crate) fn analyze_cfg(
     ops: &[Op],
     constants: &[Value],
     offset_map: Option<&[GnuByteOffsetMapEntry]>,

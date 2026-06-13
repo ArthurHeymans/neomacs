@@ -1,0 +1,839 @@
+//! MIR — a typed SSA intermediate representation for the optimizing **Tier-2**
+//! JIT (a tier *above* the Cranelift baseline in `compile.rs`).
+//!
+//! The baseline tier lowers GNU bytecode straight to CLIF in a single pass, so
+//! it can't do lisp-semantic optimization (type specialization, guard
+//! elimination, unboxing, inlining) — Cranelift sees only opaque `i64`s. MIR is
+//! the layer where those optimizations live: a control-flow graph of SSA
+//! operations over lisp `Value`s, each carrying a [`LispType`] fact (the type
+//! lattice that lets a proven-fixnum drop its guard / stay unboxed) and an
+//! [`Effect`] fact (pure / allocates / calls / signals — for reordering and GC
+//! safety). Passes run over the MIR, then it lowers to CLIF reusing the
+//! baseline tier's shims and precise-deopt emission.
+//!
+//! **Construction** abstract-interprets the stack machine: each bytecode push
+//! becomes a fresh SSA value, the operand stack becomes a vector of [`MirValue`]
+//! handles, and block joins use **block parameters as phis** (Cranelift / Swift
+//! SIL style — simpler than explicit phi nodes, and the existing
+//! [`super::compile::analyze_cfg`] already hands us the block leaders and the
+//! operand-stack depth at every block entry).
+//!
+//! **Phase 4a (this file's current scope)** is the foundation: the IR types and
+//! the bytecode→MIR builder, validated structurally in isolation. It is NOT yet
+//! wired into the live compile pipeline — the baseline JIT is untouched — so it
+//! is behaviour-neutral. Later phases add MIR→CLIF lowering (behaviour-identical
+//! to the baseline first), deopt framestates, guard elimination, unboxing, and
+//! inlining. Handler / `Switch` / `Throw` opcodes are deferred: the builder
+//! bails on them for now (the baseline tier still handles those functions).
+
+use std::collections::HashMap;
+use std::fmt;
+
+use super::compile::{CompileError, analyze_cfg, simple_effect};
+use crate::emacs_core::bytecode::opcode::Op;
+use crate::emacs_core::value::Value;
+
+/// An SSA value handle — an index into [`MirFunction`]'s value table. Each MIR
+/// instruction result and each block parameter is one `MirValue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MirValue(pub u32);
+
+/// A basic-block handle — an index into [`MirFunction::blocks`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MirBlockId(pub u32);
+
+/// The lisp-type lattice attached to every [`MirValue`]. `Unknown` is the
+/// bottom (no information yet), `Any` the top (could be anything). Concrete
+/// types in between let later passes prove a value is a fixnum (drop its guard,
+/// keep it unboxed), a cons (skip the consp guard on `car`), etc. Phase 4a
+/// computes only the trivial facts (constants, type-predicate results); the
+/// real narrowing pass comes later.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LispType {
+    /// No information (a fresh block parameter before inference).
+    Unknown,
+    Fixnum,
+    Nil,
+    True,
+    Cons,
+    Str,
+    Symbol,
+    Float,
+    /// Vector / record / bytecode object / hash-table / …
+    Veclike,
+    /// Provably a boolean-ish result of a predicate (`t` or `nil`).
+    Boolean,
+    /// Could be anything (the join of incompatible types).
+    Any,
+}
+
+impl LispType {
+    /// Classify a compile-time constant `Value`.
+    pub fn of_value(v: Value) -> LispType {
+        if v.is_nil() {
+            LispType::Nil
+        } else if v == Value::T {
+            LispType::True
+        } else if v.is_fixnum() {
+            LispType::Fixnum
+        } else if v.is_cons() {
+            LispType::Cons
+        } else if v.is_string() {
+            LispType::Str
+        } else if v.is_symbol() {
+            LispType::Symbol
+        } else if v.is_float() {
+            LispType::Float
+        } else {
+            LispType::Veclike
+        }
+    }
+
+    /// The lattice join (least upper bound) used at block-parameter merges:
+    /// identical types stay; `Unknown` is the identity; anything else widens to
+    /// `Any`. (A richer lattice with unions — `fixnum|nil` etc. — is a later
+    /// refinement; Phase 4a keeps it coarse.)
+    pub fn join(self, other: LispType) -> LispType {
+        match (self, other) {
+            (a, b) if a == b => a,
+            (LispType::Unknown, b) => b,
+            (a, LispType::Unknown) => a,
+            _ => LispType::Any,
+        }
+    }
+}
+
+/// The effect lattice — what an operation does, for reordering / GC-safety
+/// reasoning. Ordered weakest→strongest: a pass may hoist/CSE `Pure` ops freely,
+/// must keep `Allocates` ops behind GC-rooting, and must never reorder across
+/// `Calls`/`Signals`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Effect {
+    Pure,
+    Allocates,
+    Calls,
+    Signals,
+}
+
+/// A comparison kind for the fixnum-comparison MIR op.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CmpKind {
+    NumEq,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+/// A one-argument predicate kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PredKind {
+    Null,
+    Not,
+    Consp,
+    Stringp,
+    Listp,
+    Symbolp,
+    Integerp,
+    Numberp,
+}
+
+/// A one-argument fixnum unary kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnaryKind {
+    Add1,
+    Sub1,
+    Negate,
+}
+
+/// A two-argument fixnum binary kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BinKind {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Max,
+    Min,
+}
+
+/// One MIR instruction (the operation; the SSA result handle and its type/effect
+/// live alongside in [`MirInst`]). The optimization-relevant ops — arithmetic,
+/// type predicates, `car`/`cdr`, `cons`, `eq` — are modelled explicitly so
+/// passes can reason about them. Everything else is wrapped [`MirOp::Opaque`],
+/// which preserves operand-stack discipline (via [`simple_effect`]) without yet
+/// modelling the op's semantics; later phases promote opaque ops to explicit
+/// ones as the optimizer learns to handle them.
+#[derive(Clone, Debug)]
+pub enum MirOp {
+    /// Function argument `i` (`0..arity`), seeding the entry block's stack.
+    Arg(usize),
+    /// A compile-time constant from the function's constant pool.
+    Const(Value),
+    /// Fixnum-fast-path binary arithmetic (guards added in a later phase).
+    Bin(BinKind, MirValue, MirValue),
+    /// Fixnum-fast-path unary arithmetic.
+    Unary(UnaryKind, MirValue),
+    /// Fixnum comparison → `t`/`nil`.
+    Cmp(CmpKind, MirValue, MirValue),
+    /// One-argument type predicate → `t`/`nil`.
+    Pred(PredKind, MirValue),
+    /// `eq` (identity) → `t`/`nil`.
+    Eq(MirValue, MirValue),
+    /// `car`/`cdr`; `safe` is the `*-safe` variant (non-cons → nil, no guard).
+    CarCdr {
+        cdr: bool,
+        safe: bool,
+        arg: MirValue,
+    },
+    /// `(cons car cdr)` — allocates.
+    Cons(MirValue, MirValue),
+    /// Any opcode not yet modelled explicitly. `args` are the popped operands
+    /// (innermost last); the result count is implied by [`simple_effect`].
+    /// `op` is kept verbatim so lowering can reuse the baseline emission.
+    Opaque { op: Op, args: Vec<MirValue> },
+}
+
+/// A complete MIR instruction: the operation plus its SSA result, type fact, and
+/// effect fact.
+#[derive(Clone, Debug)]
+pub struct MirInst {
+    pub result: MirValue,
+    pub op: MirOp,
+    pub ty: LispType,
+    pub effect: Effect,
+}
+
+/// A block terminator. Successor edges carry the live operand stack as argument
+/// lists (block-params-as-phis): each `*_args` vector matches the target block's
+/// parameter list one-for-one.
+#[derive(Clone, Debug)]
+pub enum MirTerm {
+    /// Return the top of stack.
+    Return(MirValue),
+    /// Unconditional branch.
+    Goto {
+        target: MirBlockId,
+        args: Vec<MirValue>,
+    },
+    /// Conditional branch on `cond` being nil. `nil_else_pop` marks the
+    /// `GotoIf*ElsePop` variants where the taken edge keeps the tested value on
+    /// the stack and the fall-through pops it.
+    Branch {
+        cond: MirValue,
+        /// True for the `GotoIfNil*` family (branch when nil); false for
+        /// `GotoIfNotNil*` (branch when non-nil).
+        on_nil: bool,
+        else_pop: bool,
+        taken: MirBlockId,
+        taken_args: Vec<MirValue>,
+        fallthrough: MirBlockId,
+        fallthrough_args: Vec<MirValue>,
+    },
+}
+
+/// A basic block: its parameters (the operand stack at entry — phis), its
+/// straight-line instructions, and its terminator.
+#[derive(Clone, Debug)]
+pub struct MirBlockData {
+    /// The bytecode index this block starts at (its leader) — the anchor for
+    /// deopt framestates in later phases.
+    pub bytecode_pc: usize,
+    /// Entry operand stack = block parameters (one `MirValue` per slot).
+    pub params: Vec<MirValue>,
+    pub insts: Vec<MirInst>,
+    pub term: MirTerm,
+}
+
+/// A function in MIR form: a CFG of [`MirBlockData`] over an SSA value space.
+/// `value_types[v.0]` is the [`LispType`] of value `v`.
+#[derive(Clone, Debug)]
+pub struct MirFunction {
+    pub arity: usize,
+    pub blocks: Vec<MirBlockData>,
+    /// Type fact per SSA value (block params + instruction results), indexed by
+    /// `MirValue`.
+    pub value_types: Vec<LispType>,
+    /// Map from a bytecode leader index to its [`MirBlockId`].
+    pub block_for: HashMap<usize, MirBlockId>,
+}
+
+impl MirFunction {
+    pub fn value_type(&self, v: MirValue) -> LispType {
+        self.value_types[v.0 as usize]
+    }
+}
+
+/// The default effect of an opaque opcode — coarse but sound (over-approximate):
+/// allocation/call/variable ops are treated as their strongest effect so a
+/// later pass never reorders across them unsafely.
+fn opaque_effect(op: &Op) -> Effect {
+    match op {
+        Op::Cons | Op::List(_) | Op::Concat(_) | Op::Nconc | Op::Substring => Effect::Allocates,
+        Op::Call(_)
+        | Op::Apply(_)
+        | Op::VarSet(_)
+        | Op::VarBind(_)
+        | Op::Unbind(_)
+        | Op::Aset
+        | Op::CallBuiltin(..)
+        | Op::CallBuiltinSym(..)
+        | Op::SaveCurrentBuffer
+        | Op::SaveExcursion
+        | Op::SaveRestriction
+        | Op::SaveWindowExcursion
+        | Op::UnwindProtectPop => Effect::Calls,
+        Op::VarRef(_) => Effect::Signals,
+        _ => Effect::Pure,
+    }
+}
+
+/// Builder state: the growing SSA value space + per-value types.
+struct Builder {
+    value_types: Vec<LispType>,
+}
+
+impl Builder {
+    fn fresh(&mut self, ty: LispType) -> MirValue {
+        let v = MirValue(self.value_types.len() as u32);
+        self.value_types.push(ty);
+        v
+    }
+}
+
+/// Build the MIR for a leaf bytecode body, or bail (`Err`) for anything the
+/// Phase 4a builder doesn't model yet (handler / `Switch` / `Throw` opcodes, or
+/// any op `simple_effect` rejects). On success the returned [`MirFunction`] is a
+/// structurally-valid SSA CFG mirroring the bytecode's blocks.
+///
+/// Deliberately mirrors [`super::compile::analyze_cfg`]'s block + terminator
+/// model so the two agree on structure (a later phase will assert this).
+pub fn build_mir(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+) -> Result<MirFunction, CompileError> {
+    // Reuse the baseline CFG analysis (block leaders + entry stack depths).
+    // No GNU byte-offset map: a `Switch` here bails anyway (unmodelled in 4a).
+    let cfg = analyze_cfg(ops, constants, None, arity)?;
+    let n = ops.len();
+
+    let mut b = Builder {
+        value_types: Vec::new(),
+    };
+
+    // Assign a block id per leader, and create its parameters. Block 0's params
+    // are the function arguments; every other block's params are phis (typed
+    // Unknown until inference).
+    let mut block_for: HashMap<usize, MirBlockId> = HashMap::new();
+    let mut block_params: HashMap<usize, Vec<MirValue>> = HashMap::new();
+    for (bid, &leader) in cfg.leaders.iter().enumerate() {
+        block_for.insert(leader, MirBlockId(bid as u32));
+        let depth = cfg.entry_depth[&leader];
+        let params: Vec<MirValue> = (0..depth)
+            .map(|i| {
+                if leader == 0 {
+                    let v = b.fresh(LispType::Any);
+                    // arg seeding handled below as Arg insts; param IS the arg.
+                    let _ = i;
+                    v
+                } else {
+                    b.fresh(LispType::Unknown)
+                }
+            })
+            .collect();
+        block_params.insert(leader, params);
+    }
+
+    let next_leader = |idx: usize| cfg.leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
+
+    let mut blocks: Vec<MirBlockData> = Vec::with_capacity(cfg.leaders.len());
+
+    for &leader in &cfg.leaders {
+        let params = block_params[&leader].clone();
+        let mut stack: Vec<MirValue> = params.clone();
+        let mut insts: Vec<MirInst> = Vec::new();
+
+        // Entry block: emit Arg insts so the params have a definition. We model
+        // each argument param as its own Arg instruction whose result IS the
+        // param value (the value was already allocated as the param).
+        if leader == 0 {
+            for (i, &p) in params.iter().enumerate() {
+                insts.push(MirInst {
+                    result: p,
+                    op: MirOp::Arg(i),
+                    ty: LispType::Any,
+                    effect: Effect::Pure,
+                });
+            }
+        }
+
+        let end = next_leader(leader);
+        let mut term: Option<MirTerm> = None;
+
+        for (off, op) in ops[leader..end].iter().enumerate() {
+            let i = leader + off;
+            // Terminators end the block.
+            match op {
+                Op::Return => {
+                    let v = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                    term = Some(MirTerm::Return(v));
+                    break;
+                }
+                Op::Goto(t) => {
+                    let target = block_for[&(*t as usize)];
+                    term = Some(MirTerm::Goto {
+                        target,
+                        args: stack.clone(),
+                    });
+                    break;
+                }
+                Op::GotoIfNil(t) | Op::GotoIfNotNil(t) => {
+                    let cond = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                    let taken = block_for[&(*t as usize)];
+                    let fallthrough = block_for[&(i + 1)];
+                    term = Some(MirTerm::Branch {
+                        cond,
+                        on_nil: matches!(op, Op::GotoIfNil(_)),
+                        else_pop: false,
+                        taken,
+                        taken_args: stack.clone(),
+                        fallthrough,
+                        fallthrough_args: stack.clone(),
+                    });
+                    break;
+                }
+                Op::GotoIfNilElsePop(t) | Op::GotoIfNotNilElsePop(t) => {
+                    // The tested value stays on the taken edge and is popped on
+                    // the fall-through.
+                    let cond = *stack.last().ok_or(CompileError::StackUnderflow)?;
+                    let taken = block_for[&(*t as usize)];
+                    let fallthrough = block_for[&(i + 1)];
+                    let taken_args = stack.clone();
+                    let mut fall = stack.clone();
+                    fall.pop();
+                    term = Some(MirTerm::Branch {
+                        cond,
+                        on_nil: matches!(op, Op::GotoIfNilElsePop(_)),
+                        else_pop: true,
+                        taken,
+                        taken_args,
+                        fallthrough,
+                        fallthrough_args: fall,
+                    });
+                    break;
+                }
+                // Unmodelled-in-4a control flow: bail (the baseline tier handles
+                // these functions).
+                Op::Switch
+                | Op::Throw
+                | Op::PushConditionCase(_)
+                | Op::PushConditionCaseRaw(_)
+                | Op::PushCatch(_)
+                | Op::PopHandler => {
+                    return Err(CompileError::UnsupportedOp("mir-unmodelled-control"));
+                }
+                _ => lower_value_op(&mut b, op, constants, &mut stack, &mut insts)?,
+            }
+        }
+
+        let term = match term {
+            Some(t) => t,
+            // A block that runs off the end without a terminator falls through
+            // to the next leader (analyze_cfg guarantees one exists and the
+            // depth is consistent).
+            None => {
+                if end >= n {
+                    return Err(CompileError::NoReturn);
+                }
+                MirTerm::Goto {
+                    target: block_for[&end],
+                    args: stack.clone(),
+                }
+            }
+        };
+
+        blocks.push(MirBlockData {
+            bytecode_pc: leader,
+            params,
+            insts,
+            term,
+        });
+    }
+
+    Ok(MirFunction {
+        arity,
+        blocks,
+        value_types: b.value_types,
+        block_for,
+    })
+}
+
+/// Lower one non-terminator opcode into MIR instruction(s), updating the model
+/// `stack`. Explicit ops (arithmetic / predicates / car-cdr / cons / eq) get a
+/// typed [`MirOp`]; everything else becomes an [`MirOp::Opaque`] whose arity
+/// comes from [`simple_effect`].
+fn lower_value_op(
+    b: &mut Builder,
+    op: &Op,
+    constants: &[Value],
+    stack: &mut Vec<MirValue>,
+    insts: &mut Vec<MirInst>,
+) -> Result<(), CompileError> {
+    let mut emit = |b: &mut Builder, mop: MirOp, ty: LispType, eff: Effect| {
+        let r = b.fresh(ty);
+        insts.push(MirInst {
+            result: r,
+            op: mop,
+            ty,
+            effect: eff,
+        });
+        r
+    };
+
+    macro_rules! pop {
+        () => {
+            stack.pop().ok_or(CompileError::StackUnderflow)?
+        };
+    }
+
+    match op {
+        Op::Constant(idx) => {
+            let v = *constants
+                .get(*idx as usize)
+                .ok_or(CompileError::BadOperand)?;
+            let r = emit(b, MirOp::Const(v), LispType::of_value(v), Effect::Pure);
+            stack.push(r);
+        }
+        Op::Nil => {
+            let r = emit(b, MirOp::Const(Value::NIL), LispType::Nil, Effect::Pure);
+            stack.push(r);
+        }
+        Op::True => {
+            let r = emit(b, MirOp::Const(Value::T), LispType::True, Effect::Pure);
+            stack.push(r);
+        }
+        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem | Op::Max | Op::Min => {
+            let rhs = pop!();
+            let lhs = pop!();
+            let kind = match op {
+                Op::Add => BinKind::Add,
+                Op::Sub => BinKind::Sub,
+                Op::Mul => BinKind::Mul,
+                Op::Div => BinKind::Div,
+                Op::Rem => BinKind::Rem,
+                Op::Max => BinKind::Max,
+                Op::Min => BinKind::Min,
+                _ => unreachable!(),
+            };
+            let r = emit(
+                b,
+                MirOp::Bin(kind, lhs, rhs),
+                LispType::Fixnum,
+                Effect::Pure,
+            );
+            stack.push(r);
+        }
+        Op::Add1 | Op::Sub1 | Op::Negate => {
+            let a = pop!();
+            let kind = match op {
+                Op::Add1 => UnaryKind::Add1,
+                Op::Sub1 => UnaryKind::Sub1,
+                Op::Negate => UnaryKind::Negate,
+                _ => unreachable!(),
+            };
+            let r = emit(b, MirOp::Unary(kind, a), LispType::Fixnum, Effect::Pure);
+            stack.push(r);
+        }
+        Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
+            let rhs = pop!();
+            let lhs = pop!();
+            let kind = match op {
+                Op::Eqlsign => CmpKind::NumEq,
+                Op::Lss => CmpKind::Lt,
+                Op::Gtr => CmpKind::Gt,
+                Op::Leq => CmpKind::Le,
+                Op::Geq => CmpKind::Ge,
+                _ => unreachable!(),
+            };
+            let r = emit(
+                b,
+                MirOp::Cmp(kind, lhs, rhs),
+                LispType::Boolean,
+                Effect::Pure,
+            );
+            stack.push(r);
+        }
+        Op::Null
+        | Op::Not
+        | Op::Consp
+        | Op::Stringp
+        | Op::Listp
+        | Op::Symbolp
+        | Op::Integerp
+        | Op::Numberp => {
+            let a = pop!();
+            let kind = match op {
+                Op::Null => PredKind::Null,
+                Op::Not => PredKind::Not,
+                Op::Consp => PredKind::Consp,
+                Op::Stringp => PredKind::Stringp,
+                Op::Listp => PredKind::Listp,
+                Op::Symbolp => PredKind::Symbolp,
+                Op::Integerp => PredKind::Integerp,
+                Op::Numberp => PredKind::Numberp,
+                _ => unreachable!(),
+            };
+            let r = emit(b, MirOp::Pred(kind, a), LispType::Boolean, Effect::Pure);
+            stack.push(r);
+        }
+        Op::Eq => {
+            let rhs = pop!();
+            let lhs = pop!();
+            let r = emit(b, MirOp::Eq(lhs, rhs), LispType::Boolean, Effect::Pure);
+            stack.push(r);
+        }
+        Op::Car | Op::Cdr | Op::CarSafe | Op::CdrSafe => {
+            let a = pop!();
+            let cdr = matches!(op, Op::Cdr | Op::CdrSafe);
+            let safe = matches!(op, Op::CarSafe | Op::CdrSafe);
+            let r = emit(
+                b,
+                MirOp::CarCdr { cdr, safe, arg: a },
+                LispType::Any,
+                Effect::Pure,
+            );
+            stack.push(r);
+        }
+        Op::Cons => {
+            let cdr = pop!();
+            let car = pop!();
+            let r = emit(b, MirOp::Cons(car, cdr), LispType::Cons, Effect::Allocates);
+            stack.push(r);
+        }
+        // Pure operand-stack shuffles — modelled as stack manipulation, no inst.
+        Op::Pop => {
+            pop!();
+        }
+        Op::Dup => {
+            let top = *stack.last().ok_or(CompileError::StackUnderflow)?;
+            stack.push(top);
+        }
+        Op::StackRef(k) => {
+            let idx = stack
+                .len()
+                .checked_sub(1 + *k as usize)
+                .ok_or(CompileError::StackUnderflow)?;
+            stack.push(stack[idx]);
+        }
+        Op::StackSet(k) => {
+            let k = *k as usize;
+            let top = pop!();
+            if k != 0 {
+                let idx = stack
+                    .len()
+                    .checked_sub(k)
+                    .ok_or(CompileError::StackUnderflow)?;
+                stack[idx] = top;
+            }
+        }
+        Op::DiscardN(raw) => {
+            let preserve = (*raw & 0x80) != 0;
+            let cnt = (*raw & 0x7F) as usize;
+            if cnt != 0 {
+                let len = stack.len();
+                if preserve {
+                    let target = len
+                        .checked_sub(1 + cnt)
+                        .ok_or(CompileError::StackUnderflow)?;
+                    stack[target] = stack[len - 1];
+                } else if cnt > len {
+                    return Err(CompileError::StackUnderflow);
+                }
+                stack.truncate(len - cnt);
+            }
+        }
+        // Everything else: opaque, arity from simple_effect.
+        other => {
+            let (needs, delta) = simple_effect(other)?;
+            if stack.len() < needs {
+                return Err(CompileError::StackUnderflow);
+            }
+            let at = stack.len() - needs;
+            let args: Vec<MirValue> = stack.split_off(at);
+            let produces = needs as i64 + delta;
+            if produces < 0 {
+                return Err(CompileError::StackUnderflow);
+            }
+            let eff = opaque_effect(other);
+            // An opaque op produces `produces` results (0 or 1 in practice).
+            for _ in 0..produces {
+                let r = emit(
+                    b,
+                    MirOp::Opaque {
+                        op: other.clone(),
+                        args: args.clone(),
+                    },
+                    LispType::Any,
+                    eff,
+                );
+                stack.push(r);
+            }
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Pretty-printer (debugging aid; not on any hot path).
+// ---------------------------------------------------------------------------
+
+impl fmt::Display for MirFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "mir fn (arity {}):", self.arity)?;
+        for (bid, blk) in self.blocks.iter().enumerate() {
+            let plist: Vec<String> = blk.params.iter().map(|p| format!("v{}", p.0)).collect();
+            writeln!(
+                f,
+                "  block{bid} @pc{}({}):",
+                blk.bytecode_pc,
+                plist.join(", ")
+            )?;
+            for inst in &blk.insts {
+                writeln!(
+                    f,
+                    "    v{} = {:?}  [{:?}/{:?}]",
+                    inst.result.0, inst.op, inst.ty, inst.effect
+                )?;
+            }
+            writeln!(f, "    -> {:?}", blk.term)?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::emacs_core::bytecode::opcode::Op;
+
+    /// A simple arithmetic body builds the expected MIR shape.
+    #[test]
+    fn builds_add_body() {
+        // (lambda (a b) (+ a b)): StackRef(1) StackRef(1) Add Return.
+        let ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Add, Op::Return];
+        let mir = build_mir(&ops, &[], 2).expect("builds");
+        assert_eq!(mir.arity, 2);
+        assert_eq!(mir.blocks.len(), 1, "one block");
+        let blk = &mir.blocks[0];
+        assert_eq!(blk.params.len(), 2, "two arg params");
+        // The Add result is a fixnum-typed Bin op.
+        let add = blk
+            .insts
+            .iter()
+            .find(|i| matches!(i.op, MirOp::Bin(BinKind::Add, _, _)))
+            .expect("has an Add");
+        assert_eq!(add.ty, LispType::Fixnum);
+        assert!(matches!(blk.term, MirTerm::Return(_)));
+    }
+
+    /// A branchy body: block count + entry depths mirror analyze_cfg.
+    #[test]
+    fn builds_branch_body_matching_cfg() {
+        // (lambda (n) (if (< n 2) n (1+ n))):
+        //  0 StackRef(0); 1 Constant(0)=2; 2 Lss; 3 GotoIfNil(6);
+        //  4 StackRef(0); 5 Return; 6 StackRef(0); 7 Add1; 8 Return
+        let ops = vec![
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Lss,
+            Op::GotoIfNil(6),
+            Op::StackRef(0),
+            Op::Return,
+            Op::StackRef(0),
+            Op::Add1,
+            Op::Return,
+        ];
+        let constants = vec![Value::make_int(2)];
+        let cfg = analyze_cfg(&ops, &constants, None, 1).unwrap();
+        let mir = build_mir(&ops, &constants, 1).expect("builds");
+        // One MIR block per bytecode leader, same leaders.
+        assert_eq!(mir.blocks.len(), cfg.leaders.len());
+        for blk in &mir.blocks {
+            assert_eq!(
+                blk.params.len(),
+                cfg.entry_depth[&blk.bytecode_pc],
+                "block params == analyze_cfg entry depth at pc {}",
+                blk.bytecode_pc
+            );
+        }
+        // The first block ends in a conditional branch.
+        assert!(matches!(mir.blocks[0].term, MirTerm::Branch { .. }));
+    }
+
+    /// A loop with a back-edge builds without trouble (forward and backward
+    /// edges are just successor edges carrying the live stack).
+    #[test]
+    fn builds_loop_with_backedge() {
+        // (lambda (n) (while (> n 0) (setq n (1- n))) n):
+        //  0 StackRef(0); 1 Constant(0)=0; 2 Gtr; 3 GotoIfNil(8);
+        //  4 StackRef(0); 5 Sub1; 6 StackSet(1); 7 Goto(0);
+        //  8 StackRef(0); 9 Return
+        let ops = vec![
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Gtr,
+            Op::GotoIfNil(8),
+            Op::StackRef(0),
+            Op::Sub1,
+            Op::StackSet(1),
+            Op::Goto(0),
+            Op::StackRef(0),
+            Op::Return,
+        ];
+        let constants = vec![Value::make_int(0)];
+        let mir = build_mir(&ops, &constants, 1).expect("builds");
+        // The backedge block ends in a Goto back to block0.
+        let has_backedge = mir
+            .blocks
+            .iter()
+            .any(|b| matches!(b.term, MirTerm::Goto { target, .. } if target == MirBlockId(0)));
+        assert!(has_backedge, "loop produces a back-edge Goto to block0");
+    }
+
+    /// Opaque ops (a builtin call) preserve stack discipline via simple_effect.
+    #[test]
+    fn opaque_op_preserves_stack() {
+        // (lambda (s) (length s)): StackRef(0) Length Return.
+        let ops = vec![Op::StackRef(0), Op::Length, Op::Return];
+        let mir = build_mir(&ops, &[], 1).expect("builds");
+        let blk = &mir.blocks[0];
+        // Length is opaque (one operand -> one result).
+        assert!(
+            blk.insts
+                .iter()
+                .any(|i| matches!(&i.op, MirOp::Opaque { op: Op::Length, .. })),
+            "length is modelled opaque"
+        );
+        assert!(matches!(blk.term, MirTerm::Return(_)));
+    }
+
+    /// `build_mir`'s own unmodelled-control bail: a `Throw` body passes
+    /// `analyze_cfg` (which treats Throw as a terminator) but the Phase 4a MIR
+    /// builder defers it.
+    #[test]
+    fn bails_on_unmodelled_control() {
+        // tag, value, Throw — analyze_cfg accepts (Throw terminates); MIR bails.
+        let ops = vec![Op::Constant(0), Op::Constant(1), Op::Throw];
+        let constants = vec![Value::symbol("tag"), Value::make_int(1)];
+        assert!(matches!(
+            build_mir(&ops, &constants, 0),
+            Err(CompileError::UnsupportedOp("mir-unmodelled-control"))
+        ));
+        // A non-constant-table Switch is caught earlier, by analyze_cfg — also
+        // not buildable, which is all Phase 4a needs.
+        let sw = vec![Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return];
+        assert!(build_mir(&sw, &[], 0).is_err());
+    }
+}

@@ -40,6 +40,14 @@ pub mod compile;
 #[cfg(feature = "jit")]
 pub mod cache;
 
+/// MIR: typed SSA IR for the optimizing Tier-2 (above the baseline `compile`).
+/// Phase 4a is the foundation only — the IR types + bytecode→MIR builder,
+/// validated in isolation and NOT yet wired into the live compile pipeline, so
+/// the baseline JIT is behaviourally untouched. Only built with the `jit`
+/// feature. See `jit/mir.rs`.
+#[cfg(feature = "jit")]
+pub mod mir;
+
 #[cfg(feature = "jit")]
 pub use cache::try_run_compiled;
 
