@@ -4697,12 +4697,10 @@ impl LayoutEngine {
                         );
 
                         match resolved_replacement {
-                            Some(ResolvedDisplayReplacement::Item(media_item)) => {
-                                let media =
-                                    crate::display_item::DisplayMediaReplacement::from_item_kind(
-                                        &media_item,
-                                    )
-                                    .expect("resolved media item should have media geometry");
+                            Some(ResolvedDisplayReplacement::Media {
+                                item: media_item,
+                                geometry: media,
+                            }) => {
                                 let display_width = media.width;
                                 let display_height = media.height;
                                 let (cursor_face_h, cursor_face_ascent) = if matches!(

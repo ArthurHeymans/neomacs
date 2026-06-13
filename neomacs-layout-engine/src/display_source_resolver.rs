@@ -1,7 +1,7 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::DisplayReplacementProperty;
@@ -264,8 +264,19 @@ pub(crate) struct ResolvedDisplaySourceItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ResolvedDisplayReplacement {
-    Item(DisplayItemKind),
+    Media {
+        item: DisplayItemKind,
+        geometry: DisplayMediaReplacement,
+    },
     Placeholder(&'static str),
+}
+
+fn resolved_media_replacement(kind: DisplayItemKind) -> Option<ResolvedDisplayReplacement> {
+    let geometry = DisplayMediaReplacement::from_item_kind(&kind)?;
+    Some(ResolvedDisplayReplacement::Media {
+        item: kind,
+        geometry,
+    })
 }
 
 pub(crate) fn resolve_display_replacement(
@@ -277,7 +288,7 @@ pub(crate) fn resolve_display_replacement(
     fallback_row_height: f32,
 ) -> Option<ResolvedDisplayReplacement> {
     if let Some(kind) = replacement.direct_media_item_kind() {
-        return Some(ResolvedDisplayReplacement::Item(kind));
+        return resolved_media_replacement(kind);
     }
 
     if let Some(kind) = resolve_display_property_media(
@@ -289,7 +300,7 @@ pub(crate) fn resolve_display_replacement(
     )
     .filter(|kind| replacement.accepts_resolved_media_item(kind))
     {
-        return Some(ResolvedDisplayReplacement::Item(kind));
+        return resolved_media_replacement(kind);
     }
 
     replacement
@@ -616,9 +627,13 @@ mod tests {
 
         assert_eq!(
             resolved,
-            Some(ResolvedDisplayReplacement::Item(DisplayItemKind::Xwidget(
-                xwidget
-            )))
+            Some(ResolvedDisplayReplacement::Media {
+                item: DisplayItemKind::Xwidget(xwidget),
+                geometry: DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(
+                    xwidget
+                ))
+                .expect("xwidget geometry"),
+            })
         );
     }
 
