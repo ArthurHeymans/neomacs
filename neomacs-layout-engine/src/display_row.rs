@@ -17,6 +17,7 @@ use crate::display_source_resolver::{
     DisplaySourceFaceBasis, DisplaySourceFallbackMetrics, DisplaySourceResolveParams,
     DisplaySourceResolveState, ResolvedDisplaySourceItem, resolve_next_display_source_item,
 };
+#[cfg(test)]
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::{
     ComplexTextRunAdvancePolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
@@ -2078,6 +2079,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         self.render_lisp_string_row_with_context(request.into_render_plan(), rendered, context)
     }
 
+    #[cfg(test)]
     fn render_display_text_fragment_row_with_context(
         &mut self,
         plan: DisplayRowRenderPlan<'_>,
@@ -2095,6 +2097,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         self.render_display_item_source_row_with_context(plan, &mut source, context)
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_text_fragment_source_row_with_context(
         &mut self,
         request: DisplayRowSourceRenderRequest<'_>,
@@ -2463,16 +2466,6 @@ impl LayoutEngine {
             face_resolver,
             face_ids,
         )
-    }
-
-    pub(crate) fn render_display_text_fragment_source_row_with_context(
-        &mut self,
-        request: DisplayRowSourceRenderRequest<'_>,
-        fragment: DisplayTextFragment,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-    ) -> Option<RenderedDisplayRow> {
-        DisplayRowRenderer::new(&mut self.font_metrics)
-            .render_display_text_fragment_source_row_with_context(request, fragment, context)
     }
 }
 

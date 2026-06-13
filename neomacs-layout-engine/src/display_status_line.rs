@@ -29,7 +29,6 @@ pub(crate) use crate::display_row::{
 };
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_source::LispStringSourceCursor;
-use crate::display_text::DisplayTextFragment;
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
@@ -68,27 +67,15 @@ pub(crate) enum FrameTabBarDisplayRowRender {
 #[derive(Clone, Copy)]
 pub(crate) struct WindowChromeDisplayText {
     value: Value,
-    selected_window: bool,
 }
 
 impl WindowChromeDisplayText {
-    pub(crate) fn new(value: Value, selected_window: bool) -> Self {
-        Self {
-            value,
-            selected_window,
-        }
+    pub(crate) fn new(value: Value, _selected_window: bool) -> Self {
+        Self { value }
     }
 
-    fn fragment(self, kind: WindowChromeKind) -> DisplayTextFragment {
-        match kind {
-            WindowChromeKind::TabLine => DisplayTextFragment::tab_line(self.value),
-            WindowChromeKind::HeaderLine => {
-                DisplayTextFragment::header_line(self.value, self.selected_window)
-            }
-            WindowChromeKind::ModeLine => {
-                DisplayTextFragment::mode_line(self.value, self.selected_window)
-            }
-        }
+    fn value(self) -> Value {
+        self.value
     }
 }
 
@@ -204,9 +191,9 @@ impl LayoutEngine {
             evaluator.display_host.as_deref(),
             face_ids,
         );
-        let rendered_row = self.render_display_text_fragment_source_row_with_context(
+        let rendered_row = self.render_lisp_string_source_row_with_context(
             row_request,
-            request.text.fragment(request.kind),
+            request.text.value(),
             &mut render_context,
         );
         let measured_row = rendered_row.map(|rendered| {
@@ -260,9 +247,9 @@ impl LayoutEngine {
         );
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        let rendered = self.render_display_text_fragment_source_row_with_context(
+        let rendered = self.render_lisp_string_source_row_with_context(
             row_request,
-            DisplayTextFragment::tab_bar(rendered_text),
+            rendered_text,
             &mut render_context,
         )?;
         if rendered.row.glyphs[GlyphArea::Text.index()].is_empty() {

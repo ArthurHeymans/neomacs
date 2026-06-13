@@ -2443,7 +2443,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
 }
 
 #[test]
-fn layout_engine_renders_display_text_fragment_with_render_context() {
+fn layout_engine_renders_lisp_string_source_with_render_context() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
     let table = FaceTable::new();
@@ -2467,11 +2467,7 @@ fn layout_engine_renders_display_text_fragment_with_render_context() {
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
     let rendered = engine
-        .render_display_text_fragment_source_row_with_context(
-            request,
-            DisplayTextFragment::tab_bar(Value::string("ctx")),
-            &mut context,
-        )
+        .render_lisp_string_source_row_with_context(request, Value::string("ctx"), &mut context)
         .expect("rendered context row");
 
     assert_eq!(rendered.row.role, GlyphRowRole::TabBar);

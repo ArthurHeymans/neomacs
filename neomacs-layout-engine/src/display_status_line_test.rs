@@ -1,7 +1,4 @@
 use super::*;
-use crate::display_face_policy::BaseFacePolicy;
-use crate::display_origin::DisplayOrigin;
-use neomacs_display_protocol::face::BasicFaceId;
 
 #[test]
 fn display_row_height_for_face_uses_realized_line_height_and_box() {
@@ -21,31 +18,26 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
 }
 
 #[test]
-fn window_chrome_display_text_lowers_by_chrome_kind() {
+fn window_chrome_display_text_preserves_lisp_value_for_source_renderer() {
     let _eval = Context::new();
 
-    let tab_line = WindowChromeDisplayText::new(Value::string("tab-line"), true)
-        .fragment(WindowChromeKind::TabLine);
-    assert_eq!(tab_line.origin, DisplayOrigin::TabLine);
     assert_eq!(
-        tab_line.base_face_policy,
-        BaseFacePolicy::FixedBasicFace(BasicFaceId::TabLine)
+        WindowChromeDisplayText::new(Value::string("tab-line"), true)
+            .value()
+            .as_utf8_str(),
+        Some("tab-line")
     );
-
-    let active_header = WindowChromeDisplayText::new(Value::string("header"), true)
-        .fragment(WindowChromeKind::HeaderLine);
-    assert_eq!(active_header.origin, DisplayOrigin::HeaderLine);
     assert_eq!(
-        active_header.base_face_policy,
-        BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineActive)
+        WindowChromeDisplayText::new(Value::string("header"), true)
+            .value()
+            .as_utf8_str(),
+        Some("header")
     );
-
-    let inactive_mode = WindowChromeDisplayText::new(Value::string("mode"), false)
-        .fragment(WindowChromeKind::ModeLine);
-    assert_eq!(inactive_mode.origin, DisplayOrigin::ModeLine);
     assert_eq!(
-        inactive_mode.base_face_policy,
-        BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineInactive)
+        WindowChromeDisplayText::new(Value::string("mode"), false)
+            .value()
+            .as_utf8_str(),
+        Some("mode")
     );
 }
 
