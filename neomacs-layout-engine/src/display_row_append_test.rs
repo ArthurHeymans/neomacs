@@ -12,7 +12,10 @@ use crate::display_row::{
     DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceRenderRequest,
     DisplayRowSourceState,
 };
-use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_builder::{
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
+    DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
+};
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_text::DisplayTextFragment;
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
@@ -2471,6 +2474,39 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
     let xwidget_cursor = DisplayReplacementMediaAppendItem::new(media, &active_face, true);
     assert_eq!(xwidget_cursor.cursor_face_height_px(), 18.0);
     assert_eq!(xwidget_cursor.cursor_face_ascent_px(), 13.0);
+}
+
+#[test]
+fn display_replacement_media_append_item_names_row_extent_policy() {
+    let active_face = test_active_face_state(7, 8.0);
+    let item = DisplayReplacementMediaAppendItem::new(
+        DisplayMediaReplacement::image(DisplayImageItem {
+            image_id: 42,
+            width: 64.0,
+            height: 10.0,
+        }),
+        &active_face,
+        false,
+    );
+    let mut progress = DisplayRowAppendProgress {
+        start: DisplayRowPosition { x_px: 0.0, col: 0 },
+        end: DisplayRowPosition { x_px: 64.0, col: 8 },
+        metrics: DisplayRowWriteMetrics {
+            width_px: 64.0,
+            width_cols: 8,
+        },
+        status: DisplayRowAppendStatus::Complete,
+        slots: Vec::new(),
+    };
+
+    assert_eq!(item.row_extents_after_append(&progress), Some((10.0, 10.0)));
+
+    progress.status = DisplayRowAppendStatus::Clipped;
+    assert_eq!(item.row_extents_after_append(&progress), None);
+
+    progress.status = DisplayRowAppendStatus::Complete;
+    progress.metrics.width_px = 0.0;
+    assert_eq!(item.row_extents_after_append(&progress), None);
 }
 
 #[test]

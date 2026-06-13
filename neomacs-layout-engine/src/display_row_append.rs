@@ -1676,6 +1676,17 @@ impl DisplayReplacementMediaAppendItem {
     pub(crate) fn cursor_face_ascent_px(self) -> f32 {
         self.cursor_face_ascent
     }
+
+    pub(crate) fn row_extents_after_append(
+        self,
+        progress: &DisplayRowAppendProgress,
+    ) -> Option<(f32, f32)> {
+        if progress.status == DisplayRowAppendStatus::Complete && progress.metrics.width_px > 0.0 {
+            Some((self.display_height_px(), self.display_ascent_px()))
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

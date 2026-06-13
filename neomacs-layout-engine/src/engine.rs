@@ -4792,14 +4792,10 @@ impl LayoutEngine {
                                         media_item,
                                         DisplayRowPosition { x_px: x, col },
                                     )
-                                    && progress.status
-                                        == crate::display_row_builder::DisplayRowAppendStatus::Complete
-                                    && progress.metrics.width_px > 0.0
+                                    && let Some((height, ascent)) =
+                                        media_item.row_extents_after_append(&progress)
                                 {
-                                    row_geometry.include_row_extents(
-                                        media_item.display_height_px(),
-                                        media_item.display_ascent_px(),
-                                    );
+                                    row_geometry.include_row_extents(height, ascent);
                                     x = position.x_px;
                                     col = position.col;
                                 }
