@@ -1609,6 +1609,15 @@ impl Obarray {
         self.function_epoch = self.function_epoch.wrapping_add(1);
     }
 
+    /// Record that function-call behavior changed WITHOUT a cell write — the
+    /// static subr table (`register_global_subr_entry`) rewrites a subr's fn
+    /// pointer/arity in place, invisibly to the cells. Bumping here keeps
+    /// `function_epoch` a complete "any function binding may have changed"
+    /// signal, which JIT call speculation relies on for validity.
+    pub(crate) fn bump_function_epoch(&mut self) {
+        self.function_epoch = self.function_epoch.wrapping_add(1);
+    }
+
     /// Set the function cell of a symbol by identity.
     pub fn set_symbol_function_id(&mut self, id: SymId, function: Value) {
         self.ensure_global_member_if_canonical(id);

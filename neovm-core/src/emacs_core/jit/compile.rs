@@ -2914,11 +2914,11 @@ struct SpecSite {
 /// the callee slot can't be rewritten), no jump target lands inside the
 /// window, and `f` is currently fbound to a BYTECODE object.
 ///
-/// Bytecode callees only, deliberately: a subr's behavior can be rewritten in
-/// place via `register_global_subr_entry` WITHOUT a function_epoch bump, so
-/// epoch-validated speculation on subr bindings would be unsound until that
-/// hole is closed. An epoch-equal check on a bytecode binding, by contrast,
-/// proves the binding still names the same immutable bytecode object.
+/// Bytecode callees only for now: an epoch-equal check on a bytecode binding
+/// proves it still names the same immutable bytecode object. (Subr-entry
+/// rewrites — `register_global_subr_entry` — now also bump function_epoch via
+/// `defsubr_with_entry`, so extending speculation to subr bindings is
+/// unlocked; it just isn't implemented or measured yet.)
 fn find_spec_sites(
     ops: &[Op],
     constants: &[Value],

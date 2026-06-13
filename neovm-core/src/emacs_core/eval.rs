@@ -13438,6 +13438,10 @@ impl Context {
             self.obarray
                 .set_symbol_function(name, Value::subr_from_sym_id(sym_id));
         }
+        // The static subr entry above was rewritten IN PLACE even when the
+        // cell write was skipped — keep function_epoch a complete change
+        // signal (JIT call-speculation validity depends on it).
+        self.obarray.bump_function_epoch();
     }
 
     /// Call a registered subr value directly. Returns None if VALUE is not a
