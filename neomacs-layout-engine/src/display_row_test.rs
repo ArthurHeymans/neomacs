@@ -718,10 +718,11 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
         )),
     };
     let mut state = DisplayRowSourceState::default();
+    let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
     let first = renderer
-        .render_display_item_source_row_step_with_display_host(
-            display_row_spec_for_face(
+        .render_display_item_source_row_step_from_request_with_context(
+            DisplayRowSourceRenderRequest::whole_row(
                 DisplayRowGeometry {
                     y: 0.0,
                     width: 16.0,
@@ -736,14 +737,12 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
             ),
             &mut source,
             &mut state,
-            &resolver,
-            None,
-            &mut face_ids,
+            &mut context,
         )
         .expect("first row");
     let second = renderer
-        .render_display_item_source_row_step_with_display_host(
-            display_row_spec_for_face(
+        .render_display_item_source_row_step_from_request_with_context(
+            DisplayRowSourceRenderRequest::whole_row(
                 DisplayRowGeometry {
                     y: 16.0,
                     width: 16.0,
@@ -758,9 +757,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
             ),
             &mut source,
             &mut state,
-            &resolver,
-            None,
-            &mut face_ids,
+            &mut context,
         )
         .expect("second row");
 
@@ -2525,7 +2522,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = display_row_spec_from_base_face(
+    let request = DisplayRowSourceRenderRequest::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2539,18 +2536,15 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
     );
-    let base_face_id = spec.base_face_id;
-    let mut source = crate::display_source::LispStringSourceCursor::new(
-        1,
-        Value::string("אב"),
-        RenderFaceRef::FaceId(base_face_id),
-    )
-    .expect("lisp string source");
+    let base_face = request.base_face_ref();
+    let mut source =
+        crate::display_source::LispStringSourceCursor::new(1, Value::string("אב"), base_face)
+            .expect("lisp string source");
     let mut state = DisplayRowSourceState::default();
 
     let fragment = renderer
-        .render_display_item_source_row_fragment_step_with_display_host(
-            spec,
+        .render_display_item_source_row_fragment_step_from_request_with_display_host(
+            request,
             &mut source,
             &mut state,
             &resolver,

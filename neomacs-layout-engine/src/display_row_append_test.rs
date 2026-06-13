@@ -512,7 +512,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
         let mut source_state = DisplayRowSourceState::default();
         renderer
-            .render_display_item_source_row_fragment_step_with_display_host(
+            .render_display_item_source_row_fragment_step_from_request_with_display_host(
                 DisplayRowSourceRenderRequest::whole_row(
                     DisplayRowGeometry {
                         y: 0.0,
@@ -529,8 +529,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
                 .with_render_bounds(DisplayRowRenderBounds {
                     start: DisplayRowPosition { x_px: 16.0, col: 2 },
                     max_x_px: 160.0,
-                })
-                .display_row_spec(),
+                }),
                 &mut source,
                 &mut source_state,
                 &face_resolver,

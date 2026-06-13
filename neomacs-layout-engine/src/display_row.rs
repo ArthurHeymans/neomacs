@@ -1978,20 +1978,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .map(|result| result.rendered)
     }
 
-    #[cfg(test)]
-    pub(crate) fn render_display_item_source_row_step_with_display_host(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        source: &mut impl DisplayItemSource,
-        state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<DisplayRowRenderResult> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        self.render_display_item_source_row_step_with_context(spec, source, state, &mut context)
-    }
-
     pub(crate) fn render_display_item_source_row_step_with_context(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -2022,9 +2008,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     }
 
     #[cfg(test)]
-    pub(crate) fn render_display_item_source_row_fragment_step_with_display_host(
+    pub(crate) fn render_display_item_source_row_fragment_step_from_request_with_display_host(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        request: DisplayRowSourceRenderRequest<'_>,
         source: &mut impl DisplayItemSource,
         state: &mut DisplayRowSourceState,
         face_resolver: &FaceResolver,
@@ -2033,7 +2019,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     ) -> Option<DisplayRowRenderResult> {
         let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         self.render_display_item_source_row_fragment_step_with_context(
-            spec,
+            request.display_row_spec(),
             source,
             state,
             &mut context,
