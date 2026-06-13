@@ -652,7 +652,7 @@ impl<'a> LispStringAppendContext<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct LispStringRowAppendContext<'row> {
-    active_face_context: DisplayRowActiveFaceAppendContext<'row>,
+    active_face_context: DisplayRowActiveFaceAppendContext<'row, 'row>,
 }
 
 impl<'row> LispStringRowAppendContext<'row> {
@@ -914,7 +914,7 @@ impl<'a> SyntheticTextAppendContext<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct SyntheticTextRowAppendContext<'a> {
-    active_face_context: DisplayRowActiveFaceAppendContext<'a>,
+    active_face_context: DisplayRowActiveFaceAppendContext<'a, 'a>,
 }
 
 impl<'a> SyntheticTextRowAppendContext<'a> {
@@ -1226,10 +1226,7 @@ pub(crate) struct BufferTextFragmentRowAppendContext<'source, 'row, B: LayoutBuf
     buffer: &'source B,
     buffer_id: BufferId,
     active_face: &'source DisplayRowActiveFaceState,
-    append_surface: &'row DisplayRowAppendSurface,
-    geometry: &'row DisplayRowGeometryState,
-    glyph_y_offset: f32,
-    default_row_height: f32,
+    active_face_context: DisplayRowActiveFaceAppendContext<'row, 'source>,
 }
 
 impl<'source, 'row, B: LayoutBufferView + ?Sized>
@@ -1248,22 +1245,18 @@ impl<'source, 'row, B: LayoutBufferView + ?Sized>
             buffer,
             buffer_id,
             active_face,
-            append_surface,
-            geometry,
-            glyph_y_offset,
-            default_row_height,
+            active_face_context: DisplayRowActiveFaceAppendContext::new(
+                append_surface,
+                geometry,
+                active_face,
+                glyph_y_offset,
+                default_row_height,
+            ),
         }
     }
 
     pub(crate) fn active_face(self) -> BufferTextFragmentAppendContext<'source, B> {
-        let frame = self
-            .append_surface
-            .frame_for_active_face_from_geometry_state(
-                self.geometry,
-                self.glyph_y_offset,
-                self.active_face,
-                self.default_row_height,
-            );
+        let frame = self.active_face_context.active_face_frame();
         BufferTextFragmentAppendContext::new(
             self.buffer,
             self.buffer_id,
@@ -1829,7 +1822,7 @@ pub(crate) struct BufferTextItemRowAppendContext<'a, B: LayoutBufferView + ?Size
     buffer: &'a B,
     buffer_id: BufferId,
     active_face: &'a DisplayRowActiveFaceState,
-    active_face_context: DisplayRowActiveFaceAppendContext<'a>,
+    active_face_context: DisplayRowActiveFaceAppendContext<'a, 'a>,
 }
 
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemRowAppendContext<'a, B> {
@@ -3251,16 +3244,16 @@ impl<'a> DisplayRowTextAppendContext<'a> {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct DisplayRowActiveFaceAppendContext<'a> {
-    text_context: DisplayRowTextAppendContext<'a>,
-    active_face: &'a DisplayRowActiveFaceState,
+pub(crate) struct DisplayRowActiveFaceAppendContext<'row, 'face> {
+    text_context: DisplayRowTextAppendContext<'row>,
+    active_face: &'face DisplayRowActiveFaceState,
 }
 
-impl<'a> DisplayRowActiveFaceAppendContext<'a> {
+impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
     pub(crate) fn new(
-        append_surface: &'a DisplayRowAppendSurface,
-        geometry: &'a DisplayRowGeometryState,
-        active_face: &'a DisplayRowActiveFaceState,
+        append_surface: &'row DisplayRowAppendSurface,
+        geometry: &'row DisplayRowGeometryState,
+        active_face: &'face DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         default_row_height: f32,
     ) -> Self {
