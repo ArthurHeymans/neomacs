@@ -39,7 +39,7 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceClusterState,
-    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementAppendItem,
+    BufferTextSourceRange, BufferTextSourceSpecialDisplay, DisplayPropertyReplacementAppendItem,
     DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
     DisplayReplacementRowAppendContext, DisplayRowAppendArea, DisplayRowAppendSurface,
     LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
@@ -4939,6 +4939,8 @@ impl LayoutEngine {
             );
             let buffer_source_start = CharPos0::new(charpos as usize);
             let buffer_source_end = CharPos0::new((charpos + 1) as usize);
+            let buffer_source_range =
+                BufferTextSourceRange::new(buffer_source_start, buffer_source_end);
 
             // Control characters: render as ^X notation
             if let Some(special_display) = precluster_special_display
@@ -4954,8 +4956,7 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_source_start,
-                        buffer_source_end,
+                        buffer_source_range,
                         face_resolver,
                         control_item.clone(),
                         DisplayRowPosition { x_px: x, col },
@@ -5069,8 +5070,7 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_source_start,
-                        buffer_source_end,
+                        buffer_source_range,
                         face_resolver,
                         control_item,
                         DisplayRowPosition { x_px: x, col },
@@ -5103,8 +5103,7 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_source_start,
-                        buffer_source_end,
+                        buffer_source_range,
                         face_resolver,
                         nobreak_item,
                         DisplayRowPosition { x_px: x, col },
@@ -5145,8 +5144,7 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        buffer_source_start,
-                        buffer_source_end,
+                        buffer_source_range,
                         face_resolver,
                         glyphless_item,
                         DisplayRowPosition { x_px: x, col },
@@ -5175,8 +5173,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &text,
                     ch_start_byte_idx,
-                    buffer_source_start,
-                    buffer_source_end,
+                    buffer_source_range,
                     face_resolver,
                     append_position,
                     cluster_state,
@@ -5439,8 +5436,7 @@ impl LayoutEngine {
                 &mut output_emitter,
                 evaluator,
                 &mut self.font_metrics,
-                buffer_source_start,
-                buffer_source_end,
+                buffer_source_range,
                 face_resolver,
                 resolved_advance,
                 append_position,

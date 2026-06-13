@@ -1155,17 +1155,46 @@ pub(crate) fn append_lisp_string_to_text_row(
     outcome.end_position()
 }
 
-fn buffer_text_source_range_item<B: LayoutBufferView + ?Sized>(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BufferTextSourceRange {
     start: CharPos0,
     end: CharPos0,
+}
+
+impl BufferTextSourceRange {
+    pub(crate) fn new(start: CharPos0, end: CharPos0) -> Self {
+        Self { start, end }
+    }
+
+    fn start(self) -> CharPos0 {
+        self.start
+    }
+
+    fn end(self) -> CharPos0 {
+        self.end
+    }
+
+    fn is_single_char(self) -> bool {
+        self.end == self.start.add_len(CharLen::new(1))
+    }
+
+    fn is_empty_or_reversed(self) -> bool {
+        self.end <= self.start
+    }
+}
+
+fn buffer_text_source_range_item<B: LayoutBufferView + ?Sized>(
+    range: BufferTextSourceRange,
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
 ) -> Option<(DisplayItem, DisplayRowAppendKind)> {
-    if end != start.add_len(CharLen::new(1)) {
+    if !range.is_single_char() {
         return None;
     }
 
+    let start = range.start();
+    let end = range.end();
     let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(start);
     let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(end);
     let mut bytes = Vec::new();
@@ -1193,8 +1222,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    start: CharPos0,
-    end: CharPos0,
+    range: BufferTextSourceRange,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     buffer_id: BufferId,
@@ -1204,8 +1232,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let (item, append_kind) =
-        buffer_text_source_range_item(start, end, buffer_id, buffer, face_id)?;
+    let (item, append_kind) = buffer_text_source_range_item(range, buffer_id, buffer, face_id)?;
     let request = frame.source_append_request(position, face_id, base_face, append_kind);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
@@ -1264,8 +1291,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         font_metrics: &mut Option<FontMetricsService>,
         text: &[u8],
         byte_idx: usize,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         active_face_state: &DisplayRowActiveFaceState,
         position: DisplayRowPosition,
@@ -1277,8 +1303,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
             font_metrics,
             text,
             byte_idx,
-            start,
-            end,
+            range,
             face_resolver,
             self.buffer_id,
             self.buffer,
@@ -1297,8 +1322,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         resolved_advance: ResolvedBufferTextSourceAdvance,
         position: DisplayRowPosition,
@@ -1308,8 +1332,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
             output_emitter,
             evaluator,
             font_metrics,
-            start,
-            end,
+            range,
             face_resolver,
             self.base_face,
             self.buffer_id,
@@ -1327,8 +1350,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
     ) -> Option<f32> {
@@ -1336,8 +1358,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
             builder,
             evaluator,
             font_metrics,
-            start,
-            end,
+            range,
             face_resolver,
             self.base_face,
             self.buffer_id,
@@ -1417,8 +1438,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
@@ -1428,8 +1448,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
                 builder,
                 evaluator,
                 font_metrics,
-                start,
-                end,
+                range,
                 face_resolver,
                 item,
                 position,
@@ -1444,8 +1463,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
@@ -1456,8 +1474,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
                 output_emitter,
                 evaluator,
                 font_metrics,
-                start,
-                end,
+                range,
                 face_resolver,
                 item,
                 position,
@@ -1474,8 +1491,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         font_metrics: &mut Option<FontMetricsService>,
         text: &[u8],
         byte_idx: usize,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
         cluster: BufferTextSourceClusterState,
@@ -1487,8 +1503,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             font_metrics,
             text,
             byte_idx,
-            start,
-            end,
+            range,
             face_resolver,
             self.buffer_id,
             self.buffer,
@@ -1507,8 +1522,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         resolved_advance: ResolvedBufferTextSourceAdvance,
         position: DisplayRowPosition,
@@ -1519,8 +1533,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             output_emitter,
             evaluator,
             font_metrics,
-            start,
-            end,
+            range,
             face_resolver,
             self.active_face.resolved_face(),
             self.buffer_id,
@@ -1538,8 +1551,7 @@ fn measure_buffer_text_source_range_append_progress_to_text_row<B: LayoutBufferV
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    start: CharPos0,
-    end: CharPos0,
+    range: BufferTextSourceRange,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     buffer_id: BufferId,
@@ -1548,8 +1560,7 @@ fn measure_buffer_text_source_range_append_progress_to_text_row<B: LayoutBufferV
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<DisplayRowAppendProgress> {
-    let (item, append_kind) =
-        buffer_text_source_range_item(start, end, buffer_id, buffer, face_id)?;
+    let (item, append_kind) = buffer_text_source_range_item(range, buffer_id, buffer, face_id)?;
     let request = frame
         .source_append_request(position, face_id, base_face, append_kind)
         .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
@@ -1577,8 +1588,7 @@ fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    start: CharPos0,
-    end: CharPos0,
+    range: BufferTextSourceRange,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     buffer_id: BufferId,
@@ -1592,8 +1602,7 @@ fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
             builder,
             evaluator,
             font_metrics,
-            start,
-            end,
+            range,
             face_resolver,
             base_face,
             buffer_id,
@@ -1612,8 +1621,7 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    start: CharPos0,
-    end: CharPos0,
+    range: BufferTextSourceRange,
     face_resolver: &FaceResolver,
     buffer_id: BufferId,
     buffer: &B,
@@ -1626,8 +1634,7 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
         builder,
         evaluator,
         font_metrics,
-        start,
-        end,
+        range,
         face_resolver,
         active_face_state.resolved_face(),
         buffer_id,
@@ -1673,8 +1680,7 @@ impl BufferTextSourceAdvanceResolver {
         font_metrics: &mut Option<FontMetricsService>,
         text: &[u8],
         byte_idx: usize,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         buffer_id: BufferId,
         buffer: &B,
@@ -1702,8 +1708,7 @@ impl BufferTextSourceAdvanceResolver {
                     builder,
                     evaluator,
                     font_metrics,
-                    start,
-                    end,
+                    range,
                     face_resolver,
                     buffer_id,
                     buffer,
@@ -1719,17 +1724,18 @@ impl BufferTextSourceAdvanceResolver {
 }
 
 fn buffer_display_item_source_range_item<B: LayoutBufferView + ?Sized>(
-    start: CharPos0,
-    end: CharPos0,
+    range: BufferTextSourceRange,
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
     item: BufferTextSourceAppendItem,
 ) -> Option<(DisplayItem, DisplayRowAppendKind)> {
-    if end <= start {
+    if range.is_empty_or_reversed() {
         return None;
     }
 
+    let start = range.start();
+    let end = range.end();
     let source = BufferTextItemSource::new(
         buffer_id,
         start,
@@ -1752,8 +1758,7 @@ fn append_buffer_display_item_source_range_to_text_row_and_emit<B: LayoutBufferV
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    start: CharPos0,
-    end: CharPos0,
+    range: BufferTextSourceRange,
     buffer: &B,
     buffer_id: BufferId,
     face_resolver: &FaceResolver,
@@ -1764,7 +1769,7 @@ fn append_buffer_display_item_source_range_to_text_row_and_emit<B: LayoutBufferV
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let (item, append_kind) =
-        buffer_display_item_source_range_item(start, end, buffer_id, buffer, face_id, item)?;
+        buffer_display_item_source_range_item(range, buffer_id, buffer, face_id, item)?;
     let request = frame.source_append_request(position, face_id, base_face, append_kind);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
@@ -1790,8 +1795,7 @@ fn measure_buffer_display_item_source_range_append_progress_to_text_row<
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    start: CharPos0,
-    end: CharPos0,
+    range: BufferTextSourceRange,
     buffer: &B,
     buffer_id: BufferId,
     face_resolver: &FaceResolver,
@@ -1802,7 +1806,7 @@ fn measure_buffer_display_item_source_range_append_progress_to_text_row<
     position: DisplayRowPosition,
 ) -> Option<DisplayRowAppendProgress> {
     let (item, append_kind) =
-        buffer_display_item_source_range_item(start, end, buffer_id, buffer, face_id, item)?;
+        buffer_display_item_source_range_item(range, buffer_id, buffer, face_id, item)?;
     let request = frame
         .source_append_request(position, face_id, base_face, append_kind)
         .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
@@ -2007,8 +2011,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
@@ -2018,8 +2021,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
             output_emitter,
             evaluator,
             font_metrics,
-            start,
-            end,
+            range,
             self.buffer,
             self.buffer_id,
             face_resolver,
@@ -2037,8 +2039,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
@@ -2048,8 +2049,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
                 builder,
                 evaluator,
                 font_metrics,
-                start,
-                end,
+                range,
                 self.buffer,
                 self.buffer_id,
                 face_resolver,
@@ -2070,8 +2070,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        start: CharPos0,
-        end: CharPos0,
+        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
@@ -2083,8 +2082,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
             builder,
             evaluator,
             font_metrics,
-            start,
-            end,
+            range,
             face_resolver,
             item,
             position,
