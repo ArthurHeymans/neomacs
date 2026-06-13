@@ -2457,16 +2457,21 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let source_char = BufferTextSourceChar::new('\u{00A0}', CharPos0::new(0), 2);
+    let special_display = source_char
+        .precluster_special_display()
+        .cloned()
+        .expect("nobreak source char should map to a display item");
     let (_progress, end) = append_context
-        .append_item_source_range_to_text_row_and_emit(
+        .append_special_source_char_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+            &source_char,
             &face_resolver,
-            BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() },
+            special_display,
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended source-mapped buffer text item fragment");
@@ -2529,19 +2534,20 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let source_char = BufferTextSourceChar::new('\u{fff0}', CharPos0::new(0), 2);
+    let special_display = source_char
+        .cluster_special_display(None)
+        .expect("glyphless source char should map to a display item");
     let (_progress, end) = append_context
-        .append_item_source_range_to_text_row_and_emit(
+        .append_special_source_char_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+            &source_char,
             &face_resolver,
-            BufferTextSourceAppendItem::Glyphless {
-                ch: '\u{fff0}',
-                method: GlyphlessMethod::HexCode,
-            },
+            special_display,
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended glyphless buffer text item fragment");

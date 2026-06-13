@@ -1067,6 +1067,30 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn measure_special_source_char_width_or_active_face_fallback_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        source_char: &BufferTextSourceChar,
+        face_resolver: &FaceResolver,
+        special_display: &BufferTextSourceSpecialDisplay,
+        position: DisplayRowPosition,
+    ) -> f32 {
+        self.measure_item_source_range_width_or_active_face_fallback_to_text_row(
+            geometry,
+            builder,
+            evaluator,
+            font_metrics,
+            source_char.range(),
+            face_resolver,
+            special_display.clone().into_append_item(),
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_item_source_range_to_text_row_and_emit(
         &self,
         geometry: &DisplayRowGeometryState,
@@ -1090,6 +1114,32 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
                 item,
                 position,
             )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_special_source_char_to_text_row_and_emit(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        source_char: &BufferTextSourceChar,
+        face_resolver: &FaceResolver,
+        special_display: BufferTextSourceSpecialDisplay,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.append_item_source_range_to_text_row_and_emit(
+            geometry,
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            source_char.range(),
+            face_resolver,
+            special_display.into_append_item(),
+            position,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
