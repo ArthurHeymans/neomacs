@@ -265,6 +265,25 @@ pub(crate) struct CurrentTextRowRenderOutcome {
     pub(crate) row_ascent_px: f32,
 }
 
+impl CurrentTextRowRenderOutcome {
+    fn into_append_progress(self, start: DisplayRowPosition) -> DisplayRowAppendProgress {
+        display_row_append_progress_from_render_result(
+            start,
+            self.end,
+            self.stop,
+            self.source_slots,
+        )
+    }
+
+    fn into_append_progress_and_position(
+        self,
+        start: DisplayRowPosition,
+    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
+        let end = self.end;
+        (self.into_append_progress(start), end)
+    }
+}
+
 fn display_row_position_from_output_progress(
     progress: DisplayRowOutputProgress,
 ) -> DisplayRowPosition {
@@ -520,10 +539,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
         request,
         render_policy,
     )?;
-    let slots = outcome.source_slots;
-    let end = outcome.end;
-    let progress = display_row_append_progress_from_render_result(start, end, outcome.stop, slots);
-    Some((progress, end))
+    Some(outcome.into_append_progress_and_position(start))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1090,13 +1106,7 @@ fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized
         request,
         &mut render_policy,
     )?;
-    let progress = display_row_append_progress_from_render_result(
-        position,
-        outcome.end,
-        outcome.stop,
-        outcome.source_slots,
-    );
-    Some((progress, outcome.end))
+    Some(outcome.into_append_progress_and_position(position))
 }
 
 pub(crate) struct BufferTextFragmentAppendContext<'a, B: LayoutBufferView + ?Sized> {
@@ -1297,12 +1307,7 @@ fn measure_buffer_text_fragment_append_progress_to_text_row<B: LayoutBufferView 
         request,
         &mut render_policy,
     )?;
-    Some(display_row_append_progress_from_render_result(
-        position,
-        outcome.end,
-        outcome.stop,
-        outcome.source_slots,
-    ))
+    Some(outcome.into_append_progress(position))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1518,13 +1523,7 @@ fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView 
         &mut face_ids,
         request,
     )?;
-    let progress = display_row_append_progress_from_render_result(
-        position,
-        outcome.end,
-        outcome.stop,
-        outcome.source_slots,
-    );
-    Some((progress, outcome.end))
+    Some(outcome.into_append_progress_and_position(position))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1562,12 +1561,7 @@ fn measure_buffer_display_item_fragment_append_progress_to_text_row<
         request,
         &mut render_policy,
     )?;
-    Some(display_row_append_progress_from_render_result(
-        position,
-        outcome.end,
-        outcome.stop,
-        outcome.source_slots,
-    ))
+    Some(outcome.into_append_progress(position))
 }
 
 #[derive(Clone, Debug, PartialEq)]

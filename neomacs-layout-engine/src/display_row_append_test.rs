@@ -14,8 +14,8 @@ use crate::display_row::{
     DisplayRowSourceState,
 };
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
-    DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
+    DisplayRowItemMeasurement, DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_text::DisplayTextFragment;
@@ -697,6 +697,38 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
 fn render_face_ref_id_uses_fallback_for_inherit() {
     assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(12), 7), 12);
     assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, 7), 7);
+}
+
+#[test]
+fn current_text_row_render_outcome_builds_append_progress() {
+    let outcome = CurrentTextRowRenderOutcome {
+        stop: DisplayRowRenderStop::Clipped,
+        source_slots: vec![DisplayRowGlyphSlot {
+            source: DisplaySourcePosition::synthetic(9, 0),
+            x_px: 8.0,
+            col: 1,
+            width_px: 16.0,
+            width_cols: 2,
+        }],
+        end: DisplayRowPosition { x_px: 24.0, col: 3 },
+        row_height_px: 18.0,
+        row_ascent_px: 13.0,
+    };
+    let start = DisplayRowPosition { x_px: 8.0, col: 1 };
+
+    let (progress, end) = outcome.into_append_progress_and_position(start);
+
+    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.start, start);
+    assert_eq!(progress.end, end);
+    assert_eq!(progress.metrics.width_px, 16.0);
+    assert_eq!(progress.metrics.width_cols, 2);
+    assert_eq!(progress.status, DisplayRowAppendStatus::Clipped);
+    assert_eq!(progress.slots.len(), 1);
+    assert_eq!(
+        progress.slots[0].source,
+        DisplaySourcePosition::synthetic(9, 0)
+    );
 }
 
 #[test]
