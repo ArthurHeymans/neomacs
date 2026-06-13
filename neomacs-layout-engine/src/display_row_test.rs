@@ -1,5 +1,4 @@
 use super::*;
-use crate::display_text::DisplayTextFragment;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -502,40 +501,6 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
 
     let rendered = renderer
         .render_lisp_string_source_row(request, Value::string("A中"), &resolver, &mut face_ids)
-        .expect("display source row");
-
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
-    assert_eq!(rendered.row.role, GlyphRowRole::TabLine);
-    assert_eq!(rendered.progress.end_col, 3);
-}
-
-#[test]
-fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
-    let _eval = Context::new();
-    let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
-    let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
-    let request = display_row_request_from_base_face(
-        DisplayRowGeometry {
-            y: 0.0,
-            width: 240.0,
-            height: 16.0,
-            char_width: 8.0,
-            ascent: 12.0,
-            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-        },
-        &mut face_ids,
-        resolver.default_face(),
-        GlyphRowRole::TabLine,
-        std::collections::HashMap::new(),
-    );
-    let fragment = DisplayTextFragment::tab_line(Value::string("A中"));
-    let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
-
-    let rendered = renderer
-        .render_display_text_fragment_source_row_with_context(request, fragment, &mut context)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");

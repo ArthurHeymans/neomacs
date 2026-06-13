@@ -17,8 +17,6 @@ use crate::display_source_resolver::{
     DisplaySourceFaceBasis, DisplaySourceFallbackMetrics, DisplaySourceResolveParams,
     DisplaySourceResolveState, ResolvedDisplaySourceItem, resolve_next_display_source_item,
 };
-#[cfg(test)]
-use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::{
     ComplexTextRunAdvancePolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
     DisplayTextRunMeasurementPlan,
@@ -2077,38 +2075,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
         self.render_lisp_string_row_with_context(request.into_render_plan(), rendered, context)
-    }
-
-    #[cfg(test)]
-    fn render_display_text_fragment_row_with_context(
-        &mut self,
-        plan: DisplayRowRenderPlan<'_>,
-        fragment: DisplayTextFragment,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-    ) -> Option<RenderedDisplayRow> {
-        let rendered = match fragment.storage {
-            DisplayTextStorage::LispString(value) => value,
-            DisplayTextStorage::Static(value) => Value::string(value),
-            DisplayTextStorage::BufferSpan { .. } => return None,
-        };
-        let base_face_id = plan.base_face_id;
-        let mut source =
-            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
-        self.render_display_item_source_row_with_context(plan, &mut source, context)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_display_text_fragment_source_row_with_context(
-        &mut self,
-        request: DisplayRowSourceRenderRequest<'_>,
-        fragment: DisplayTextFragment,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-    ) -> Option<RenderedDisplayRow> {
-        self.render_display_text_fragment_row_with_context(
-            request.into_render_plan(),
-            fragment,
-            context,
-        )
     }
 
     #[cfg(test)]
