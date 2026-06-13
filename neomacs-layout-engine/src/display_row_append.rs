@@ -826,14 +826,13 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
         geometry: &DisplayRowGeometryState,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        let frame = self.append_surface.text_row_frame_from_geometry_state(
+        let frame = DisplayRowTextAppendContext::new(
+            self.append_surface,
             geometry,
             self.glyph_y_offset,
-            self.height_px,
-            self.ascent_px,
-            self.char_width_px,
             self.default_row_height,
-        );
+        )
+        .text_row_frame(self.height_px, self.ascent_px, self.char_width_px);
         self.source_context.render_to_text_row_and_emit(
             builder,
             output_emitter,
