@@ -2481,11 +2481,8 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         .precluster_special_display()
         .cloned()
         .expect("nobreak source char should map to a display item");
-    let measure_request = BufferTextSpecialSourceCharMeasureRequest::new(
-        &source_char,
-        &special_display,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    );
+    let source_request = BufferTextSpecialSourceCharRequest::new(&source_char, special_display);
+    let measure_request = source_request.measure_at(DisplayRowPosition { x_px: 0.0, col: 0 });
     let measured_width = append_context
         .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
             &geometry,
@@ -2495,11 +2492,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
             &face_resolver,
             measure_request,
         );
-    let request = BufferTextSpecialSourceCharAppendRequest::new(
-        &source_char,
-        special_display,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    );
+    let request = source_request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
         .append_special_source_char_request_to_text_row_and_emit(
             &geometry,
@@ -2575,11 +2568,8 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let special_display = source_char
         .cluster_special_display(None)
         .expect("glyphless source char should map to a display item");
-    let request = BufferTextSpecialSourceCharAppendRequest::new(
-        &source_char,
-        special_display,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    );
+    let source_request = BufferTextSpecialSourceCharRequest::new(&source_char, special_display);
+    let request = source_request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
         .append_special_source_char_request_to_text_row_and_emit(
             &geometry,

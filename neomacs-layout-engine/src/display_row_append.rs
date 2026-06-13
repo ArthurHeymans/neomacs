@@ -1735,6 +1735,46 @@ impl BufferTextSourceChar {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSpecialSourceCharRequest {
+    range: BufferTextSourceRange,
+    special_display: BufferTextSourceSpecialDisplay,
+}
+
+impl BufferTextSpecialSourceCharRequest {
+    pub(crate) fn new(
+        source_char: &BufferTextSourceChar,
+        special_display: BufferTextSourceSpecialDisplay,
+    ) -> Self {
+        Self {
+            range: source_char.range(),
+            special_display,
+        }
+    }
+
+    pub(crate) fn append_at(
+        &self,
+        position: DisplayRowPosition,
+    ) -> BufferTextSpecialSourceCharAppendRequest {
+        BufferTextSpecialSourceCharAppendRequest {
+            range: self.range,
+            special_display: self.special_display.clone(),
+            position,
+        }
+    }
+
+    pub(crate) fn measure_at(
+        &self,
+        position: DisplayRowPosition,
+    ) -> BufferTextSpecialSourceCharMeasureRequest {
+        BufferTextSpecialSourceCharMeasureRequest {
+            range: self.range,
+            special_display: self.special_display.clone(),
+            position,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSpecialSourceCharAppendRequest {
     range: BufferTextSourceRange,
     special_display: BufferTextSourceSpecialDisplay,
@@ -1742,18 +1782,6 @@ pub(crate) struct BufferTextSpecialSourceCharAppendRequest {
 }
 
 impl BufferTextSpecialSourceCharAppendRequest {
-    pub(crate) fn new(
-        source_char: &BufferTextSourceChar,
-        special_display: BufferTextSourceSpecialDisplay,
-        position: DisplayRowPosition,
-    ) -> Self {
-        Self {
-            range: source_char.range(),
-            special_display,
-            position,
-        }
-    }
-
     fn into_parts(self) -> BufferTextSpecialSourceCharAppendRequestParts {
         BufferTextSpecialSourceCharAppendRequestParts {
             range: self.range,
@@ -1777,18 +1805,6 @@ pub(crate) struct BufferTextSpecialSourceCharMeasureRequest {
 }
 
 impl BufferTextSpecialSourceCharMeasureRequest {
-    pub(crate) fn new(
-        source_char: &BufferTextSourceChar,
-        special_display: &BufferTextSourceSpecialDisplay,
-        position: DisplayRowPosition,
-    ) -> Self {
-        Self {
-            range: source_char.range(),
-            special_display: special_display.clone(),
-            position,
-        }
-    }
-
     fn into_parts(self) -> BufferTextSpecialSourceCharMeasureRequestParts {
         BufferTextSpecialSourceCharMeasureRequestParts {
             range: self.range,

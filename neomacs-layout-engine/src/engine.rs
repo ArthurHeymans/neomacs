@@ -39,12 +39,11 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    BufferTextSourceCharAdvanceRequest, BufferTextSpecialSourceCharAppendRequest,
-    BufferTextSpecialSourceCharMeasureRequest, DisplayPropertyReplacementAppendItem,
-    DisplayPropertyReplacementAppendRequest, DisplayPropertyReplacementAppendResolveRequest,
-    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
-    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
-    LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
+    BufferTextSourceCharAdvanceRequest, BufferTextSpecialSourceCharRequest,
+    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
+    DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
+    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
     SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -5052,11 +5051,12 @@ impl LayoutEngine {
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let measure_request = BufferTextSpecialSourceCharMeasureRequest::new(
+                let special_source_request = BufferTextSpecialSourceCharRequest::new(
                     &buffer_source_char,
-                    special_display,
-                    DisplayRowPosition { x_px: x, col },
+                    special_display.clone(),
                 );
+                let measure_request =
+                    special_source_request.measure_at(DisplayRowPosition { x_px: x, col });
                 let needed_width = buffer_row_append_context
                     .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
                         &row_geometry,
@@ -5168,11 +5168,8 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     let _ = face_ids.allocate();
                 }
-                let special_request = BufferTextSpecialSourceCharAppendRequest::new(
-                    &buffer_source_char,
-                    special_display.clone(),
-                    DisplayRowPosition { x_px: x, col },
-                );
+                let special_request =
+                    special_source_request.append_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
                     .append_special_source_char_request_to_text_row_and_emit(
                         &row_geometry,
@@ -5204,11 +5201,12 @@ impl LayoutEngine {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
                 }
-                let special_request = BufferTextSpecialSourceCharAppendRequest::new(
+                let special_source_request = BufferTextSpecialSourceCharRequest::new(
                     &buffer_source_char,
                     special_display.clone(),
-                    DisplayRowPosition { x_px: x, col },
                 );
+                let special_request =
+                    special_source_request.append_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
                     .append_special_source_char_request_to_text_row_and_emit(
                         &row_geometry,
@@ -5246,11 +5244,10 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
-                let special_request = BufferTextSpecialSourceCharAppendRequest::new(
-                    &buffer_source_char,
-                    special_display,
-                    DisplayRowPosition { x_px: x, col },
-                );
+                let special_source_request =
+                    BufferTextSpecialSourceCharRequest::new(&buffer_source_char, special_display);
+                let special_request =
+                    special_source_request.append_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
                     .append_special_source_char_request_to_text_row_and_emit(
                         &row_geometry,
