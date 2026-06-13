@@ -1434,6 +1434,36 @@ pub(crate) struct DisplayRowSourceAppendRenderParts<'face> {
     pub(crate) output: TextRowOutput,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayRowSourceAppendRequestPolicy {
+    matrix_row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    output_height: f32,
+    geometry: DisplayRowGeometry,
+    max_x_px: f32,
+}
+
+impl DisplayRowSourceAppendRequestPolicy {
+    pub(crate) fn new(
+        matrix_row: usize,
+        row_y: f32,
+        glyph_y: f32,
+        output_height: f32,
+        geometry: DisplayRowGeometry,
+        max_x_px: f32,
+    ) -> Self {
+        Self {
+            matrix_row,
+            row_y,
+            glyph_y,
+            output_height,
+            geometry,
+            max_x_px,
+        }
+    }
+}
+
 impl<'face> DisplayRowSourceAppendRequest<'face> {
     pub(crate) fn new(
         request: DisplayRowSourceRenderRequest<'face>,
@@ -1447,6 +1477,27 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             start,
             base_face_id,
         }
+    }
+
+    pub(crate) fn from_text_row_policy(
+        position: DisplayRowPosition,
+        base_face_id: u32,
+        base_face: &'face ResolvedFace,
+        policy: DisplayRowSourceAppendRequestPolicy,
+    ) -> Self {
+        let request = DisplayRowSourceGeometry::from_display_row_geometry(policy.geometry)
+            .source_request_for_base_face_id(base_face_id, base_face, GlyphRowRole::Text)
+            .with_render_bounds(DisplayRowRenderBounds {
+                start: position,
+                max_x_px: policy.max_x_px,
+            });
+        let output = TextRowOutput {
+            row: policy.matrix_row,
+            row_y: policy.row_y,
+            glyph_y: policy.glyph_y,
+            height: policy.output_height,
+        };
+        Self::new(request, output, position, base_face_id)
     }
 
     pub(crate) fn start_position(&self) -> DisplayRowPosition {

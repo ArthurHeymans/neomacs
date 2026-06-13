@@ -17,7 +17,7 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds,
     DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowSourceAppendRequest,
-    DisplayRowSourceGeometry, DisplayRowSourceState, DisplaySourceAppendMeasurement,
+    DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState, DisplaySourceAppendMeasurement,
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
     append_single_display_item_fragment_to_text_row_and_emit,
     measure_display_source_append_request_against_current_text_row,
@@ -43,8 +43,9 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
-use crate::window_output::{TextRowOutput, WindowOutputEmitter};
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+#[cfg(test)]
+use crate::window_output::TextRowOutput;
+use crate::window_output::WindowOutputEmitter;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
@@ -3373,19 +3374,19 @@ impl DisplayRowAppendFrame {
             char_width: kind.char_width(self),
             ..self.geometry.clone()
         };
-        let request = DisplayRowSourceGeometry::from_display_row_geometry(geometry)
-            .source_request_for_base_face_id(face_id, base_face, GlyphRowRole::Text)
-            .with_render_bounds(DisplayRowRenderBounds {
-                start: position,
-                max_x_px: kind.max_x(self),
-            });
-        let output = TextRowOutput {
-            row: self.row,
-            row_y: self.geometry.y,
-            glyph_y: self.glyph_y,
-            height: kind.output_height(self),
-        };
-        DisplayRowSourceAppendRequest::new(request, output, position, face_id)
+        DisplayRowSourceAppendRequest::from_text_row_policy(
+            position,
+            face_id,
+            base_face,
+            DisplayRowSourceAppendRequestPolicy::new(
+                self.row,
+                self.geometry.y,
+                self.glyph_y,
+                kind.output_height(self),
+                geometry,
+                kind.max_x(self),
+            ),
+        )
     }
 }
 
