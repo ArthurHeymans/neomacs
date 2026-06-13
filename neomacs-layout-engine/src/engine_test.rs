@@ -2240,10 +2240,7 @@ fn replacement_string_item_measurer_returns_direct_text_run_plan() {
     );
     let active_face_state = DisplayRowActiveFaceState::new(default_face, measured_face);
     let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
-    let mut measurer = ReplacementStringItemMeasurer::from_active_face_state(
-        &mut font_metrics,
-        &active_face_state,
-    );
+    let mut measurer = ReplacementStringItemMeasurer::from_active_face_state(&active_face_state);
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(11, 0, 3),
         RenderFaceRef::FaceId(7),
@@ -2252,7 +2249,13 @@ fn replacement_string_item_measurer_returns_direct_text_run_plan() {
         ),
     );
 
-    let measurement = measurer.measurement_for(&item, 7);
+    let measurement =
+        crate::display_row_append::DisplayReplacementStringItemMeasurementPolicy::measurement_for(
+            &mut measurer,
+            &item,
+            7,
+            &mut font_metrics,
+        );
 
     let DisplayRowItemMeasurement::TextRun(measurement) = measurement else {
         panic!("replacement string text should use a direct text-run measurement");

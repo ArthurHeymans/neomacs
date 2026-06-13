@@ -33,12 +33,12 @@ use crate::display_row_append::{
     append_buffer_text_fragment_to_text_row, append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
-    append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
+    append_lisp_string_fragment_to_text_row_and_emit,
+    append_premeasured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
+    measure_buffer_text_fragment_append_to_text_row,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
 };
-use crate::display_row_builder::{
-    DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
-};
+use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker,
@@ -1466,35 +1466,33 @@ fn resolve_cursor_geometry(
     }
 }
 
-struct ReplacementStringItemMeasurer<'a> {
-    font_metrics_svc: &'a mut Option<FontMetricsService>,
+struct ReplacementStringItemMeasurer {
     active_face_state: DisplayRowActiveFaceState,
 }
 
-impl<'a> ReplacementStringItemMeasurer<'a> {
-    fn from_active_face_state(
-        font_metrics_svc: &'a mut Option<FontMetricsService>,
-        active_face_state: &DisplayRowActiveFaceState,
-    ) -> Self {
+impl ReplacementStringItemMeasurer {
+    fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
         Self {
-            font_metrics_svc,
             active_face_state: active_face_state.clone(),
         }
     }
 }
 
-impl DisplayRowItemMeasurer for ReplacementStringItemMeasurer<'_> {
+impl crate::display_row_append::DisplayReplacementStringItemMeasurementPolicy
+    for ReplacementStringItemMeasurer
+{
     fn measurement_for(
         &mut self,
         item: &crate::display_item::DisplayItem,
         _face_id: u32,
+        font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         let crate::display_item::DisplayItemKind::SourceMappedText(text) = &item.kind else {
             return DisplayRowItemMeasurement::Default;
         };
         DisplayRowItemMeasurement::TextRun(
             self.active_face_state
-                .text_run_measurement(self.font_metrics_svc, text.text.as_ref()),
+                .text_run_measurement(font_metrics, text.text.as_ref()),
         )
     }
 }
@@ -2855,9 +2853,6 @@ impl LayoutEngine {
         };
         self.matrix_builder.push_transition_hint(hint);
     }
-
-    // char_advance is a standalone function (below) to avoid borrow conflicts
-    // with self.text_buf
 
     /// Perform layout for a frame using neovm-core data (Rust-authoritative path).
     ///
@@ -4370,6 +4365,7 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
+                            &mut self.font_metrics,
                             face_resolver,
                             active_face_state.resolved_face(),
                             ellipsis_frame,
@@ -4533,6 +4529,7 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
+                            &mut self.font_metrics,
                             face_resolver,
                             face_resolver.default_face(),
                             trunc_frame,
@@ -4695,13 +4692,13 @@ impl LayoutEngine {
                                     );
                                 let mut item_measurer =
                                     ReplacementStringItemMeasurer::from_active_face_state(
-                                        &mut self.font_metrics,
                                         &active_face_state,
                                     );
                                 let position = append_display_replacement_string_source_to_text_row(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
+                                    &mut self.font_metrics,
                                     source,
                                     face_resolver,
                                     &replacement_base_face,
@@ -4787,6 +4784,7 @@ impl LayoutEngine {
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
+                                    &mut self.font_metrics,
                                     item,
                                     face_resolver,
                                     active_face_state.resolved_face(),
@@ -4877,6 +4875,7 @@ impl LayoutEngine {
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
+                                    &mut self.font_metrics,
                                     item,
                                     face_resolver,
                                     active_face_state.resolved_face(),
@@ -4918,6 +4917,7 @@ impl LayoutEngine {
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
+                                    &mut self.font_metrics,
                                     item,
                                     face_resolver,
                                     active_face_state.resolved_face(),
@@ -5000,6 +5000,7 @@ impl LayoutEngine {
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
+                    &mut self.font_metrics,
                     face_resolver,
                     active_face_state.resolved_face(),
                     ellipsis_frame,
@@ -5331,6 +5332,7 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
+                        &mut self.font_metrics,
                         buffer_text_fragment,
                         buffer,
                         buf_id,
@@ -5379,6 +5381,7 @@ impl LayoutEngine {
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
+                            &mut self.font_metrics,
                             buffer_text_fragment,
                             buffer,
                             buf_id,
@@ -5442,6 +5445,7 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
+                        &mut self.font_metrics,
                         buffer_text_fragment,
                         buffer,
                         buf_id,
@@ -5463,76 +5467,102 @@ impl LayoutEngine {
                 continue;
             }
 
-            // Check for line wrap / truncation using per-face char width
+            let append_position = DisplayRowPosition { x_px: x, col };
+            let frame = text_append_surface.frame_for_active_face(
+                row_geometry.append_placement(raise_span.value_or(0.0)),
+                &active_face_state,
+                char_h,
+            );
+            let buffer_text_fragment = DisplayTextFragment::buffer_text(
+                CharPos0::new(charpos as usize),
+                CharPos0::new((charpos + 1) as usize),
+            );
 
-            let tab_advance = (ch == '\t').then(|| {
-                text_display_tab_policy(content_x, params).advance_from(
-                    crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                    face_metrics.space_width,
-                )
-            });
-
-            // Grapheme-cluster extenders (combining marks, ZWJ, variation
-            // selectors) share the preceding base char's cell — zero columns,
-            // zero advance — grouping clusters identically across every layout
-            // walk (neomacs's stand-in for GNU's shared `composition_it`,
-            // src/composite.c). `cluster_tail` / `is_cluster_continuation` were
-            // computed above (before glyphless handling) and are reused here.
-            let char_cols = if let Some(tab_advance) = tab_advance {
-                tab_advance.width_cols
-            } else if is_cluster_continuation {
-                0
-            } else {
-                crate::composition::base_width_cols(ch) as usize
-            };
-            let advance = if let Some(tab_advance) = tab_advance {
-                tab_advance.pixel_width
-            } else if is_cluster_continuation {
-                0.0
-            } else if crate::composition::needs_complex_shaping(ch) {
-                // Use the joined-form advance from shaping the whole run, so
-                // composed Arabic/Indic text is tight and cursor columns line
-                // up with the rendered letters (isolated-form widths over-
-                // reserve). Shape the run once and cache advances by absolute
-                // byte offset.
-                if !complex_run_cache.contains(ch_start_byte_idx) {
-                    let script = crate::composition::complex_script(ch);
-                    let mut end = ch_start_byte_idx;
-                    let mut run_text = String::new();
-                    while end < text.len() {
-                        let (c, clen) = decode_utf8(&text[end..]);
-                        if crate::composition::complex_script(c) == script
-                            || (end > ch_start_byte_idx && is_cluster_extender(c))
-                        {
-                            run_text.push(c);
-                            end += clen;
-                        } else {
-                            break;
+            // Check for line wrap / truncation. Use the same append renderer
+            // that materializes buffer text where builder semantics differ
+            // from a simple per-face ASCII advance.
+            let complex_text = crate::composition::needs_complex_shaping(ch);
+            let advance = if complex_text {
+                if is_cluster_continuation {
+                    0.0
+                } else {
+                    let char_cols = crate::composition::base_width_cols(ch) as usize;
+                    // Use the joined-form advance from shaping the whole run, so
+                    // composed Arabic/Indic text is tight and cursor columns line
+                    // up with the rendered letters (isolated-form widths over-
+                    // reserve). Shape the run once and cache advances by absolute
+                    // byte offset.
+                    if !complex_run_cache.contains(ch_start_byte_idx) {
+                        let script = crate::composition::complex_script(ch);
+                        let mut end = ch_start_byte_idx;
+                        let mut run_text = String::new();
+                        while end < text.len() {
+                            let (c, clen) = decode_utf8(&text[end..]);
+                            if crate::composition::complex_script(c) == script
+                                || (end > ch_start_byte_idx && is_cluster_extender(c))
+                            {
+                                run_text.push(c);
+                                end += clen;
+                            } else {
+                                break;
+                            }
                         }
+                        let measurement = active_face_state
+                            .text_run_measurement(&mut self.font_metrics, &run_text);
+                        // Leave the cache empty when shaping yields nothing (no
+                        // font / unavailable) so each char falls back to its
+                        // isolated width rather than collapsing to zero.
+                        complex_run_cache.record(
+                            ch_start_byte_idx,
+                            end,
+                            measurement.base_char_byte_advances(&run_text, ch_start_byte_idx),
+                        );
                     }
-                    let measurement =
-                        active_face_state.text_run_measurement(&mut self.font_metrics, &run_text);
-                    // Leave the cache empty when shaping yields nothing (no
-                    // font / unavailable) so each char falls back to its
-                    // isolated width rather than collapsing to zero.
-                    complex_run_cache.record(
-                        ch_start_byte_idx,
-                        end,
-                        measurement.base_char_byte_advances(&run_text, ch_start_byte_idx),
-                    );
+                    match complex_run_cache.advance_for(ch_start_byte_idx) {
+                        // In the shaped run: use it, including 0 for a character
+                        // covered by a preceding ligature glyph (no double-count).
+                        Some(a) => a,
+                        // Not cached (shaping unavailable / no font): fall back to
+                        // the isolated-form width.
+                        None => active_face_state.advance_for_columns(
+                            &mut self.font_metrics,
+                            ch,
+                            char_cols,
+                        ),
+                    }
                 }
-                match complex_run_cache.advance_for(ch_start_byte_idx) {
-                    // In the shaped run: use it, including 0 for a character
-                    // covered by a preceding ligature glyph (no double-count).
-                    Some(a) => a,
-                    // Not cached (shaping unavailable / no font): fall back to
-                    // the isolated-form width.
-                    None => {
+            } else if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
+                measure_buffer_text_fragment_append_to_text_row(
+                    &mut self.matrix_builder,
+                    evaluator,
+                    &mut self.font_metrics,
+                    buffer_text_fragment.clone(),
+                    face_resolver,
+                    active_face_state.resolved_face(),
+                    buf_id,
+                    buffer,
+                    active_face_state.face_id(),
+                    frame.clone(),
+                    append_position,
+                )
+                .map(|progress| progress.metrics.width_px)
+                .unwrap_or_else(|| {
+                    if ch == '\t' {
+                        text_display_tab_policy(content_x, params)
+                            .advance_from(
+                                crate::display_row_builder::DisplayRowPosition { x_px: x, col },
+                                face_metrics.space_width,
+                            )
+                            .pixel_width
+                    } else if is_cluster_continuation {
+                        0.0
+                    } else {
+                        let char_cols = crate::composition::base_width_cols(ch) as usize;
                         active_face_state.advance_for_columns(&mut self.font_metrics, ch, char_cols)
                     }
-                }
+                })
             } else {
-                active_face_state.advance_for_columns(&mut self.font_metrics, ch, char_cols)
+                active_face_state.advance_for_columns(&mut self.font_metrics, ch, 1)
             };
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > content_x + avail_width {
@@ -5785,33 +5815,42 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let frame = text_append_surface.frame_for_active_face(
-                row_geometry.append_placement(raise_span.value_or(0.0)),
-                &active_face_state,
-                char_h,
-            );
-            let buffer_text_fragment = DisplayTextFragment::buffer_text(
-                CharPos0::new(charpos as usize),
-                CharPos0::new((charpos + 1) as usize),
-            );
-            let mut ch_text = [0; 4];
-            let measurement = active_face_state
-                .resolved_fragment_measurement(ch.encode_utf8(&mut ch_text), advance);
-            let Some((_progress, position)) = append_buffer_text_fragment_to_text_row(
-                &mut self.matrix_builder,
-                &mut output_emitter,
-                evaluator,
-                &mut self.font_metrics,
-                buffer_text_fragment,
-                face_resolver,
-                active_face_state.resolved_face(),
-                buf_id,
-                buffer,
-                active_face_state.face_id(),
-                measurement,
-                frame,
-                DisplayRowPosition { x_px: x, col },
-            ) else {
+            let appended = if complex_text {
+                let mut ch_text = [0; 4];
+                let measurement = active_face_state
+                    .resolved_fragment_measurement(ch.encode_utf8(&mut ch_text), advance);
+                append_premeasured_buffer_text_fragment_to_text_row(
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    buffer_text_fragment,
+                    face_resolver,
+                    active_face_state.resolved_face(),
+                    buf_id,
+                    buffer,
+                    active_face_state.face_id(),
+                    measurement,
+                    frame,
+                    append_position,
+                )
+            } else {
+                append_buffer_text_fragment_to_text_row(
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    buffer_text_fragment,
+                    face_resolver,
+                    active_face_state.resolved_face(),
+                    buf_id,
+                    buffer,
+                    active_face_state.face_id(),
+                    frame,
+                    append_position,
+                )
+            };
+            let Some((_progress, position)) = appended else {
                 break;
             };
 

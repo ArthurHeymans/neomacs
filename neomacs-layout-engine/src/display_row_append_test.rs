@@ -226,6 +226,7 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -255,6 +256,7 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         &face_resolver,
         base_face,
         frame,
@@ -311,6 +313,7 @@ fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -342,6 +345,7 @@ fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         &face_resolver,
         base_face,
         frame,
@@ -812,13 +816,12 @@ fn display_row_source_append_request_uses_append_spec() {
     let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, 42, base_face);
 
     let parts = request.into_render_parts();
-    let row_spec = parts.row_spec;
     assert_eq!(
-        row_spec.render_bounds.start,
+        parts.request.render_bounds().start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(row_spec.render_bounds.max_x_px, 148.0);
-    assert_eq!(row_spec.geometry.height, 16.0);
+    assert_eq!(parts.request.render_bounds().max_x_px, 148.0);
+    assert_eq!(parts.request.geometry().height, 16.0);
     assert_eq!(parts.output.height, 14.0);
 }
 
@@ -1343,7 +1346,6 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
         buf_id,
         &snapshot,
         7,
-        DisplayTextRunMeasurementPlan::uniform_for_text("a", 8.0),
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -1359,6 +1361,204 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
                 text[0].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'a' }
             ));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("ab");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("measure-buffer-fragment-append", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = {
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        LayoutBufferSnapshot::from_buffer(buffer)
+    };
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut base_face = face_resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    builder.push_char_with_pixel_width('x', 7, 0, 8.0);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let position = DisplayRowPosition { x_px: 8.0, col: 1 };
+    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
+
+    let measured = measure_buffer_text_fragment_append_to_text_row(
+        &mut builder,
+        &mut eval,
+        &mut font_metrics,
+        fragment.clone(),
+        &face_resolver,
+        &base_face,
+        buf_id,
+        &snapshot,
+        7,
+        frame.clone(),
+        position,
+    )
+    .expect("measured buffer fragment append");
+
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: 'x' }));
+        })
+        .expect("current row");
+
+    let (appended, end) = append_buffer_text_fragment_to_text_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        fragment,
+        &face_resolver,
+        &base_face,
+        buf_id,
+        &snapshot,
+        7,
+        frame,
+        position,
+    )
+    .expect("appended buffer fragment");
+
+    assert_eq!(measured.end, end);
+    assert_eq!(measured.metrics, appended.metrics);
+    assert_eq!(measured.status, appended.status);
+    assert_eq!(measured.slots.len(), appended.slots.len());
+}
+
+#[test]
+fn append_premeasured_buffer_text_fragment_to_text_row_uses_supplied_advance() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a");
+    }
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "append-buffer-premeasured-fragment",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = {
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        LayoutBufferSnapshot::from_buffer(buffer)
+    };
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+
+    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
+    let (progress, end) = append_premeasured_buffer_text_fragment_to_text_row(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        fragment,
+        &face_resolver,
+        base_face,
+        buf_id,
+        &snapshot,
+        7,
+        DisplayTextRunMeasurementPlan::uniform_for_text("a", 13.0),
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("appended premeasured buffer fragment");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 1 });
+    assert_eq!(progress.metrics.width_px, 13.0);
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 1);
+            assert_eq!(text[0].pixel_width, 13.0);
         })
         .expect("current row");
 }
@@ -1436,7 +1636,6 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
         buf_id,
         &snapshot,
         7,
-        DisplayTextRunMeasurementPlan::uniform_for_text("\u{301}", 0.0),
         frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
     )
@@ -1489,6 +1688,7 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_buffer_source_it
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1519,6 +1719,7 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_buffer_source_it
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         fragment,
         &snapshot,
         buf_id,
@@ -1872,12 +2073,14 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
         },
         DisplayTabPolicy::every(8),
     );
+    let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
 
     let end = append_display_replacement_string_source_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         source,
         &face_resolver,
         base_face,
@@ -1991,6 +2194,7 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -2030,6 +2234,7 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
         &mut builder,
         &mut output_emitter,
         &mut eval,
+        &mut font_metrics,
         item,
         &face_resolver,
         base_face,
