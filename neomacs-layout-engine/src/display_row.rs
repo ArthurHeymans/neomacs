@@ -1430,7 +1430,6 @@ impl DisplayRowSourceRequestPolicy {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn from_display_row_geometry(
         geometry: DisplayRowGeometry,
         role: GlyphRowRole,
@@ -1535,7 +1534,7 @@ impl DisplayRowSourceAppendRequestPolicy {
 }
 
 impl<'face> DisplayRowSourceAppendRequest<'face> {
-    pub(crate) fn new(
+    fn new(
         request: DisplayRowSourceRenderRequest<'face>,
         output: TextRowOutput,
         start: DisplayRowPosition,
@@ -1555,12 +1554,15 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         base_face: &'face ResolvedFace,
         policy: DisplayRowSourceAppendRequestPolicy,
     ) -> Self {
-        let request = DisplayRowSourceGeometry::from_display_row_geometry(policy.geometry)
-            .source_request_for_base_face_id(base_face_id, base_face, GlyphRowRole::Text)
-            .with_render_bounds(DisplayRowRenderBounds {
-                start: position,
-                max_x_px: policy.max_x_px,
-            });
+        let request = DisplayRowSourceRequestPolicy::from_display_row_geometry(
+            policy.geometry,
+            GlyphRowRole::Text,
+        )
+        .source_request_for_base_face_id(base_face_id, base_face)
+        .with_render_bounds(DisplayRowRenderBounds {
+            start: position,
+            max_x_px: policy.max_x_px,
+        });
         let output = TextRowOutput {
             row: policy.matrix_row,
             row_y: policy.row_y,
