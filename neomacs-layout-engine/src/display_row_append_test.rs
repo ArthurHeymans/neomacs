@@ -2,7 +2,7 @@ use super::*;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
+    DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::DisplayPropertySource;
 use crate::display_row::{
@@ -1900,7 +1900,7 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_buffer_source_it
     );
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
+    let (_progress, end) = append_buffer_control_char_fragment_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1911,7 +1911,7 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_buffer_source_it
         &face_resolver,
         base_face,
         7,
-        DisplayItemKind::ControlChar { ch: '\u{0001}' },
+        '\u{0001}',
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -1929,6 +1929,138 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_buffer_source_it
             assert!(matches!(
                 text[1].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'A' }
+            ));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn append_buffer_source_mapped_text_fragment_to_text_row_and_emit_builds_mapped_item() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "append-buffer-source-mapped-fragment",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
+
+    let (_progress, end) = append_buffer_source_mapped_text_fragment_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        fragment,
+        &snapshot,
+        buf_id,
+        &face_resolver,
+        base_face,
+        7,
+        "\\ ",
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("appended source-mapped buffer text item fragment");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 2);
+            assert!(matches!(
+                text[0].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: '\\' }
+            ));
+            assert!(matches!(
+                text[1].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: ' ' }
+            ));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn append_buffer_glyphless_fragment_to_text_row_and_emit_builds_glyphless_item() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-buffer-glyphless-fragment", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
+
+    let (_progress, end) = append_buffer_glyphless_fragment_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        fragment,
+        &snapshot,
+        buf_id,
+        &face_resolver,
+        base_face,
+        7,
+        '\u{fff0}',
+        GlyphlessMethod::HexCode,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("appended glyphless buffer text item fragment");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 48.0, col: 6 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(
+                text[0].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Glyphless { ch: '\u{fff0}' }
             ));
         })
         .expect("current row");

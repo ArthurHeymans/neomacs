@@ -41,7 +41,9 @@ use crate::display_row::{
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, DisplayReplacementStringItemMeasurer, DisplayRowAppendArea,
     DisplayRowAppendFrame, DisplayRowAppendMetrics, DisplayRowAppendSurface,
-    append_buffer_text_item_fragment_to_text_row_and_emit,
+    append_buffer_control_char_fragment_to_text_row_and_emit,
+    append_buffer_glyphless_fragment_to_text_row_and_emit,
+    append_buffer_source_mapped_text_fragment_to_text_row_and_emit,
     append_display_replacement_item_kind_to_text_row_and_emit,
     append_display_replacement_source_mapped_text_to_text_row_and_emit,
     append_display_replacement_stretch_to_text_row_and_emit,
@@ -5176,7 +5178,7 @@ impl LayoutEngine {
                     char_h,
                 );
                 if let Some((_progress, position)) =
-                    append_buffer_text_item_fragment_to_text_row_and_emit(
+                    append_buffer_control_char_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
@@ -5187,7 +5189,7 @@ impl LayoutEngine {
                         face_resolver,
                         active_face_state.resolved_face(),
                         active_face_state.face_id(),
-                        crate::display_item::DisplayItemKind::ControlChar { ch },
+                        ch,
                         text_item_frame,
                         DisplayRowPosition { x_px: x, col },
                     )
@@ -5225,7 +5227,7 @@ impl LayoutEngine {
                         char_h,
                     );
                     if let Some((_progress, position)) =
-                        append_buffer_text_item_fragment_to_text_row_and_emit(
+                        append_buffer_source_mapped_text_fragment_to_text_row_and_emit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
@@ -5236,9 +5238,7 @@ impl LayoutEngine {
                             face_resolver,
                             active_face_state.resolved_face(),
                             active_face_state.face_id(),
-                            crate::display_item::DisplayItemKind::SourceMappedText(
-                                crate::display_item::DisplaySourceMappedText::new(mapped_text),
-                            ),
+                            mapped_text,
                             text_item_frame,
                             DisplayRowPosition { x_px: x, col },
                         )
@@ -5289,7 +5289,7 @@ impl LayoutEngine {
                     char_h,
                 );
                 if let Some((_progress, position)) =
-                    append_buffer_text_item_fragment_to_text_row_and_emit(
+                    append_buffer_glyphless_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
@@ -5300,9 +5300,8 @@ impl LayoutEngine {
                         face_resolver,
                         active_face_state.resolved_face(),
                         active_face_state.face_id(),
-                        crate::display_item::DisplayItemKind::Glyphless(
-                            crate::display_item::DisplayGlyphless { ch, method },
-                        ),
+                        ch,
+                        method,
                         text_item_frame,
                         DisplayRowPosition { x_px: x, col },
                     )
