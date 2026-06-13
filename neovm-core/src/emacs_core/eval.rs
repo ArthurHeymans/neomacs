@@ -11179,8 +11179,9 @@ impl Context {
                             let saved_roots = save_scratch_gc_roots();
                             push_scratch_gc_root(function);
                             let ctx_ptr = self as *mut Context;
-                            let native =
-                                crate::emacs_core::jit::try_run_compiled(ctx_ptr, bc_data, &args);
+                            let native = crate::emacs_core::jit::try_run_compiled(
+                                ctx_ptr, bc_data, function, &args,
+                            );
                             restore_scratch_gc_roots(saved_roots);
                             match native {
                                 Ok(Some(bits)) => {
@@ -13438,6 +13439,10 @@ impl Context {
             self.obarray
                 .set_symbol_function(name, Value::subr_from_sym_id(sym_id));
         }
+        // The static subr entry above was rewritten IN PLACE even when the
+        // cell write was skipped — keep function_epoch a complete change
+        // signal (JIT call-speculation validity depends on it).
+        self.obarray.bump_function_epoch();
     }
 
     /// Call a registered subr value directly. Returns None if VALUE is not a

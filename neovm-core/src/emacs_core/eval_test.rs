@@ -1547,6 +1547,10 @@ fn read_char_respects_inhibit_redisplay_during_input_wait() {
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(20));
         tx.send(crate::keyboard::InputEvent::key_press(
@@ -2133,6 +2137,10 @@ fn wait_for_pending_resize_events_blocks_until_resize_and_preserves_keypress() {
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(20));
         tx.send(crate::keyboard::InputEvent::Resize {
@@ -4358,6 +4366,10 @@ fn read_char_fires_bootstrapped_gnu_run_with_timer_while_waiting_for_input() {
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(100));
         tx.send(crate::keyboard::InputEvent::key_press(
@@ -4399,6 +4411,10 @@ fn read_char_fires_bootstrapped_gnu_run_with_idle_timer_while_waiting_for_input(
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    // Keep one sender alive: dropping the last tx disconnects the channel,
+    // which the input machinery treats as terminal-gone -> quit (timing flake;
+    // see the sit-for soak fix).
+    let _tx_keepalive = tx.clone();
     eprintln!("idle test: spawn sender");
     thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(100));
@@ -12217,6 +12233,1005 @@ fn jit_call_through_funcall_seam() {
     assert!(
         ev.eval_str("(+ 1 2)").is_ok(),
         "context stays healthy after a propagated signal"
+    );
+}
+
+/// End-to-end: handler opcodes (PushCatch/PushConditionCase/PopHandler +
+/// in-frame Throw) compile and run natively through the funcall seam — catch,
+/// rethrow, normal-path PopHandler, deopt inside a protected extent, and
+/// specpdl unwinding on a caught throw all mirror the interpreter.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_handlers_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let mk = |required: usize, ops: Vec<Op>, consts: Vec<Value>, hot: bool| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (1..=required)
+                .map(|i| crate::emacs_core::intern::SymId(i as u32))
+                .collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops;
+        f.constants = consts;
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+
+    // 1. Same-function catch + conditional throw:
+    //    (lambda (x) (catch 'tag (when x (throw 'tag 42)) 7)).
+    //    The handler target (9) is also the normal join — both enter depth 2.
+    let catch_fn = |hot: bool| {
+        mk(
+            1,
+            vec![
+                Op::Constant(0),  // 0: 'tag            [x 'tag]
+                Op::PushCatch(9), // 1: frame, tgt=9    [x]
+                Op::StackRef(0),  // 2: x               [x x]
+                Op::GotoIfNil(7), // 3:                 [x]
+                Op::Constant(0),  // 4: 'tag            [x 'tag]
+                Op::Constant(1),  // 5: 42              [x 'tag 42]
+                Op::Throw,        // 6: -> handler 9 with [x 42]
+                Op::PopHandler,   // 7: normal path     [x]
+                Op::Constant(2),  // 8: 7               [x 7]
+                Op::Return,       // 9: join + handler: returns TOS
+            ],
+            vec![
+                Value::symbol("jit-h-tag"),
+                Value::make_int(42),
+                Value::make_int(7),
+            ],
+            hot,
+        )
+    };
+    let hot_catch = catch_fn(true);
+    let cold_catch = catch_fn(false);
+    for (arg, want) in [(Value::T, 42), (Value::NIL, 7)] {
+        let native = ev
+            .funcall_general_untraced(hot_catch, vec![arg])
+            .expect("native catch/throw runs");
+        let interp = ev
+            .funcall_general_untraced(cold_catch, vec![arg])
+            .expect("interpreted catch/throw runs");
+        assert_eq!(native, Value::make_int(want));
+        assert_eq!(native, interp);
+        assert_eq!(ev.condition_stack.len(), 0, "handler frames balanced");
+    }
+
+    // 2. condition-case catching a signal raised by a CALLED function, plus the
+    //    normal path (PopHandler) on the SAME compiled body:
+    //    (lambda () (condition-case nil (jit-h-boom) (error 99))).
+    let boom_sym = Value::symbol("jit-h-boom");
+    let ValueKind::Symbol(boom_id) = boom_sym.kind() else {
+        panic!("symbol expected");
+    };
+    // (car 5) signals wrong-type-argument in the interpreter (the callee is
+    // cold bytecode).
+    let boom_signal = mk(
+        0,
+        vec![Op::Constant(0), Op::Car, Op::Return],
+        vec![Value::make_int(5)],
+        false,
+    );
+    ev.obarray.set_symbol_function_id(boom_id, boom_signal);
+    let cc_fn = |hot: bool| {
+        mk(
+            0,
+            vec![
+                Op::PushConditionCase(5), // 0: implicit 'error  []
+                Op::Constant(0),          // 1: 'jit-h-boom      [f]
+                Op::Call(0),              // 2: signal -> 5      [res]
+                Op::PopHandler,           // 3: normal exit
+                Op::Return,               // 4: callee result
+                Op::Pop,                  // 5: handler: drop the error object
+                Op::Constant(1),          // 6: 99
+                Op::Return,               // 7
+            ],
+            vec![boom_sym, Value::make_int(99)],
+            hot,
+        )
+    };
+    let hot_cc = cc_fn(true);
+    let cold_cc = cc_fn(false);
+    let native = ev
+        .funcall_general_untraced(hot_cc, vec![])
+        .expect("native condition-case catches");
+    let interp = ev
+        .funcall_general_untraced(cold_cc, vec![])
+        .expect("interpreted condition-case catches");
+    assert_eq!(native, Value::make_int(99));
+    assert_eq!(native, interp);
+    assert_eq!(ev.condition_stack.len(), 0);
+    // Redefine the callee to return normally: the same compiled body takes the
+    // PopHandler path.
+    let boom_ok = mk(
+        0,
+        vec![Op::Constant(0), Op::Return],
+        vec![Value::make_int(31)],
+        false,
+    );
+    ev.obarray.set_symbol_function_id(boom_id, boom_ok);
+    assert_eq!(
+        ev.funcall_general_untraced(hot_cc, vec![])
+            .expect("native normal path runs"),
+        Value::make_int(31)
+    );
+    assert_eq!(ev.condition_stack.len(), 0);
+
+    // 3. Unmatched throw propagates out (no-catch), frames balanced:
+    //    (lambda () (catch 'a (throw 'b 1))).
+    let rethrow = mk(
+        0,
+        vec![
+            Op::Constant(0),  // 'a
+            Op::PushCatch(5), // frame, tgt=5
+            Op::Constant(1),  // 'b
+            Op::Constant(2),  // 1
+            Op::Throw,        // no frame matches 'b -> propagate
+            Op::Return,       // 5: handler (reachable only via the frame)
+        ],
+        vec![
+            Value::symbol("jit-h-a"),
+            Value::symbol("jit-h-b"),
+            Value::make_int(1),
+        ],
+        true,
+    );
+    assert!(
+        ev.funcall_general_untraced(rethrow, vec![]).is_err(),
+        "unmatched throw must propagate as no-catch"
+    );
+    assert_eq!(ev.condition_stack.len(), 0, "frames unwound on propagation");
+    assert!(ev.eval_str("(+ 1 2)").is_ok(), "context healthy after");
+
+    // 4. Deopt INSIDE a protected extent (the non-poisoning Push* payoff): a
+    //    guard after PushConditionCase compiles; a non-fixnum deopts, the frame
+    //    unwind truncates the registered handler frame, and the interpreter
+    //    rerun re-registers it and catches its own signal:
+    //    (lambda (x) (condition-case nil (1+ x) (error 99))).
+    let cc_arith = |hot: bool| {
+        mk(
+            1,
+            vec![
+                Op::PushConditionCase(5), // 0:              [x]
+                Op::StackRef(0),          // 1:              [x x]
+                Op::Add1,                 // 2: guard        [x x+1]
+                Op::PopHandler,           // 3:
+                Op::Return,               // 4: x+1
+                Op::Pop,                  // 5: handler      [x]
+                Op::Constant(0),          // 6: 99
+                Op::Return,               // 7
+            ],
+            vec![Value::make_int(99)],
+            hot,
+        )
+    };
+    let hot_arith = cc_arith(true);
+    let cold_arith = cc_arith(false);
+    for arg in [Value::make_int(5), Value::string("boom")] {
+        let native = ev
+            .funcall_general_untraced(hot_arith, vec![arg])
+            .expect("native/deopt path runs");
+        let interp = ev
+            .funcall_general_untraced(cold_arith, vec![arg])
+            .expect("interpreter path runs");
+        assert_eq!(native, interp, "deopt-in-extent must match the interpreter");
+        assert_eq!(ev.condition_stack.len(), 0);
+    }
+    assert_eq!(
+        ev.funcall_general_untraced(hot_arith, vec![Value::make_int(5)])
+            .unwrap(),
+        Value::make_int(6)
+    );
+
+    // 5. A caught throw unwinds dynamic bindings made inside the extent (the
+    //    match shim's unbind_to + bind-stack truncation):
+    //    (lambda () (catch 'tag (let ((jit-h-var 123)) (throw 'tag 55)))).
+    ev.eval_str("(setq jit-h-var 9)").expect("global value set");
+    let unwind = mk(
+        0,
+        vec![
+            Op::Constant(0),  // 0: 'tag
+            Op::PushCatch(7), // 1: frame, tgt=7
+            Op::Constant(1),  // 2: 123
+            Op::VarBind(2),   // 3: bind jit-h-var
+            Op::Constant(0),  // 4: 'tag
+            Op::Constant(3),  // 5: 55
+            Op::Throw,        // 6: caught below; must unbind first
+            Op::Return,       // 7: handler -> 55
+        ],
+        vec![
+            Value::symbol("jit-h-tag"),
+            Value::make_int(123),
+            Value::symbol("jit-h-var"),
+            Value::make_int(55),
+        ],
+        true,
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(unwind, vec![])
+            .expect("native catch with varbind runs"),
+        Value::make_int(55)
+    );
+    assert_eq!(
+        ev.eval_str("jit-h-var").expect("global survives"),
+        Value::make_int(9),
+        "caught throw must unwind the dynamic binding"
+    );
+    assert_eq!(ev.condition_stack.len(), 0);
+}
+
+/// End-to-end: `Op::Switch` (pcase/cl-case jump tables) compiles and runs
+/// natively through the funcall seam — table hits jump to their static
+/// targets, misses fall through, matching the interpreter exactly.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_switch_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::{HashTableTest, LambdaParams};
+
+    let mut ev = Context::new();
+    // Jump table {a -> 5, b -> 7} (raw instruction indices: no GNU byte-offset
+    // map on natively built chunks, same as the interpreter's resolution).
+    let table = Value::hash_table(HashTableTest::Eq);
+    let _ = table.with_hash_table_mut(|ht| {
+        for (name, target) in [("jit-sw-a", 5), ("jit-sw-b", 7)] {
+            let key = Value::symbol(name).to_hash_key(&ht.test);
+            ht.data.insert(key.clone(), Value::fixnum(target));
+            ht.key_snapshots.insert(key.clone(), Value::symbol(name));
+            ht.insertion_order.push(key);
+        }
+    });
+    // (lambda (x) (pcase x ('jit-sw-a 1) ('jit-sw-b 2) (_ 0)))
+    let mk = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::StackRef(0), // 0: [x x]
+            Op::Constant(0), // 1: [x x table]
+            Op::Switch,      // 2: [x]
+            Op::Constant(3), // 3: miss -> 0
+            Op::Return,      // 4
+            Op::Constant(1), // 5: 'jit-sw-a -> 1
+            Op::Return,      // 6
+            Op::Constant(2), // 7: 'jit-sw-b -> 2
+            Op::Return,      // 8
+        ];
+        f.constants = vec![
+            table,
+            Value::make_int(1),
+            Value::make_int(2),
+            Value::make_int(0),
+        ];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let hot = mk(true);
+    let cold = mk(false);
+    for (arg, want) in [
+        (Value::symbol("jit-sw-a"), 1),
+        (Value::symbol("jit-sw-b"), 2),
+        (Value::symbol("jit-sw-other"), 0),
+        (Value::make_int(33), 0),
+    ] {
+        let native = ev
+            .funcall_general_untraced(hot, vec![arg])
+            .expect("native switch runs");
+        let interp = ev
+            .funcall_general_untraced(cold, vec![arg])
+            .expect("interpreted switch runs");
+        assert_eq!(native, Value::make_int(want));
+        assert_eq!(native, interp, "switch must match the interpreter");
+    }
+}
+
+/// End-to-end: the named-builtin escape hatch (`CallBuiltin`/`CallBuiltinSym`)
+/// and `Aset` compile and run natively, matching the interpreter — including
+/// the override-aware path (a redefined builtin's function cell is honored by
+/// CallBuiltin and deliberately bypassed by CallBuiltinSym, GNU parity).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_named_builtins_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let mk = |ops: Vec<Op>, consts: Vec<Value>, hot: bool| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops;
+        f.constants = consts;
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+
+    // (lambda (x) (length x)) via the constants-pool escape hatch.
+    let cb = |hot| {
+        mk(
+            vec![Op::StackRef(0), Op::CallBuiltin(0, 1), Op::Return],
+            vec![Value::symbol("length")],
+            hot,
+        )
+    };
+    // Same via the symbol-encoded variant.
+    let cbs = |hot| {
+        mk(
+            vec![
+                Op::StackRef(0),
+                Op::CallBuiltinSym(crate::emacs_core::intern::intern("length"), 1),
+                Op::Return,
+            ],
+            vec![],
+            hot,
+        )
+    };
+    for f in [&cb as &dyn Fn(bool) -> Value, &cbs] {
+        let hot = f(true);
+        let cold = f(false);
+        for arg in [Value::string("hello"), Value::NIL] {
+            let native = ev
+                .funcall_general_untraced(hot, vec![arg])
+                .expect("native named builtin runs");
+            let interp = ev
+                .funcall_general_untraced(cold, vec![arg])
+                .expect("interpreted named builtin runs");
+            assert_eq!(native, interp, "named builtin must match the interpreter");
+        }
+        // Signal parity: (length 5) is a wrong-type-argument both ways.
+        assert!(
+            ev.funcall_general_untraced(hot, vec![Value::make_int(5)])
+                .is_err()
+        );
+    }
+
+    // Aset differential: (lambda (v) (aset v 0 7) v).
+    let aset = |hot| {
+        mk(
+            vec![
+                Op::StackRef(0), // v
+                Op::StackRef(1), // v (for the return)
+                Op::Constant(0), // 0
+                Op::Constant(1), // 7
+                Op::Aset,        // -> 7
+                Op::Pop,
+                Op::Return, // v
+            ],
+            vec![Value::make_int(0), Value::make_int(7)],
+            hot,
+        )
+    };
+    let native_vec = Value::vector(vec![Value::make_int(1)]);
+    let interp_vec = Value::vector(vec![Value::make_int(1)]);
+    let r1 = ev
+        .funcall_general_untraced(aset(true), vec![native_vec])
+        .expect("native aset runs");
+    let r2 = ev
+        .funcall_general_untraced(aset(false), vec![interp_vec])
+        .expect("interpreted aset runs");
+    use crate::emacs_core::print::print_value;
+    assert_eq!(print_value(&r1), "[7]");
+    assert_eq!(print_value(&r1), print_value(&r2));
+}
+
+/// End-to-end: `Op::SaveWindowExcursion` compiles — the body list evaluates
+/// under a window-configuration save/restore, matching the interpreter.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_save_window_excursion_through_funcall_seam() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    // (lambda () (save-window-excursion (+ 20 22))) — body list as a constant.
+    let body = ev.eval_str("'((+ 20 22))").expect("body list parses");
+    let mk = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::SaveWindowExcursion, Op::Return];
+        f.constants = vec![body];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let native = ev
+        .funcall_general_untraced(mk(true), vec![])
+        .expect("native save-window-excursion runs");
+    let interp = ev
+        .funcall_general_untraced(mk(false), vec![])
+        .expect("interpreted save-window-excursion runs");
+    assert_eq!(native, Value::make_int(42));
+    assert_eq!(native, interp);
+
+    // Signal parity: a body that signals propagates identically.
+    let bad_body = ev.eval_str("'((car 5))").expect("body parses");
+    let mk_bad = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::SaveWindowExcursion, Op::Return];
+        f.constants = vec![bad_body];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    assert!(ev.funcall_general_untraced(mk_bad(true), vec![]).is_err());
+    assert!(ev.funcall_general_untraced(mk_bad(false), vec![]).is_err());
+}
+
+/// End-to-end: direct-call speculation — a hot caller whose callee slot is a
+/// constant symbol bound to bytecode calls it through the epoch-validated
+/// spec shim. fset MUST take effect immediately (GNU default semantics):
+/// across calls, after unrelated epoch bumps (re-arm path), and for
+/// non-bytecode replacements (permanent slow path).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_direct_call_speculation_tracks_redefinition() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let mk_times = |k: i64| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
+        f.constants = vec![Value::make_int(k)];
+        f.max_stack = 16;
+        Value::make_bytecode(f)
+    };
+    let g_sym = Value::symbol("jit-spec-g");
+    let ValueKind::Symbol(g_id) = g_sym.kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(g_id, mk_times(2));
+
+    // Hot caller (lambda (x) (jit-spec-g x)) — the exact speculation shape:
+    // Constant(sym) StackRef Call(1).
+    let mk_caller = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+        f.constants = vec![g_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let hot = mk_caller(true);
+    let cold = mk_caller(false);
+    let five = vec![Value::make_int(5)];
+
+    // 1) Speculated direct call (compile-time binding = doubler) — and prove
+    //    the spec shim engaged (the generic path would also compute 10; the
+    //    engagement counter only exists in debug builds).
+    #[cfg(debug_assertions)]
+    let spec_before =
+        crate::emacs_core::jit::compile::SPEC_CALL_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(10)
+    );
+    #[cfg(debug_assertions)]
+    assert!(
+        crate::emacs_core::jit::compile::SPEC_CALL_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+            > spec_before,
+        "the speculated call site must route through the spec shim"
+    );
+    // 2) Redefine: MUST take effect on the next call (epoch moved, binding
+    //    differs -> strict symbol path).
+    ev.obarray.set_symbol_function_id(g_id, mk_times(3));
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(15)
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(cold, five.clone()).unwrap(),
+        Value::make_int(15),
+        "interpreter agrees"
+    );
+    // 3) Unrelated epoch bump (different symbol): caller still correct.
+    let other = Value::symbol("jit-spec-unrelated");
+    let ValueKind::Symbol(other_id) = other.kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(other_id, mk_times(7));
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(15)
+    );
+    // 4) Replace with a non-bytecode callable (interpreted lambda): the spec
+    //    site stays disarmed and the symbol path resolves it.
+    let lam = ev
+        .eval_str("(lambda (x) (* x 10))")
+        .expect("lambda evaluates");
+    ev.obarray.set_symbol_function_id(g_id, lam);
+    assert_eq!(
+        ev.funcall_general_untraced(hot, five.clone()).unwrap(),
+        Value::make_int(50)
+    );
+    // 5) fmakunbound: the call must now signal void-function.
+    ev.obarray.fmakunbound_id(g_id);
+    assert!(ev.funcall_general_untraced(hot, five).is_err());
+}
+
+/// The strictest case: the callee redefines ITSELF mid-caller — the second
+/// speculated site in the same native frame must see the new binding (the
+/// interpreter resolves per call; the spec shim's per-call epoch check must
+/// match it exactly).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_direct_call_speculation_mid_execution_redefinition() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    let h_sym = Value::symbol("jit-spec-h");
+    let ValueKind::Symbol(h_id) = h_sym.kind() else {
+        panic!("symbol expected");
+    };
+    // h2: (lambda () 2)
+    let mut h2 = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    h2.lexical = true;
+    h2.ops = vec![Op::Constant(0), Op::Return];
+    h2.constants = vec![Value::make_int(2)];
+    h2.max_stack = 16;
+    let h2_val = Value::make_bytecode(h2);
+    // h1: (lambda () (fset 'jit-spec-h h2) 1) — redefines itself, returns 1.
+    let mut h1 = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    h1.lexical = true;
+    h1.ops = vec![
+        Op::Constant(0), // 'fset
+        Op::Constant(1), // 'jit-spec-h
+        Op::Constant(2), // h2
+        Op::Call(2),
+        Op::Pop,
+        Op::Constant(3), // 1
+        Op::Return,
+    ];
+    h1.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)];
+    h1.max_stack = 16;
+    ev.obarray
+        .set_symbol_function_id(h_id, Value::make_bytecode(h1));
+
+    // Hot caller: (lambda () (list (jit-spec-h) (jit-spec-h))) — both call
+    // sites speculate on h1 at compile time.
+    let mk_caller = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::Constant(0),
+            Op::Call(0),
+            Op::Constant(0),
+            Op::Call(0),
+            Op::List(2),
+            Op::Return,
+        ];
+        f.constants = vec![h_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    use crate::emacs_core::print::print_value;
+    // First invocation: site 1 hits h1 (which fsets h -> h2); site 2 MUST
+    // already see h2.
+    let r = ev
+        .funcall_general_untraced(mk_caller(true), vec![])
+        .expect("native caller runs");
+    assert_eq!(print_value(&r), "(1 2)");
+    // Second invocation: both sites see h2.
+    let hot2 = mk_caller(true);
+    let r = ev
+        .funcall_general_untraced(hot2, vec![])
+        .expect("native caller runs");
+    assert_eq!(print_value(&r), "(2 2)");
+    // Interpreter differential on a fresh pair: reinstall h1 and compare.
+    // (Rebuild h1 since the previous one's constants still hold h2.)
+    let mut h1b = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    h1b.lexical = true;
+    h1b.ops = vec![
+        Op::Constant(0),
+        Op::Constant(1),
+        Op::Constant(2),
+        Op::Call(2),
+        Op::Pop,
+        Op::Constant(3),
+        Op::Return,
+    ];
+    h1b.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)];
+    h1b.max_stack = 16;
+    ev.obarray
+        .set_symbol_function_id(h_id, Value::make_bytecode(h1b));
+    let r = ev
+        .funcall_general_untraced(mk_caller(false), vec![])
+        .expect("interpreted caller runs");
+    assert_eq!(print_value(&r), "(1 2)", "interpreter agrees on strictness");
+}
+
+/// End-to-end: the classic hot shapes the poisoning analysis used to BAIL on
+/// now compile — recursive fib (arithmetic after recursive calls) and a
+/// while-loop mixing a call with arithmetic (guards at the loop join). Both
+/// must match the interpreter exactly, including the deopt path.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_fib_and_loops_compile_under_precise_deopt() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    // fib: (lambda (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) —
+    // self-recursive through its constant symbol (also exercises direct-call
+    // speculation), with Sub/Add guards AFTER the recursive calls.
+    let fib_sym = Value::symbol("jit-pd-fib");
+    let ValueKind::Symbol(fib_id) = fib_sym.kind() else {
+        panic!("symbol expected");
+    };
+    let mk_fib = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::StackRef(0),  // 0  [n n]
+            Op::Constant(0),  // 1  [n n 2]
+            Op::Lss,          // 2  [n c]
+            Op::GotoIfNil(6), // 3  [n]
+            Op::StackRef(0),  // 4  [n n]
+            Op::Return,       // 5
+            Op::Constant(1),  // 6  [n f]
+            Op::StackRef(1),  // 7  [n f n]
+            Op::Constant(2),  // 8  [n f n 1]
+            Op::Sub,          // 9  [n f n-1]
+            Op::Call(1),      // 10 [n r1]
+            Op::Constant(1),  // 11 [n r1 f]
+            Op::StackRef(2),  // 12 [n r1 f n]
+            Op::Constant(0),  // 13 [n r1 f n 2]
+            Op::Sub,          // 14 [n r1 f n-2]   guard AFTER a call
+            Op::Call(1),      // 15 [n r1 r2]
+            Op::Add,          // 16 [n r]          guard AFTER both calls
+            Op::Return,       // 17
+        ];
+        f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    // Interpreter oracle first (cold installed), then the hot version.
+    ev.obarray.set_symbol_function_id(fib_id, mk_fib(false));
+    let interp = ev
+        .funcall_general_untraced(mk_fib(false), vec![Value::make_int(12)])
+        .expect("interpreted fib runs");
+    assert_eq!(interp, Value::make_int(144));
+    let hot = mk_fib(true);
+    ev.obarray.set_symbol_function_id(fib_id, hot);
+    let native = ev
+        .funcall_general_untraced(hot, vec![Value::make_int(12)])
+        .expect("native fib runs");
+    assert_eq!(native, Value::make_int(144), "fib compiles + runs natively");
+    // Non-fixnum argument: the Lss guard deopts and the resumed interpreter
+    // signals wrong-type-argument, exactly like the oracle.
+    assert!(
+        ev.funcall_general_untraced(hot, vec![Value::string("x")])
+            .is_err()
+    );
+
+    // while-loop with a call + arithmetic at the join:
+    // (lambda (n) (while (> n 0) (setq n (1- (identity-callee n)))) n).
+    let id_sym = Value::symbol("jit-pd-id");
+    let ValueKind::Symbol(id_id) = id_sym.kind() else {
+        panic!("symbol expected");
+    };
+    let mut ident = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    ident.lexical = true;
+    ident.ops = vec![Op::StackRef(0), Op::Return];
+    ident.max_stack = 16;
+    ev.obarray
+        .set_symbol_function_id(id_id, Value::make_bytecode(ident));
+    let mk_loop = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::StackRef(0),   // 0  [n n]      <- loop head (backedge target)
+            Op::Constant(0),   // 1  [n n 0]
+            Op::Gtr,           // 2  [n c]      guard at the loop JOIN
+            Op::GotoIfNil(10), // 3  [n]
+            Op::Constant(1),   // 4  [n f]
+            Op::StackRef(1),   // 5  [n f n]
+            Op::Call(1),       // 6  [n r]
+            Op::Sub1,          // 7  [n r-1]    guard AFTER the call
+            Op::StackSet(1),   // 8  [r-1]
+            Op::Goto(0),       // 9  backedge
+            Op::StackRef(0),   // 10 [n n]
+            Op::Return,        // 11
+        ];
+        f.constants = vec![Value::make_int(0), id_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let native = ev
+        .funcall_general_untraced(mk_loop(true), vec![Value::make_int(300)])
+        .expect("native loop runs");
+    let interp = ev
+        .funcall_general_untraced(mk_loop(false), vec![Value::make_int(300)])
+        .expect("interpreted loop runs");
+    assert_eq!(native, Value::make_int(0));
+    assert_eq!(native, interp, "loop with call+guards matches interpreter");
+}
+
+/// Macro-benchmark helper: hand-built recursive fib (the canonical JIT
+/// benchmark shape — self-recursive constant-symbol call, guards after the
+/// calls, only compilable since precise-PC deopt).
+#[cfg(feature = "jit")]
+fn jit_bench_fib_value(sym_name: &str, hot: bool) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let fib_sym = Value::symbol(sym_name);
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::StackRef(0),
+        Op::Constant(0),
+        Op::Lss,
+        Op::GotoIfNil(6),
+        Op::StackRef(0),
+        Op::Return,
+        Op::Constant(1),
+        Op::StackRef(1),
+        Op::Constant(2),
+        Op::Sub,
+        Op::Call(1),
+        Op::Constant(1),
+        Op::StackRef(2),
+        Op::Constant(0),
+        Op::Sub,
+        Op::Call(1),
+        Op::Add,
+        Op::Return,
+    ];
+    f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)];
+    f.max_stack = 16;
+    if hot {
+        f.runtime.set_hot_for_test();
+    }
+    Value::make_bytecode(f)
+}
+
+/// Body-dominated control benchmark: sum a countdown loop (pure arithmetic +
+/// backedges, no calls) — isolates the native-body win from call overhead.
+#[cfg(feature = "jit")]
+fn jit_bench_loop_value(hot: bool) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::Constant(0),   // 0  [n 0]
+        Op::StackRef(1),   // 1  [n acc n]      <- loop head
+        Op::Constant(0),   // 2  [n acc n 0]
+        Op::Gtr,           // 3  [n acc c]
+        Op::GotoIfNil(13), // 4  [n acc]
+        Op::StackRef(1),   // 5  [n acc n]
+        Op::StackRef(1),   // 6  [n acc n acc]
+        Op::Add,           // 7  [n acc acc']
+        Op::StackSet(1),   // 8  [n acc']
+        Op::StackRef(1),   // 9  [n acc' n]
+        Op::Sub1,          // 10 [n acc' n-1]
+        Op::StackSet(2),   // 11 [n-1 acc']
+        Op::Goto(1),       // 12 backedge
+        Op::StackRef(0),   // 13 [n acc acc]
+        Op::Return,        // 14
+    ];
+    f.constants = vec![Value::make_int(0)];
+    f.max_stack = 16;
+    if hot {
+        f.runtime.set_hot_for_test();
+    }
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_loop_native() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let f = jit_bench_loop_value(true);
+    let n = 5_000_000i64;
+    let want = Value::make_int(n * (n + 1) / 2);
+    // Warm (compiles).
+    assert_eq!(
+        ev.funcall_general_untraced(f, vec![Value::make_int(1000)])
+            .unwrap(),
+        Value::make_int(500500)
+    );
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(f, vec![Value::make_int(n)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, want);
+    panic!("BENCH native loop(5M) = {dt:?} (intentional panic so nextest prints this)");
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_loop_interp() {
+    crate::test_utils::init_test_tracing();
+    unsafe { std::env::set_var("NEOVM_JIT_THRESHOLD", "4000000000") };
+    let mut ev = Context::new();
+    let f = jit_bench_loop_value(false);
+    let n = 5_000_000i64;
+    let want = Value::make_int(n * (n + 1) / 2);
+    assert_eq!(
+        ev.funcall_general_untraced(f, vec![Value::make_int(1000)])
+            .unwrap(),
+        Value::make_int(500500)
+    );
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(f, vec![Value::make_int(n)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, want);
+    panic!("BENCH interp loop(5M) = {dt:?} (intentional panic so nextest prints this)");
+}
+
+/// `cargo nextest run --release --run-ignored ignored-only jit_bench` — run
+/// BOTH jit_bench_* tests and compare the printed timings (each pins its
+/// tier via NEOVM_JIT_THRESHOLD before the first JIT touch; nextest's
+/// process-per-test makes that sound).
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_fib_native() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fib = jit_bench_fib_value("jit-bench-fib", true);
+    let ValueKind::Symbol(id) = Value::symbol("jit-bench-fib").kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(id, fib);
+    // Warm: ensures compilation happened before timing.
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(20)])
+        .unwrap();
+    assert_eq!(r, Value::make_int(6765));
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(27)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, Value::make_int(196418));
+    panic!(
+        "BENCH native fib(27) = {:?} (intentional panic so nextest prints this)",
+        dt
+    );
+}
+
+/// Interpreter-pinned twin of [`jit_bench_fib_native`].
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_fib_interp() {
+    crate::test_utils::init_test_tracing();
+    // Pin the tier BEFORE the first hot_threshold() read in this process.
+    unsafe { std::env::set_var("NEOVM_JIT_THRESHOLD", "4000000000") };
+    let mut ev = Context::new();
+    let fib = jit_bench_fib_value("jit-bench-fib-i", false);
+    let ValueKind::Symbol(id) = Value::symbol("jit-bench-fib-i").kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(id, fib);
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(20)])
+        .unwrap();
+    assert_eq!(r, Value::make_int(6765));
+    let t = std::time::Instant::now();
+    let r = ev
+        .funcall_general_untraced(fib, vec![Value::make_int(27)])
+        .unwrap();
+    let dt = t.elapsed();
+    assert_eq!(r, Value::make_int(196418));
+    panic!(
+        "BENCH interp fib(27) = {:?} (intentional panic so nextest prints this)",
+        dt
     );
 }
 

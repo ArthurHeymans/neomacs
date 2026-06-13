@@ -54,15 +54,21 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, default_libcall_names};
 use smallvec::SmallVec;
 use std::collections::{BTreeSet, HashMap};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::backend::BackendError;
+use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::bytecode::opcode::Op;
+use crate::emacs_core::bytecode::vm::condition_frame_resume;
 use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
-use crate::emacs_core::error::Flow;
+use crate::emacs_core::error::{Flow, make_signal_binding_value, signal};
 use crate::emacs_core::eval::{
-    Context, LispArgVec, push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
+    ConditionFrame, Context, LispArgVec, ResumeTarget, push_scratch_gc_root,
+    restore_scratch_gc_roots, save_scratch_gc_roots,
 };
-use crate::emacs_core::value::Value;
+use crate::emacs_core::intern::{SymId, intern};
+use crate::emacs_core::symbol::Obarray;
+use crate::emacs_core::value::{Value, ValueKind};
 use crate::tagged::header::ConsCell;
 use crate::tagged::value::{
     FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_CONS, TAG_MASK, TAG_STRING, TAG_SYMBOL,
@@ -120,6 +126,18 @@ pub const STATUS_DEOPT: i64 = 0;
 /// Native return code: a runtime call raised a non-local `Flow`; take it with
 /// [`take_pending_flow`] and propagate.
 pub const STATUS_SIGNAL: i64 = 2;
+
+/// Native return code: a speculation guard failed at a PRECISE bytecode pc —
+/// the live operand stack was spilled into the leaf's deopt buffer and the
+/// frame's binds/handlers were left REGISTERED (no frame unwind): the caller
+/// resumes the Tier-0 interpreter mid-function via `Vm::run_resumed_frame`.
+/// Unlike [`STATUS_DEOPT`], this is sound even after side effects ran.
+pub const STATUS_DEOPT_AT: i64 = 3;
+
+/// Debug-build counter of speculated direct-call shim entries (test evidence
+/// that `find_spec_sites` + the spec lowering actually engage).
+#[cfg(debug_assertions)]
+pub(crate) static SPEC_CALL_COUNT: AtomicU64 = AtomicU64::new(0);
 
 /// Take the `Flow` stashed by a shim that returned [`STATUS_SIGNAL`].
 pub fn take_pending_flow() -> Option<Flow> {
@@ -366,6 +384,815 @@ extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Direct-builtin tables: the SAME typed `builtins::builtin_*` functions the
+// interpreter opcode arms call, exposed to generated code through three
+// arity-shaped generic shims. Single source of truth — the JIT cannot drift
+// from the interpreter's semantics for these ops.
+// ---------------------------------------------------------------------------
+
+type JitBuiltin1 = fn(&mut Context, Value) -> Result<Value, Flow>;
+type JitBuiltin2 = fn(&mut Context, Value, Value) -> Result<Value, Flow>;
+type JitBuiltin3 = fn(&mut Context, Value, Value, Value) -> Result<Value, Flow>;
+
+use crate::emacs_core::builtins as b;
+
+static JIT_BUILTIN1: [JitBuiltin1; 4] = [
+    b::builtin_length_1,          // 0
+    b::builtin_symbol_value_1,    // 1
+    b::builtin_symbol_function_1, // 2
+    b::builtin_nreverse_1,        // 3
+];
+
+static JIT_BUILTIN2: [JitBuiltin2; 15] = [
+    b::builtin_nth_2,          // 0
+    b::builtin_nthcdr_2,       // 1
+    b::builtin_elt_2,          // 2
+    b::builtin_member_2,       // 3
+    b::builtin_memq_2,         // 4
+    b::builtin_assq_2,         // 5
+    b::builtin_equal_2,        // 6
+    b::builtin_setcar_2,       // 7
+    b::builtin_setcdr_2,       // 8
+    b::builtin_aref_2,         // 9
+    b::builtin_set_2,          // 10
+    b::builtin_fset_2,         // 11
+    b::builtin_get_2,          // 12
+    b::builtin_string_equal_2, // 13
+    b::builtin_string_lessp_2, // 14
+];
+
+static JIT_BUILTIN3: [JitBuiltin3; 1] = [
+    b::builtin_put_3, // 0
+];
+
+/// Slice-shaped builtins (`fn(&[Value]) -> EvalResult`, no Context) — the
+/// exact functions the interpreter's `Nconc`/`Concat`/`Substring` arms call.
+type JitBuiltinSlice = fn(&[Value]) -> Result<Value, Flow>;
+
+static JIT_BUILTIN_SLICE: [JitBuiltinSlice; 3] = [
+    b::builtin_nconc_slice_values, // 0
+    b::builtin_concat_slice,       // 1
+    b::builtin_substring_slice,    // 2
+];
+
+/// `(nargs, table_index, mutates)` for ops lowered through the slice-builtin
+/// shim. `Concat`'s arity rides in the opcode; `Nconc`/`Substring` are fixed.
+fn slice_builtin_spec(op: &Op) -> Option<(usize, usize, bool)> {
+    Some(match op {
+        Op::Nconc => (2, 0, true),
+        Op::Concat(n) => (*n as usize, 1, false),
+        Op::Substring => (3, 2, false),
+        _ => return None,
+    })
+}
+
+/// `(table_arity, table_index, mutates)` for ops lowered through the generic
+/// direct-builtin shims. `mutates` ops poison later guards (a deopt-rerun would
+/// replay the mutation); pure ones are rerun-safe.
+fn direct_builtin_spec(op: &Op) -> Option<(u8, usize, bool)> {
+    Some(match op {
+        Op::Length => (1, 0, false),
+        Op::SymbolValue => (1, 1, false),
+        Op::SymbolFunction => (1, 2, false),
+        Op::Nreverse => (1, 3, true),
+        Op::Nth => (2, 0, false),
+        Op::Nthcdr => (2, 1, false),
+        Op::Elt => (2, 2, false),
+        Op::Member => (2, 3, false),
+        Op::Memq => (2, 4, false),
+        Op::Assq => (2, 5, false),
+        Op::Equal => (2, 6, false),
+        Op::Setcar => (2, 7, true),
+        Op::Setcdr => (2, 8, true),
+        Op::Aref => (2, 9, false),
+        Op::Set => (2, 10, true),
+        Op::Fset => (2, 11, true),
+        Op::Get => (2, 12, false),
+        Op::StringEqual => (2, 13, false),
+        Op::StringLessp => (2, 14, false),
+        Op::Put => (3, 0, true),
+        _ => return None,
+    })
+}
+
+/// Call a unary direct builtin (`JIT_BUILTIN1[idx]`) — the identical function
+/// the interpreter arm calls. Roots the argument across the call (builtins may
+/// GC); the generated code rooted the rest of its frame.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_builtin1(ctx: *mut u8, idx: i64, a: i64, out: *mut i64) -> i64 {
+    let a = Value::from_bits(a as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(a);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match JIT_BUILTIN1[idx as usize](ctx, a) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// Binary variant of [`neovm_jit_builtin1`].
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_builtin2(ctx: *mut u8, idx: i64, a: i64, b: i64, out: *mut i64) -> i64 {
+    let a = Value::from_bits(a as usize);
+    let b = Value::from_bits(b as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(a);
+    push_scratch_gc_root(b);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match JIT_BUILTIN2[idx as usize](ctx, a, b) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// Ternary variant of [`neovm_jit_builtin1`].
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_builtin3(
+    ctx: *mut u8,
+    idx: i64,
+    a: i64,
+    b: i64,
+    c: i64,
+    out: *mut i64,
+) -> i64 {
+    let a = Value::from_bits(a as usize);
+    let b = Value::from_bits(b as usize);
+    let c = Value::from_bits(c as usize);
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(a);
+    push_scratch_gc_root(b);
+    push_scratch_gc_root(c);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match JIT_BUILTIN3[idx as usize](ctx, a, b, c) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// `Op::List`: build a list from `n` operand words (the interpreter's
+/// `Value::list_from_slice` on the live stack slice). The values are rooted
+/// here across the per-cell allocations; the generated code rooted the rest of
+/// its frame. Infallible, context-free.
+extern "C" fn neovm_jit_list(args_ptr: *const i64, nargs: i64) -> i64 {
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    let mut args: SmallVec<[Value; 8]> = SmallVec::with_capacity(nargs);
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` words at
+        // `args_ptr` (its call-args stack slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    let result = Value::list_from_slice(&args).bits() as i64;
+    restore_scratch_gc_roots(saved);
+    result
+}
+
+/// Call a slice-shaped direct builtin (`JIT_BUILTIN_SLICE[idx]`) — the
+/// identical function the interpreter arm calls (`nconc`/`concat`/
+/// `substring`). Roots the operands across the call (they may allocate);
+/// context-free like the interpreter's slice calls.
+extern "C" fn neovm_jit_builtin_slice(
+    idx: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    let mut args: SmallVec<[Value; 8]> = SmallVec::with_capacity(nargs);
+    for i in 0..nargs {
+        // SAFETY: see neovm_jit_list — the same spill-slot contract.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    let status = match JIT_BUILTIN_SLICE[idx as usize](&args) {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// Named-builtin dispatch for `Op::CallBuiltin`/`Op::CallBuiltinSym`/
+/// `Op::Aset` — re-enters the runtime through the dedicated `Vm::*_for_jit`
+/// helpers, which mirror the interpreter arms exactly (override-aware named
+/// dispatch for CallBuiltin/Aset, advice-bypassing direct dispatch for
+/// CallBuiltinSym, mutating-first-arg string writeback, trailing quit poll).
+/// `variant`: 0 = CallBuiltin, 1 = CallBuiltinSym, 2 = Aset.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_named_builtin(
+    ctx: *mut u8,
+    variant: i64,
+    sym: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    let mut args = LispArgVec::new();
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` words at
+        // `args_ptr` (its call-args stack slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let mut vm = Vm::from_context(ctx);
+    let result = match variant {
+        0 => vm.callbuiltin_for_jit(SymId(sym as u32), args),
+        1 => vm.callbuiltinsym_for_jit(SymId(sym as u32), args),
+        _ => vm.aset_for_jit(args[0], args[1], args[2]),
+    };
+    let status = match result {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// `Op::SaveWindowExcursion` (GNU bytecode.c Bsave_window_excursion): pop the
+/// body form list, evaluate `(progn . body)` inside a real
+/// window-configuration save/restore — the interpreter arm 1:1, including
+/// error precedence (a failed restore wins over the body's flow). The body
+/// runs arbitrary lisp: everything live is rooted here, the generated code
+/// rooted the rest of its frame.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut i64) -> i64 {
+    use crate::emacs_core::window_cmds;
+    let body = Value::from_bits(body as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let root_scope = save_scratch_gc_roots();
+    push_scratch_gc_root(body);
+    let progn_form = Value::cons(Value::symbol("progn"), body);
+    push_scratch_gc_root(progn_form);
+    let status = (|| {
+        let saved = match window_cmds::builtin_current_window_configuration(ctx, vec![Value::NIL]) {
+            Ok(v) => v,
+            Err(flow) => {
+                stash_pending_flow(flow);
+                return STATUS_SIGNAL;
+            }
+        };
+        push_scratch_gc_root(saved);
+        let body_result = ctx.eval_sub(progn_form);
+        if let Ok(v) = &body_result {
+            push_scratch_gc_root(*v);
+        }
+        let restore_result = window_cmds::builtin_set_window_configuration(ctx, vec![saved]);
+        match body_result {
+            Ok(result) => match restore_result {
+                Ok(_) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = result.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            },
+            Err(flow) => {
+                // Interpreter parity: vm_try!(restore_result) runs first, so a
+                // restore failure takes precedence over the body's flow.
+                match restore_result {
+                    Err(restore_flow) => stash_pending_flow(restore_flow),
+                    Ok(_) => stash_pending_flow(flow),
+                }
+                STATUS_SIGNAL
+            }
+        }
+    })();
+    restore_scratch_gc_roots(root_scope);
+    status
+}
+
+/// Speculated direct call (`Op::Call` whose callee slot provably holds a
+/// constant symbol that was fbound to a bytecode object at compile time).
+/// Quit poll FIRST (the interpreter's Op::Call order — quit processing can run
+/// lisp, including fset), then the validity check: if `ctx.obarray`'s
+/// function_epoch still equals this site's armed epoch, NO function binding
+/// anywhere has changed since the binding was observed equal to `expected`,
+/// so the callee object is still reachable through the obarray and calling it
+/// directly is exactly equivalent to resolving the symbol — minus the
+/// resolution. On an epoch move, re-validate THIS binding: unchanged -> re-arm
+/// the slot and proceed direct; changed -> strict symbol call (fset/advice
+/// take effect immediately, GNU default-settings parity).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`]; `slot` points into the
+/// owning CompiledLeaf's spec_slots (alive whenever its code runs).
+extern "C" fn neovm_jit_call_spec(
+    ctx: *mut u8,
+    sym: i64,
+    expected: i64,
+    slot: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    // Debug-build evidence that speculation actually engages (tests assert on
+    // it; release builds carry no counter).
+    #[cfg(debug_assertions)]
+    SPEC_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+    let nargs = nargs as usize;
+    let saved = save_scratch_gc_roots();
+    let mut args = LispArgVec::new();
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` argument words at
+        // `args_ptr` (its call-args stack slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        push_scratch_gc_root(v);
+        args.push(v);
+    }
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let status = match ctx.maybe_quit() {
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+        Ok(()) => {
+            // SAFETY: slot points into the executing leaf's spec_slots.
+            let slot = unsafe { &*(slot as *const AtomicU64) };
+            let epoch = ctx.obarray.function_epoch();
+            let armed = slot.load(Ordering::Relaxed) == epoch || {
+                let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
+                if cur.is_some_and(|v| v.bits() as i64 == expected) {
+                    slot.store(epoch, Ordering::Relaxed);
+                    true
+                } else {
+                    false
+                }
+            };
+            let target = if armed {
+                Value::from_bits(expected as usize)
+            } else {
+                Value::from_sym_id(SymId(sym as u32))
+            };
+            push_scratch_gc_root(target);
+            let mut vm = Vm::from_context(ctx);
+            match vm.call_for_jit(target, args) {
+                Ok(value) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = value.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            }
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
+/// Compiled bodies have no local handlers (handler opcodes bail), so a throw
+/// always propagates out — exactly the interpreter's `resume_nonlocal` once no
+/// local handler matches. Context-free.
+extern "C" fn neovm_jit_throw(tag: i64, value: i64) {
+    stash_pending_flow(Flow::Throw {
+        tag: Value::from_bits(tag as usize),
+        value: Value::from_bits(value as usize),
+    });
+}
+
+/// Slow path for `integerp` when the value isn't a fixnum: bignums are
+/// veclikes, so delegate to the value layer's own predicate. Context-free,
+/// pure, never allocates or signals.
+extern "C" fn neovm_jit_integerp_slow(v: i64) -> i64 {
+    let v = Value::from_bits(v as usize);
+    (if v.is_integer() {
+        Value::T.bits()
+    } else {
+        Value::NIL.bits()
+    }) as i64
+}
+
+/// Slow path for `numberp` when the value isn't a fixnum (floats, bignums).
+/// Context-free, pure, never allocates or signals.
+extern "C" fn neovm_jit_numberp_slow(v: i64) -> i64 {
+    let v = Value::from_bits(v as usize);
+    (if v.is_number() {
+        Value::T.bits()
+    } else {
+        Value::NIL.bits()
+    }) as i64
+}
+
+/// `Op::SaveCurrentBuffer`: record the current buffer on the specpdl + the
+/// bind stack, exactly like the interpreter arm (conditional + infallible).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_current_buffer(ctx: *mut u8) {
+    use crate::emacs_core::eval::SpecBinding;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Some(buffer_id) = ctx.buffers.current_buffer().map(|buffer| buffer.id) {
+        JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
+        ctx.specpdl
+            .push(SpecBinding::SaveCurrentBuffer { buffer_id });
+    }
+}
+
+/// `Op::SaveExcursion`: record point/mark/buffer via the same Context helper
+/// the interpreter uses (`record_save_excursion` pushes the specpdl record and
+/// returns the pre-push depth for the bind stack).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_excursion(ctx: *mut u8) {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Some(count) = ctx.record_save_excursion() {
+        JIT_BIND_STACK.with(|s| s.borrow_mut().push(count));
+    }
+}
+
+/// `Op::SaveRestriction`: record the narrowing state, exactly like the
+/// interpreter arm (conditional + infallible).
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_save_restriction(ctx: *mut u8) {
+    use crate::emacs_core::eval::SpecBinding;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Some(saved) = ctx.buffers.save_current_restriction_state() {
+        JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
+        ctx.specpdl
+            .push(SpecBinding::SaveRestriction { state: saved });
+    }
+}
+
+/// `Op::UnwindProtectPop`: register an unwind-protect cleanup form as a
+/// specpdl record (the interpreter arm mirrored 1:1 — same `SpecBinding`
+/// entry, same captured lexenv). The cleanup runs whenever `unbind_to` crosses
+/// it: the matching `Unbind`, or the frame unwind on any exit — shared
+/// machinery with the interpreter, including the signal path.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_unwind_protect(ctx: *mut u8, forms: i64) {
+    use crate::emacs_core::eval::SpecBinding;
+    let forms = Value::from_bits(forms as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
+    let lexenv = ctx.lexenv;
+    ctx.specpdl
+        .push(SpecBinding::UnwindProtect { forms, lexenv });
+}
+
+/// `Op::PushConditionCase`: register a `condition-case` handler frame on the
+/// ctx-level condition stack, mirroring the interpreter arm exactly — implicit
+/// `error` conditions, a `VmConditionCase` resume carrying the bytecode target,
+/// the static operand-stack depth at the push, the current specpdl depth, and
+/// the current JIT bind-stack length (this frame's analogue of the
+/// interpreter's frame-local `bind_stack`). Infallible.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_push_cc(ctx: *mut u8, target: i64, stack_len: i64) {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let resume_id = ctx.allocate_resume_id();
+    let bind_stack_len = JIT_BIND_STACK.with(|s| s.borrow().len());
+    let spec_depth = ctx.specpdl.len();
+    ctx.push_condition_frame(ConditionFrame::ConditionCase {
+        conditions: Value::symbol("error"),
+        resume: ResumeTarget::VmConditionCase {
+            resume_id,
+            target: target as u32,
+            stack_len: stack_len as usize,
+            spec_depth,
+            bind_stack_len,
+        },
+    });
+}
+
+/// `Op::PushConditionCaseRaw`: like [`neovm_jit_push_cc`] but the handler
+/// pattern (conditions) was popped from the operand stack by the generated
+/// code and is passed in. Infallible.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_push_cc_raw(ctx: *mut u8, target: i64, stack_len: i64, conditions: i64) {
+    let conditions = Value::from_bits(conditions as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let resume_id = ctx.allocate_resume_id();
+    let bind_stack_len = JIT_BIND_STACK.with(|s| s.borrow().len());
+    let spec_depth = ctx.specpdl.len();
+    ctx.push_condition_frame(ConditionFrame::ConditionCase {
+        conditions,
+        resume: ResumeTarget::VmConditionCase {
+            resume_id,
+            target: target as u32,
+            stack_len: stack_len as usize,
+            spec_depth,
+            bind_stack_len,
+        },
+    });
+}
+
+/// `Op::PushCatch`: register a `catch` frame (tag popped by the generated
+/// code), mirroring the interpreter arm. Infallible.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_push_catch(ctx: *mut u8, target: i64, stack_len: i64, tag: i64) {
+    let tag = Value::from_bits(tag as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let resume_id = ctx.allocate_resume_id();
+    let bind_stack_len = JIT_BIND_STACK.with(|s| s.borrow().len());
+    let spec_depth = ctx.specpdl.len();
+    ctx.push_condition_frame(ConditionFrame::Catch {
+        tag,
+        resume: ResumeTarget::VmCatch {
+            resume_id,
+            target: target as u32,
+            stack_len: stack_len as usize,
+            spec_depth,
+            bind_stack_len,
+        },
+    });
+}
+
+/// `Op::PopHandler`: drop the innermost handler frame (normal exit from a
+/// protected extent). The static handler-depth analysis guarantees balance.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_pop_handler(ctx: *mut u8) {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    ctx.pop_condition_frame();
+}
+
+/// Handler-match dispatch: called on the cold path after a runtime call inside
+/// a protected extent returned [`STATUS_SIGNAL`], with `ours` = the number of
+/// condition frames this *native frame* has active at the site (static). The
+/// per-frame invariant "callees pop their own frames on every exit" means the
+/// top `ours` frames of `ctx.condition_stack` are exactly ours.
+///
+/// Mirrors `Vm::resume_nonlocal` 1:1:
+/// - `Throw`: select via `matching_catch_resume` (whole-stack scan, like the
+///   interpreter); pop our frames innermost-first looking for the selected
+///   resume. Found -> unwind (`unbind_to` to the frame's spec depth, truncate
+///   the JIT bind stack), write the thrown value through `out`, and return the
+///   0-based miss count `m` (0 = innermost handler matched). Selected-but-outer
+///   -> all ours popped, rethrow (-1). No catch anywhere -> `no-catch` signal.
+/// - `Signal`: `kill-emacs` propagates untouched (frames left for the frame
+///   unwind, like the interpreter's early return). Otherwise run
+///   `dispatch_signal_if_needed` (signal hooks + handler-bind — may run lisp,
+///   GC, or itself raise: loop on the new flow, the interpreter's recursion),
+///   then unwind to `selected_resume` among our frames; on a match the error
+///   object (`make_signal_binding_value`) goes through `out`.
+///
+/// The generated code keeps its live operand-stack values rooted across this
+/// call (the lisp run by cleanups/hooks can collect) and maps the returned
+/// ordinal back to the statically known handler target.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`]; `out` is the generated
+/// code's result stack slot.
+extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64) -> i64 {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let ours = ours as usize;
+    let mut flow = take_pending_flow().expect("match shim runs only after STATUS_SIGNAL");
+    loop {
+        match flow {
+            Flow::Throw { tag, value } => {
+                let Some(selected) = ctx.matching_catch_resume(&tag) else {
+                    // No matching catch anywhere: unwind all our frames and
+                    // propagate `no-catch` (resume_nonlocal parity).
+                    for _ in 0..ours {
+                        ctx.pop_condition_frame();
+                    }
+                    stash_pending_flow(signal("no-catch", vec![tag, value]));
+                    return -1;
+                };
+                for m in 0..ours {
+                    let frame = ctx
+                        .pop_condition_frame()
+                        .expect("JIT handler frames missing from condition stack");
+                    let resume = condition_frame_resume(frame);
+                    if resume == selected {
+                        let ResumeTarget::VmCatch {
+                            spec_depth,
+                            bind_stack_len,
+                            ..
+                        } = resume
+                        else {
+                            unreachable!("JIT catch frame carries a VmCatch resume");
+                        };
+                        // unbind_to may run unwind-protect cleanups (lisp ->
+                        // GC); keep the carried values alive across it.
+                        let saved = save_scratch_gc_roots();
+                        push_scratch_gc_root(tag);
+                        push_scratch_gc_root(value);
+                        ctx.unbind_to(spec_depth);
+                        JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
+                        restore_scratch_gc_roots(saved);
+                        // SAFETY: `out` is the generated code's result slot.
+                        unsafe { *out = value.bits() as i64 };
+                        return m as i64;
+                    }
+                }
+                // The selected catch belongs to an outer frame: ours are all
+                // popped; rethrow for the frame unwind + outer handlers.
+                stash_pending_flow(Flow::Throw { tag, value });
+                return -1;
+            }
+            Flow::Signal(sig) => {
+                if sig.symbol == intern("kill-emacs") {
+                    // Interpreter parity: propagate immediately, frames left
+                    // to the frame-exit truncation.
+                    stash_pending_flow(Flow::Signal(sig));
+                    return -1;
+                }
+                // Signal hooks / handler-bind handlers may run lisp and GC;
+                // root the signal payload across the dispatch.
+                let saved = save_scratch_gc_roots();
+                push_scratch_gc_root(Value::from_sym_id(sig.symbol));
+                for v in sig.data.iter().copied() {
+                    push_scratch_gc_root(v);
+                }
+                if let Some(raw) = sig.raw_data {
+                    push_scratch_gc_root(raw);
+                }
+                let dispatched = ctx.dispatch_signal_if_needed(sig);
+                restore_scratch_gc_roots(saved);
+                let sig = match dispatched {
+                    Ok(sig) => sig,
+                    // A hook/handler raised: restart matching on the new flow
+                    // (resume_nonlocal recurses here).
+                    Err(next) => {
+                        flow = next;
+                        continue;
+                    }
+                };
+                let Some(selected) = sig.selected_resume.clone() else {
+                    for _ in 0..ours {
+                        ctx.pop_condition_frame();
+                    }
+                    stash_pending_flow(Flow::Signal(sig));
+                    return -1;
+                };
+                for m in 0..ours {
+                    let frame = ctx
+                        .pop_condition_frame()
+                        .expect("JIT handler frames missing from condition stack");
+                    let resume = condition_frame_resume(frame);
+                    if resume == selected {
+                        let ResumeTarget::VmConditionCase {
+                            spec_depth,
+                            bind_stack_len,
+                            ..
+                        } = resume
+                        else {
+                            unreachable!(
+                                "JIT condition-case frame carries a VmConditionCase resume"
+                            );
+                        };
+                        // unbind_to runs cleanups and the error object below
+                        // allocates: root the signal payload throughout.
+                        let saved = save_scratch_gc_roots();
+                        push_scratch_gc_root(Value::from_sym_id(sig.symbol));
+                        for v in sig.data.iter().copied() {
+                            push_scratch_gc_root(v);
+                        }
+                        if let Some(raw) = sig.raw_data {
+                            push_scratch_gc_root(raw);
+                        }
+                        ctx.unbind_to(spec_depth);
+                        JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
+                        let binding = make_signal_binding_value(&sig);
+                        restore_scratch_gc_roots(saved);
+                        // SAFETY: `out` is the generated code's result slot.
+                        unsafe { *out = binding.bits() as i64 };
+                        return m as i64;
+                    }
+                }
+                stash_pending_flow(Flow::Signal(sig));
+                return -1;
+            }
+        }
+    }
+}
+
+/// `Op::Switch` lookup result: the dispatch value is not in the jump table —
+/// fall through (interpreter parity).
+const JIT_SWITCH_MISS: i64 = -1;
+/// `Op::Switch` lookup result: the table no longer matches what was compiled
+/// (a value mutated to a non-fixnum); the shim stashed a signal.
+const JIT_SWITCH_STALE: i64 = -2;
+
+/// `Op::Switch`: look the dispatch value up in the (statically verified
+/// compile-time constant) hash-table jump table, with the interpreter's exact
+/// key semantics (`to_hash_key_swp` under the table's own test). Returns the
+/// raw fixnum target address on a hit ([`JIT_SWITCH_MISS`]/[`JIT_SWITCH_STALE`]
+/// otherwise); the generated code maps raw addresses onto the statically
+/// resolved target blocks. Pure lookup — no allocation, no lisp.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_switch(ctx: *mut u8, dispatch: i64, table: i64) -> i64 {
+    let table = Value::from_bits(table as usize);
+    let dispatch = Value::from_bits(dispatch as usize);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let Some(ht) = table.as_hash_table() else {
+        // Statically verified a hash table; only runtime mutation of the
+        // constant pool itself could change that.
+        stash_pending_flow(signal(
+            "error",
+            vec![Value::string("jit: switch jump table mutated at runtime")],
+        ));
+        return JIT_SWITCH_STALE;
+    };
+    let key = dispatch.to_hash_key_swp(&ht.test, ctx.symbols_with_pos_enabled);
+    match ht.data.get(&key).copied() {
+        Some(v) => match v.kind() {
+            ValueKind::Fixnum(addr) if addr >= 0 => addr,
+            _ => {
+                stash_pending_flow(signal(
+                    "error",
+                    vec![Value::string("jit: switch jump table mutated at runtime")],
+                ));
+                JIT_SWITCH_STALE
+            }
+        },
+        None => JIT_SWITCH_MISS,
+    }
+}
+
+/// Cold path for a switch hit whose raw address is not in the statically
+/// compiled target set (the jump table was mutated after compilation — code
+/// the byte-compiler never produces). Stash a loud signal; the generated code
+/// routes to its signal path. Context-free.
+extern "C" fn neovm_jit_switch_stale() {
+    stash_pending_flow(signal(
+        "error",
+        vec![Value::string("jit: switch jump table mutated at runtime")],
+    ));
+}
+
+/// Back-edge service poll: GC safepoint + `maybe_quit`, via the same shared
+/// Context helper the interpreter's `branch_to!` wrap path uses
+/// (`bytecode_branch_maybe_gc_and_quit`). Generated code calls this every 255
+/// backward jumps (the interpreter's u8 `quitcounter` cadence), with its live
+/// operand-stack values rooted by the caller — the poll may collect.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+extern "C" fn neovm_jit_backedge(ctx: *mut u8) -> i64 {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    match ctx.bytecode_branch_maybe_gc_and_quit() {
+        Ok(()) => STATUS_OK,
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    }
+}
+
 /// Why a bytecode body could not be compiled by this baseline tier.
 ///
 /// Every variant means "stay on the Tier-0 interpreter"; none is fatal.
@@ -422,6 +1249,24 @@ pub struct CompiledLeaf {
     /// the `cleanup_bytecode_frame` parity unwind — and requires a non-null
     /// vmctx.
     has_binds: bool,
+    /// Precise-deopt spill buffer: a failing guard writes the live operand
+    /// stack here (raw tagged bits) before returning [`STATUS_DEOPT_AT`].
+    /// Untraced by design — consumed immediately after the native call
+    /// returns, with no allocation in between.
+    deopt_spill: Box<[core::cell::Cell<i64>]>,
+    /// Precise-deopt pc/depth/handler-count cells (see [`DeoptCells`]).
+    deopt_meta: Box<DeoptCells>,
+    /// Armed-epoch slots for direct-call speculation sites: slot k holds the
+    /// obarray function_epoch at which site k's callee binding was last
+    /// validated. Generated code holds raw pointers into this Box (stable:
+    /// boxed slice, owned here, code only runs under a live Rc of this leaf).
+    spec_slots: Box<[AtomicU64]>,
+    /// Whether the body registers handler frames (`condition-case`/`catch`).
+    /// When set, [`call`](Self::call) truncates `ctx.condition_stack` back to
+    /// the entry depth on every exit (before the specpdl unwind, exactly like
+    /// `cleanup_bytecode_frame` — no stale frame may be matchable while unbind
+    /// cleanups run lisp) and requires a non-null vmctx.
+    has_handlers: bool,
     // Field order matters for drop: `entry` points into `_module`'s memory; keep
     // `_module` alive as long as the handle exists.
     entry: *const u8,
@@ -445,8 +1290,25 @@ pub enum NativeRun {
     Ok(usize),
     /// A speculation guard failed. The poisoning analysis guarantees no side
     /// effect (no runtime call) ran before any guard, so the caller can safely
-    /// rerun the body on the Tier-0 interpreter.
+    /// rerun the body on the Tier-0 interpreter. (Also the null-vmctx mapping
+    /// of a precise deopt: shim-free bodies are side-effect-free by
+    /// construction, so rerun-from-start stays sound for them.)
     Deopt,
+    /// A guard failed at a precise bytecode pc with the live operand stack
+    /// and frame state captured — resume the Tier-0 interpreter MID-FUNCTION
+    /// via `Vm::run_resumed_frame`. The native call performed NO frame
+    /// unwind: `binds` (pre-push specpdl depths, this frame's JIT bind-stack
+    /// segment) and the `handlers` condition frames remain registered and
+    /// their ownership transfers to the resumed frame, which unwinds to
+    /// `spec_base`/`cond_base` (the native frame's entry bases) on exit.
+    DeoptAt {
+        pc: usize,
+        stack: Vec<Value>,
+        handlers: usize,
+        binds: Vec<usize>,
+        spec_base: usize,
+        cond_base: usize,
+    },
     /// A runtime call inside the body raised a non-local `Flow` (signal/throw);
     /// take it with [`take_pending_flow`] and propagate it.
     Signal,
@@ -523,15 +1385,74 @@ impl CompiledLeaf {
         } else {
             None
         };
+        let cond_base = if self.has_handlers {
+            debug_assert!(!vmctx.is_null(), "handler bodies require a Context");
+            // SAFETY: as above — only a length read.
+            Some(unsafe { (*(vmctx as *const Context)).condition_stack_len() })
+        } else {
+            None
+        };
         let status = unsafe {
             let f: extern "C" fn(*mut u8, *const i64, *mut i64) -> i64 =
                 core::mem::transmute(self.entry);
             f(vmctx, arg_bits.as_ptr(), &mut out as *mut i64)
         };
-        if let Some((spec_base, stack_base)) = bind_frame {
-            JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(stack_base));
+        if status == STATUS_DEOPT_AT {
+            // Precise deopt: NO frame unwind — the resumed interpreter frame
+            // takes ownership of the registered binds/handlers and unwinds to
+            // the entry bases itself on every exit. With a null vmctx (shim-
+            // free test bodies — side-effect-free by construction) fall back
+            // to the legacy rerun-from-start mapping.
+            if vmctx.is_null() {
+                return NativeRun::Deopt;
+            }
+            let pc = self.deopt_meta.pc.get() as usize;
+            let depth = self.deopt_meta.depth.get() as usize;
+            let handlers = self.deopt_meta.handlers.get() as usize;
+            // No allocation happens between the native spill write and this
+            // read; the caller seeds the values into the GC-traced bc_buf
+            // before any elisp can run.
+            let stack: Vec<Value> = (0..depth)
+                .map(|j| Value::from_bits(self.deopt_spill[j].get() as usize))
+                .collect();
+            let binds: Vec<usize> = match bind_frame {
+                Some((_, stack_base)) => JIT_BIND_STACK.with(|s| {
+                    let mut s = s.borrow_mut();
+                    s.split_off(stack_base)
+                }),
+                None => Vec::new(),
+            };
+            // SAFETY: dormant seam Context; length reads only.
+            let spec_base = match bind_frame {
+                Some((spec_base, _)) => spec_base,
+                None => unsafe { (*(vmctx as *const Context)).specpdl.len() },
+            };
+            let cond_base = match cond_base {
+                Some(base) => base,
+                None => unsafe { (*(vmctx as *const Context)).condition_stack_len() },
+            };
+            return NativeRun::DeoptAt {
+                pc,
+                stack,
+                handlers,
+                binds,
+                spec_base,
+                cond_base,
+            };
+        }
+        // cleanup_bytecode_frame parity, same order: condition frames first
+        // (the specpdl unwind below can run unwind-protect cleanups — lisp
+        // that must not be able to match a stale frame of this dead body),
+        // then the dynamic-binding unwind. On a deopt both are exactly what
+        // makes the interpreter rerun sound: the rerun re-registers them.
+        if let Some(base) = cond_base {
             // SAFETY: the native call has returned; the seam's &mut Context is
             // still dormant (we are inside its dynamic extent).
+            unsafe { (*(vmctx as *mut Context)).truncate_condition_stack(base) };
+        }
+        if let Some((spec_base, stack_base)) = bind_frame {
+            JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(stack_base));
+            // SAFETY: as above.
             unsafe { (*(vmctx as *mut Context)).unbind_to(spec_base) };
         }
         match status {
@@ -549,7 +1470,7 @@ impl CompiledLeaf {
     pub(crate) fn call_for_test(&self, args: &[Value]) -> Option<usize> {
         match self.call(core::ptr::null_mut(), args) {
             NativeRun::Ok(bits) => Some(bits),
-            NativeRun::Deopt => None,
+            NativeRun::Deopt | NativeRun::DeoptAt { .. } => None,
             NativeRun::Signal => panic!("unexpected STATUS_SIGNAL from a test body"),
         }
     }
@@ -611,6 +1532,15 @@ fn params_on_stack(f: &ByteCodeFunction) -> bool {
 /// Dynamic-binding bytecode (params bound via `varbind`, not on the stack)
 /// still bails.
 pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, CompileError> {
+    compile_bytecode_function_with(f, None)
+}
+
+/// [`compile_bytecode_function`] with the compiling thread's obarray for
+/// direct-call speculation.
+pub fn compile_bytecode_function_with(
+    f: &ByteCodeFunction,
+    obarray: Option<&Obarray>,
+) -> Result<CompiledLeaf, CompileError> {
     let required = f.params.required.len();
     let nonrest = required + f.params.optional.len();
     let has_rest = f.params.rest.is_some();
@@ -620,7 +1550,13 @@ pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, C
         // find them.
         return Err(CompileError::TakesArguments);
     }
-    let mut leaf = lower_leaf(&f.ops, &f.constants, native_arity)?;
+    let mut leaf = lower_leaf_full(
+        &f.ops,
+        &f.constants,
+        native_arity,
+        f.gnu_byte_offset_map.as_deref(),
+        obarray,
+    )?;
     leaf.required = required;
     leaf.has_rest = has_rest;
     Ok(leaf)
@@ -632,24 +1568,16 @@ pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, C
 /// block — created lazily on first use; otherwise fall through into a fresh,
 /// sealed continuation block. On return, the builder is positioned in the
 /// continuation so lowering continues on the success path.
-fn emit_guard(fb: &mut FunctionBuilder, deopt: &mut Option<Block>, cond: ClifValue) {
-    let db = match *deopt {
-        Some(b) => b,
-        None => {
-            let b = fb.create_block();
-            *deopt = Some(b);
-            b
-        }
-    };
+fn emit_guard(fb: &mut FunctionBuilder, deopt: Block, cond: ClifValue) {
     let cont = fb.create_block();
-    fb.ins().brif(cond, cont, &[], db, &[]);
+    fb.ins().brif(cond, cont, &[], deopt, &[]);
     fb.switch_to_block(cont);
     // `cont`'s only predecessor is the guard branch just emitted.
     fb.seal_block(cont);
 }
 
 /// Guard that `v` is a fixnum (`(v & 0b11) == 0b10`), deopting otherwise.
-fn guard_fixnum(fb: &mut FunctionBuilder, deopt: &mut Option<Block>, v: ClifValue) {
+fn guard_fixnum(fb: &mut FunctionBuilder, deopt: Block, v: ClifValue) {
     let tag = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
     let is_fix = fb
         .ins()
@@ -668,7 +1596,7 @@ fn retag_fixnum(fb: &mut FunctionBuilder, n: ClifValue) -> ClifValue {
 /// the result be in fixnum range, else deopt. Returns the tagged-fixnum result.
 fn lower_fixnum_binop(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     is_sub: bool,
     a: ClifValue,
     b: ClifValue,
@@ -722,7 +1650,7 @@ enum UnaryKind {
 /// exactly rather than a post-compute range check.
 fn lower_fixnum_unop(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     kind: UnaryKind,
     a: ClifValue,
 ) -> ClifValue {
@@ -750,7 +1678,7 @@ fn lower_fixnum_unop(
 /// else deopt, then select `t`/`nil` from the comparison — no branch needed.
 fn lower_fixnum_compare(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     cc: IntCC,
     a: ClifValue,
     b: ClifValue,
@@ -773,7 +1701,7 @@ fn lower_fixnum_compare(
 /// fixnum-range overflow at once.
 fn lower_fixnum_mul(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     a: ClifValue,
     b: ClifValue,
 ) -> ClifValue {
@@ -808,7 +1736,7 @@ fn lower_fixnum_mul(
 /// same bits as our retag, so no extra range guard is needed for parity.
 fn lower_fixnum_divrem(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     is_rem: bool,
     a: ClifValue,
     b: ClifValue,
@@ -866,21 +1794,30 @@ fn lower_predicate(fb: &mut FunctionBuilder, kind: PredKind, a: ClifValue) -> Cl
     fb.ins().select(cond, t, nil)
 }
 
-/// Lower `car`/`cdr` with exact interpreter parity: a cons yields the loaded
-/// field, nil yields nil, and anything else deopts (the interpreter signals
-/// `wrong-type-argument`). Non-allocating; reading a cons field needs no SATB
+/// Lower `car`/`cdr` (and the `-safe` variants) with exact interpreter parity:
+/// a cons yields the loaded field; otherwise plain car/cdr yields nil for nil
+/// and deopts for anything else (the interpreter signals
+/// `wrong-type-argument`), while car-safe/cdr-safe yield nil for ANY non-cons
+/// (total, no deopt). Non-allocating; reading a cons field needs no SATB
 /// barrier (the barrier is on writes), and there is no GC safepoint here.
 fn lower_car_cdr(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Option<Block>,
     is_cdr: bool,
+    safe: bool,
     a: ClifValue,
 ) -> ClifValue {
     let tag = fb.ins().band_imm(a, TAG_MASK as i64);
     let is_cons = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64);
-    let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
-    let valid = fb.ins().bor(is_cons, is_nil);
-    emit_guard(fb, deopt, valid);
+    if !safe {
+        let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
+        let valid = fb.ins().bor(is_cons, is_nil);
+        emit_guard(
+            fb,
+            deopt.expect("guarded car/cdr lowers with a deopt site"),
+            valid,
+        );
+    }
 
     // Branch: cons -> load the field; nil -> nil. The result flows through a
     // fresh SSA variable (Cranelift inserts the phi at the merge).
@@ -904,7 +1841,13 @@ fn lower_car_cdr(
     fb.ins().jump(merge, &[]);
 
     fb.switch_to_block(nil_blk);
-    fb.def_var(res, a); // nil -> nil (a already holds nil)
+    if safe {
+        // -safe variants: ANY non-cons yields nil.
+        let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+        fb.def_var(res, nil);
+    } else {
+        fb.def_var(res, a); // nil -> nil (a already holds nil, guarded above)
+    }
     fb.ins().jump(merge, &[]);
 
     fb.switch_to_block(merge);
@@ -947,6 +1890,29 @@ struct RtRefs {
     varset: FuncRef,
     varbind: FuncRef,
     unbind: FuncRef,
+    backedge: FuncRef,
+    save_current_buffer: FuncRef,
+    save_excursion: FuncRef,
+    save_restriction: FuncRef,
+    unwind_protect: FuncRef,
+    throw_flow: FuncRef,
+    integerp_slow: FuncRef,
+    numberp_slow: FuncRef,
+    builtin1: FuncRef,
+    builtin2: FuncRef,
+    builtin3: FuncRef,
+    push_cc: FuncRef,
+    push_cc_raw: FuncRef,
+    push_catch: FuncRef,
+    pop_handler: FuncRef,
+    match_handler: FuncRef,
+    switch_lookup: FuncRef,
+    switch_stale: FuncRef,
+    list: FuncRef,
+    builtin_slice: FuncRef,
+    named_builtin: FuncRef,
+    save_window_excursion: FuncRef,
+    call_spec: FuncRef,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -1026,6 +1992,100 @@ fn declare_rt_refs(
     sig_unbind.params.push(AbiParam::new(i64t));
     let varbind_id = declare(module, "neovm_jit_varbind", &sig_varbind)?;
     let unbind_id = declare(module, "neovm_jit_unbind", &sig_unbind)?;
+    // (vmctx) -> status
+    let mut sig_backedge = Signature::new(call_conv);
+    sig_backedge.params.push(AbiParam::new(ptr_ty));
+    sig_backedge.returns.push(AbiParam::new(i64t));
+    let backedge_id = declare(module, "neovm_jit_backedge", &sig_backedge)?;
+    // (vmctx) -> ()  — the infallible Save* records.
+    let mut sig_save = Signature::new(call_conv);
+    sig_save.params.push(AbiParam::new(ptr_ty));
+    let scb_id = declare(module, "neovm_jit_save_current_buffer", &sig_save)?;
+    let sexc_id = declare(module, "neovm_jit_save_excursion", &sig_save)?;
+    let sres_id = declare(module, "neovm_jit_save_restriction", &sig_save)?;
+    // (vmctx, forms) -> ()  — unwind-protect record (infallible).
+    let up_id = declare(module, "neovm_jit_unwind_protect", &sig_unbind)?;
+    // (tag, value) -> ()  — context-free Flow stash.
+    let mut sig_throw = Signature::new(call_conv);
+    sig_throw.params.push(AbiParam::new(i64t));
+    sig_throw.params.push(AbiParam::new(i64t));
+    let throw_id = declare(module, "neovm_jit_throw", &sig_throw)?;
+    // (v) -> t/nil bits  — context-free predicates.
+    let mut sig_pred1 = Signature::new(call_conv);
+    sig_pred1.params.push(AbiParam::new(i64t));
+    sig_pred1.returns.push(AbiParam::new(i64t));
+    let intp_id = declare(module, "neovm_jit_integerp_slow", &sig_pred1)?;
+    let nump_id = declare(module, "neovm_jit_numberp_slow", &sig_pred1)?;
+    // (vmctx, idx, a[, b[, c]], out_ptr) -> status — generic direct builtins.
+    let mut sig_b1 = Signature::new(call_conv);
+    sig_b1.params.push(AbiParam::new(ptr_ty));
+    sig_b1.params.push(AbiParam::new(i64t));
+    sig_b1.params.push(AbiParam::new(i64t));
+    sig_b1.params.push(AbiParam::new(ptr_ty));
+    sig_b1.returns.push(AbiParam::new(i64t));
+    let mut sig_b2 = sig_b1.clone();
+    sig_b2.params.insert(3, AbiParam::new(i64t));
+    let mut sig_b3 = sig_b2.clone();
+    sig_b3.params.insert(4, AbiParam::new(i64t));
+    let b1_id = declare(module, "neovm_jit_builtin1", &sig_b1)?;
+    let b2_id = declare(module, "neovm_jit_builtin2", &sig_b2)?;
+    let b3_id = declare(module, "neovm_jit_builtin3", &sig_b3)?;
+    // (vmctx, target, stack_len) -> ()  — condition-case push (infallible).
+    let mut sig_pcc = Signature::new(call_conv);
+    sig_pcc.params.push(AbiParam::new(ptr_ty));
+    sig_pcc.params.push(AbiParam::new(i64t));
+    sig_pcc.params.push(AbiParam::new(i64t));
+    // (vmctx, target, stack_len, conditions/tag) -> ()
+    let mut sig_pcc_raw = sig_pcc.clone();
+    sig_pcc_raw.params.push(AbiParam::new(i64t));
+    let pcc_id = declare(module, "neovm_jit_push_cc", &sig_pcc)?;
+    let pcc_raw_id = declare(module, "neovm_jit_push_cc_raw", &sig_pcc_raw)?;
+    let pcatch_id = declare(module, "neovm_jit_push_catch", &sig_pcc_raw)?;
+    let pop_handler_id = declare(module, "neovm_jit_pop_handler", &sig_save)?;
+    // (vmctx, ours, out_ptr) -> matched ordinal or -1.
+    let match_id = declare(module, "neovm_jit_match_handler", &sig_varref)?;
+    // (vmctx, dispatch, table) -> raw target addr / miss / stale.
+    let switch_id = declare(module, "neovm_jit_switch", &sig_eq)?;
+    // () -> ()  — stash the stale-table signal.
+    let sig_void = Signature::new(call_conv);
+    let switch_stale_id = declare(module, "neovm_jit_switch_stale", &sig_void)?;
+    // (args_ptr, nargs) -> list bits  — infallible n-ary list builder.
+    let mut sig_list = Signature::new(call_conv);
+    sig_list.params.push(AbiParam::new(ptr_ty));
+    sig_list.params.push(AbiParam::new(i64t));
+    sig_list.returns.push(AbiParam::new(i64t));
+    let list_id = declare(module, "neovm_jit_list", &sig_list)?;
+    // (idx, args_ptr, nargs, out_ptr) -> status  — slice-shaped builtins.
+    let mut sig_slice = Signature::new(call_conv);
+    sig_slice.params.push(AbiParam::new(i64t));
+    sig_slice.params.push(AbiParam::new(ptr_ty));
+    sig_slice.params.push(AbiParam::new(i64t));
+    sig_slice.params.push(AbiParam::new(ptr_ty));
+    sig_slice.returns.push(AbiParam::new(i64t));
+    let slice_id = declare(module, "neovm_jit_builtin_slice", &sig_slice)?;
+    // (vmctx, variant, sym, args_ptr, nargs, out_ptr) -> status.
+    let mut sig_named = Signature::new(call_conv);
+    sig_named.params.push(AbiParam::new(ptr_ty));
+    sig_named.params.push(AbiParam::new(i64t));
+    sig_named.params.push(AbiParam::new(i64t));
+    sig_named.params.push(AbiParam::new(ptr_ty));
+    sig_named.params.push(AbiParam::new(i64t));
+    sig_named.params.push(AbiParam::new(ptr_ty));
+    sig_named.returns.push(AbiParam::new(i64t));
+    let named_id = declare(module, "neovm_jit_named_builtin", &sig_named)?;
+    // (vmctx, body, out_ptr) -> status.
+    let swe_id = declare(module, "neovm_jit_save_window_excursion", &sig_varref)?;
+    // (vmctx, sym, expected, slot_ptr, args_ptr, nargs, out_ptr) -> status.
+    let mut sig_spec = Signature::new(call_conv);
+    sig_spec.params.push(AbiParam::new(ptr_ty));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(ptr_ty));
+    sig_spec.params.push(AbiParam::new(i64t));
+    sig_spec.params.push(AbiParam::new(ptr_ty));
+    sig_spec.returns.push(AbiParam::new(i64t));
+    let call_spec_id = declare(module, "neovm_jit_call_spec", &sig_spec)?;
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -1040,19 +2100,232 @@ fn declare_rt_refs(
         varset: module.declare_func_in_func(varset_id, func),
         varbind: module.declare_func_in_func(varbind_id, func),
         unbind: module.declare_func_in_func(unbind_id, func),
+        backedge: module.declare_func_in_func(backedge_id, func),
+        save_current_buffer: module.declare_func_in_func(scb_id, func),
+        save_excursion: module.declare_func_in_func(sexc_id, func),
+        save_restriction: module.declare_func_in_func(sres_id, func),
+        unwind_protect: module.declare_func_in_func(up_id, func),
+        throw_flow: module.declare_func_in_func(throw_id, func),
+        integerp_slow: module.declare_func_in_func(intp_id, func),
+        numberp_slow: module.declare_func_in_func(nump_id, func),
+        builtin1: module.declare_func_in_func(b1_id, func),
+        builtin2: module.declare_func_in_func(b2_id, func),
+        builtin3: module.declare_func_in_func(b3_id, func),
+        push_cc: module.declare_func_in_func(pcc_id, func),
+        push_cc_raw: module.declare_func_in_func(pcc_raw_id, func),
+        push_catch: module.declare_func_in_func(pcatch_id, func),
+        pop_handler: module.declare_func_in_func(pop_handler_id, func),
+        match_handler: module.declare_func_in_func(match_id, func),
+        switch_lookup: module.declare_func_in_func(switch_id, func),
+        switch_stale: module.declare_func_in_func(switch_stale_id, func),
+        list: module.declare_func_in_func(list_id, func),
+        builtin_slice: module.declare_func_in_func(slice_id, func),
+        named_builtin: module.declare_func_in_func(named_id, func),
+        save_window_excursion: module.declare_func_in_func(swe_id, func),
+        call_spec: module.declare_func_in_func(call_spec_id, func),
     })
+}
+
+/// The per-leaf cells a precise-deopt exit writes through before returning
+/// [`STATUS_DEOPT_AT`]: the failing op's bytecode index, the live operand
+/// stack depth (the values themselves go to the spill buffer), and the number
+/// of condition frames this frame had registered at that point. `Cell` makes
+/// the native interior writes legal; the mutator is single-threaded and the
+/// values are consumed immediately after the native call returns.
+pub(crate) struct DeoptCells {
+    pub(crate) pc: core::cell::Cell<i64>,
+    pub(crate) depth: core::cell::Cell<i64>,
+    pub(crate) handlers: core::cell::Cell<i64>,
+}
+
+/// A precise-deopt exit block queued at a guard-emitting op: created (and
+/// targeted by that op's guards) during lowering, filled after the bytecode
+/// block terminates. Captures the op's index and the operand stack snapshot
+/// from BEFORE the op popped its operands — the interpreter reruns the
+/// failing op itself.
+struct PendingDeopt {
+    block: Block,
+    pc: usize,
+    handlers_len: usize,
+    stack: Vec<ClifValue>,
+}
+
+/// Queue (and return) the precise-deopt block for the guard-emitting op at
+/// bytecode index `pc`, capturing the pre-op operand stack.
+fn deopt_site(
+    fb: &mut FunctionBuilder,
+    pc: usize,
+    handlers_len: usize,
+    stack: &[ClifValue],
+    pending: &mut Vec<PendingDeopt>,
+) -> Block {
+    let block = fb.create_block();
+    pending.push(PendingDeopt {
+        block,
+        pc,
+        handlers_len,
+        stack: stack.to_vec(),
+    });
+    block
+}
+
+/// Raw addresses of the leaf's deopt cells + spill buffer, baked into the
+/// generated code as immediates (the owning Boxes are address-stable and
+/// outlive every execution of the code).
+#[derive(Clone, Copy)]
+struct DeoptRefs {
+    spill_base: i64,
+    meta_pc: i64,
+    meta_depth: i64,
+    meta_handlers: i64,
+}
+
+/// Fill the precise-deopt blocks queued within one bytecode block: spill the
+/// captured live stack, record pc/depth/handler-count, and return
+/// [`STATUS_DEOPT_AT`].
+fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut Vec<PendingDeopt>) {
+    for pd in pending.drain(..) {
+        fb.switch_to_block(pd.block);
+        fb.seal_block(pd.block);
+        let base = fb.ins().iconst(types::I64, refs.spill_base);
+        for (j, &v) in pd.stack.iter().enumerate() {
+            fb.ins().store(MemFlags::trusted(), v, base, (j * 8) as i32);
+        }
+        let pc_v = fb.ins().iconst(types::I64, pd.pc as i64);
+        let a = fb.ins().iconst(types::I64, refs.meta_pc);
+        fb.ins().store(MemFlags::trusted(), pc_v, a, 0);
+        let depth_v = fb.ins().iconst(types::I64, pd.stack.len() as i64);
+        let a = fb.ins().iconst(types::I64, refs.meta_depth);
+        fb.ins().store(MemFlags::trusted(), depth_v, a, 0);
+        let h_v = fb.ins().iconst(types::I64, pd.handlers_len as i64);
+        let a = fb.ins().iconst(types::I64, refs.meta_handlers);
+        fb.ins().store(MemFlags::trusted(), h_v, a, 0);
+        let code = fb.ins().iconst(types::I64, STATUS_DEOPT_AT);
+        fb.ins().return_(&[code]);
+    }
+}
+
+/// A handler-dispatch block queued at a `STATUS_SIGNAL` site inside a
+/// protected extent: created (and branched to) at the site, filled after the
+/// current bytecode block terminates by [`emit_pending_dispatches`]. Carries
+/// the static handler list active at the site and the live operand-stack
+/// snapshot (the site's SSA values dominate the dispatch block — it is their
+/// only successor on the signal edge).
+struct PendingDispatch {
+    block: Block,
+    handlers: Vec<HandlerStatic>,
+    stack: Vec<ClifValue>,
+}
+
+/// Where a `STATUS_SIGNAL` site should branch: with no active handlers, the
+/// shared signal-exit block (today's behavior); inside a protected extent, a
+/// per-site dispatch block that will call the match shim.
+fn signal_target_for_site(
+    fb: &mut FunctionBuilder,
+    signal_exit: &mut Option<Block>,
+    handlers: &[HandlerStatic],
+    pending: &mut Vec<PendingDispatch>,
+    stack: &[ClifValue],
+) -> Block {
+    if handlers.is_empty() {
+        return *signal_exit.get_or_insert_with(|| fb.create_block());
+    }
+    let block = fb.create_block();
+    pending.push(PendingDispatch {
+        block,
+        handlers: handlers.to_vec(),
+        stack: stack.to_vec(),
+    });
+    block
+}
+
+/// Fill the dispatch blocks queued by [`signal_target_for_site`] within one
+/// bytecode block (called after its terminator, when the builder can switch
+/// blocks). Each dispatch: root the live operand stack (the match shim can run
+/// lisp — unwind-protect cleanups, handler-bind handlers, signal hooks — and
+/// GC), call the match shim, and map the returned ordinal (`m` misses from the
+/// innermost handler; -1 = propagate) onto the statically known handler
+/// targets: re-materialize the handler's entry stack (the current model values
+/// below its push depth + the error value the shim wrote through the result
+/// slot) and jump to its block.
+fn emit_pending_dispatches(
+    fb: &mut FunctionBuilder,
+    rt: &RtCtx,
+    signal_exit: &mut Option<Block>,
+    vars: &[Variable],
+    block_for: &HashMap<usize, Block>,
+    pending: &mut Vec<PendingDispatch>,
+) -> Result<(), CompileError> {
+    for pd in pending.drain(..) {
+        fb.switch_to_block(pd.block);
+        fb.seal_block(pd.block);
+        let saved = if pd.stack.is_empty() {
+            None
+        } else {
+            let c = fb.ins().call(rt.refs.gc_save, &[]);
+            let s = fb.inst_results(c)[0];
+            for &v in pd.stack.iter() {
+                fb.ins().call(rt.refs.gc_push, &[v]);
+            }
+            Some(s)
+        };
+        let vmctx = fb.use_var(rt.vmctx_var);
+        let ours = fb.ins().iconst(types::I64, pd.handlers.len() as i64);
+        let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+        let call = fb
+            .ins()
+            .call(rt.refs.match_handler, &[vmctx, ours, out_addr]);
+        let idx = fb.inst_results(call)[0];
+        if let Some(s) = saved {
+            fb.ins().call(rt.refs.gc_restore, &[s]);
+        }
+        // Compare chain over the (small) static handler list: shim ordinal
+        // m counts misses from the top, so m maps to handlers[len-1-m].
+        let k = pd.handlers.len();
+        for m in 0..k {
+            let (target, push_depth) = pd.handlers[k - 1 - m];
+            if push_depth > pd.stack.len() {
+                // The byte-compiler keeps the operand stack at or above the
+                // protected base inside the extent; anything else is exotic —
+                // bail to the interpreter.
+                return Err(CompileError::UnsupportedOp("handler-depth"));
+            }
+            let hit = fb.create_block();
+            let next = fb.create_block();
+            let is_m = fb.ins().icmp_imm(IntCC::Equal, idx, m as i64);
+            fb.ins().brif(is_m, hit, &[], next, &[]);
+            fb.switch_to_block(hit);
+            fb.seal_block(hit);
+            for (j, &v) in pd.stack.iter().take(push_depth).enumerate() {
+                fb.def_var(vars[j], v);
+            }
+            let err = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            fb.def_var(vars[push_depth], err);
+            fb.ins().jump(block_for[&target], &[]);
+            fb.switch_to_block(next);
+            fb.seal_block(next);
+        }
+        let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+        fb.ins().jump(se, &[]);
+    }
+    Ok(())
 }
 
 /// Lower one non-control-flow opcode, updating the compile-time operand `stack`
 /// (the live CLIF SSA values within the current basic block). Terminators
 /// (`Return`/`Goto`/`GotoIf*`) are handled by the block lowerer before this.
+#[allow(clippy::too_many_arguments)]
 fn lower_simple_op(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    pc: usize,
+    deopt_sites: &mut Vec<PendingDeopt>,
     signal_exit: &mut Option<Block>,
     constants: &[Value],
     stack: &mut Vec<ClifValue>,
     rt: Option<&RtCtx>,
+    handlers: &[HandlerStatic],
+    pending: &mut Vec<PendingDispatch>,
+    spec: Option<(u32, u64, i64)>,
     op: &Op,
 ) -> Result<(), CompileError> {
     match op {
@@ -1109,21 +2382,24 @@ fn lower_simple_op(
             }
         }
         Op::Add | Op::Sub => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_sub = matches!(op, Op::Sub);
-            stack.push(lower_fixnum_binop(fb, deopt, is_sub, a, b));
+            stack.push(lower_fixnum_binop(fb, dsite, is_sub, a, b));
         }
         Op::Mul => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            stack.push(lower_fixnum_mul(fb, deopt, a, b));
+            stack.push(lower_fixnum_mul(fb, dsite, a, b));
         }
         Op::Div | Op::Rem => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_rem = matches!(op, Op::Rem);
-            stack.push(lower_fixnum_divrem(fb, deopt, is_rem, a, b));
+            stack.push(lower_fixnum_divrem(fb, dsite, is_rem, a, b));
         }
         Op::Eq => {
             // Bit-equal -> t natively; differing bits -> the read-only slow-path
@@ -1188,6 +2464,7 @@ fn lower_simple_op(
             stack.push(fb.use_var(res));
         }
         Op::Add1 | Op::Sub1 | Op::Negate => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let kind = match op {
                 Op::Add1 => UnaryKind::Add1,
@@ -1195,9 +2472,10 @@ fn lower_simple_op(
                 Op::Negate => UnaryKind::Negate,
                 _ => unreachable!("matched Add1/Sub1/Negate above"),
             };
-            stack.push(lower_fixnum_unop(fb, deopt, kind, a));
+            stack.push(lower_fixnum_unop(fb, dsite, kind, a));
         }
         Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let cc = match op {
@@ -1208,7 +2486,7 @@ fn lower_simple_op(
                 Op::Geq => IntCC::SignedGreaterThanOrEqual,
                 _ => unreachable!("matched comparison ops above"),
             };
-            stack.push(lower_fixnum_compare(fb, deopt, cc, a, b));
+            stack.push(lower_fixnum_compare(fb, dsite, cc, a, b));
         }
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -1222,9 +2500,72 @@ fn lower_simple_op(
             stack.push(lower_predicate(fb, kind, a));
         }
         Op::Car | Op::Cdr => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_cdr = matches!(op, Op::Cdr);
-            stack.push(lower_car_cdr(fb, deopt, is_cdr, a));
+            stack.push(lower_car_cdr(fb, Some(dsite), is_cdr, false, a));
+        }
+        Op::CarSafe | Op::CdrSafe => {
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let is_cdr = matches!(op, Op::CdrSafe);
+            stack.push(lower_car_cdr(fb, None, is_cdr, true, a));
+        }
+        Op::Max | Op::Min => {
+            // Both fixnum -> keep the original tagged operand selected by the
+            // untagged comparison (exact interpreter parity: fixnum_ge ->
+            // a-else-b for max, fixnum_le -> a-else-b for min); otherwise deopt
+            // to the interpreter's number-coercing builtin.
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
+            let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            guard_fixnum(fb, dsite, a);
+            guard_fixnum(fb, dsite, b);
+            let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+            let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+            let cc = if matches!(op, Op::Max) {
+                IntCC::SignedGreaterThanOrEqual
+            } else {
+                IntCC::SignedLessThanOrEqual
+            };
+            let keep_a = fb.ins().icmp(cc, av, bv);
+            stack.push(fb.ins().select(keep_a, a, b));
+        }
+        Op::Integerp | Op::Numberp => {
+            // Fixnum tag -> t natively; anything else (bignum/float/non-number)
+            // through the context-free slow shim.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("predicate"))?;
+            let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let shim = if matches!(op, Op::Integerp) {
+                rt.refs.integerp_slow
+            } else {
+                rt.refs.numberp_slow
+            };
+            let res = fb.declare_var(types::I64);
+            let fast = fb.create_block();
+            let slow = fb.create_block();
+            let merge = fb.create_block();
+            let tagbits = fb.ins().band_imm(a, FIXNUM_CHECK_MASK as i64);
+            let is_fix = fb
+                .ins()
+                .icmp_imm(IntCC::Equal, tagbits, FIXNUM_CHECK_VALUE as i64);
+            fb.ins().brif(is_fix, fast, &[], slow, &[]);
+
+            fb.switch_to_block(fast);
+            fb.seal_block(fast);
+            let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
+            fb.def_var(res, t);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(slow);
+            fb.seal_block(slow);
+            let call = fb.ins().call(shim, &[a]);
+            let slow_res = fb.inst_results(call)[0];
+            fb.def_var(res, slow_res);
+            fb.ins().jump(merge, &[]);
+
+            fb.switch_to_block(merge);
+            fb.seal_block(merge);
+            stack.push(fb.use_var(res));
         }
         Op::VarRef(idx) => {
             // Read through the runtime's variable machinery (buffer-locals,
@@ -1251,7 +2592,7 @@ fn lower_simple_op(
             if let Some(s) = saved {
                 fb.ins().call(rt.refs.gc_restore, &[s]);
             }
-            let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+            let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], se, &[]);
@@ -1283,7 +2624,7 @@ fn lower_simple_op(
             if let Some(s) = saved {
                 fb.ins().call(rt.refs.gc_restore, &[s]);
             }
-            let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+            let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], se, &[]);
@@ -1329,16 +2670,29 @@ fn lower_simple_op(
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
             let n_val = fb.ins().iconst(types::I64, n as i64);
-            let call = fb
-                .ins()
-                .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
+            // Speculated direct call: the callee slot holds a constant symbol
+            // whose compile-time binding was a bytecode object — call through
+            // the epoch-validated spec shim instead (Apply never speculates).
+            let spec = spec.filter(|_| matches!(op, Op::Call(_)));
+            let call = if let Some((sym, expected, slot_ptr)) = spec {
+                let sym_v = fb.ins().iconst(types::I64, sym as i64);
+                let exp_v = fb.ins().iconst(types::I64, expected as i64);
+                let slot_v = fb.ins().iconst(types::I64, slot_ptr);
+                fb.ins().call(
+                    rt.refs.call_spec,
+                    &[vmctx, sym_v, exp_v, slot_v, args_addr, n_val, out_addr],
+                )
+            } else {
+                fb.ins()
+                    .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr])
+            };
             let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
                 fb.ins().call(rt.refs.gc_restore, &[s]);
             }
             // STATUS_OK -> continue with the result; anything else from the call
             // shim is STATUS_SIGNAL -> propagate via the shared signal block.
-            let se = *signal_exit.get_or_insert_with(|| fb.create_block());
+            let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], se, &[]);
@@ -1392,7 +2746,249 @@ fn lower_simple_op(
             let n_v = fb.ins().iconst(types::I64, *n as i64);
             fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
         }
-        other => return Err(CompileError::UnsupportedOp(op_category(other))),
+        Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => {
+            // Infallible specpdl records (the interpreter arms mirrored in the
+            // shims); restored by the matching Unbind or the frame unwind.
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let shim = match op {
+                Op::SaveCurrentBuffer => rt.refs.save_current_buffer,
+                Op::SaveExcursion => rt.refs.save_excursion,
+                Op::SaveRestriction => rt.refs.save_restriction,
+                _ => unreachable!("matched Save* above"),
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            fb.ins().call(shim, &[vmctx]);
+        }
+        Op::UnwindProtectPop => {
+            // Pop the cleanup form and register the unwind-protect record
+            // (infallible; the cleanup runs via the shared unbind machinery).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
+            let forms = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            let vmctx = fb.use_var(rt.vmctx_var);
+            fb.ins().call(rt.refs.unwind_protect, &[vmctx, forms]);
+        }
+        Op::SaveWindowExcursion => {
+            // Evaluate the popped body under a window-configuration
+            // save/restore via the shim (interpreter arm parity).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+            let body = stack.pop().ok_or(CompileError::StackUnderflow)?;
+            // Root remaining live values: the body runs arbitrary lisp.
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+            let call = fb
+                .ins()
+                .call(rt.refs.save_window_excursion, &[vmctx, body, out_addr]);
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            stack.push(result);
+        }
+        Op::CallBuiltin(..) | Op::CallBuiltinSym(..) | Op::Aset => {
+            // Named-builtin escape hatch + aset: route through the
+            // Vm::*_for_jit helpers mirroring the interpreter arms
+            // (override-aware / advice-bypassing / writeback / quit poll).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+            let (variant, sym, nargs): (i64, u32, usize) = match op {
+                Op::CallBuiltin(name_idx, n) => {
+                    (0, const_sym_id(constants, *name_idx)?, *n as usize)
+                }
+                Op::CallBuiltinSym(sym, n) => (1, sym.0, *n as usize),
+                Op::Aset => (2, 0, 3),
+                _ => unreachable!("matched named-builtin ops above"),
+            };
+            if stack.len() < nargs {
+                return Err(CompileError::StackUnderflow);
+            }
+            let at = stack.len() - nargs;
+            for (i, &v) in stack[at..].iter().enumerate() {
+                fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+            }
+            stack.truncate(at);
+            // Root remaining live values (arbitrary lisp may run; the shim
+            // roots the operands themselves).
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let variant_v = fb.ins().iconst(types::I64, variant);
+            let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
+            let n_val = fb.ins().iconst(types::I64, nargs as i64);
+            let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+            let call = fb.ins().call(
+                rt.refs.named_builtin,
+                &[vmctx, variant_v, sym_v, args_addr, n_val, out_addr],
+            );
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            stack.push(result);
+        }
+        Op::List(n) => {
+            // N-ary list builder — infallible allocation through the shim
+            // (the interpreter's Value::list_from_slice on the stack slice).
+            let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+            let n = *n as usize;
+            if stack.len() < n {
+                return Err(CompileError::StackUnderflow);
+            }
+            let at = stack.len() - n;
+            for (i, &v) in stack[at..].iter().enumerate() {
+                fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+            }
+            stack.truncate(at);
+            // Root remaining live values (the allocation may GC; the shim
+            // roots the operands themselves).
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
+            let n_val = fb.ins().iconst(types::I64, n as i64);
+            let call = fb.ins().call(rt.refs.list, &[args_addr, n_val]);
+            let result = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            stack.push(result);
+        }
+        other => {
+            // Slice-shaped builtins (nconc/concat/substring): spill the
+            // operands and call the generic slice shim with the table index
+            // baked in — the SAME builtins::*_slice function the interpreter
+            // arm calls.
+            if let Some((nargs, idx, _mutates)) = slice_builtin_spec(other) {
+                let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+                if stack.len() < nargs {
+                    return Err(CompileError::StackUnderflow);
+                }
+                let at = stack.len() - nargs;
+                for (i, &v) in stack[at..].iter().enumerate() {
+                    fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                }
+                stack.truncate(at);
+                let saved = if stack.is_empty() {
+                    None
+                } else {
+                    let c = fb.ins().call(rt.refs.gc_save, &[]);
+                    let s = fb.inst_results(c)[0];
+                    for &v in stack.iter() {
+                        fb.ins().call(rt.refs.gc_push, &[v]);
+                    }
+                    Some(s)
+                };
+                let idx_v = fb.ins().iconst(types::I64, idx as i64);
+                let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
+                let n_val = fb.ins().iconst(types::I64, nargs as i64);
+                let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+                let call = fb
+                    .ins()
+                    .call(rt.refs.builtin_slice, &[idx_v, args_addr, n_val, out_addr]);
+                let status = fb.inst_results(call)[0];
+                if let Some(s) = saved {
+                    fb.ins().call(rt.refs.gc_restore, &[s]);
+                }
+                let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+                let cont = fb.create_block();
+                let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+                fb.ins().brif(ok, cont, &[], se, &[]);
+                fb.switch_to_block(cont);
+                fb.seal_block(cont);
+                let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+                stack.push(result);
+                return Ok(());
+            }
+            // Direct-builtin ops: pop the operands, root the rest of the live
+            // frame, and call the arity-shaped generic shim with the table
+            // index baked in — the shim invokes the SAME builtins::* function
+            // the interpreter arm calls.
+            let Some((arity, idx, _mutates)) = direct_builtin_spec(other) else {
+                return Err(CompileError::UnsupportedOp(op_category(other)));
+            };
+            let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
+            let arity = arity as usize;
+            if stack.len() < arity {
+                return Err(CompileError::StackUnderflow);
+            }
+            let at = stack.len() - arity;
+            let operands: Vec<ClifValue> = stack[at..].to_vec();
+            stack.truncate(at);
+            // Root remaining live values (the builtin may allocate/GC; the
+            // shim roots the operands themselves).
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
+            let vmctx = fb.use_var(rt.vmctx_var);
+            let idx_v = fb.ins().iconst(types::I64, idx as i64);
+            let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
+            let shim = match arity {
+                1 => rt.refs.builtin1,
+                2 => rt.refs.builtin2,
+                _ => rt.refs.builtin3,
+            };
+            let mut call_args = vec![vmctx, idx_v];
+            call_args.extend(operands);
+            call_args.push(out_addr);
+            let call = fb.ins().call(shim, &call_args);
+            let status = fb.inst_results(call)[0];
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
+            let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+            let cont = fb.create_block();
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], se, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
+            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            stack.push(result);
+        }
     }
     Ok(())
 }
@@ -1400,7 +2996,18 @@ fn lower_simple_op(
 /// Minimum operand-stack depth a simple op requires, and its net depth change.
 /// `Err` for anything outside the supported simple subset.
 fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
+    if let Some((arity, _, _)) = direct_builtin_spec(op) {
+        // N operands -> one result.
+        return Ok((arity as usize, 1 - arity as i64));
+    }
+    if let Some((nargs, _, _)) = slice_builtin_spec(op) {
+        return Ok((nargs, 1 - nargs as i64));
+    }
     Ok(match op {
+        Op::List(n) => (*n as usize, 1 - *n as i64),
+        Op::CallBuiltin(_, n) | Op::CallBuiltinSym(_, n) => (*n as usize, 1 - *n as i64),
+        Op::Aset => (3, -2),
+        Op::SaveWindowExcursion => (1, 0),
         Op::Constant(_) | Op::Nil | Op::True => (0, 1),
         Op::StackRef(n) => (*n as usize + 1, 1),
         Op::StackSet(n) => (*n as usize + 1, -1),
@@ -1428,7 +3035,9 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         | Op::Geq => (2, -1),
         Op::Add1 | Op::Sub1 | Op::Negate => (1, 0),
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp | Op::Symbolp => (1, 0),
-        Op::Car | Op::Cdr => (1, 0),
+        Op::Integerp | Op::Numberp => (1, 0),
+        Op::Car | Op::Cdr | Op::CarSafe | Op::CdrSafe => (1, 0),
+        Op::Max | Op::Min => (2, -1),
         Op::Cons => (2, -1),
         // [func a1 .. aN] -> [result]
         Op::Call(n) | Op::Apply(n) => (*n as usize + 1, -(*n as i64)),
@@ -1436,59 +3045,160 @@ fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
         Op::VarSet(_) => (1, -1),
         Op::VarBind(_) => (1, -1),
         Op::Unbind(_) => (0, 0),
+        Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => (0, 0),
+        Op::UnwindProtectPop => (1, -1),
         other => return Err(CompileError::UnsupportedOp(op_category(other))),
     })
 }
 
+/// A statically tracked active handler: `(handler target instruction, operand
+/// stack depth at the push)`. The list at any program point is the stack of
+/// `PushConditionCase`/`PushCatch` frames not yet popped, outermost first.
+type HandlerStatic = (usize, usize);
+
+/// A speculated direct-call site: an `Op::Call` whose callee slot provably
+/// holds the constant symbol `sym`, fbound at compile time to the bytecode
+/// object `expected_bits`. `slot` indexes the leaf's armed-epoch slots.
+struct SpecSite {
+    sym: u32,
+    expected_bits: u64,
+    slot: usize,
+}
+
+/// Find direct-call speculation sites: the byte-compiler's standard call
+/// shape `Constant(f) arg-push* Call(n)` where every op between the callee
+/// push and its call only PUSHES new slots (Constant/Nil/True/Dup/StackRef —
+/// the callee slot can't be rewritten), no jump target lands inside the
+/// window, and `f` is currently fbound to a BYTECODE object.
+///
+/// Bytecode callees only for now: an epoch-equal check on a bytecode binding
+/// proves it still names the same immutable bytecode object. (Subr-entry
+/// rewrites — `register_global_subr_entry` — now also bump function_epoch via
+/// `defsubr_with_entry`, so extending speculation to subr bindings is
+/// unlocked; it just isn't implemented or measured yet.)
+fn find_spec_sites(
+    ops: &[Op],
+    constants: &[Value],
+    leaders: &[usize],
+    obarray: &Obarray,
+) -> HashMap<usize, SpecSite> {
+    let mut sites = HashMap::new();
+    let mut next_slot = 0usize;
+    'outer: for i in 0..ops.len() {
+        let Op::Constant(cidx) = &ops[i] else {
+            continue;
+        };
+        let Some(sym_val) = constants.get(*cidx as usize) else {
+            continue;
+        };
+        let Some(sym_id) = sym_val.as_symbol_id() else {
+            continue;
+        };
+        let mut pushes = 0usize;
+        let mut j = i + 1;
+        let call_idx = loop {
+            if j >= ops.len() || leaders.binary_search(&j).is_ok() {
+                continue 'outer;
+            }
+            match ops[j] {
+                Op::Constant(_) | Op::Nil | Op::True | Op::Dup | Op::StackRef(_) => {
+                    pushes += 1;
+                    j += 1;
+                }
+                Op::Call(n) if n as usize == pushes => break j,
+                _ => continue 'outer,
+            }
+        };
+        let Some(binding) = obarray.symbol_function_id(sym_id) else {
+            continue;
+        };
+        if binding.get_bytecode_data().is_none() {
+            continue;
+        }
+        sites.insert(
+            call_idx,
+            SpecSite {
+                sym: sym_id.0,
+                expected_bits: binding.bits() as u64,
+                slot: next_slot,
+            },
+        );
+        next_slot += 1;
+    }
+    sites
+}
+
+/// Resolve the static target set of the `Op::Switch` at `i`: the byte
+/// compiler always pushes the jump table as a constant immediately before the
+/// switch, so require `ops[i-1]` to be that `Constant`, the constant to be a
+/// hash table, and every table value to be a fixnum address resolving (through
+/// the GNU byte-offset map when present) to an in-range instruction index.
+/// Returns deduplicated `(raw address, instruction index)` pairs; anything
+/// else bails to the interpreter.
+fn switch_static_targets(
+    ops: &[Op],
+    constants: &[Value],
+    offset_map: Option<&[GnuByteOffsetMapEntry]>,
+    i: usize,
+) -> Result<Vec<(i64, usize)>, CompileError> {
+    let table = match i.checked_sub(1).map(|p| &ops[p]) {
+        Some(Op::Constant(idx)) => constants
+            .get(*idx as usize)
+            .ok_or(CompileError::BadOperand)?,
+        _ => return Err(CompileError::UnsupportedOp("switch-dynamic")),
+    };
+    let Some(ht) = table.as_hash_table() else {
+        return Err(CompileError::UnsupportedOp("switch-dynamic"));
+    };
+    let mut out: Vec<(i64, usize)> = Vec::with_capacity(ht.data.len());
+    for v in ht.data.values() {
+        let ValueKind::Fixnum(raw) = v.kind() else {
+            return Err(CompileError::UnsupportedOp("switch-dynamic"));
+        };
+        let raw_addr = usize::try_from(raw).map_err(|_| CompileError::BadOperand)?;
+        let target = match offset_map {
+            Some(map) => map
+                .binary_search_by_key(&raw_addr, |e| e.byte_offset)
+                .map(|k| map[k].instruction_index)
+                .map_err(|_| CompileError::BadOperand)?,
+            None => raw_addr,
+        };
+        if target >= ops.len() {
+            return Err(CompileError::BadOperand);
+        }
+        if !out.iter().any(|&(r, _)| r == raw) {
+            out.push((raw, target));
+        }
+    }
+    Ok(out)
+}
+
 /// Basic-block analysis: sorted block leaders, the operand-stack depth at each
-/// block's entry, and the max depth seen at any block boundary.
+/// block's entry, the active-handler stack at each block's entry, the resolved
+/// static target sets of every `Op::Switch`, and the max depth seen at any
+/// block boundary.
 struct Cfg {
     leaders: Vec<usize>,
     entry_depth: HashMap<usize, usize>,
+    entry_handlers: HashMap<usize, Vec<HandlerStatic>>,
+    switch_targets: HashMap<usize, Vec<(i64, usize)>>,
     max_depth: usize,
 }
 
-/// True iff lowering this op emits a speculation guard (a possible deopt). Used
-/// by the poisoning analysis: a guard reachable after a `Call` would make
-/// rerun-on-deopt unsound (the call's side effects already happened), so such
-/// bodies bail to the interpreter instead of compiling.
-fn emits_guard(op: &Op) -> bool {
-    matches!(
-        op,
-        Op::Add
-            | Op::Sub
-            | Op::Mul
-            | Op::Div
-            | Op::Rem
-            | Op::Add1
-            | Op::Sub1
-            | Op::Negate
-            | Op::Eqlsign
-            | Op::Lss
-            | Op::Gtr
-            | Op::Leq
-            | Op::Geq
-            | Op::Car
-            | Op::Cdr
-    )
-}
-
 /// Record that `target` is entered with stack depth `d`, outstanding dynamic
-/// bind count `binds`, and side-effect state `poisoned`, scheduling (or
-/// re-scheduling) it for analysis. Depth and bind count must be non-negative
-/// and consistent across all paths (the byte-compiler guarantees a single
-/// static value per program point); poison merges with OR and forces a re-visit
-/// when it newly turns on, so the fixpoint is reached in <= 2 visits per block.
-#[allow(clippy::too_many_arguments)]
+/// bind count `binds`, and active handler stack `handlers`, scheduling it for
+/// analysis on first sight. Depth, bind count, and handler stack must be
+/// non-negative and consistent across all paths (the byte-compiler guarantees
+/// a single static value per program point), so each block is analyzed once.
 fn push_succ(
     entry_depth: &mut HashMap<usize, usize>,
-    entry_poison: &mut HashMap<usize, bool>,
     entry_binds: &mut HashMap<usize, usize>,
+    entry_handlers: &mut HashMap<usize, Vec<HandlerStatic>>,
     work: &mut Vec<usize>,
     target: usize,
     d: i64,
-    poisoned: bool,
     binds: usize,
+    handlers: &[HandlerStatic],
 ) -> Result<(), CompileError> {
     if d < 0 {
         return Err(CompileError::StackUnderflow);
@@ -1502,17 +3212,18 @@ fn push_succ(
             if entry_binds.get(&target).copied().unwrap_or(0) != binds {
                 return Err(CompileError::UnsupportedOp("inconsistent bind depth"));
             }
-            let prior = entry_poison.get(&target).copied().unwrap_or(false);
-            if poisoned && !prior {
-                entry_poison.insert(target, true);
-                work.push(target);
+            if entry_handlers
+                .get(&target)
+                .is_none_or(|existing| existing != handlers)
+            {
+                return Err(CompileError::UnsupportedOp("inconsistent handler stack"));
             }
             Ok(())
         }
         None => {
             entry_depth.insert(target, d);
-            entry_poison.insert(target, poisoned);
             entry_binds.insert(target, binds);
+            entry_handlers.insert(target, handlers.to_vec());
             work.push(target);
             Ok(())
         }
@@ -1522,7 +3233,12 @@ fn push_succ(
 /// Partition `ops` into basic blocks and compute the operand-stack depth at each
 /// block boundary, validating that every op is supported, jump targets are in
 /// range, depth never underflows, and every path ends in `Return`.
-fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
+fn analyze_cfg(
+    ops: &[Op],
+    constants: &[Value],
+    offset_map: Option<&[GnuByteOffsetMapEntry]>,
+    arity: usize,
+) -> Result<Cfg, CompileError> {
     let n = ops.len();
     if n == 0 {
         return Err(CompileError::NoReturn);
@@ -1531,9 +3247,23 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
     // 1. Block leaders: index 0, every jump target, and every index following a
     //    branch/goto/return.
     let mut leader_set: BTreeSet<usize> = BTreeSet::new();
+    let mut switch_targets: HashMap<usize, Vec<(i64, usize)>> = HashMap::new();
     leader_set.insert(0);
     for (i, op) in ops.iter().enumerate() {
         match op {
+            Op::Switch => {
+                // Resolve the static target set now (bails for non-constant
+                // tables); every target is a leader, plus the miss
+                // fall-through.
+                let targets = switch_static_targets(ops, constants, offset_map, i)?;
+                for &(_, t) in &targets {
+                    leader_set.insert(t);
+                }
+                if i + 1 < n {
+                    leader_set.insert(i + 1);
+                }
+                switch_targets.insert(i, targets);
+            }
             Op::Goto(t)
             | Op::GotoIfNil(t)
             | Op::GotoIfNotNil(t)
@@ -1548,7 +3278,19 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     leader_set.insert(i + 1);
                 }
             }
-            Op::Return => {
+            // Handler pushes end their block (the lowering emits an anchor
+            // edge to the handler target) and make the target a leader.
+            Op::PushConditionCase(t) | Op::PushConditionCaseRaw(t) | Op::PushCatch(t) => {
+                let t = *t as usize;
+                if t >= n {
+                    return Err(CompileError::BadOperand);
+                }
+                leader_set.insert(t);
+                if i + 1 < n {
+                    leader_set.insert(i + 1);
+                }
+            }
+            Op::Return | Op::Throw => {
                 if i + 1 < n {
                     leader_set.insert(i + 1);
                 }
@@ -1559,23 +3301,22 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
     let leaders: Vec<usize> = leader_set.into_iter().collect();
     let next_leader = |idx: usize| leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
 
-    // 2. Propagate entry depths + call-poisoning over the CFG (worklist).
-    // "Poisoned" = a `Call` may already have executed on some path reaching this
-    // point; encountering a guard-emitting op while poisoned makes
-    // rerun-on-deopt unsound, so such bodies bail.
+    // 2. Propagate entry depths over the CFG (worklist). Guards deopt at a
+    // PRECISE pc (the interpreter resumes mid-function with the live state),
+    // so side effects before a guard are fine — no poisoning dimension.
     let mut entry_depth: HashMap<usize, usize> = HashMap::new();
-    let mut entry_poison: HashMap<usize, bool> = HashMap::new();
     let mut entry_binds: HashMap<usize, usize> = HashMap::new();
+    let mut entry_handlers: HashMap<usize, Vec<HandlerStatic>> = HashMap::new();
     entry_depth.insert(0, arity);
-    entry_poison.insert(0, false);
     entry_binds.insert(0, 0);
+    entry_handlers.insert(0, Vec::new());
     let mut work = vec![0usize];
     let mut max_depth = arity;
 
     while let Some(l) = work.pop() {
         let mut cur = entry_depth[&l] as i64;
-        let mut poisoned = entry_poison.get(&l).copied().unwrap_or(false);
         let mut binds = entry_binds.get(&l).copied().unwrap_or(0);
+        let mut handlers = entry_handlers.get(&l).cloned().unwrap_or_default();
         let end = next_leader(l);
         let mut terminated = false;
         for op in &ops[l..end] {
@@ -1591,16 +3332,25 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     terminated = true;
                     break;
                 }
+                Op::Throw => {
+                    // [tag value] -> non-local exit; a terminator for compiled
+                    // code (no local handlers exist — handler opcodes bail).
+                    if cur < 2 {
+                        return Err(CompileError::StackUnderflow);
+                    }
+                    terminated = true;
+                    break;
+                }
                 Op::Goto(t) => {
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
+                        &mut entry_handlers,
                         &mut work,
                         *t as usize,
                         cur,
-                        poisoned,
                         binds,
+                        &handlers,
                     )?;
                     terminated = true;
                     break;
@@ -1612,24 +3362,24 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     cur -= 1; // pop the condition
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
+                        &mut entry_handlers,
                         &mut work,
                         *t as usize,
                         cur,
-                        poisoned,
                         binds,
+                        &handlers,
                     )?;
                     // fall-through
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
+                        &mut entry_handlers,
                         &mut work,
                         end,
                         cur,
-                        poisoned,
                         binds,
+                        &handlers,
                     )?;
                     terminated = true;
                     break;
@@ -1641,31 +3391,121 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                     // The jump preserves TOS (depth cur); the fall-through pops it.
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
+                        &mut entry_handlers,
                         &mut work,
                         *t as usize,
                         cur,
-                        poisoned,
                         binds,
+                        &handlers,
                     )?;
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
+                        &mut entry_handlers,
                         &mut work,
                         end,
                         cur - 1,
-                        poisoned,
                         binds,
+                        &handlers,
                     )?;
                     terminated = true;
                     break;
                 }
-                other => {
-                    if poisoned && emits_guard(other) {
-                        return Err(CompileError::UnsupportedOp("guard-after-call"));
+                Op::Switch => {
+                    // [dispatch table] -> jump to a static target or fall
+                    // through on a miss. The target set was resolved in the
+                    // leader pass.
+                    if end >= n {
+                        return Err(CompileError::NoReturn);
                     }
+                    if cur < 2 {
+                        return Err(CompileError::StackUnderflow);
+                    }
+                    cur -= 2;
+                    // The Switch is the last op of its block (pass 1 made the
+                    // following index a leader), so `end` is the fall-through.
+                    let i = end - 1;
+                    for &(_, t) in switch_targets.get(&i).expect("resolved in pass 1") {
+                        push_succ(
+                            &mut entry_depth,
+                            &mut entry_binds,
+                            &mut entry_handlers,
+                            &mut work,
+                            t,
+                            cur,
+                            binds,
+                            &handlers,
+                        )?;
+                    }
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_binds,
+                        &mut entry_handlers,
+                        &mut work,
+                        end,
+                        cur,
+                        binds,
+                        &handlers,
+                    )?;
+                    terminated = true;
+                    break;
+                }
+                Op::PushConditionCase(t) | Op::PushConditionCaseRaw(t) | Op::PushCatch(t) => {
+                    if end >= n {
+                        // A push as the final op would fall off the end.
+                        return Err(CompileError::NoReturn);
+                    }
+                    // Raw/Catch consume the conditions/tag operand first.
+                    if !matches!(op, Op::PushConditionCase(_)) {
+                        if cur < 1 {
+                            return Err(CompileError::StackUnderflow);
+                        }
+                        cur -= 1;
+                    }
+                    // Handler edge: entered with the push-time stack plus the
+                    // error value, the handler stack as of BEFORE this push
+                    // (the matched frame and everything above it were popped
+                    // by the unwind), and the push-time bind count (the catch
+                    // restored the specpdl/bind state).
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_binds,
+                        &mut entry_handlers,
+                        &mut work,
+                        *t as usize,
+                        cur + 1,
+                        binds,
+                        &handlers,
+                    )?;
+                    if cur as usize + 1 > max_depth {
+                        max_depth = cur as usize + 1;
+                    }
+                    handlers.push((*t as usize, cur as usize));
+                    // Fall-through edge: same stack, handler now active.
+                    push_succ(
+                        &mut entry_depth,
+                        &mut entry_binds,
+                        &mut entry_handlers,
+                        &mut work,
+                        end,
+                        cur,
+                        binds,
+                        &handlers,
+                    )?;
+                    terminated = true;
+                    break;
+                }
+                Op::PopHandler => {
+                    // Normal exit from a protected extent: drop the innermost
+                    // static handler. No stack effect; non-poisoning (the pop
+                    // is a silent registration change — a deopt-rerun re-pushes
+                    // and re-pops it after the frame unwind truncated ours).
+                    if handlers.pop().is_none() {
+                        return Err(CompileError::UnsupportedOp("unbalanced-pophandler"));
+                    }
+                }
+                other => {
                     let (needs, delta) = simple_effect(other)?;
                     if cur < needs as i64 {
                         return Err(CompileError::StackUnderflow);
@@ -1675,7 +3515,11 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                         max_depth = cur as usize;
                     }
                     match other {
-                        Op::VarBind(_) => binds += 1,
+                        Op::VarBind(_)
+                        | Op::SaveCurrentBuffer
+                        | Op::SaveExcursion
+                        | Op::SaveRestriction
+                        | Op::UnwindProtectPop => binds += 1,
                         Op::Unbind(un) => {
                             let un = *un as usize;
                             if un > binds {
@@ -1688,14 +3532,6 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
                         }
                         _ => {}
                     }
-                    if matches!(
-                        other,
-                        Op::Call(_) | Op::Apply(_) | Op::VarSet(_) | Op::VarBind(_) | Op::Unbind(_)
-                    ) {
-                        // Side effects (calls, assignment, dynamic-binding
-                        // push/pop): a later deopt-rerun would replay them.
-                        poisoned = true;
-                    }
                 }
             }
         }
@@ -1707,13 +3543,13 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
             }
             push_succ(
                 &mut entry_depth,
-                &mut entry_poison,
                 &mut entry_binds,
+                &mut entry_handlers,
                 &mut work,
                 end,
                 cur,
-                poisoned,
                 binds,
+                &handlers,
             )?;
         }
     }
@@ -1724,6 +3560,8 @@ fn analyze_cfg(ops: &[Op], arity: usize) -> Result<Cfg, CompileError> {
     Ok(Cfg {
         leaders,
         entry_depth,
+        entry_handlers,
+        switch_targets,
         max_depth,
     })
 }
@@ -1734,6 +3572,61 @@ fn write_stack_to_vars(fb: &mut FunctionBuilder, vars: &[Variable], stack: &[Cli
     for (k, &v) in stack.iter().enumerate() {
         fb.def_var(vars[k], v);
     }
+}
+
+/// Emit a backward jump with the interpreter's `branch_to!` parity: bump the
+/// u8 quit counter; on every wrap (each 255th backward jump — counter resets to
+/// 1, exactly like the interpreter) root the live operand stack and call the
+/// back-edge service poll (GC safepoint + `maybe_quit`), propagating a signaled
+/// `Flow` via the shared signal-exit block. The caller has already written the
+/// operand stack to `vars` (the target's entry state).
+#[allow(clippy::too_many_arguments)]
+fn emit_backedge_jump(
+    fb: &mut FunctionBuilder,
+    rt: &RtCtx,
+    counter_slot: StackSlot,
+    signal_exit: &mut Option<Block>,
+    vars: &[Variable],
+    target_depth: usize,
+    target_block: Block,
+    handlers: &[HandlerStatic],
+    pending: &mut Vec<PendingDispatch>,
+) {
+    let c = fb.ins().stack_load(types::I64, counter_slot, 0);
+    let c1 = fb.ins().iadd_imm(c, 1);
+    let c1m = fb.ins().band_imm(c1, 0xFF);
+    fb.ins().stack_store(c1m, counter_slot, 0);
+    let wrapped = fb.ins().icmp_imm(IntCC::Equal, c1m, 0);
+    let poll = fb.create_block();
+    fb.ins().brif(wrapped, poll, &[], target_block, &[]);
+
+    fb.switch_to_block(poll);
+    fb.seal_block(poll);
+    let one = fb.ins().iconst(types::I64, 1);
+    fb.ins().stack_store(one, counter_slot, 0);
+    // The live operand stack at the jump (already written to vars): rooted
+    // across the poll, and the handler-entry snapshot if a quit signal lands
+    // in a protected extent (condition-case catching `quit` around a loop).
+    let vals: Vec<ClifValue> = (0..target_depth).map(|k| fb.use_var(vars[k])).collect();
+    let saved = if vals.is_empty() {
+        None
+    } else {
+        let call = fb.ins().call(rt.refs.gc_save, &[]);
+        let s = fb.inst_results(call)[0];
+        for &v in vals.iter() {
+            fb.ins().call(rt.refs.gc_push, &[v]);
+        }
+        Some(s)
+    };
+    let vmctx = fb.use_var(rt.vmctx_var);
+    let call = fb.ins().call(rt.refs.backedge, &[vmctx]);
+    let status = fb.inst_results(call)[0];
+    if let Some(s) = saved {
+        fb.ins().call(rt.refs.gc_restore, &[s]);
+    }
+    let se = signal_target_for_site(fb, signal_exit, handlers, pending, &vals);
+    let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+    fb.ins().brif(ok, target_block, &[], se, &[]);
 }
 
 /// Lower a leaf bytecode body taking `arity` fixed arguments to native code.
@@ -1748,8 +3641,61 @@ pub fn lower_leaf(
     constants: &[Value],
     arity: usize,
 ) -> Result<CompiledLeaf, CompileError> {
-    let cfg = analyze_cfg(ops, arity)?;
+    lower_leaf_with_map(ops, constants, arity, None)
+}
+
+/// [`lower_leaf`] with the function's GNU byte-offset map, needed to resolve
+/// `Op::Switch` jump-table addresses to instruction indices (GNU bytecode
+/// stores byte offsets; natively compiled chunks store indices directly).
+pub fn lower_leaf_with_map(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    offset_map: Option<&[GnuByteOffsetMapEntry]>,
+) -> Result<CompiledLeaf, CompileError> {
+    lower_leaf_full(ops, constants, arity, offset_map, None)
+}
+
+/// [`lower_leaf_with_map`] plus the compiling thread's obarray, enabling
+/// direct-call speculation (constant-symbol callees bound to bytecode get
+/// epoch-validated direct calls; see [`find_spec_sites`]).
+pub fn lower_leaf_full(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    offset_map: Option<&[GnuByteOffsetMapEntry]>,
+    obarray: Option<&Obarray>,
+) -> Result<CompiledLeaf, CompileError> {
+    let cfg = analyze_cfg(ops, constants, offset_map, arity)?;
     let n = ops.len();
+    // Direct-call speculation sites + their armed-epoch slots. The Box's heap
+    // storage is address-stable: slot pointers are baked into the generated
+    // code as immediates and the Box moves into the CompiledLeaf at the end.
+    let (spec_sites, spec_slots): (HashMap<usize, SpecSite>, Box<[AtomicU64]>) = match obarray {
+        Some(ob) => {
+            let sites = find_spec_sites(ops, constants, &cfg.leaders, ob);
+            let slots: Box<[AtomicU64]> = (0..sites.len()).map(|_| AtomicU64::new(0)).collect();
+            // Arm every slot with the epoch the bindings were observed at; any
+            // bump before first execution self-heals via shim re-validation.
+            let epoch = ob.function_epoch();
+            for site in sites.values() {
+                slots[site.slot].store(epoch, Ordering::Relaxed);
+            }
+            (sites, slots)
+        }
+        None => (HashMap::new(), Box::from([])),
+    };
+    // Precise-deopt buffers: live operand-stack spill (max depth) + the
+    // pc/depth/handler-count cells. Address-stable Boxes owned by the leaf;
+    // generated code writes through baked raw addresses.
+    let deopt_spill: Box<[core::cell::Cell<i64>]> = (0..cfg.max_depth)
+        .map(|_| core::cell::Cell::new(0))
+        .collect();
+    let deopt_meta: Box<DeoptCells> = Box::new(DeoptCells {
+        pc: core::cell::Cell::new(0),
+        depth: core::cell::Cell::new(0),
+        handlers: core::cell::Cell::new(0),
+    });
 
     let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
@@ -1768,25 +3714,119 @@ pub fn lower_leaf(
     builder.symbol("neovm_jit_varset", neovm_jit_varset as *const u8);
     builder.symbol("neovm_jit_varbind", neovm_jit_varbind as *const u8);
     builder.symbol("neovm_jit_unbind", neovm_jit_unbind as *const u8);
+    builder.symbol("neovm_jit_backedge", neovm_jit_backedge as *const u8);
+    builder.symbol(
+        "neovm_jit_save_current_buffer",
+        neovm_jit_save_current_buffer as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_save_excursion",
+        neovm_jit_save_excursion as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_save_restriction",
+        neovm_jit_save_restriction as *const u8,
+    );
+    builder.symbol("neovm_jit_throw", neovm_jit_throw as *const u8);
+    builder.symbol(
+        "neovm_jit_integerp_slow",
+        neovm_jit_integerp_slow as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_numberp_slow",
+        neovm_jit_numberp_slow as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_unwind_protect",
+        neovm_jit_unwind_protect as *const u8,
+    );
+    builder.symbol("neovm_jit_builtin1", neovm_jit_builtin1 as *const u8);
+    builder.symbol("neovm_jit_builtin2", neovm_jit_builtin2 as *const u8);
+    builder.symbol("neovm_jit_builtin3", neovm_jit_builtin3 as *const u8);
+    builder.symbol("neovm_jit_push_cc", neovm_jit_push_cc as *const u8);
+    builder.symbol("neovm_jit_push_cc_raw", neovm_jit_push_cc_raw as *const u8);
+    builder.symbol("neovm_jit_push_catch", neovm_jit_push_catch as *const u8);
+    builder.symbol("neovm_jit_pop_handler", neovm_jit_pop_handler as *const u8);
+    builder.symbol(
+        "neovm_jit_match_handler",
+        neovm_jit_match_handler as *const u8,
+    );
+    builder.symbol("neovm_jit_switch", neovm_jit_switch as *const u8);
+    builder.symbol(
+        "neovm_jit_switch_stale",
+        neovm_jit_switch_stale as *const u8,
+    );
+    builder.symbol("neovm_jit_list", neovm_jit_list as *const u8);
+    builder.symbol(
+        "neovm_jit_builtin_slice",
+        neovm_jit_builtin_slice as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_named_builtin",
+        neovm_jit_named_builtin as *const u8,
+    );
+    builder.symbol(
+        "neovm_jit_save_window_excursion",
+        neovm_jit_save_window_excursion as *const u8,
+    );
+    builder.symbol("neovm_jit_call_spec", neovm_jit_call_spec as *const u8);
     let mut module = JITModule::new(builder);
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
+    // Backward jumps need the back-edge service poll (GC safepoint + quit),
+    // mirroring the interpreter's branch_to! wrap path. Switch targets count:
+    // a jump-table edge can also close a loop.
+    let has_backedge = ops.iter().enumerate().any(|(i, o)| match o {
+        Op::Goto(t)
+        | Op::GotoIfNil(t)
+        | Op::GotoIfNotNil(t)
+        | Op::GotoIfNilElsePop(t)
+        | Op::GotoIfNotNilElsePop(t) => (*t as usize) <= i,
+        _ => false,
+    }) || cfg
+        .switch_targets
+        .iter()
+        .any(|(i, ts)| ts.iter().any(|&(_, t)| t <= *i));
     // Eq/Symbolp need vmctx for their symbols-with-pos slow-path shims;
-    // VarRef/VarSet/VarBind/Unbind re-enter the runtime's variable machinery.
-    let needs_rt = ops.iter().any(|o| {
-        matches!(
-            o,
-            Op::Cons
-                | Op::Call(_)
-                | Op::Apply(_)
-                | Op::Eq
-                | Op::Symbolp
-                | Op::VarRef(_)
-                | Op::VarSet(_)
-                | Op::VarBind(_)
-                | Op::Unbind(_)
-        )
-    });
+    // VarRef/VarSet/VarBind/Unbind re-enter the runtime's variable machinery;
+    // back-edges poll through vmctx.
+    let needs_rt = has_backedge
+        || ops.iter().any(|o| {
+            direct_builtin_spec(o).is_some()
+                || slice_builtin_spec(o).is_some()
+                || matches!(
+                    o,
+                    Op::List(_)
+                        | Op::CallBuiltin(..)
+                        | Op::CallBuiltinSym(..)
+                        | Op::Aset
+                        | Op::SaveWindowExcursion
+                )
+                || matches!(
+                    o,
+                    Op::Cons
+                        | Op::Call(_)
+                        | Op::Apply(_)
+                        | Op::Eq
+                        | Op::Symbolp
+                        | Op::VarRef(_)
+                        | Op::VarSet(_)
+                        | Op::VarBind(_)
+                        | Op::Unbind(_)
+                        | Op::SaveCurrentBuffer
+                        | Op::SaveExcursion
+                        | Op::SaveRestriction
+                        | Op::UnwindProtectPop
+                        | Op::Throw
+                        | Op::Integerp
+                        | Op::Numberp
+                        | Op::PushConditionCase(_)
+                        | Op::PushConditionCaseRaw(_)
+                        | Op::PushCatch(_)
+                        | Op::PopHandler
+                        | Op::Switch
+                )
+        });
 
     // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
     // Reads `arity` argument words from `args`; returns STATUS_OK + writes the
@@ -1812,7 +3852,10 @@ pub fn lower_leaf(
             let max_call_args = ops
                 .iter()
                 .filter_map(|o| match o {
-                    Op::Call(n) | Op::Apply(n) => Some(*n as usize),
+                    Op::Call(n) | Op::Apply(n) | Op::List(n) | Op::Concat(n) => Some(*n as usize),
+                    Op::CallBuiltin(_, n) | Op::CallBuiltinSym(_, n) => Some(*n as usize),
+                    Op::Nconc => Some(2),
+                    Op::Substring | Op::Aset => Some(3),
                     _ => None,
                 })
                 .max()
@@ -1850,10 +3893,20 @@ pub fn lower_leaf(
             .map(|&l| (l, fb.create_block()))
             .collect();
         // Shared deopt landing block, created lazily on the first guard.
-        let mut deopt: Option<Block> = None;
+        let deopt_refs = DeoptRefs {
+            spill_base: deopt_spill.as_ptr() as i64,
+            meta_pc: &deopt_meta.pc as *const core::cell::Cell<i64> as i64,
+            meta_depth: &deopt_meta.depth as *const core::cell::Cell<i64> as i64,
+            meta_handlers: &deopt_meta.handlers as *const core::cell::Cell<i64> as i64,
+        };
         // Shared signal-propagation block (returns STATUS_SIGNAL), created
         // lazily by the first `Call` lowering.
         let mut signal_exit: Option<Block> = None;
+        // Backward-jump quit counter (the interpreter's u8 `quitcounter`), kept
+        // in a stack slot so every block can bump it.
+        let backedge_counter: Option<StackSlot> = has_backedge.then(|| {
+            fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3))
+        });
 
         // Function-entry block: stash vmctx + the out pointer, load args into
         // the slot variables, then jump into bytecode block 0.
@@ -1867,6 +3920,11 @@ pub fn lower_leaf(
             fb.def_var(rt.vmctx_var, vmctx_param);
         }
         fb.def_var(out_var, out_ptr);
+        if let Some(slot) = backedge_counter {
+            // The interpreter starts quitcounter at 1.
+            let one = fb.ins().iconst(types::I64, 1);
+            fb.ins().stack_store(one, slot, 0);
+        }
         for i in 0..arity {
             let v = fb
                 .ins()
@@ -1883,6 +3941,13 @@ pub fn lower_leaf(
             // Materialize the incoming operand stack from the slot variables.
             let depth = cfg.entry_depth[&l];
             let mut stack: Vec<ClifValue> = (0..depth).map(|k| fb.use_var(vars[k])).collect();
+            // Active handler frames at block entry (static), kept in sync as
+            // PopHandler ops run; signal sites inside a protected extent queue
+            // a dispatch block here, filled after the block's terminator.
+            let mut handlers: Vec<HandlerStatic> =
+                cfg.entry_handlers.get(&l).cloned().unwrap_or_default();
+            let mut pending: Vec<PendingDispatch> = Vec::new();
+            let mut pending_deopt: Vec<PendingDeopt> = Vec::new();
 
             let end = next_leader(l);
             let mut terminated = false;
@@ -1898,9 +3963,50 @@ pub fn lower_leaf(
                         terminated = true;
                         break;
                     }
+                    Op::Throw => {
+                        // Stash Flow::Throw{tag, value} and exit via the signal
+                        // path; inside a protected extent that path is the
+                        // handler dispatch (a same-function `catch` is caught
+                        // natively via the match shim).
+                        let value = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        let tag = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        let rt = rt.as_ref().ok_or(CompileError::UnsupportedOp("throw"))?;
+                        fb.ins().call(rt.refs.throw_flow, &[tag, value]);
+                        let se = signal_target_for_site(
+                            &mut fb,
+                            &mut signal_exit,
+                            &handlers,
+                            &mut pending,
+                            &stack,
+                        );
+                        fb.ins().jump(se, &[]);
+                        terminated = true;
+                        break;
+                    }
                     Op::Goto(t) => {
                         write_stack_to_vars(&mut fb, &vars, &stack);
-                        fb.ins().jump(block_for[&(*t as usize)], &[]);
+                        let tu = *t as usize;
+                        if tu <= i {
+                            // Backward jump: bump the quit counter and poll on
+                            // wrap, exactly like the interpreter's branch_to!.
+                            let (rt, slot) = (
+                                rt.as_ref().expect("backedge implies rt"),
+                                backedge_counter.expect("backedge implies counter"),
+                            );
+                            emit_backedge_jump(
+                                &mut fb,
+                                rt,
+                                slot,
+                                &mut signal_exit,
+                                &vars,
+                                cfg.entry_depth[&tu],
+                                block_for[&tu],
+                                &handlers,
+                                &mut pending,
+                            );
+                        } else {
+                            fb.ins().jump(block_for[&tu], &[]);
+                        }
                         terminated = true;
                         break;
                     }
@@ -1910,13 +4016,38 @@ pub fn lower_leaf(
                         let is_nil =
                             fb.ins()
                                 .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
-                        let target = block_for[&(*t as usize)];
+                        let tu = *t as usize;
+                        let mut target = block_for[&tu];
                         let fallthrough = block_for[&(i + 1)];
+                        let backedge = (tu <= i).then(|| fb.create_block());
+                        if let Some(tramp) = backedge {
+                            target = tramp;
+                        }
                         // brif takes the `then` block when the condition is true.
                         if matches!(op, Op::GotoIfNil(_)) {
                             fb.ins().brif(is_nil, target, &[], fallthrough, &[]);
                         } else {
                             fb.ins().brif(is_nil, fallthrough, &[], target, &[]);
+                        }
+                        if let Some(tramp) = backedge {
+                            // Taken-edge trampoline carrying the back-edge poll.
+                            fb.switch_to_block(tramp);
+                            fb.seal_block(tramp);
+                            let (rt, slot) = (
+                                rt.as_ref().expect("backedge implies rt"),
+                                backedge_counter.expect("backedge implies counter"),
+                            );
+                            emit_backedge_jump(
+                                &mut fb,
+                                rt,
+                                slot,
+                                &mut signal_exit,
+                                &vars,
+                                cfg.entry_depth[&tu],
+                                block_for[&tu],
+                                &handlers,
+                                &mut pending,
+                            );
                         }
                         terminated = true;
                         break;
@@ -1931,25 +4062,190 @@ pub fn lower_leaf(
                         let is_nil =
                             fb.ins()
                                 .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
-                        let target = block_for[&(*t as usize)];
+                        let tu = *t as usize;
+                        let mut target = block_for[&tu];
                         let fallthrough = block_for[&(i + 1)];
+                        let backedge = (tu <= i).then(|| fb.create_block());
+                        if let Some(tramp) = backedge {
+                            target = tramp;
+                        }
                         if matches!(op, Op::GotoIfNilElsePop(_)) {
                             fb.ins().brif(is_nil, target, &[], fallthrough, &[]);
                         } else {
                             fb.ins().brif(is_nil, fallthrough, &[], target, &[]);
                         }
+                        if let Some(tramp) = backedge {
+                            fb.switch_to_block(tramp);
+                            fb.seal_block(tramp);
+                            let (rt, slot) = (
+                                rt.as_ref().expect("backedge implies rt"),
+                                backedge_counter.expect("backedge implies counter"),
+                            );
+                            emit_backedge_jump(
+                                &mut fb,
+                                rt,
+                                slot,
+                                &mut signal_exit,
+                                &vars,
+                                cfg.entry_depth[&tu],
+                                block_for[&tu],
+                                &handlers,
+                                &mut pending,
+                            );
+                        }
                         terminated = true;
                         break;
                     }
-                    other => lower_simple_op(
-                        &mut fb,
-                        &mut deopt,
-                        &mut signal_exit,
-                        constants,
-                        &mut stack,
-                        rt.as_ref(),
-                        other,
-                    )?,
+                    Op::Switch => {
+                        // [dispatch table] -> shim lookup (the interpreter's
+                        // exact hash-key semantics) returning the raw fixnum
+                        // address; map it onto the statically resolved targets
+                        // with a compare chain. Miss -> fall through. A raw
+                        // address outside the static set or a mutated table ->
+                        // loud signal (out-of-contract self-modification).
+                        let rt_ref = rt.as_ref().ok_or(CompileError::UnsupportedOp("switch"))?;
+                        let table = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        let dispatch = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                        write_stack_to_vars(&mut fb, &vars, &stack);
+                        let vmctx = fb.use_var(rt_ref.vmctx_var);
+                        let call = fb
+                            .ins()
+                            .call(rt_ref.refs.switch_lookup, &[vmctx, dispatch, table]);
+                        let addr = fb.inst_results(call)[0];
+                        let targets = cfg.switch_targets.get(&i).expect("resolved in analyze");
+                        let sig = signal_target_for_site(
+                            &mut fb,
+                            &mut signal_exit,
+                            &handlers,
+                            &mut pending,
+                            &stack,
+                        );
+                        let fall = block_for[&(i + 1)];
+                        // miss -> fall through
+                        let miss = fb.ins().icmp_imm(IntCC::Equal, addr, JIT_SWITCH_MISS);
+                        let chain = fb.create_block();
+                        fb.ins().brif(miss, fall, &[], chain, &[]);
+                        fb.switch_to_block(chain);
+                        fb.seal_block(chain);
+                        // stale (-2): the shim stashed the flow already.
+                        let stale = fb.ins().icmp_imm(IntCC::Equal, addr, JIT_SWITCH_STALE);
+                        let mut cur_blk = fb.create_block();
+                        fb.ins().brif(stale, sig, &[], cur_blk, &[]);
+                        for &(raw, target) in targets {
+                            fb.switch_to_block(cur_blk);
+                            fb.seal_block(cur_blk);
+                            let next = fb.create_block();
+                            let hit = fb.ins().icmp_imm(IntCC::Equal, addr, raw);
+                            if target <= i {
+                                // Backward jump-table edge: poll through a
+                                // trampoline, exactly like Goto back-edges.
+                                let tramp = fb.create_block();
+                                fb.ins().brif(hit, tramp, &[], next, &[]);
+                                fb.switch_to_block(tramp);
+                                fb.seal_block(tramp);
+                                let (rt_b, slot) = (
+                                    rt.as_ref().expect("backedge implies rt"),
+                                    backedge_counter.expect("backedge implies counter"),
+                                );
+                                emit_backedge_jump(
+                                    &mut fb,
+                                    rt_b,
+                                    slot,
+                                    &mut signal_exit,
+                                    &vars,
+                                    cfg.entry_depth[&target],
+                                    block_for[&target],
+                                    &handlers,
+                                    &mut pending,
+                                );
+                            } else {
+                                fb.ins().brif(hit, block_for[&target], &[], next, &[]);
+                            }
+                            cur_blk = next;
+                        }
+                        // Exhausted: a hit whose address is not in the static
+                        // set — stash the stale-table signal and propagate.
+                        fb.switch_to_block(cur_blk);
+                        fb.seal_block(cur_blk);
+                        fb.ins().call(rt_ref.refs.switch_stale, &[]);
+                        fb.ins().jump(sig, &[]);
+                        terminated = true;
+                        break;
+                    }
+                    Op::PushConditionCase(t) | Op::PushConditionCaseRaw(t) | Op::PushCatch(t) => {
+                        // Register the handler frame via the shim (interpreter
+                        // arm parity), then end the block with an "anchor"
+                        // edge: a never-taken branch to the handler target
+                        // that (a) guarantees the target block always has a
+                        // Cranelift predecessor with every entry var defined
+                        // (its real entries are the runtime match dispatches)
+                        // and (b) falls through to the protected body.
+                        let rt_ref = rt.as_ref().ok_or(CompileError::UnsupportedOp("handler"))?;
+                        let tu = *t as usize;
+                        let vmctx = fb.use_var(rt_ref.vmctx_var);
+                        let t_v = fb.ins().iconst(types::I64, tu as i64);
+                        match op {
+                            Op::PushConditionCase(_) => {
+                                let d_v = fb.ins().iconst(types::I64, stack.len() as i64);
+                                fb.ins().call(rt_ref.refs.push_cc, &[vmctx, t_v, d_v]);
+                            }
+                            Op::PushConditionCaseRaw(_) => {
+                                let conditions = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                                let d_v = fb.ins().iconst(types::I64, stack.len() as i64);
+                                fb.ins()
+                                    .call(rt_ref.refs.push_cc_raw, &[vmctx, t_v, d_v, conditions]);
+                            }
+                            Op::PushCatch(_) => {
+                                let tag = stack.pop().ok_or(CompileError::StackUnderflow)?;
+                                let d_v = fb.ins().iconst(types::I64, stack.len() as i64);
+                                fb.ins()
+                                    .call(rt_ref.refs.push_catch, &[vmctx, t_v, d_v, tag]);
+                            }
+                            _ => unreachable!("matched Push* above"),
+                        }
+                        write_stack_to_vars(&mut fb, &vars, &stack);
+                        // Placeholder error-value slot for the never-taken
+                        // anchor edge (real entries define it from the shim).
+                        let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
+                        fb.def_var(vars[stack.len()], nil);
+                        let never = fb.ins().iconst(types::I8, 0);
+                        fb.ins()
+                            .brif(never, block_for[&tu], &[], block_for[&(i + 1)], &[]);
+                        terminated = true;
+                        break;
+                    }
+                    Op::PopHandler => {
+                        // Normal exit from the protected extent: drop the
+                        // runtime frame and the static tracking entry.
+                        let rt_ref = rt.as_ref().ok_or(CompileError::UnsupportedOp("handler"))?;
+                        let vmctx = fb.use_var(rt_ref.vmctx_var);
+                        fb.ins().call(rt_ref.refs.pop_handler, &[vmctx]);
+                        handlers
+                            .pop()
+                            .ok_or(CompileError::UnsupportedOp("unbalanced-pophandler"))?;
+                    }
+                    other => {
+                        let spec = spec_sites.get(&i).map(|site| {
+                            (
+                                site.sym,
+                                site.expected_bits,
+                                &spec_slots[site.slot] as *const AtomicU64 as i64,
+                            )
+                        });
+                        lower_simple_op(
+                            &mut fb,
+                            i,
+                            &mut pending_deopt,
+                            &mut signal_exit,
+                            constants,
+                            &mut stack,
+                            rt.as_ref(),
+                            &handlers,
+                            &mut pending,
+                            spec,
+                            other,
+                        )?
+                    }
                 }
             }
             if !terminated {
@@ -1958,14 +4254,23 @@ pub fn lower_leaf(
                 write_stack_to_vars(&mut fb, &vars, &stack);
                 fb.ins().jump(block_for[&end], &[]);
             }
+            // Fill the precise-deopt exit blocks queued by this block's guards.
+            emit_pending_deopts(&mut fb, deopt_refs, &mut pending_deopt);
+            // Fill the handler-dispatch blocks queued by this block's signal
+            // sites (the builder can switch blocks now that it's terminated).
+            if !pending.is_empty() {
+                let rt_ref = rt.as_ref().expect("pending dispatches imply rt");
+                emit_pending_dispatches(
+                    &mut fb,
+                    rt_ref,
+                    &mut signal_exit,
+                    &vars,
+                    &block_for,
+                    &mut pending,
+                )?;
+            }
         }
 
-        // Terminate the shared deopt block (return STATUS_DEOPT) iff used.
-        if let Some(db) = deopt {
-            fb.switch_to_block(db);
-            let code = fb.ins().iconst(types::I64, STATUS_DEOPT);
-            fb.ins().return_(&[code]);
-        }
         // Terminate the shared signal block (return STATUS_SIGNAL) iff used.
         if let Some(sb) = signal_exit {
             fb.switch_to_block(sb);
@@ -1998,9 +4303,26 @@ pub fn lower_leaf(
         // &optional/&rest lambda lists.
         required: arity,
         has_rest: false,
-        has_binds: ops
-            .iter()
-            .any(|o| matches!(o, Op::VarBind(_) | Op::Unbind(_))),
+        has_binds: ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::VarBind(_)
+                    | Op::Unbind(_)
+                    | Op::SaveCurrentBuffer
+                    | Op::SaveExcursion
+                    | Op::SaveRestriction
+                    | Op::UnwindProtectPop
+            )
+        }),
+        has_handlers: ops.iter().any(|o| {
+            matches!(
+                o,
+                Op::PushConditionCase(_) | Op::PushConditionCaseRaw(_) | Op::PushCatch(_)
+            )
+        }),
+        spec_slots,
+        deopt_spill,
+        deopt_meta,
         entry,
         _module: module,
     })
@@ -2527,12 +4849,734 @@ mod tests {
     }
 
     #[test]
+    fn backedge_polls_quit_like_the_interpreter() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        // Countdown loop with enough iterations (> 255 backward jumps) for the
+        // u8 quit counter to wrap and trigger the back-edge service poll.
+        let ops = [
+            Op::StackRef(0),
+            Op::Constant(0),
+            Op::Gtr,
+            Op::GotoIfNil(8),
+            Op::StackRef(0),
+            Op::Sub1,
+            Op::StackSet(1),
+            Op::Goto(0),
+            Op::StackRef(0),
+            Op::Return,
+        ];
+        let constants = [Value::make_int(0)];
+        let mut ev = Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+        let leaf = lower_leaf(&ops, &constants, 1).unwrap();
+
+        // Flag clear: the loop runs to completion natively (polls return OK).
+        assert_eq!(
+            leaf.call(ctx_ptr, &[Value::make_int(1000)]),
+            NativeRun::Ok(Value::make_int(0).bits())
+        );
+
+        // Flag set: the wrap poll must signal quit out of native code...
+        ev.set_quit_flag_value(Value::T);
+        assert_eq!(
+            leaf.call(ctx_ptr, &[Value::make_int(1000)]),
+            NativeRun::Signal,
+            "C-g must interrupt a compiled loop"
+        );
+        assert!(take_pending_flow().is_some(), "quit Flow stashed");
+
+        // ...exactly like the interpreter on the same body (the poll clears the
+        // flag, so re-set it for the oracle run).
+        ev.set_quit_flag_value(Value::T);
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.to_vec();
+        f.constants = constants.to_vec();
+        f.max_stack = 16;
+        let interp = {
+            let mut vm = Vm::from_context(&mut ev);
+            vm.execute(&f, vec![Value::make_int(1000)])
+        };
+        assert!(interp.is_err(), "interpreter quits on the same loop");
+
+        // Flag cleared by the quit: the loop completes again.
+        assert_eq!(
+            leaf.call(ctx_ptr, &[Value::make_int(1000)]),
+            NativeRun::Ok(Value::make_int(0).bits())
+        );
+    }
+
+    #[test]
+    fn compiles_save_excursion_with_unwind_semantics() {
+        use crate::emacs_core::eval::Context;
+        let mut ev = Context::new();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+        ev.eval_str(r#"(insert "hello world")"#).expect("insert");
+        let specpdl_before = ev.specpdl.len();
+        let constants = [
+            Value::symbol("goto-char"),
+            Value::make_int(1),
+            Value::symbol("point"),
+        ];
+
+        // Balanced: (save-excursion (goto-char 1)) then (point) — restored.
+        let balanced = lower_nullary_leaf(
+            &[
+                Op::SaveExcursion,
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Call(1),
+                Op::Pop,
+                Op::Unbind(1),
+                Op::Constant(2),
+                Op::Call(0),
+                Op::Return,
+            ],
+            &constants,
+        )
+        .unwrap();
+        assert_eq!(
+            balanced.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(12).bits()),
+            "point must be restored by the Unbind"
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before);
+
+        // Early return with the record dangling: the frame unwind restores it.
+        let dangling = lower_nullary_leaf(
+            &[
+                Op::SaveExcursion,
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Call(1),
+                Op::Return,
+            ],
+            &constants,
+        )
+        .unwrap();
+        assert_eq!(
+            dangling.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(1).bits())
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before, "frame unwind pops record");
+        let point_now =
+            lower_nullary_leaf(&[Op::Constant(2), Op::Call(0), Op::Return], &constants).unwrap();
+        assert_eq!(
+            point_now.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(12).bits()),
+            "point must be restored by the frame unwind too"
+        );
+
+        // SaveCurrentBuffer / SaveRestriction: records create + frame-unwind
+        // cleanly (same shim/record machinery; arms mirrored 1:1).
+        for op in [Op::SaveCurrentBuffer, Op::SaveRestriction] {
+            let mech = lower_nullary_leaf(&[op, Op::Nil, Op::Return], &[]).unwrap();
+            assert_eq!(mech.call(ctx_ptr, &[]), NativeRun::Ok(Value::NIL.bits()));
+            assert_eq!(ev.specpdl.len(), specpdl_before);
+        }
+
+        // Precise deopt: a guard after the Save* record compiles and runs
+        // (a failing guard would resume the interpreter mid-frame with the
+        // record still registered).
+        let after = lower_nullary_leaf(
+            &[Op::SaveExcursion, Op::Constant(1), Op::Add1, Op::Return],
+            &constants,
+        )
+        .expect("guard after a side effect compiles under precise deopt");
+        match after.call(ctx_ptr, &[]) {
+            NativeRun::Ok(_) => {}
+            other => panic!("guard-after-save must run, got {other:?}"),
+        }
+        assert_eq!(ev.specpdl.len(), specpdl_before);
+    }
+
+    #[test]
+    fn compiles_trivial_natives_carsafe_maxmin_throw_numpreds() {
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let t = NativeRun::Ok(Value::T.bits());
+        let nil = NativeRun::Ok(Value::NIL.bits());
+        let run1 = |op: Op, v: Value, ctx: *mut u8| {
+            lower_nullary_leaf(&[Op::Constant(0), op, Op::Return], &[v])
+                .unwrap()
+                .call(ctx, &[])
+        };
+
+        // car-safe / cdr-safe: total — non-cons (incl. fixnums) -> nil, no deopt.
+        let cons = Value::cons(Value::make_int(3), Value::make_int(4));
+        assert_eq!(
+            run1(Op::CarSafe, cons, ctx_ptr),
+            NativeRun::Ok(Value::make_int(3).bits())
+        );
+        assert_eq!(
+            run1(Op::CdrSafe, cons, ctx_ptr),
+            NativeRun::Ok(Value::make_int(4).bits())
+        );
+        assert_eq!(run1(Op::CarSafe, Value::make_int(9), ctx_ptr), nil);
+        assert_eq!(run1(Op::CdrSafe, Value::T, ctx_ptr), nil);
+        assert_eq!(run1(Op::CarSafe, Value::NIL, ctx_ptr), nil);
+
+        // max / min: fixnum fast path keeps the original tagged operand;
+        // non-fixnum deopts to the interpreter's coercing builtin.
+        let run2 = |op: Op, a: Value, b: Value, ctx: *mut u8| {
+            lower_nullary_leaf(&[Op::Constant(0), Op::Constant(1), op, Op::Return], &[a, b])
+                .unwrap()
+                .call(ctx, &[])
+        };
+        assert_eq!(
+            run2(Op::Max, Value::make_int(3), Value::make_int(7), ctx_ptr),
+            NativeRun::Ok(Value::make_int(7).bits())
+        );
+        assert_eq!(
+            run2(Op::Max, Value::make_int(-3), Value::make_int(-7), ctx_ptr),
+            NativeRun::Ok(Value::make_int(-3).bits())
+        );
+        assert_eq!(
+            run2(Op::Min, Value::make_int(3), Value::make_int(7), ctx_ptr),
+            NativeRun::Ok(Value::make_int(3).bits())
+        );
+        // Non-fixnum operand: precise deopt at the Max op with the operands
+        // still on the captured stack.
+        match run2(Op::Max, Value::make_float(1.5), Value::make_int(7), ctx_ptr) {
+            NativeRun::DeoptAt { pc, stack, .. } => {
+                assert_eq!(pc, 2, "deopt at the Max op");
+                assert_eq!(stack[1], Value::make_int(7));
+            }
+            other => panic!("expected a precise deopt, got {other:?}"),
+        }
+
+        // integerp / numberp: fixnum natively; float/bignum via the slow shim.
+        assert_eq!(run1(Op::Integerp, Value::make_int(5), ctx_ptr), t);
+        assert_eq!(run1(Op::Integerp, Value::make_float(1.5), ctx_ptr), nil);
+        assert_eq!(run1(Op::Integerp, Value::T, ctx_ptr), nil);
+        assert_eq!(run1(Op::Numberp, Value::make_int(5), ctx_ptr), t);
+        assert_eq!(run1(Op::Numberp, Value::make_float(1.5), ctx_ptr), t);
+        assert_eq!(run1(Op::Numberp, Value::NIL, ctx_ptr), nil);
+
+        // throw: stashes Flow::Throw and exits via the signal path.
+        let tag = Value::symbol("jit-throw-tag");
+        let thrown = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Throw],
+            &[tag, Value::make_int(42)],
+        )
+        .unwrap();
+        assert_eq!(thrown.call(ctx_ptr, &[]), NativeRun::Signal);
+        match take_pending_flow().expect("throw Flow stashed") {
+            Flow::Throw {
+                tag: got_tag,
+                value,
+            } => {
+                assert_eq!(got_tag, tag);
+                assert_eq!(value, Value::make_int(42));
+            }
+            other => panic!("expected Flow::Throw, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn compiles_direct_builtin_ops() {
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let ok_int = |n: i64| NativeRun::Ok(Value::make_int(n).bits());
+        let run = |ops: &[Op], consts: &[Value], ctx: *mut u8| {
+            lower_nullary_leaf(ops, consts).unwrap().call(ctx, &[])
+        };
+
+        // length
+        let list = Value::cons(
+            Value::make_int(1),
+            Value::cons(
+                Value::make_int(2),
+                Value::cons(Value::make_int(3), Value::NIL),
+            ),
+        );
+        assert_eq!(
+            run(&[Op::Constant(0), Op::Length, Op::Return], &[list], ctx_ptr),
+            ok_int(3)
+        );
+
+        // nth: (nth 1 '(1 2 3)) = 2 — operand order matches the arm (n, list).
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Nth, Op::Return],
+                &[Value::make_int(1), list],
+                ctx_ptr
+            ),
+            ok_int(2)
+        );
+
+        // memq: (memq 'b '(a b c)) -> the tail whose car is 'b.
+        let (a, bsym, c) = (
+            Value::symbol("jit-memq-a"),
+            Value::symbol("jit-memq-b"),
+            Value::symbol("jit-memq-c"),
+        );
+        let abc = Value::cons(a, Value::cons(bsym, Value::cons(c, Value::NIL)));
+        let NativeRun::Ok(tail) = run(
+            &[Op::Constant(0), Op::Constant(1), Op::Memq, Op::Return],
+            &[bsym, abc],
+            ctx_ptr,
+        ) else {
+            panic!("memq must succeed");
+        };
+        assert_eq!(Value::from_bits(tail).cons_car(), bsym);
+
+        // equal on structurally-equal fresh lists -> t.
+        let l1 = Value::cons(
+            Value::make_int(1),
+            Value::cons(Value::make_int(2), Value::NIL),
+        );
+        let l2 = Value::cons(
+            Value::make_int(1),
+            Value::cons(Value::make_int(2), Value::NIL),
+        );
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Equal, Op::Return],
+                &[l1, l2],
+                ctx_ptr
+            ),
+            NativeRun::Ok(Value::T.bits())
+        );
+
+        // setcar mutates through the SATB-barriered builtin; result = new car.
+        let cell = Value::cons(Value::make_int(10), Value::make_int(20));
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Setcar, Op::Return],
+                &[cell, Value::make_int(99)],
+                ctx_ptr
+            ),
+            ok_int(99)
+        );
+        assert_eq!(cell.cons_car(), Value::make_int(99), "mutation visible");
+
+        // Precise deopt: a guard after the mutation compiles and runs —
+        // (1+ (setcar cell 1)) = 2 with the mutation visible.
+        assert_eq!(
+            run(
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::Setcar,
+                    Op::Add1,
+                    Op::Return,
+                ],
+                &[cell, Value::make_int(1)],
+                ctx_ptr
+            ),
+            ok_int(2)
+        );
+        assert_eq!(cell.cons_car(), Value::make_int(1), "mutation visible");
+
+        // symbol-value: live read + void-variable signal.
+        let var = Value::symbol("jit-bw-var");
+        let crate::emacs_core::value::ValueKind::Symbol(var_id) = var.kind() else {
+            panic!("symbol expected");
+        };
+        ev.obarray.set_symbol_value_id(var_id, Value::make_int(5));
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::SymbolValue, Op::Return],
+                &[var],
+                ctx_ptr
+            ),
+            ok_int(5)
+        );
+        let unbound = Value::symbol("jit-bw-unbound");
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::SymbolValue, Op::Return],
+                &[unbound],
+                ctx_ptr
+            ),
+            NativeRun::Signal
+        );
+        assert!(take_pending_flow().is_some());
+
+        // put / get round-trip on a plist.
+        let psym = Value::symbol("jit-bw-plist");
+        let prop = Value::symbol("jit-bw-prop");
+        assert_eq!(
+            run(
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::Constant(2),
+                    Op::Put,
+                    Op::Return,
+                ],
+                &[psym, prop, Value::make_int(7)],
+                ctx_ptr
+            ),
+            ok_int(7)
+        );
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Get, Op::Return],
+                &[psym, prop],
+                ctx_ptr
+            ),
+            ok_int(7)
+        );
+
+        // aref on a string; string-equal.
+        let s = Value::string("abc");
+        assert_eq!(
+            run(
+                &[Op::Constant(0), Op::Constant(1), Op::Aref, Op::Return],
+                &[s, Value::make_int(1)],
+                ctx_ptr
+            ),
+            ok_int('b' as i64)
+        );
+        let s2 = Value::string("abc");
+        assert_eq!(
+            run(
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::StringEqual,
+                    Op::Return
+                ],
+                &[s, s2],
+                ctx_ptr
+            ),
+            NativeRun::Ok(Value::T.bits())
+        );
+    }
+
+    #[test]
+    fn compiles_unwind_protect_pop() {
+        use crate::emacs_core::eval::Context;
+        let mut ev = Context::new();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+        // NOTE: the opcode's operand is a LIST of cleanup forms (sf_progn_value),
+        // exactly what the byte-compiler pushes for (unwind-protect BODY FORMS..).
+        let cleanup = ev
+            .eval_str("'((setq jit-up-ran t))")
+            .expect("cleanup forms");
+        ev.eval_str("(setq jit-up-ran nil)").expect("flag init");
+        let specpdl_before = ev.specpdl.len();
+        let consts = [
+            cleanup,
+            Value::make_int(7),
+            Value::symbol("jit-up-no-such-fn"),
+        ];
+
+        // Balanced: the matching Unbind runs the cleanup.
+        let balanced = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::UnwindProtectPop,
+                Op::Constant(1),
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &consts,
+        )
+        .unwrap();
+        assert_eq!(
+            balanced.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(7).bits())
+        );
+        assert_eq!(
+            ev.eval_str("jit-up-ran").unwrap(),
+            Value::T,
+            "cleanup ran on the balanced path"
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before);
+
+        // Signal inside the protected extent: the frame unwind runs the cleanup.
+        ev.eval_str("(setq jit-up-ran nil)").expect("flag reset");
+        let signaled = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::UnwindProtectPop,
+                Op::Constant(2),
+                Op::Call(0),
+                Op::Return,
+            ],
+            &consts,
+        )
+        .unwrap();
+        assert_eq!(signaled.call(ctx_ptr, &[]), NativeRun::Signal);
+        assert!(take_pending_flow().is_some());
+        assert_eq!(
+            ev.eval_str("jit-up-ran").unwrap(),
+            Value::T,
+            "cleanup ran on the signal path"
+        );
+        assert_eq!(ev.specpdl.len(), specpdl_before);
+    }
+
+    #[test]
     fn bails_on_unsupported_op() {
-        // Switch (hash-table jump tables) is not in the supported subset ->
+        // MakeClosure (closure construction) is not in the supported subset ->
         // refuse, do not miscompile.
+        let err = lower_nullary_leaf(
+            &[Op::Nil, Op::Nil, Op::MakeClosure(0), Op::Nil, Op::Return],
+            &[Value::NIL],
+        )
+        .unwrap_err();
+        assert!(matches!(err, CompileError::UnsupportedOp("other")));
+        // A Switch whose jump table is not a compile-time constant bails too
+        // (the byte compiler always emits Constant(table) right before it).
         let err = lower_nullary_leaf(&[Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return], &[])
             .unwrap_err();
-        assert!(matches!(err, CompileError::UnsupportedOp("control-flow")));
+        assert!(matches!(err, CompileError::UnsupportedOp("switch-dynamic")));
+    }
+
+    #[test]
+    fn list_and_slice_builtins_run_natively() {
+        use crate::emacs_core::print::print_value;
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+
+        // (list 1 2 3)
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::List(3),
+                Op::Return,
+            ],
+            &[Value::make_int(1), Value::make_int(2), Value::make_int(3)],
+        )
+        .expect("list body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native list failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "(1 2 3)");
+
+        // (concat "foo" "bar")
+        let leaf = lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Concat(2), Op::Return],
+            &[Value::string("foo"), Value::string("bar")],
+        )
+        .expect("concat body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native concat failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "\"foobar\"");
+
+        // (substring "hello" 1 3)
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::Substring,
+                Op::Return,
+            ],
+            &[
+                Value::string("hello"),
+                Value::make_int(1),
+                Value::make_int(3),
+            ],
+        )
+        .expect("substring body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native substring failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "\"el\"");
+
+        // (nconc (list 1 2) (list 3)) — built natively end-to-end.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::List(2),
+                Op::Constant(2),
+                Op::List(1),
+                Op::Nconc,
+                Op::Return,
+            ],
+            &[Value::make_int(1), Value::make_int(2), Value::make_int(3)],
+        )
+        .expect("nconc body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("native nconc failed");
+        };
+        assert_eq!(print_value(&Value::from_bits(bits)), "(1 2 3)");
+
+        // Signal path: (substring 5 0 1) is a wrong-type-argument.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::Substring,
+                Op::Return,
+            ],
+            &[Value::make_int(5), Value::make_int(0), Value::make_int(1)],
+        )
+        .expect("substring body compiles");
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let flow = take_pending_flow().expect("signal stashed");
+        match flow {
+            Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+            other => panic!("expected wrong-type-argument, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn named_builtin_ops_run_natively() {
+        // CallBuiltin/CallBuiltinSym need the full runtime's subr resolution
+        // (covered by the eval_test seam differential); Aset's fast path runs
+        // against the minimal harness.
+        use crate::emacs_core::print::print_value;
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+
+        // Aset: mutate a constant vector natively, read back.
+        let vec = Value::vector(vec![Value::make_int(0), Value::make_int(0)]);
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0), // v
+                Op::Constant(1), // 1
+                Op::Constant(2), // 99
+                Op::Aset,
+                Op::Return,
+            ],
+            &[vec, Value::make_int(1), Value::make_int(99)],
+        )
+        .expect("aset body compiles");
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(99).bits())
+        );
+        assert_eq!(print_value(&vec), "[0 99]");
+
+        // Signal path: (aset 5 0 1) is a wrong-type-argument.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),
+                Op::Constant(1),
+                Op::Constant(2),
+                Op::Aset,
+                Op::Return,
+            ],
+            &[Value::make_int(5), Value::make_int(0), Value::make_int(1)],
+        )
+        .expect("aset body compiles");
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let _ = take_pending_flow().expect("signal stashed");
+    }
+
+    #[test]
+    fn switch_jump_table_dispatches_natively() {
+        // Mirror vm_switch_branches_using_hash_table_jump_table: a constant
+        // eq jump table {foo -> byte offset 8} resolving through the GNU
+        // byte-offset map to instruction 5. Hit -> 20, miss -> 10.
+        use crate::emacs_core::value::HashTableTest;
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let table = Value::hash_table(HashTableTest::Eq);
+        let _ = table.with_hash_table_mut(|ht| {
+            let key = Value::symbol("jit-sw-foo").to_hash_key(&ht.test);
+            ht.data.insert(key.clone(), Value::fixnum(8));
+            ht.key_snapshots
+                .insert(key.clone(), Value::symbol("jit-sw-foo"));
+            ht.insertion_order.push(key);
+        });
+        let map = vec![GnuByteOffsetMapEntry::new(8, 5)];
+        let leaf = lower_leaf_with_map(
+            &[
+                Op::StackRef(0), // [x x]
+                Op::Constant(0), // [x x table]
+                Op::Switch,      // [x], jump or fall through
+                Op::Constant(1), // miss: 10
+                Op::Return,
+                Op::Constant(2), // 5: hit: 20
+                Op::Return,
+            ],
+            &[table, Value::make_int(10), Value::make_int(20)],
+            1,
+            Some(&map),
+        )
+        .expect("switch body compiles");
+        let hit = leaf.call(ctx_ptr, &[Value::symbol("jit-sw-foo")]);
+        assert_eq!(hit, NativeRun::Ok(Value::make_int(20).bits()));
+        let miss = leaf.call(ctx_ptr, &[Value::symbol("jit-sw-bar")]);
+        assert_eq!(miss, NativeRun::Ok(Value::make_int(10).bits()));
+    }
+
+    #[test]
+    fn handler_analysis_bails_on_unbalanced_pophandler() {
+        // PopHandler with no statically active handler frame.
+        let err = lower_nullary_leaf(&[Op::PopHandler, Op::Nil, Op::Return], &[]).unwrap_err();
+        assert!(matches!(
+            err,
+            CompileError::UnsupportedOp("unbalanced-pophandler")
+        ));
+    }
+
+    #[test]
+    fn handler_body_compiles_and_runs_catch_throw_natively() {
+        // (catch 'tag (throw 'tag 42)) — the throw is caught by this same
+        // frame's PushCatch via the match shim, natively.
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let tag = Value::symbol("jit-unit-tag");
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),  // 'tag
+                Op::PushCatch(5), // frame, handler target 5
+                Op::Constant(0),  // 'tag
+                Op::Constant(1),  // 42
+                Op::Throw,
+                Op::Return, // 5: handler entry [thrown]
+            ],
+            &[tag, Value::make_int(42)],
+        )
+        .expect("handler body compiles");
+        let base = ev.condition_stack.len();
+        match leaf.call(ctx_ptr, &[]) {
+            NativeRun::Ok(bits) => {
+                assert_eq!(Value::from_bits(bits), Value::make_int(42));
+            }
+            other => panic!("expected native catch, got {other:?}"),
+        }
+        assert_eq!(ev.condition_stack.len(), base, "frame popped by the catch");
+    }
+
+    #[test]
+    fn handler_frames_unwound_on_propagation() {
+        // (catch 'a (throw 'b 1)) — no frame matches: the flow propagates as
+        // STATUS_SIGNAL (no-catch) and our registered frame is unwound.
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0),  // 'a
+                Op::PushCatch(5), // frame, handler target 5
+                Op::Constant(1),  // 'b
+                Op::Constant(2),  // 1
+                Op::Throw,
+                Op::Return, // 5: handler (reachable only via the frame)
+            ],
+            &[
+                Value::symbol("jit-unit-a"),
+                Value::symbol("jit-unit-b"),
+                Value::make_int(1),
+            ],
+        )
+        .expect("handler body compiles");
+        let base = ev.condition_stack.len();
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let flow = take_pending_flow().expect("no-catch flow stashed");
+        match flow {
+            Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "no-catch"),
+            other => panic!("expected no-catch signal, got {other:?}"),
+        }
+        assert_eq!(ev.condition_stack.len(), base, "frames unwound");
     }
 
     #[test]
@@ -2664,8 +5708,9 @@ mod tests {
 
     #[test]
     fn guard_after_varbind_and_unbalanced_unbind_bail() {
-        // Bindings are side effects: later guards must bail.
-        let err = lower_nullary_leaf(
+        // Precise deopt: a guard after a binding compiles (a failing guard
+        // transfers the bind to the resumed interpreter frame).
+        lower_nullary_leaf(
             &[
                 Op::Constant(1),
                 Op::VarBind(0),
@@ -2675,11 +5720,7 @@ mod tests {
             ],
             &[Value::symbol("jit-test-bind-poison"), Value::make_int(1)],
         )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+        .expect("guard after a binding compiles under precise deopt");
 
         // Unbinding more than this function bound bails to the interpreter.
         let err = lower_nullary_leaf(&[Op::Unbind(1), Op::Nil, Op::Return], &[]).unwrap_err();
@@ -2690,9 +5731,12 @@ mod tests {
     }
 
     #[test]
-    fn guard_after_varset_bails() {
-        // VarSet is a side effect: a later deopt guard would rerun it.
-        let err = lower_nullary_leaf(
+    fn guard_after_varset_compiles_and_runs() {
+        // Precise deopt: a guard after an assignment compiles and runs; the
+        // assignment is NOT replayed on a later deopt (resume is mid-frame).
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let leaf = lower_nullary_leaf(
             &[
                 Op::Constant(1),
                 Op::VarSet(0),
@@ -2702,11 +5746,11 @@ mod tests {
             ],
             &[Value::symbol("jit-test-poison-var"), Value::make_int(1)],
         )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+        .expect("guard after an assignment compiles under precise deopt");
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(2).bits())
+        );
     }
 
     #[test]
@@ -2947,18 +5991,110 @@ mod tests {
     }
 
     #[test]
-    fn bails_on_guard_after_call() {
-        // A deopt guard reachable after a call would make rerun-on-deopt unsound
-        // (the call's side effects already ran) -> must refuse to compile.
-        let err = lower_nullary_leaf(
-            &[Op::Constant(0), Op::Call(0), Op::Add1, Op::Return],
-            &[Value::symbol("jit-test-any")],
-        )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+    fn guard_after_call_deopts_without_replaying_the_call() {
+        // THE precise-deopt capability test: a guard after a side-effecting
+        // call compiles; when it fails, the interpreter resumes AT the guard
+        // op — the call's side effect happened exactly once (rerun-from-start
+        // would have replayed it). Full Context: the resumed 1+ promotes to a
+        // bignum through the real builtin dispatch.
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        // Callee (lambda (x) (setcar CELL (1+ (car CELL))) x): observable
+        // side effect (counter cons), returns its argument unchanged.
+        let cell = Value::cons(Value::make_int(0), Value::NIL);
+        let sym_val = Value::symbol("jit-test-effect-callee");
+        let crate::emacs_core::value::ValueKind::Symbol(sym_id) = sym_val.kind() else {
+            panic!("symbol expected");
+        };
+        let mut callee = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        callee.lexical = true;
+        callee.ops = vec![
+            Op::Constant(0), // CELL
+            Op::Constant(0), // CELL
+            Op::Car,
+            Op::Add1,
+            Op::Setcar,
+            Op::Pop,
+            Op::StackRef(0),
+            Op::Return,
+        ];
+        callee.constants = vec![cell];
+        callee.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(sym_id, Value::make_bytecode(callee));
+
+        // Caller: (1+ (callee MOST-POSITIVE-FIXNUM)) — the 1+ guard fails
+        // AFTER the call ran.
+        let ops = vec![
+            Op::Constant(0), // 'callee
+            Op::Constant(1), // MOST_POSITIVE
+            Op::Call(1),
+            Op::Add1, // pc 3: deopts (overflow)
+            Op::Return,
+        ];
+        let constants = vec![sym_val, Value::make_int(Value::MOST_POSITIVE_FIXNUM)];
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 16;
+        let leaf = lower_nullary_leaf(&ops, &constants).expect("guard after call compiles now");
+        let native = match leaf.call(ctx_ptr, &[]) {
+            NativeRun::DeoptAt {
+                pc,
+                stack,
+                handlers,
+                binds,
+                spec_base,
+                cond_base,
+            } => {
+                assert_eq!(pc, 3, "deopt at the 1+ after the call");
+                assert_eq!(
+                    cell.cons_car(),
+                    Value::make_int(1),
+                    "the call's side effect ran exactly once before the deopt"
+                );
+                let mut vm = Vm::from_context(&mut ev);
+                vm.run_resumed_frame(
+                    &f,
+                    Value::NIL,
+                    pc,
+                    &stack,
+                    handlers,
+                    &binds,
+                    spec_base,
+                    cond_base,
+                )
+                .expect("resume computes the bignum")
+            }
+            other => panic!("expected a precise deopt after the call, got {other:?}"),
+        };
+        assert_eq!(
+            cell.cons_car(),
+            Value::make_int(1),
+            "resume must NOT replay the call"
+        );
+        // Differential: the pure interpreter on the same body (fresh counter
+        // state) computes the same bignum and also increments exactly once.
+        b::builtin_setcar_2(&mut ev, cell, Value::make_int(0)).expect("reset counter");
+        let interp = {
+            let mut vm = Vm::from_context(&mut ev);
+            vm.execute(&f, vec![]).expect("interpreter computes")
+        };
+        assert_eq!(
+            crate::emacs_core::print::print_value(&native),
+            crate::emacs_core::print::print_value(&interp),
+            "resume result must equal the interpreter's"
+        );
+        assert_eq!(cell.cons_car(), Value::make_int(1));
     }
 
     #[test]
@@ -2980,13 +6116,30 @@ mod tests {
             leaf.call(ctx_ptr, &[]),
             NativeRun::Ok(Value::make_int(42).bits())
         );
-        // Boundary input: the pre-call guard deopts BEFORE the call ran.
+        // Boundary input: the pre-call guard now deopts PRECISELY at the 1+
+        // op (pc 2) with the pre-op stack captured — the resume would rerun
+        // exactly that op on the interpreter.
         let leaf2 = lower_nullary_leaf(
             &ops,
             &[sym_val, Value::make_int(Value::MOST_POSITIVE_FIXNUM)],
         )
         .unwrap();
-        assert_eq!(leaf2.call(ctx_ptr, &[]), NativeRun::Deopt);
+        match leaf2.call(ctx_ptr, &[]) {
+            NativeRun::DeoptAt {
+                pc,
+                stack,
+                handlers,
+                binds,
+                ..
+            } => {
+                assert_eq!(pc, 2, "deopt at the Add1 op");
+                assert_eq!(stack.len(), 2, "pre-op stack: [callee-sym, arg]");
+                assert_eq!(stack[1], Value::make_int(Value::MOST_POSITIVE_FIXNUM));
+                assert_eq!(handlers, 0);
+                assert!(binds.is_empty());
+            }
+            other => panic!("expected a precise deopt, got {other:?}"),
+        }
     }
 
     #[test]
@@ -3655,6 +6808,39 @@ mod tests {
                 }
                 NativeRun::Deopt => {
                     // The seam reruns the interpreter; nothing further to hold.
+                }
+                NativeRun::DeoptAt {
+                    pc,
+                    stack,
+                    handlers,
+                    binds,
+                    spec_base,
+                    cond_base,
+                } => {
+                    // Precise deopt: resume mid-function and the result must
+                    // match the pure-interpreter run exactly.
+                    let mut vm = crate::emacs_core::bytecode::Vm::from_context(&mut ev);
+                    let resumed = vm.run_resumed_frame(
+                        &f,
+                        Value::NIL,
+                        pc,
+                        &stack,
+                        handlers,
+                        &binds,
+                        spec_base,
+                        cond_base,
+                    );
+                    match (&resumed, &interp) {
+                        (Ok(got), Ok(want)) => assert_eq!(
+                            got.bits(),
+                            want.bits(),
+                            "seed {seed}: resume/interpreter mismatch on {ops:?}"
+                        ),
+                        (Err(_), Err(_)) => {}
+                        other => panic!(
+                            "seed {seed}: resume/interpreter outcome mismatch {other:?}: {ops:?}"
+                        ),
+                    }
                 }
                 NativeRun::Signal => {
                     let _ = take_pending_flow();
