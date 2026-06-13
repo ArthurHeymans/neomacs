@@ -29,7 +29,9 @@ use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySour
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::DisplayTextRunMeasurement;
+use crate::display_text_run_measurement::{
+    DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -66,17 +68,21 @@ impl DisplayItemSource for SingleDisplayItemSource {
     }
 }
 
-struct PremeasuredTextRunRenderPolicy {
+struct ResolvedFragmentAdvanceRenderPolicy {
     measurement: DisplayTextRunMeasurement,
 }
 
-impl PremeasuredTextRunRenderPolicy {
-    fn new(measurement: DisplayTextRunMeasurement) -> Self {
-        Self { measurement }
+impl ResolvedFragmentAdvanceRenderPolicy {
+    fn new(text: &str, advance_px: f32) -> Self {
+        Self {
+            measurement: DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(
+                text, advance_px,
+            ),
+        }
     }
 }
 
-impl DisplayRowRenderPolicy for PremeasuredTextRunRenderPolicy {
+impl DisplayRowRenderPolicy for ResolvedFragmentAdvanceRenderPolicy {
     fn measurement_for(
         &mut self,
         _item: &DisplayItem,
@@ -631,7 +637,7 @@ pub(crate) fn measure_buffer_text_fragment_append_to_text_row<B: LayoutBufferVie
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_premeasured_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
+pub(crate) fn append_resolved_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -642,7 +648,8 @@ pub(crate) fn append_premeasured_buffer_text_fragment_to_text_row<B: LayoutBuffe
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-    measurement: DisplayTextRunMeasurement,
+    fragment_text: &str,
+    advance_px: f32,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -653,7 +660,7 @@ pub(crate) fn append_premeasured_buffer_text_fragment_to_text_row<B: LayoutBuffe
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy = PremeasuredTextRunRenderPolicy::new(measurement);
+    let mut render_policy = ResolvedFragmentAdvanceRenderPolicy::new(fragment_text, advance_px);
     let outcome = render_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,

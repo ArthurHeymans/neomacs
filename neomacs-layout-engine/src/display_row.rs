@@ -664,14 +664,6 @@ impl DisplayRowGlyphMeasurementFace {
             |ch, fallback_advance_px| self.advance_for_char(font_metrics, ch, fallback_advance_px),
         )
     }
-
-    pub(crate) fn resolved_fragment_measurement(
-        &self,
-        text: &str,
-        advance_px: f32,
-    ) -> DisplayTextRunMeasurement {
-        DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(text, advance_px)
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -765,15 +757,6 @@ impl DisplayRowActiveFaceMeasurementState {
         self.measurement_face
             .text_run_measurement(font_metrics, text)
     }
-
-    pub(crate) fn resolved_fragment_measurement(
-        &self,
-        text: &str,
-        advance_px: f32,
-    ) -> DisplayTextRunMeasurement {
-        self.measurement_face
-            .resolved_fragment_measurement(text, advance_px)
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -845,15 +828,6 @@ impl DisplayRowActiveFaceState {
         text: &str,
     ) -> DisplayTextRunMeasurement {
         self.measurement.text_run_measurement(font_metrics, text)
-    }
-
-    pub(crate) fn resolved_fragment_measurement(
-        &self,
-        text: &str,
-        advance_px: f32,
-    ) -> DisplayTextRunMeasurement {
-        self.measurement
-            .resolved_fragment_measurement(text, advance_px)
     }
 }
 

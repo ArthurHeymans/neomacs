@@ -2067,13 +2067,12 @@ fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan(
 }
 
 #[test]
-fn display_row_glyph_measurement_face_builds_resolved_fragment_measurement_plan() {
-    let mut base = base_face();
-    base.font_char_width = 7.2;
-    let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 7.2);
-
-    let measurement = measurement_face.resolved_fragment_measurement("\u{301}", 0.0);
+fn display_text_run_measurement_plan_builds_resolved_fragment_advance() {
+    let measurement =
+        crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(
+            "\u{301}",
+            0.0,
+        );
 
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
         measurement
@@ -2088,7 +2087,10 @@ fn display_row_glyph_measurement_face_builds_resolved_fragment_measurement_plan(
         vec![(0, 0, 0.0)]
     );
 
-    let wide_measurement = measurement_face.resolved_fragment_measurement("中", 14.0);
+    let wide_measurement =
+        crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(
+            "中", 14.0,
+        );
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(wide_advances) =
         wide_measurement
     else {

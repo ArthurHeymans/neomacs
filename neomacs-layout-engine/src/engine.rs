@@ -34,7 +34,7 @@ use crate::display_row_append::{
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
-    append_premeasured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
+    append_resolved_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
     measure_buffer_text_fragment_append_to_text_row,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
 };
@@ -5807,9 +5807,8 @@ impl LayoutEngine {
             }
             let appended = if complex_text {
                 let mut ch_text = [0; 4];
-                let measurement = active_face_state
-                    .resolved_fragment_measurement(ch.encode_utf8(&mut ch_text), advance);
-                append_premeasured_buffer_text_fragment_to_text_row(
+                let fragment_text = ch.encode_utf8(&mut ch_text);
+                append_resolved_buffer_text_fragment_to_text_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
@@ -5820,7 +5819,8 @@ impl LayoutEngine {
                     buf_id,
                     buffer,
                     active_face_state.face_id(),
-                    measurement,
+                    fragment_text,
+                    advance,
                     frame,
                     append_position,
                 )

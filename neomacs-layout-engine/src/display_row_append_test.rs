@@ -12,9 +12,7 @@ use crate::display_row::{
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_text::DisplayTextFragment;
-use crate::display_text_run_measurement::{
-    DisplayTextRunAdvance, DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
-};
+use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
@@ -1472,7 +1470,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
 }
 
 #[test]
-fn append_premeasured_buffer_text_fragment_to_text_row_uses_supplied_advance() {
+fn append_resolved_buffer_text_fragment_to_text_row_uses_supplied_advance() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1483,12 +1481,9 @@ fn append_premeasured_buffer_text_fragment_to_text_row_uses_supplied_advance() {
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buffer.insert("a");
     }
-    let frame_id = eval.frame_manager_mut().create_frame(
-        "append-buffer-premeasured-fragment",
-        320,
-        120,
-        buf_id,
-    );
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-buffer-resolved-fragment", 320, 120, buf_id);
     let window_id = eval
         .frame_manager()
         .get(frame_id)
@@ -1533,7 +1528,7 @@ fn append_premeasured_buffer_text_fragment_to_text_row_uses_supplied_advance() {
     );
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-    let (progress, end) = append_premeasured_buffer_text_fragment_to_text_row(
+    let (progress, end) = append_resolved_buffer_text_fragment_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1544,11 +1539,12 @@ fn append_premeasured_buffer_text_fragment_to_text_row_uses_supplied_advance() {
         buf_id,
         &snapshot,
         7,
-        DisplayTextRunMeasurementPlan::uniform_for_text("a", 13.0),
+        "a",
+        13.0,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
-    .expect("appended premeasured buffer fragment");
+    .expect("appended resolved buffer fragment");
 
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 13.0);

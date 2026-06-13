@@ -45,6 +45,7 @@ Continuation work after this handoff:
 - Synthetic ellipses and truncation markers now let the source-row append renderer own text measurement instead of passing caller-precomputed `DisplayTextRunMeasurement`.
 - Test-only direct display-item append stream helpers have been removed. Lisp string, synthetic text, and media replacement append coverage now exercises the same source-append request helpers used by runtime paths.
 - `.config/nextest.toml` caps the default nextest worker pool at 24 threads while keeping the memory-limit wrapper on every test.
+- Main buffer complex text append no longer constructs `DisplayTextRunMeasurement` in `engine.rs`; the append layer now lowers the already-resolved fragment advance into its render policy. The buffer walker still computes that advance for wrap and cursor decisions, so full width-path unification remains open.
 - Latest local verification:
 
   ```bash
