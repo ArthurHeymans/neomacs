@@ -568,10 +568,9 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
-        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0)
-            .active_face(active_face.face_id(), active_face.resolved_face());
+        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
     let (progress, end) = append_context
-        .append_to_text_row_and_emit(
+        .append_active_face_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -1785,10 +1784,9 @@ fn lisp_string_append_context_appends_fragment_items() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let fragment = DisplayTextFragment::line_prefix(Value::string("=>"), CharPos0::new(0));
     let append_context =
-        LispStringRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0)
-            .active_face(0, base_face);
+        LispStringRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
 
-    let end = append_context.append_fragment_to_text_row_and_emit(
+    let end = append_context.append_active_face_fragment_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -1797,6 +1795,8 @@ fn lisp_string_append_context_appends_fragment_items() {
         2,
         &face_resolver,
         &mut face_ids,
+        0,
+        base_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     );
 
@@ -3826,10 +3826,9 @@ fn synthetic_text_append_context_uses_source_append_request() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 18.0, 13.0);
 
     let append_context =
-        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0)
-            .text_row(7, base_face, 16.0, 12.0, 8.0);
+        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0);
     let (_progress, end) = append_context
-        .append_to_text_row_and_emit(
+        .append_text_row_metrics_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -3838,6 +3837,11 @@ fn synthetic_text_append_context_uses_source_append_request() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
             9,
             "x",
+            7,
+            base_face,
+            16.0,
+            12.0,
+            8.0,
         )
         .expect("append progress");
 

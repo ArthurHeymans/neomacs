@@ -674,13 +674,42 @@ impl<'row> LispStringRowAppendContext<'row> {
         }
     }
 
-    pub(crate) fn active_face<'face>(
+    fn active_face<'face>(
         self,
         base_face_id: u32,
         base_face: &'face ResolvedFace,
     ) -> LispStringAppendContext<'face> {
         let frame = self.active_face_context.active_face_frame();
         LispStringAppendContext::new(base_face_id, base_face, frame)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_active_face_fragment_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        source_id: u64,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face_id: u32,
+        base_face: &'row ResolvedFace,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        self.active_face(base_face_id, base_face)
+            .append_fragment_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                fragment,
+                source_id,
+                face_resolver,
+                face_ids,
+                position,
+            )
     }
 }
 
@@ -930,7 +959,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         }
     }
 
-    pub(crate) fn active_face(
+    fn active_face(
         self,
         face_id: u32,
         base_face: &'a ResolvedFace,
@@ -942,7 +971,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         )
     }
 
-    pub(crate) fn text_row(
+    fn text_row(
         self,
         face_id: u32,
         base_face: &'a ResolvedFace,
@@ -956,6 +985,62 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
             self.active_face_context
                 .text_row_frame(height_px, ascent_px, char_width_px),
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_active_face_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+        source_id: u64,
+        text: impl Into<Box<str>>,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let active_face = self.active_face_context.active_face;
+        self.active_face(active_face.face_id(), active_face.resolved_face())
+            .append_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                position,
+                source_id,
+                text,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_text_row_metrics_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+        source_id: u64,
+        text: impl Into<Box<str>>,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        height_px: f32,
+        ascent_px: f32,
+        char_width_px: f32,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.text_row(face_id, base_face, height_px, ascent_px, char_width_px)
+            .append_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                position,
+                source_id,
+                text,
+            )
     }
 }
 
