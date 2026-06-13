@@ -2689,13 +2689,6 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut font_metrics = None;
-    let mut source = crate::display_source::LispStringSourceCursor::new(
-        1,
-        Value::string("a\nb"),
-        RenderFaceRef::FaceId(7),
-    )
-    .expect("lisp string source");
-    let mut source_state = DisplayRowSourceState::default();
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -2711,18 +2704,15 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     let first_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let second_geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
 
-    let mut append_context = LispStringSourceRowAppendContext::new(
-        &mut source,
-        &mut source_state,
-        7,
-        base_face,
-        &surface,
-        0.0,
-        16.0,
-        12.0,
-        8.0,
-        16.0,
+    let request = LispStringSourceAppendRequest::new(
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        1,
+        Value::string("a\nb"),
     );
+    let mut append_context = LispStringSourceRowAppendSession::new(
+        request, 7, base_face, &surface, 0.0, 16.0, 12.0, 8.0, 16.0,
+    )
+    .expect("lisp string source session");
 
     let first = append_context
         .render_to_text_row_and_emit(

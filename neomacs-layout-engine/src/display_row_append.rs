@@ -337,11 +337,6 @@ impl<'a> LispStringSourceAppendContext<'a> {
             position,
         )
     }
-
-    pub(crate) fn discard_pending_until_row_break(&mut self) -> bool {
-        self.source_state.discard_pending_item();
-        self.source.discard_until_row_break()
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -385,37 +380,6 @@ pub(crate) struct LispStringSourceRowAppendContext<'a> {
 
 impl<'a> LispStringSourceRowAppendContext<'a> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        source: &'a mut LispStringSourceCursor,
-        source_state: &'a mut DisplayRowSourceState,
-        base_face_id: u32,
-        base_face: &'a ResolvedFace,
-        append_surface: &'a DisplayRowAppendSurface,
-        glyph_y_offset: f32,
-        height: f32,
-        ascent: f32,
-        char_width: f32,
-        default_row_height: f32,
-    ) -> Self {
-        Self {
-            source_context: LispStringSourceAppendContext::new(
-                source,
-                source_state,
-                base_face_id,
-                base_face,
-            ),
-            append_surface,
-            glyph_y_offset,
-            metrics: DisplayRowAppendMetrics::text_row(
-                height,
-                ascent,
-                char_width,
-                default_row_height,
-            ),
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_to_text_row_and_emit(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
@@ -449,9 +413,94 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
             position,
         )
     }
+}
+
+pub(crate) struct LispStringSourceRowAppendSession<'a> {
+    source: LispStringSourceCursor,
+    source_state: DisplayRowSourceState,
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+    append_surface: &'a DisplayRowAppendSurface,
+    glyph_y_offset: f32,
+    metrics: DisplayRowAppendMetrics,
+}
+
+impl<'a> LispStringSourceRowAppendSession<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        request: LispStringSourceAppendRequest,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        append_surface: &'a DisplayRowAppendSurface,
+        glyph_y_offset: f32,
+        height: f32,
+        ascent: f32,
+        char_width: f32,
+        default_row_height: f32,
+    ) -> Option<Self> {
+        let parts = request.into_parts();
+        let source = LispStringSourceCursor::new(
+            parts.source_id,
+            parts.value,
+            RenderFaceRef::FaceId(base_face_id),
+        )?;
+        Some(Self {
+            source,
+            source_state: DisplayRowSourceState::default(),
+            base_face_id,
+            base_face,
+            append_surface,
+            glyph_y_offset,
+            metrics: DisplayRowAppendMetrics::text_row(
+                height,
+                ascent,
+                char_width,
+                default_row_height,
+            ),
+        })
+    }
+
+    fn append_context(&mut self) -> LispStringSourceRowAppendContext<'_> {
+        LispStringSourceRowAppendContext {
+            source_context: LispStringSourceAppendContext::new(
+                &mut self.source,
+                &mut self.source_state,
+                self.base_face_id,
+                self.base_face,
+            ),
+            append_surface: self.append_surface,
+            glyph_y_offset: self.glyph_y_offset,
+            metrics: self.metrics,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_to_text_row_and_emit(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        geometry: &DisplayRowGeometryState,
+        position: DisplayRowPosition,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        self.append_context().render_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            geometry,
+            position,
+        )
+    }
 
     pub(crate) fn discard_pending_until_row_break(&mut self) -> bool {
-        self.source_context.discard_pending_until_row_break()
+        self.source_state.discard_pending_item();
+        self.source.discard_until_row_break()
     }
 }
 

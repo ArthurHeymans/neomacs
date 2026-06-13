@@ -34,7 +34,7 @@ use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
-    DisplayRowMeasurementPolicy, DisplayRowRenderStop, DisplayRowSourceState, WindowChromeKind,
+    DisplayRowMeasurementPolicy, DisplayRowRenderStop, WindowChromeKind,
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
@@ -42,7 +42,7 @@ use crate::display_row_append::{
     DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
     DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
     DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceAppendRequest, LispStringSourceRowAppendContext,
+    LispStringRowAppendContext, LispStringSourceAppendRequest, LispStringSourceRowAppendSession,
     SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -2230,17 +2230,16 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         }};
     }
 
-    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
+    let append_request = LispStringSourceAppendRequest::new(
+        DisplayRowPosition {
+            x_px: *x,
+            col: *col,
+        },
         LISP_STRING_SOURCE_OVERLAY_STRING,
         text_value,
-        crate::display_item::RenderFaceRef::FaceId(base_face.face_id()),
-    ) else {
-        return;
-    };
-    let mut source_state = DisplayRowSourceState::default();
-    let mut source_context = LispStringSourceRowAppendContext::new(
-        &mut source,
-        &mut source_state,
+    );
+    let Some(mut source_context) = LispStringSourceRowAppendSession::new(
+        append_request,
         base_face.face_id(),
         base_face.face(),
         row_context.append_surface,
@@ -2249,7 +2248,9 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         row_context.default_row_ascent,
         row_context.face_char_w,
         row_context.char_h,
-    );
+    ) else {
+        return;
+    };
 
     while geometry.is_within_row_limit(row_limit) {
         if *x >= max_x {
