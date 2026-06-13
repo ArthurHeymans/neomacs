@@ -223,116 +223,116 @@ fn test_append_frame_at(
 }
 
 #[test]
-fn fallback_buffer_text_fragment_natural_advance_uses_frame_tab_policy() {
+fn fallback_buffer_text_source_natural_advance_uses_frame_tab_policy() {
     let active_face = test_active_face_state(7, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(4));
     let mut font_metrics = None;
 
-    let advance = fallback_buffer_text_fragment_natural_advance_to_text_row(
+    let advance = fallback_buffer_text_source_range_natural_advance_to_text_row(
         &mut font_metrics,
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
-        BufferTextFragmentClusterState::for_char('\t', None),
+        BufferTextSourceClusterState::for_char('\t', None),
     );
 
     assert_eq!(advance, 24.0);
 }
 
 #[test]
-fn fallback_buffer_text_fragment_natural_advance_zeroes_cluster_continuation() {
+fn fallback_buffer_text_source_natural_advance_zeroes_cluster_continuation() {
     let active_face = test_active_face_state(7, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
-    let advance = fallback_buffer_text_fragment_natural_advance_to_text_row(
+    let advance = fallback_buffer_text_source_range_natural_advance_to_text_row(
         &mut font_metrics,
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
-        BufferTextFragmentClusterState::for_char('\u{301}', Some(('e', false))),
+        BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
     );
 
     assert_eq!(advance, 0.0);
 }
 
 #[test]
-fn fallback_buffer_text_fragment_natural_advance_uses_face_columns() {
+fn fallback_buffer_text_source_natural_advance_uses_face_columns() {
     let active_face = test_active_face_state(7, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
-    let advance = fallback_buffer_text_fragment_natural_advance_to_text_row(
+    let advance = fallback_buffer_text_source_range_natural_advance_to_text_row(
         &mut font_metrics,
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        BufferTextFragmentClusterState::for_char('中', None),
+        BufferTextSourceClusterState::for_char('中', None),
     );
 
     assert_eq!(advance, 16.0);
 }
 
 #[test]
-fn buffer_text_fragment_natural_fallback_advance_names_width_policy() {
+fn buffer_text_source_natural_fallback_advance_names_width_policy() {
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
-            BufferTextFragmentClusterState::for_char('\t', None),
+        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+            BufferTextSourceClusterState::for_char('\t', None),
         ),
-        BufferTextFragmentNaturalFallbackAdvance::Tab
+        BufferTextSourceNaturalFallbackAdvance::Tab
     );
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
-            BufferTextFragmentClusterState::for_char('\u{301}', Some(('e', false))),
+        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+            BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
         ),
-        BufferTextFragmentNaturalFallbackAdvance::ClusterContinuation
+        BufferTextSourceNaturalFallbackAdvance::ClusterContinuation
     );
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
-            BufferTextFragmentClusterState::for_char('x', None),
+        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+            BufferTextSourceClusterState::for_char('x', None),
         ),
-        BufferTextFragmentNaturalFallbackAdvance::FaceColumns { columns: 1 }
+        BufferTextSourceNaturalFallbackAdvance::FaceColumns { columns: 1 }
     );
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
-            BufferTextFragmentClusterState::for_char('中', None),
+        BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+            BufferTextSourceClusterState::for_char('中', None),
         ),
-        BufferTextFragmentNaturalFallbackAdvance::FaceColumns { columns: 2 }
+        BufferTextSourceNaturalFallbackAdvance::FaceColumns { columns: 2 }
     );
 }
 
 #[test]
-fn buffer_text_fragment_advance_path_names_append_measurement_policy() {
+fn buffer_text_source_advance_path_names_append_measurement_policy() {
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
             'x', None,
         )),
-        BufferTextFragmentAdvancePath::NaturalRenderedFragment
+        BufferTextSourceAdvancePath::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
             '\t', None,
         )),
-        BufferTextFragmentAdvancePath::NaturalRenderedFragment
+        BufferTextSourceAdvancePath::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
             '\u{301}',
             Some(('e', false)),
         )),
-        BufferTextFragmentAdvancePath::NaturalRenderedFragment
+        BufferTextSourceAdvancePath::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
             '中', None,
         )),
-        BufferTextFragmentAdvancePath::NaturalRenderedFragment
+        BufferTextSourceAdvancePath::NaturalRenderedSource
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
             '\u{0633}', None,
         )),
-        BufferTextFragmentAdvancePath::ResolvedComplexRun
+        BufferTextSourceAdvancePath::ResolvedComplexRun
     );
 }
 
@@ -342,7 +342,7 @@ fn current_buffer_snapshot(eval: &Context, buf_id: BufferId) -> LayoutBufferSnap
 }
 
 #[test]
-fn buffer_text_fragment_append_context_resolves_natural_measurement_for_ascii() {
+fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -356,8 +356,8 @@ fn buffer_text_fragment_append_context_resolves_natural_measurement_for_ascii() 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let mut resolver = BufferTextFragmentAdvanceResolver::default();
-    let append_context = BufferTextFragmentAppendContext::new(
+    let mut resolver = BufferTextSourceAdvanceResolver::default();
+    let append_context = BufferTextSourceRangeAppendContext::new(
         &snapshot,
         buf_id,
         active_face.face_id(),
@@ -377,18 +377,18 @@ fn buffer_text_fragment_append_context_resolves_natural_measurement_for_ascii() 
         &face_resolver,
         &active_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        BufferTextFragmentClusterState::for_char('x', None),
+        BufferTextSourceClusterState::for_char('x', None),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
     assert_eq!(
         resolved.append_measurement(),
-        BufferTextFragmentAppendMeasurement::Natural
+        BufferTextSourceAppendMeasurement::Natural
     );
 }
 
 #[test]
-fn buffer_text_fragment_append_context_measures_ascii_at_right_edge() {
+fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -402,8 +402,8 @@ fn buffer_text_fragment_append_context_measures_ascii_at_right_edge() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let mut resolver = BufferTextFragmentAdvanceResolver::default();
-    let append_context = BufferTextFragmentAppendContext::new(
+    let mut resolver = BufferTextSourceAdvanceResolver::default();
+    let append_context = BufferTextSourceRangeAppendContext::new(
         &snapshot,
         buf_id,
         active_face.face_id(),
@@ -426,18 +426,18 @@ fn buffer_text_fragment_append_context_measures_ascii_at_right_edge() {
             x_px: 80.0,
             col: 10,
         },
-        BufferTextFragmentClusterState::for_char('x', None),
+        BufferTextSourceClusterState::for_char('x', None),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
     assert_eq!(
         resolved.append_measurement(),
-        BufferTextFragmentAppendMeasurement::Natural
+        BufferTextSourceAppendMeasurement::Natural
     );
 }
 
 #[test]
-fn buffer_text_fragment_append_context_resolves_complex_text_measurement() {
+fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -451,8 +451,8 @@ fn buffer_text_fragment_append_context_resolves_complex_text_measurement() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let mut resolver = BufferTextFragmentAdvanceResolver::default();
-    let append_context = BufferTextFragmentAppendContext::new(
+    let mut resolver = BufferTextSourceAdvanceResolver::default();
+    let append_context = BufferTextSourceRangeAppendContext::new(
         &snapshot,
         buf_id,
         active_face.face_id(),
@@ -472,13 +472,13 @@ fn buffer_text_fragment_append_context_resolves_complex_text_measurement() {
         &face_resolver,
         &active_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        BufferTextFragmentClusterState::for_char('\u{0633}', None),
+        BufferTextSourceClusterState::for_char('\u{0633}', None),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
     assert_eq!(
         resolved.append_measurement(),
-        BufferTextFragmentAppendMeasurement::ResolvedAdvance { advance_px: 8.0 }
+        BufferTextSourceAppendMeasurement::ResolvedAdvance { advance_px: 8.0 }
     );
 }
 
@@ -843,7 +843,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
                 None,
                 &mut face_ids,
             )
-            .expect("rendered fragment")
+            .expect("rendered source")
             .rendered
     };
     let mut output_emitter =
@@ -1814,7 +1814,7 @@ fn lisp_string_append_context_appends_fragment_items() {
 }
 
 #[test]
-fn buffer_text_fragment_append_context_appends_source_char() {
+fn buffer_text_source_append_context_appends_source_char() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1872,7 +1872,7 @@ fn buffer_text_fragment_append_context_appends_source_char() {
             CharPos0::new(0),
             CharPos0::new(1),
             &face_resolver,
-            ResolvedBufferTextFragmentAdvance::natural(8.0),
+            ResolvedBufferTextSourceAdvance::natural(8.0),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended buffer fragment");
@@ -1892,7 +1892,7 @@ fn buffer_text_fragment_append_context_appends_source_char() {
 }
 
 #[test]
-fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row() {
+fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating_row() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1936,7 +1936,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
     let end = CharPos0::new(2);
 
     let append_context =
-        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
+        BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let measured_width = append_context
         .measure_source_range_natural_advance_to_text_row(
             &mut builder,
@@ -1966,7 +1966,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
             start,
             end,
             &face_resolver,
-            ResolvedBufferTextFragmentAdvance::natural(measured_width),
+            ResolvedBufferTextSourceAdvance::natural(measured_width),
             position,
         )
         .expect("appended buffer fragment");
@@ -1976,7 +1976,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
 }
 
 #[test]
-fn buffer_text_fragment_append_context_uses_resolved_advance() {
+fn buffer_text_source_append_context_uses_resolved_advance() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2014,7 +2014,7 @@ fn buffer_text_fragment_append_context_uses_resolved_advance() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let append_context =
-        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+        BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let (progress, end) = append_context
         .append_resolved_source_range_to_text_row(
             &mut builder,
@@ -2024,7 +2024,7 @@ fn buffer_text_fragment_append_context_uses_resolved_advance() {
             CharPos0::new(0),
             CharPos0::new(1),
             &face_resolver,
-            ResolvedBufferTextFragmentAdvance::resolved(13.0),
+            ResolvedBufferTextSourceAdvance::resolved(13.0),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended resolved buffer fragment");
@@ -2041,7 +2041,7 @@ fn buffer_text_fragment_append_context_uses_resolved_advance() {
 }
 
 #[test]
-fn buffer_text_fragment_append_context_composes_with_current_row_tail() {
+fn buffer_text_source_append_context_composes_with_current_row_tail() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2082,7 +2082,7 @@ fn buffer_text_fragment_append_context_composes_with_current_row_tail() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let append_context =
-        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
+        BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let (progress, end) = append_context
         .append_resolved_source_range_to_text_row(
             &mut builder,
@@ -2092,7 +2092,7 @@ fn buffer_text_fragment_append_context_composes_with_current_row_tail() {
             CharPos0::new(1),
             CharPos0::new(2),
             &face_resolver,
-            ResolvedBufferTextFragmentAdvance::natural(0.0),
+            ResolvedBufferTextSourceAdvance::natural(0.0),
             DisplayRowPosition { x_px: 8.0, col: 1 },
         )
         .expect("appended combining buffer char");
@@ -2149,7 +2149,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let item = BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' };
+    let item = BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' };
 
     let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
@@ -2228,110 +2228,111 @@ fn buffer_text_item_append_context_builds_control_char_item() {
 }
 
 #[test]
-fn buffer_text_fragment_append_item_names_nobreak_display_policy() {
+fn buffer_text_source_append_item_names_nobreak_display_policy() {
     assert_eq!(
-        BufferTextFragmentAppendItem::nobreak_display('\u{00A0}', 1),
-        Some(BufferTextFragmentAppendItem::SourceMappedText { text: " ".into() })
+        BufferTextSourceAppendItem::nobreak_display('\u{00A0}', 1),
+        Some(BufferTextSourceAppendItem::SourceMappedText { text: " ".into() })
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::nobreak_display('\u{00AD}', 1),
-        Some(BufferTextFragmentAppendItem::SourceMappedText { text: "-".into() })
+        BufferTextSourceAppendItem::nobreak_display('\u{00AD}', 1),
+        Some(BufferTextSourceAppendItem::SourceMappedText { text: "-".into() })
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::nobreak_display('\u{00A0}', 2),
-        Some(BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() })
+        BufferTextSourceAppendItem::nobreak_display('\u{00A0}', 2),
+        Some(BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() })
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::nobreak_display('\u{00AD}', 2),
-        Some(BufferTextFragmentAppendItem::SourceMappedText { text: "\\-".into() })
+        BufferTextSourceAppendItem::nobreak_display('\u{00AD}', 2),
+        Some(BufferTextSourceAppendItem::SourceMappedText { text: "\\-".into() })
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::nobreak_display('\u{00A0}', 0),
+        BufferTextSourceAppendItem::nobreak_display('\u{00A0}', 0),
         None
     );
-    assert_eq!(BufferTextFragmentAppendItem::nobreak_display('x', 2), None);
+    assert_eq!(BufferTextSourceAppendItem::nobreak_display('x', 2), None);
 }
 
 #[test]
-fn buffer_text_fragment_special_display_names_precluster_policy() {
+fn buffer_text_source_special_display_names_precluster_policy() {
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_precluster_char('\u{0001}', 2),
-        Some(BufferTextFragmentSpecialDisplay::Control(
-            BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' }
+        BufferTextSourceSpecialDisplay::for_precluster_char('\u{0001}', 2),
+        Some(BufferTextSourceSpecialDisplay::Control(
+            BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }
         ))
     );
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_precluster_char('\u{007F}', 2),
-        Some(BufferTextFragmentSpecialDisplay::Control(
-            BufferTextFragmentAppendItem::ControlChar { ch: '\u{007F}' }
+        BufferTextSourceSpecialDisplay::for_precluster_char('\u{007F}', 2),
+        Some(BufferTextSourceSpecialDisplay::Control(
+            BufferTextSourceAppendItem::ControlChar { ch: '\u{007F}' }
         ))
     );
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_precluster_char('\u{00A0}', 2),
-        Some(BufferTextFragmentSpecialDisplay::Nobreak(
-            BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() }
+        BufferTextSourceSpecialDisplay::for_precluster_char('\u{00A0}', 2),
+        Some(BufferTextSourceSpecialDisplay::Nobreak(
+            BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }
         ))
     );
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_precluster_char('\n', 2),
+        BufferTextSourceSpecialDisplay::for_precluster_char('\n', 2),
         None
     );
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_precluster_char('\t', 2),
+        BufferTextSourceSpecialDisplay::for_precluster_char('\t', 2),
         None
     );
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_precluster_char('x', 2),
+        BufferTextSourceSpecialDisplay::for_precluster_char('x', 2),
         None
     );
 }
 
 #[test]
-fn buffer_text_fragment_special_display_names_cluster_policy() {
+fn buffer_text_source_special_display_names_cluster_policy() {
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_cluster_state(
-            BufferTextFragmentClusterState::for_char('\u{200E}', Some(('a', false)),)
-        ),
-        Some(BufferTextFragmentSpecialDisplay::Glyphless(
-            BufferTextFragmentAppendItem::Glyphless {
+        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+            '\u{200E}',
+            Some(('a', false)),
+        )),
+        Some(BufferTextSourceSpecialDisplay::Glyphless(
+            BufferTextSourceAppendItem::Glyphless {
                 ch: '\u{200E}',
                 method: GlyphlessMethod::ZeroWidth,
             }
         ))
     );
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_cluster_state(
-            BufferTextFragmentClusterState::for_char('\u{FE0F}', Some(('\u{2764}', false)),)
-        ),
+        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+            '\u{FE0F}',
+            Some(('\u{2764}', false)),
+        )),
         None
     );
     assert_eq!(
-        BufferTextFragmentSpecialDisplay::for_cluster_state(
-            BufferTextFragmentClusterState::for_char('x', None,)
-        ),
+        BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
+            'x', None,
+        )),
         None
     );
 }
 
 #[test]
-fn buffer_text_fragment_append_item_names_fallback_width_policy() {
+fn buffer_text_source_append_item_names_fallback_width_policy() {
     assert_eq!(
-        BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_policy(),
-        BufferTextFragmentFallbackWidthPolicy::Columns(2)
+        BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_policy(),
+        BufferTextSourceFallbackWidthPolicy::Columns(2)
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() }
-            .fallback_width_policy(),
-        BufferTextFragmentFallbackWidthPolicy::Columns(2)
+        BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }.fallback_width_policy(),
+        BufferTextSourceFallbackWidthPolicy::Columns(2)
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::SourceMappedText { text: "".into() }
+        BufferTextSourceAppendItem::SourceMappedText { text: "".into() }
             .fallback_width_policy()
             .width_px(8.0),
         8.0
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::Glyphless {
+        BufferTextSourceAppendItem::Glyphless {
             ch: '\u{200E}',
             method: GlyphlessMethod::ZeroWidth,
         }
@@ -2342,45 +2343,45 @@ fn buffer_text_fragment_append_item_names_fallback_width_policy() {
 }
 
 #[test]
-fn buffer_text_fragment_append_item_names_glyphless_display_policy() {
+fn buffer_text_source_append_item_names_glyphless_display_policy() {
     let variation_selector_state =
-        BufferTextFragmentClusterState::for_char('\u{FE0F}', Some(('\u{2764}', false)));
+        BufferTextSourceClusterState::for_char('\u{FE0F}', Some(('\u{2764}', false)));
     assert!(variation_selector_state.is_cluster_continuation());
 
     assert_eq!(
-        BufferTextFragmentAppendItem::glyphless_display(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
             '\u{0080}', None,
         )),
-        Some(BufferTextFragmentAppendItem::Glyphless {
+        Some(BufferTextSourceAppendItem::Glyphless {
             ch: '\u{0080}',
             method: GlyphlessMethod::HexCode,
         })
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::glyphless_display(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
             '\u{FE0F}', None,
         )),
-        Some(BufferTextFragmentAppendItem::Glyphless {
+        Some(BufferTextSourceAppendItem::Glyphless {
             ch: '\u{FE0F}',
             method: GlyphlessMethod::ZeroWidth,
         })
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::glyphless_display(variation_selector_state),
+        BufferTextSourceAppendItem::glyphless_display(variation_selector_state),
         None
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::glyphless_display(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
             '\u{200E}',
             Some(('a', false)),
         )),
-        Some(BufferTextFragmentAppendItem::Glyphless {
+        Some(BufferTextSourceAppendItem::Glyphless {
             ch: '\u{200E}',
             method: GlyphlessMethod::ZeroWidth,
         })
     );
     assert_eq!(
-        BufferTextFragmentAppendItem::glyphless_display(BufferTextFragmentClusterState::for_char(
+        BufferTextSourceAppendItem::glyphless_display(BufferTextSourceClusterState::for_char(
             'x', None,
         )),
         None
@@ -2441,7 +2442,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
             CharPos0::new(0),
             CharPos0::new(1),
             &face_resolver,
-            BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() },
+            BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() },
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended source-mapped buffer text item fragment");
@@ -2514,7 +2515,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
             CharPos0::new(0),
             CharPos0::new(1),
             &face_resolver,
-            BufferTextFragmentAppendItem::Glyphless {
+            BufferTextSourceAppendItem::Glyphless {
                 ch: '\u{fff0}',
                 method: GlyphlessMethod::HexCode,
             },

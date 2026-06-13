@@ -38,12 +38,11 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAdvanceResolver, BufferTextFragmentClusterState,
-    BufferTextFragmentSpecialDisplay, BufferTextRowAppendContext,
-    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementCursorPolicy,
-    DisplayReplacementMediaAppendResolution, DisplayReplacementRowAppendContext,
-    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
-    LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
+    BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceClusterState,
+    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementAppendItem,
+    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
+    DisplayReplacementRowAppendContext, DisplayRowAppendArea, DisplayRowAppendSurface,
+    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -3992,7 +3991,7 @@ impl LayoutEngine {
         // Exact joined-form advances for the current contextual-shaping run,
         // shaped once via shape_run and keyed by absolute byte offset (robust
         // to wrap re-processing). Empty/unused for non-complex text.
-        let mut buffer_text_advance = BufferTextFragmentAdvanceResolver::default();
+        let mut buffer_text_advance = BufferTextSourceAdvanceResolver::default();
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
@@ -4926,7 +4925,7 @@ impl LayoutEngine {
                 continue;
             }
 
-            let precluster_special_display = BufferTextFragmentSpecialDisplay::for_precluster_char(
+            let precluster_special_display = BufferTextSourceSpecialDisplay::for_precluster_char(
                 ch,
                 params.nobreak_char_display,
             );
@@ -5129,11 +5128,11 @@ impl LayoutEngine {
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
-            let cluster_state = BufferTextFragmentClusterState::for_char(ch, cluster_tail);
+            let cluster_state = BufferTextSourceClusterState::for_char(ch, cluster_tail);
 
             // Glyphless character detection (C1 controls, format chars, etc.)
             if let Some(special_display) =
-                BufferTextFragmentSpecialDisplay::for_cluster_state(cluster_state)
+                BufferTextSourceSpecialDisplay::for_cluster_state(cluster_state)
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();

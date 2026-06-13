@@ -238,7 +238,7 @@ impl DisplayTextRunClusterAdvances {
 pub(crate) struct DisplayTextRunMeasurementPlan;
 
 impl DisplayTextRunMeasurementPlan {
-    pub(crate) fn from_resolved_fragment_advance(
+    pub(crate) fn from_resolved_source_advance(
         text: &str,
         advance_px: f32,
     ) -> DisplayTextRunMeasurement {

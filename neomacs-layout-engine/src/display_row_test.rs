@@ -2079,9 +2079,9 @@ fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan(
 }
 
 #[test]
-fn display_text_run_measurement_plan_builds_resolved_fragment_advance() {
+fn display_text_run_measurement_plan_builds_resolved_source_advance() {
     let measurement =
-        crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(
+        crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::from_resolved_source_advance(
             "\u{301}",
             0.0,
         );
@@ -2089,7 +2089,7 @@ fn display_text_run_measurement_plan_builds_resolved_fragment_advance() {
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
         measurement
     else {
-        panic!("resolved fragment advances should produce measured text-run plans");
+        panic!("resolved source advances should produce measured text-run plans");
     };
     assert_eq!(
         advances
@@ -2100,13 +2100,13 @@ fn display_text_run_measurement_plan_builds_resolved_fragment_advance() {
     );
 
     let wide_measurement =
-        crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(
+        crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::from_resolved_source_advance(
             "中", 14.0,
         );
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(wide_advances) =
         wide_measurement
     else {
-        panic!("resolved wide fragment advance should produce a measured text-run plan");
+        panic!("resolved wide source advance should produce a measured text-run plan");
     };
     assert_eq!(
         wide_advances

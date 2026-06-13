@@ -71,23 +71,23 @@ impl DisplayItemSource for SingleDisplayItemSource {
     }
 }
 
-struct ResolvedFragmentAdvanceRenderPolicy {
+struct ResolvedSourceAdvanceRenderPolicy {
     advance_px: f32,
 }
 
-impl ResolvedFragmentAdvanceRenderPolicy {
+impl ResolvedSourceAdvanceRenderPolicy {
     fn new(advance_px: f32) -> Self {
         Self { advance_px }
     }
 
     fn measurement_for_text(&self, text: &str) -> DisplayRowItemMeasurement {
         DisplayRowItemMeasurement::TextRun(
-            DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(text, self.advance_px),
+            DisplayTextRunMeasurementPlan::from_resolved_source_advance(text, self.advance_px),
         )
     }
 }
 
-impl DisplayRowRenderPolicy for ResolvedFragmentAdvanceRenderPolicy {
+impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
     fn measurement_for(
         &mut self,
         item: &DisplayItem,
@@ -107,29 +107,29 @@ struct NaturalDisplayRowAppendRenderPolicy;
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum BufferTextFragmentAppendMeasurement {
+enum BufferTextSourceAppendMeasurement {
     Natural,
     ResolvedAdvance { advance_px: f32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ResolvedBufferTextFragmentAdvance {
+pub(crate) struct ResolvedBufferTextSourceAdvance {
     advance_px: f32,
-    append_measurement: BufferTextFragmentAppendMeasurement,
+    append_measurement: BufferTextSourceAppendMeasurement,
 }
 
-impl ResolvedBufferTextFragmentAdvance {
+impl ResolvedBufferTextSourceAdvance {
     fn natural(advance_px: f32) -> Self {
         Self {
             advance_px,
-            append_measurement: BufferTextFragmentAppendMeasurement::Natural,
+            append_measurement: BufferTextSourceAppendMeasurement::Natural,
         }
     }
 
     fn resolved(advance_px: f32) -> Self {
         Self {
             advance_px,
-            append_measurement: BufferTextFragmentAppendMeasurement::ResolvedAdvance { advance_px },
+            append_measurement: BufferTextSourceAppendMeasurement::ResolvedAdvance { advance_px },
         }
     }
 
@@ -137,41 +137,41 @@ impl ResolvedBufferTextFragmentAdvance {
         self.advance_px
     }
 
-    fn append_measurement(self) -> BufferTextFragmentAppendMeasurement {
+    fn append_measurement(self) -> BufferTextSourceAppendMeasurement {
         self.append_measurement
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct BufferTextFragmentAdvanceResolver {
+pub(crate) struct BufferTextSourceAdvanceResolver {
     complex_run: ComplexTextRunAdvanceResolver,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BufferTextFragmentAdvancePath {
-    NaturalRenderedFragment,
+enum BufferTextSourceAdvancePath {
+    NaturalRenderedSource,
     ResolvedComplexRun,
 }
 
-impl BufferTextFragmentAdvancePath {
-    fn for_cluster_state(cluster: BufferTextFragmentClusterState) -> Self {
+impl BufferTextSourceAdvancePath {
+    fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
         if crate::composition::needs_complex_shaping(cluster.ch()) {
             Self::ResolvedComplexRun
         } else {
-            Self::NaturalRenderedFragment
+            Self::NaturalRenderedSource
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BufferTextFragmentNaturalFallbackAdvance {
+enum BufferTextSourceNaturalFallbackAdvance {
     Tab,
     ClusterContinuation,
     FaceColumns { columns: usize },
 }
 
-impl BufferTextFragmentNaturalFallbackAdvance {
-    fn for_cluster_state(cluster: BufferTextFragmentClusterState) -> Self {
+impl BufferTextSourceNaturalFallbackAdvance {
+    fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
         let ch = cluster.ch();
         if ch == '\t' {
             Self::Tab
@@ -208,25 +208,25 @@ impl BufferTextFragmentNaturalFallbackAdvance {
     }
 }
 
-enum BufferTextFragmentRenderPolicy {
+enum BufferTextSourceRenderPolicy {
     Natural(NaturalDisplayRowAppendRenderPolicy),
-    Resolved(ResolvedFragmentAdvanceRenderPolicy),
+    Resolved(ResolvedSourceAdvanceRenderPolicy),
 }
 
-impl BufferTextFragmentRenderPolicy {
-    fn new(measurement: BufferTextFragmentAppendMeasurement) -> Self {
+impl BufferTextSourceRenderPolicy {
+    fn new(measurement: BufferTextSourceAppendMeasurement) -> Self {
         match measurement {
-            BufferTextFragmentAppendMeasurement::Natural => {
+            BufferTextSourceAppendMeasurement::Natural => {
                 Self::Natural(NaturalDisplayRowAppendRenderPolicy)
             }
-            BufferTextFragmentAppendMeasurement::ResolvedAdvance { advance_px } => {
-                Self::Resolved(ResolvedFragmentAdvanceRenderPolicy::new(advance_px))
+            BufferTextSourceAppendMeasurement::ResolvedAdvance { advance_px } => {
+                Self::Resolved(ResolvedSourceAdvanceRenderPolicy::new(advance_px))
             }
         }
     }
 }
 
-impl DisplayRowRenderPolicy for BufferTextFragmentRenderPolicy {
+impl DisplayRowRenderPolicy for BufferTextSourceRenderPolicy {
     fn measurement_for(
         &mut self,
         item: &DisplayItem,
@@ -1200,7 +1200,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-    resolved_advance: ResolvedBufferTextFragmentAdvance,
+    resolved_advance: ResolvedBufferTextSourceAdvance,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -1211,7 +1211,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
-        BufferTextFragmentRenderPolicy::new(resolved_advance.append_measurement());
+        BufferTextSourceRenderPolicy::new(resolved_advance.append_measurement());
     let outcome = render_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -1228,7 +1228,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
 }
 
 #[cfg(test)]
-pub(crate) struct BufferTextFragmentAppendContext<'a, B: LayoutBufferView + ?Sized> {
+pub(crate) struct BufferTextSourceRangeAppendContext<'a, B: LayoutBufferView + ?Sized> {
     buffer: &'a B,
     buffer_id: BufferId,
     face_id: u32,
@@ -1237,7 +1237,7 @@ pub(crate) struct BufferTextFragmentAppendContext<'a, B: LayoutBufferView + ?Siz
 }
 
 #[cfg(test)]
-impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
+impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B> {
     pub(crate) fn new(
         buffer: &'a B,
         buffer_id: BufferId,
@@ -1258,7 +1258,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
     #[cfg(test)]
     pub(crate) fn resolve_source_range_advance_to_text_row(
         &self,
-        resolver: &mut BufferTextFragmentAdvanceResolver,
+        resolver: &mut BufferTextSourceAdvanceResolver,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
@@ -1269,8 +1269,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
         face_resolver: &FaceResolver,
         active_face_state: &DisplayRowActiveFaceState,
         position: DisplayRowPosition,
-        cluster: BufferTextFragmentClusterState,
-    ) -> ResolvedBufferTextFragmentAdvance {
+        cluster: BufferTextSourceClusterState,
+    ) -> ResolvedBufferTextSourceAdvance {
         resolver.resolve_source_range_to_text_row(
             builder,
             evaluator,
@@ -1300,7 +1300,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
         start: CharPos0,
         end: CharPos0,
         face_resolver: &FaceResolver,
-        resolved_advance: ResolvedBufferTextFragmentAdvance,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         append_resolved_buffer_text_source_range_to_text_row(
@@ -1420,7 +1420,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         start: CharPos0,
         end: CharPos0,
         face_resolver: &FaceResolver,
-        item: BufferTextFragmentAppendItem,
+        item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
     ) -> f32 {
         self.item_active_face(geometry)
@@ -1447,7 +1447,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         start: CharPos0,
         end: CharPos0,
         face_resolver: &FaceResolver,
-        item: BufferTextFragmentAppendItem,
+        item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         self.item_active_face(geometry)
@@ -1468,7 +1468,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     pub(crate) fn resolve_source_range_advance_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
-        resolver: &mut BufferTextFragmentAdvanceResolver,
+        resolver: &mut BufferTextSourceAdvanceResolver,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
@@ -1478,8 +1478,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         end: CharPos0,
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
-        cluster: BufferTextFragmentClusterState,
-    ) -> ResolvedBufferTextFragmentAdvance {
+        cluster: BufferTextSourceClusterState,
+    ) -> ResolvedBufferTextSourceAdvance {
         let frame = self.active_face_context(geometry).active_face_frame();
         resolver.resolve_source_range_to_text_row(
             builder,
@@ -1510,7 +1510,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         start: CharPos0,
         end: CharPos0,
         face_resolver: &FaceResolver,
-        resolved_advance: ResolvedBufferTextFragmentAdvance,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let frame = self.active_face_context(geometry).active_face_frame();
@@ -1557,7 +1557,7 @@ fn measure_buffer_text_source_range_append_progress_to_text_row<B: LayoutBufferV
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
-        BufferTextFragmentRenderPolicy::new(BufferTextFragmentAppendMeasurement::Natural);
+        BufferTextSourceRenderPolicy::new(BufferTextSourceAppendMeasurement::Natural);
     let outcome = measure_display_source_append_request_against_current_text_row(
         builder,
         evaluator,
@@ -1620,7 +1620,7 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     active_face_state: &DisplayRowActiveFaceState,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
-    cluster: BufferTextFragmentClusterState,
+    cluster: BufferTextSourceClusterState,
 ) -> f32 {
     if let Some(measured_width) = measure_buffer_text_source_range_natural_advance_to_text_row(
         builder,
@@ -1639,7 +1639,7 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
         return measured_width;
     }
 
-    fallback_buffer_text_fragment_natural_advance_to_text_row(
+    fallback_buffer_text_source_range_natural_advance_to_text_row(
         font_metrics,
         active_face_state,
         &frame,
@@ -1648,14 +1648,14 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     )
 }
 
-fn fallback_buffer_text_fragment_natural_advance_to_text_row(
+fn fallback_buffer_text_source_range_natural_advance_to_text_row(
     font_metrics: &mut Option<FontMetricsService>,
     active_face_state: &DisplayRowActiveFaceState,
     frame: &DisplayRowAppendFrame,
     position: DisplayRowPosition,
-    cluster: BufferTextFragmentClusterState,
+    cluster: BufferTextSourceClusterState,
 ) -> f32 {
-    BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(cluster).resolve_to_text_row(
+    BufferTextSourceNaturalFallbackAdvance::for_cluster_state(cluster).resolve_to_text_row(
         font_metrics,
         active_face_state,
         frame,
@@ -1664,7 +1664,7 @@ fn fallback_buffer_text_fragment_natural_advance_to_text_row(
     )
 }
 
-impl BufferTextFragmentAdvanceResolver {
+impl BufferTextSourceAdvanceResolver {
     #[allow(clippy::too_many_arguments)]
     fn resolve_source_range_to_text_row<B: LayoutBufferView + ?Sized>(
         &mut self,
@@ -1681,11 +1681,11 @@ impl BufferTextFragmentAdvanceResolver {
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
-        cluster: BufferTextFragmentClusterState,
-    ) -> ResolvedBufferTextFragmentAdvance {
+        cluster: BufferTextSourceClusterState,
+    ) -> ResolvedBufferTextSourceAdvance {
         let ch = cluster.ch();
-        match BufferTextFragmentAdvancePath::for_cluster_state(cluster) {
-            BufferTextFragmentAdvancePath::ResolvedComplexRun => {
+        match BufferTextSourceAdvancePath::for_cluster_state(cluster) {
+            BufferTextSourceAdvancePath::ResolvedComplexRun => {
                 let mut policy =
                     DisplayRowComplexTextRunAdvancePolicy::new(active_face_state, font_metrics);
                 let advance_px = self.complex_run.advance_for_char(
@@ -1695,9 +1695,9 @@ impl BufferTextFragmentAdvanceResolver {
                     cluster.is_cluster_continuation(),
                     &mut policy,
                 );
-                ResolvedBufferTextFragmentAdvance::resolved(advance_px)
+                ResolvedBufferTextSourceAdvance::resolved(advance_px)
             }
-            BufferTextFragmentAdvancePath::NaturalRenderedFragment => {
+            BufferTextSourceAdvancePath::NaturalRenderedSource => {
                 let advance_px = resolve_buffer_text_source_range_natural_advance_to_text_row(
                     builder,
                     evaluator,
@@ -1712,7 +1712,7 @@ impl BufferTextFragmentAdvanceResolver {
                     position,
                     cluster,
                 );
-                ResolvedBufferTextFragmentAdvance::natural(advance_px)
+                ResolvedBufferTextSourceAdvance::natural(advance_px)
             }
         }
     }
@@ -1724,7 +1724,7 @@ fn buffer_display_item_source_range_item<B: LayoutBufferView + ?Sized>(
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-    item: BufferTextFragmentAppendItem,
+    item: BufferTextSourceAppendItem,
 ) -> Option<(DisplayItem, DisplayRowAppendKind)> {
     if end <= start {
         return None;
@@ -1759,7 +1759,7 @@ fn append_buffer_display_item_source_range_to_text_row_and_emit<B: LayoutBufferV
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     face_id: u32,
-    item: BufferTextFragmentAppendItem,
+    item: BufferTextSourceAppendItem,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -1797,7 +1797,7 @@ fn measure_buffer_display_item_source_range_append_progress_to_text_row<
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     face_id: u32,
-    item: BufferTextFragmentAppendItem,
+    item: BufferTextSourceAppendItem,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<DisplayRowAppendProgress> {
@@ -1825,36 +1825,36 @@ fn measure_buffer_display_item_source_range_append_progress_to_text_row<
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextFragmentAppendItem {
+pub(crate) enum BufferTextSourceAppendItem {
     ControlChar { ch: char },
     SourceMappedText { text: Box<str> },
     Glyphless { ch: char, method: GlyphlessMethod },
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextFragmentSpecialDisplay {
-    Control(BufferTextFragmentAppendItem),
-    Nobreak(BufferTextFragmentAppendItem),
-    Glyphless(BufferTextFragmentAppendItem),
+pub(crate) enum BufferTextSourceSpecialDisplay {
+    Control(BufferTextSourceAppendItem),
+    Nobreak(BufferTextSourceAppendItem),
+    Glyphless(BufferTextSourceAppendItem),
 }
 
-impl BufferTextFragmentSpecialDisplay {
+impl BufferTextSourceSpecialDisplay {
     pub(crate) fn for_precluster_char(ch: char, nobreak_display_policy: i32) -> Option<Self> {
         if Self::is_control_char(ch) {
-            Some(Self::Control(BufferTextFragmentAppendItem::ControlChar {
+            Some(Self::Control(BufferTextSourceAppendItem::ControlChar {
                 ch,
             }))
         } else {
-            BufferTextFragmentAppendItem::nobreak_display(ch, nobreak_display_policy)
+            BufferTextSourceAppendItem::nobreak_display(ch, nobreak_display_policy)
                 .map(Self::Nobreak)
         }
     }
 
-    pub(crate) fn for_cluster_state(cluster: BufferTextFragmentClusterState) -> Option<Self> {
-        BufferTextFragmentAppendItem::glyphless_display(cluster).map(Self::Glyphless)
+    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Option<Self> {
+        BufferTextSourceAppendItem::glyphless_display(cluster).map(Self::Glyphless)
     }
 
-    pub(crate) fn into_append_item(self) -> BufferTextFragmentAppendItem {
+    pub(crate) fn into_append_item(self) -> BufferTextSourceAppendItem {
         match self {
             Self::Control(item) | Self::Nobreak(item) | Self::Glyphless(item) => item,
         }
@@ -1874,18 +1874,18 @@ impl BufferTextFragmentSpecialDisplay {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BufferTextFragmentFallbackWidthPolicy {
+enum BufferTextSourceFallbackWidthPolicy {
     Columns(usize),
 }
 
-impl BufferTextFragmentFallbackWidthPolicy {
-    fn for_append_item(item: &BufferTextFragmentAppendItem) -> Self {
+impl BufferTextSourceFallbackWidthPolicy {
+    fn for_append_item(item: &BufferTextSourceAppendItem) -> Self {
         match item {
-            BufferTextFragmentAppendItem::ControlChar { .. } => Self::Columns(2),
-            BufferTextFragmentAppendItem::SourceMappedText { text } => {
+            BufferTextSourceAppendItem::ControlChar { .. } => Self::Columns(2),
+            BufferTextSourceAppendItem::SourceMappedText { text } => {
                 Self::Columns(text.chars().count().max(1))
             }
-            BufferTextFragmentAppendItem::Glyphless { .. } => Self::Columns(1),
+            BufferTextSourceAppendItem::Glyphless { .. } => Self::Columns(1),
         }
     }
 
@@ -1901,13 +1901,13 @@ impl BufferTextFragmentFallbackWidthPolicy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextFragmentClusterState {
+pub(crate) struct BufferTextSourceClusterState {
     ch: char,
     tail: Option<(char, bool)>,
     is_cluster_continuation: bool,
 }
 
-impl BufferTextFragmentClusterState {
+impl BufferTextSourceClusterState {
     pub(crate) fn for_char(ch: char, tail: Option<(char, bool)>) -> Self {
         Self {
             ch,
@@ -1929,7 +1929,7 @@ impl BufferTextFragmentClusterState {
     }
 }
 
-impl BufferTextFragmentAppendItem {
+impl BufferTextSourceAppendItem {
     pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
         let text = match (display_policy, ch) {
             (1, '\u{00A0}') => " ",
@@ -1941,7 +1941,7 @@ impl BufferTextFragmentAppendItem {
         Some(Self::SourceMappedText { text: text.into() })
     }
 
-    pub(crate) fn glyphless_display(cluster: BufferTextFragmentClusterState) -> Option<Self> {
+    pub(crate) fn glyphless_display(cluster: BufferTextSourceClusterState) -> Option<Self> {
         let ch = cluster.ch();
         if cluster.has_tail() && crate::composition::is_composition_joiner(ch) {
             return None;
@@ -1958,8 +1958,8 @@ impl BufferTextFragmentAppendItem {
         }
     }
 
-    fn fallback_width_policy(&self) -> BufferTextFragmentFallbackWidthPolicy {
-        BufferTextFragmentFallbackWidthPolicy::for_append_item(self)
+    fn fallback_width_policy(&self) -> BufferTextSourceFallbackWidthPolicy {
+        BufferTextSourceFallbackWidthPolicy::for_append_item(self)
     }
 
     fn into_display_item_kind(self) -> DisplayItemKind {
@@ -2010,7 +2010,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         start: CharPos0,
         end: CharPos0,
         face_resolver: &FaceResolver,
-        item: BufferTextFragmentAppendItem,
+        item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         append_buffer_display_item_source_range_to_text_row_and_emit(
@@ -2040,7 +2040,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         start: CharPos0,
         end: CharPos0,
         face_resolver: &FaceResolver,
-        item: BufferTextFragmentAppendItem,
+        item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
     ) -> Option<f32> {
         Some(
@@ -2073,7 +2073,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         start: CharPos0,
         end: CharPos0,
         face_resolver: &FaceResolver,
-        item: BufferTextFragmentAppendItem,
+        item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
     ) -> f32 {
         let fallback_width = item
