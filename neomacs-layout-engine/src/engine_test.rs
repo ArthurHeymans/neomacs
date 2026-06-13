@@ -1,5 +1,7 @@
 use super::*;
+use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
+use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy,
 };
@@ -330,6 +332,40 @@ fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     assert_eq!(
         DisplayRowPrefixRequest::initial(false, true),
         DisplayRowPrefixRequest::None
+    );
+}
+
+#[test]
+fn display_row_prefix_request_builds_typed_prefix_source() {
+    let _eval = Context::new();
+    let line_fragment = DisplayRowPrefixRequest::Line
+        .source_for_value(Value::string("line"), CharPos0::new(4))
+        .expect("line prefix source")
+        .fragment();
+    assert_eq!(
+        line_fragment.origin,
+        DisplayOrigin::LinePrefix {
+            anchor_charpos: CharPos0::new(4),
+        }
+    );
+    assert_eq!(line_fragment.base_face_policy, BaseFacePolicy::DefaultFace);
+
+    let wrap_fragment = DisplayRowPrefixRequest::Wrap
+        .source_for_value(Value::string("wrap"), CharPos0::new(7))
+        .expect("wrap prefix source")
+        .fragment();
+    assert_eq!(
+        wrap_fragment.origin,
+        DisplayOrigin::WrapPrefix {
+            anchor_charpos: CharPos0::new(7),
+        }
+    );
+    assert_eq!(wrap_fragment.base_face_policy, BaseFacePolicy::DefaultFace);
+
+    assert!(
+        DisplayRowPrefixRequest::None
+            .source_for_value(Value::string("none"), CharPos0::new(0))
+            .is_none()
     );
 }
 

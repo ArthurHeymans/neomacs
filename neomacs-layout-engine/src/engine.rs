@@ -457,6 +457,19 @@ enum DisplayRowPrefixRequest {
     Wrap,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayRowPrefixKind {
+    Line,
+    Wrap,
+}
+
+#[derive(Clone, Copy)]
+struct DisplayRowPrefixSource {
+    value: Value,
+    anchor_charpos: CharPos0,
+    kind: DisplayRowPrefixKind,
+}
+
 impl CursorGeometrySource {
     fn from_captured_cursor(
         cursor: &CapturedCursorInfo,
@@ -1017,6 +1030,36 @@ impl DisplayRowPrefixRequest {
 
     fn uses_wrap_prefix(self) -> bool {
         matches!(self, Self::Wrap)
+    }
+
+    fn source_for_value(
+        self,
+        value: Value,
+        anchor_charpos: CharPos0,
+    ) -> Option<DisplayRowPrefixSource> {
+        let kind = match self {
+            Self::Line => DisplayRowPrefixKind::Line,
+            Self::Wrap => DisplayRowPrefixKind::Wrap,
+            Self::None => return None,
+        };
+        Some(DisplayRowPrefixSource {
+            value,
+            anchor_charpos,
+            kind,
+        })
+    }
+}
+
+impl DisplayRowPrefixSource {
+    fn fragment(self) -> DisplayTextFragment {
+        match self.kind {
+            DisplayRowPrefixKind::Line => {
+                DisplayTextFragment::line_prefix(self.value, self.anchor_charpos)
+            }
+            DisplayRowPrefixKind::Wrap => {
+                DisplayTextFragment::wrap_prefix(self.value, self.anchor_charpos)
+            }
+        }
     }
 }
 
@@ -4165,17 +4208,10 @@ impl LayoutEngine {
                     // Flush ligature run before prefix
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let prefix_fragment = if prefix_request.uses_wrap_prefix() {
-                        DisplayTextFragment::wrap_prefix(
-                            prefix_value,
-                            CharPos0::new(charpos as usize),
-                        )
-                    } else {
-                        DisplayTextFragment::line_prefix(
-                            prefix_value,
-                            CharPos0::new(charpos as usize),
-                        )
-                    };
+                    let prefix_source = prefix_request
+                        .source_for_value(prefix_value, CharPos0::new(charpos as usize))
+                        .expect("requested prefix should build a prefix source");
+                    let prefix_fragment = prefix_source.fragment();
                     let prefix_base_face = display_string_base_face(
                         buffer,
                         face_resolver,
