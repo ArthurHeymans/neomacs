@@ -4,6 +4,7 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
+use crate::display_property::DisplayReplacementProperty;
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
@@ -261,6 +262,41 @@ pub(crate) struct ResolvedDisplaySourceItem {
     pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum ResolvedDisplayReplacement {
+    Item(DisplayItemKind),
+    Placeholder(&'static str),
+}
+
+pub(crate) fn resolve_display_replacement(
+    display_prop: Value,
+    replacement: &DisplayReplacementProperty,
+    display_host: Option<&dyn DisplayHost>,
+    resolved_face: &ResolvedFace,
+    fallback_char_width: f32,
+    fallback_row_height: f32,
+) -> Option<ResolvedDisplayReplacement> {
+    if let Some(kind) = replacement.direct_media_item_kind() {
+        return Some(ResolvedDisplayReplacement::Item(kind));
+    }
+
+    if let Some(kind) = resolve_display_property_media(
+        &display_prop,
+        display_host,
+        resolved_face,
+        fallback_char_width,
+        fallback_row_height,
+    )
+    .filter(|kind| replacement.accepts_resolved_media_item(kind))
+    {
+        return Some(ResolvedDisplayReplacement::Item(kind));
+    }
+
+    replacement
+        .media_fallback_placeholder()
+        .map(ResolvedDisplayReplacement::Placeholder)
+}
+
 pub(crate) struct DisplaySourcePropertyResolver<'a> {
     params: DisplaySourceResolveParams<'a>,
     state: &'a mut DisplaySourceResolveState,
@@ -443,6 +479,7 @@ pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::display_item::{DisplayItemKind, DisplayXwidgetItem};
     use crate::neovm_bridge::LayoutBufferSnapshot;
     use neovm_core::emacs_core::Context;
     use neovm_core::face::FaceTable;
@@ -556,5 +593,52 @@ mod tests {
         assert_eq!(pending_face.face_id, 500);
         assert!(same_resolved_face(&pending_face.resolved, base_face.face()));
         assert_eq!(face_ids.finish(), 501);
+    }
+
+    #[test]
+    fn resolve_display_replacement_returns_direct_xwidget_item() {
+        let table = FaceTable::new();
+        let resolver = test_face_resolver(&table);
+        let xwidget = DisplayXwidgetItem {
+            xwidget_id: 42,
+            width: 120.0,
+            height: 36.0,
+        };
+
+        let resolved = resolve_display_replacement(
+            Value::NIL,
+            &DisplayReplacementProperty::Xwidget(xwidget),
+            None,
+            resolver.default_face(),
+            8.0,
+            16.0,
+        );
+
+        assert_eq!(
+            resolved,
+            Some(ResolvedDisplayReplacement::Item(DisplayItemKind::Xwidget(
+                xwidget
+            )))
+        );
+    }
+
+    #[test]
+    fn resolve_display_replacement_uses_media_placeholder_without_host() {
+        let table = FaceTable::new();
+        let resolver = test_face_resolver(&table);
+
+        let resolved = resolve_display_replacement(
+            Value::NIL,
+            &DisplayReplacementProperty::Image,
+            None,
+            resolver.default_face(),
+            8.0,
+            16.0,
+        );
+
+        assert_eq!(
+            resolved,
+            Some(ResolvedDisplayReplacement::Placeholder("[img]"))
+        );
     }
 }

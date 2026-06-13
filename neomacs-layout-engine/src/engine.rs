@@ -62,7 +62,7 @@ use crate::display_row_geometry::{
 use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBox};
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
-    resolve_display_property_media, resolve_display_string_base_face,
+    ResolvedDisplayReplacement, resolve_display_replacement, resolve_display_string_base_face,
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::fontconfig::FontSizing;
@@ -4687,27 +4687,28 @@ impl LayoutEngine {
                     if let Some(replacement) = display_property.replacement.as_ref()
                         && replacement.is_media_replacement()
                     {
-                        let maybe_media_item = replacement.direct_media_item_kind().or_else(|| {
-                            resolve_display_property_media(
-                                &prop_val,
-                                evaluator.display_host.as_deref(),
-                                active_face_state.resolved_face(),
-                                face_metrics.char_width,
-                                face_metrics.row_height,
-                            )
-                            .filter(|kind| replacement.accepts_resolved_media_item(kind))
-                        });
+                        let resolved_replacement = resolve_display_replacement(
+                            prop_val,
+                            replacement,
+                            evaluator.display_host.as_deref(),
+                            active_face_state.resolved_face(),
+                            face_metrics.char_width,
+                            face_metrics.row_height,
+                        );
 
-                        if let Some(media_item) = maybe_media_item {
-                            let media =
-                                crate::display_item::DisplayMediaReplacement::from_item_kind(
-                                    &media_item,
-                                )
-                                .expect("resolved media item should have media geometry");
-                            let display_width = media.width;
-                            let display_height = media.height;
-                            let (cursor_face_h, cursor_face_ascent) =
-                                if matches!(replacement, DisplayReplacementProperty::Xwidget(_)) {
+                        match resolved_replacement {
+                            Some(ResolvedDisplayReplacement::Item(media_item)) => {
+                                let media =
+                                    crate::display_item::DisplayMediaReplacement::from_item_kind(
+                                        &media_item,
+                                    )
+                                    .expect("resolved media item should have media geometry");
+                                let display_width = media.width;
+                                let display_height = media.height;
+                                let (cursor_face_h, cursor_face_ascent) = if matches!(
+                                    replacement,
+                                    DisplayReplacementProperty::Xwidget(_)
+                                ) {
                                     (
                                         display_height.max(face_metrics.row_height),
                                         display_height.max(face_metrics.ascent),
@@ -4716,90 +4717,94 @@ impl LayoutEngine {
                                     (display_height, display_height)
                                 };
 
-                            if point_in_display_replacement {
-                                capture_cursor_info(
-                                    &mut cursor_info,
-                                    CapturedCursorInfo::display_box_from_active_face_state(
-                                        &active_face_state,
-                                        CapturedCursorPlacement::from_row_text_position(
-                                            row_geometry.text_position(x, byte_idx, col),
-                                            CapturedCursorSlotWidth::Explicit(display_width),
-                                            false,
+                                if point_in_display_replacement {
+                                    capture_cursor_info(
+                                        &mut cursor_info,
+                                        CapturedCursorInfo::display_box_from_active_face_state(
+                                            &active_face_state,
+                                            CapturedCursorPlacement::from_row_text_position(
+                                                row_geometry.text_position(x, byte_idx, col),
+                                                CapturedCursorSlotWidth::Explicit(display_width),
+                                                false,
+                                            ),
+                                            cursor_face_h,
+                                            cursor_face_ascent,
                                         ),
-                                        cursor_face_h,
-                                        cursor_face_ascent,
-                                    ),
-                                );
-                            }
+                                    );
+                                }
 
-                            let replacement_frame = text_append_surface.frame(
-                                row_geometry.append_placement(raise_span.value_or(0.0)),
-                                DisplayRowAppendMetrics::display_box_from_active_face_state(
-                                    &active_face_state,
-                                    display_height,
-                                    display_height,
-                                    char_h,
-                                ),
-                            );
-                            if let Some((progress, position)) =
-                                append_display_replacement_item_kind_to_text_row_and_emit(
-                                    &mut self.matrix_builder,
-                                    &mut output_emitter,
-                                    evaluator,
-                                    &mut self.font_metrics,
-                                    display_replacement_source,
-                                    active_face_state.face_id(),
-                                    media_item,
-                                    face_resolver,
-                                    active_face_state.resolved_face(),
-                                    replacement_frame,
-                                    DisplayRowPosition { x_px: x, col },
-                                )
-                                && progress.status
-                                    == crate::display_row_builder::DisplayRowAppendStatus::Complete
-                                && progress.metrics.width_px > 0.0
-                            {
-                                row_geometry.include_row_extents(display_height, display_height);
-                                x = position.x_px;
-                                col = position.col;
-                            }
-                        } else if let Some(placeholder) = replacement.media_fallback_placeholder() {
-                            if point_in_display_replacement {
-                                capture_cursor_info(
-                                    &mut cursor_info,
-                                    CapturedCursorInfo::from_active_face_state(
+                                let replacement_frame = text_append_surface.frame(
+                                    row_geometry.append_placement(raise_span.value_or(0.0)),
+                                    DisplayRowAppendMetrics::display_box_from_active_face_state(
                                         &active_face_state,
-                                        CapturedCursorPlacement::from_row_text_position(
-                                            row_geometry.text_position(x, byte_idx, col),
-                                            CapturedCursorSlotWidth::FaceChar,
-                                            false,
-                                        ),
+                                        display_height,
+                                        display_height,
+                                        char_h,
                                     ),
                                 );
+                                if let Some((progress, position)) =
+                                    append_display_replacement_item_kind_to_text_row_and_emit(
+                                        &mut self.matrix_builder,
+                                        &mut output_emitter,
+                                        evaluator,
+                                        &mut self.font_metrics,
+                                        display_replacement_source,
+                                        active_face_state.face_id(),
+                                        media_item,
+                                        face_resolver,
+                                        active_face_state.resolved_face(),
+                                        replacement_frame,
+                                        DisplayRowPosition { x_px: x, col },
+                                    )
+                                    && progress.status
+                                        == crate::display_row_builder::DisplayRowAppendStatus::Complete
+                                    && progress.metrics.width_px > 0.0
+                                {
+                                    row_geometry
+                                        .include_row_extents(display_height, display_height);
+                                    x = position.x_px;
+                                    col = position.col;
+                                }
                             }
-                            let replacement_frame = text_append_surface.frame_for_active_face(
-                                row_geometry.append_placement(raise_span.value_or(0.0)),
-                                &active_face_state,
-                                char_h,
-                            );
-                            if let Some((_progress, position)) =
-                                append_display_replacement_source_mapped_text_to_text_row_and_emit(
-                                    &mut self.matrix_builder,
-                                    &mut output_emitter,
-                                    evaluator,
-                                    &mut self.font_metrics,
-                                    display_replacement_source,
-                                    active_face_state.face_id(),
-                                    placeholder,
-                                    face_resolver,
-                                    active_face_state.resolved_face(),
-                                    replacement_frame,
-                                    DisplayRowPosition { x_px: x, col },
-                                )
-                            {
-                                x = position.x_px;
-                                col = position.col;
+                            Some(ResolvedDisplayReplacement::Placeholder(placeholder)) => {
+                                if point_in_display_replacement {
+                                    capture_cursor_info(
+                                        &mut cursor_info,
+                                        CapturedCursorInfo::from_active_face_state(
+                                            &active_face_state,
+                                            CapturedCursorPlacement::from_row_text_position(
+                                                row_geometry.text_position(x, byte_idx, col),
+                                                CapturedCursorSlotWidth::FaceChar,
+                                                false,
+                                            ),
+                                        ),
+                                    );
+                                }
+                                let replacement_frame = text_append_surface.frame_for_active_face(
+                                    row_geometry.append_placement(raise_span.value_or(0.0)),
+                                    &active_face_state,
+                                    char_h,
+                                );
+                                if let Some((_progress, position)) =
+                                    append_display_replacement_source_mapped_text_to_text_row_and_emit(
+                                        &mut self.matrix_builder,
+                                        &mut output_emitter,
+                                        evaluator,
+                                        &mut self.font_metrics,
+                                        display_replacement_source,
+                                        active_face_state.face_id(),
+                                        placeholder,
+                                        face_resolver,
+                                        active_face_state.resolved_face(),
+                                        replacement_frame,
+                                        DisplayRowPosition { x_px: x, col },
+                                    )
+                                {
+                                    x = position.x_px;
+                                    col = position.col;
+                                }
                             }
+                            None => {}
                         }
 
                         // Skip covered buffer text
