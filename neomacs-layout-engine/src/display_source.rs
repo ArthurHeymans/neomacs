@@ -4,9 +4,7 @@ use crate::display_item::{
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
     GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
-use crate::display_property::{
-    DisplayDirectReplacement, DisplayReplacementProperty, classify_display_property,
-};
+use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
@@ -717,13 +715,6 @@ enum DisplayPropertySourceAction {
     },
 }
 
-fn direct_display_replacement_kind(replacement: DisplayDirectReplacement) -> DisplayItemKind {
-    match replacement {
-        DisplayDirectReplacement::Stretch(stretch) => DisplayItemKind::Stretch(stretch),
-        DisplayDirectReplacement::Media(media) => DisplayItemKind::MediaReplacement(media),
-    }
-}
-
 fn display_property_source_action(
     context: &mut DisplaySourceContext<'_>,
     display_prop: Value,
@@ -735,10 +726,14 @@ fn display_property_source_action(
             value: display_prop,
             base_face: face,
         },
-        Some(replacement) => {
+        Some(DisplayReplacementProperty::Stretch(stretch)) => DisplayPropertySourceAction::Emit {
+            kind: DisplayItemKind::Stretch(stretch),
+            layout: classification.modifiers,
+        },
+        Some(DisplayReplacementProperty::Media(replacement)) => {
             let kind = replacement
                 .direct_replacement()
-                .map(direct_display_replacement_kind)
+                .map(DisplayItemKind::MediaReplacement)
                 .or_else(|| {
                     context
                         .resolve_display_media_replacement(display_prop, face)

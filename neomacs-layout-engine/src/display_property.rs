@@ -28,28 +28,7 @@ pub(crate) enum DisplayMediaReplacementProperty {
     Webkit,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum DisplayDirectReplacement {
-    Stretch(DisplayStretch),
-    Media(DisplayMediaReplacement),
-}
-
 impl DisplayReplacementProperty {
-    pub(crate) fn direct_replacement(&self) -> Option<DisplayDirectReplacement> {
-        match self {
-            Self::Stretch(stretch) => Some(DisplayDirectReplacement::Stretch(stretch.clone())),
-            Self::Media(media) => media
-                .direct_replacement()
-                .map(DisplayDirectReplacement::Media),
-            Self::String => None,
-        }
-    }
-
-    pub(crate) fn accepts_media_replacement(&self, media: &DisplayMediaReplacement) -> bool {
-        self.media()
-            .is_some_and(|replacement| replacement.accepts_media_replacement(media))
-    }
-
     pub(crate) fn media(&self) -> Option<&DisplayMediaReplacementProperty> {
         match self {
             Self::Media(media) => Some(media),
