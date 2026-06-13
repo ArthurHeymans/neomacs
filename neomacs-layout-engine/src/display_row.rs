@@ -1323,7 +1323,7 @@ impl DisplayRowGeometry {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DisplayRowSourceGeometry {
+struct DisplayRowSourceGeometry {
     y: f32,
     width: f32,
     height: f32,
@@ -1333,7 +1333,7 @@ pub(crate) struct DisplayRowSourceGeometry {
 }
 
 impl DisplayRowSourceGeometry {
-    pub(crate) fn new(
+    fn new(
         y: f32,
         width: f32,
         height: f32,
@@ -1351,7 +1351,7 @@ impl DisplayRowSourceGeometry {
         }
     }
 
-    pub(crate) fn from_display_row_geometry(geometry: DisplayRowGeometry) -> Self {
+    fn from_display_row_geometry(geometry: DisplayRowGeometry) -> Self {
         Self::new(
             geometry.y,
             geometry.width,
@@ -1373,7 +1373,7 @@ impl DisplayRowSourceGeometry {
         }
     }
 
-    pub(crate) fn source_request_from_base_face<'face>(
+    fn source_request_from_base_face<'face>(
         self,
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &'face ResolvedFace,
@@ -1389,7 +1389,7 @@ impl DisplayRowSourceGeometry {
         )
     }
 
-    pub(crate) fn source_request_for_base_face_id<'face>(
+    fn source_request_for_base_face_id<'face>(
         self,
         base_face_id: u32,
         base_face: &'face ResolvedFace,
@@ -1425,6 +1425,18 @@ impl DisplayRowSourceRequestPolicy {
             geometry: DisplayRowSourceGeometry::new(
                 y, width, height, char_width, ascent, tab_policy,
             ),
+            role,
+            symbol_values: std::collections::HashMap::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_display_row_geometry(
+        geometry: DisplayRowGeometry,
+        role: GlyphRowRole,
+    ) -> Self {
+        Self {
+            geometry: DisplayRowSourceGeometry::from_display_row_geometry(geometry),
             role,
             symbol_values: std::collections::HashMap::new(),
         }

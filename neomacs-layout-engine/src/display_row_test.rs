@@ -26,12 +26,9 @@ fn display_row_request_from_base_face<'a>(
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 ) -> DisplayRowSourceRenderRequest<'a> {
-    DisplayRowSourceGeometry::from_display_row_geometry(geometry).source_request_from_base_face(
-        face_ids,
-        base_face,
-        role,
-        symbol_values,
-    )
+    DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role)
+        .with_symbol_values(symbol_values)
+        .source_request_from_base_face(face_ids, base_face)
 }
 
 fn display_row_request_for_face<'a>(
@@ -40,11 +37,8 @@ fn display_row_request_for_face<'a>(
     base_face: &'a crate::neovm_bridge::ResolvedFace,
     role: GlyphRowRole,
 ) -> DisplayRowSourceRenderRequest<'a> {
-    DisplayRowSourceGeometry::from_display_row_geometry(geometry).source_request_for_base_face_id(
-        base_face_id,
-        base_face,
-        role,
-    )
+    DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role)
+        .source_request_for_base_face_id(base_face_id, base_face)
 }
 
 #[derive(Default)]
