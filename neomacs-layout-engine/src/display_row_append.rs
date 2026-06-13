@@ -1043,7 +1043,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn measure_item_source_range_width_or_active_face_fallback_to_text_row(
+    fn measure_item_source_range_width_or_active_face_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -1091,7 +1091,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_item_source_range_to_text_row_and_emit(
+    fn append_item_source_range_to_text_row_and_emit(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -1143,7 +1143,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_source_range_advance_to_text_row(
+    fn resolve_source_range_advance_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         resolver: &mut BufferTextSourceAdvanceResolver,
@@ -1206,7 +1206,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_resolved_source_range_to_text_row(
+    fn append_resolved_source_range_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
