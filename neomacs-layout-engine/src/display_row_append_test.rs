@@ -450,7 +450,7 @@ fn display_row_append_frame_builds_from_geometry_state() {
 }
 
 #[test]
-fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
+fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -479,20 +479,19 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let (progress, end) = append_synthetic_text_to_display_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
-        base_face,
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        99,
-        "...",
-        7,
-    )
-    .expect("synthetic text progress");
+    let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
+    let (progress, end) = append_context
+        .append_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            99,
+            "...",
+        )
+        .expect("synthetic text progress");
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
     assert_eq!(progress.metrics.width_px, 24.0);
@@ -516,7 +515,7 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
 }
 
 #[test]
-fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
+fn synthetic_text_append_context_composes_with_current_row_tail() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -547,20 +546,19 @@ fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
-    let (progress, end) = append_synthetic_text_to_display_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
-        base_face,
-        frame,
-        DisplayRowPosition { x_px: 8.0, col: 1 },
-        100,
-        "\u{301}",
-        7,
-    )
-    .expect("combining fragment progress");
+    let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
+    let (progress, end) = append_context
+        .append_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            DisplayRowPosition { x_px: 8.0, col: 1 },
+            100,
+            "\u{301}",
+        )
+        .expect("combining fragment progress");
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 0.0);
@@ -1462,6 +1460,63 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
             let text = &row.glyphs[1];
             assert_eq!(text[0].face_id, 0);
             assert_eq!(text[1].face_id, 20);
+        })
+        .expect("current row");
+}
+
+#[test]
+fn lisp_string_append_context_appends_fragment_items() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-lisp-fragment-context", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let fragment = DisplayTextFragment::line_prefix(Value::string("=>"), CharPos0::new(0));
+    let append_context = LispStringAppendContext::new(0, base_face, frame);
+
+    let end = append_context.append_fragment_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        fragment,
+        2,
+        &face_resolver,
+        &mut face_ids,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    );
+
+    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 2);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '=' }));
+            assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: '>' }));
         })
         .expect("current row");
 }
@@ -2563,7 +2618,7 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_source_mapped_t
 }
 
 #[test]
-fn append_synthetic_text_to_display_row_uses_source_append_request() {
+fn synthetic_text_append_context_uses_source_append_request() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2611,20 +2666,19 @@ fn append_synthetic_text_to_display_row_uses_source_append_request() {
         DisplayTabPolicy::every(8),
     );
 
-    let (_progress, end) = append_synthetic_text_to_display_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
-        base_face,
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        9,
-        "x",
-        7,
-    )
-    .expect("append progress");
+    let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
+    let (_progress, end) = append_context
+        .append_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            9,
+            "x",
+        )
+        .expect("append progress");
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder

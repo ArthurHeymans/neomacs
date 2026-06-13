@@ -522,7 +522,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
+fn append_lisp_string_fragment_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -564,6 +564,56 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
         return position;
     };
     outcome.end
+}
+
+#[derive(Clone)]
+pub(crate) struct LispStringAppendContext<'a> {
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+    frame: DisplayRowAppendFrame,
+}
+
+impl<'a> LispStringAppendContext<'a> {
+    pub(crate) fn new(
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            base_face_id,
+            base_face,
+            frame,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_fragment_to_text_row_and_emit(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        source_id: u64,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        append_lisp_string_fragment_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            fragment,
+            source_id,
+            face_resolver,
+            self.base_face,
+            self.base_face_id,
+            face_ids,
+            self.frame.clone(),
+            position,
+        )
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -609,6 +659,54 @@ pub(crate) fn synthetic_display_text_item(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     )
+}
+
+#[derive(Clone)]
+pub(crate) struct SyntheticTextAppendContext<'a> {
+    face_id: u32,
+    base_face: &'a ResolvedFace,
+    frame: DisplayRowAppendFrame,
+}
+
+impl<'a> SyntheticTextAppendContext<'a> {
+    pub(crate) fn new(
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            face_id,
+            base_face,
+            frame,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_to_text_row_and_emit(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+        source_id: u64,
+        text: impl Into<Box<str>>,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        append_synthetic_text_to_display_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            self.base_face,
+            self.frame.clone(),
+            position,
+            source_id,
+            text,
+            self.face_id,
+        )
+    }
 }
 
 pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
@@ -1933,7 +2031,7 @@ impl DisplayRowAppendSpec {
     }
 }
 
-pub(crate) fn append_synthetic_text_to_display_row(
+fn append_synthetic_text_to_display_row(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,

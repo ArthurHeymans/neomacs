@@ -43,8 +43,8 @@ use crate::display_row_append::{
     DisplayReplacementAppendContext, DisplayReplacementAppendItem,
     DisplayReplacementStringItemMeasurer, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
     DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
-    append_lisp_string_fragment_to_text_row_and_emit,
-    append_resolved_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
+    LispStringAppendContext, SyntheticTextAppendContext,
+    append_resolved_buffer_text_fragment_to_text_row,
     render_lisp_string_source_append_to_text_row_and_emit,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -4261,7 +4261,12 @@ impl LayoutEngine {
                         char_h,
                     )
                     .active_face_frame();
-                    let position = append_lisp_string_fragment_to_text_row_and_emit(
+                    let append_context = LispStringAppendContext::new(
+                        prefix_base_face.face_id(),
+                        prefix_base_face.face(),
+                        append_frame,
+                    );
+                    let position = append_context.append_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
@@ -4269,10 +4274,7 @@ impl LayoutEngine {
                         prefix_fragment,
                         2,
                         face_resolver,
-                        prefix_base_face.face(),
-                        prefix_base_face.face_id(),
                         &mut face_ids,
-                        append_frame,
                         DisplayRowPosition { x_px: x, col },
                     );
                     x = position.x_px;
@@ -4322,19 +4324,23 @@ impl LayoutEngine {
                             char_h,
                         )
                         .active_face_frame();
-                        if let Some((_progress, position)) = append_synthetic_text_to_display_row(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                            &mut self.font_metrics,
-                            face_resolver,
+                        let append_context = SyntheticTextAppendContext::new(
+                            active_face_state.face_id(),
                             active_face_state.resolved_face(),
                             ellipsis_frame,
-                            DisplayRowPosition { x_px: x, col },
-                            SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
-                            "...",
-                            active_face_state.face_id(),
-                        ) {
+                        );
+                        if let Some((_progress, position)) = append_context
+                            .append_to_text_row_and_emit(
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                &mut self.font_metrics,
+                                face_resolver,
+                                DisplayRowPosition { x_px: x, col },
+                                SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
+                                "...",
+                            )
+                        {
                             x = position.x_px;
                             col = position.col;
                         }
@@ -4485,22 +4491,26 @@ impl LayoutEngine {
                             default_face_ascent,
                             char_w,
                         );
-                        if let Some((_progress, position)) = append_synthetic_text_to_display_row(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                            &mut self.font_metrics,
-                            face_resolver,
+                        let append_context = SyntheticTextAppendContext::new(
+                            trunc_face_id,
                             face_resolver.default_face(),
                             trunc_frame,
-                            DisplayRowPosition {
-                                x_px: content_x,
-                                col: 0,
-                            },
-                            SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
-                            "$",
-                            trunc_face_id,
-                        ) {
+                        );
+                        if let Some((_progress, position)) = append_context
+                            .append_to_text_row_and_emit(
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                &mut self.font_metrics,
+                                face_resolver,
+                                DisplayRowPosition {
+                                    x_px: content_x,
+                                    col: 0,
+                                },
+                                SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
+                                "$",
+                            )
+                        {
                             x = position.x_px;
                             col = position.col;
                         }
@@ -4915,18 +4925,20 @@ impl LayoutEngine {
                     char_h,
                 )
                 .active_face_frame();
-                if let Some((_progress, position)) = append_synthetic_text_to_display_row(
+                let append_context = SyntheticTextAppendContext::new(
+                    active_face_state.face_id(),
+                    active_face_state.resolved_face(),
+                    ellipsis_frame,
+                );
+                if let Some((_progress, position)) = append_context.append_to_text_row_and_emit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
                     &mut self.font_metrics,
                     face_resolver,
-                    active_face_state.resolved_face(),
-                    ellipsis_frame,
                     DisplayRowPosition { x_px: x, col },
                     SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
                     "...",
-                    active_face_state.face_id(),
                 ) {
                     x = position.x_px;
                     col = position.col;
