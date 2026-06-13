@@ -1873,7 +1873,7 @@ struct OverlayStringRenderRowContext<'a> {
 impl<'a> OverlayStringRenderRowContext<'a> {
     fn new(
         append_surface: &'a DisplayRowAppendSurface,
-        face_char_w: f32,
+        active_face_state: &DisplayRowActiveFaceState,
         char_h: f32,
         default_row_ascent: f32,
         text_y: f32,
@@ -1882,7 +1882,7 @@ impl<'a> OverlayStringRenderRowContext<'a> {
     ) -> Self {
         Self {
             append_surface,
-            face_char_w,
+            face_char_w: active_face_state.metrics().char_width,
             char_h,
             default_row_ascent,
             text_y,
@@ -4271,7 +4271,7 @@ impl LayoutEngine {
                                     &mut row_y_positions,
                                     OverlayStringRenderRowContext::new(
                                         &text_append_surface,
-                                        face_metrics.char_width,
+                                        &active_face_state,
                                         char_h,
                                         default_face_ascent,
                                         text_y,
@@ -5398,7 +5398,7 @@ impl LayoutEngine {
                             &mut row_y_positions,
                             OverlayStringRenderRowContext::new(
                                 &text_append_surface,
-                                face_metrics.char_width,
+                                &active_face_state,
                                 char_h,
                                 default_face_ascent,
                                 text_y,
@@ -5490,7 +5490,7 @@ impl LayoutEngine {
                             &mut row_y_positions,
                             OverlayStringRenderRowContext::new(
                                 &text_append_surface,
-                                face_metrics.char_width,
+                                &active_face_state,
                                 char_h,
                                 default_face_ascent,
                                 text_y,
@@ -5574,7 +5574,7 @@ impl LayoutEngine {
                     &mut row_y_positions,
                     OverlayStringRenderRowContext::new(
                         &text_append_surface,
-                        face_metrics.char_width,
+                        &active_face_state,
                         char_h,
                         default_face_ascent,
                         text_y,
@@ -5608,7 +5608,7 @@ impl LayoutEngine {
                     &mut row_y_positions,
                     OverlayStringRenderRowContext::new(
                         &text_append_surface,
-                        face_metrics.char_width,
+                        &active_face_state,
                         char_h,
                         default_face_ascent,
                         text_y,
