@@ -207,7 +207,7 @@ fn display_row_position_from_output_progress(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
+fn render_display_item_source_into_current_text_row_and_emit<
     S: DisplayItemSource,
     P: DisplayRowRenderPolicy,
 >(
@@ -263,7 +263,7 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_display_source_append_request_into_current_text_row_and_emit<
+fn render_display_source_append_request_into_current_text_row_and_emit<
     S: DisplayItemSource,
     P: DisplayRowRenderPolicy,
 >(
@@ -295,7 +295,7 @@ pub(crate) fn render_display_source_append_request_into_current_text_row_and_emi
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_natural_display_source_append_request_into_current_text_row_and_emit<
+fn render_natural_display_source_append_request_into_current_text_row_and_emit<
     S: DisplayItemSource,
 >(
     builder: &mut GlyphMatrixBuilder,
@@ -324,7 +324,7 @@ pub(crate) fn render_natural_display_source_append_request_into_current_text_row
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn measure_display_source_append_request_against_current_text_row<
+fn measure_display_source_append_request_against_current_text_row<
     S: DisplayItemSource,
     P: DisplayRowRenderPolicy,
 >(
@@ -397,9 +397,9 @@ pub(crate) struct DisplayRowSourceAppendRequest<'face> {
     base_face: &'face ResolvedFace,
 }
 
-pub(crate) struct DisplayRowSourceAppendRenderParts<'face> {
-    pub(crate) request: DisplayRowSourceRenderRequest<'face>,
-    pub(crate) output: TextRowOutput,
+struct DisplayRowSourceAppendRenderParts<'face> {
+    request: DisplayRowSourceRenderRequest<'face>,
+    output: TextRowOutput,
 }
 
 impl<'face> DisplayRowSourceAppendRequest<'face> {
@@ -415,7 +415,7 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         }
     }
 
-    pub(crate) fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
+    fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
         let request = self
             .append_spec
             .display_row_source_render_request(self.base_face_id, self.base_face);
