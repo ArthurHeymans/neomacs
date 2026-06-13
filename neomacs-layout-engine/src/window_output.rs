@@ -160,6 +160,13 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) face_id: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextWindowLineNumberMargin<'a> {
+    pub(crate) text: &'a str,
+    pub(crate) cols: i32,
+    pub(crate) face_id: u32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextMatrixRowGeometryTransition {
     pub(crate) finished_row: TextMatrixRowMetrics,
@@ -309,6 +316,20 @@ pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuil
     builder.with_current_row_mut(|glyph_row| {
         glyph_row.truncated_left = true;
     });
+}
+
+pub(crate) fn emit_text_window_line_number_margin(
+    builder: &mut GlyphMatrixBuilder,
+    request: TextWindowLineNumberMargin<'_>,
+) {
+    let padding = (request.cols - 1) - request.text.chars().count() as i32;
+    if padding > 0 {
+        builder.push_left_margin_stretch(padding as u16, request.face_id);
+    }
+    for ch in request.text.chars() {
+        builder.push_left_margin_char(ch, request.face_id);
+    }
+    builder.push_left_margin_stretch(1, request.face_id);
 }
 
 pub(crate) fn finish_text_window_output_rows(

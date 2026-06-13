@@ -16,9 +16,10 @@ use super::types::*;
 use super::unicode::*;
 use super::window_output::{
     ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowDisplayRange,
-    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
+    TextWindowLineNumberMargin, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
+    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
     finish_text_matrix_row_output, finish_text_window_output_rows,
     install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
     record_text_window_display_range,
@@ -4187,27 +4188,14 @@ impl LayoutEngine {
 
                 // Format number right-aligned
                 let num_str = format!("{}", display_num);
-                let num_chars = num_str.len() as i32;
-                let padding = (lnum_cols - 1) - num_chars; // -1 for trailing space
-
-                let _gy = row_geometry.glyph_y(0.0);
-
-                // Leading padding (stretch)
-                if padding > 0 {
-                    self.matrix_builder
-                        .push_left_margin_stretch(padding as u16, lnum_face_id);
-                }
-
-                // Number digits
-                for (i, ch) in num_str.chars().enumerate() {
-                    let _dx = text_x + (padding.max(0) + i as i32) as f32 * char_w;
-                    self.matrix_builder.push_left_margin_char(ch, lnum_face_id);
-                }
-
-                // Trailing space separator
-                let _space_x = text_x + (lnum_cols - 1) as f32 * char_w;
-                self.matrix_builder
-                    .push_left_margin_stretch(1, lnum_face_id);
+                emit_text_window_line_number_margin(
+                    &mut self.matrix_builder,
+                    TextWindowLineNumberMargin {
+                        text: &num_str,
+                        cols: lnum_cols,
+                        face_id: lnum_face_id,
+                    },
+                );
 
                 // Force face resolution to re-apply text face after line number face
                 face_scan.invalidate();
