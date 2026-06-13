@@ -1448,6 +1448,49 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextItemRowAppendContext<'a, B: LayoutBufferView + ?Sized> {
+    buffer: &'a B,
+    buffer_id: BufferId,
+    active_face: &'a DisplayRowActiveFaceState,
+    active_face_context: DisplayRowActiveFaceAppendContext<'a>,
+}
+
+impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemRowAppendContext<'a, B> {
+    pub(crate) fn new(
+        buffer: &'a B,
+        buffer_id: BufferId,
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &'a DisplayRowGeometryState,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            buffer,
+            buffer_id,
+            active_face,
+            active_face_context: DisplayRowActiveFaceAppendContext::new(
+                append_surface,
+                geometry,
+                active_face,
+                glyph_y_offset,
+                default_row_height,
+            ),
+        }
+    }
+
+    pub(crate) fn active_face(self) -> BufferTextItemAppendContext<'a, B> {
+        BufferTextItemAppendContext::new(
+            self.buffer,
+            self.buffer_id,
+            self.active_face.face_id(),
+            self.active_face.resolved_face(),
+            self.active_face_context.active_face_frame(),
+        )
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementActiveFaceMeasurer {
     active_face_state: DisplayRowActiveFaceState,

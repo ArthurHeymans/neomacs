@@ -1936,15 +1936,33 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver.default_face();
+    let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let append_context = BufferTextItemRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        16.0,
+    )
+    .active_face();
     let (_progress, end) = append_context
         .append_fragment_to_text_row_and_emit(
             &mut builder,
@@ -1999,15 +2017,33 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver.default_face();
+    let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let append_context = BufferTextItemRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        16.0,
+    )
+    .active_face();
     let (_progress, end) = append_context
         .append_fragment_to_text_row_and_emit(
             &mut builder,

@@ -40,12 +40,12 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
-    BufferTextFragmentAppendItem, BufferTextItemAppendContext, DisplayReplacementMediaAppendItem,
-    DisplayReplacementRowAppendContext, DisplayReplacementSourceMappedTextAppendItem,
-    DisplayReplacementStretchAppendItem, DisplayReplacementStringAppendItem,
-    DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
-    LispStringSourceAppendContext, SyntheticTextAppendContext,
+    BufferTextFragmentAppendItem, BufferTextItemRowAppendContext,
+    DisplayReplacementMediaAppendItem, DisplayReplacementRowAppendContext,
+    DisplayReplacementSourceMappedTextAppendItem, DisplayReplacementStretchAppendItem,
+    DisplayReplacementStringAppendItem, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
+    DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
+    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -5136,33 +5136,27 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = DisplayRowActiveFaceAppendContext::new(
+                let control_item = BufferTextFragmentAppendItem::ControlChar { ch };
+                let needed_width = BufferTextItemRowAppendContext::new(
+                    buffer,
+                    buf_id,
                     &text_append_surface,
                     &row_geometry,
                     &active_face_state,
                     raise_span.value_or(0.0),
                     char_h,
                 )
-                .active_face_frame();
-                let append_context = BufferTextItemAppendContext::new(
-                    buffer,
-                    buf_id,
-                    active_face_state.face_id(),
-                    active_face_state.resolved_face(),
-                    text_item_frame,
-                );
-                let control_item = BufferTextFragmentAppendItem::ControlChar { ch };
-                let needed_width = append_context
-                    .measure_fragment_width_to_text_row(
-                        &mut self.matrix_builder,
-                        evaluator,
-                        &mut self.font_metrics,
-                        buffer_text_fragment.clone(),
-                        face_resolver,
-                        control_item.clone(),
-                        DisplayRowPosition { x_px: x, col },
-                    )
-                    .unwrap_or(2.0 * face_metrics.char_width);
+                .active_face()
+                .measure_fragment_width_to_text_row(
+                    &mut self.matrix_builder,
+                    evaluator,
+                    &mut self.font_metrics,
+                    buffer_text_fragment.clone(),
+                    face_resolver,
+                    control_item.clone(),
+                    DisplayRowPosition { x_px: x, col },
+                )
+                .unwrap_or(2.0 * face_metrics.char_width);
 
                 // Check if the renderer-measured caret notation fits.
                 if x + needed_width > text_append_surface.full_text_right_edge() {
@@ -5265,6 +5259,16 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     let _ = face_ids.allocate();
                 }
+                let append_context = BufferTextItemRowAppendContext::new(
+                    buffer,
+                    buf_id,
+                    &text_append_surface,
+                    &row_geometry,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                    char_h,
+                )
+                .active_face();
                 if let Some((_progress, position)) = append_context
                     .append_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -5304,21 +5308,16 @@ impl LayoutEngine {
                         CharPos0::new(charpos as usize),
                         CharPos0::new((charpos + 1) as usize),
                     );
-                    let text_item_frame = DisplayRowActiveFaceAppendContext::new(
+                    let append_context = BufferTextItemRowAppendContext::new(
+                        buffer,
+                        buf_id,
                         &text_append_surface,
                         &row_geometry,
                         &active_face_state,
                         raise_span.value_or(0.0),
                         char_h,
                     )
-                    .active_face_frame();
-                    let append_context = BufferTextItemAppendContext::new(
-                        buffer,
-                        buf_id,
-                        active_face_state.face_id(),
-                        active_face_state.resolved_face(),
-                        text_item_frame,
-                    );
+                    .active_face();
                     if let Some((_progress, position)) = append_context
                         .append_fragment_to_text_row_and_emit(
                             &mut self.matrix_builder,
@@ -5373,21 +5372,16 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = DisplayRowActiveFaceAppendContext::new(
+                let append_context = BufferTextItemRowAppendContext::new(
+                    buffer,
+                    buf_id,
                     &text_append_surface,
                     &row_geometry,
                     &active_face_state,
                     raise_span.value_or(0.0),
                     char_h,
                 )
-                .active_face_frame();
-                let append_context = BufferTextItemAppendContext::new(
-                    buffer,
-                    buf_id,
-                    active_face_state.face_id(),
-                    active_face_state.resolved_face(),
-                    text_item_frame,
-                );
+                .active_face();
                 if let Some((_progress, position)) = append_context
                     .append_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
