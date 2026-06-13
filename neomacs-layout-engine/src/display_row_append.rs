@@ -1743,7 +1743,7 @@ impl BufferTextSourceChar {
             .map(|display| self.special_request_for_display(display))
     }
 
-    pub(crate) fn cluster_state(&self, tail: Option<(char, bool)>) -> BufferTextSourceClusterState {
+    fn cluster_state(&self, tail: Option<(char, bool)>) -> BufferTextSourceClusterState {
         BufferTextSourceClusterState::for_char(self.ch, tail)
     }
 
@@ -1760,6 +1760,22 @@ impl BufferTextSourceChar {
     ) -> Option<BufferTextSpecialSourceCharRequest> {
         self.cluster_special_display(tail)
             .map(|display| self.special_request_for_display(display))
+    }
+
+    pub(crate) fn advance_request_at<'text>(
+        &self,
+        text: &'text [u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        tail: Option<(char, bool)>,
+    ) -> BufferTextSourceCharAdvanceRequest<'text> {
+        BufferTextSourceCharAdvanceRequest {
+            text,
+            byte_idx,
+            range: self.range(),
+            position,
+            cluster: self.cluster_state(tail),
+        }
     }
 }
 
@@ -1887,22 +1903,6 @@ pub(crate) struct BufferTextSourceCharAdvanceRequest<'text> {
 }
 
 impl<'text> BufferTextSourceCharAdvanceRequest<'text> {
-    pub(crate) fn new(
-        text: &'text [u8],
-        byte_idx: usize,
-        source_char: &BufferTextSourceChar,
-        position: DisplayRowPosition,
-        cluster: BufferTextSourceClusterState,
-    ) -> Self {
-        Self {
-            text,
-            byte_idx,
-            range: source_char.range(),
-            position,
-            cluster,
-        }
-    }
-
     fn into_parts(self) -> BufferTextSourceCharAdvanceRequestParts<'text> {
         BufferTextSourceCharAdvanceRequestParts {
             text: self.text,

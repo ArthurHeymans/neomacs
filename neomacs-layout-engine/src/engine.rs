@@ -39,11 +39,10 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    BufferTextSourceCharAdvanceRequest, DisplayPropertyReplacementAppendItem,
-    DisplayPropertyReplacementAppendRequest, DisplayPropertyReplacementAppendResolveRequest,
-    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
-    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
-    LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
+    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
+    DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
+    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
     SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -5222,7 +5221,6 @@ impl LayoutEngine {
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
-            let cluster_state = buffer_source_char.cluster_state(cluster_tail);
 
             // Glyphless character detection (C1 controls, format chars, etc.)
             if let Some(special_source_request) =
@@ -5258,12 +5256,11 @@ impl LayoutEngine {
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            let advance_request = BufferTextSourceCharAdvanceRequest::new(
+            let advance_request = buffer_source_char.advance_request_at(
                 &text,
                 ch_start_byte_idx,
-                &buffer_source_char,
                 append_position,
-                cluster_state,
+                cluster_tail,
             );
             let resolved_advance = buffer_row_append_context
                 .resolve_source_char_advance_request_to_text_row(

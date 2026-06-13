@@ -1864,13 +1864,8 @@ fn buffer_text_source_append_context_appends_source_char() {
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
     let mut advance_resolver = BufferTextSourceAdvanceResolver::default();
-    let advance_request = BufferTextSourceCharAdvanceRequest::new(
-        b"a",
-        0,
-        &source_char,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        BufferTextSourceClusterState::for_char('a', None),
-    );
+    let advance_request =
+        source_char.advance_request_at(b"a", 0, DisplayRowPosition { x_px: 0.0, col: 0 }, None);
     let resolved_advance = append_context.resolve_source_char_advance_request_to_text_row(
         &geometry,
         &mut advance_resolver,
