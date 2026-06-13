@@ -13403,6 +13403,64 @@ fn jit_bench_loop() {
     );
 }
 
+/// CallBuiltinSym-dominated benchmark: a loop calling the primitive `length`
+/// via `Op::CallBuiltinSym` each iteration (the byte-compiler's inlined-
+/// primitive call opcode, opcodes 0140-0177). Isolates the JIT's named-builtin
+/// dispatch cost (callbuiltinsym_for_jit -> dispatch_vm_builtin), a SEPARATE
+/// path from the general Op::Call subr dispatch.
+#[cfg(feature = "jit")]
+fn jit_bench_cbsym_value(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::StackRef(0),   // 0  [n n]  <- head
+        Op::Constant(0),   // 1  [n n 0]
+        Op::Gtr,           // 2  [n c]
+        Op::GotoIfNil(11), // 3  [n]
+        Op::Constant(1),   // 4  '(a b c)  [n list]
+        Op::CallBuiltinSym(crate::emacs_core::intern::intern("length"), 1), // 5 [n len]
+        Op::Pop,           // 6  [n]
+        Op::StackRef(0),   // 7  [n n]
+        Op::Sub1,          // 8  [n n-1]
+        Op::StackSet(1),   // 9  [n-1]
+        Op::Goto(0),       // 10 backedge
+        Op::StackRef(0),   // 11 [n n]
+        Op::Return,        // 12
+    ];
+    f.constants = vec![
+        Value::make_int(0),
+        Value::list_from_slice(&[Value::symbol("a"), Value::symbol("b"), Value::symbol("c")]),
+    ];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_cbsym() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let native = jit_bench_cbsym_value(BenchTier::Hot);
+    let cold = jit_bench_cbsym_value(BenchTier::Cold);
+    let n = 2_000_000i64;
+    let want = Value::make_int(0);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH cbsym-loop(2M length-CallBuiltinSym): native {nat:?} interp {int:?} -> {:.2}x",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 /// Subr-call-dominated benchmark: a loop that calls the primitive `length` via
 /// the general `Op::Call` path each iteration (NOT the inlined `Op::Length`
 /// opcode) — isolates the cost of the JIT's subr-call dispatch, the 75.4% of
