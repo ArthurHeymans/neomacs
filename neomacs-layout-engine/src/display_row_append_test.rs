@@ -735,6 +735,51 @@ fn display_row_append_frame_builds_append_spec_directly() {
 }
 
 #[test]
+fn display_row_fragment_append_request_uses_append_spec() {
+    let tab_policy = DisplayTabPolicy::every(4);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 3,
+            y: 20.0,
+            glyph_y: 22.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        tab_policy,
+    );
+    let append_spec = frame.append_spec(
+        DisplayRowPosition { x_px: 18.0, col: 2 },
+        42,
+        DisplayRowAppendKind::ControlChar,
+    );
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = resolver.default_face();
+
+    let request = DisplayRowFragmentAppendRequest::from_append_spec(append_spec, 42, base_face);
+
+    let row_spec = request.display_row_spec();
+    assert_eq!(
+        row_spec.render_bounds.start,
+        DisplayRowPosition { x_px: 18.0, col: 2 }
+    );
+    assert_eq!(row_spec.render_bounds.max_x_px, 148.0);
+    assert_eq!(row_spec.geometry.height, 16.0);
+    assert_eq!(request.text_row_output().height, 14.0);
+}
+
+#[test]
 fn display_row_append_surface_builds_frames_with_shared_area() {
     let tab_policy = DisplayTabPolicy::every(4);
     let surface = DisplayRowAppendSurface::new(

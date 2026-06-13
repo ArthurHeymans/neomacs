@@ -251,10 +251,7 @@ fn display_row_append_progress_from_render_result(
 }
 
 struct DisplayRowFragmentAppendRequest<'face> {
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-    max_x_px: f32,
-    output_height: f32,
+    append_spec: DisplayRowAppendSpec,
     base_face_id: u32,
     base_face: &'face ResolvedFace,
 }
@@ -266,26 +263,32 @@ impl<'face> DisplayRowFragmentAppendRequest<'face> {
         base_face_id: u32,
         base_face: &'face ResolvedFace,
     ) -> Self {
-        let max_x_px = frame.content_x + frame.geometry.width;
-        let output_height = frame.geometry.height;
+        Self::from_append_spec(
+            frame.append_spec(position, base_face_id, DisplayRowAppendKind::SourceText),
+            base_face_id,
+            base_face,
+        )
+    }
+
+    fn from_append_spec(
+        append_spec: DisplayRowAppendSpec,
+        base_face_id: u32,
+        base_face: &'face ResolvedFace,
+    ) -> Self {
         Self {
-            frame,
-            position,
-            max_x_px,
-            output_height,
+            append_spec,
             base_face_id,
             base_face,
         }
     }
 
-    fn with_max_x_px(mut self, max_x_px: f32) -> Self {
-        self.max_x_px = max_x_px;
-        self
+    fn display_row_spec(&self) -> DisplayRowSpec<'face> {
+        self.append_spec
+            .display_row_spec(self.base_face_id, self.base_face)
     }
 
-    fn with_output_height(mut self, output_height: f32) -> Self {
-        self.output_height = output_height;
-        self
+    fn text_row_output(&self) -> TextRowOutput {
+        self.append_spec.text_row_output()
     }
 }
 
@@ -301,26 +304,11 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     item.face = RenderFaceRef::FaceId(request.base_face_id);
     let mut source = SingleDisplayItemSource::new(item);
-    let row_spec = DisplayRowSpec {
-        geometry: request.frame.geometry.clone(),
-        render_bounds: DisplayRowRenderBounds {
-            start: request.position,
-            max_x_px: request.max_x_px,
-        },
-        base_face_id: request.base_face_id,
-        base_face: request.base_face,
-        role: GlyphRowRole::Text,
-        symbol_values: HashMap::new(),
-    };
+    let row_spec = request.display_row_spec();
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(request.base_face_id.saturating_add(1));
-    let output = TextRowOutput {
-        row: request.frame.row,
-        row_y: request.frame.geometry.y,
-        glyph_y: request.frame.glyph_y,
-        height: request.output_height,
-    };
+    let output = request.text_row_output();
     let outcome = render_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -336,8 +324,12 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
     )?;
     let slots = outcome.source_slots;
     let end = outcome.end;
-    let progress =
-        display_row_append_progress_from_render_result(request.position, end, outcome.stop, slots);
+    let progress = display_row_append_progress_from_render_result(
+        request.append_spec.position,
+        end,
+        outcome.stop,
+        slots,
+    );
     Some((progress, end))
 }
 
@@ -584,9 +576,8 @@ pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
     let append_kind = DisplayRowAppendKind::from_display_item_kind(&kind)?;
     let append_spec = frame.append_spec(position, face_id, append_kind);
     let item = source.item(RenderFaceRef::FaceId(face_id), kind);
-    let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face)
-        .with_max_x_px(append_spec.max_x)
-        .with_output_height(append_spec.output.height);
+    let request =
+        DisplayRowFragmentAppendRequest::from_append_spec(append_spec, face_id, base_face);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,
