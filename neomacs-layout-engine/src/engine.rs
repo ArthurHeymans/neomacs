@@ -2177,6 +2177,49 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn render_overlay_string_batch<B: super::neovm_bridge::LayoutBufferView>(
+    evaluator: &mut Context,
+    output_emitter: &mut WindowOutputEmitter,
+    buffer: &B,
+    overlay_strings: &[super::neovm_bridge::OverlayDisplayString],
+    anchor_charpos: CharPos0,
+    kind: OverlayStringKind,
+    font_metrics: &mut Option<FontMetricsService>,
+    face_resolver: &super::neovm_bridge::FaceResolver,
+    x: &mut f32,
+    col: &mut usize,
+    geometry: &mut DisplayRowGeometryState,
+    cursor_info: &mut CursorCaptureState,
+    hit_rows: &mut Vec<HitRow>,
+    hit_row_range: &mut HitRowRangeTracker,
+    row_y_positions: &mut DisplayRowYPositions,
+    row_context: OverlayStringRenderRowContext<'_>,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+) {
+    for overlay_string in overlay_strings {
+        render_overlay_string(
+            evaluator,
+            output_emitter,
+            buffer,
+            OverlayStringRenderSource::new(*overlay_string, anchor_charpos, kind),
+            font_metrics,
+            face_resolver,
+            x,
+            col,
+            geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            row_context,
+            face_ids,
+            builder,
+        );
+    }
+}
+
 fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) -> Option<usize> {
     match source {
         crate::display_item::DisplaySourcePosition::LispString {
@@ -4337,38 +4380,34 @@ impl LayoutEngine {
                         if !after_strings.is_empty() {
                             flush_run(&self.run_buf, ligatures);
                             self.run_buf.clear();
-                            for overlay_string in &after_strings {
-                                render_overlay_string(
-                                    evaluator,
-                                    &mut output_emitter,
-                                    buffer,
-                                    OverlayStringRenderSource::new(
-                                        *overlay_string,
-                                        CharPos0::new(charpos as usize),
-                                        OverlayStringKind::After,
-                                    ),
-                                    &mut self.font_metrics,
-                                    face_resolver,
-                                    &mut x,
-                                    &mut col,
-                                    &mut row_geometry,
-                                    &mut cursor_info,
-                                    &mut hit_rows,
-                                    &mut hit_row_range,
-                                    &mut row_y_positions,
-                                    OverlayStringRenderRowContext::new(
-                                        &text_append_surface,
-                                        &active_face_state,
-                                        char_h,
-                                        default_face_ascent,
-                                        text_y,
-                                        text_matrix_row_base,
-                                        max_rows,
-                                    ),
-                                    &mut face_ids,
-                                    &mut self.matrix_builder,
-                                );
-                            }
+                            render_overlay_string_batch(
+                                evaluator,
+                                &mut output_emitter,
+                                buffer,
+                                &after_strings,
+                                CharPos0::new(charpos as usize),
+                                OverlayStringKind::After,
+                                &mut self.font_metrics,
+                                face_resolver,
+                                &mut x,
+                                &mut col,
+                                &mut row_geometry,
+                                &mut cursor_info,
+                                &mut hit_rows,
+                                &mut hit_row_range,
+                                &mut row_y_positions,
+                                OverlayStringRenderRowContext::new(
+                                    &text_append_surface,
+                                    &active_face_state,
+                                    char_h,
+                                    default_face_ascent,
+                                    text_y,
+                                    text_matrix_row_base,
+                                    max_rows,
+                                ),
+                                &mut face_ids,
+                                &mut self.matrix_builder,
+                            );
                         }
                     }
 
@@ -5370,38 +5409,34 @@ impl LayoutEngine {
                     // Flush run buffer before emitting overlay chars
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    for overlay_string in &before_strings {
-                        render_overlay_string(
-                            evaluator,
-                            &mut output_emitter,
-                            buffer,
-                            OverlayStringRenderSource::new(
-                                *overlay_string,
-                                CharPos0::new(charpos as usize),
-                                OverlayStringKind::Before,
-                            ),
-                            &mut self.font_metrics,
-                            face_resolver,
-                            &mut x,
-                            &mut col,
-                            &mut row_geometry,
-                            &mut cursor_info,
-                            &mut hit_rows,
-                            &mut hit_row_range,
-                            &mut row_y_positions,
-                            OverlayStringRenderRowContext::new(
-                                &text_append_surface,
-                                &active_face_state,
-                                char_h,
-                                default_face_ascent,
-                                text_y,
-                                text_matrix_row_base,
-                                max_rows,
-                            ),
-                            &mut face_ids,
-                            &mut self.matrix_builder,
-                        );
-                    }
+                    render_overlay_string_batch(
+                        evaluator,
+                        &mut output_emitter,
+                        buffer,
+                        &before_strings,
+                        CharPos0::new(charpos as usize),
+                        OverlayStringKind::Before,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        &mut x,
+                        &mut col,
+                        &mut row_geometry,
+                        &mut cursor_info,
+                        &mut hit_rows,
+                        &mut hit_row_range,
+                        &mut row_y_positions,
+                        OverlayStringRenderRowContext::new(
+                            &text_append_surface,
+                            &active_face_state,
+                            char_h,
+                            default_face_ascent,
+                            text_y,
+                            text_matrix_row_base,
+                            max_rows,
+                        ),
+                        &mut face_ids,
+                        &mut self.matrix_builder,
+                    );
                 }
             }
 
@@ -5461,38 +5496,34 @@ impl LayoutEngine {
                     // Flush run buffer before emitting overlay chars
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    for overlay_string in &after_strings {
-                        render_overlay_string(
-                            evaluator,
-                            &mut output_emitter,
-                            buffer,
-                            OverlayStringRenderSource::new(
-                                *overlay_string,
-                                CharPos0::new(charpos as usize),
-                                OverlayStringKind::After,
-                            ),
-                            &mut self.font_metrics,
-                            face_resolver,
-                            &mut x,
-                            &mut col,
-                            &mut row_geometry,
-                            &mut cursor_info,
-                            &mut hit_rows,
-                            &mut hit_row_range,
-                            &mut row_y_positions,
-                            OverlayStringRenderRowContext::new(
-                                &text_append_surface,
-                                &active_face_state,
-                                char_h,
-                                default_face_ascent,
-                                text_y,
-                                text_matrix_row_base,
-                                max_rows,
-                            ),
-                            &mut face_ids,
-                            &mut self.matrix_builder,
-                        );
-                    }
+                    render_overlay_string_batch(
+                        evaluator,
+                        &mut output_emitter,
+                        buffer,
+                        &after_strings,
+                        CharPos0::new(charpos as usize),
+                        OverlayStringKind::After,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        &mut x,
+                        &mut col,
+                        &mut row_geometry,
+                        &mut cursor_info,
+                        &mut hit_rows,
+                        &mut hit_row_range,
+                        &mut row_y_positions,
+                        OverlayStringRenderRowContext::new(
+                            &text_append_surface,
+                            &active_face_state,
+                            char_h,
+                            default_face_ascent,
+                            text_y,
+                            text_matrix_row_base,
+                            max_rows,
+                        ),
+                        &mut face_ids,
+                        &mut self.matrix_builder,
+                    );
                 }
             }
 
@@ -5543,70 +5574,62 @@ impl LayoutEngine {
                 params.window_id as u64,
             );
             let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
-            for overlay_string in &before_strings {
-                render_overlay_string(
-                    evaluator,
-                    &mut output_emitter,
-                    buffer,
-                    OverlayStringRenderSource::new(
-                        *overlay_string,
-                        CharPos0::new(charpos as usize),
-                        OverlayStringKind::Before,
-                    ),
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut x,
-                    &mut col,
-                    &mut row_geometry,
-                    &mut cursor_info,
-                    &mut hit_rows,
-                    &mut hit_row_range,
-                    &mut row_y_positions,
-                    OverlayStringRenderRowContext::new(
-                        &text_append_surface,
-                        &active_face_state,
-                        char_h,
-                        default_face_ascent,
-                        text_y,
-                        text_matrix_row_base,
-                        max_rows,
-                    ),
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                );
-            }
-            for overlay_string in &after_strings {
-                render_overlay_string(
-                    evaluator,
-                    &mut output_emitter,
-                    buffer,
-                    OverlayStringRenderSource::new(
-                        *overlay_string,
-                        CharPos0::new(charpos as usize),
-                        OverlayStringKind::After,
-                    ),
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut x,
-                    &mut col,
-                    &mut row_geometry,
-                    &mut cursor_info,
-                    &mut hit_rows,
-                    &mut hit_row_range,
-                    &mut row_y_positions,
-                    OverlayStringRenderRowContext::new(
-                        &text_append_surface,
-                        &active_face_state,
-                        char_h,
-                        default_face_ascent,
-                        text_y,
-                        text_matrix_row_base,
-                        max_rows,
-                    ),
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                );
-            }
+            render_overlay_string_batch(
+                evaluator,
+                &mut output_emitter,
+                buffer,
+                &before_strings,
+                CharPos0::new(charpos as usize),
+                OverlayStringKind::Before,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut x,
+                &mut col,
+                &mut row_geometry,
+                &mut cursor_info,
+                &mut hit_rows,
+                &mut hit_row_range,
+                &mut row_y_positions,
+                OverlayStringRenderRowContext::new(
+                    &text_append_surface,
+                    &active_face_state,
+                    char_h,
+                    default_face_ascent,
+                    text_y,
+                    text_matrix_row_base,
+                    max_rows,
+                ),
+                &mut face_ids,
+                &mut self.matrix_builder,
+            );
+            render_overlay_string_batch(
+                evaluator,
+                &mut output_emitter,
+                buffer,
+                &after_strings,
+                CharPos0::new(charpos as usize),
+                OverlayStringKind::After,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut x,
+                &mut col,
+                &mut row_geometry,
+                &mut cursor_info,
+                &mut hit_rows,
+                &mut hit_row_range,
+                &mut row_y_positions,
+                OverlayStringRenderRowContext::new(
+                    &text_append_surface,
+                    &active_face_state,
+                    char_h,
+                    default_face_ascent,
+                    text_y,
+                    text_matrix_row_base,
+                    max_rows,
+                ),
+                &mut face_ids,
+                &mut self.matrix_builder,
+            );
         }
 
         // Face :extend at end-of-buffer: fill remaining empty rows
