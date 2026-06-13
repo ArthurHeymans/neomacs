@@ -28,7 +28,6 @@ pub(crate) mod display_source_resolver;
 pub mod display_space;
 pub mod display_spec;
 pub mod display_status_line;
-pub(crate) mod display_text;
 pub(crate) mod display_text_run_measurement;
 pub mod engine;
 pub mod font_loader;

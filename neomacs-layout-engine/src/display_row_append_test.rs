@@ -21,7 +21,6 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
-use crate::display_text::DisplayTextFragment;
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -366,14 +365,15 @@ fn buffer_text_fragment_append_context_resolves_natural_measurement_for_ascii() 
         frame,
     );
 
-    let resolved = append_context.resolve_advance_to_text_row(
+    let resolved = append_context.resolve_source_range_advance_to_text_row(
         &mut resolver,
         &mut builder,
         &mut eval,
         &mut font_metrics,
         b"x",
         0,
-        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
+        CharPos0::new(0),
+        CharPos0::new(1),
         &face_resolver,
         &active_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -411,14 +411,15 @@ fn buffer_text_fragment_append_context_measures_ascii_at_right_edge() {
         frame,
     );
 
-    let resolved = append_context.resolve_advance_to_text_row(
+    let resolved = append_context.resolve_source_range_advance_to_text_row(
         &mut resolver,
         &mut builder,
         &mut eval,
         &mut font_metrics,
         b"x",
         0,
-        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
+        CharPos0::new(0),
+        CharPos0::new(1),
         &face_resolver,
         &active_face,
         DisplayRowPosition {
@@ -459,14 +460,15 @@ fn buffer_text_fragment_append_context_resolves_complex_text_measurement() {
         frame,
     );
 
-    let resolved = append_context.resolve_advance_to_text_row(
+    let resolved = append_context.resolve_source_range_advance_to_text_row(
         &mut resolver,
         &mut builder,
         &mut eval,
         &mut font_metrics,
         "\u{0633}".as_bytes(),
         0,
-        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
+        CharPos0::new(0),
+        CharPos0::new(1),
         &face_resolver,
         &active_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -1783,16 +1785,15 @@ fn lisp_string_append_context_appends_fragment_items() {
         DisplayTabPolicy::every(8),
     );
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let fragment = DisplayTextFragment::line_prefix(Value::string("=>"), CharPos0::new(0));
     let append_context =
         LispStringRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
 
-    let end = append_context.append_active_face_fragment_to_text_row_and_emit(
+    let end = append_context.append_active_face_value_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        fragment,
+        Value::string("=>"),
         2,
         &face_resolver,
         &mut face_ids,
@@ -1931,16 +1932,18 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
     builder.push_char_with_pixel_width('x', 7, 0, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
-    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
+    let start = CharPos0::new(1);
+    let end = CharPos0::new(2);
 
     let append_context =
         BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let measured_width = append_context
-        .measure_natural_advance_to_text_row(
+        .measure_source_range_natural_advance_to_text_row(
             &mut builder,
             &mut eval,
             &mut font_metrics,
-            fragment.clone(),
+            start,
+            end,
             &face_resolver,
             position,
         )
@@ -1955,12 +1958,13 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
         .expect("current row");
 
     let (appended, end) = append_context
-        .append_resolved_to_text_row(
+        .append_resolved_source_range_to_text_row(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            fragment,
+            start,
+            end,
             &face_resolver,
             ResolvedBufferTextFragmentAdvance::natural(measured_width),
             position,
@@ -2009,16 +2013,16 @@ fn buffer_text_fragment_append_context_uses_resolved_advance() {
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
-    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
     let append_context =
         BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let (progress, end) = append_context
-        .append_resolved_to_text_row(
+        .append_resolved_source_range_to_text_row(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            fragment,
+            CharPos0::new(0),
+            CharPos0::new(1),
             &face_resolver,
             ResolvedBufferTextFragmentAdvance::resolved(13.0),
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -2077,16 +2081,16 @@ fn buffer_text_fragment_append_context_composes_with_current_row_tail() {
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
-    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
     let append_context =
         BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let (progress, end) = append_context
-        .append_resolved_to_text_row(
+        .append_resolved_source_range_to_text_row(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            fragment,
+            CharPos0::new(1),
+            CharPos0::new(2),
             &face_resolver,
             ResolvedBufferTextFragmentAdvance::natural(0.0),
             DisplayRowPosition { x_px: 8.0, col: 1 },
@@ -2145,16 +2149,16 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
     let item = BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' };
 
     let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
-        .measure_fragment_width_to_text_row(
+        .measure_source_range_width_to_text_row(
             &mut builder,
             &mut eval,
             &mut font_metrics,
-            fragment.clone(),
+            CharPos0::new(0),
+            CharPos0::new(1),
             &face_resolver,
             item.clone(),
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -2163,20 +2167,23 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder
         .with_current_row_mut(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
-    let fallback_width = append_context.measure_fragment_width_or_active_face_fallback_to_text_row(
+    let fallback_width = append_context
+        .measure_source_range_width_or_active_face_fallback_to_text_row(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            CharPos0::new(0),
+            CharPos0::new(0),
+            &face_resolver,
+            item.clone(),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        );
+    let edge_width = append_context.measure_source_range_width_or_active_face_fallback_to_text_row(
         &mut builder,
         &mut eval,
         &mut font_metrics,
-        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(0)),
-        &face_resolver,
-        item.clone(),
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    );
-    let edge_width = append_context.measure_fragment_width_or_active_face_fallback_to_text_row(
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        fragment.clone(),
+        CharPos0::new(0),
+        CharPos0::new(1),
         &face_resolver,
         item.clone(),
         DisplayRowPosition {
@@ -2186,12 +2193,13 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     );
 
     let (progress, end) = append_context
-        .append_fragment_to_text_row_and_emit(
+        .append_source_range_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            fragment,
+            CharPos0::new(0),
+            CharPos0::new(1),
             &face_resolver,
             item,
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -3512,23 +3520,18 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
         CharPos0::new(0),
         EmacsBytePos::new(0),
     );
-    let fragment = DisplayTextFragment::display_property_string(
-        value,
-        CharPos0::new(0),
-        DisplayPropertySource::TextProperty,
-    );
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
 
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
-    let end = append_context.append_string_fragment_to_text_row(
+    let end = append_context.append_string_source_value_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        fragment,
+        value,
         1,
         &face_resolver,
         &mut face_ids,
