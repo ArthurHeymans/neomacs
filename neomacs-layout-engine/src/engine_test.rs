@@ -370,6 +370,36 @@ fn display_row_prefix_request_builds_typed_prefix_source() {
 }
 
 #[test]
+fn overlay_string_render_source_exposes_typed_render_inputs() {
+    let _eval = Context::new();
+    let text = Value::string("overlay");
+    let overlay_id = Value::symbol("overlay-id");
+    let source = OverlayStringRenderSource::new(
+        crate::neovm_bridge::OverlayDisplayString {
+            string: text,
+            overlay_id,
+        },
+        CharPos0::new(9),
+        OverlayStringKind::After,
+    );
+
+    assert_eq!(source.value(), text);
+    assert_eq!(source.anchor_i64(), 9);
+    assert_eq!(
+        source.origin(),
+        DisplayOrigin::OverlayString {
+            overlay_id,
+            anchor_charpos: CharPos0::new(9),
+            kind: OverlayStringKind::After,
+        }
+    );
+    assert_eq!(
+        source.base_face_policy(),
+        BaseFacePolicy::OverlayStringAtAnchor
+    );
+}
+
+#[test]
 fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
     let mut state = HorizontalScrollSkipState::new(true, 5);
 

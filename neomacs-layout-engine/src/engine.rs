@@ -57,7 +57,7 @@ use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
     resolve_display_string_base_face,
 };
-use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
+use crate::display_text::DisplayTextFragment;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -1991,13 +1991,20 @@ impl OverlayStringRenderSource {
         self.anchor_charpos.get() as i64
     }
 
-    fn fragment(self) -> DisplayTextFragment {
-        DisplayTextFragment::overlay_string(
-            self.string,
-            self.overlay_id,
-            self.anchor_charpos,
-            self.kind,
-        )
+    fn value(self) -> Value {
+        self.string
+    }
+
+    fn origin(self) -> DisplayOrigin {
+        DisplayOrigin::OverlayString {
+            overlay_id: self.overlay_id,
+            anchor_charpos: self.anchor_charpos,
+            kind: self.kind,
+        }
+    }
+
+    fn base_face_policy(self) -> BaseFacePolicy {
+        BaseFacePolicy::OverlayStringAtAnchor
     }
 }
 
@@ -2024,11 +2031,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) {
-    let fragment = source_request.fragment();
     let anchor_charpos = source_request.anchor_i64();
-    let DisplayTextStorage::LispString(text_value) = fragment.storage else {
-        return;
-    };
+    let text_value = source_request.value();
     if text_value.as_lisp_string().is_none() {
         return;
     }
@@ -2036,8 +2040,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     let base_face = display_string_base_face(
         buffer,
         face_resolver,
-        fragment.origin,
-        fragment.base_face_policy,
+        source_request.origin(),
+        source_request.base_face_policy(),
         face_ids,
         builder,
     );
