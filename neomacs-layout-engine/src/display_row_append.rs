@@ -25,6 +25,7 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurer, DisplayRowLayout, DisplayRowPosition, DisplayRowWriteMetrics,
     DisplayTabPolicy,
 };
+use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -195,37 +196,6 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
         row_height_px,
         row_ascent_px,
     })
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn render_natural_display_item_source_into_current_text_row_and_emit<
-    S: DisplayItemSource,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
-    row_spec: DisplayRowSpec<'_>,
-    output: TextRowOutput,
-) -> Option<CurrentTextRowRenderOutcome> {
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    render_display_item_source_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        source,
-        source_state,
-        face_resolver,
-        face_ids,
-        row_spec,
-        output,
-        &mut render_policy,
-    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1043,6 +1013,21 @@ impl DisplayRowAppendFrame {
             line_number_width: area.line_number_width,
             face_space_width: metrics.space_width,
         }
+    }
+
+    pub(crate) fn from_geometry_state(
+        geometry: &DisplayRowGeometryState,
+        glyph_y_offset: f32,
+        area: DisplayRowAppendArea,
+        metrics: DisplayRowAppendMetrics,
+        tab_policy: DisplayTabPolicy,
+    ) -> Self {
+        Self::from_parts(
+            geometry.append_placement(glyph_y_offset),
+            area,
+            metrics,
+            tab_policy,
+        )
     }
 
     pub(crate) fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {

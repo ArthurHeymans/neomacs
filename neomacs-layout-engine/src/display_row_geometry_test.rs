@@ -1,8 +1,6 @@
 use super::*;
-use crate::display_row::DisplayRowGeometry;
-use crate::display_row_builder::DisplayTabPolicy;
 use crate::window_output::{
-    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextRowOutput,
+    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
 };
 
 #[test]
@@ -284,7 +282,6 @@ fn display_row_geometry_state_can_be_mutated_directly() {
     geometry.y += 16.0;
     geometry.row_extra_y += 5.0;
     geometry.include_row_extents(32.0, 20.0);
-    let result = geometry.text_row_output(16.0);
 
     assert_eq!(
         geometry,
@@ -296,8 +293,6 @@ fn display_row_geometry_state_can_be_mutated_directly() {
             ascent: 20.0,
         }
     );
-    assert_eq!(result.row, 3);
-    assert_eq!(result.row_y, 58.0);
 }
 
 #[test]
@@ -575,29 +570,6 @@ fn display_row_geometry_state_builds_row_scoped_start_marker() {
 }
 
 #[test]
-fn display_row_geometry_state_builds_text_row_output() {
-    let geometry = DisplayRowGeometryState {
-        row: 3,
-        y: 69.0,
-        row_extra_y: 11.0,
-        height: 16.0,
-        ascent: 12.0,
-    };
-
-    let output = geometry.text_row_output(24.0);
-
-    assert_eq!(
-        output,
-        TextRowOutput {
-            row: 3,
-            row_y: 69.0,
-            glyph_y: 69.0,
-            height: 24.0,
-        }
-    );
-}
-
-#[test]
 fn display_row_geometry_state_builds_text_position_from_current_row() {
     let geometry = DisplayRowGeometryState {
         row: 3,
@@ -705,30 +677,6 @@ fn display_row_geometry_state_resolves_glyph_y_with_offset() {
     };
 
     assert_eq!(geometry.glyph_y(2.5), 71.5);
-}
-
-#[test]
-fn display_row_geometry_state_builds_render_geometry() {
-    let geometry = DisplayRowGeometryState {
-        row: 3,
-        y: 69.0,
-        row_extra_y: 11.0,
-        height: 16.0,
-        ascent: 12.0,
-    };
-    let tab_policy = DisplayTabPolicy::every(8);
-
-    assert_eq!(
-        geometry.render_geometry(120.0, 16.0, 7.0, 12.0, tab_policy.clone()),
-        DisplayRowGeometry {
-            y: 69.0,
-            width: 120.0,
-            height: 16.0,
-            char_width: 7.0,
-            ascent: 12.0,
-            tab_policy,
-        }
-    );
 }
 
 #[test]

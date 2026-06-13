@@ -28,12 +28,13 @@ use crate::display_row::{
     install_rendered_display_row,
 };
 use crate::display_row_append::{
-    DisplayRowAppendArea, DisplayRowAppendMetrics, DisplayRowAppendSurface,
+    DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
+    DisplayRowAppendSurface, DisplayRowSourceAppendRequest,
     append_buffer_text_fragment_to_text_row, append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit, append_synthetic_text_to_display_row,
-    render_natural_display_item_source_into_current_text_row_and_emit,
+    render_natural_display_source_append_request_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowItemMeasurer, DisplayRowPosition, DisplayTabPolicy,
@@ -2086,38 +2087,49 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             break;
         }
 
-        let row_spec = DisplayRowSpec {
-            geometry: geometry.render_geometry(
-                max_x - content_x,
-                char_h,
-                face_char_w,
-                default_row_ascent,
-                text_display_tab_policy(content_x, params),
-            ),
-            render_bounds: DisplayRowRenderBounds {
-                start: DisplayRowPosition {
+        let frame = DisplayRowAppendFrame::from_geometry_state(
+            geometry,
+            0.0,
+            DisplayRowAppendArea {
+                content_x,
+                width: max_x - content_x,
+                text_width: max_x - content_x,
+                line_number_width: 0.0,
+            },
+            DisplayRowAppendMetrics {
+                height: char_h,
+                ascent: default_row_ascent,
+                char_width: face_char_w,
+                space_width: face_char_w,
+                default_row_height: char_h,
+            },
+            text_display_tab_policy(content_x, params),
+        );
+        let request = DisplayRowSourceAppendRequest::from_append_spec(
+            frame.append_spec(
+                DisplayRowPosition {
                     x_px: *x,
                     col: *col,
                 },
-                max_x_px: max_x,
-            },
-            base_face_id: base_face.face_id,
-            base_face: &base_face.face,
-            role: GlyphRowRole::Text,
-            symbol_values: std::collections::HashMap::new(),
-        };
-        let Some(outcome) = render_natural_display_item_source_into_current_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            &mut source,
-            &mut source_state,
-            face_resolver,
-            face_ids,
-            row_spec,
-            geometry.text_row_output(char_h),
-        ) else {
+                base_face.face_id,
+                DisplayRowAppendKind::SourceText,
+            ),
+            base_face.face_id,
+            &base_face.face,
+        );
+        let Some(outcome) =
+            render_natural_display_source_append_request_into_current_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                &mut source,
+                &mut source_state,
+                face_resolver,
+                face_ids,
+                request,
+            )
+        else {
             break;
         };
         let stop = outcome.stop;

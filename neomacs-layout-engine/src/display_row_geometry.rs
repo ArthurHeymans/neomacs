@@ -1,10 +1,7 @@
-use crate::display_row::DisplayRowGeometry;
 use crate::display_row_append::DisplayRowAppendPlacement;
-use crate::display_row_builder::DisplayTabPolicy;
 use crate::hit_test::HitRow;
 use crate::window_output::{
     RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
-    TextRowOutput,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -549,15 +546,6 @@ impl DisplayRowGeometryState {
         self.row_y(self.row, row_y_positions, text_y, default_height)
     }
 
-    pub(crate) fn text_row_output(&self, height: f32) -> TextRowOutput {
-        TextRowOutput {
-            row: self.row,
-            row_y: self.y,
-            glyph_y: self.y,
-            height,
-        }
-    }
-
     pub(crate) fn text_position(
         &self,
         x: f32,
@@ -602,24 +590,6 @@ impl DisplayRowGeometryState {
 
     pub(crate) fn glyph_y(&self, glyph_y_offset: f32) -> f32 {
         self.y + glyph_y_offset
-    }
-
-    pub(crate) fn render_geometry(
-        &self,
-        width: f32,
-        height: f32,
-        char_width: f32,
-        ascent: f32,
-        tab_policy: DisplayTabPolicy,
-    ) -> DisplayRowGeometry {
-        DisplayRowGeometry {
-            y: self.y,
-            width,
-            height,
-            char_width,
-            ascent,
-            tab_policy,
-        }
     }
 
     pub(crate) fn finish_boundary_in_place(

@@ -10,6 +10,7 @@ use crate::display_row::{
     DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_text::DisplayTextFragment;
 use crate::display_text_run_measurement::{
     DisplayTextRunAdvance, DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
@@ -165,6 +166,40 @@ fn synthetic_display_text_item_builds_synthetic_text_run() {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "..."),
         other => panic!("expected text run, got {other:?}"),
     }
+}
+
+#[test]
+fn display_row_append_frame_builds_from_geometry_state() {
+    let geometry = DisplayRowGeometryState::new(2, 40.0, 0.0, 18.0, 13.0);
+
+    let frame = DisplayRowAppendFrame::from_geometry_state(
+        &geometry,
+        3.0,
+        DisplayRowAppendArea {
+            content_x: 10.0,
+            width: 90.0,
+            text_width: 120.0,
+            line_number_width: 6.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 18.0,
+            ascent: 13.0,
+            char_width: 7.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(4),
+    );
+
+    assert_eq!(frame.row, 2);
+    assert_eq!(frame.glyph_y, 43.0);
+    assert_eq!(frame.geometry.y, 40.0);
+    assert_eq!(frame.geometry.width, 90.0);
+    assert_eq!(frame.geometry.height, 18.0);
+    assert_eq!(frame.default_row_height, 16.0);
+    assert_eq!(frame.content_x, 10.0);
+    assert_eq!(frame.text_width, 120.0);
+    assert_eq!(frame.line_number_width, 6.0);
 }
 
 #[test]
