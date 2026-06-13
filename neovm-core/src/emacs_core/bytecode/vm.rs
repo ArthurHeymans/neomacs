@@ -425,6 +425,71 @@ impl<'a> Vm<'a> {
         result
     }
 
+    /// Resume a bytecode frame MID-FUNCTION after a precise JIT deopt: a
+    /// native guard failed at `start_pc` with the live operand stack `stack`,
+    /// `handlers_active` condition frames registered by this frame still on
+    /// `ctx.condition_stack`, and `bind_entries` (pre-push specpdl depths,
+    /// drained from the JIT bind-stack segment) as the frame's outstanding
+    /// dynamic binds. Ownership of those binds/handlers transfers here: the
+    /// native caller performed NO frame unwind, and this frame's cleanup uses
+    /// the native frame's entry bases (`specpdl_base`/`condition_stack_base`)
+    /// so every exit unwinds exactly like the original frame would have.
+    ///
+    /// lexenv note: deliberately NOT the run_frame LexicalEnv prologue — the
+    /// native frame never switched lexenv, and the only compilable op that
+    /// reads it (UnwindProtectPop) uses the identical `ctx.lexenv` expression
+    /// in its shim and interpreter arm, so resumed ops behave exactly as the
+    /// remaining native ops would have.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn run_resumed_frame(
+        &mut self,
+        func: &ByteCodeFunction,
+        func_value: Value,
+        start_pc: usize,
+        stack: &[Value],
+        handlers_active: usize,
+        bind_entries: &[usize],
+        specpdl_base: usize,
+        condition_stack_base: usize,
+    ) -> EvalResult {
+        let frame_base = self.ctx.bc_buf.len();
+        self.ctx.bc_frames.push(crate::emacs_core::eval::BcFrame {
+            base: frame_base,
+            fun: func_value,
+        });
+        let frame_limit = match frame_base.checked_add(func.max_stack as usize) {
+            Some(limit) => limit,
+            None => {
+                self.ctx.bc_frames.pop();
+                return Err(invalid_bytecode_flow());
+            }
+        };
+        if self.ctx.bc_buf.capacity() < frame_limit {
+            self.ctx
+                .bc_buf
+                .reserve_exact(frame_limit - self.ctx.bc_buf.len());
+        }
+        // Seed the operand stack with the native frame's live values (traced
+        // from here on; the caller performed no allocation since reading them
+        // out of the spill buffer).
+        self.ctx.bc_buf.extend_from_slice(stack);
+        let mut pc = start_pc;
+        let mut handlers = HandlerStack::new();
+        for _ in 0..handlers_active {
+            handlers.push(Handler::Condition);
+        }
+        let mut bind_stack: BindStack = bind_entries.iter().copied().collect();
+        let result = self.run_loop(
+            func,
+            frame_base,
+            frame_limit,
+            &mut pc,
+            &mut handlers,
+            &mut bind_stack,
+        );
+        self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
+    }
+
     fn run_frame(
         &mut self,
         func: &ByteCodeFunction,

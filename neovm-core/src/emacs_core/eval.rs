@@ -11179,8 +11179,9 @@ impl Context {
                             let saved_roots = save_scratch_gc_roots();
                             push_scratch_gc_root(function);
                             let ctx_ptr = self as *mut Context;
-                            let native =
-                                crate::emacs_core::jit::try_run_compiled(ctx_ptr, bc_data, &args);
+                            let native = crate::emacs_core::jit::try_run_compiled(
+                                ctx_ptr, bc_data, function, &args,
+                            );
                             restore_scratch_gc_roots(saved_roots);
                             match native {
                                 Ok(Some(bits)) => {

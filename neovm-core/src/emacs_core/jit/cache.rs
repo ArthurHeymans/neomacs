@@ -73,6 +73,7 @@ fn max_compiled_id() -> u64 {
 pub fn try_run_compiled(
     ctx: *mut Context,
     func: &ByteCodeFunction,
+    func_value: Value,
     args: &[Value],
 ) -> Result<Option<usize>, Flow> {
     let id = func.runtime.compiled_id_or_assign();
@@ -126,6 +127,29 @@ pub fn try_run_compiled(
         Some(leaf) => match leaf.call(ctx as *mut u8, args) {
             NativeRun::Ok(bits) => Ok(Some(bits)),
             NativeRun::Deopt => Ok(None),
+            NativeRun::DeoptAt {
+                pc,
+                stack,
+                handlers,
+                binds,
+                spec_base,
+                cond_base,
+            } => {
+                if ctx.is_null() {
+                    // call() maps null-vmctx deopts to Deopt; defensive only.
+                    return Ok(None);
+                }
+                // Precise deopt: resume the Tier-0 interpreter mid-function
+                // with the live stack and the (still registered) frame state.
+                // SAFETY: the seam-provided &mut Context is dormant during the
+                // native call — the same contract every runtime shim uses.
+                let ctx = unsafe { &mut *ctx };
+                let mut vm = crate::emacs_core::bytecode::Vm::from_context(ctx);
+                vm.run_resumed_frame(
+                    func, func_value, pc, &stack, handlers, &binds, spec_base, cond_base,
+                )
+                .map(|v| Some(v.bits()))
+            }
             NativeRun::Signal => Err(take_pending_flow()
                 .expect("STATUS_SIGNAL from compiled code implies a stashed Flow")),
         },
@@ -156,12 +180,12 @@ mod tests {
         let f = nullary_fn(vec![Op::Constant(0), Op::Return], vec![c]);
         // First call compiles + caches; result is the constant's bits.
         assert_eq!(
-            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
             Some(c.bits())
         );
         // Second call hits the cache; same result.
         assert_eq!(
-            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
             Some(c.bits())
         );
     }
@@ -174,11 +198,11 @@ mod tests {
             vec![],
         );
         assert_eq!(
-            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
             None
         );
         assert_eq!(
-            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
             None
         );
     }
@@ -194,7 +218,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            try_run_compiled(std::ptr::null_mut(), &f, &[]).unwrap(),
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
             None
         );
     }
@@ -230,6 +254,7 @@ mod tests {
             try_run_compiled(
                 std::ptr::null_mut(),
                 &f,
+                Value::NIL,
                 &[Value::make_int(40), Value::make_int(2)]
             )
             .unwrap(),
@@ -237,7 +262,7 @@ mod tests {
         );
         // Wrong arity -> None (interpreter will signal wrong-number-of-arguments).
         assert_eq!(
-            try_run_compiled(std::ptr::null_mut(), &f, &[Value::make_int(40)]).unwrap(),
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[Value::make_int(40)]).unwrap(),
             None
         );
     }

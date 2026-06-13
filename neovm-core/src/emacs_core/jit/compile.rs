@@ -127,6 +127,13 @@ pub const STATUS_DEOPT: i64 = 0;
 /// [`take_pending_flow`] and propagate.
 pub const STATUS_SIGNAL: i64 = 2;
 
+/// Native return code: a speculation guard failed at a PRECISE bytecode pc —
+/// the live operand stack was spilled into the leaf's deopt buffer and the
+/// frame's binds/handlers were left REGISTERED (no frame unwind): the caller
+/// resumes the Tier-0 interpreter mid-function via `Vm::run_resumed_frame`.
+/// Unlike [`STATUS_DEOPT`], this is sound even after side effects ran.
+pub const STATUS_DEOPT_AT: i64 = 3;
+
 /// Debug-build counter of speculated direct-call shim entries (test evidence
 /// that `find_spec_sites` + the spec lowering actually engage).
 #[cfg(debug_assertions)]
@@ -1242,6 +1249,13 @@ pub struct CompiledLeaf {
     /// the `cleanup_bytecode_frame` parity unwind — and requires a non-null
     /// vmctx.
     has_binds: bool,
+    /// Precise-deopt spill buffer: a failing guard writes the live operand
+    /// stack here (raw tagged bits) before returning [`STATUS_DEOPT_AT`].
+    /// Untraced by design — consumed immediately after the native call
+    /// returns, with no allocation in between.
+    deopt_spill: Box<[core::cell::Cell<i64>]>,
+    /// Precise-deopt pc/depth/handler-count cells (see [`DeoptCells`]).
+    deopt_meta: Box<DeoptCells>,
     /// Armed-epoch slots for direct-call speculation sites: slot k holds the
     /// obarray function_epoch at which site k's callee binding was last
     /// validated. Generated code holds raw pointers into this Box (stable:
@@ -1276,8 +1290,25 @@ pub enum NativeRun {
     Ok(usize),
     /// A speculation guard failed. The poisoning analysis guarantees no side
     /// effect (no runtime call) ran before any guard, so the caller can safely
-    /// rerun the body on the Tier-0 interpreter.
+    /// rerun the body on the Tier-0 interpreter. (Also the null-vmctx mapping
+    /// of a precise deopt: shim-free bodies are side-effect-free by
+    /// construction, so rerun-from-start stays sound for them.)
     Deopt,
+    /// A guard failed at a precise bytecode pc with the live operand stack
+    /// and frame state captured — resume the Tier-0 interpreter MID-FUNCTION
+    /// via `Vm::run_resumed_frame`. The native call performed NO frame
+    /// unwind: `binds` (pre-push specpdl depths, this frame's JIT bind-stack
+    /// segment) and the `handlers` condition frames remain registered and
+    /// their ownership transfers to the resumed frame, which unwinds to
+    /// `spec_base`/`cond_base` (the native frame's entry bases) on exit.
+    DeoptAt {
+        pc: usize,
+        stack: Vec<Value>,
+        handlers: usize,
+        binds: Vec<usize>,
+        spec_base: usize,
+        cond_base: usize,
+    },
     /// A runtime call inside the body raised a non-local `Flow` (signal/throw);
     /// take it with [`take_pending_flow`] and propagate it.
     Signal,
@@ -1366,6 +1397,49 @@ impl CompiledLeaf {
                 core::mem::transmute(self.entry);
             f(vmctx, arg_bits.as_ptr(), &mut out as *mut i64)
         };
+        if status == STATUS_DEOPT_AT {
+            // Precise deopt: NO frame unwind — the resumed interpreter frame
+            // takes ownership of the registered binds/handlers and unwinds to
+            // the entry bases itself on every exit. With a null vmctx (shim-
+            // free test bodies — side-effect-free by construction) fall back
+            // to the legacy rerun-from-start mapping.
+            if vmctx.is_null() {
+                return NativeRun::Deopt;
+            }
+            let pc = self.deopt_meta.pc.get() as usize;
+            let depth = self.deopt_meta.depth.get() as usize;
+            let handlers = self.deopt_meta.handlers.get() as usize;
+            // No allocation happens between the native spill write and this
+            // read; the caller seeds the values into the GC-traced bc_buf
+            // before any elisp can run.
+            let stack: Vec<Value> = (0..depth)
+                .map(|j| Value::from_bits(self.deopt_spill[j].get() as usize))
+                .collect();
+            let binds: Vec<usize> = match bind_frame {
+                Some((_, stack_base)) => JIT_BIND_STACK.with(|s| {
+                    let mut s = s.borrow_mut();
+                    s.split_off(stack_base)
+                }),
+                None => Vec::new(),
+            };
+            // SAFETY: dormant seam Context; length reads only.
+            let spec_base = match bind_frame {
+                Some((spec_base, _)) => spec_base,
+                None => unsafe { (*(vmctx as *const Context)).specpdl.len() },
+            };
+            let cond_base = match cond_base {
+                Some(base) => base,
+                None => unsafe { (*(vmctx as *const Context)).condition_stack_len() },
+            };
+            return NativeRun::DeoptAt {
+                pc,
+                stack,
+                handlers,
+                binds,
+                spec_base,
+                cond_base,
+            };
+        }
         // cleanup_bytecode_frame parity, same order: condition frames first
         // (the specpdl unwind below can run unwind-protect cleanups — lisp
         // that must not be able to match a stale frame of this dead body),
@@ -1396,7 +1470,7 @@ impl CompiledLeaf {
     pub(crate) fn call_for_test(&self, args: &[Value]) -> Option<usize> {
         match self.call(core::ptr::null_mut(), args) {
             NativeRun::Ok(bits) => Some(bits),
-            NativeRun::Deopt => None,
+            NativeRun::Deopt | NativeRun::DeoptAt { .. } => None,
             NativeRun::Signal => panic!("unexpected STATUS_SIGNAL from a test body"),
         }
     }
@@ -1494,24 +1568,16 @@ pub fn compile_bytecode_function_with(
 /// block — created lazily on first use; otherwise fall through into a fresh,
 /// sealed continuation block. On return, the builder is positioned in the
 /// continuation so lowering continues on the success path.
-fn emit_guard(fb: &mut FunctionBuilder, deopt: &mut Option<Block>, cond: ClifValue) {
-    let db = match *deopt {
-        Some(b) => b,
-        None => {
-            let b = fb.create_block();
-            *deopt = Some(b);
-            b
-        }
-    };
+fn emit_guard(fb: &mut FunctionBuilder, deopt: Block, cond: ClifValue) {
     let cont = fb.create_block();
-    fb.ins().brif(cond, cont, &[], db, &[]);
+    fb.ins().brif(cond, cont, &[], deopt, &[]);
     fb.switch_to_block(cont);
     // `cont`'s only predecessor is the guard branch just emitted.
     fb.seal_block(cont);
 }
 
 /// Guard that `v` is a fixnum (`(v & 0b11) == 0b10`), deopting otherwise.
-fn guard_fixnum(fb: &mut FunctionBuilder, deopt: &mut Option<Block>, v: ClifValue) {
+fn guard_fixnum(fb: &mut FunctionBuilder, deopt: Block, v: ClifValue) {
     let tag = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
     let is_fix = fb
         .ins()
@@ -1530,7 +1596,7 @@ fn retag_fixnum(fb: &mut FunctionBuilder, n: ClifValue) -> ClifValue {
 /// the result be in fixnum range, else deopt. Returns the tagged-fixnum result.
 fn lower_fixnum_binop(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     is_sub: bool,
     a: ClifValue,
     b: ClifValue,
@@ -1584,7 +1650,7 @@ enum UnaryKind {
 /// exactly rather than a post-compute range check.
 fn lower_fixnum_unop(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     kind: UnaryKind,
     a: ClifValue,
 ) -> ClifValue {
@@ -1612,7 +1678,7 @@ fn lower_fixnum_unop(
 /// else deopt, then select `t`/`nil` from the comparison — no branch needed.
 fn lower_fixnum_compare(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     cc: IntCC,
     a: ClifValue,
     b: ClifValue,
@@ -1635,7 +1701,7 @@ fn lower_fixnum_compare(
 /// fixnum-range overflow at once.
 fn lower_fixnum_mul(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     a: ClifValue,
     b: ClifValue,
 ) -> ClifValue {
@@ -1670,7 +1736,7 @@ fn lower_fixnum_mul(
 /// same bits as our retag, so no extra range guard is needed for parity.
 fn lower_fixnum_divrem(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Block,
     is_rem: bool,
     a: ClifValue,
     b: ClifValue,
@@ -1736,7 +1802,7 @@ fn lower_predicate(fb: &mut FunctionBuilder, kind: PredKind, a: ClifValue) -> Cl
 /// barrier (the barrier is on writes), and there is no GC safepoint here.
 fn lower_car_cdr(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    deopt: Option<Block>,
     is_cdr: bool,
     safe: bool,
     a: ClifValue,
@@ -1746,7 +1812,11 @@ fn lower_car_cdr(
     if !safe {
         let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
         let valid = fb.ins().bor(is_cons, is_nil);
-        emit_guard(fb, deopt, valid);
+        emit_guard(
+            fb,
+            deopt.expect("guarded car/cdr lowers with a deopt site"),
+            valid,
+        );
     }
 
     // Branch: cons -> load the field; nil -> nil. The result flows through a
@@ -2056,6 +2126,85 @@ fn declare_rt_refs(
     })
 }
 
+/// The per-leaf cells a precise-deopt exit writes through before returning
+/// [`STATUS_DEOPT_AT`]: the failing op's bytecode index, the live operand
+/// stack depth (the values themselves go to the spill buffer), and the number
+/// of condition frames this frame had registered at that point. `Cell` makes
+/// the native interior writes legal; the mutator is single-threaded and the
+/// values are consumed immediately after the native call returns.
+pub(crate) struct DeoptCells {
+    pub(crate) pc: core::cell::Cell<i64>,
+    pub(crate) depth: core::cell::Cell<i64>,
+    pub(crate) handlers: core::cell::Cell<i64>,
+}
+
+/// A precise-deopt exit block queued at a guard-emitting op: created (and
+/// targeted by that op's guards) during lowering, filled after the bytecode
+/// block terminates. Captures the op's index and the operand stack snapshot
+/// from BEFORE the op popped its operands — the interpreter reruns the
+/// failing op itself.
+struct PendingDeopt {
+    block: Block,
+    pc: usize,
+    handlers_len: usize,
+    stack: Vec<ClifValue>,
+}
+
+/// Queue (and return) the precise-deopt block for the guard-emitting op at
+/// bytecode index `pc`, capturing the pre-op operand stack.
+fn deopt_site(
+    fb: &mut FunctionBuilder,
+    pc: usize,
+    handlers_len: usize,
+    stack: &[ClifValue],
+    pending: &mut Vec<PendingDeopt>,
+) -> Block {
+    let block = fb.create_block();
+    pending.push(PendingDeopt {
+        block,
+        pc,
+        handlers_len,
+        stack: stack.to_vec(),
+    });
+    block
+}
+
+/// Raw addresses of the leaf's deopt cells + spill buffer, baked into the
+/// generated code as immediates (the owning Boxes are address-stable and
+/// outlive every execution of the code).
+#[derive(Clone, Copy)]
+struct DeoptRefs {
+    spill_base: i64,
+    meta_pc: i64,
+    meta_depth: i64,
+    meta_handlers: i64,
+}
+
+/// Fill the precise-deopt blocks queued within one bytecode block: spill the
+/// captured live stack, record pc/depth/handler-count, and return
+/// [`STATUS_DEOPT_AT`].
+fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut Vec<PendingDeopt>) {
+    for pd in pending.drain(..) {
+        fb.switch_to_block(pd.block);
+        fb.seal_block(pd.block);
+        let base = fb.ins().iconst(types::I64, refs.spill_base);
+        for (j, &v) in pd.stack.iter().enumerate() {
+            fb.ins().store(MemFlags::trusted(), v, base, (j * 8) as i32);
+        }
+        let pc_v = fb.ins().iconst(types::I64, pd.pc as i64);
+        let a = fb.ins().iconst(types::I64, refs.meta_pc);
+        fb.ins().store(MemFlags::trusted(), pc_v, a, 0);
+        let depth_v = fb.ins().iconst(types::I64, pd.stack.len() as i64);
+        let a = fb.ins().iconst(types::I64, refs.meta_depth);
+        fb.ins().store(MemFlags::trusted(), depth_v, a, 0);
+        let h_v = fb.ins().iconst(types::I64, pd.handlers_len as i64);
+        let a = fb.ins().iconst(types::I64, refs.meta_handlers);
+        fb.ins().store(MemFlags::trusted(), h_v, a, 0);
+        let code = fb.ins().iconst(types::I64, STATUS_DEOPT_AT);
+        fb.ins().return_(&[code]);
+    }
+}
+
 /// A handler-dispatch block queued at a `STATUS_SIGNAL` site inside a
 /// protected extent: created (and branched to) at the site, filled after the
 /// current bytecode block terminates by [`emit_pending_dispatches`]. Carries
@@ -2168,7 +2317,8 @@ fn emit_pending_dispatches(
 #[allow(clippy::too_many_arguments)]
 fn lower_simple_op(
     fb: &mut FunctionBuilder,
-    deopt: &mut Option<Block>,
+    pc: usize,
+    deopt_sites: &mut Vec<PendingDeopt>,
     signal_exit: &mut Option<Block>,
     constants: &[Value],
     stack: &mut Vec<ClifValue>,
@@ -2232,21 +2382,24 @@ fn lower_simple_op(
             }
         }
         Op::Add | Op::Sub => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_sub = matches!(op, Op::Sub);
-            stack.push(lower_fixnum_binop(fb, deopt, is_sub, a, b));
+            stack.push(lower_fixnum_binop(fb, dsite, is_sub, a, b));
         }
         Op::Mul => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            stack.push(lower_fixnum_mul(fb, deopt, a, b));
+            stack.push(lower_fixnum_mul(fb, dsite, a, b));
         }
         Op::Div | Op::Rem => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_rem = matches!(op, Op::Rem);
-            stack.push(lower_fixnum_divrem(fb, deopt, is_rem, a, b));
+            stack.push(lower_fixnum_divrem(fb, dsite, is_rem, a, b));
         }
         Op::Eq => {
             // Bit-equal -> t natively; differing bits -> the read-only slow-path
@@ -2311,6 +2464,7 @@ fn lower_simple_op(
             stack.push(fb.use_var(res));
         }
         Op::Add1 | Op::Sub1 | Op::Negate => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let kind = match op {
                 Op::Add1 => UnaryKind::Add1,
@@ -2318,9 +2472,10 @@ fn lower_simple_op(
                 Op::Negate => UnaryKind::Negate,
                 _ => unreachable!("matched Add1/Sub1/Negate above"),
             };
-            stack.push(lower_fixnum_unop(fb, deopt, kind, a));
+            stack.push(lower_fixnum_unop(fb, dsite, kind, a));
         }
         Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq | Op::Geq => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let cc = match op {
@@ -2331,7 +2486,7 @@ fn lower_simple_op(
                 Op::Geq => IntCC::SignedGreaterThanOrEqual,
                 _ => unreachable!("matched comparison ops above"),
             };
-            stack.push(lower_fixnum_compare(fb, deopt, cc, a, b));
+            stack.push(lower_fixnum_compare(fb, dsite, cc, a, b));
         }
         Op::Null | Op::Not | Op::Consp | Op::Stringp | Op::Listp => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -2345,24 +2500,26 @@ fn lower_simple_op(
             stack.push(lower_predicate(fb, kind, a));
         }
         Op::Car | Op::Cdr => {
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_cdr = matches!(op, Op::Cdr);
-            stack.push(lower_car_cdr(fb, deopt, is_cdr, false, a));
+            stack.push(lower_car_cdr(fb, Some(dsite), is_cdr, false, a));
         }
         Op::CarSafe | Op::CdrSafe => {
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let is_cdr = matches!(op, Op::CdrSafe);
-            stack.push(lower_car_cdr(fb, deopt, is_cdr, true, a));
+            stack.push(lower_car_cdr(fb, None, is_cdr, true, a));
         }
         Op::Max | Op::Min => {
             // Both fixnum -> keep the original tagged operand selected by the
             // untagged comparison (exact interpreter parity: fixnum_ge ->
             // a-else-b for max, fixnum_le -> a-else-b for min); otherwise deopt
             // to the interpreter's number-coercing builtin.
+            let dsite = deopt_site(fb, pc, handlers.len(), stack, deopt_sites);
             let b = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let a = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            guard_fixnum(fb, deopt, a);
-            guard_fixnum(fb, deopt, b);
+            guard_fixnum(fb, dsite, a);
+            guard_fixnum(fb, dsite, b);
             let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
             let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
             let cc = if matches!(op, Op::Max) {
@@ -3617,6 +3774,17 @@ pub fn lower_leaf_full(
         }
         None => (HashMap::new(), Box::from([])),
     };
+    // Precise-deopt buffers: live operand-stack spill (max depth) + the
+    // pc/depth/handler-count cells. Address-stable Boxes owned by the leaf;
+    // generated code writes through baked raw addresses.
+    let deopt_spill: Box<[core::cell::Cell<i64>]> = (0..cfg.max_depth)
+        .map(|_| core::cell::Cell::new(0))
+        .collect();
+    let deopt_meta: Box<DeoptCells> = Box::new(DeoptCells {
+        pc: core::cell::Cell::new(0),
+        depth: core::cell::Cell::new(0),
+        handlers: core::cell::Cell::new(0),
+    });
 
     let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
@@ -3814,7 +3982,12 @@ pub fn lower_leaf_full(
             .map(|&l| (l, fb.create_block()))
             .collect();
         // Shared deopt landing block, created lazily on the first guard.
-        let mut deopt: Option<Block> = None;
+        let deopt_refs = DeoptRefs {
+            spill_base: deopt_spill.as_ptr() as i64,
+            meta_pc: &deopt_meta.pc as *const core::cell::Cell<i64> as i64,
+            meta_depth: &deopt_meta.depth as *const core::cell::Cell<i64> as i64,
+            meta_handlers: &deopt_meta.handlers as *const core::cell::Cell<i64> as i64,
+        };
         // Shared signal-propagation block (returns STATUS_SIGNAL), created
         // lazily by the first `Call` lowering.
         let mut signal_exit: Option<Block> = None;
@@ -3863,6 +4036,7 @@ pub fn lower_leaf_full(
             let mut handlers: Vec<HandlerStatic> =
                 cfg.entry_handlers.get(&l).cloned().unwrap_or_default();
             let mut pending: Vec<PendingDispatch> = Vec::new();
+            let mut pending_deopt: Vec<PendingDeopt> = Vec::new();
 
             let end = next_leader(l);
             let mut terminated = false;
@@ -4149,7 +4323,8 @@ pub fn lower_leaf_full(
                         });
                         lower_simple_op(
                             &mut fb,
-                            &mut deopt,
+                            i,
+                            &mut pending_deopt,
                             &mut signal_exit,
                             constants,
                             &mut stack,
@@ -4168,6 +4343,8 @@ pub fn lower_leaf_full(
                 write_stack_to_vars(&mut fb, &vars, &stack);
                 fb.ins().jump(block_for[&end], &[]);
             }
+            // Fill the precise-deopt exit blocks queued by this block's guards.
+            emit_pending_deopts(&mut fb, deopt_refs, &mut pending_deopt);
             // Fill the handler-dispatch blocks queued by this block's signal
             // sites (the builder can switch blocks now that it's terminated).
             if !pending.is_empty() {
@@ -4183,12 +4360,6 @@ pub fn lower_leaf_full(
             }
         }
 
-        // Terminate the shared deopt block (return STATUS_DEOPT) iff used.
-        if let Some(db) = deopt {
-            fb.switch_to_block(db);
-            let code = fb.ins().iconst(types::I64, STATUS_DEOPT);
-            fb.ins().return_(&[code]);
-        }
         // Terminate the shared signal block (return STATUS_SIGNAL) iff used.
         if let Some(sb) = signal_exit {
             fb.switch_to_block(sb);
@@ -4239,6 +4410,8 @@ pub fn lower_leaf_full(
             )
         }),
         spec_slots,
+        deopt_spill,
+        deopt_meta,
         entry,
         _module: module,
     })
@@ -4953,10 +5126,15 @@ mod tests {
             run2(Op::Min, Value::make_int(3), Value::make_int(7), ctx_ptr),
             NativeRun::Ok(Value::make_int(3).bits())
         );
-        assert_eq!(
-            run2(Op::Max, Value::make_float(1.5), Value::make_int(7), ctx_ptr),
-            NativeRun::Deopt
-        );
+        // Non-fixnum operand: precise deopt at the Max op with the operands
+        // still on the captured stack.
+        match run2(Op::Max, Value::make_float(1.5), Value::make_int(7), ctx_ptr) {
+            NativeRun::DeoptAt { pc, stack, .. } => {
+                assert_eq!(pc, 2, "deopt at the Max op");
+                assert_eq!(stack[1], Value::make_int(7));
+            }
+            other => panic!("expected a precise deopt, got {other:?}"),
+        }
 
         // integerp / numberp: fixnum natively; float/bignum via the slow shim.
         assert_eq!(run1(Op::Integerp, Value::make_int(5), ctx_ptr), t);
@@ -5931,13 +6109,30 @@ mod tests {
             leaf.call(ctx_ptr, &[]),
             NativeRun::Ok(Value::make_int(42).bits())
         );
-        // Boundary input: the pre-call guard deopts BEFORE the call ran.
+        // Boundary input: the pre-call guard now deopts PRECISELY at the 1+
+        // op (pc 2) with the pre-op stack captured — the resume would rerun
+        // exactly that op on the interpreter.
         let leaf2 = lower_nullary_leaf(
             &ops,
             &[sym_val, Value::make_int(Value::MOST_POSITIVE_FIXNUM)],
         )
         .unwrap();
-        assert_eq!(leaf2.call(ctx_ptr, &[]), NativeRun::Deopt);
+        match leaf2.call(ctx_ptr, &[]) {
+            NativeRun::DeoptAt {
+                pc,
+                stack,
+                handlers,
+                binds,
+                ..
+            } => {
+                assert_eq!(pc, 2, "deopt at the Add1 op");
+                assert_eq!(stack.len(), 2, "pre-op stack: [callee-sym, arg]");
+                assert_eq!(stack[1], Value::make_int(Value::MOST_POSITIVE_FIXNUM));
+                assert_eq!(handlers, 0);
+                assert!(binds.is_empty());
+            }
+            other => panic!("expected a precise deopt, got {other:?}"),
+        }
     }
 
     #[test]
@@ -6606,6 +6801,39 @@ mod tests {
                 }
                 NativeRun::Deopt => {
                     // The seam reruns the interpreter; nothing further to hold.
+                }
+                NativeRun::DeoptAt {
+                    pc,
+                    stack,
+                    handlers,
+                    binds,
+                    spec_base,
+                    cond_base,
+                } => {
+                    // Precise deopt: resume mid-function and the result must
+                    // match the pure-interpreter run exactly.
+                    let mut vm = crate::emacs_core::bytecode::Vm::from_context(&mut ev);
+                    let resumed = vm.run_resumed_frame(
+                        &f,
+                        Value::NIL,
+                        pc,
+                        &stack,
+                        handlers,
+                        &binds,
+                        spec_base,
+                        cond_base,
+                    );
+                    match (&resumed, &interp) {
+                        (Ok(got), Ok(want)) => assert_eq!(
+                            got.bits(),
+                            want.bits(),
+                            "seed {seed}: resume/interpreter mismatch on {ops:?}"
+                        ),
+                        (Err(_), Err(_)) => {}
+                        other => panic!(
+                            "seed {seed}: resume/interpreter outcome mismatch {other:?}: {ops:?}"
+                        ),
+                    }
                 }
                 NativeRun::Signal => {
                     let _ = take_pending_flow();
