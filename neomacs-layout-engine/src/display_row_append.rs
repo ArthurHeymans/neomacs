@@ -1572,11 +1572,33 @@ pub(crate) enum BufferTextFragmentAppendItem {
 }
 
 impl BufferTextFragmentAppendItem {
+    pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
+        let text = match (display_policy, ch) {
+            (1, '\u{00A0}') => " ",
+            (1, '\u{00AD}') => "-",
+            (2, '\u{00A0}') => "\\ ",
+            (2, '\u{00AD}') => "\\-",
+            _ => return None,
+        };
+        Some(Self::SourceMappedText { text: text.into() })
+    }
+
     fn append_kind(&self) -> DisplayRowAppendKind {
         match self {
             Self::ControlChar { .. } => DisplayRowAppendKind::ControlChar,
             Self::SourceMappedText { .. } => DisplayRowAppendKind::SourceMappedText,
             Self::Glyphless { .. } => DisplayRowAppendKind::Glyphless,
+        }
+    }
+
+    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
+        let fallback_char_width = fallback_char_width.max(1.0);
+        match self {
+            Self::ControlChar { .. } => 2.0 * fallback_char_width,
+            Self::SourceMappedText { text } => {
+                text.chars().count().max(1) as f32 * fallback_char_width
+            }
+            Self::Glyphless { .. } => fallback_char_width,
         }
     }
 
@@ -1676,6 +1698,31 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
             .metrics
             .width_px,
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn measure_fragment_width_or_fallback_to_text_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        item: BufferTextFragmentAppendItem,
+        position: DisplayRowPosition,
+        fallback_char_width: f32,
+    ) -> f32 {
+        let fallback_width = item.fallback_width_px(fallback_char_width);
+        self.measure_fragment_width_to_text_row(
+            builder,
+            evaluator,
+            font_metrics,
+            fragment,
+            face_resolver,
+            item,
+            position,
+        )
+        .unwrap_or(fallback_width)
     }
 }
 

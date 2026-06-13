@@ -4936,7 +4936,7 @@ impl LayoutEngine {
                     char_h,
                 )
                 .active_face()
-                .measure_fragment_width_to_text_row(
+                .measure_fragment_width_or_fallback_to_text_row(
                     &mut self.matrix_builder,
                     evaluator,
                     &mut self.font_metrics,
@@ -4944,8 +4944,8 @@ impl LayoutEngine {
                     face_resolver,
                     control_item.clone(),
                     DisplayRowPosition { x_px: x, col },
-                )
-                .unwrap_or(2.0 * face_metrics.char_width);
+                    face_metrics.char_width,
+                );
 
                 // Check if the renderer-measured caret notation fits.
                 if x + needed_width > text_append_surface.full_text_right_edge() {
@@ -5080,55 +5080,48 @@ impl LayoutEngine {
             }
 
             // Nobreak character display (U+00A0 non-breaking space, U+00AD soft hyphen)
-            if params.nobreak_char_display > 0 && (ch == '\u{00A0}' || ch == '\u{00AD}') {
+            if let Some(nobreak_item) =
+                BufferTextFragmentAppendItem::nobreak_display(ch, params.nobreak_char_display)
+            {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let mapped_text = match params.nobreak_char_display {
-                    1 => Some(if ch == '\u{00A0}' { " " } else { "-" }),
-                    2 => Some(if ch == '\u{00A0}' { "\\ " } else { "\\-" }),
-                    _ => None,
-                };
-                if let Some(mapped_text) = mapped_text {
-                    if params.nobreak_char_fg != 0 {
-                        let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
-                        let _ = face_ids.allocate();
-                    }
-                    let buffer_text_fragment = DisplayTextFragment::buffer_text(
-                        CharPos0::new(charpos as usize),
-                        CharPos0::new((charpos + 1) as usize),
-                    );
-                    let append_context = BufferTextItemRowAppendContext::new(
-                        buffer,
-                        buf_id,
-                        &text_append_surface,
-                        &row_geometry,
-                        &active_face_state,
-                        raise_span.value_or(0.0),
-                        char_h,
-                    )
-                    .active_face();
-                    if let Some((_progress, position)) = append_context
-                        .append_fragment_to_text_row_and_emit(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                            &mut self.font_metrics,
-                            buffer_text_fragment,
-                            face_resolver,
-                            BufferTextFragmentAppendItem::SourceMappedText {
-                                text: mapped_text.into(),
-                            },
-                            DisplayRowPosition { x_px: x, col },
-                        )
-                    {
-                        x = position.x_px;
-                        col = position.col;
-                    }
-                    charpos += 1;
-                    word_wrap.disallow_after_current_char();
-                    face_scan.invalidate();
-                    continue;
+                if params.nobreak_char_fg != 0 {
+                    let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
+                    let _ = face_ids.allocate();
                 }
+                let buffer_text_fragment = DisplayTextFragment::buffer_text(
+                    CharPos0::new(charpos as usize),
+                    CharPos0::new((charpos + 1) as usize),
+                );
+                let append_context = BufferTextItemRowAppendContext::new(
+                    buffer,
+                    buf_id,
+                    &text_append_surface,
+                    &row_geometry,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                    char_h,
+                )
+                .active_face();
+                if let Some((_progress, position)) = append_context
+                    .append_fragment_to_text_row_and_emit(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        &mut self.font_metrics,
+                        buffer_text_fragment,
+                        face_resolver,
+                        nobreak_item,
+                        DisplayRowPosition { x_px: x, col },
+                    )
+                {
+                    x = position.x_px;
+                    col = position.col;
+                }
+                charpos += 1;
+                word_wrap.disallow_after_current_char();
+                face_scan.invalidate();
+                continue;
             }
             // Grapheme-cluster continuation is decided BEFORE glyphless
             // handling: a zero-width joiner / non-joiner / variation selector

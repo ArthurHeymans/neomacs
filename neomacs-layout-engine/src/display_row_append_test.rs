@@ -1917,6 +1917,16 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder
         .with_current_row_mut(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
+    let fallback_width = append_context.measure_fragment_width_or_fallback_to_text_row(
+        &mut builder,
+        &mut eval,
+        &mut font_metrics,
+        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(0)),
+        &face_resolver,
+        item.clone(),
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        8.0,
+    );
 
     let (progress, end) = append_context
         .append_fragment_to_text_row_and_emit(
@@ -1933,6 +1943,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(measured_width, 16.0);
+    assert_eq!(fallback_width, 16.0);
     assert_eq!(progress.metrics.width_px, measured_width);
     builder
         .with_current_row_mut(|row| {
@@ -1948,6 +1959,31 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             ));
         })
         .expect("current row");
+}
+
+#[test]
+fn buffer_text_fragment_append_item_names_nobreak_display_policy() {
+    assert_eq!(
+        BufferTextFragmentAppendItem::nobreak_display('\u{00A0}', 1),
+        Some(BufferTextFragmentAppendItem::SourceMappedText { text: " ".into() })
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::nobreak_display('\u{00AD}', 1),
+        Some(BufferTextFragmentAppendItem::SourceMappedText { text: "-".into() })
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::nobreak_display('\u{00A0}', 2),
+        Some(BufferTextFragmentAppendItem::SourceMappedText { text: "\\ ".into() })
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::nobreak_display('\u{00AD}', 2),
+        Some(BufferTextFragmentAppendItem::SourceMappedText { text: "\\-".into() })
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::nobreak_display('\u{00A0}', 0),
+        None
+    );
+    assert_eq!(BufferTextFragmentAppendItem::nobreak_display('x', 2), None);
 }
 
 #[test]
