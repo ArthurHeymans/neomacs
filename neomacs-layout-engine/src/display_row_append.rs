@@ -1,8 +1,8 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
-    SourceSpan,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessJoinerPolicy,
+    GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::DisplayMediaReplacementProperty;
@@ -1581,6 +1581,14 @@ impl BufferTextFragmentAppendItem {
             _ => return None,
         };
         Some(Self::SourceMappedText { text: text.into() })
+    }
+
+    pub(crate) fn glyphless_display(ch: char, cluster_tail: Option<(char, bool)>) -> Option<Self> {
+        if cluster_tail.is_some() && crate::composition::is_composition_joiner(ch) {
+            return None;
+        }
+        let method = glyphless_method_for_char(ch, GlyphlessJoinerPolicy::ClassifyAsGlyphless)?;
+        Some(Self::Glyphless { ch, method })
     }
 
     fn append_kind(&self) -> DisplayRowAppendKind {

@@ -1987,6 +1987,39 @@ fn buffer_text_fragment_append_item_names_nobreak_display_policy() {
 }
 
 #[test]
+fn buffer_text_fragment_append_item_names_glyphless_display_policy() {
+    assert_eq!(
+        BufferTextFragmentAppendItem::glyphless_display('\u{0080}', None),
+        Some(BufferTextFragmentAppendItem::Glyphless {
+            ch: '\u{0080}',
+            method: GlyphlessMethod::HexCode,
+        })
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::glyphless_display('\u{FE0F}', None),
+        Some(BufferTextFragmentAppendItem::Glyphless {
+            ch: '\u{FE0F}',
+            method: GlyphlessMethod::ZeroWidth,
+        })
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::glyphless_display('\u{FE0F}', Some(('\u{2764}', false))),
+        None
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::glyphless_display('\u{200E}', Some(('a', false))),
+        Some(BufferTextFragmentAppendItem::Glyphless {
+            ch: '\u{200E}',
+            method: GlyphlessMethod::ZeroWidth,
+        })
+    );
+    assert_eq!(
+        BufferTextFragmentAppendItem::glyphless_display('x', None),
+        None
+    );
+}
+
+#[test]
 fn buffer_text_item_append_context_builds_mapped_item() {
     let mut eval = Context::new();
     let buf_id = eval

@@ -5134,18 +5134,10 @@ impl LayoutEngine {
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
             let is_cluster_continuation = crate::composition::continues_cluster(ch, cluster_tail);
-            // Only emoji/text composition joiners (ZWJ, variation selectors,
-            // tag chars) are absorbed — not C1 controls, bidi marks, or
-            // separators, which must still render as their glyphless glyph.
-            let absorbed_into_cluster =
-                cluster_tail.is_some() && crate::composition::is_composition_joiner(ch);
 
             // Glyphless character detection (C1 controls, format chars, etc.)
-            if let Some(method) = crate::display_item::glyphless_method_for_char(
-                ch,
-                crate::display_item::GlyphlessJoinerPolicy::ClassifyAsGlyphless,
-            )
-            .filter(|_| !absorbed_into_cluster)
+            if let Some(glyphless_item) =
+                BufferTextFragmentAppendItem::glyphless_display(ch, cluster_tail)
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
@@ -5172,7 +5164,7 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                         buffer_text_fragment,
                         face_resolver,
-                        BufferTextFragmentAppendItem::Glyphless { ch, method },
+                        glyphless_item,
                         DisplayRowPosition { x_px: x, col },
                     )
                 {
