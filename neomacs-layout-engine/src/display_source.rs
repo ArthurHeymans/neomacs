@@ -715,23 +715,25 @@ enum DisplayPropertySourceAction {
     },
 }
 
-fn display_property_source_action(
-    context: &mut DisplaySourceContext<'_>,
-    display_prop: Value,
-    face: RenderFaceRef,
-) -> DisplayPropertySourceAction {
-    let classification = classify_display_property(display_prop);
-    match classification.replacement {
-        Some(DisplayReplacementProperty::String) => DisplayPropertySourceAction::PushReplacement {
-            value: display_prop,
-            base_face: face,
-        },
-        Some(DisplayReplacementProperty::Stretch(stretch)) => DisplayPropertySourceAction::Emit {
-            kind: DisplayItemKind::Stretch(stretch),
-            layout: classification.modifiers,
-        },
-        Some(DisplayReplacementProperty::Media(replacement)) => {
-            let kind = replacement
+enum DisplayPropertySourceReplacement {
+    String(Value),
+    Item(DisplayItemKind),
+    Unresolved,
+}
+
+impl DisplayPropertySourceReplacement {
+    fn resolve(
+        context: &mut DisplaySourceContext<'_>,
+        display_prop: Value,
+        replacement: Option<DisplayReplacementProperty>,
+        face: RenderFaceRef,
+    ) -> Self {
+        match replacement {
+            Some(DisplayReplacementProperty::String) => Self::String(display_prop),
+            Some(DisplayReplacementProperty::Stretch(stretch)) => {
+                Self::Item(DisplayItemKind::Stretch(stretch))
+            }
+            Some(DisplayReplacementProperty::Media(replacement)) => replacement
                 .direct_replacement()
                 .map(DisplayItemKind::MediaReplacement)
                 .or_else(|| {
@@ -739,24 +741,43 @@ fn display_property_source_action(
                         .resolve_display_media_replacement(display_prop, face)
                         .filter(|media| replacement.accepts_media_replacement(media))
                         .map(DisplayItemKind::MediaReplacement)
-                });
-            kind.map(|kind| DisplayPropertySourceAction::Emit {
-                kind,
-                layout: classification.modifiers,
-            })
-            .unwrap_or(DisplayPropertySourceAction::Ignore {
-                layout: classification.modifiers,
-            })
+                })
+                .map(Self::Item)
+                .unwrap_or(Self::Unresolved),
+            None => context
+                .resolve_display_media_replacement(display_prop, face)
+                .map(DisplayItemKind::MediaReplacement)
+                .map(Self::Item)
+                .unwrap_or(Self::Unresolved),
         }
-        None => context
-            .resolve_display_media_replacement(display_prop, face)
-            .map(|media| DisplayPropertySourceAction::Emit {
-                kind: DisplayItemKind::MediaReplacement(media),
-                layout: classification.modifiers,
-            })
-            .unwrap_or(DisplayPropertySourceAction::Ignore {
-                layout: classification.modifiers,
-            }),
+    }
+}
+
+fn display_property_source_action(
+    context: &mut DisplaySourceContext<'_>,
+    display_prop: Value,
+    face: RenderFaceRef,
+) -> DisplayPropertySourceAction {
+    let classification = classify_display_property(display_prop);
+    match DisplayPropertySourceReplacement::resolve(
+        context,
+        display_prop,
+        classification.replacement,
+        face,
+    ) {
+        DisplayPropertySourceReplacement::String(value) => {
+            DisplayPropertySourceAction::PushReplacement {
+                value,
+                base_face: face,
+            }
+        }
+        DisplayPropertySourceReplacement::Item(kind) => DisplayPropertySourceAction::Emit {
+            kind,
+            layout: classification.modifiers,
+        },
+        DisplayPropertySourceReplacement::Unresolved => DisplayPropertySourceAction::Ignore {
+            layout: classification.modifiers,
+        },
     }
 }
 

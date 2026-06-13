@@ -273,6 +273,33 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
 }
 
 #[test]
+fn display_property_source_replacement_resolves_direct_media_item() {
+    let _eval = Context::new();
+    let media = DisplayMediaReplacement::xwidget(crate::display_item::DisplayXwidgetItem {
+        xwidget_id: 21,
+        width: 30.0,
+        height: 12.0,
+    });
+    let mut context = DisplaySourceContext::empty();
+
+    let replacement = DisplayPropertySourceReplacement::resolve(
+        &mut context,
+        Value::NIL,
+        Some(crate::display_property::DisplayReplacementProperty::Media(
+            crate::display_property::DisplayMediaReplacementProperty::Xwidget(media),
+        )),
+        RenderFaceRef::FaceId(7),
+    );
+
+    let DisplayPropertySourceReplacement::Item(DisplayItemKind::MediaReplacement(resolved)) =
+        replacement
+    else {
+        panic!("expected direct media replacement item");
+    };
+    assert_eq!(resolved, media);
+}
+
+#[test]
 fn lisp_string_source_cursor_resolves_face_property() {
     let _eval = Context::new();
     let value = Value::string_with_text_properties(
