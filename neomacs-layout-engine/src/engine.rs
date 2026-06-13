@@ -15,12 +15,13 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowRightEdgeMarkerColumn,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
-    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    finish_and_end_text_matrix_row_output, finish_text_matrix_row_output,
-    finish_text_window_output_rows, install_text_window_right_edge_markers,
-    mark_current_text_row_truncated_left,
+    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowDisplayRange,
+    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
+    begin_text_window_output, close_text_window_output, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
+    finish_text_matrix_row_output, finish_text_window_output_rows,
+    install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
+    record_text_window_display_range,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -6332,12 +6333,14 @@ impl LayoutEngine {
             .map(|row| row.row.max(0) as usize)
             .unwrap_or(0);
 
-        if let Some(info) = self.matrix_builder.window_infos_last_mut()
-            && info.window_id == params.window_id
-        {
-            info.window_start = window_start_lisp.as_i64();
-            info.window_end = window_end_lisp.as_i64();
-        }
+        record_text_window_display_range(
+            &mut self.matrix_builder,
+            TextWindowDisplayRange {
+                window_id: params.window_id as u64,
+                window_start: window_start_lisp,
+                window_end: window_end_lisp,
+            },
+        );
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
@@ -6555,7 +6558,7 @@ impl LayoutEngine {
             );
         }
 
-        self.matrix_builder.end_window();
+        close_text_window_output(&mut self.matrix_builder);
 
         // Store hit-test data for this window
         self.hit_data.push(WindowHitData {

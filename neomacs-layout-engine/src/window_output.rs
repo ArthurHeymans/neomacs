@@ -131,6 +131,13 @@ pub(crate) struct TextWindowBegin {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextWindowDisplayRange {
+    pub(crate) window_id: u64,
+    pub(crate) window_start: LispCharPos1,
+    pub(crate) window_end: LispCharPos1,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextWindowRightEdgeMarkerColumn {
     LastColumn,
     BeforeRightBorder,
@@ -242,6 +249,22 @@ pub(crate) fn begin_text_window_output(
         request.selected,
     );
     TextMatrixRowOutput::new(builder, output_emitter, evaluator).begin(request.first_row);
+}
+
+pub(crate) fn record_text_window_display_range(
+    builder: &mut GlyphMatrixBuilder,
+    range: TextWindowDisplayRange,
+) {
+    if let Some(info) = builder.window_infos_last_mut()
+        && info.window_id == range.window_id as i64
+    {
+        info.window_start = range.window_start.as_i64();
+        info.window_end = range.window_end.as_i64();
+    }
+}
+
+pub(crate) fn close_text_window_output(builder: &mut GlyphMatrixBuilder) {
+    builder.end_window();
 }
 
 pub(crate) fn finish_text_matrix_row_output(

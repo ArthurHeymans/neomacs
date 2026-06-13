@@ -6,15 +6,18 @@ use super::TextMatrixRowMetrics;
 use super::TextMatrixRowOutput;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
+use super::TextWindowDisplayRange;
 use super::TextWindowRightEdgeMarkerColumn;
 use super::TextWindowRightEdgeMarkers;
 use super::WindowOutputEmitter;
+use super::close_text_window_output;
 use super::emit_text_matrix_row_transition;
 use super::emit_text_matrix_row_transition_with_limit;
 use super::finish_and_end_text_matrix_row_output;
 use super::finish_text_matrix_row_output;
 use super::install_text_window_right_edge_markers;
 use super::mark_current_text_row_truncated_left;
+use super::record_text_window_display_range;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
@@ -23,7 +26,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::display_status_line::DisplayRowOutputProgress;
 use crate::matrix_builder::GlyphMatrixBuilder;
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::frame_glyphs::{GlyphRowRole, WindowInfo};
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::{Glyph, GlyphArea, GlyphType};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
@@ -32,6 +35,25 @@ use neovm_core::emacs_core::Context;
 fn assert_char_glyph(glyph: &Glyph, ch: char, face_id: u32) {
     assert_eq!(glyph.glyph_type, GlyphType::Char { ch });
     assert_eq!(glyph.face_id, face_id);
+}
+
+fn window_info(window_id: i64) -> WindowInfo {
+    WindowInfo {
+        window_id,
+        buffer_id: 9,
+        window_start: 1,
+        window_end: 1,
+        buffer_size: 100,
+        bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        mode_line_height: 0.0,
+        header_line_height: 0.0,
+        tab_line_height: 0.0,
+        selected: true,
+        is_minibuffer: false,
+        char_height: 16.0,
+        buffer_file_name: String::new(),
+        modified: false,
+    }
 }
 
 #[test]
@@ -453,6 +475,49 @@ fn text_matrix_row_output_surface_begins_row() {
 
     builder.end_row();
     builder.end_window();
+}
+
+#[test]
+fn record_text_window_display_range_updates_matching_last_window_info() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.push_window_info(window_info(41));
+
+    record_text_window_display_range(
+        &mut builder,
+        TextWindowDisplayRange {
+            window_id: 41,
+            window_start: LispCharPos1::new(7),
+            window_end: LispCharPos1::new(19),
+        },
+    );
+
+    let info = builder.window_infos().last().expect("window info");
+    assert_eq!(info.window_start, 7);
+    assert_eq!(info.window_end, 19);
+
+    record_text_window_display_range(
+        &mut builder,
+        TextWindowDisplayRange {
+            window_id: 42,
+            window_start: LispCharPos1::new(11),
+            window_end: LispCharPos1::new(23),
+        },
+    );
+
+    let info = builder.window_infos().last().expect("window info");
+    assert_eq!(info.window_start, 7);
+    assert_eq!(info.window_end, 19);
+}
+
+#[test]
+fn close_text_window_output_closes_active_matrix_window() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+
+    close_text_window_output(&mut builder);
+
+    assert_eq!(builder.windows().len(), 1);
+    assert_eq!(builder.windows()[0].window_id, 9);
 }
 
 #[test]
