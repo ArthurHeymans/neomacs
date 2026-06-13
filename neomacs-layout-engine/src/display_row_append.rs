@@ -1253,15 +1253,23 @@ struct DisplayRowAppendOutput {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayRowAppendPlacement {
+struct DisplayRowAppendPlacement {
     row: usize,
     y: f32,
     glyph_y: f32,
 }
 
 impl DisplayRowAppendPlacement {
-    pub(crate) fn new(row: usize, y: f32, glyph_y: f32) -> Self {
+    fn new(row: usize, y: f32, glyph_y: f32) -> Self {
         Self { row, y, glyph_y }
+    }
+
+    fn from_geometry_state(geometry: &DisplayRowGeometryState, glyph_y_offset: f32) -> Self {
+        Self::new(
+            geometry.row(),
+            geometry.y(),
+            geometry.glyph_y(glyph_y_offset),
+        )
     }
 }
 
@@ -1295,7 +1303,7 @@ impl DisplayRowAppendSurface {
         Self { area, tab_policy }
     }
 
-    pub(crate) fn frame(
+    fn frame(
         &self,
         placement: DisplayRowAppendPlacement,
         metrics: DisplayRowAppendMetrics,
@@ -1309,7 +1317,10 @@ impl DisplayRowAppendSurface {
         glyph_y_offset: f32,
         metrics: DisplayRowAppendMetrics,
     ) -> DisplayRowAppendFrame {
-        self.frame(geometry.append_placement(glyph_y_offset), metrics)
+        self.frame(
+            DisplayRowAppendPlacement::from_geometry_state(geometry, glyph_y_offset),
+            metrics,
+        )
     }
 
     pub(crate) fn text_row_frame_from_geometry_state(

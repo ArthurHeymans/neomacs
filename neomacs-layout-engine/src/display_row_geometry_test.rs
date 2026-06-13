@@ -650,21 +650,6 @@ fn display_row_geometry_state_builds_text_matrix_row_begin() {
 }
 
 #[test]
-fn display_row_geometry_state_builds_append_placement_with_glyph_offset() {
-    let geometry = DisplayRowGeometryState {
-        row: 3,
-        y: 69.0,
-        row_extra_y: 11.0,
-        height: 16.0,
-        ascent: 12.0,
-    };
-
-    let placement = geometry.append_placement(2.5);
-
-    assert_eq!(placement, DisplayRowAppendPlacement::new(3, 69.0, 71.5));
-}
-
-#[test]
 fn display_row_geometry_state_resolves_glyph_y_with_offset() {
     let geometry = DisplayRowGeometryState {
         row: 3,
