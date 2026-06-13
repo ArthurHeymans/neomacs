@@ -422,7 +422,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn push_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+    pub(crate) fn push_char(&mut self, ch: char, face_id: u32, charpos: usize) {
         self.push_char_with_pixel_width(ch, face_id, charpos, 0.0);
     }
 
@@ -436,7 +436,7 @@ impl GlyphMatrixBuilder {
         crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
     }
 
-    pub fn push_char_with_pixel_width(
+    pub(crate) fn push_char_with_pixel_width(
         &mut self,
         ch: char,
         face_id: u32,
@@ -456,10 +456,12 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn push_wide_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+    #[cfg(test)]
+    pub(crate) fn push_wide_char(&mut self, ch: char, face_id: u32, charpos: usize) {
         self.push_wide_char_with_pixel_width(ch, face_id, charpos, 0.0);
     }
 
+    #[cfg(test)]
     pub(crate) fn push_wide_char_to_row(
         row: &mut GlyphRow,
         ch: char,
@@ -470,7 +472,8 @@ impl GlyphMatrixBuilder {
         crate::glyph_row_writer::push_wide_char_to_row(row, ch, face_id, charpos, pixel_width);
     }
 
-    pub fn push_wide_char_with_pixel_width(
+    #[cfg(test)]
+    pub(crate) fn push_wide_char_with_pixel_width(
         &mut self,
         ch: char,
         face_id: u32,
@@ -540,6 +543,7 @@ impl GlyphMatrixBuilder {
     /// positions. Mirrors GNU emitting a multi-character composition while
     /// each character keeps a distinct buffer position. Falls back to a
     /// standalone glyph when there is no base to merge into (run start).
+    #[cfg(test)]
     pub(crate) fn push_run_member_to_row(
         row: &mut GlyphRow,
         ch: char,
@@ -550,7 +554,14 @@ impl GlyphMatrixBuilder {
         crate::glyph_row_writer::push_run_member_to_row(row, ch, face_id, charpos, pixel_width);
     }
 
-    pub fn push_run_member(&mut self, ch: char, face_id: u32, charpos: usize, pixel_width: f32) {
+    #[cfg(test)]
+    pub(crate) fn push_run_member(
+        &mut self,
+        ch: char,
+        face_id: u32,
+        charpos: usize,
+        pixel_width: f32,
+    ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
                 Self::push_run_member_to_row(
@@ -564,10 +575,12 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn push_stretch(&mut self, width_cols: u16, face_id: u32) {
+    #[cfg(test)]
+    pub(crate) fn push_stretch(&mut self, width_cols: u16, face_id: u32) {
         self.push_stretch_with_pixel_width(width_cols, face_id, 0.0);
     }
 
+    #[cfg(test)]
     pub(crate) fn push_stretch_to_row(
         row: &mut GlyphRow,
         width_cols: u16,
@@ -586,7 +599,8 @@ impl GlyphMatrixBuilder {
         );
     }
 
-    pub fn push_stretch_with_pixel_width(
+    #[cfg(test)]
+    pub(crate) fn push_stretch_with_pixel_width(
         &mut self,
         width_cols: u16,
         face_id: u32,
@@ -595,7 +609,8 @@ impl GlyphMatrixBuilder {
         self.push_stretch_with_pixel_geometry(width_cols, face_id, pixel_width, 0.0, 0.0);
     }
 
-    pub fn push_stretch_with_pixel_geometry(
+    #[cfg(test)]
+    pub(crate) fn push_stretch_with_pixel_geometry(
         &mut self,
         width_cols: u16,
         face_id: u32,
@@ -613,27 +628,6 @@ impl GlyphMatrixBuilder {
                     pixel_height,
                     pixel_ascent,
                 );
-            }
-        }
-    }
-
-    pub fn push_composed(&mut self, text: &str, face_id: u32, charpos: usize) {
-        if let Some(ref mut matrix) = self.current_matrix {
-            if self.current_row < matrix.rows.len() {
-                let glyph = Glyph {
-                    glyph_type: GlyphType::Composite { text: text.into() },
-                    face_id,
-                    charpos,
-                    bidi_level: 0,
-                    wide: false,
-                    pixel_width: 0.0,
-                    pixel_height: 0.0,
-                    pixel_ascent: 0.0,
-                    vertical_offset_px: 0.0,
-                    padding: false,
-                };
-                matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()].push(glyph);
-                matrix.rows[self.current_row].displays_text = true;
             }
         }
     }
