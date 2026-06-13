@@ -1216,21 +1216,22 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferTextFragmentRowAppendContext<'source, 'row, B: LayoutBufferView + ?Sized> {
+pub(crate) struct BufferTextRowAppendContext<'source, 'surface, B: LayoutBufferView + ?Sized> {
     buffer: &'source B,
     buffer_id: BufferId,
+    append_surface: &'surface DisplayRowAppendSurface,
     active_face: &'source DisplayRowActiveFaceState,
-    active_face_context: DisplayRowActiveFaceAppendContext<'row, 'source>,
+    glyph_y_offset: f32,
+    default_row_height: f32,
 }
 
-impl<'source, 'row, B: LayoutBufferView + ?Sized>
-    BufferTextFragmentRowAppendContext<'source, 'row, B>
+impl<'source, 'surface, B: LayoutBufferView + ?Sized>
+    BufferTextRowAppendContext<'source, 'surface, B>
 {
     pub(crate) fn new(
         buffer: &'source B,
         buffer_id: BufferId,
-        append_surface: &'row DisplayRowAppendSurface,
-        geometry: &'row DisplayRowGeometryState,
+        append_surface: &'surface DisplayRowAppendSurface,
         active_face: &'source DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         default_row_height: f32,
@@ -1238,20 +1239,49 @@ impl<'source, 'row, B: LayoutBufferView + ?Sized>
         Self {
             buffer,
             buffer_id,
+            append_surface,
             active_face,
-            active_face_context: DisplayRowActiveFaceAppendContext::new(
-                append_surface,
-                geometry,
-                active_face,
-                glyph_y_offset,
-                default_row_height,
-            ),
+            glyph_y_offset,
+            default_row_height,
         }
     }
 
-    pub(crate) fn active_face(self) -> BufferTextFragmentAppendContext<'source, B> {
-        let frame = self.active_face_context.active_face_frame();
+    fn active_face_context<'row>(
+        &self,
+        geometry: &'row DisplayRowGeometryState,
+    ) -> DisplayRowActiveFaceAppendContext<'row, 'source>
+    where
+        'surface: 'row,
+    {
+        DisplayRowActiveFaceAppendContext::new(
+            self.append_surface,
+            geometry,
+            self.active_face,
+            self.glyph_y_offset,
+            self.default_row_height,
+        )
+    }
+
+    pub(crate) fn fragment_active_face(
+        &self,
+        geometry: &DisplayRowGeometryState,
+    ) -> BufferTextFragmentAppendContext<'source, B> {
+        let frame = self.active_face_context(geometry).active_face_frame();
         BufferTextFragmentAppendContext::new(
+            self.buffer,
+            self.buffer_id,
+            self.active_face.face_id(),
+            self.active_face.resolved_face(),
+            frame,
+        )
+    }
+
+    pub(crate) fn item_active_face(
+        &self,
+        geometry: &DisplayRowGeometryState,
+    ) -> BufferTextItemAppendContext<'source, B> {
+        let frame = self.active_face_context(geometry).active_face_frame();
+        BufferTextItemAppendContext::new(
             self.buffer,
             self.buffer_id,
             self.active_face.face_id(),
@@ -1808,49 +1838,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
             position,
         )
         .unwrap_or(fallback_width)
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BufferTextItemRowAppendContext<'a, B: LayoutBufferView + ?Sized> {
-    buffer: &'a B,
-    buffer_id: BufferId,
-    active_face: &'a DisplayRowActiveFaceState,
-    active_face_context: DisplayRowActiveFaceAppendContext<'a, 'a>,
-}
-
-impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemRowAppendContext<'a, B> {
-    pub(crate) fn new(
-        buffer: &'a B,
-        buffer_id: BufferId,
-        append_surface: &'a DisplayRowAppendSurface,
-        geometry: &'a DisplayRowGeometryState,
-        active_face: &'a DisplayRowActiveFaceState,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-    ) -> Self {
-        Self {
-            buffer,
-            buffer_id,
-            active_face,
-            active_face_context: DisplayRowActiveFaceAppendContext::new(
-                append_surface,
-                geometry,
-                active_face,
-                glyph_y_offset,
-                default_row_height,
-            ),
-        }
-    }
-
-    pub(crate) fn active_face(self) -> BufferTextItemAppendContext<'a, B> {
-        BufferTextItemAppendContext::new(
-            self.buffer,
-            self.buffer_id,
-            self.active_face.face_id(),
-            self.active_face.resolved_face(),
-            self.active_face_context.active_face_frame(),
-        )
     }
 }
 

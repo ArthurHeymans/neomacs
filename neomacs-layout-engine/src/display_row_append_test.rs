@@ -1859,16 +1859,9 @@ fn buffer_text_fragment_append_context_appends_source_char() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
-    let append_context = BufferTextFragmentRowAppendContext::new(
-        &snapshot,
-        buf_id,
-        &surface,
-        &geometry,
-        &active_face,
-        0.0,
-        16.0,
-    )
-    .active_face();
+    let append_context =
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0)
+            .fragment_active_face(&geometry);
     let (_progress, end) = append_context
         .append_resolved_to_text_row(
             &mut builder,
@@ -2429,16 +2422,9 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let append_context = BufferTextItemRowAppendContext::new(
-        &snapshot,
-        buf_id,
-        &surface,
-        &geometry,
-        &active_face,
-        0.0,
-        16.0,
-    )
-    .active_face();
+    let append_context =
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0)
+            .item_active_face(&geometry);
     let (_progress, end) = append_context
         .append_fragment_to_text_row_and_emit(
             &mut builder,
@@ -2510,16 +2496,9 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
-    let append_context = BufferTextItemRowAppendContext::new(
-        &snapshot,
-        buf_id,
-        &surface,
-        &geometry,
-        &active_face,
-        0.0,
-        16.0,
-    )
-    .active_face();
+    let append_context =
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0)
+            .item_active_face(&geometry);
     let (_progress, end) = append_context
         .append_fragment_to_text_row_and_emit(
             &mut builder,
