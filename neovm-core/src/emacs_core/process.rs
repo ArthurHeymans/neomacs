@@ -34,6 +34,7 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::net::{SocketAddr as UnixSocketAddr, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use strum::{EnumString, IntoStaticStr};
 
@@ -625,7 +626,11 @@ pub struct ProcessManager {
 
 struct ProcessWaitBackend {
     /// I/O multiplexer for process descriptors and render-thread input wakeups.
-    poller: Option<polling::Poller>,
+    ///
+    /// Shared (`Arc`) so the render/frontend thread can wake a blocked
+    /// `poller.wait()` via the cross-platform `Poller::notify()` — the basis for
+    /// the unified single-poll wait loop (no per-OS wakeup pipe needed).
+    poller: Option<Arc<polling::Poller>>,
     /// Render-thread input wakeup fd registered in the shared wait poller.
     #[cfg(unix)]
     input_wakeup_fd: Option<std::os::unix::io::RawFd>,
@@ -651,14 +656,19 @@ impl ProcessWaitBackendInterest {
 impl ProcessWaitBackend {
     fn new() -> Self {
         Self {
-            poller: polling::Poller::new().ok(),
+            poller: polling::Poller::new().ok().map(Arc::new),
             #[cfg(unix)]
             input_wakeup_fd: None,
         }
     }
 
     fn poller(&self) -> Option<&polling::Poller> {
-        self.poller.as_ref()
+        self.poller.as_deref()
+    }
+
+    /// A shared handle the frontend uses to wake a blocked wait (cross-platform).
+    fn notify_handle(&self) -> Option<Arc<polling::Poller>> {
+        self.poller.clone()
     }
 
     #[cfg(unix)]
@@ -1995,6 +2005,13 @@ impl ProcessManager {
 
     pub(crate) fn has_wait_input_wakeup_backend(&self) -> bool {
         self.wait_backend.has_input_wakeup()
+    }
+
+    /// Shared poller handle for the render/frontend thread to wake a blocked
+    /// wait via the cross-platform `Poller::notify()`. `None` if no poller could
+    /// be created (e.g. headless/batch).
+    pub(crate) fn wait_notify_handle(&self) -> Option<Arc<polling::Poller>> {
+        self.wait_backend.notify_handle()
     }
 
     pub(crate) fn wait_for_input_wakeup_events(
