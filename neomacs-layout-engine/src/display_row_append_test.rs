@@ -3171,6 +3171,41 @@ fn display_property_replacement_append_item_names_cursor_policy() {
 }
 
 #[test]
+fn display_property_replacement_append_request_keeps_item_policy_and_start_position() {
+    let item = DisplayPropertyReplacementAppendItem::Stretch(
+        DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
+    );
+    let request = DisplayPropertyReplacementAppendRequest::new(
+        crate::display_source::BufferDisplayReplacementSource::new(
+            BufferId(7),
+            CharPos0::new(3),
+            EmacsBytePos::new(12),
+        ),
+        item,
+        -2.0,
+        18.0,
+        DisplayRowPosition { x_px: 24.0, col: 4 },
+    );
+
+    assert_eq!(
+        request.cursor_policy(),
+        DisplayPropertyReplacementCursorPolicy::TextSlot {
+            width_px: 13.0,
+            stretch_like: true,
+        }
+    );
+    assert_eq!(
+        request.start_position(),
+        DisplayRowPosition { x_px: 24.0, col: 4 }
+    );
+    let DisplayPropertyReplacementAppendItem::Stretch(item) = request.into_item() else {
+        panic!("expected stretch replacement item");
+    };
+    assert_eq!(item.height_px(), 16.0);
+    assert_eq!(item.ascent_px(), 12.0);
+}
+
+#[test]
 fn display_replacement_stretch_append_item_names_cursor_and_extent_policy() {
     let item = DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0);
     assert_eq!(item.width_px(), 13.0);

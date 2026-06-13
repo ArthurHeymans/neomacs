@@ -39,8 +39,8 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementCursorPolicy,
-    DisplayReplacementMediaAppendResolution, DisplayReplacementRowAppendContext,
+    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
+    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
     DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
     LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
 };
@@ -627,21 +627,12 @@ fn append_display_property_replacement_to_text_row<B: super::neovm_bridge::Layou
     text_append_surface: &DisplayRowAppendSurface,
     row_geometry: &mut DisplayRowGeometryState,
     active_face_state: &DisplayRowActiveFaceState,
-    replacement_source: BufferDisplayReplacementSource,
-    replacement_item: DisplayPropertyReplacementAppendItem,
-    raise_px: f32,
-    default_row_height: f32,
-    position: DisplayRowPosition,
+    request: DisplayPropertyReplacementAppendRequest,
 ) -> DisplayRowPosition {
-    let replacement_append_context = DisplayReplacementRowAppendContext::new(
-        replacement_source,
-        text_append_surface,
-        row_geometry,
-        active_face_state,
-        raise_px,
-        default_row_height,
-    );
-    match replacement_item {
+    let position = request.start_position();
+    let replacement_append_context =
+        request.row_append_context(text_append_surface, row_geometry, active_face_state);
+    match request.into_item() {
         DisplayPropertyReplacementAppendItem::String(replacement_item) => {
             if replacement_item.is_empty() {
                 return position;
@@ -4727,11 +4718,18 @@ impl LayoutEngine {
                         params,
                         evaluator.display_host.as_deref(),
                     ) {
+                        let replacement_request = DisplayPropertyReplacementAppendRequest::new(
+                            display_replacement_source,
+                            replacement_item,
+                            raise_span.value_or(0.0),
+                            char_h,
+                            DisplayRowPosition { x_px: x, col },
+                        );
                         if point_in_display_replacement {
                             capture_cursor_info(
                                 &mut cursor_info,
                                 display_property_replacement_cursor_info(
-                                    replacement_item.cursor_policy(),
+                                    replacement_request.cursor_policy(),
                                     &active_face_state,
                                     row_geometry.text_position(x, byte_idx, col),
                                 ),
@@ -4748,11 +4746,7 @@ impl LayoutEngine {
                             &text_append_surface,
                             &mut row_geometry,
                             &active_face_state,
-                            display_replacement_source,
-                            replacement_item,
-                            raise_span.value_or(0.0),
-                            char_h,
-                            DisplayRowPosition { x_px: x, col },
+                            replacement_request,
                         );
                         x = position.x_px;
                         col = position.col;

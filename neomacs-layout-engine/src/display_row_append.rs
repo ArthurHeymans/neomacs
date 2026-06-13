@@ -2480,6 +2480,61 @@ pub(crate) enum DisplayPropertyReplacementAppendItem {
     Media(DisplayReplacementMediaAppendResolution),
 }
 
+#[derive(Clone)]
+pub(crate) struct DisplayPropertyReplacementAppendRequest {
+    replacement_source: BufferDisplayReplacementSource,
+    item: DisplayPropertyReplacementAppendItem,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    start_position: DisplayRowPosition,
+}
+
+impl DisplayPropertyReplacementAppendRequest {
+    pub(crate) fn new(
+        replacement_source: BufferDisplayReplacementSource,
+        item: DisplayPropertyReplacementAppendItem,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        start_position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            replacement_source,
+            item,
+            glyph_y_offset,
+            default_row_height,
+            start_position,
+        }
+    }
+
+    pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
+        self.item.cursor_policy()
+    }
+
+    pub(crate) fn start_position(&self) -> DisplayRowPosition {
+        self.start_position
+    }
+
+    pub(crate) fn row_append_context<'a>(
+        &self,
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &DisplayRowGeometryState,
+        active_face: &'a DisplayRowActiveFaceState,
+    ) -> DisplayReplacementRowAppendContext<'a> {
+        DisplayReplacementRowAppendContext::new(
+            self.replacement_source,
+            append_surface,
+            geometry,
+            active_face,
+            self.glyph_y_offset,
+            self.default_row_height,
+        )
+    }
+
+    pub(crate) fn into_item(self) -> DisplayPropertyReplacementAppendItem {
+        self.item
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum DisplayPropertyReplacementCursorPolicy {
     TextSlot {
