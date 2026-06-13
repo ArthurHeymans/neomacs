@@ -4450,6 +4450,12 @@ impl<'a> Vm<'a> {
     ///
     /// SAFETY: `args_ptr` addresses `nargs` valid tagged words (the caller's
     /// call-args slot, populated immediately before the spec shim was called).
+    ///
+    /// Only ever called from the JIT spec shim (`jit::compile`, itself
+    /// `#[cfg(feature = "jit")]`) and references `jit::compile`/`jit::cache`
+    /// types, so it must be gated too — otherwise the no-jit production build
+    /// (workspace `neovm-core` is `default-features = false`) fails to compile.
+    #[cfg(feature = "jit")]
     pub(crate) fn call_armed_callee_native(
         &mut self,
         callee: Value,
