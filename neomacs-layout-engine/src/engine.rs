@@ -5729,10 +5729,8 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let mut ch_text = [0; 4];
             let append_measurement = if complex_text {
                 BufferTextFragmentAppendMeasurement::ResolvedAdvance {
-                    text: ch.encode_utf8(&mut ch_text),
                     advance_px: advance,
                 }
             } else {

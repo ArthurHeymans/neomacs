@@ -1540,10 +1540,7 @@ fn append_measured_buffer_text_fragment_to_text_row_uses_resolved_advance() {
         buf_id,
         &snapshot,
         7,
-        BufferTextFragmentAppendMeasurement::ResolvedAdvance {
-            text: "a",
-            advance_px: 13.0,
-        },
+        BufferTextFragmentAppendMeasurement::ResolvedAdvance { advance_px: 13.0 },
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )

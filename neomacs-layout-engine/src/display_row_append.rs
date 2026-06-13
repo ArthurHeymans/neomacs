@@ -32,9 +32,7 @@ use crate::display_source::{
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::{
-    DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
-};
+use crate::display_text_run_measurement::DisplayTextRunMeasurementPlan;
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -72,27 +70,33 @@ impl DisplayItemSource for SingleDisplayItemSource {
 }
 
 struct ResolvedFragmentAdvanceRenderPolicy {
-    measurement: DisplayTextRunMeasurement,
+    advance_px: f32,
 }
 
 impl ResolvedFragmentAdvanceRenderPolicy {
-    fn new(text: &str, advance_px: f32) -> Self {
-        Self {
-            measurement: DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(
-                text, advance_px,
-            ),
-        }
+    fn new(advance_px: f32) -> Self {
+        Self { advance_px }
+    }
+
+    fn measurement_for_text(&self, text: &str) -> DisplayRowItemMeasurement {
+        DisplayRowItemMeasurement::TextRun(
+            DisplayTextRunMeasurementPlan::from_resolved_fragment_advance(text, self.advance_px),
+        )
     }
 }
 
 impl DisplayRowRenderPolicy for ResolvedFragmentAdvanceRenderPolicy {
     fn measurement_for(
         &mut self,
-        _item: &DisplayItem,
+        item: &DisplayItem,
         _face_id: u32,
         _font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
-        DisplayRowItemMeasurement::TextRun(self.measurement.clone())
+        match &item.kind {
+            DisplayItemKind::TextRun(run) => self.measurement_for_text(&run.text),
+            DisplayItemKind::SourceMappedText(text) => self.measurement_for_text(&text.text),
+            _ => DisplayRowItemMeasurement::Default,
+        }
     }
 }
 
@@ -100,9 +104,9 @@ struct NaturalDisplayRowAppendRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
-pub(crate) enum BufferTextFragmentAppendMeasurement<'a> {
+pub(crate) enum BufferTextFragmentAppendMeasurement {
     Natural,
-    ResolvedAdvance { text: &'a str, advance_px: f32 },
+    ResolvedAdvance { advance_px: f32 },
 }
 
 enum BufferTextFragmentRenderPolicy {
@@ -111,13 +115,13 @@ enum BufferTextFragmentRenderPolicy {
 }
 
 impl BufferTextFragmentRenderPolicy {
-    fn new(measurement: BufferTextFragmentAppendMeasurement<'_>) -> Self {
+    fn new(measurement: BufferTextFragmentAppendMeasurement) -> Self {
         match measurement {
             BufferTextFragmentAppendMeasurement::Natural => {
                 Self::Natural(NaturalDisplayRowAppendRenderPolicy)
             }
-            BufferTextFragmentAppendMeasurement::ResolvedAdvance { text, advance_px } => {
-                Self::Resolved(ResolvedFragmentAdvanceRenderPolicy::new(text, advance_px))
+            BufferTextFragmentAppendMeasurement::ResolvedAdvance { advance_px } => {
+                Self::Resolved(ResolvedFragmentAdvanceRenderPolicy::new(advance_px))
             }
         }
     }
@@ -636,7 +640,7 @@ pub(crate) fn append_measured_buffer_text_fragment_to_text_row<B: LayoutBufferVi
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-    measurement: BufferTextFragmentAppendMeasurement<'_>,
+    measurement: BufferTextFragmentAppendMeasurement,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
