@@ -1,6 +1,4 @@
 use crate::display_face_id::FrameFaceIdAllocator;
-#[cfg(test)]
-use crate::display_item::DisplayMediaReplacementKind;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
     DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
@@ -19,8 +17,6 @@ use crate::display_row::{
     install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
-#[cfg(test)]
-use crate::display_row_builder::DisplayRowAppendCursor;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout,
     DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
@@ -1624,116 +1620,6 @@ impl DisplayRowAppendSpec {
             height: self.output.height,
         }
     }
-}
-
-#[cfg(test)]
-pub(crate) fn append_display_row_item(
-    builder: &mut GlyphMatrixBuilder,
-    layout: &DisplayRowLayout,
-    position: DisplayRowPosition,
-    max_x: f32,
-    item: DisplayItem,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let mut append_cursor = DisplayRowAppendCursor::new(position, max_x);
-    let progress = append_cursor.append_item_to_current_matrix_row(builder, layout, item)?;
-    let position = append_cursor.position();
-    Some((progress, position))
-}
-
-#[cfg(test)]
-pub(crate) fn append_display_row_append_spec_item(
-    builder: &mut GlyphMatrixBuilder,
-    spec: &DisplayRowAppendSpec,
-    item: DisplayItem,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let media = match &item.kind {
-        DisplayItemKind::MediaReplacement(media) => Some(*media),
-        _ => None,
-    };
-    if let Some(media) = media {
-        append_media_display_row_append_spec_item(builder, spec, item, media)
-    } else {
-        append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
-    }
-}
-
-#[cfg(test)]
-fn append_media_display_row_append_spec_item(
-    builder: &mut GlyphMatrixBuilder,
-    spec: &DisplayRowAppendSpec,
-    item: DisplayItem,
-    media: DisplayMediaReplacement,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let (progress, position) = append_display_row_item(
-        builder,
-        &spec.layout,
-        spec.position,
-        spec.max_x,
-        media.replacement_item(item),
-    )?;
-    if progress.status == crate::display_row_builder::DisplayRowAppendStatus::Complete
-        && progress.metrics.width_px > 0.0
-    {
-        install_media_replacement(builder, spec, &progress, media);
-    }
-    Some((progress, position))
-}
-
-#[cfg(test)]
-fn install_media_replacement(
-    builder: &mut GlyphMatrixBuilder,
-    spec: &DisplayRowAppendSpec,
-    progress: &DisplayRowAppendProgress,
-    media: DisplayMediaReplacement,
-) {
-    match media.kind {
-        DisplayMediaReplacementKind::Image { image_id } => builder.push_current_window_image(
-            spec.layout.role,
-            display_slot_row(spec.output.row),
-            display_slot_col(progress.start.col),
-            image_id,
-            progress.start.x_px,
-            spec.output.glyph_y,
-            media.width,
-            media.height,
-        ),
-        DisplayMediaReplacementKind::Video {
-            video_id,
-            loop_count,
-            autoplay,
-        } => builder.push_current_window_video(
-            spec.layout.role,
-            display_slot_row(spec.output.row),
-            display_slot_col(progress.start.col),
-            video_id,
-            progress.start.x_px,
-            spec.output.glyph_y,
-            media.width,
-            media.height,
-            loop_count,
-            autoplay,
-        ),
-        DisplayMediaReplacementKind::Xwidget { xwidget_id } => builder.push_current_window_xwidget(
-            spec.layout.role,
-            display_slot_row(spec.output.row),
-            display_slot_col(progress.start.col),
-            xwidget_id,
-            progress.start.x_px,
-            spec.output.glyph_y,
-            media.width,
-            media.height,
-        ),
-    }
-}
-
-#[cfg(test)]
-fn display_slot_row(row: usize) -> u32 {
-    row.min(u32::MAX as usize) as u32
-}
-
-#[cfg(test)]
-fn display_slot_col(col: usize) -> u16 {
-    col.min(usize::from(u16::MAX)) as u16
 }
 
 pub(crate) fn append_synthetic_text_to_display_row(
