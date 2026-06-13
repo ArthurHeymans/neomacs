@@ -735,7 +735,7 @@ fn display_row_append_frame_builds_append_spec_directly() {
 }
 
 #[test]
-fn display_row_fragment_append_request_uses_append_spec() {
+fn display_row_source_append_request_uses_append_spec() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = DisplayRowAppendFrame::from_parts(
         DisplayRowAppendPlacement {
@@ -767,7 +767,7 @@ fn display_row_fragment_append_request_uses_append_spec() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let request = DisplayRowFragmentAppendRequest::from_append_spec(append_spec, 42, base_face);
+    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, 42, base_face);
 
     let row_spec = request.display_row_spec();
     assert_eq!(

@@ -250,13 +250,13 @@ fn display_row_append_progress_from_render_result(
     }
 }
 
-struct DisplayRowFragmentAppendRequest<'face> {
+struct DisplayRowSourceAppendRequest<'face> {
     append_spec: DisplayRowAppendSpec,
     base_face_id: u32,
     base_face: &'face ResolvedFace,
 }
 
-impl<'face> DisplayRowFragmentAppendRequest<'face> {
+impl<'face> DisplayRowSourceAppendRequest<'face> {
     fn for_frame(
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
@@ -299,7 +299,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
     evaluator: &mut Context,
     mut item: DisplayItem,
     face_resolver: &FaceResolver,
-    request: DisplayRowFragmentAppendRequest<'_>,
+    request: DisplayRowSourceAppendRequest<'_>,
     render_policy: &mut P,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     item.face = RenderFaceRef::FaceId(request.base_face_id);
@@ -358,17 +358,11 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
     ) else {
         return position;
     };
-    let row_spec = DisplayRowSpec {
-        geometry: frame.geometry.clone(),
-        render_bounds: DisplayRowRenderBounds {
-            start: position,
-            max_x_px: frame.content_x + frame.geometry.width,
-        },
-        base_face_id,
-        base_face,
-        role: GlyphRowRole::Text,
-        symbol_values: HashMap::new(),
-    };
+    let append_spec = frame.append_spec(position, base_face_id, DisplayRowAppendKind::SourceText);
+    let request =
+        DisplayRowSourceAppendRequest::from_append_spec(append_spec, base_face_id, base_face);
+    let row_spec = request.display_row_spec();
+    let output = request.text_row_output();
     let mut source_state = DisplayRowSourceState::default();
     let Some(outcome) = render_natural_display_item_source_into_current_text_row_and_emit(
         builder,
@@ -380,12 +374,7 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
         face_resolver,
         face_ids,
         row_spec,
-        TextRowOutput {
-            row: frame.row,
-            row_y: frame.geometry.y,
-            glyph_y: frame.glyph_y,
-            height: frame.geometry.height,
-        },
+        output,
     ) else {
         return position;
     };
@@ -576,8 +565,7 @@ pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
     let append_kind = DisplayRowAppendKind::from_display_item_kind(&kind)?;
     let append_spec = frame.append_spec(position, face_id, append_kind);
     let item = source.item(RenderFaceRef::FaceId(face_id), kind);
-    let request =
-        DisplayRowFragmentAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,
@@ -814,7 +802,7 @@ pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let face_id = render_face_ref_id(item.face, fallback_face_id);
-    let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face);
+    let request = DisplayRowSourceAppendRequest::for_frame(frame, position, face_id, base_face);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,
@@ -1313,7 +1301,7 @@ pub(crate) fn append_synthetic_text_to_display_row(
     measurement: Option<DisplayTextRunMeasurement>,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let item = synthetic_display_text_item(source_id, text, face_id);
-    let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face);
+    let request = DisplayRowSourceAppendRequest::for_frame(frame, position, face_id, base_face);
     match measurement {
         Some(measurement) => {
             let mut render_policy = TextRunDisplayRowRenderPolicy::new(measurement);
