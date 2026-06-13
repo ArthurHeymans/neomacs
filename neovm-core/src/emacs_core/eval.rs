@@ -5343,6 +5343,15 @@ impl Context {
         self.command_loop.running = true;
     }
 
+    /// Cross-platform handle the render/frontend thread uses to wake the wait
+    /// loop after pushing an input event to the channel (see [`WaitNotifier`]).
+    /// Returns `None` in headless/batch where no poller exists. Prefer this over
+    /// the legacy Unix wakeup pipe: it works on every platform via
+    /// `Poller::notify()`.
+    pub fn wait_notifier(&self) -> Option<crate::emacs_core::process::WaitNotifier> {
+        self.processes.wait_notifier()
+    }
+
     pub fn set_display_host(&mut self, host: Box<dyn DisplayHost>) {
         self.display_host = Some(host);
     }

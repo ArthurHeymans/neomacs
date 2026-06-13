@@ -624,6 +624,31 @@ pub struct ProcessManager {
     wait_backend: ProcessWaitBackend,
 }
 
+/// Opaque, thread-safe handle the render/frontend thread uses to wake a blocked
+/// wait loop after delivering input, via the cross-platform `Poller::notify()`.
+///
+/// This is the platform-agnostic replacement for the Unix-only wakeup pipe: it
+/// works identically on Linux/macOS/Windows (the `polling` crate maps `notify`
+/// onto eventfd/pipe/IOCP as appropriate) and is one-shot + remembered if no
+/// waiter is currently blocked, so `send`-then-`notify` never loses a wakeup.
+#[derive(Clone)]
+pub struct WaitNotifier {
+    poller: Arc<polling::Poller>,
+}
+
+impl WaitNotifier {
+    fn new(poller: Arc<polling::Poller>) -> Self {
+        Self { poller }
+    }
+
+    /// Wake the current (or next) `poller.wait()` so the evaluator drains its
+    /// input channel. Call this right after pushing an event to the input
+    /// channel from the render/frontend thread.
+    pub fn notify(&self) {
+        let _ = self.poller.notify();
+    }
+}
+
 struct ProcessWaitBackend {
     /// I/O multiplexer for process descriptors and render-thread input wakeups.
     ///
@@ -667,8 +692,8 @@ impl ProcessWaitBackend {
     }
 
     /// A shared handle the frontend uses to wake a blocked wait (cross-platform).
-    fn notify_handle(&self) -> Option<Arc<polling::Poller>> {
-        self.poller.clone()
+    fn notify_handle(&self) -> Option<WaitNotifier> {
+        self.poller.clone().map(WaitNotifier::new)
     }
 
     #[cfg(unix)]
@@ -703,14 +728,10 @@ impl ProcessWaitBackend {
     fn register_input_wakeup_fd(&mut self, _fd: super::eval::WakeupFd) {}
 
     fn has_input_wakeup(&self) -> bool {
-        #[cfg(unix)]
-        {
-            self.poller.is_some() && self.input_wakeup_fd.is_some()
-        }
-        #[cfg(not(unix))]
-        {
-            false
-        }
+        // Cross-platform: any live poller can be woken via `Poller::notify()`,
+        // so the unified input+process wait path is available on every OS — not
+        // only where the Unix wakeup pipe (`input_wakeup_fd`) is registered.
+        self.poller.is_some()
     }
 
     fn wait_for_events(
@@ -748,6 +769,14 @@ impl ProcessWaitBackend {
                                     ready_processes.push(id);
                                 }
                             }
+                        }
+                        // A cross-platform `Poller::notify()` wake (the frontend
+                        // delivered input) carries no event — so any wake while
+                        // input is of interest means "input may be ready": surface
+                        // it and let the caller drain the input channel. This also
+                        // makes the wait return promptly instead of yield-looping.
+                        if interest.wants_input_wakeup() {
+                            input_wakeup = true;
                         }
                         let backend =
                             ProcessWaitEvents::from_sources(input_wakeup, ready_processes);
@@ -2007,10 +2036,10 @@ impl ProcessManager {
         self.wait_backend.has_input_wakeup()
     }
 
-    /// Shared poller handle for the render/frontend thread to wake a blocked
-    /// wait via the cross-platform `Poller::notify()`. `None` if no poller could
-    /// be created (e.g. headless/batch).
-    pub(crate) fn wait_notify_handle(&self) -> Option<Arc<polling::Poller>> {
+    /// Cross-platform handle for the render/frontend thread to wake a blocked
+    /// wait via `Poller::notify()` after delivering input. `None` if no poller
+    /// could be created (e.g. headless/batch).
+    pub(crate) fn wait_notifier(&self) -> Option<WaitNotifier> {
         self.wait_backend.notify_handle()
     }
 
