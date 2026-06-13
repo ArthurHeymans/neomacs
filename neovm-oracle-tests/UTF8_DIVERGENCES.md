@@ -19,7 +19,7 @@ cargo nextest run -p neovm-oracle-tests -E 'test(/div_utf8/)' --no-fail-fast
 GNU Emacs is expected on `PATH` (or `NEOVM_FORCE_ORACLE_PATH=/path/to/emacs`);
 the Neomacs binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH=...`).
 
-Scope at time of writing: **180 tests, 148 pass, 32 divergences.**
+Scope at time of writing: **188 tests, 155 pass, 33 divergences.**
 
 Root cause theme: **Neomacs uses a UTF-8-internal string model**, diverging
 from GNU's eight-bit-charset model. Almost every divergence traces back to
@@ -92,6 +92,12 @@ the raw-byte promotion path.
 - `buffer_multibyte_toggle::div_utf8_toggle_unibyte_to_multibyte_interleaved`
 - `buffer_multibyte_toggle::div_utf8_toggle_unibyte_to_multibyte_preserves_point_max`
 
+### Theme 7 — Display composition not registered
+`(compose-region ...)` followed by `(find-composition ...)` returns `nil` in
+Neomacs; GNU returns the recorded composition info `(FROM TO COMPONENTS ...)`.
+The display composition layer is not tracked.
+- `bidi_compose_misc::div_utf8_find_composition_explicit_compose`
+
 ## What already works (coverage, not divergences)
 UTF-8/UTF-16 encode-decode, Unicode property tables (general-category,
 bidi-class, char-script, char-to-name, case, decomposition), char-width,
@@ -103,7 +109,8 @@ multibyte (classes/alternation/groups/word-boundary), string-width and
 of normal multibyte.
 
 ## Files
-`divergence_utf8_{buffer_charset_props, buffer_io, buffer_multibyte_toggle,
-buffer_region_ops, char_ops_regex, char_properties, char_tables,
-charset_conv_deep, coding, coding_deep, digest_print, more_codings,
-print_escape, string_compare_format, string_primitives, syntax_display}.rs`
+`divergence_utf8_{bidi_compose_misc, buffer_charset_props, buffer_io,
+buffer_multibyte_toggle, buffer_region_ops, char_ops_regex, char_properties,
+char_tables, charset_conv_deep, coding, coding_deep, digest_print,
+more_codings, print_escape, string_compare_format, string_primitives,
+syntax_display}.rs`
