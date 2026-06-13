@@ -1145,6 +1145,12 @@ impl TaggedHeap {
         self.allocated_count
     }
 
+    /// Total number of completed GC collection cycles since this heap was
+    /// created. Used by allocation benchmarks to measure GC frequency.
+    pub fn gc_collections(&self) -> usize {
+        self.gc_collections
+    }
+
     #[inline]
     pub(crate) fn add_memory_use_count(&mut self, slot: MemoryUseCountSlot, delta: u64) {
         let index = slot.index();

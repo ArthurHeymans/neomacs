@@ -13521,6 +13521,88 @@ fn jit_bench_subr() {
     );
 }
 
+/// Allocation-throughput benchmark: a loop that conses one `(n . n)` cell per
+/// iteration and immediately discards it (garbage), churning the cons allocator
+/// and the GC without growing the live heap. Isolates allocation + collection
+/// cost — the workload that slab/generational GC would target. Both tiers poll
+/// the GC at back-edges (`neovm_jit_backedge` mirrors the interpreter's
+/// `bytecode_branch_maybe_gc_and_quit`), so the native and interpreter runs
+/// collect on the same schedule; the ratio is GC-cost-fair.
+#[cfg(feature = "jit")]
+fn jit_bench_cons_value(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    // (lambda (n) (while (> n 0) (cons n n) (setq n (1- n))) n)
+    f.ops = vec![
+        Op::StackRef(0),   // 0  [n n]      <- loop head
+        Op::Constant(0),   // 1  [n n 0]
+        Op::Gtr,           // 2  [n c]
+        Op::GotoIfNil(12), // 3  [n]
+        Op::StackRef(0),   // 4  [n n]
+        Op::StackRef(1),   // 5  [n n n]
+        Op::Cons,          // 6  [n cons]   <- allocate (n . n)
+        Op::Pop,           // 7  [n]        <- discard => garbage
+        Op::StackRef(0),   // 8  [n n]
+        Op::Sub1,          // 9  [n n-1]
+        Op::StackSet(1),   // 10 [n-1]
+        Op::Goto(0),       // 11 backedge
+        Op::StackRef(0),   // 12 [n n]
+        Op::Return,        // 13
+    ];
+    f.constants = vec![Value::make_int(0)];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_cons() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let native = jit_bench_cons_value(BenchTier::Hot);
+    let cold = jit_bench_cons_value(BenchTier::Cold);
+    // Root BOTH function objects via obarray for the whole test. This is a
+    // heavy-allocation benchmark: the native phase triggers ~40 GCs/run, so a
+    // bare Rust local is NOT a GC root (exact GC never scans the Rust stack) and
+    // the not-currently-executing copy would be swept mid-test and its memory
+    // reused — the cold phase would then execute a freed ByteCodeObj. Interning
+    // on symbols keeps both copies reachable, exactly like `jit_bench_fib`.
+    let ValueKind::Symbol(nid) = Value::symbol("jit-bench-cons-n").kind() else {
+        panic!()
+    };
+    let ValueKind::Symbol(cid) = Value::symbol("jit-bench-cons-c").kind() else {
+        panic!()
+    };
+    ev.obarray.set_symbol_function_id(nid, native);
+    ev.obarray.set_symbol_function_id(cid, cold);
+    let n = 2_000_000i64;
+    let want = Value::make_int(0);
+    // GC frequency over ONE native run: gc_collections() counts completed cycles
+    // (monotonic). Each ~16-byte cons against the 800 KB gc-cons-threshold means
+    // ~40 cycles for 2M conses. (allocated_count is NOT usable here — sweep
+    // resets it to the live count, so its delta is net live growth, not volume.)
+    let gc0 = ev.tagged_heap.gc_collections();
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let gc = ev.tagged_heap.gc_collections() - gc0;
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    let per_cons_ns = nat.as_secs_f64() * 1e9 / n as f64;
+    let gc_per_run = gc as f64 / 10.0; // jit_bench_min does 1 warmup + 9 timed calls
+    panic!(
+        "BENCH cons-churn(2M): native {nat:?} interp {int:?} -> {:.2}x | \
+         {per_cons_ns:.1} ns/cons native | ~{gc_per_run:.0} GC cycles/run",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();
