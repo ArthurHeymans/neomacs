@@ -5430,11 +5430,19 @@ impl LayoutEngine {
                 CharPos0::new(charpos as usize),
                 CharPos0::new((charpos + 1) as usize),
             );
+            let append_context = BufferTextFragmentAppendContext::new(
+                buffer,
+                buf_id,
+                active_face_state.face_id(),
+                active_face_state.resolved_face(),
+                frame,
+            );
 
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            let resolved_advance = buffer_text_advance.resolve_to_text_row(
+            let resolved_advance = append_context.resolve_advance_to_text_row(
+                &mut buffer_text_advance,
                 &mut self.matrix_builder,
                 evaluator,
                 &mut self.font_metrics,
@@ -5442,10 +5450,7 @@ impl LayoutEngine {
                 ch_start_byte_idx,
                 buffer_text_fragment.clone(),
                 face_resolver,
-                buf_id,
-                buffer,
                 &active_face_state,
-                frame.clone(),
                 append_position,
                 ch,
                 is_cluster_continuation,
@@ -5704,13 +5709,6 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let append_context = BufferTextFragmentAppendContext::new(
-                buffer,
-                buf_id,
-                active_face_state.face_id(),
-                active_face_state.resolved_face(),
-                frame,
-            );
             let appended = append_context.append_resolved_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,

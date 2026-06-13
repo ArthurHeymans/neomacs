@@ -2,7 +2,7 @@
 
 Date: 2026-06-13
 Branch: `main`
-Latest relevant pushed commit before this batch: `41d074f2b refactor: group buffer text append context`
+Latest relevant pushed commit before this batch: `d98c96bad refactor: group lisp source append context`
 
 ## Goal
 
@@ -60,6 +60,7 @@ Continuation work after this handoff:
 - Main-buffer line/wrap prefixes and synthetic ellipsis/truncation markers now use `LispStringAppendContext` and `SyntheticTextAppendContext`; direct Lisp-fragment and synthetic-text append helpers are private implementation details.
 - Ordinary main-buffer text append now uses `BufferTextFragmentAppendContext`; `engine.rs` still computes resolved advances for wrap/cursor decisions, but final append request wiring is contained in `display_row_append.rs`.
 - Overlay Lisp-string source append now uses `LispStringSourceAppendContext`; `engine.rs` still owns overlay row breaks, hit rows, and cursor capture, but source-state append request wiring is contained in `display_row_append.rs`.
+- Main-buffer ordinary text advance resolution now goes through `BufferTextFragmentAppendContext`; `engine.rs` still consumes the resolved advance for wrap and cursor decisions, but it no longer wires buffer, face, frame, and append-measurement policy directly into `BufferTextFragmentAdvanceResolver`.
 - Latest local verification:
 
   ```bash
@@ -72,7 +73,7 @@ Continuation work after this handoff:
   cargo check
   ```
 
-  Full layout-engine nextest passed with 1061 tests after grouping overlay Lisp-string source append request wiring behind `LispStringSourceAppendContext`.
+  Full layout-engine nextest passed with 1061 tests after grouping main-buffer text advance resolution behind `BufferTextFragmentAppendContext`.
 
 ## Why This Refactor Exists
 

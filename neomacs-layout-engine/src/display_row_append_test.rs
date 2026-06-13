@@ -319,7 +319,7 @@ fn current_buffer_snapshot(eval: &Context, buf_id: BufferId) -> LayoutBufferSnap
 }
 
 #[test]
-fn buffer_text_fragment_advance_resolver_returns_natural_measurement_for_ascii() {
+fn buffer_text_fragment_append_context_resolves_natural_measurement_for_ascii() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -334,8 +334,16 @@ fn buffer_text_fragment_advance_resolver_returns_natural_measurement_for_ascii()
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let mut resolver = BufferTextFragmentAdvanceResolver::default();
+    let append_context = BufferTextFragmentAppendContext::new(
+        &snapshot,
+        buf_id,
+        active_face.face_id(),
+        active_face.resolved_face(),
+        frame,
+    );
 
-    let resolved = resolver.resolve_to_text_row(
+    let resolved = append_context.resolve_advance_to_text_row(
+        &mut resolver,
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -343,10 +351,7 @@ fn buffer_text_fragment_advance_resolver_returns_natural_measurement_for_ascii()
         0,
         DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
         &face_resolver,
-        buf_id,
-        &snapshot,
         &active_face,
-        frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
         'x',
         false,
@@ -360,7 +365,7 @@ fn buffer_text_fragment_advance_resolver_returns_natural_measurement_for_ascii()
 }
 
 #[test]
-fn buffer_text_fragment_advance_resolver_returns_resolved_measurement_for_complex_text() {
+fn buffer_text_fragment_append_context_resolves_complex_text_measurement() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -375,8 +380,16 @@ fn buffer_text_fragment_advance_resolver_returns_resolved_measurement_for_comple
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let mut resolver = BufferTextFragmentAdvanceResolver::default();
+    let append_context = BufferTextFragmentAppendContext::new(
+        &snapshot,
+        buf_id,
+        active_face.face_id(),
+        active_face.resolved_face(),
+        frame,
+    );
 
-    let resolved = resolver.resolve_to_text_row(
+    let resolved = append_context.resolve_advance_to_text_row(
+        &mut resolver,
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -384,10 +397,7 @@ fn buffer_text_fragment_advance_resolver_returns_resolved_measurement_for_comple
         0,
         DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
         &face_resolver,
-        buf_id,
-        &snapshot,
         &active_face,
-        frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
         '\u{0633}',
         false,
@@ -1632,20 +1642,18 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
 
-    let measured_width = measure_buffer_text_fragment_natural_advance_to_text_row(
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        fragment.clone(),
-        &face_resolver,
-        &base_face,
-        buf_id,
-        &snapshot,
-        7,
-        frame.clone(),
-        position,
-    )
-    .expect("measured buffer fragment append");
+    let append_context =
+        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
+    let measured_width = append_context
+        .measure_natural_advance_to_text_row(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            fragment.clone(),
+            &face_resolver,
+            position,
+        )
+        .expect("measured buffer fragment append");
 
     builder
         .with_current_row_mut(|row| {
@@ -1655,8 +1663,6 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
         })
         .expect("current row");
 
-    let append_context =
-        BufferTextFragmentAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let (appended, end) = append_context
         .append_resolved_to_text_row(
             &mut builder,

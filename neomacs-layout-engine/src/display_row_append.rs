@@ -939,6 +939,40 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_advance_to_text_row(
+        &self,
+        resolver: &mut BufferTextFragmentAdvanceResolver,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &[u8],
+        byte_idx: usize,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        active_face_state: &DisplayRowActiveFaceState,
+        position: DisplayRowPosition,
+        ch: char,
+        is_cluster_continuation: bool,
+    ) -> ResolvedBufferTextFragmentAdvance {
+        resolver.resolve_to_text_row(
+            builder,
+            evaluator,
+            font_metrics,
+            text,
+            byte_idx,
+            fragment,
+            face_resolver,
+            self.buffer_id,
+            self.buffer,
+            active_face_state,
+            self.frame.clone(),
+            position,
+            ch,
+            is_cluster_continuation,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_resolved_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
@@ -962,6 +996,31 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
             self.buffer,
             self.face_id,
             resolved_advance,
+            self.frame.clone(),
+            position,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn measure_natural_advance_to_text_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+    ) -> Option<f32> {
+        measure_buffer_text_fragment_natural_advance_to_text_row(
+            builder,
+            evaluator,
+            font_metrics,
+            fragment,
+            face_resolver,
+            self.base_face,
+            self.buffer_id,
+            self.buffer,
+            self.face_id,
             self.frame.clone(),
             position,
         )
@@ -1098,7 +1157,7 @@ fn fallback_buffer_text_fragment_natural_advance_to_text_row(
 
 impl BufferTextFragmentAdvanceResolver {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_to_text_row<B: LayoutBufferView + ?Sized>(
+    fn resolve_to_text_row<B: LayoutBufferView + ?Sized>(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
