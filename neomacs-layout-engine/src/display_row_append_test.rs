@@ -2991,6 +2991,52 @@ fn test_display_space_window_params() -> WindowParams {
 }
 
 #[test]
+fn display_replacement_space_width_policy_names_width_sources() {
+    let _eval = Context::new();
+    let explicit = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("width"),
+        Value::fixnum(4),
+    ]);
+    let relative = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("relative-width"),
+        Value::fixnum(2),
+    ]);
+    let align_to = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("align-to"),
+        Value::fixnum(12),
+    ]);
+    let default = Value::list(vec![Value::symbol("space")]);
+
+    assert!(matches!(
+        DisplayReplacementSpaceWidthPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&explicit).expect("explicit list")
+        ),
+        DisplayReplacementSpaceWidthPolicy::Explicit(_)
+    ));
+    assert!(matches!(
+        DisplayReplacementSpaceWidthPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&relative).expect("relative list")
+        ),
+        DisplayReplacementSpaceWidthPolicy::Relative { factor } if factor == 2.0
+    ));
+    assert!(matches!(
+        DisplayReplacementSpaceWidthPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&align_to).expect("align list")
+        ),
+        DisplayReplacementSpaceWidthPolicy::AlignTo(_)
+    ));
+    assert!(matches!(
+        DisplayReplacementSpaceWidthPolicy::from_items(
+            &neovm_core::emacs_core::value::list_to_vec(&default).expect("default list")
+        ),
+        DisplayReplacementSpaceWidthPolicy::Default
+    ));
+}
+
+#[test]
 fn display_replacement_stretch_append_item_resolves_display_space_property() {
     let _eval = Context::new();
     let active_face = test_active_face_state(7, 8.0);

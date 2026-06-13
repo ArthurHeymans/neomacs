@@ -2051,6 +2051,83 @@ pub(crate) struct DisplayReplacementSpaceGeometry {
     pub(crate) ascent: f32,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum DisplayReplacementSpaceWidthPolicy {
+    Explicit(Value),
+    Relative { factor: f32 },
+    AlignTo(Value),
+    Default,
+}
+
+impl DisplayReplacementSpaceWidthPolicy {
+    fn from_items(items: &[Value]) -> Self {
+        if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::Width)
+            && !prop.is_nil()
+        {
+            Self::Explicit(prop)
+        } else if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::RelativeWidth)
+            && let Some(factor) = display_space_positive_number(prop)
+        {
+            Self::Relative { factor }
+        } else if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::AlignTo)
+            && !prop.is_nil()
+        {
+            Self::AlignTo(prop)
+        } else {
+            Self::Default
+        }
+    }
+
+    fn zero_width_allowed(self) -> bool {
+        matches!(self, Self::AlignTo(_))
+    }
+
+    fn resolve(
+        self,
+        pctx: &crate::display_pixel_calc::PixelCalcContext,
+        current_x: f32,
+        content_x: f32,
+        display_char_width: f32,
+        default_width: f32,
+    ) -> f32 {
+        use crate::display_pixel_calc::calc_pixel_width_or_height;
+
+        match self {
+            Self::Explicit(prop) => calc_pixel_width_or_height(pctx, &prop, true, None)
+                .map(|pixels| pixels as f32)
+                .unwrap_or(default_width),
+            Self::Relative { factor } => factor * display_char_width.max(0.0),
+            Self::AlignTo(prop) => {
+                let mut align_to: i32 = -1;
+                if let Some(pixels) =
+                    calc_pixel_width_or_height(pctx, &prop, true, Some(&mut align_to))
+                {
+                    let target_x = if align_to >= 0 {
+                        align_to as f32 + pixels as f32
+                    } else {
+                        content_x + pixels as f32
+                    };
+                    (target_x - current_x).max(0.0)
+                } else {
+                    default_width
+                }
+            }
+            Self::Default => default_width,
+        }
+    }
+}
+
+fn display_space_plist_value(items: &[Value], wanted: DisplaySpaceKey) -> Option<Value> {
+    let mut i = 1;
+    while i + 1 < items.len() {
+        if DisplaySpaceKey::from_lisp_value(items[i]) == Some(wanted) {
+            return Some(items[i + 1]);
+        }
+        i += 2;
+    }
+    None
+}
+
 impl DisplayReplacementStretchAppendItem {
     pub(crate) fn from_extents(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
         let width_px = width_px.max(0.0);
@@ -2135,85 +2212,55 @@ impl DisplayReplacementStretchAppendItem {
             symbol_values: std::collections::HashMap::new(),
         };
 
-        let plist_value = |wanted: DisplaySpaceKey| -> Option<Value> {
-            let mut i = 1;
-            while i + 1 < items.len() {
-                if DisplaySpaceKey::from_lisp_value(items[i]) == Some(wanted) {
-                    return Some(items[i + 1]);
-                }
-                i += 2;
-            }
-            None
-        };
-
-        let mut width = if let Some(prop) = plist_value(DisplaySpaceKey::Width)
-            && !prop.is_nil()
-            && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, true, None)
-        {
-            pixels as f32
-        } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeWidth)
-            && let Some(factor) = display_space_positive_number(prop)
-        {
-            factor * display_char_width.max(0.0)
-        } else if let Some(prop) = plist_value(DisplaySpaceKey::AlignTo)
-            && !prop.is_nil()
-        {
-            let mut align_to: i32 = -1;
-            if let Some(pixels) =
-                calc_pixel_width_or_height(&pctx, &prop, true, Some(&mut align_to))
-            {
-                let target_x = if align_to >= 0 {
-                    align_to as f32 + pixels as f32
-                } else {
-                    content_x + pixels as f32
-                };
-                (target_x - current_x).max(0.0)
-            } else {
-                default_width
-            }
-        } else {
-            default_width
-        };
-        let zero_width_ok =
-            plist_value(DisplaySpaceKey::AlignTo).is_some_and(|prop| !prop.is_nil());
-        if width <= 0.0 && (width < 0.0 || !zero_width_ok) {
+        let width_policy = DisplayReplacementSpaceWidthPolicy::from_items(&items);
+        let mut width = width_policy.resolve(
+            &pctx,
+            current_x,
+            content_x,
+            display_char_width,
+            default_width,
+        );
+        if width <= 0.0 && (width < 0.0 || !width_policy.zero_width_allowed()) {
             width = 1.0;
         }
 
         let (height, ascent) = if params.window_system {
-            let mut height = if let Some(prop) = plist_value(DisplaySpaceKey::Height)
+            let mut height = if let Some(prop) =
+                display_space_plist_value(&items, DisplaySpaceKey::Height)
                 && !prop.is_nil()
                 && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
             {
                 pixels as f32
-            } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeHeight)
+            } else if let Some(prop) =
+                display_space_plist_value(&items, DisplaySpaceKey::RelativeHeight)
                 && let Some(factor) = display_space_positive_number(prop)
             {
                 default_height * factor
             } else {
                 default_height
             };
-            let zero_height_ok =
-                plist_value(DisplaySpaceKey::Height).is_some_and(|prop| !prop.is_nil());
+            let zero_height_ok = display_space_plist_value(&items, DisplaySpaceKey::Height)
+                .is_some_and(|prop| !prop.is_nil());
             if height <= 0.0 && (height < 0.0 || !zero_height_ok) {
                 height = 1.0;
             }
 
-            let ascent = if let Some(prop) = plist_value(DisplaySpaceKey::Ascent) {
-                if let Some(percent) = display_space_positive_number(prop)
-                    && percent <= 100.0
-                {
-                    height * percent / 100.0
-                } else if !prop.is_nil()
-                    && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
-                {
-                    (pixels as f32).max(0.0).min(height)
+            let ascent =
+                if let Some(prop) = display_space_plist_value(&items, DisplaySpaceKey::Ascent) {
+                    if let Some(percent) = display_space_positive_number(prop)
+                        && percent <= 100.0
+                    {
+                        height * percent / 100.0
+                    } else if !prop.is_nil()
+                        && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
+                    {
+                        (pixels as f32).max(0.0).min(height)
+                    } else {
+                        height * default_ascent / default_height
+                    }
                 } else {
                     height * default_ascent / default_height
-                }
-            } else {
-                height * default_ascent / default_height
-            };
+                };
             (height, ascent)
         } else {
             (1.0, 1.0)
