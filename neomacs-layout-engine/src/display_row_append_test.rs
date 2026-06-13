@@ -2334,6 +2334,27 @@ fn display_replacement_active_face_measurer_names_cursor_and_display_width_polic
 }
 
 #[test]
+fn display_replacement_media_append_item_names_display_and_cursor_extents() {
+    let active_face = test_active_face_state(7, 8.0);
+    let media = DisplayMediaReplacement::image(DisplayImageItem {
+        image_id: 42,
+        width: 64.0,
+        height: 10.0,
+    });
+
+    let ordinary = DisplayReplacementMediaAppendItem::new(media, &active_face, false);
+    assert_eq!(ordinary.width_px(), 64.0);
+    assert_eq!(ordinary.display_height_px(), 10.0);
+    assert_eq!(ordinary.display_ascent_px(), 10.0);
+    assert_eq!(ordinary.cursor_face_height_px(), 10.0);
+    assert_eq!(ordinary.cursor_face_ascent_px(), 10.0);
+
+    let xwidget_cursor = DisplayReplacementMediaAppendItem::new(media, &active_face, true);
+    assert_eq!(xwidget_cursor.cursor_face_height_px(), 18.0);
+    assert_eq!(xwidget_cursor.cursor_face_ascent_px(), 13.0);
+}
+
+#[test]
 fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -2764,24 +2785,29 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replace
         EmacsBytePos::new(0),
     );
 
-    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        replacement_source,
-        3,
-        DisplayReplacementAppendItem::Media(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+    let active_face = test_active_face_state(3, 8.0);
+    let media_item = DisplayReplacementMediaAppendItem::new(
+        DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
             xwidget_id: 1234,
             width: 96.0,
             height: 54.0,
-        })),
-        &face_resolver,
-        base_face,
-        frame,
-        DisplayRowPosition { x_px: 16.0, col: 2 },
-    )
-    .expect("append progress");
+        }),
+        &active_face,
+        true,
+    );
+    let append_context =
+        DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
+    let (progress, end) = append_context
+        .append_media_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            media_item,
+            DisplayRowPosition { x_px: 16.0, col: 2 },
+        )
+        .expect("append progress");
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(progress.metrics.width_px, 96.0);

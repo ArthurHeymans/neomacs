@@ -1508,6 +1508,60 @@ impl DisplayReplacementAppendItem {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayReplacementMediaAppendItem {
+    media: DisplayMediaReplacement,
+    cursor_face_height: f32,
+    cursor_face_ascent: f32,
+}
+
+impl DisplayReplacementMediaAppendItem {
+    pub(crate) fn new(
+        media: DisplayMediaReplacement,
+        active_face_state: &DisplayRowActiveFaceState,
+        uses_xwidget_cursor_extents: bool,
+    ) -> Self {
+        let metrics = active_face_state.metrics();
+        let (cursor_face_height, cursor_face_ascent) = if uses_xwidget_cursor_extents {
+            (
+                media.height.max(metrics.row_height),
+                media.height.max(metrics.ascent),
+            )
+        } else {
+            (media.height, media.height)
+        };
+        Self {
+            media,
+            cursor_face_height,
+            cursor_face_ascent,
+        }
+    }
+
+    pub(crate) fn media(self) -> DisplayMediaReplacement {
+        self.media
+    }
+
+    pub(crate) fn width_px(self) -> f32 {
+        self.media.width
+    }
+
+    pub(crate) fn display_height_px(self) -> f32 {
+        self.media.height
+    }
+
+    pub(crate) fn display_ascent_px(self) -> f32 {
+        self.media.height
+    }
+
+    pub(crate) fn cursor_face_height_px(self) -> f32 {
+        self.cursor_face_height
+    }
+
+    pub(crate) fn cursor_face_ascent_px(self) -> f32 {
+        self.cursor_face_ascent
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementAppendContext<'a> {
     replacement_source: BufferDisplayReplacementSource,
@@ -1553,6 +1607,28 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             face_resolver,
             self.base_face,
             self.frame.clone(),
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_media_to_text_row_and_emit(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        item: DisplayReplacementMediaAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.append_item_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            DisplayReplacementAppendItem::Media(item.media()),
             position,
         )
     }

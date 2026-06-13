@@ -42,9 +42,10 @@ use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
     BufferTextFragmentAppendItem, BufferTextItemAppendContext,
     DisplayReplacementActiveFaceMeasurer, DisplayReplacementAppendContext,
-    DisplayReplacementAppendItem, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
-    DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
-    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextAppendContext,
+    DisplayReplacementAppendItem, DisplayReplacementMediaAppendItem,
+    DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
+    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
+    LispStringSourceAppendContext, SyntheticTextAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4749,17 +4750,11 @@ impl LayoutEngine {
 
                         match resolved_replacement {
                             Some(ResolvedDisplayReplacement::Media(media)) => {
-                                let display_width = media.width;
-                                let display_height = media.height;
-                                let (cursor_face_h, cursor_face_ascent) =
-                                    if media_replacement.uses_xwidget_cursor_extents() {
-                                        (
-                                            display_height.max(face_metrics.row_height),
-                                            display_height.max(face_metrics.ascent),
-                                        )
-                                    } else {
-                                        (display_height, display_height)
-                                    };
+                                let media_item = DisplayReplacementMediaAppendItem::new(
+                                    media,
+                                    &active_face_state,
+                                    media_replacement.uses_xwidget_cursor_extents(),
+                                );
 
                                 if point_in_display_replacement {
                                     capture_cursor_info(
@@ -4768,11 +4763,13 @@ impl LayoutEngine {
                                             &active_face_state,
                                             CapturedCursorPlacement::from_row_text_position(
                                                 row_geometry.text_position(x, byte_idx, col),
-                                                CapturedCursorSlotWidth::Explicit(display_width),
+                                                CapturedCursorSlotWidth::Explicit(
+                                                    media_item.width_px(),
+                                                ),
                                                 false,
                                             ),
-                                            cursor_face_h,
-                                            cursor_face_ascent,
+                                            media_item.cursor_face_height_px(),
+                                            media_item.cursor_face_ascent_px(),
                                         ),
                                     );
                                 }
@@ -4784,7 +4781,10 @@ impl LayoutEngine {
                                     raise_span.value_or(0.0),
                                     char_h,
                                 )
-                                .display_box_frame(display_height, display_height);
+                                .display_box_frame(
+                                    media_item.display_height_px(),
+                                    media_item.display_ascent_px(),
+                                );
                                 let append_context = DisplayReplacementAppendContext::new(
                                     display_replacement_source,
                                     active_face_state.face_id(),
@@ -4792,21 +4792,23 @@ impl LayoutEngine {
                                     replacement_frame,
                                 );
                                 if let Some((progress, position)) = append_context
-                                    .append_item_to_text_row_and_emit(
+                                    .append_media_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
                                         &mut self.font_metrics,
                                         face_resolver,
-                                        DisplayReplacementAppendItem::Media(media),
+                                        media_item,
                                         DisplayRowPosition { x_px: x, col },
                                     )
                                     && progress.status
                                         == crate::display_row_builder::DisplayRowAppendStatus::Complete
                                     && progress.metrics.width_px > 0.0
                                 {
-                                    row_geometry
-                                        .include_row_extents(display_height, display_height);
+                                    row_geometry.include_row_extents(
+                                        media_item.display_height_px(),
+                                        media_item.display_ascent_px(),
+                                    );
                                     x = position.x_px;
                                     col = position.col;
                                 }
