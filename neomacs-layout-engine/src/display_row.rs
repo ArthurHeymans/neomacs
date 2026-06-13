@@ -1912,6 +1912,41 @@ impl DisplayMediaReplacement {
     }
 }
 
+struct DisplayRowRenderItem {
+    source_item: DisplayItem,
+    row_item: DisplayItem,
+    media_descriptor: Option<DisplayMediaReplacement>,
+}
+
+impl DisplayRowRenderItem {
+    fn from_source_item(source_item: DisplayItem) -> Self {
+        let media_descriptor = match &source_item.kind {
+            DisplayItemKind::MediaReplacement(media) => Some(*media),
+            _ => None,
+        };
+        let row_item = media_descriptor
+            .map(|descriptor| descriptor.replacement_item(source_item.clone()))
+            .unwrap_or_else(|| source_item.clone());
+        Self {
+            source_item,
+            row_item,
+            media_descriptor,
+        }
+    }
+
+    fn row_face(&self) -> RenderFaceRef {
+        self.row_item.face
+    }
+
+    fn row_item(&self) -> &DisplayItem {
+        &self.row_item
+    }
+
+    fn into_source_item(self) -> DisplayItem {
+        self.source_item
+    }
+}
+
 impl From<DisplayMediaReplacementKind> for RenderedDisplayRowMediaKind {
     fn from(kind: DisplayMediaReplacementKind) -> Self {
         match kind {
@@ -2301,20 +2336,16 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     row_faces.push(realized);
                 }
             }
-            let media_descriptor = match &item.kind {
-                DisplayItemKind::MediaReplacement(media) => Some(*media),
-                _ => None,
-            };
-            let source_item = item.clone();
-            let item = media_descriptor
-                .map(|descriptor| descriptor.replacement_item(item.clone()))
-                .unwrap_or(item);
-            let item_face_id = match item.face {
+            let render_item = DisplayRowRenderItem::from_source_item(item);
+            let item_face_id = match render_item.row_face() {
                 RenderFaceRef::FaceId(face_id) => face_id,
                 RenderFaceRef::Inherit => row_face.face_id,
             };
-            let measurement =
-                policy.measurement_for(&item, item_face_id, face_realizer.font_metrics_mut());
+            let measurement = policy.measurement_for(
+                render_item.row_item(),
+                item_face_id,
+                face_realizer.font_metrics_mut(),
+            );
             let progress = match measurement {
                 DisplayRowItemMeasurement::Default => {
                     let mut glyph_measurer = DisplayRowGlyphMeasurer::new(
@@ -2329,7 +2360,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         position,
                         render_bounds.max_x_px,
                     );
-                    row_writer.push_item(item)
+                    row_writer.push_item(render_item.row_item().clone())
                 }
                 DisplayRowItemMeasurement::TextRun(measurement) => {
                     let mut row_writer = DisplayRowProgressWriter::with_text_run_measurement(
@@ -2339,12 +2370,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         position,
                         render_bounds.max_x_px,
                     );
-                    row_writer.push_item(item)
+                    row_writer.push_item(render_item.row_item().clone())
                 }
             };
             position = progress.end;
             source_slots.extend(progress.slots.iter().cloned());
-            if let Some(descriptor) = media_descriptor
+            if let Some(descriptor) = render_item.media_descriptor
                 && progress.status == DisplayRowAppendStatus::Complete
                 && progress.metrics.width_px > 0.0
             {
@@ -2352,19 +2383,21 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             }
             match progress.status {
                 DisplayRowAppendStatus::Complete => {}
-                DisplayRowAppendStatus::Clipped => match policy.clipped_behavior(&source_item) {
-                    DisplayRowRenderClipBehavior::PreserveRemainderAndStop => {
-                        state.remember_pending_item(clipped_display_item_remainder(
-                            source_item,
-                            &progress,
-                        ));
-                        break DisplayRowRenderStop::Clipped;
+                DisplayRowAppendStatus::Clipped => {
+                    match policy.clipped_behavior(&render_item.source_item) {
+                        DisplayRowRenderClipBehavior::PreserveRemainderAndStop => {
+                            state.remember_pending_item(clipped_display_item_remainder(
+                                render_item.into_source_item(),
+                                &progress,
+                            ));
+                            break DisplayRowRenderStop::Clipped;
+                        }
+                        DisplayRowRenderClipBehavior::Stop => {
+                            break DisplayRowRenderStop::Clipped;
+                        }
+                        DisplayRowRenderClipBehavior::Continue => {}
                     }
-                    DisplayRowRenderClipBehavior::Stop => {
-                        break DisplayRowRenderStop::Clipped;
-                    }
-                    DisplayRowRenderClipBehavior::Continue => {}
-                },
+                }
                 DisplayRowAppendStatus::RowBreak => {
                     break DisplayRowRenderStop::RowBreak;
                 }
