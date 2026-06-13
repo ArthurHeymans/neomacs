@@ -20,7 +20,7 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout,
-    DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
+    DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{
@@ -462,20 +462,16 @@ fn display_row_append_progress_from_render_result(
     stop: DisplayRowRenderStop,
     slots: Vec<crate::display_row_builder::DisplayRowGlyphSlot>,
 ) -> DisplayRowAppendProgress {
-    DisplayRowAppendProgress {
+    DisplayRowAppendProgress::from_positions(
         start,
         end,
-        metrics: DisplayRowWriteMetrics {
-            width_px: (end.x_px - start.x_px).max(0.0),
-            width_cols: end.col.saturating_sub(start.col),
-        },
-        status: match stop {
+        match stop {
             DisplayRowRenderStop::SourceExhausted => DisplayRowAppendStatus::Complete,
             DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
             DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
         },
         slots,
-    }
+    )
 }
 
 struct DisplayRowSourceAppendRequest<'face> {

@@ -15,7 +15,7 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
-    DisplayRowItemMeasurement, DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
+    DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_text::DisplayTextFragment;
@@ -2954,16 +2954,12 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
         &active_face,
         false,
     );
-    let mut progress = DisplayRowAppendProgress {
-        start: DisplayRowPosition { x_px: 0.0, col: 0 },
-        end: DisplayRowPosition { x_px: 64.0, col: 8 },
-        metrics: DisplayRowWriteMetrics {
-            width_px: 64.0,
-            width_cols: 8,
-        },
-        status: DisplayRowAppendStatus::Complete,
-        slots: Vec::new(),
-    };
+    let mut progress = DisplayRowAppendProgress::from_positions(
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        DisplayRowPosition { x_px: 64.0, col: 8 },
+        DisplayRowAppendStatus::Complete,
+        Vec::new(),
+    );
 
     assert_eq!(item.row_extents_after_append(&progress), Some((10.0, 10.0)));
 

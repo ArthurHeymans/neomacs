@@ -333,6 +333,42 @@ pub(crate) struct DisplayRowAppendProgress {
     pub(crate) slots: Vec<DisplayRowGlyphSlot>,
 }
 
+impl DisplayRowAppendProgress {
+    pub(crate) fn new(
+        start: DisplayRowPosition,
+        end: DisplayRowPosition,
+        metrics: DisplayRowWriteMetrics,
+        status: DisplayRowAppendStatus,
+        slots: Vec<DisplayRowGlyphSlot>,
+    ) -> Self {
+        Self {
+            start,
+            end,
+            metrics,
+            status,
+            slots,
+        }
+    }
+
+    pub(crate) fn from_positions(
+        start: DisplayRowPosition,
+        end: DisplayRowPosition,
+        status: DisplayRowAppendStatus,
+        slots: Vec<DisplayRowGlyphSlot>,
+    ) -> Self {
+        Self::new(
+            start,
+            end,
+            DisplayRowWriteMetrics {
+                width_px: (end.x_px - start.x_px).max(0.0),
+                width_cols: end.col.saturating_sub(start.col),
+            },
+            status,
+            slots,
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DisplayTextSourceMapping {
     NaturalText,
@@ -631,13 +667,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                     .push_item(DisplayItem::new(span, face, kind).with_layout(item_layout));
                 if written.width_px > 0.0 && self.position.x_px + written.width_px > self.max_x_px {
                     checkpoint.restore(self.writer.row);
-                    return DisplayRowAppendProgress {
+                    return DisplayRowAppendProgress::new(
                         start,
-                        end: self.position,
+                        self.position,
                         metrics,
-                        status: DisplayRowAppendStatus::Clipped,
+                        DisplayRowAppendStatus::Clipped,
                         slots,
-                    };
+                    );
                 }
                 if written.width_px > 0.0 || written.width_cols > 0 {
                     slots.push(DisplayRowGlyphSlot {
@@ -654,13 +690,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             }
         };
 
-        DisplayRowAppendProgress {
-            start,
-            end: self.position,
-            metrics,
-            status,
-            slots,
-        }
+        DisplayRowAppendProgress::new(start, self.position, metrics, status, slots)
     }
 
     fn push_text_item(
