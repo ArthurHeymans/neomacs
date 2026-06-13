@@ -833,6 +833,35 @@ impl<M: DisplayRowItemMeasurer> DisplayReplacementStringItemMeasurementPolicy fo
     }
 }
 
+pub(crate) struct DisplayReplacementStringItemMeasurer {
+    active_face_state: DisplayRowActiveFaceState,
+}
+
+impl DisplayReplacementStringItemMeasurer {
+    pub(crate) fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
+        Self {
+            active_face_state: active_face_state.clone(),
+        }
+    }
+}
+
+impl DisplayReplacementStringItemMeasurementPolicy for DisplayReplacementStringItemMeasurer {
+    fn measurement_for(
+        &mut self,
+        item: &DisplayItem,
+        _face_id: u32,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowItemMeasurement {
+        let DisplayItemKind::SourceMappedText(text) = &item.kind else {
+            return DisplayRowItemMeasurement::Default;
+        };
+        DisplayRowItemMeasurement::TextRun(
+            self.active_face_state
+                .text_run_measurement(font_metrics, text.text.as_ref()),
+        )
+    }
+}
+
 struct DisplayReplacementStringRenderPolicy<'a, M> {
     item_measurer: &'a mut M,
 }

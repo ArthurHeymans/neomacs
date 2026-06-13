@@ -39,8 +39,8 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAppendMeasurement, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendMetrics, DisplayRowAppendSurface,
+    BufferTextFragmentAppendMeasurement, DisplayReplacementStringItemMeasurer,
+    DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendMetrics, DisplayRowAppendSurface,
     append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_kind_to_text_row_and_emit,
     append_display_replacement_source_mapped_text_to_text_row_and_emit,
@@ -51,7 +51,7 @@ use crate::display_row_append::{
     measure_buffer_text_fragment_natural_advance_to_text_row,
     render_lisp_string_source_append_to_text_row_and_emit,
 };
-use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition};
+use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker,
@@ -1455,37 +1455,6 @@ fn resolve_cursor_geometry(
         style,
         color,
         cursor_fg: source.cursor_fg,
-    }
-}
-
-struct ReplacementStringItemMeasurer {
-    active_face_state: DisplayRowActiveFaceState,
-}
-
-impl ReplacementStringItemMeasurer {
-    fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
-        Self {
-            active_face_state: active_face_state.clone(),
-        }
-    }
-}
-
-impl crate::display_row_append::DisplayReplacementStringItemMeasurementPolicy
-    for ReplacementStringItemMeasurer
-{
-    fn measurement_for(
-        &mut self,
-        item: &crate::display_item::DisplayItem,
-        _face_id: u32,
-        font_metrics: &mut Option<FontMetricsService>,
-    ) -> DisplayRowItemMeasurement {
-        let crate::display_item::DisplayItemKind::SourceMappedText(text) = &item.kind else {
-            return DisplayRowItemMeasurement::Default;
-        };
-        DisplayRowItemMeasurement::TextRun(
-            self.active_face_state
-                .text_run_measurement(font_metrics, text.text.as_ref()),
-        )
     }
 }
 
@@ -4606,7 +4575,7 @@ impl LayoutEngine {
                                 char_h,
                             );
                             let mut item_measurer =
-                                ReplacementStringItemMeasurer::from_active_face_state(
+                                DisplayReplacementStringItemMeasurer::from_active_face_state(
                                     &active_face_state,
                                 );
                             let position = append_display_replacement_string_fragment_to_text_row(
