@@ -14,7 +14,8 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowOutputProgress, DisplayRowRenderBounds,
     DisplayRowRenderClipBehavior, DisplayRowRenderContext, DisplayRowRenderPolicy,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceGeometry,
+    DisplayRowSourceRenderRequest, DisplayRowSourceState,
     install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
@@ -3168,16 +3169,12 @@ impl DisplayRowAppendFrame {
             char_width: kind.char_width(self),
             ..self.geometry.clone()
         };
-        let request = DisplayRowSourceRenderRequest::whole_row(
-            geometry,
-            face_id,
-            base_face,
-            GlyphRowRole::Text,
-        )
-        .with_render_bounds(DisplayRowRenderBounds {
-            start: position,
-            max_x_px: kind.max_x(self),
-        });
+        let request = DisplayRowSourceGeometry::from_display_row_geometry(geometry)
+            .source_request_for_base_face_id(face_id, base_face, GlyphRowRole::Text)
+            .with_render_bounds(DisplayRowRenderBounds {
+                start: position,
+                max_x_px: kind.max_x(self),
+            });
         let output = TextRowOutput {
             row: self.row,
             row_y: self.geometry.y,

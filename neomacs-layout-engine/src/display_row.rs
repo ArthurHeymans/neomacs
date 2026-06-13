@@ -1247,6 +1247,88 @@ impl DisplayRowGeometry {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayRowSourceGeometry {
+    y: f32,
+    width: f32,
+    height: f32,
+    char_width: f32,
+    ascent: f32,
+    tab_policy: DisplayTabPolicy,
+}
+
+impl DisplayRowSourceGeometry {
+    pub(crate) fn new(
+        y: f32,
+        width: f32,
+        height: f32,
+        char_width: f32,
+        ascent: f32,
+        tab_policy: DisplayTabPolicy,
+    ) -> Self {
+        Self {
+            y,
+            width,
+            height,
+            char_width,
+            ascent,
+            tab_policy,
+        }
+    }
+
+    pub(crate) fn from_display_row_geometry(geometry: DisplayRowGeometry) -> Self {
+        Self::new(
+            geometry.y,
+            geometry.width,
+            geometry.height,
+            geometry.char_width,
+            geometry.ascent,
+            geometry.tab_policy,
+        )
+    }
+
+    pub(crate) fn into_geometry(self) -> DisplayRowGeometry {
+        DisplayRowGeometry {
+            y: self.y,
+            width: self.width,
+            height: self.height,
+            char_width: self.char_width,
+            ascent: self.ascent,
+            tab_policy: self.tab_policy,
+        }
+    }
+
+    pub(crate) fn source_request_from_base_face<'face>(
+        self,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face: &'face ResolvedFace,
+        role: GlyphRowRole,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> DisplayRowSourceRenderRequest<'face> {
+        DisplayRowSourceRenderRequest::from_base_face(
+            self.into_geometry(),
+            face_ids,
+            base_face,
+            role,
+            symbol_values,
+        )
+    }
+
+    pub(crate) fn source_request_for_base_face_id<'face>(
+        self,
+        base_face_id: u32,
+        base_face: &'face ResolvedFace,
+        role: GlyphRowRole,
+    ) -> DisplayRowSourceRenderRequest<'face> {
+        DisplayRowSourceRenderRequest::whole_row(
+            self.into_geometry(),
+            base_face_id,
+            base_face,
+            role,
+        )
+    }
+}
+
 struct LoweredDisplayRowSpec<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
