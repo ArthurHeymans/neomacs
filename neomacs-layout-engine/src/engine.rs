@@ -40,8 +40,7 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
-    BufferTextFragmentAppendItem, BufferTextItemAppendContext,
-    DisplayReplacementActiveFaceMeasurer, DisplayReplacementAppendContext,
+    BufferTextFragmentAppendItem, BufferTextItemAppendContext, DisplayReplacementAppendContext,
     DisplayReplacementMediaAppendItem, DisplayReplacementSourceMappedTextAppendItem,
     DisplayReplacementStretchAppendItem, DisplayReplacementStringAppendItem,
     DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
@@ -4644,15 +4643,13 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Stretch(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let replacement_measurement =
-                            DisplayReplacementActiveFaceMeasurer::from_active_face_state(
+                        let display_char_width =
+                            DisplayReplacementStretchAppendItem::source_char_width_px(
                                 &active_face_state,
+                                &mut self.font_metrics,
+                                display_ch,
+                                face_metrics.char_width,
                             );
-                        let display_char_width = replacement_measurement.char_advance_px(
-                            &mut self.font_metrics,
-                            display_ch,
-                            face_metrics.char_width,
-                        );
                         let space_geometry = eval_display_space_geometry(
                             &prop_val,
                             x,
@@ -4663,7 +4660,12 @@ impl LayoutEngine {
                             face_metrics.ascent,
                             params,
                         );
-                        let space_width = space_geometry.width;
+                        let stretch_item = DisplayReplacementStretchAppendItem::from_space_extents(
+                            space_geometry.width,
+                            space_geometry.height,
+                            space_geometry.ascent,
+                            face_metrics.char_width,
+                        );
                         if point_in_display_replacement {
                             capture_cursor_info(
                                 &mut cursor_info,
@@ -4672,18 +4674,18 @@ impl LayoutEngine {
                                     CapturedCursorPlacement::from_row_text_position(
                                         row_geometry.text_position(x, byte_idx, col),
                                         CapturedCursorSlotWidth::Explicit(
-                                            space_width.max(face_metrics.char_width),
+                                            stretch_item.cursor_slot_width_px(),
                                         ),
                                         true,
                                     ),
                                 ),
                             );
                         }
-                        if space_width > 0.0 {
+                        if stretch_item.width_px() > 0.0 {
                             let _bg = Color::from_pixel(default_resolved.bg);
                             row_geometry.include_glyph_vertical_metrics(
-                                space_geometry.height,
-                                space_geometry.ascent,
+                                stretch_item.height_px(),
+                                stretch_item.ascent_px(),
                             );
                             let replacement_frame = DisplayRowActiveFaceAppendContext::new(
                                 &text_append_surface,
@@ -4698,11 +4700,6 @@ impl LayoutEngine {
                                 active_face_state.face_id(),
                                 active_face_state.resolved_face(),
                                 replacement_frame,
-                            );
-                            let stretch_item = DisplayReplacementStretchAppendItem::from_extents(
-                                space_width,
-                                space_geometry.height,
-                                space_geometry.ascent,
                             );
                             if let Some((_progress, position)) = append_context
                                 .append_stretch_to_text_row_and_emit(

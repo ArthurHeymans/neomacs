@@ -2418,6 +2418,41 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
 }
 
 #[test]
+fn display_replacement_stretch_append_item_names_cursor_and_extent_policy() {
+    let item = DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0);
+    assert_eq!(item.width_px(), 13.0);
+    assert_eq!(item.height_px(), 16.0);
+    assert_eq!(item.ascent_px(), 12.0);
+    assert_eq!(item.cursor_slot_width_px(), 13.0);
+
+    let narrow = DisplayReplacementStretchAppendItem::from_space_extents(3.0, 10.0, 7.0, 8.0);
+    assert_eq!(narrow.width_px(), 3.0);
+    assert_eq!(narrow.cursor_slot_width_px(), 8.0);
+
+    let clamped = DisplayReplacementStretchAppendItem::from_extents(-1.0, -2.0, -3.0);
+    assert_eq!(clamped.width_px(), 0.0);
+    assert_eq!(clamped.height_px(), 0.0);
+    assert_eq!(clamped.ascent_px(), 0.0);
+    assert_eq!(clamped.cursor_slot_width_px(), 0.0);
+}
+
+#[test]
+fn display_replacement_stretch_append_item_resolves_source_char_width() {
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+
+    assert_eq!(
+        DisplayReplacementStretchAppendItem::source_char_width_px(
+            &active_face,
+            &mut font_metrics,
+            'x',
+            8.0,
+        ),
+        8.0
+    );
+}
+
+#[test]
 fn display_replacement_media_append_item_names_display_and_cursor_extents() {
     let active_face = test_active_face_state(7, 8.0);
     let media = DisplayMediaReplacement::image(DisplayImageItem {

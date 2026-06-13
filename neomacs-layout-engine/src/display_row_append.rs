@@ -1562,13 +1562,61 @@ impl DisplayReplacementAppendItem {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DisplayReplacementStretchAppendItem {
     geometry: DisplayReplacementBox,
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+    cursor_slot_width_px: f32,
 }
 
 impl DisplayReplacementStretchAppendItem {
     pub(crate) fn from_extents(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
+        let width_px = width_px.max(0.0);
+        let height_px = height_px.max(0.0);
+        let ascent_px = ascent_px.max(0.0);
         Self {
             geometry: DisplayReplacementBox::new(width_px, height_px, ascent_px),
+            width_px,
+            height_px,
+            ascent_px,
+            cursor_slot_width_px: width_px,
         }
+    }
+
+    pub(crate) fn from_space_extents(
+        width_px: f32,
+        height_px: f32,
+        ascent_px: f32,
+        fallback_cursor_width_px: f32,
+    ) -> Self {
+        let mut item = Self::from_extents(width_px, height_px, ascent_px);
+        item.cursor_slot_width_px = item.width_px.max(fallback_cursor_width_px);
+        item
+    }
+
+    pub(crate) fn source_char_width_px(
+        active_face_state: &DisplayRowActiveFaceState,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state)
+            .char_advance_px(font_metrics, ch, fallback_advance_px)
+    }
+
+    pub(crate) fn width_px(self) -> f32 {
+        self.width_px
+    }
+
+    pub(crate) fn height_px(self) -> f32 {
+        self.height_px
+    }
+
+    pub(crate) fn ascent_px(self) -> f32 {
+        self.ascent_px
+    }
+
+    pub(crate) fn cursor_slot_width_px(self) -> f32 {
+        self.cursor_slot_width_px
     }
 
     fn geometry(self) -> DisplayReplacementBox {
