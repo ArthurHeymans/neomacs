@@ -4457,6 +4457,13 @@ impl LayoutEngine {
                     let point_in_display_replacement = cursor_info.is_missing()
                         && point_charpos >= charpos
                         && point_charpos < skip_to;
+                    let display_property_char_pos = CharPos0::new(charpos.max(0) as usize);
+                    let display_property_byte_pos = EmacsBytePos::new(text_start_byte + byte_idx);
+                    let display_replacement_source = BufferDisplayReplacementSource::new(
+                        buf_id,
+                        display_property_char_pos,
+                        display_property_byte_pos,
+                    );
                     let display_property = classify_display_property(prop_val);
                     // Case 1: String replacement — render the string instead of buffer text
                     if matches!(
@@ -4499,14 +4506,9 @@ impl LayoutEngine {
                                 },
                                 text_display_tab_policy(content_x, params),
                             );
-                            let replacement_source = BufferDisplayReplacementSource::new(
-                                buf_id,
-                                CharPos0::new(charpos.max(0) as usize),
-                                EmacsBytePos::new(text_start_byte + byte_idx),
-                            );
                             let replacement_fragment = DisplayTextFragment::display_property_string(
                                 prop_val,
-                                CharPos0::new(charpos as usize),
+                                display_property_char_pos,
                                 DisplayPropertySource::TextProperty,
                             );
                             let mut replacement_next_check =
@@ -4553,7 +4555,7 @@ impl LayoutEngine {
                                 evaluator,
                                 &mut self.font_metrics,
                                 replacement_fragment,
-                                replacement_source,
+                                display_replacement_source,
                                 1,
                                 face_resolver,
                                 &replacement_base_face,
@@ -4615,11 +4617,6 @@ impl LayoutEngine {
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
-                            let replacement_source = BufferDisplayReplacementSource::new(
-                                buf_id,
-                                CharPos0::new(charpos.max(0) as usize),
-                                EmacsBytePos::new(text_start_byte + byte_idx),
-                            );
                             let replacement_frame = text_append_surface.frame_for_active_face(
                                 row_geometry.append_placement(raise_span.value_or(0.0)),
                                 &active_face_state,
@@ -4631,7 +4628,7 @@ impl LayoutEngine {
                                     &mut output_emitter,
                                     evaluator,
                                     &mut self.font_metrics,
-                                    replacement_source,
+                                    display_replacement_source,
                                     active_face_state.face_id(),
                                     DisplayReplacementBox::new(
                                         space_width,
@@ -4660,11 +4657,6 @@ impl LayoutEngine {
                     if let Some(replacement) = display_property.replacement.as_ref()
                         && replacement.is_media_replacement()
                     {
-                        let replacement_source = BufferDisplayReplacementSource::new(
-                            buf_id,
-                            CharPos0::new(charpos.max(0) as usize),
-                            EmacsBytePos::new(text_start_byte + byte_idx),
-                        );
                         let maybe_media_item = replacement.direct_media_item_kind().or_else(|| {
                             resolve_display_property_media(
                                 &prop_val,
@@ -4725,7 +4717,7 @@ impl LayoutEngine {
                                     &mut output_emitter,
                                     evaluator,
                                     &mut self.font_metrics,
-                                    replacement_source,
+                                    display_replacement_source,
                                     active_face_state.face_id(),
                                     media_item,
                                     face_resolver,
@@ -4766,7 +4758,7 @@ impl LayoutEngine {
                                     &mut output_emitter,
                                     evaluator,
                                     &mut self.font_metrics,
-                                    replacement_source,
+                                    display_replacement_source,
                                     active_face_state.face_id(),
                                     placeholder,
                                     face_resolver,
