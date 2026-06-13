@@ -1128,7 +1128,7 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
     }
 }
 
-pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
+fn append_raw_display_replacement_item_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -1171,7 +1171,7 @@ pub(crate) fn append_display_media_replacement_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_display_replacement_item_to_text_row_and_emit(
+    append_raw_display_replacement_item_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1199,7 +1199,7 @@ pub(crate) fn append_display_replacement_stretch_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_display_replacement_item_to_text_row_and_emit(
+    append_raw_display_replacement_item_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1227,7 +1227,7 @@ pub(crate) fn append_display_replacement_source_mapped_text_to_text_row_and_emit
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_display_replacement_item_to_text_row_and_emit(
+    append_raw_display_replacement_item_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,

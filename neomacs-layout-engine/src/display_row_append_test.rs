@@ -2523,7 +2523,7 @@ fn append_display_replacement_string_fragment_to_text_row_walks_source_faces_and
 }
 
 #[test]
-fn append_display_replacement_item_to_text_row_and_emit_uses_face_fallback() {
+fn append_raw_display_replacement_item_to_text_row_and_emit_uses_face_fallback() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2582,7 +2582,7 @@ fn append_display_replacement_item_to_text_row_and_emit_uses_face_fallback() {
         }),
     );
 
-    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
+    let (progress, end) = append_raw_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -2867,7 +2867,7 @@ fn append_synthetic_text_to_display_row_uses_source_append_request() {
 }
 
 #[test]
-fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replacements() {
+fn append_display_media_replacement_to_text_row_and_emit_installs_xwidget_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2924,25 +2924,26 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replace
         },
         DisplayTabPolicy::every(8),
     );
-    let item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(9, 0, 1),
-        RenderFaceRef::FaceId(3),
-        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-            xwidget_id: 1234,
-            width: 96.0,
-            height: 54.0,
-        })),
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
     );
 
-    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
+    let (progress, end) = append_display_media_replacement_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        item,
+        replacement_source,
+        3,
+        DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+            xwidget_id: 1234,
+            width: 96.0,
+            height: 54.0,
+        }),
         &face_resolver,
         base_face,
-        7,
         frame,
         DisplayRowPosition { x_px: 16.0, col: 2 },
     )
@@ -2994,7 +2995,7 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replace
 }
 
 #[test]
-fn append_display_replacement_item_to_text_row_and_emit_installs_image_replacements() {
+fn append_display_media_replacement_to_text_row_and_emit_installs_image_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -3051,25 +3052,26 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_image_replaceme
         },
         DisplayTabPolicy::every(8),
     );
-    let item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(9, 0, 1),
-        RenderFaceRef::FaceId(3),
-        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::image(DisplayImageItem {
-            image_id: 42,
-            width: 64.0,
-            height: 32.0,
-        })),
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
     );
 
-    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
+    let (progress, end) = append_display_media_replacement_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        item,
+        replacement_source,
+        3,
+        DisplayMediaReplacement::image(DisplayImageItem {
+            image_id: 42,
+            width: 64.0,
+            height: 32.0,
+        }),
         &face_resolver,
         base_face,
-        7,
         frame,
         DisplayRowPosition { x_px: 16.0, col: 2 },
     )
@@ -3121,7 +3123,7 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_image_replaceme
 }
 
 #[test]
-fn append_display_replacement_item_to_text_row_and_emit_installs_video_replacements() {
+fn append_display_media_replacement_to_text_row_and_emit_installs_video_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -3178,27 +3180,28 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_video_replaceme
         },
         DisplayTabPolicy::every(8),
     );
-    let item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(9, 0, 1),
-        RenderFaceRef::FaceId(3),
-        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::video(DisplayVideoItem {
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
+    );
+
+    let (progress, end) = append_display_media_replacement_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        replacement_source,
+        3,
+        DisplayMediaReplacement::video(DisplayVideoItem {
             video_id: 88,
             width: 80.0,
             height: 45.0,
             loop_count: -1,
             autoplay: true,
-        })),
-    );
-
-    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        item,
+        }),
         &face_resolver,
         base_face,
-        7,
         frame,
         DisplayRowPosition { x_px: 16.0, col: 2 },
     )
