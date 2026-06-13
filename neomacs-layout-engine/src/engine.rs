@@ -2041,6 +2041,77 @@ impl<'a> OverlayStringRenderRowContext<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
+struct MainTextRowAppendContext<'a> {
+    append_surface: &'a DisplayRowAppendSurface,
+    geometry: &'a DisplayRowGeometryState,
+    active_face: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+}
+
+impl<'a> MainTextRowAppendContext<'a> {
+    fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &'a DisplayRowGeometryState,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            append_surface,
+            geometry,
+            active_face,
+            glyph_y_offset,
+            default_row_height,
+        }
+    }
+
+    fn active_face_frame(self) -> DisplayRowAppendFrame {
+        self.append_surface
+            .frame_for_active_face_from_geometry_state(
+                self.geometry,
+                self.glyph_y_offset,
+                self.active_face,
+                self.default_row_height,
+            )
+    }
+
+    fn full_text_width_active_face_frame(self) -> DisplayRowAppendFrame {
+        self.append_surface
+            .full_text_width_surface()
+            .frame_for_active_face_from_geometry_state(
+                self.geometry,
+                self.glyph_y_offset,
+                self.active_face,
+                self.default_row_height,
+            )
+    }
+
+    fn display_box_frame(self, height: f32, ascent: f32) -> DisplayRowAppendFrame {
+        self.append_surface
+            .display_box_frame_for_active_face_from_geometry_state(
+                self.geometry,
+                self.glyph_y_offset,
+                self.active_face,
+                height,
+                ascent,
+                self.default_row_height,
+            )
+    }
+
+    fn text_row_frame(self, height: f32, ascent: f32, char_width: f32) -> DisplayRowAppendFrame {
+        self.append_surface.text_row_frame_from_geometry_state(
+            self.geometry,
+            self.glyph_y_offset,
+            height,
+            ascent,
+            char_width,
+            self.default_row_height,
+        )
+    }
+}
+
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
@@ -4260,13 +4331,14 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                     );
 
-                    let append_frame = text_append_surface
-                        .frame_for_active_face_from_geometry_state(
-                            &row_geometry,
-                            raise_span.value_or(0.0),
-                            &active_face_state,
-                            char_h,
-                        );
+                    let append_frame = MainTextRowAppendContext::new(
+                        &text_append_surface,
+                        &row_geometry,
+                        &active_face_state,
+                        raise_span.value_or(0.0),
+                        char_h,
+                    )
+                    .active_face_frame();
                     let position = append_lisp_string_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -4320,13 +4392,14 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let ellipsis_frame = text_append_surface
-                            .frame_for_active_face_from_geometry_state(
-                                &row_geometry,
-                                raise_span.value_or(0.0),
-                                &active_face_state,
-                                char_h,
-                            );
+                        let ellipsis_frame = MainTextRowAppendContext::new(
+                            &text_append_surface,
+                            &row_geometry,
+                            &active_face_state,
+                            raise_span.value_or(0.0),
+                            char_h,
+                        )
+                        .active_face_frame();
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4478,13 +4551,17 @@ impl LayoutEngine {
                     // When hscroll is exhausted, show $ indicator at left edge
                     if !hscroll_skip.should_skip() && hscroll_skip.should_show_left_truncation() {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
-                        let trunc_frame = text_append_surface.text_row_frame_from_geometry_state(
+                        let trunc_frame = MainTextRowAppendContext::new(
+                            &text_append_surface,
                             &row_geometry,
+                            &active_face_state,
                             0.0,
+                            char_h,
+                        )
+                        .text_row_frame(
                             char_h,
                             default_face_ascent,
                             char_w,
-                            char_h,
                         );
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
@@ -4584,8 +4661,6 @@ impl LayoutEngine {
                             );
                         }
                         if !replacement.is_empty() {
-                            let replacement_string_surface =
-                                text_append_surface.full_text_width_surface();
                             let replacement_fragment = DisplayTextFragment::display_property_string(
                                 prop_val,
                                 display_property_char_pos,
@@ -4600,13 +4675,14 @@ impl LayoutEngine {
                                 &mut face_ids,
                                 &mut self.matrix_builder,
                             );
-                            let append_frame = replacement_string_surface
-                                .frame_for_active_face_from_geometry_state(
-                                    &row_geometry,
-                                    raise_span.value_or(0.0),
-                                    &active_face_state,
-                                    char_h,
-                                );
+                            let append_frame = MainTextRowAppendContext::new(
+                                &text_append_surface,
+                                &row_geometry,
+                                &active_face_state,
+                                raise_span.value_or(0.0),
+                                char_h,
+                            )
+                            .full_text_width_active_face_frame();
                             let mut item_policy =
                                 DisplayReplacementStringItemMeasurer::from_active_face_state(
                                     &active_face_state,
@@ -4679,13 +4755,14 @@ impl LayoutEngine {
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
-                            let replacement_frame = text_append_surface
-                                .frame_for_active_face_from_geometry_state(
-                                    &row_geometry,
-                                    raise_span.value_or(0.0),
-                                    &active_face_state,
-                                    char_h,
-                                );
+                            let replacement_frame = MainTextRowAppendContext::new(
+                                &text_append_surface,
+                                &row_geometry,
+                                &active_face_state,
+                                raise_span.value_or(0.0),
+                                char_h,
+                            )
+                            .active_face_frame();
                             if let Some((_progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4764,15 +4841,14 @@ impl LayoutEngine {
                                     );
                                 }
 
-                                let replacement_frame = text_append_surface
-                                    .display_box_frame_for_active_face_from_geometry_state(
-                                        &row_geometry,
-                                        raise_span.value_or(0.0),
-                                        &active_face_state,
-                                        display_height,
-                                        display_height,
-                                        char_h,
-                                    );
+                                let replacement_frame = MainTextRowAppendContext::new(
+                                    &text_append_surface,
+                                    &row_geometry,
+                                    &active_face_state,
+                                    raise_span.value_or(0.0),
+                                    char_h,
+                                )
+                                .display_box_frame(display_height, display_height);
                                 if let Some((progress, position)) =
                                     append_display_replacement_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
@@ -4811,13 +4887,14 @@ impl LayoutEngine {
                                         ),
                                     );
                                 }
-                                let replacement_frame = text_append_surface
-                                    .frame_for_active_face_from_geometry_state(
-                                        &row_geometry,
-                                        raise_span.value_or(0.0),
-                                        &active_face_state,
-                                        char_h,
-                                    );
+                                let replacement_frame = MainTextRowAppendContext::new(
+                                    &text_append_surface,
+                                    &row_geometry,
+                                    &active_face_state,
+                                    raise_span.value_or(0.0),
+                                    char_h,
+                                )
+                                .active_face_frame();
                                 if let Some((_progress, position)) =
                                     append_display_replacement_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
@@ -4900,12 +4977,14 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let ellipsis_frame = text_append_surface.frame_for_active_face_from_geometry_state(
+                let ellipsis_frame = MainTextRowAppendContext::new(
+                    &text_append_surface,
                     &row_geometry,
-                    raise_span.value_or(0.0),
                     &active_face_state,
+                    raise_span.value_or(0.0),
                     char_h,
-                );
+                )
+                .active_face_frame();
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -5003,7 +5082,7 @@ impl LayoutEngine {
 
                 // Face :extend: fill rest of row with extending face background
                 if let Some((_ext_bg, _ext_face_id)) = row_extend.value_on(&row_geometry) {
-                    let right_edge = content_x + avail_width;
+                    let right_edge = text_append_surface.right_edge();
                     if x < right_edge {}
                 }
                 row_extend.clear();
@@ -5102,7 +5181,10 @@ impl LayoutEngine {
                                 );
                                 for dot_i in 0..3 {
                                     let dot_x = content_x + dot_i as f32 * face_metrics.char_width;
-                                    if dot_x + face_metrics.char_width <= content_x + avail_width {}
+                                    if dot_x + face_metrics.char_width
+                                        <= text_append_surface.right_edge()
+                                    {
+                                    }
                                 }
                                 shown_ellipsis = true;
                             }
@@ -5131,7 +5213,7 @@ impl LayoutEngine {
                 let needed_width = 2.0 * face_metrics.char_width;
 
                 // Check if we have room for ^X (2 columns)
-                if x + needed_width > content_x + (text_width - lnum_pixel_width) {
+                if x + needed_width > text_append_surface.full_text_right_edge() {
                     // Doesn't fit — wrap or truncate
                     if params.truncate_lines {
                         row_geometry.mark_current_row_flag_kind(
@@ -5235,13 +5317,14 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = text_append_surface
-                    .frame_for_active_face_from_geometry_state(
-                        &row_geometry,
-                        raise_span.value_or(0.0),
-                        &active_face_state,
-                        char_h,
-                    );
+                let text_item_frame = MainTextRowAppendContext::new(
+                    &text_append_surface,
+                    &row_geometry,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                    char_h,
+                )
+                .active_face_frame();
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -5286,13 +5369,14 @@ impl LayoutEngine {
                         CharPos0::new(charpos as usize),
                         CharPos0::new((charpos + 1) as usize),
                     );
-                    let text_item_frame = text_append_surface
-                        .frame_for_active_face_from_geometry_state(
-                            &row_geometry,
-                            raise_span.value_or(0.0),
-                            &active_face_state,
-                            char_h,
-                        );
+                    let text_item_frame = MainTextRowAppendContext::new(
+                        &text_append_surface,
+                        &row_geometry,
+                        &active_face_state,
+                        raise_span.value_or(0.0),
+                        char_h,
+                    )
+                    .active_face_frame();
                     if let Some((_progress, position)) =
                         append_buffer_text_item_fragment_to_text_row_and_emit(
                             &mut self.matrix_builder,
@@ -5352,13 +5436,14 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = text_append_surface
-                    .frame_for_active_face_from_geometry_state(
-                        &row_geometry,
-                        raise_span.value_or(0.0),
-                        &active_face_state,
-                        char_h,
-                    );
+                let text_item_frame = MainTextRowAppendContext::new(
+                    &text_append_surface,
+                    &row_geometry,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                    char_h,
+                )
+                .active_face_frame();
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -5385,12 +5470,14 @@ impl LayoutEngine {
             }
 
             let append_position = DisplayRowPosition { x_px: x, col };
-            let frame = text_append_surface.frame_for_active_face_from_geometry_state(
+            let frame = MainTextRowAppendContext::new(
+                &text_append_surface,
                 &row_geometry,
-                raise_span.value_or(0.0),
                 &active_face_state,
+                raise_span.value_or(0.0),
                 char_h,
-            );
+            )
+            .active_face_frame();
             let buffer_text_fragment = DisplayTextFragment::buffer_text(
                 CharPos0::new(charpos as usize),
                 CharPos0::new((charpos + 1) as usize),
@@ -5417,7 +5504,7 @@ impl LayoutEngine {
             );
             let advance = resolved_advance.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
-            if ch != '\t' && x + advance > content_x + avail_width {
+            if ch != '\t' && x + advance > text_append_surface.right_edge() {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 if params.truncate_lines {
@@ -5867,7 +5954,7 @@ impl LayoutEngine {
         // Face :extend at end-of-buffer: fill remaining empty rows
         // with the last :extend face's background color
         if let Some((_ext_bg, _ext_face_id)) = row_extend.value() {
-            let right_edge = content_x + avail_width;
+            let right_edge = text_append_surface.right_edge();
             // First, extend the current (partially filled) row if text didn't fill it
             if x < right_edge && row_geometry.is_within_row_limit(row_limit) {
                 let _ry = row_geometry.current_row_y(&row_y_positions, text_y, char_h);
@@ -5942,7 +6029,7 @@ impl LayoutEngine {
                 for r in 0..total_rows {
                     let _gy =
                         row_y_positions.y_for_row(r, row_geometry_defaults.row_y_fallback(0.0));
-                    if indicator_x < content_x + avail_width {}
+                    if indicator_x < text_append_surface.right_edge() {}
                 }
             }
         }

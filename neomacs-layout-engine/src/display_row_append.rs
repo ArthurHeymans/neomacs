@@ -1381,6 +1381,10 @@ impl DisplayRowAppendSurface {
         self.area.right_edge()
     }
 
+    pub(crate) fn full_text_right_edge(&self) -> f32 {
+        self.area.full_text_width().right_edge()
+    }
+
     pub(crate) fn full_text_width_surface(&self) -> Self {
         Self {
             area: self.area.full_text_width(),

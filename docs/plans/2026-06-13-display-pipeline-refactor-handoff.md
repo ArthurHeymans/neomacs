@@ -53,6 +53,7 @@ Continuation work after this handoff:
 - Buffer text fragment natural fallback advance now uses typed `BufferTextFragmentNaturalFallbackAdvance` variants for tab, cluster-continuation, and face-column width policy instead of raw fallback conditionals.
 - Overlay string rendering now consumes the shared `DisplayRowAppendSurface` from the main text row instead of rebuilding append bounds from raw right-limit/content-x values at every overlay call site.
 - Overlay string rendering now receives a typed `OverlayStringRenderRowContext`, and display-property replacement strings derive their full text-width append surface from the shared text-row append surface instead of rebuilding raw width geometry in `engine.rs`.
+- Main buffer synthetic text, display replacements, glyphless/control items, replacement strings, and ordinary text append frame creation now go through `MainTextRowAppendContext`; text-row right edges and full text-width limits are exposed by `DisplayRowAppendSurface` instead of repeated raw `content_x + width` calculations in `engine.rs`.
 - Latest local verification:
 
   ```bash
@@ -65,7 +66,7 @@ Continuation work after this handoff:
   cargo check
   ```
 
-  Full layout-engine nextest passed with 1059 tests after grouping overlay row context and replacement-string append geometry behind typed row append inputs.
+  Full layout-engine nextest passed with 1059 tests after routing the main-buffer append frame and edge decisions through typed row append context.
 
 ## Why This Refactor Exists
 
