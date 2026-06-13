@@ -1486,7 +1486,7 @@ fn append_raw_display_replacement_item_to_text_row_and_emit(
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum DisplayReplacementAppendItem {
+enum DisplayReplacementAppendItem {
     Media(DisplayMediaReplacement),
     Stretch(DisplayReplacementBox),
     SourceMappedText(Box<str>),
@@ -1505,6 +1505,23 @@ impl DisplayReplacementAppendItem {
                 replacement_source.source_mapped_text_item(face_id, text)
             }
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DisplayReplacementStretchAppendItem {
+    geometry: DisplayReplacementBox,
+}
+
+impl DisplayReplacementStretchAppendItem {
+    pub(crate) fn from_extents(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
+        Self {
+            geometry: DisplayReplacementBox::new(width_px, height_px, ascent_px),
+        }
+    }
+
+    fn geometry(self) -> DisplayReplacementBox {
+        self.geometry
     }
 }
 
@@ -1562,6 +1579,21 @@ impl DisplayReplacementMediaAppendItem {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DisplayReplacementSourceMappedTextAppendItem {
+    text: Box<str>,
+}
+
+impl DisplayReplacementSourceMappedTextAppendItem {
+    pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
+        Self { text: text.into() }
+    }
+
+    fn text(self) -> Box<str> {
+        self.text
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementAppendContext<'a> {
     replacement_source: BufferDisplayReplacementSource,
@@ -1586,7 +1618,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_item_to_text_row_and_emit(
+    fn append_item_to_text_row_and_emit(
         &self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
@@ -1612,6 +1644,28 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_stretch_to_text_row_and_emit(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        item: DisplayReplacementStretchAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.append_item_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            DisplayReplacementAppendItem::Stretch(item.geometry()),
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_media_to_text_row_and_emit(
         &self,
         builder: &mut GlyphMatrixBuilder,
@@ -1629,6 +1683,28 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             font_metrics,
             face_resolver,
             DisplayReplacementAppendItem::Media(item.media()),
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_source_mapped_text_to_text_row_and_emit(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        item: DisplayReplacementSourceMappedTextAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.append_item_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            DisplayReplacementAppendItem::SourceMappedText(item.text()),
             position,
         )
     }

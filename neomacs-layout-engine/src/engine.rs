@@ -42,10 +42,10 @@ use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
     BufferTextFragmentAppendItem, BufferTextItemAppendContext,
     DisplayReplacementActiveFaceMeasurer, DisplayReplacementAppendContext,
-    DisplayReplacementAppendItem, DisplayReplacementMediaAppendItem,
-    DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
-    LispStringSourceAppendContext, SyntheticTextAppendContext,
+    DisplayReplacementMediaAppendItem, DisplayReplacementSourceMappedTextAppendItem,
+    DisplayReplacementStretchAppendItem, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
+    DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
+    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -54,7 +54,7 @@ use crate::display_row_geometry::{
     DisplayRowScopedValue, DisplayRowStartMarker, DisplayRowTextPosition,
     DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
-use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBox};
+use crate::display_source::BufferDisplayReplacementSource;
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
     ResolvedDisplayReplacement, resolve_display_replacement, resolve_display_string_base_face,
@@ -4704,20 +4704,19 @@ impl LayoutEngine {
                                 active_face_state.resolved_face(),
                                 replacement_frame,
                             );
+                            let stretch_item = DisplayReplacementStretchAppendItem::from_extents(
+                                space_width,
+                                space_geometry.height,
+                                space_geometry.ascent,
+                            );
                             if let Some((_progress, position)) = append_context
-                                .append_item_to_text_row_and_emit(
+                                .append_stretch_to_text_row_and_emit(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
                                     &mut self.font_metrics,
                                     face_resolver,
-                                    DisplayReplacementAppendItem::Stretch(
-                                        DisplayReplacementBox::new(
-                                            space_width,
-                                            space_geometry.height,
-                                            space_geometry.ascent,
-                                        ),
-                                    ),
+                                    stretch_item,
                                     DisplayRowPosition { x_px: x, col },
                                 )
                             {
@@ -4842,14 +4841,14 @@ impl LayoutEngine {
                                     replacement_frame,
                                 );
                                 if let Some((_progress, position)) = append_context
-                                    .append_item_to_text_row_and_emit(
+                                    .append_source_mapped_text_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
                                         &mut self.font_metrics,
                                         face_resolver,
-                                        DisplayReplacementAppendItem::SourceMappedText(
-                                            placeholder.into(),
+                                        DisplayReplacementSourceMappedTextAppendItem::new(
+                                            placeholder,
                                         ),
                                         DisplayRowPosition { x_px: x, col },
                                     )
