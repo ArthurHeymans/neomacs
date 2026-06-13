@@ -385,7 +385,6 @@ struct Reader<'a> {
 
 struct ReaderToken {
     name: crate::heap_types::LispString,
-    text: Option<String>,
     had_escape: bool,
 }
 
@@ -2058,7 +2057,7 @@ impl<'a> Reader<'a> {
         }
 
         if !token.had_escape {
-            if let Some(token_text) = token.text.as_deref() {
+            if let Some(token_text) = token.name.as_utf8_str() {
                 // Try integer. Funnel through Value::make_integer so a value
                 // that fits in i64 but not in fixnum (62-bit) is promoted to
                 // a bignum, matching GNU `string_to_number` behavior. On i64
@@ -2133,12 +2132,11 @@ impl<'a> Reader<'a> {
         } else {
             crate::heap_types::LispString::from_unibyte(bytes)
         };
-        let text = name.as_utf8_str().map(ToOwned::to_owned);
-        ReaderToken {
-            name,
-            text,
-            had_escape,
-        }
+        // No owned `text` copy here: the integer/float/`t`/`nil` checks in
+        // `read_atom` borrow `name.as_utf8_str()` directly (a `&str`, no alloc).
+        // This used to `to_owned()` a String for every symbol/atom token —
+        // pure churn, since Doom loading reads a huge number of tokens.
+        ReaderToken { name, had_escape }
     }
 
     fn push_symbol_token_code(&self, bytes: &mut ReaderTokenBytes, code: u32) {
