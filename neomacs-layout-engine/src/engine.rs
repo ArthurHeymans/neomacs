@@ -4447,24 +4447,17 @@ impl LayoutEngine {
                         display_property.replacement,
                         Some(DisplayReplacementProperty::Stretch(_))
                     ) {
-                        let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let display_char_width =
-                            DisplayReplacementStretchAppendItem::source_char_width_px(
+                        let stretch_item =
+                            DisplayReplacementStretchAppendItem::from_display_space_property(
+                                &prop_val,
+                                &text[byte_idx..],
                                 &active_face_state,
                                 &mut self.font_metrics,
-                                display_ch,
-                                face_metrics.char_width,
-                            );
-                        let stretch_item =
-                            DisplayReplacementStretchAppendItem::from_display_space_spec(
-                                &prop_val,
                                 x,
                                 content_x,
                                 face_metrics.char_width,
-                                display_char_width,
                                 face_metrics.row_height,
                                 face_metrics.ascent,
-                                face_metrics.char_width,
                                 params,
                             );
                         if point_in_display_replacement {

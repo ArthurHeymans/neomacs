@@ -2554,20 +2554,98 @@ fn display_replacement_stretch_append_item_names_cursor_and_extent_policy() {
     assert_eq!(clamped.cursor_slot_width_px(), 0.0);
 }
 
+fn test_display_space_window_params() -> WindowParams {
+    WindowParams {
+        window_id: 1,
+        buffer_id: 1,
+        bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
+        text_bounds: Rect::new(0.0, 0.0, 800.0, 560.0),
+        selected: true,
+        is_minibuffer: false,
+        window_start: 1,
+        window_end: 0,
+        point: 1,
+        buffer_size: 1,
+        buffer_begv: 1,
+        hscroll: 0,
+        vscroll: 0,
+        truncate_lines: false,
+        word_wrap: false,
+        tab_width: 8,
+        tab_stop_list: vec![],
+        default_fg: 0xFFFFFF,
+        default_bg: 0x000000,
+        char_width: 8.0,
+        char_height: 16.0,
+        window_system: true,
+        font_pixel_size: 14.0,
+        font_ascent: 12.0,
+        mode_line_height: 0.0,
+        header_line_height: 0.0,
+        tab_line_height: 0.0,
+        cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::FilledBox,
+        cursor_bar_width: neomacs_display_protocol::frame_glyphs::CursorBarWidth::TWO,
+        x_stretch_cursor: false,
+        cursor_color: 0xFFFFFF,
+        cursor_effects: None,
+        visual_cursors: Vec::new(),
+        left_fringe_width: 0.0,
+        right_fringe_width: 0.0,
+        indicate_empty_lines: 0,
+        show_trailing_whitespace: false,
+        trailing_ws_bg: 0,
+        fill_column_indicator: -1,
+        fill_column_indicator_char: '|',
+        fill_column_indicator_fg: 0,
+        extra_line_spacing: 0.0,
+        selective_display: 0,
+        escape_glyph_fg: 0,
+        nobreak_char_display: 0,
+        nobreak_char_fg: 0,
+        glyphless_char_fg: 0,
+        wrap_prefix: vec![],
+        line_prefix: vec![],
+        left_margin_width: 0.0,
+        right_margin_width: 0.0,
+        vertical_scroll_bar_side: None,
+        horizontal_scroll_bar: false,
+        scroll_bar_pixel_width: 0.0,
+        scroll_bar_pixel_height: 0.0,
+    }
+}
+
 #[test]
-fn display_replacement_stretch_append_item_resolves_source_char_width() {
+fn display_replacement_stretch_append_item_resolves_display_space_property() {
+    let _eval = Context::new();
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("relative-width"),
+        Value::fixnum(2),
+        Value::keyword("height"),
+        Value::list(vec![Value::fixnum(10)]),
+        Value::keyword("ascent"),
+        Value::fixnum(40),
+    ]);
 
-    assert_eq!(
-        DisplayReplacementStretchAppendItem::source_char_width_px(
-            &active_face,
-            &mut font_metrics,
-            'x',
-            8.0,
-        ),
-        8.0
+    let item = DisplayReplacementStretchAppendItem::from_display_space_property(
+        &spec,
+        "x".as_bytes(),
+        &active_face,
+        &mut font_metrics,
+        0.0,
+        0.0,
+        8.0,
+        18.0,
+        13.0,
+        &test_display_space_window_params(),
     );
+
+    assert_eq!(item.width_px(), 16.0);
+    assert_eq!(item.height_px(), 10.0);
+    assert_eq!(item.ascent_px(), 4.0);
+    assert_eq!(item.cursor_slot_width_px(), 16.0);
 }
 
 #[test]

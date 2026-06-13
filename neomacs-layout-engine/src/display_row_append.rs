@@ -2141,7 +2141,40 @@ impl DisplayReplacementStretchAppendItem {
         )
     }
 
-    pub(crate) fn source_char_width_px(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_display_space_property(
+        spec: &Value,
+        source_text: &[u8],
+        active_face_state: &DisplayRowActiveFaceState,
+        font_metrics: &mut Option<FontMetricsService>,
+        current_x: f32,
+        content_x: f32,
+        default_char_width: f32,
+        default_height: f32,
+        default_ascent: f32,
+        params: &WindowParams,
+    ) -> Self {
+        let (display_ch, _) = decode_utf8(source_text);
+        let display_char_width = Self::source_char_width_px(
+            active_face_state,
+            font_metrics,
+            display_ch,
+            default_char_width,
+        );
+        Self::from_display_space_spec(
+            spec,
+            current_x,
+            content_x,
+            default_char_width,
+            display_char_width,
+            default_height,
+            default_ascent,
+            default_char_width,
+            params,
+        )
+    }
+
+    fn source_char_width_px(
         active_face_state: &DisplayRowActiveFaceState,
         font_metrics: &mut Option<FontMetricsService>,
         ch: char,
