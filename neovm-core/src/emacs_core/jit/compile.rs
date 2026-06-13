@@ -89,8 +89,19 @@ extern "C" fn neovm_jit_gc_save() -> i64 {
 }
 
 /// Root one live `Value` (by its raw bits) across an upcoming allocation.
+///
+/// Only heap objects (cons/string/float/veclike incl. bignum) can be collected
+/// and need stack rooting; immediates (fixnums, chars, nil/t) are never on the
+/// heap, and symbols are kept live by the obarray (always a GC root), not by the
+/// operand stack. Skipping those here is correct — `mark_value` would no-op on
+/// them anyway — and avoids the thread-local push for the many symbol/fixnum
+/// operands the JIT roots before calls. `gc_restore` truncates to the saved
+/// depth, so a variable push count is fine.
 extern "C" fn neovm_jit_gc_push(bits: i64) {
-    push_scratch_gc_root(Value::from_bits(bits as usize));
+    let v = Value::from_bits(bits as usize);
+    if v.is_heap_object() {
+        push_scratch_gc_root(v);
+    }
 }
 
 /// Pop the scratch roots back to a saved depth.
