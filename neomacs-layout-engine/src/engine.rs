@@ -48,8 +48,8 @@ use crate::display_row_append::{
     append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
     append_measured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
-    measure_buffer_text_fragment_natural_advance_to_text_row,
     render_lisp_string_source_append_to_text_row_and_emit,
+    resolve_buffer_text_fragment_natural_advance_to_text_row,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -5345,34 +5345,20 @@ impl LayoutEngine {
                     &mut policy,
                 )
             } else if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
-                measure_buffer_text_fragment_natural_advance_to_text_row(
+                resolve_buffer_text_fragment_natural_advance_to_text_row(
                     &mut self.matrix_builder,
                     evaluator,
                     &mut self.font_metrics,
                     buffer_text_fragment.clone(),
                     face_resolver,
-                    active_face_state.resolved_face(),
                     buf_id,
                     buffer,
-                    active_face_state.face_id(),
+                    &active_face_state,
                     frame.clone(),
                     append_position,
+                    ch,
+                    is_cluster_continuation,
                 )
-                .unwrap_or_else(|| {
-                    if ch == '\t' {
-                        text_display_tab_policy(content_x, params)
-                            .advance_from(
-                                crate::display_row_builder::DisplayRowPosition { x_px: x, col },
-                                face_metrics.space_width,
-                            )
-                            .pixel_width
-                    } else if is_cluster_continuation {
-                        0.0
-                    } else {
-                        let char_cols = crate::composition::base_width_cols(ch) as usize;
-                        active_face_state.advance_for_columns(&mut self.font_metrics, ch, char_cols)
-                    }
-                })
             } else {
                 active_face_state.advance_for_columns(&mut self.font_metrics, ch, 1)
             };

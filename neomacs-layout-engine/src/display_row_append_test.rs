@@ -154,6 +154,109 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
     );
 }
 
+fn test_active_face_state(face_id: u32, char_width: f32) -> DisplayRowActiveFaceState {
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut base = resolver.default_face().clone();
+    base.font_char_width = char_width;
+    let mut font_metrics = None;
+    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
+        face_id,
+        &base,
+        None,
+        char_width,
+        DisplayRowFallbackMetrics {
+            char_width,
+            row_height: 18.0,
+            ascent: 13.0,
+        },
+        &mut font_metrics,
+    );
+    DisplayRowActiveFaceState::new(base, measured)
+}
+
+fn test_append_frame(
+    char_width: f32,
+    space_width: f32,
+    tab_policy: DisplayTabPolicy,
+) -> DisplayRowAppendFrame {
+    DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width,
+            space_width,
+            default_row_height: 16.0,
+        },
+        tab_policy,
+    )
+}
+
+#[test]
+fn fallback_buffer_text_fragment_natural_advance_uses_frame_tab_policy() {
+    let active_face = test_active_face_state(7, 8.0);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(4));
+    let mut font_metrics = None;
+
+    let advance = fallback_buffer_text_fragment_natural_advance_to_text_row(
+        &mut font_metrics,
+        &active_face,
+        &frame,
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+        '\t',
+        false,
+    );
+
+    assert_eq!(advance, 24.0);
+}
+
+#[test]
+fn fallback_buffer_text_fragment_natural_advance_zeroes_cluster_continuation() {
+    let active_face = test_active_face_state(7, 8.0);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let mut font_metrics = None;
+
+    let advance = fallback_buffer_text_fragment_natural_advance_to_text_row(
+        &mut font_metrics,
+        &active_face,
+        &frame,
+        DisplayRowPosition { x_px: 8.0, col: 1 },
+        '\u{301}',
+        true,
+    );
+
+    assert_eq!(advance, 0.0);
+}
+
+#[test]
+fn fallback_buffer_text_fragment_natural_advance_uses_face_columns() {
+    let active_face = test_active_face_state(7, 8.0);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let mut font_metrics = None;
+
+    let advance = fallback_buffer_text_fragment_natural_advance_to_text_row(
+        &mut font_metrics,
+        &active_face,
+        &frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        '中',
+        false,
+    );
+
+    assert_eq!(advance, 16.0);
+}
+
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
     let item = synthetic_display_text_item(9, "...", 7);

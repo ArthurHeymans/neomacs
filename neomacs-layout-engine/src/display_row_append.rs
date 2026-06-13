@@ -751,6 +751,71 @@ pub(crate) fn measure_buffer_text_fragment_natural_advance_to_text_row<
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn resolve_buffer_text_fragment_natural_advance_to_text_row<
+    B: LayoutBufferView + ?Sized,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    fragment: DisplayTextFragment,
+    face_resolver: &FaceResolver,
+    buffer_id: BufferId,
+    buffer: &B,
+    active_face_state: &DisplayRowActiveFaceState,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    ch: char,
+    is_cluster_continuation: bool,
+) -> f32 {
+    if let Some(measured_width) = measure_buffer_text_fragment_natural_advance_to_text_row(
+        builder,
+        evaluator,
+        font_metrics,
+        fragment,
+        face_resolver,
+        active_face_state.resolved_face(),
+        buffer_id,
+        buffer,
+        active_face_state.face_id(),
+        frame.clone(),
+        position,
+    ) {
+        return measured_width;
+    }
+
+    fallback_buffer_text_fragment_natural_advance_to_text_row(
+        font_metrics,
+        active_face_state,
+        &frame,
+        position,
+        ch,
+        is_cluster_continuation,
+    )
+}
+
+pub(crate) fn fallback_buffer_text_fragment_natural_advance_to_text_row(
+    font_metrics: &mut Option<FontMetricsService>,
+    active_face_state: &DisplayRowActiveFaceState,
+    frame: &DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    ch: char,
+    is_cluster_continuation: bool,
+) -> f32 {
+    if ch == '\t' {
+        return frame
+            .geometry
+            .tab_policy
+            .advance_from(position, frame.face_space_width)
+            .pixel_width;
+    }
+    if is_cluster_continuation {
+        return 0.0;
+    }
+    let char_cols = crate::composition::base_width_cols(ch) as usize;
+    active_face_state.advance_for_columns(font_metrics, ch, char_cols)
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
     B: LayoutBufferView + ?Sized,
 >(
