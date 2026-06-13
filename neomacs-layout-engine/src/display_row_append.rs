@@ -20,9 +20,10 @@ use crate::display_row::{
     DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState, DisplaySourceAppendMeasurement,
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
     append_single_display_item_fragment_to_text_row_and_emit,
-    measure_display_source_append_request_against_current_text_row,
+    measure_single_display_item_source_append_request_against_current_text_row,
     render_display_source_append_request_into_current_text_row_and_emit,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
+    render_single_display_item_source_append_request_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
@@ -31,7 +32,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SingleDisplayItemSource,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -967,18 +968,15 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let (item, append_kind) = buffer_text_source_range_item(range, buffer_id, buffer, face_id)?;
     let request = frame.source_append_request(position, face_id, base_face, append_kind);
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
         DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
-    let outcome = render_display_source_append_request_into_current_text_row_and_emit(
+    let outcome = render_single_display_item_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        &mut source,
-        &mut source_state,
+        item,
         face_resolver,
         &mut face_ids,
         request,
@@ -1420,17 +1418,14 @@ fn measure_buffer_text_source_range_append_progress_to_text_row<B: LayoutBufferV
     let request = frame
         .source_append_request(position, face_id, base_face, append_kind)
         .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
         DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
-    let outcome = measure_display_source_append_request_against_current_text_row(
+    let outcome = measure_single_display_item_source_append_request_against_current_text_row(
         builder,
         evaluator,
         font_metrics,
-        &mut source,
-        &mut source_state,
+        item,
         face_resolver,
         &mut face_ids,
         request,
@@ -1627,19 +1622,18 @@ fn append_buffer_display_item_source_range_to_text_row_and_emit<B: LayoutBufferV
     let (item, append_kind) =
         buffer_display_item_source_range_item(range, buffer_id, buffer, face_id, item)?;
     let request = frame.source_append_request(position, face_id, base_face, append_kind);
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let outcome = render_natural_display_source_append_request_into_current_text_row_and_emit(
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    let outcome = render_single_display_item_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        &mut source,
-        &mut source_state,
+        item,
         face_resolver,
         &mut face_ids,
         request,
+        &mut render_policy,
     )?;
     Some(outcome.into_append_progress_and_position(position))
 }
@@ -1666,16 +1660,13 @@ fn measure_buffer_display_item_source_range_append_progress_to_text_row<
     let request = frame
         .source_append_request(position, face_id, base_face, append_kind)
         .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let outcome = measure_display_source_append_request_against_current_text_row(
+    let outcome = measure_single_display_item_source_append_request_against_current_text_row(
         builder,
         evaluator,
         font_metrics,
-        &mut source,
-        &mut source_state,
+        item,
         face_resolver,
         &mut face_ids,
         request,

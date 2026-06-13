@@ -1947,6 +1947,36 @@ pub(crate) fn render_natural_display_source_append_request_into_current_text_row
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn render_single_display_item_source_append_request_into_current_text_row_and_emit<
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    item: DisplayItem,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+    request: DisplayRowSourceAppendRequest<'_>,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let mut source = SingleDisplayItemSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    render_display_source_append_request_into_current_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        face_ids,
+        request,
+        render_policy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn measure_display_source_append_request_against_current_text_row<
     S: DisplayItemSource,
     P: DisplayRowRenderPolicy,
@@ -1993,6 +2023,34 @@ pub(crate) fn measure_display_source_append_request_against_current_text_row<
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn measure_single_display_item_source_append_request_against_current_text_row<
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    item: DisplayItem,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+    request: DisplayRowSourceAppendRequest<'_>,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let mut source = SingleDisplayItemSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    measure_display_source_append_request_against_current_text_row(
+        builder,
+        evaluator,
+        font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        face_ids,
+        request,
+        render_policy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn append_single_display_item_fragment_to_text_row_and_emit<
     P: DisplayRowRenderPolicy,
 >(
@@ -2007,17 +2065,14 @@ pub(crate) fn append_single_display_item_fragment_to_text_row_and_emit<
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let base_face_id = request.base_face_id();
     item.face = RenderFaceRef::FaceId(base_face_id);
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
     let start = request.start_position();
-    let outcome = render_display_source_append_request_into_current_text_row_and_emit(
+    let outcome = render_single_display_item_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        &mut source,
-        &mut source_state,
+        item,
         face_resolver,
         &mut face_ids,
         request,
