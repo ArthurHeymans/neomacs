@@ -144,6 +144,25 @@ pub(crate) struct BufferTextFragmentAdvanceResolver {
     complex_run: ComplexTextRunAdvanceResolver,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferTextFragmentAdvancePath {
+    NaturalFaceColumns,
+    NaturalRenderedFragment,
+    ResolvedComplexRun,
+}
+
+impl BufferTextFragmentAdvancePath {
+    fn for_char(ch: char, is_cluster_continuation: bool) -> Self {
+        if crate::composition::needs_complex_shaping(ch) {
+            Self::ResolvedComplexRun
+        } else if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
+            Self::NaturalRenderedFragment
+        } else {
+            Self::NaturalFaceColumns
+        }
+    }
+}
+
 enum BufferTextFragmentRenderPolicy {
     Natural(NaturalDisplayRowAppendRenderPolicy),
     Resolved(ResolvedFragmentAdvanceRenderPolicy),
@@ -853,42 +872,44 @@ impl BufferTextFragmentAdvanceResolver {
         ch: char,
         is_cluster_continuation: bool,
     ) -> ResolvedBufferTextFragmentAdvance {
-        if crate::composition::needs_complex_shaping(ch) {
-            let mut policy =
-                DisplayRowComplexTextRunAdvancePolicy::new(active_face_state, font_metrics);
-            let advance_px = self.complex_run.advance_for_char(
-                text,
-                byte_idx,
-                ch,
-                is_cluster_continuation,
-                &mut policy,
-            );
-            return ResolvedBufferTextFragmentAdvance::resolved(advance_px);
+        match BufferTextFragmentAdvancePath::for_char(ch, is_cluster_continuation) {
+            BufferTextFragmentAdvancePath::ResolvedComplexRun => {
+                let mut policy =
+                    DisplayRowComplexTextRunAdvancePolicy::new(active_face_state, font_metrics);
+                let advance_px = self.complex_run.advance_for_char(
+                    text,
+                    byte_idx,
+                    ch,
+                    is_cluster_continuation,
+                    &mut policy,
+                );
+                ResolvedBufferTextFragmentAdvance::resolved(advance_px)
+            }
+            BufferTextFragmentAdvancePath::NaturalRenderedFragment => {
+                let advance_px = resolve_buffer_text_fragment_natural_advance_to_text_row(
+                    builder,
+                    evaluator,
+                    font_metrics,
+                    fragment,
+                    face_resolver,
+                    buffer_id,
+                    buffer,
+                    active_face_state,
+                    frame,
+                    position,
+                    ch,
+                    is_cluster_continuation,
+                );
+                ResolvedBufferTextFragmentAdvance::natural(advance_px)
+            }
+            BufferTextFragmentAdvancePath::NaturalFaceColumns => {
+                ResolvedBufferTextFragmentAdvance::natural(active_face_state.advance_for_columns(
+                    font_metrics,
+                    ch,
+                    1,
+                ))
+            }
         }
-
-        if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
-            let advance_px = resolve_buffer_text_fragment_natural_advance_to_text_row(
-                builder,
-                evaluator,
-                font_metrics,
-                fragment,
-                face_resolver,
-                buffer_id,
-                buffer,
-                active_face_state,
-                frame,
-                position,
-                ch,
-                is_cluster_continuation,
-            );
-            return ResolvedBufferTextFragmentAdvance::natural(advance_px);
-        }
-
-        ResolvedBufferTextFragmentAdvance::natural(active_face_state.advance_for_columns(
-            font_metrics,
-            ch,
-            1,
-        ))
     }
 }
 

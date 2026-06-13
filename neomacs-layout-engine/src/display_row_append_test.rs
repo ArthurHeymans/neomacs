@@ -269,6 +269,30 @@ fn fallback_buffer_text_fragment_natural_advance_uses_face_columns() {
     assert_eq!(advance, 16.0);
 }
 
+#[test]
+fn buffer_text_fragment_advance_path_names_append_measurement_policy() {
+    assert_eq!(
+        BufferTextFragmentAdvancePath::for_char('x', false),
+        BufferTextFragmentAdvancePath::NaturalFaceColumns
+    );
+    assert_eq!(
+        BufferTextFragmentAdvancePath::for_char('\t', false),
+        BufferTextFragmentAdvancePath::NaturalRenderedFragment
+    );
+    assert_eq!(
+        BufferTextFragmentAdvancePath::for_char('\u{301}', true),
+        BufferTextFragmentAdvancePath::NaturalRenderedFragment
+    );
+    assert_eq!(
+        BufferTextFragmentAdvancePath::for_char('中', false),
+        BufferTextFragmentAdvancePath::NaturalRenderedFragment
+    );
+    assert_eq!(
+        BufferTextFragmentAdvancePath::for_char('\u{0633}', false),
+        BufferTextFragmentAdvancePath::ResolvedComplexRun
+    );
+}
+
 fn current_buffer_snapshot(eval: &Context, buf_id: BufferId) -> LayoutBufferSnapshot {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     LayoutBufferSnapshot::from_buffer(buffer)
