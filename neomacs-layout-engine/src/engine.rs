@@ -270,14 +270,14 @@ impl CapturedCursorInfo {
         if let Some(slot_width) = self.slot_width {
             slot_width.max(1.0)
         } else {
-            cursor_width_for_style(
+            CursorSlotWidthPolicy::from_style_and_buffer_position(
                 style,
                 text,
                 self.byte_idx,
                 self.col as i32,
                 params,
-                self.face_w,
             )
+            .width_px(self.face_w)
             .max(1.0)
         }
     }
@@ -1635,6 +1635,50 @@ fn cursor_point_columns(text: &[u8], byte_idx: usize, col: i32, params: &WindowP
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CursorSlotWidthPolicy {
+    ExplicitPixels(f32),
+    GlyphColumns(usize),
+    TabClamp { frame_char_width: f32 },
+}
+
+impl CursorSlotWidthPolicy {
+    fn from_style_and_buffer_position(
+        style: CursorStyle,
+        text: &[u8],
+        byte_idx: usize,
+        col: i32,
+        params: &WindowParams,
+    ) -> Self {
+        match style {
+            CursorStyle::Bar(width) => Self::ExplicitPixels(width),
+            CursorStyle::Hbar(_) => {
+                Self::GlyphColumns(cursor_point_columns(text, byte_idx, col, params))
+            }
+            CursorStyle::FilledBox | CursorStyle::Hollow => {
+                if !params.x_stretch_cursor && byte_idx < text.len() {
+                    let (ch, _) = decode_utf8(&text[byte_idx..]);
+                    if ch == '\t' {
+                        return Self::TabClamp {
+                            frame_char_width: params.char_width,
+                        };
+                    }
+                }
+                Self::GlyphColumns(cursor_point_columns(text, byte_idx, col, params))
+            }
+        }
+    }
+
+    fn width_px(self, face_char_w: f32) -> f32 {
+        match self {
+            Self::ExplicitPixels(width) => width,
+            Self::GlyphColumns(columns) => columns as f32 * face_char_w,
+            Self::TabClamp { frame_char_width } => frame_char_width.max(1.0),
+        }
+    }
+}
+
+#[cfg(test)]
 #[inline]
 fn cursor_width_for_style(
     style: CursorStyle,
@@ -1644,21 +1688,8 @@ fn cursor_width_for_style(
     params: &WindowParams,
     face_char_w: f32,
 ) -> f32 {
-    match style {
-        CursorStyle::Bar(w) => w,
-        CursorStyle::Hbar(_) => {
-            cursor_point_columns(text, byte_idx, col, params) as f32 * face_char_w
-        }
-        _ => {
-            if !params.x_stretch_cursor && byte_idx < text.len() {
-                let (ch, _) = decode_utf8(&text[byte_idx..]);
-                if ch == '\t' {
-                    return params.char_width.max(1.0);
-                }
-            }
-            cursor_point_columns(text, byte_idx, col, params) as f32 * face_char_w
-        }
-    }
+    CursorSlotWidthPolicy::from_style_and_buffer_position(style, text, byte_idx, col, params)
+        .width_px(face_char_w)
 }
 
 #[inline]

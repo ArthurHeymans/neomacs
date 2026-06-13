@@ -9745,6 +9745,75 @@ fn test_cursor_width_for_style_hbar_uses_glyph_columns() {
 }
 
 #[test]
+fn cursor_slot_width_policy_names_style_and_buffer_width_sources() {
+    let mut params = test_window_params();
+    params.char_width = 6.0;
+    let text = b"\t";
+
+    assert_eq!(
+        CursorSlotWidthPolicy::from_style_and_buffer_position(
+            CursorStyle::Bar(2.5),
+            text,
+            0,
+            1,
+            &params,
+        ),
+        CursorSlotWidthPolicy::ExplicitPixels(2.5)
+    );
+    assert_eq!(
+        CursorSlotWidthPolicy::from_style_and_buffer_position(
+            CursorStyle::FilledBox,
+            text,
+            0,
+            1,
+            &params,
+        ),
+        CursorSlotWidthPolicy::TabClamp {
+            frame_char_width: 6.0,
+        }
+    );
+
+    params.x_stretch_cursor = true;
+    assert_eq!(
+        CursorSlotWidthPolicy::from_style_and_buffer_position(
+            CursorStyle::FilledBox,
+            text,
+            0,
+            1,
+            &params,
+        ),
+        CursorSlotWidthPolicy::GlyphColumns(7)
+    );
+    assert_eq!(
+        CursorSlotWidthPolicy::from_style_and_buffer_position(
+            CursorStyle::Hbar(2.0),
+            "你".as_bytes(),
+            0,
+            0,
+            &params,
+        ),
+        CursorSlotWidthPolicy::GlyphColumns(2)
+    );
+}
+
+#[test]
+fn cursor_slot_width_policy_tab_clamp_uses_frame_char_width() {
+    let mut params = test_window_params();
+    params.char_width = 6.0;
+    let text = b"\t";
+
+    let policy = CursorSlotWidthPolicy::from_style_and_buffer_position(
+        CursorStyle::FilledBox,
+        text,
+        0,
+        1,
+        &params,
+    );
+
+    assert_eq!(policy.width_px(8.0), 6.0);
+}
+
+#[test]
 fn test_cursor_style_for_nonselected_bar_uses_resolved_width() {
     let mut params = test_window_params();
     params.selected = false;
