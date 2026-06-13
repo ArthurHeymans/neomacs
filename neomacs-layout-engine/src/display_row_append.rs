@@ -739,9 +739,7 @@ fn measure_buffer_text_fragment_append_progress_to_text_row<B: LayoutBufferView 
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn measure_buffer_text_fragment_natural_advance_to_text_row<
-    B: LayoutBufferView + ?Sized,
->(
+fn measure_buffer_text_fragment_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
@@ -774,9 +772,7 @@ pub(crate) fn measure_buffer_text_fragment_natural_advance_to_text_row<
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn resolve_buffer_text_fragment_natural_advance_to_text_row<
-    B: LayoutBufferView + ?Sized,
->(
+fn resolve_buffer_text_fragment_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
@@ -816,7 +812,7 @@ pub(crate) fn resolve_buffer_text_fragment_natural_advance_to_text_row<
     )
 }
 
-pub(crate) fn fallback_buffer_text_fragment_natural_advance_to_text_row(
+fn fallback_buffer_text_fragment_natural_advance_to_text_row(
     font_metrics: &mut Option<FontMetricsService>,
     active_face_state: &DisplayRowActiveFaceState,
     frame: &DisplayRowAppendFrame,
