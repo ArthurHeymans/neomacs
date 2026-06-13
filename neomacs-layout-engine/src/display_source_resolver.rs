@@ -4,7 +4,7 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::DisplayReplacementProperty;
+use crate::display_property::{DisplayDirectReplacement, DisplayReplacementProperty};
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
@@ -280,7 +280,7 @@ pub(crate) fn resolve_display_replacement(
     fallback_char_width: f32,
     fallback_row_height: f32,
 ) -> Option<ResolvedDisplayReplacement> {
-    if let Some(media) = replacement.direct_media_replacement() {
+    if let Some(DisplayDirectReplacement::Media(media)) = replacement.direct_replacement() {
         return Some(resolved_media_replacement(media));
     }
 
@@ -600,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_display_replacement_returns_direct_xwidget_item() {
+    fn resolve_display_replacement_returns_direct_xwidget_media() {
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
         let xwidget = DisplayXwidgetItem {

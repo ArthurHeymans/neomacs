@@ -1,5 +1,5 @@
 use crate::display_item::{
-    DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
+    DisplayItemLayout, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
     DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayXwidgetItem,
 };
 use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
@@ -23,11 +23,17 @@ pub(crate) enum DisplayReplacementProperty {
     Webkit,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DisplayDirectReplacement {
+    Stretch(DisplayStretch),
+    Media(DisplayMediaReplacement),
+}
+
 impl DisplayReplacementProperty {
-    pub(crate) fn display_item_kind(&self) -> Option<DisplayItemKind> {
+    pub(crate) fn direct_replacement(&self) -> Option<DisplayDirectReplacement> {
         match self {
-            Self::Space(stretch) => Some(DisplayItemKind::Stretch(stretch.clone())),
-            Self::Xwidget(media) => Some(DisplayItemKind::MediaReplacement(*media)),
+            Self::Space(stretch) => Some(DisplayDirectReplacement::Stretch(stretch.clone())),
+            Self::Xwidget(media) => Some(DisplayDirectReplacement::Media(*media)),
             Self::String | Self::Image | Self::Video | Self::Webkit => None,
         }
     }
@@ -53,13 +59,6 @@ impl DisplayReplacementProperty {
             self,
             Self::Image | Self::Video | Self::Xwidget(_) | Self::Webkit
         )
-    }
-
-    pub(crate) fn direct_media_replacement(&self) -> Option<DisplayMediaReplacement> {
-        match self {
-            Self::Xwidget(media) => Some(*media),
-            Self::String | Self::Space(_) | Self::Image | Self::Video | Self::Webkit => None,
-        }
     }
 
     pub(crate) fn media_fallback_placeholder(&self) -> Option<&'static str> {

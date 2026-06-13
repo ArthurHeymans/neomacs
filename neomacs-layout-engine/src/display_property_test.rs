@@ -202,11 +202,8 @@ fn display_replacement_property_describes_media_replacement_behavior() {
         None
     );
     assert_eq!(
-        DisplayReplacementProperty::Xwidget(xwidget_replacement).direct_media_replacement(),
-        Some(xwidget_replacement)
+        DisplayReplacementProperty::Xwidget(xwidget_replacement).direct_replacement(),
+        Some(DisplayDirectReplacement::Media(xwidget_replacement))
     );
-    assert_eq!(
-        DisplayReplacementProperty::Image.direct_media_replacement(),
-        None
-    );
+    assert_eq!(DisplayReplacementProperty::Image.direct_replacement(), None);
 }

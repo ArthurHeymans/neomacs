@@ -4,7 +4,9 @@ use crate::display_item::{
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
     GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
-use crate::display_property::{DisplayReplacementProperty, classify_display_property};
+use crate::display_property::{
+    DisplayDirectReplacement, DisplayReplacementProperty, classify_display_property,
+};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
@@ -170,7 +172,7 @@ impl BufferDisplayReplacementSource {
         )
     }
 
-    pub(crate) fn item(self, face_id: u32, kind: DisplayItemKind) -> DisplayItem {
+    fn item(self, face_id: u32, kind: DisplayItemKind) -> DisplayItem {
         self.item_with_face(RenderFaceRef::FaceId(face_id), kind)
     }
 
@@ -715,6 +717,13 @@ enum DisplayPropertySourceAction {
     },
 }
 
+fn direct_display_replacement_kind(replacement: DisplayDirectReplacement) -> DisplayItemKind {
+    match replacement {
+        DisplayDirectReplacement::Stretch(stretch) => DisplayItemKind::Stretch(stretch),
+        DisplayDirectReplacement::Media(media) => DisplayItemKind::MediaReplacement(media),
+    }
+}
+
 fn display_property_source_action(
     context: &mut DisplaySourceContext<'_>,
     display_prop: Value,
@@ -727,12 +736,15 @@ fn display_property_source_action(
             base_face: face,
         },
         Some(replacement) => {
-            let kind = replacement.display_item_kind().or_else(|| {
-                context
-                    .resolve_display_media_replacement(display_prop, face)
-                    .filter(|media| replacement.accepts_media_replacement(media))
-                    .map(DisplayItemKind::MediaReplacement)
-            });
+            let kind = replacement
+                .direct_replacement()
+                .map(direct_display_replacement_kind)
+                .or_else(|| {
+                    context
+                        .resolve_display_media_replacement(display_prop, face)
+                        .filter(|media| replacement.accepts_media_replacement(media))
+                        .map(DisplayItemKind::MediaReplacement)
+                });
             kind.map(|kind| DisplayPropertySourceAction::Emit {
                 kind,
                 layout: classification.modifiers,
