@@ -65,6 +65,33 @@ pub(crate) enum FrameTabBarDisplayRowRender {
     Measured(MeasuredDisplayRow),
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct WindowChromeDisplayText {
+    value: Value,
+    selected_window: bool,
+}
+
+impl WindowChromeDisplayText {
+    pub(crate) fn new(value: Value, selected_window: bool) -> Self {
+        Self {
+            value,
+            selected_window,
+        }
+    }
+
+    fn fragment(self, kind: WindowChromeKind) -> DisplayTextFragment {
+        match kind {
+            WindowChromeKind::TabLine => DisplayTextFragment::tab_line(self.value),
+            WindowChromeKind::HeaderLine => {
+                DisplayTextFragment::header_line(self.value, self.selected_window)
+            }
+            WindowChromeKind::ModeLine => {
+                DisplayTextFragment::mode_line(self.value, self.selected_window)
+            }
+        }
+    }
+}
+
 pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) window_id: u64,
     pub(crate) kind: WindowChromeKind,
@@ -76,7 +103,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) tab_policy: DisplayTabPolicy,
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
-    pub(crate) text: DisplayTextFragment,
+    pub(crate) text: WindowChromeDisplayText,
 }
 
 pub(crate) struct InactiveMinibufferDisplayRowRequest<'face> {
@@ -179,7 +206,7 @@ impl LayoutEngine {
         );
         let rendered_row = self.render_display_text_fragment_source_row_with_context(
             row_request,
-            request.text,
+            request.text.fragment(request.kind),
             &mut render_context,
         );
         let measured_row = rendered_row.map(|rendered| {
@@ -215,7 +242,7 @@ impl LayoutEngine {
         ascent: f32,
         row_height: f32,
         tab_bar_face: &ResolvedFace,
-        rendered_text: DisplayTextFragment,
+        rendered_text: Value,
     ) -> Option<FrameTabBarDisplayRowRender> {
         let row_request = DisplayRowSourceGeometry::new(
             y,
@@ -235,7 +262,7 @@ impl LayoutEngine {
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let rendered = self.render_display_text_fragment_source_row_with_context(
             row_request,
-            rendered_text,
+            DisplayTextFragment::tab_bar(rendered_text),
             &mut render_context,
         )?;
         if rendered.row.glyphs[GlyphArea::Text.index()].is_empty() {

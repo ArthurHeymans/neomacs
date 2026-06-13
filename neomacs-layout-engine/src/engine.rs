@@ -6,7 +6,7 @@
 
 use super::display_status_line::{
     EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
-    InactiveMinibufferDisplayRowRequest, WindowChromeDisplayRowRequest,
+    InactiveMinibufferDisplayRowRequest, WindowChromeDisplayRowRequest, WindowChromeDisplayText,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -6050,7 +6050,7 @@ impl LayoutEngine {
                     tab_policy: text_display_tab_policy(0.0, params),
                     base_face: tl_face,
                     symbol_values: status_line_symbol_values.clone(),
-                    text: DisplayTextFragment::tab_line(tab_text),
+                    text: WindowChromeDisplayText::new(tab_text, params.selected),
                 },
             );
         }
@@ -6103,7 +6103,7 @@ impl LayoutEngine {
                     tab_policy: text_display_tab_policy(0.0, params),
                     base_face: hl_face,
                     symbol_values: status_line_symbol_values.clone(),
-                    text: DisplayTextFragment::header_line(header_text, params.selected),
+                    text: WindowChromeDisplayText::new(header_text, params.selected),
                 },
             );
         }
@@ -6166,7 +6166,7 @@ impl LayoutEngine {
                     tab_policy: text_display_tab_policy(0.0, params),
                     base_face: ml_face,
                     symbol_values: status_line_symbol_values.clone(),
-                    text: DisplayTextFragment::mode_line(mode_text, params.selected),
+                    text: WindowChromeDisplayText::new(mode_text, params.selected),
                 },
             );
         }
@@ -6343,7 +6343,7 @@ impl LayoutEngine {
             tab_bar_ascent,
             frame_params.char_height,
             &tab_bar_face,
-            DisplayTextFragment::tab_bar(tab_bar.text),
+            tab_bar.text,
         ) else {
             return None;
         };
