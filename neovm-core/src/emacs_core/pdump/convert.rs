@@ -5992,7 +5992,7 @@ pub(crate) fn load_watcher_list(
     decoder: &mut LoadDecoder,
     dwl: &DumpVariableWatcherList,
 ) -> VariableWatcherList {
-    let watchers: HashMap<SymId, Vec<VariableWatcher>> = dwl
+    let watchers: FxHashMap<SymId, Vec<VariableWatcher>> = dwl
         .watchers
         .iter()
         .map(|(k, callbacks)| {

@@ -3,7 +3,7 @@
 //! Provides callbacks invoked when a watched variable changes
 //! (like Emacs `add-variable-watcher` / `remove-variable-watcher`).
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::intern::SymId;
 use super::symbol::Obarray;
@@ -24,13 +24,15 @@ pub struct VariableWatcher {
 /// Registry of variable watchers.
 pub struct VariableWatcherList {
     /// Map from resolved variable symbol → list of watcher callbacks.
-    watchers: HashMap<SymId, Vec<VariableWatcher>>,
+    /// FxHashMap (not the default SipHash): `has_watchers` is queried on every
+    /// variable set/bind/unbind, and SymId keys hash far cheaper under FxHash.
+    watchers: FxHashMap<SymId, Vec<VariableWatcher>>,
 }
 
 impl VariableWatcherList {
     pub fn new() -> Self {
         Self {
-            watchers: HashMap::new(),
+            watchers: FxHashMap::default(),
         }
     }
 
@@ -63,6 +65,14 @@ impl VariableWatcherList {
 
     /// Check if a variable has any watchers.
     pub fn has_watchers(&self, var_id: SymId) -> bool {
+        // Fast path: when nothing has called add-variable-watcher (the common
+        // case, especially during loading) the map is empty, so skip hashing the
+        // key entirely. `remove_watcher` deletes emptied entries, so an empty map
+        // genuinely means "no watchers anywhere". This runs on every variable
+        // write via run_variable_watchers_by_id_with_where.
+        if self.watchers.is_empty() {
+            return false;
+        }
         self.watchers
             .get(&var_id)
             .is_some_and(|list| !list.is_empty())
@@ -111,10 +121,10 @@ impl VariableWatcherList {
     }
 
     // pdump accessors
-    pub(crate) fn dump_watchers(&self) -> &HashMap<SymId, Vec<VariableWatcher>> {
+    pub(crate) fn dump_watchers(&self) -> &FxHashMap<SymId, Vec<VariableWatcher>> {
         &self.watchers
     }
-    pub(crate) fn from_dump(watchers: HashMap<SymId, Vec<VariableWatcher>>) -> Self {
+    pub(crate) fn from_dump(watchers: FxHashMap<SymId, Vec<VariableWatcher>>) -> Self {
         Self { watchers }
     }
 }
