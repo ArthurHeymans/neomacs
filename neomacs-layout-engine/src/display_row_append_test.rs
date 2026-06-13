@@ -181,12 +181,10 @@ fn test_append_frame(
     space_width: f32,
     tab_policy: DisplayTabPolicy,
 ) -> DisplayRowAppendFrame {
-    DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
+    test_append_frame_at(
+        0,
+        0.0,
+        0.0,
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 80.0,
@@ -202,6 +200,19 @@ fn test_append_frame(
         },
         tab_policy,
     )
+}
+
+fn test_append_frame_at(
+    row: usize,
+    y: f32,
+    glyph_y: f32,
+    area: DisplayRowAppendArea,
+    metrics: DisplayRowAppendMetrics,
+    tab_policy: DisplayTabPolicy,
+) -> DisplayRowAppendFrame {
+    let surface = DisplayRowAppendSurface::new(area, tab_policy);
+    let geometry = DisplayRowGeometryState::new(row, y, 0.0, metrics.height, metrics.ascent);
+    surface.frame_from_geometry_state(&geometry, glyph_y - y, metrics)
 }
 
 #[test]
@@ -423,27 +434,7 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let (progress, end) = append_synthetic_text_to_display_row(
         &mut builder,
         &mut output_emitter,
@@ -510,27 +501,7 @@ fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let (progress, end) = append_synthetic_text_to_display_row(
         &mut builder,
@@ -603,27 +574,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     builder.begin_row(0, GlyphRowRole::Text);
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
 
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let request = DisplayRowSourceAppendRequest::from_append_spec(
         frame.append_spec(
             DisplayRowPosition { x_px: 8.0, col: 1 },
@@ -796,13 +747,11 @@ fn display_row_append_surface_builds_positioned_specs() {
         tab_policy.clone(),
     );
 
+    let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
     let spec = surface
-        .frame(
-            DisplayRowAppendPlacement {
-                row: 3,
-                y: 20.0,
-                glyph_y: 22.0,
-            },
+        .frame_from_geometry_state(
+            &geometry,
+            2.0,
             DisplayRowAppendMetrics {
                 height: 16.0,
                 ascent: 11.0,
@@ -901,12 +850,10 @@ fn display_row_append_context_derives_layout_output_and_bounds() {
 #[test]
 fn display_row_append_frame_builds_positioned_context() {
     let tab_policy = DisplayTabPolicy::every(4);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 3,
-            y: 20.0,
-            glyph_y: 22.0,
-        },
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
         DisplayRowAppendArea {
             content_x: 8.0,
             width: 120.0,
@@ -936,12 +883,10 @@ fn display_row_append_frame_builds_positioned_context() {
 #[test]
 fn display_row_append_frame_builds_append_spec_directly() {
     let tab_policy = DisplayTabPolicy::every(4);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 3,
-            y: 20.0,
-            glyph_y: 22.0,
-        },
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
         DisplayRowAppendArea {
             content_x: 8.0,
             width: 120.0,
@@ -973,12 +918,10 @@ fn display_row_append_frame_builds_append_spec_directly() {
 #[test]
 fn display_row_source_append_request_uses_append_spec() {
     let tab_policy = DisplayTabPolicy::every(4);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 3,
-            y: 20.0,
-            glyph_y: 22.0,
-        },
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
         DisplayRowAppendArea {
             content_x: 8.0,
             width: 120.0,
@@ -1028,12 +971,10 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
         tab_policy.clone(),
     );
 
-    let frame = surface.frame(
-        DisplayRowAppendPlacement {
-            row: 3,
-            y: 20.0,
-            glyph_y: 22.0,
-        },
+    let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
+    let frame = surface.frame_from_geometry_state(
+        &geometry,
+        2.0,
         DisplayRowAppendMetrics {
             height: 16.0,
             ascent: 11.0,
@@ -1104,14 +1045,12 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
 }
 
 #[test]
-fn display_row_append_frame_from_parts_preserves_geometry_and_area() {
+fn display_row_append_frame_preserves_geometry_and_area() {
     let tab_policy = DisplayTabPolicy::every(4);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 3,
-            y: 20.0,
-            glyph_y: 22.0,
-        },
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
         DisplayRowAppendArea {
             content_x: 8.0,
             width: 120.0,
@@ -1410,27 +1349,7 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
             ]),
         }],
     );
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let end = append_lisp_string_to_text_row(
         &mut builder,
@@ -1497,27 +1416,7 @@ fn append_buffer_text_fragment_to_text_row_appends_source_char() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
     let (_progress, end) = append_resolved_buffer_text_fragment_to_text_row(
@@ -1590,27 +1489,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     builder.push_char_with_pixel_width('x', 7, 0, 8.0);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
 
@@ -1694,27 +1573,7 @@ fn append_resolved_buffer_text_fragment_to_text_row_uses_resolved_advance() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
     let (progress, end) = append_resolved_buffer_text_fragment_to_text_row(
@@ -1784,27 +1643,7 @@ fn append_buffer_text_fragment_to_text_row_composes_with_current_row_tail() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
     let (progress, end) = append_resolved_buffer_text_fragment_to_text_row(
@@ -1875,27 +1714,7 @@ fn append_buffer_text_item_fragment_to_text_row_and_emit_builds_control_char_ite
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
     let (_progress, end) = append_buffer_text_item_fragment_to_text_row_and_emit(
@@ -2095,27 +1914,7 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let end = append_lisp_string_to_text_row(
         &mut builder,
@@ -2181,27 +1980,7 @@ fn render_lisp_string_source_append_to_text_row_preserves_source_after_row_break
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let first = render_lisp_string_source_append_to_text_row_and_emit(
         &mut builder,
@@ -2315,17 +2094,15 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
                     Value::keyword("type"),
                     Value::symbol("png"),
                     Value::keyword("file"),
-                    Value::string("/tmp/append-lisp-string.png"),
+                    Value::string("./tmp/append-lisp-string.png"),
                 ]),
             ]),
         }],
     );
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 6.0,
-        },
+    let frame = test_append_frame_at(
+        0,
+        0.0,
+        6.0,
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 160.0,
@@ -2462,27 +2239,7 @@ fn append_display_replacement_string_fragment_to_text_row_walks_source_faces_and
         CharPos0::new(0),
         DisplayPropertySource::TextProperty,
     );
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
 
@@ -2550,27 +2307,7 @@ fn append_raw_display_replacement_item_to_text_row_and_emit_uses_face_fallback()
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::Inherit,
@@ -2640,27 +2377,7 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_stretch_output(
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
@@ -2731,27 +2448,7 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_source_mapped_t
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 16.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
         buf_id,
         CharPos0::new(0),
@@ -2820,12 +2517,10 @@ fn append_synthetic_text_to_display_row_uses_source_append_request() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 0.0,
-            glyph_y: 0.0,
-        },
+    let frame = test_append_frame_at(
+        0,
+        0.0,
+        0.0,
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 80.0,
@@ -2904,12 +2599,10 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replace
         true,
     );
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 4.0,
-            glyph_y: 6.0,
-        },
+    let frame = test_append_frame_at(
+        0,
+        4.0,
+        6.0,
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 160.0,
@@ -3032,12 +2725,10 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_image_replaceme
         true,
     );
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 4.0,
-            glyph_y: 6.0,
-        },
+    let frame = test_append_frame_at(
+        0,
+        4.0,
+        6.0,
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 160.0,
@@ -3160,12 +2851,10 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_video_replaceme
         true,
     );
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = DisplayRowAppendFrame::from_parts(
-        DisplayRowAppendPlacement {
-            row: 0,
-            y: 4.0,
-            glyph_y: 6.0,
-        },
+    let frame = test_append_frame_at(
+        0,
+        4.0,
+        6.0,
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 160.0,
