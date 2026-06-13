@@ -17,10 +17,10 @@ use super::engine::LayoutEngine;
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::RenderFaceRef;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceRequestPolicy, DisplayRowSourceState, FrameChromeKind,
+    DisplayRowBoundsPolicy, DisplayRowLispStringSourceSession,
+    DisplayRowLispStringSourceSessionRequest, DisplayRowOwner, DisplayRowRenderContext,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRequestPolicy, FrameChromeKind,
     MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, install_measured_frame_chrome_row,
     install_measured_window_display_row, install_rendered_display_row,
 };
@@ -28,7 +28,6 @@ pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
 use crate::display_row_builder::DisplayTabPolicy;
-use crate::display_source::LispStringSourceCursor;
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
@@ -386,12 +385,12 @@ impl LayoutEngine {
         } else {
             face_ids.allocate()
         };
-        let Some(mut source) =
-            LispStringSourceCursor::new(1, echo_message, RenderFaceRef::FaceId(base_face_id))
+        let session_request =
+            DisplayRowLispStringSourceSessionRequest::new(1, echo_message, base_face_id);
+        let Some(mut source_session) = DisplayRowLispStringSourceSession::new(session_request)
         else {
             return empty_minibuffer_echo_row(y, ascent, row_height);
         };
-        let mut source_state = DisplayRowSourceState::default();
         let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
@@ -409,14 +408,11 @@ impl LayoutEngine {
                 GlyphRowRole::Minibuffer,
             )
             .source_request_for_base_face_id(base_face_id, &base_face);
-            let Some(result) = renderer
-                .render_display_item_source_row_step_from_request_with_context(
-                    request,
-                    &mut source,
-                    &mut source_state,
-                    &mut render_context,
-                )
-            else {
+            let Some(result) = source_session.render_next_row_with_context(
+                &mut renderer,
+                request,
+                &mut render_context,
+            ) else {
                 break;
             };
             let stop = result.stop;

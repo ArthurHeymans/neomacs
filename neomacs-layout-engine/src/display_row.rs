@@ -1241,6 +1241,55 @@ pub(crate) struct DisplayRowRenderResult {
     pub(crate) stop: DisplayRowRenderStop,
 }
 
+pub(crate) struct DisplayRowLispStringSourceSessionRequest {
+    source_id: u64,
+    value: Value,
+    base_face_id: u32,
+}
+
+impl DisplayRowLispStringSourceSessionRequest {
+    pub(crate) fn new(source_id: u64, value: Value, base_face_id: u32) -> Self {
+        Self {
+            source_id,
+            value,
+            base_face_id,
+        }
+    }
+}
+
+pub(crate) struct DisplayRowLispStringSourceSession {
+    source: LispStringSourceCursor,
+    state: DisplayRowSourceState,
+}
+
+impl DisplayRowLispStringSourceSession {
+    pub(crate) fn new(request: DisplayRowLispStringSourceSessionRequest) -> Option<Self> {
+        let source = LispStringSourceCursor::new(
+            request.source_id,
+            request.value,
+            RenderFaceRef::FaceId(request.base_face_id),
+        )?;
+        Some(Self {
+            source,
+            state: DisplayRowSourceState::default(),
+        })
+    }
+
+    pub(crate) fn render_next_row_with_context(
+        &mut self,
+        renderer: &mut DisplayRowRenderer<'_>,
+        request: DisplayRowSourceRenderRequest<'_>,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<DisplayRowRenderResult> {
+        renderer.render_display_item_source_row_step_from_request_with_context(
+            request,
+            &mut self.source,
+            &mut self.state,
+            context,
+        )
+    }
+}
+
 pub(crate) struct DisplayRowRenderIntoRowResult {
     pub(crate) progress: DisplayRowOutputProgress,
     pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
