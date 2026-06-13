@@ -214,8 +214,7 @@ pub(crate) fn render_display_source_append_request_into_current_text_row_and_emi
     request: DisplayRowSourceAppendRequest<'_>,
     render_policy: &mut P,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let row_spec = request.display_row_spec();
-    let output = request.text_row_output();
+    let parts = request.into_render_parts();
     render_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -225,8 +224,8 @@ pub(crate) fn render_display_source_append_request_into_current_text_row_and_emi
         source_state,
         face_resolver,
         face_ids,
-        row_spec,
-        output,
+        parts.row_spec,
+        parts.output,
         render_policy,
     )
 }
@@ -288,6 +287,11 @@ pub(crate) struct DisplayRowSourceAppendRequest<'face> {
     base_face: &'face ResolvedFace,
 }
 
+pub(crate) struct DisplayRowSourceAppendRenderParts<'face> {
+    pub(crate) row_spec: DisplayRowSpec<'face>,
+    pub(crate) output: TextRowOutput,
+}
+
 impl<'face> DisplayRowSourceAppendRequest<'face> {
     pub(crate) fn for_frame(
         frame: DisplayRowAppendFrame,
@@ -314,13 +318,12 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         }
     }
 
-    pub(crate) fn display_row_spec(&self) -> DisplayRowSpec<'face> {
-        self.append_spec
-            .display_row_spec(self.base_face_id, self.base_face)
-    }
-
-    pub(crate) fn text_row_output(&self) -> TextRowOutput {
-        self.append_spec.text_row_output()
+    pub(crate) fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
+        let row_spec = self
+            .append_spec
+            .display_row_spec(self.base_face_id, self.base_face);
+        let output = self.append_spec.text_row_output();
+        DisplayRowSourceAppendRenderParts { row_spec, output }
     }
 }
 

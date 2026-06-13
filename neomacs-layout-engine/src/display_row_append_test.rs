@@ -812,14 +812,15 @@ fn display_row_source_append_request_uses_append_spec() {
 
     let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, 42, base_face);
 
-    let row_spec = request.display_row_spec();
+    let parts = request.into_render_parts();
+    let row_spec = parts.row_spec;
     assert_eq!(
         row_spec.render_bounds.start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
     assert_eq!(row_spec.render_bounds.max_x_px, 148.0);
     assert_eq!(row_spec.geometry.height, 16.0);
-    assert_eq!(request.text_row_output().height, 14.0);
+    assert_eq!(parts.output.height, 14.0);
 }
 
 #[test]
