@@ -1391,7 +1391,7 @@ pub(crate) fn builtin_logcount(args: Vec<Value>) -> EvalResult {
 
 /// Retrieve the effective UID via `id -u`, falling back to 1000.
 fn get_uid() -> i64 {
-    std::process::Command::new("id")
+    crate::emacs_core::callproc::new_child_command("id")
         .arg("-u")
         .output()
         .ok()
@@ -1402,7 +1402,7 @@ fn get_uid() -> i64 {
 
 /// Retrieve the effective GID via `id -g`, falling back to 1000.
 fn get_gid() -> i64 {
-    std::process::Command::new("id")
+    crate::emacs_core::callproc::new_child_command("id")
         .arg("-g")
         .output()
         .ok()

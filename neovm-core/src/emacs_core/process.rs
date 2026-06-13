@@ -1660,7 +1660,7 @@ impl ProcessManager {
             .map(lisp_string_to_os_string)
             .collect::<Vec<OsString>>();
 
-        let mut cmd = Command::new(&argv_os[0]);
+        let mut cmd = crate::emacs_core::callproc::new_child_command(&argv_os[0]);
         cmd.args(&argv_os[1..]);
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
@@ -9032,7 +9032,7 @@ pub(crate) fn builtin_shell_command_to_string(args: Vec<Value>) -> EvalResult {
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
 
-    let output = Command::new(&shell)
+    let output = crate::emacs_core::callproc::new_child_command(&shell)
         .arg("-c")
         .arg(&command)
         .output()

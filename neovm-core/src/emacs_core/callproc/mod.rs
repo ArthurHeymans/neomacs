@@ -16,6 +16,50 @@ use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferManager, EmacsByteRange};
 use crate::heap_types::LispString;
 
+/// Build a child `Command` already isolated into its own OS process group.
+///
+/// Every subprocess neomacs launches MUST go through this (instead of bare
+/// `Command::new`) so that a child's job-control signals can never suspend or
+/// kill the editor. This mirrors GNU Emacs's `child_setup` (callproc.c), which
+/// does `setpgid (0, 0)` in every child: an interactive shell (e.g. via
+/// `shell-command-switch "-ic"` → `bash -i`) grabs the controlling terminal and
+/// emits SIGTSTP/SIGTTOU; without isolation that stop hits neomacs's whole
+/// process group and freezes the editor (issue #132).
+///
+/// Cross-platform: Unix puts the child in a fresh process group pre-exec;
+/// Windows gives it its own process group (`CREATE_NEW_PROCESS_GROUP`); other
+/// targets fall back to a plain command.
+pub(crate) fn new_child_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    let mut command = Command::new(program);
+    isolate_child_command(&mut command);
+    command
+}
+
+/// Apply the platform's "own process group" isolation to an already-built
+/// command. Split out so callers that need portable_pty (which already
+/// `setsid`s the child) or a pre-configured command can opt in explicitly.
+pub(crate) fn isolate_child_command(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // setpgid(0, 0) in the child before exec: its SIGTSTP/SIGTTOU stay in
+        // its own group and cannot stop neomacs.
+        command.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NEW_PROCESS_GROUP: the child does not receive console
+        // Ctrl-C/Ctrl-Break aimed at neomacs.
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = command;
+    }
+}
+
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         return Err(signal(
@@ -501,7 +545,7 @@ fn run_process_command_in_state(
         .collect::<Vec<OsString>>();
 
     if destination_spec.no_wait {
-        let mut command = Command::new(&program_os);
+        let mut command = new_child_command(&program_os);
         command.args(&cmd_args_os).stdout(Stdio::null());
         configure_subprocess_current_dir(eval, &mut command);
         configure_call_process_stdin(&mut command, infile.as_ref())?;
@@ -535,7 +579,7 @@ fn run_process_command_in_state(
         return Ok(Value::NIL);
     }
 
-    let mut command = Command::new(&program_os);
+    let mut command = new_child_command(&program_os);
     command
         .args(&cmd_args_os)
         .stdout(Stdio::piped())
@@ -560,7 +604,7 @@ fn run_process_capture_output(
     program: &LispString,
     cmd_args: &[LispString],
 ) -> Result<(i32, Vec<u8>), Flow> {
-    let mut command = Command::new(resolve_call_process_program(eval, program)?);
+    let mut command = new_child_command(resolve_call_process_program(eval, program)?);
     command
         .args(cmd_args.iter().map(lisp_string_to_os_string))
         .stdin(Stdio::null())
@@ -749,7 +793,7 @@ fn builtin_call_process_region_impl(
     };
 
     if destination_spec.no_wait {
-        let mut command = Command::new(&program_os);
+        let mut command = new_child_command(&program_os);
         if let Some(dir) = &subprocess_dir {
             command.current_dir(dir);
         }
@@ -792,7 +836,7 @@ fn builtin_call_process_region_impl(
         return Ok(Value::NIL);
     }
 
-    let mut command = Command::new(&program_os);
+    let mut command = new_child_command(&program_os);
     if let Some(dir) = &subprocess_dir {
         command.current_dir(dir);
     }
@@ -954,3 +998,39 @@ fn parse_output_lines(stdout: &[u8]) -> Value {
 #[cfg(test)]
 #[path = "callproc_raw_bytes_test.rs"]
 mod raw_bytes_tests;
+
+#[cfg(all(test, unix))]
+mod child_isolation_tests {
+    use super::new_child_command;
+    use std::process::Stdio;
+
+    /// Regression test for issue #132: every spawned child must live in its own
+    /// process group, so a child's job-control signals (SIGTSTP/SIGTTOU from an
+    /// interactive `bash -i`) cannot reach — and suspend — the editor.
+    #[test]
+    fn child_runs_in_its_own_process_group() {
+        let parent_pgid = unsafe { libc::getpgrp() };
+        let mut child = new_child_command("sh")
+            .arg("-c")
+            .arg("sleep 1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn child");
+        let pid = child.id() as libc::pid_t;
+        // Read the child's process group while it is still alive.
+        let child_pgid = unsafe { libc::getpgid(pid) };
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(child_pgid > 0, "getpgid failed for live child");
+        assert_ne!(
+            child_pgid, parent_pgid,
+            "child shares the editor's process group; its SIGTSTP/SIGTTOU could suspend neomacs (#132)"
+        );
+        assert_eq!(
+            child_pgid, pid,
+            "isolated child should lead its own process group (setpgid(0,0))"
+        );
+    }
+}

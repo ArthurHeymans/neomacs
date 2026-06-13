@@ -2332,6 +2332,12 @@ pub fn run(mode: RuntimeMode) {
     // the default 8 MB stack.
     increase_stack_limit();
 
+    // Make the editor immune to a child process suspending it via job control
+    // (issue #132): children are spawned in their own process group
+    // (callproc::new_child_command), and we ignore SIGTTOU so terminal output
+    // from a momentarily-backgrounded neomacs never stops the whole editor.
+    install_job_control_signal_hygiene();
+
     // Handle --help / --version with no logging side effects (so e.g.
     // `NEOMACS_LOG_TO_FILE=1 neomacs --help` does not create a stray
     // neomacs-{pid}.log file).
@@ -3446,6 +3452,28 @@ fn increase_stack_limit() {
 
 #[cfg(not(unix))]
 fn increase_stack_limit() {}
+
+/// Job-control signal hygiene so a child process can never suspend the editor
+/// (issue #132). Mirrors GNU Emacs, which is never stopped by SIGTTOU.
+///
+/// Children are spawned in their own process group (callproc::new_child_command
+/// → setpgid), so a child's SIGTSTP stays in its own group. The remaining
+/// vector is SIGTTOU: when an interactive subprocess (`bash -i`) grabs the
+/// controlling terminal's foreground process group, neomacs's own terminal
+/// output (redisplay) from a momentarily-backgrounded state would raise SIGTTOU
+/// and stop the whole process. Ignoring SIGTTOU makes those writes succeed
+/// instead — exactly how a terminal editor must behave. SIGTSTP is left intact
+/// so deliberate `C-z` suspension still works.
+#[cfg(unix)]
+fn install_job_control_signal_hygiene() {
+    // SIG_IGN is idempotent and process-global; safe to set once at startup.
+    unsafe {
+        libc::signal(libc::SIGTTOU, libc::SIG_IGN);
+    }
+}
+
+#[cfg(not(unix))]
+fn install_job_control_signal_hygiene() {}
 
 #[cfg(test)]
 #[path = "main_test.rs"]

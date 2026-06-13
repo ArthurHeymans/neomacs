@@ -587,7 +587,7 @@ fn login_name_from_env() -> Option<String> {
 }
 
 fn current_uid() -> i64 {
-    std::process::Command::new("id")
+    crate::emacs_core::callproc::new_child_command("id")
         .arg("-u")
         .output()
         .ok()
@@ -597,7 +597,7 @@ fn current_uid() -> i64 {
 }
 
 fn real_uid() -> i64 {
-    std::process::Command::new("id")
+    crate::emacs_core::callproc::new_child_command("id")
         .args(["-ru"])
         .output()
         .ok()
