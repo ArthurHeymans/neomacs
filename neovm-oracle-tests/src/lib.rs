@@ -1906,6 +1906,7 @@ mod divergence_utf8_digest_print;
 mod divergence_utf8_more_codings;
 mod divergence_utf8_string_compare_format;
 mod divergence_utf8_string_primitives;
+mod divergence_utf8_syntax_display;
 mod divergence_weak_hash_lifecycle;
 mod divergence_whitespace_display_modes;
 mod divergence_window_config_deep;
