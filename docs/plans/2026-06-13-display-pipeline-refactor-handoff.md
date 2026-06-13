@@ -54,6 +54,7 @@ Continuation work after this handoff:
 - Overlay string rendering now consumes the shared `DisplayRowAppendSurface` from the main text row instead of rebuilding append bounds from raw right-limit/content-x values at every overlay call site.
 - Overlay string rendering now receives a typed `OverlayStringRenderRowContext`, and display-property replacement strings derive their full text-width append surface from the shared text-row append surface instead of rebuilding raw width geometry in `engine.rs`.
 - Main buffer synthetic text, display replacements, glyphless/control items, replacement strings, and ordinary text append frame creation now go through `MainTextRowAppendContext`; text-row right edges and full text-width limits are exposed by `DisplayRowAppendSurface` instead of repeated raw `content_x + width` calculations in `engine.rs`.
+- Main-buffer and overlay row frame creation now use shared `DisplayRowTextAppendContext` / `DisplayRowActiveFaceAppendContext` types from `display_row_append.rs`; `engine.rs` no longer calls the raw append-surface frame constructors directly.
 - Latest local verification:
 
   ```bash
@@ -66,7 +67,7 @@ Continuation work after this handoff:
   cargo check
   ```
 
-  Full layout-engine nextest passed with 1059 tests after routing the main-buffer append frame and edge decisions through typed row append context.
+  Full layout-engine nextest passed with 1059 tests after moving main-buffer and overlay append frame construction behind shared display-row append context types.
 
 ## Why This Refactor Exists
 

@@ -1464,6 +1464,117 @@ impl DisplayRowAppendSurface {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct DisplayRowTextAppendContext<'a> {
+    append_surface: &'a DisplayRowAppendSurface,
+    geometry: &'a DisplayRowGeometryState,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+}
+
+impl<'a> DisplayRowTextAppendContext<'a> {
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &'a DisplayRowGeometryState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            append_surface,
+            geometry,
+            glyph_y_offset,
+            default_row_height,
+        }
+    }
+
+    pub(crate) fn text_row_frame(
+        self,
+        height: f32,
+        ascent: f32,
+        char_width: f32,
+    ) -> DisplayRowAppendFrame {
+        self.append_surface.text_row_frame_from_geometry_state(
+            self.geometry,
+            self.glyph_y_offset,
+            height,
+            ascent,
+            char_width,
+            self.default_row_height,
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct DisplayRowActiveFaceAppendContext<'a> {
+    text_context: DisplayRowTextAppendContext<'a>,
+    active_face: &'a DisplayRowActiveFaceState,
+}
+
+impl<'a> DisplayRowActiveFaceAppendContext<'a> {
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &'a DisplayRowGeometryState,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            text_context: DisplayRowTextAppendContext::new(
+                append_surface,
+                geometry,
+                glyph_y_offset,
+                default_row_height,
+            ),
+            active_face,
+        }
+    }
+
+    pub(crate) fn active_face_frame(self) -> DisplayRowAppendFrame {
+        self.text_context
+            .append_surface
+            .frame_for_active_face_from_geometry_state(
+                self.text_context.geometry,
+                self.text_context.glyph_y_offset,
+                self.active_face,
+                self.text_context.default_row_height,
+            )
+    }
+
+    pub(crate) fn full_text_width_active_face_frame(self) -> DisplayRowAppendFrame {
+        self.text_context
+            .append_surface
+            .full_text_width_surface()
+            .frame_for_active_face_from_geometry_state(
+                self.text_context.geometry,
+                self.text_context.glyph_y_offset,
+                self.active_face,
+                self.text_context.default_row_height,
+            )
+    }
+
+    pub(crate) fn display_box_frame(self, height: f32, ascent: f32) -> DisplayRowAppendFrame {
+        self.text_context
+            .append_surface
+            .display_box_frame_for_active_face_from_geometry_state(
+                self.text_context.geometry,
+                self.text_context.glyph_y_offset,
+                self.active_face,
+                height,
+                ascent,
+                self.text_context.default_row_height,
+            )
+    }
+
+    pub(crate) fn text_row_frame(
+        self,
+        height: f32,
+        ascent: f32,
+        char_width: f32,
+    ) -> DisplayRowAppendFrame {
+        self.text_context.text_row_frame(height, ascent, char_width)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendMetrics {
     height: f32,

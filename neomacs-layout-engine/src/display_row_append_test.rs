@@ -1055,6 +1055,34 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
 }
 
 #[test]
+fn display_row_text_append_context_builds_text_frame_from_shared_surface() {
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        DisplayTabPolicy::every(4),
+    );
+    let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
+
+    let frame = DisplayRowTextAppendContext::new(&surface, &geometry, 2.0, 14.0)
+        .text_row_frame(16.0, 11.0, 9.0);
+
+    assert_eq!(frame.row, 3);
+    assert_eq!(frame.glyph_y, 22.0);
+    assert_eq!(frame.geometry.height, 16.0);
+    assert_eq!(frame.geometry.ascent, 11.0);
+    assert_eq!(frame.geometry.char_width, 9.0);
+    assert_eq!(frame.face_space_width, 9.0);
+    assert_eq!(frame.default_row_height, 14.0);
+    assert_eq!(frame.content_x, 8.0);
+    assert_eq!(frame.text_width, 150.0);
+    assert_eq!(frame.line_number_width, 10.0);
+}
+
+#[test]
 fn display_row_append_surface_builds_frame_from_active_face_state() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
@@ -1085,7 +1113,8 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
 
     let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 12.0);
     let frame =
-        surface.frame_for_active_face_from_geometry_state(&geometry, 2.0, &active_face, 16.0);
+        DisplayRowActiveFaceAppendContext::new(&surface, &geometry, &active_face, 2.0, 16.0)
+            .active_face_frame();
 
     assert_eq!(frame.row, 3);
     assert_eq!(frame.glyph_y, 22.0);
@@ -1094,6 +1123,11 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
     assert_eq!(frame.geometry.char_width, 7.5);
     assert_eq!(frame.face_space_width, 8.0);
     assert_eq!(frame.default_row_height, 16.0);
+
+    let full_text_frame =
+        DisplayRowActiveFaceAppendContext::new(&surface, &geometry, &active_face, 2.0, 16.0)
+            .full_text_width_active_face_frame();
+    assert_eq!(full_text_frame.geometry.width, 140.0);
 }
 
 #[test]
