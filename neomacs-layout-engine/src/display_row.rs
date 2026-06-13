@@ -1225,6 +1225,45 @@ pub(crate) struct DisplayRowSpec<'a> {
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
 }
 
+pub(crate) struct DisplayRowSourceRenderRequest<'a> {
+    geometry: DisplayRowGeometry,
+    render_bounds: DisplayRowRenderBounds,
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+    role: GlyphRowRole,
+    symbol_values: std::collections::HashMap<String, Value>,
+}
+
+impl<'a> DisplayRowSourceRenderRequest<'a> {
+    pub(crate) fn whole_row(
+        geometry: DisplayRowGeometry,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        role: GlyphRowRole,
+    ) -> Self {
+        let render_bounds = DisplayRowRenderBounds::whole_row(geometry.width);
+        Self {
+            geometry,
+            render_bounds,
+            base_face_id,
+            base_face,
+            role,
+            symbol_values: std::collections::HashMap::new(),
+        }
+    }
+
+    pub(crate) fn display_row_spec(self) -> DisplayRowSpec<'a> {
+        DisplayRowSpec {
+            geometry: self.geometry,
+            render_bounds: self.render_bounds,
+            base_face_id: self.base_face_id,
+            base_face: self.base_face,
+            role: self.role,
+            symbol_values: self.symbol_values,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowRenderBounds {
     pub(crate) start: DisplayRowPosition,

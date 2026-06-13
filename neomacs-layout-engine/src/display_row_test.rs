@@ -142,6 +142,34 @@ fn display_row_spec_allocates_dynamic_base_face_id_through_allocator() {
 }
 
 #[test]
+fn display_row_source_render_request_builds_whole_row_spec() {
+    let face = base_face();
+    let geometry = DisplayRowGeometry {
+        y: 4.0,
+        width: 96.0,
+        height: 18.0,
+        char_width: 9.0,
+        ascent: 13.0,
+        tab_policy: DisplayTabPolicy::every(4),
+    };
+
+    let request = DisplayRowSourceRenderRequest::whole_row(
+        geometry.clone(),
+        17,
+        &face,
+        GlyphRowRole::Minibuffer,
+    );
+    let spec = request.display_row_spec();
+
+    assert_eq!(spec.geometry, geometry);
+    assert_eq!(spec.render_bounds, DisplayRowRenderBounds::whole_row(96.0));
+    assert_eq!(spec.base_face_id, 17);
+    assert!(std::ptr::eq(spec.base_face, &face));
+    assert_eq!(spec.role, GlyphRowRole::Minibuffer);
+    assert!(spec.symbol_values.is_empty());
+}
+
+#[test]
 fn display_row_render_context_builds_source_resolve_params() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);

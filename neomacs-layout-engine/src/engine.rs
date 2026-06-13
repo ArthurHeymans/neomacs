@@ -22,10 +22,10 @@ use crate::display_property::{DisplayReplacementProperty, classify_display_prope
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner,
-    DisplayRowRenderBounds, DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind, insert_resolved_display_row_face, install_measured_frame_chrome_row,
-    install_rendered_display_row,
+    DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
+    DisplayRowSourceRenderRequest, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind,
+    MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
+    install_measured_frame_chrome_row, install_rendered_display_row,
 };
 use crate::display_row_append::{
     DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
@@ -6801,8 +6801,8 @@ impl LayoutEngine {
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
         while rows.len() < max_rows {
-            let row_spec = DisplayRowSpec {
-                geometry: DisplayRowGeometry {
+            let request = DisplayRowSourceRenderRequest::whole_row(
+                DisplayRowGeometry {
                     y: y + rows.len() as f32 * row_height,
                     width: wrap_width,
                     height: row_height,
@@ -6810,14 +6810,12 @@ impl LayoutEngine {
                     ascent,
                     tab_policy: DisplayTabPolicy::every(8),
                 },
-                render_bounds: DisplayRowRenderBounds::whole_row(wrap_width),
                 base_face_id,
-                base_face: &base_face,
-                role: GlyphRowRole::Minibuffer,
-                symbol_values: std::collections::HashMap::new(),
-            };
+                &base_face,
+                GlyphRowRole::Minibuffer,
+            );
             let Some(result) = renderer.render_display_item_source_row_step_with_context(
-                row_spec,
+                request.display_row_spec(),
                 &mut source,
                 &mut source_state,
                 &mut render_context,
