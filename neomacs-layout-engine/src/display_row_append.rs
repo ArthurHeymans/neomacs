@@ -1312,15 +1312,54 @@ impl DisplayRowAppendSurface {
         self.frame(geometry.append_placement(glyph_y_offset), metrics)
     }
 
-    pub(crate) fn frame_for_active_face(
+    pub(crate) fn text_row_frame_from_geometry_state(
         &self,
-        placement: DisplayRowAppendPlacement,
+        geometry: &DisplayRowGeometryState,
+        glyph_y_offset: f32,
+        height: f32,
+        ascent: f32,
+        char_width: f32,
+        default_row_height: f32,
+    ) -> DisplayRowAppendFrame {
+        self.frame_from_geometry_state(
+            geometry,
+            glyph_y_offset,
+            DisplayRowAppendMetrics::text_row(height, ascent, char_width, default_row_height),
+        )
+    }
+
+    pub(crate) fn frame_for_active_face_from_geometry_state(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        glyph_y_offset: f32,
         active_face: &DisplayRowActiveFaceState,
         default_row_height: f32,
     ) -> DisplayRowAppendFrame {
-        self.frame(
-            placement,
+        self.frame_from_geometry_state(
+            geometry,
+            glyph_y_offset,
             DisplayRowAppendMetrics::from_active_face_state(active_face, default_row_height),
+        )
+    }
+
+    pub(crate) fn display_box_frame_for_active_face_from_geometry_state(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        glyph_y_offset: f32,
+        active_face: &DisplayRowActiveFaceState,
+        height: f32,
+        ascent: f32,
+        default_row_height: f32,
+    ) -> DisplayRowAppendFrame {
+        self.frame_from_geometry_state(
+            geometry,
+            glyph_y_offset,
+            DisplayRowAppendMetrics::display_box_from_active_face_state(
+                active_face,
+                height,
+                ascent,
+                default_row_height,
+            ),
         )
     }
 }

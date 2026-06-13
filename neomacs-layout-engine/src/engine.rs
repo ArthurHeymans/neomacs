@@ -40,8 +40,8 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem, DisplayReplacementAppendItem,
-    DisplayReplacementStringItemMeasurer, DisplayRowAppendArea, DisplayRowAppendMetrics,
-    DisplayRowAppendSurface, append_buffer_text_item_fragment_to_text_row_and_emit,
+    DisplayReplacementStringItemMeasurer, DisplayRowAppendArea, DisplayRowAppendSurface,
+    append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
@@ -2073,10 +2073,13 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             DisplayRowAppendArea::new(content_x, max_x - content_x, max_x - content_x, 0.0),
             text_display_tab_policy(content_x, params),
         );
-        let frame = overlay_append_surface.frame_from_geometry_state(
+        let frame = overlay_append_surface.text_row_frame_from_geometry_state(
             geometry,
             0.0,
-            DisplayRowAppendMetrics::text_row(char_h, default_row_ascent, face_char_w, char_h),
+            char_h,
+            default_row_ascent,
+            face_char_w,
+            char_h,
         );
         let Some(outcome) = render_lisp_string_source_append_to_text_row_and_emit(
             builder,
@@ -4205,11 +4208,13 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                     );
 
-                    let append_frame = text_append_surface.frame_for_active_face(
-                        row_geometry.append_placement(raise_span.value_or(0.0)),
-                        &active_face_state,
-                        char_h,
-                    );
+                    let append_frame = text_append_surface
+                        .frame_for_active_face_from_geometry_state(
+                            &row_geometry,
+                            raise_span.value_or(0.0),
+                            &active_face_state,
+                            char_h,
+                        );
                     let position = append_lisp_string_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -4263,11 +4268,13 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let ellipsis_frame = text_append_surface.frame_for_active_face(
-                            row_geometry.append_placement(raise_span.value_or(0.0)),
-                            &active_face_state,
-                            char_h,
-                        );
+                        let ellipsis_frame = text_append_surface
+                            .frame_for_active_face_from_geometry_state(
+                                &row_geometry,
+                                raise_span.value_or(0.0),
+                                &active_face_state,
+                                char_h,
+                            );
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4420,14 +4427,13 @@ impl LayoutEngine {
                     // When hscroll is exhausted, show $ indicator at left edge
                     if !hscroll_skip.should_skip() && hscroll_skip.should_show_left_truncation() {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
-                        let trunc_frame = text_append_surface.frame(
-                            row_geometry.append_placement(0.0),
-                            DisplayRowAppendMetrics::text_row(
-                                char_h,
-                                default_face_ascent,
-                                char_w,
-                                char_h,
-                            ),
+                        let trunc_frame = text_append_surface.text_row_frame_from_geometry_state(
+                            &row_geometry,
+                            0.0,
+                            char_h,
+                            default_face_ascent,
+                            char_w,
+                            char_h,
                         );
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
@@ -4551,11 +4557,13 @@ impl LayoutEngine {
                                 &mut face_ids,
                                 &mut self.matrix_builder,
                             );
-                            let append_frame = replacement_string_surface.frame_for_active_face(
-                                row_geometry.append_placement(raise_span.value_or(0.0)),
-                                &active_face_state,
-                                char_h,
-                            );
+                            let append_frame = replacement_string_surface
+                                .frame_for_active_face_from_geometry_state(
+                                    &row_geometry,
+                                    raise_span.value_or(0.0),
+                                    &active_face_state,
+                                    char_h,
+                                );
                             let mut item_policy =
                                 DisplayReplacementStringItemMeasurer::from_active_face_state(
                                     &active_face_state,
@@ -4628,11 +4636,13 @@ impl LayoutEngine {
                                 space_geometry.height,
                                 space_geometry.ascent,
                             );
-                            let replacement_frame = text_append_surface.frame_for_active_face(
-                                row_geometry.append_placement(raise_span.value_or(0.0)),
-                                &active_face_state,
-                                char_h,
-                            );
+                            let replacement_frame = text_append_surface
+                                .frame_for_active_face_from_geometry_state(
+                                    &row_geometry,
+                                    raise_span.value_or(0.0),
+                                    &active_face_state,
+                                    char_h,
+                                );
                             if let Some((_progress, position)) =
                                 append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
@@ -4711,15 +4721,15 @@ impl LayoutEngine {
                                     );
                                 }
 
-                                let replacement_frame = text_append_surface.frame(
-                                    row_geometry.append_placement(raise_span.value_or(0.0)),
-                                    DisplayRowAppendMetrics::display_box_from_active_face_state(
+                                let replacement_frame = text_append_surface
+                                    .display_box_frame_for_active_face_from_geometry_state(
+                                        &row_geometry,
+                                        raise_span.value_or(0.0),
                                         &active_face_state,
                                         display_height,
                                         display_height,
                                         char_h,
-                                    ),
-                                );
+                                    );
                                 if let Some((progress, position)) =
                                     append_display_replacement_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
@@ -4758,11 +4768,13 @@ impl LayoutEngine {
                                         ),
                                     );
                                 }
-                                let replacement_frame = text_append_surface.frame_for_active_face(
-                                    row_geometry.append_placement(raise_span.value_or(0.0)),
-                                    &active_face_state,
-                                    char_h,
-                                );
+                                let replacement_frame = text_append_surface
+                                    .frame_for_active_face_from_geometry_state(
+                                        &row_geometry,
+                                        raise_span.value_or(0.0),
+                                        &active_face_state,
+                                        char_h,
+                                    );
                                 if let Some((_progress, position)) =
                                     append_display_replacement_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
@@ -4845,8 +4857,9 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let ellipsis_frame = text_append_surface.frame_for_active_face(
-                    row_geometry.append_placement(raise_span.value_or(0.0)),
+                let ellipsis_frame = text_append_surface.frame_for_active_face_from_geometry_state(
+                    &row_geometry,
+                    raise_span.value_or(0.0),
                     &active_face_state,
                     char_h,
                 );
@@ -5179,11 +5192,13 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = text_append_surface.frame_for_active_face(
-                    row_geometry.append_placement(raise_span.value_or(0.0)),
-                    &active_face_state,
-                    char_h,
-                );
+                let text_item_frame = text_append_surface
+                    .frame_for_active_face_from_geometry_state(
+                        &row_geometry,
+                        raise_span.value_or(0.0),
+                        &active_face_state,
+                        char_h,
+                    );
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -5228,11 +5243,13 @@ impl LayoutEngine {
                         CharPos0::new(charpos as usize),
                         CharPos0::new((charpos + 1) as usize),
                     );
-                    let text_item_frame = text_append_surface.frame_for_active_face(
-                        row_geometry.append_placement(raise_span.value_or(0.0)),
-                        &active_face_state,
-                        char_h,
-                    );
+                    let text_item_frame = text_append_surface
+                        .frame_for_active_face_from_geometry_state(
+                            &row_geometry,
+                            raise_span.value_or(0.0),
+                            &active_face_state,
+                            char_h,
+                        );
                     if let Some((_progress, position)) =
                         append_buffer_text_item_fragment_to_text_row_and_emit(
                             &mut self.matrix_builder,
@@ -5292,11 +5309,13 @@ impl LayoutEngine {
                     CharPos0::new(charpos as usize),
                     CharPos0::new((charpos + 1) as usize),
                 );
-                let text_item_frame = text_append_surface.frame_for_active_face(
-                    row_geometry.append_placement(raise_span.value_or(0.0)),
-                    &active_face_state,
-                    char_h,
-                );
+                let text_item_frame = text_append_surface
+                    .frame_for_active_face_from_geometry_state(
+                        &row_geometry,
+                        raise_span.value_or(0.0),
+                        &active_face_state,
+                        char_h,
+                    );
                 if let Some((_progress, position)) =
                     append_buffer_text_item_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -5323,8 +5342,9 @@ impl LayoutEngine {
             }
 
             let append_position = DisplayRowPosition { x_px: x, col };
-            let frame = text_append_surface.frame_for_active_face(
-                row_geometry.append_placement(raise_span.value_or(0.0)),
+            let frame = text_append_surface.frame_for_active_face_from_geometry_state(
+                &row_geometry,
+                raise_span.value_or(0.0),
                 &active_face_state,
                 char_h,
             );

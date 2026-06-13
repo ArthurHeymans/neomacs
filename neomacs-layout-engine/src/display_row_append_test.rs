@@ -1090,17 +1090,12 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
         DisplayTabPolicy::every(4),
     );
 
-    let frame = surface.frame_for_active_face(
-        DisplayRowAppendPlacement {
-            row: 3,
-            y: 20.0,
-            glyph_y: 22.0,
-        },
-        &active_face,
-        16.0,
-    );
+    let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 12.0);
+    let frame =
+        surface.frame_for_active_face_from_geometry_state(&geometry, 2.0, &active_face, 16.0);
 
     assert_eq!(frame.row, 3);
+    assert_eq!(frame.glyph_y, 22.0);
     assert_eq!(frame.geometry.height, 18.0);
     assert_eq!(frame.geometry.ascent, 13.0);
     assert_eq!(frame.geometry.char_width, 7.5);
