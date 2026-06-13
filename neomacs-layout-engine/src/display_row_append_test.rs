@@ -2289,7 +2289,7 @@ fn append_display_replacement_item_to_text_row_and_emit_uses_face_fallback() {
 }
 
 #[test]
-fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
+fn append_display_replacement_stretch_to_text_row_and_emit_advances_output() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2338,25 +2338,19 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
         },
         DisplayTabPolicy::every(8),
     );
-    let item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(9, 0, 1),
-        RenderFaceRef::FaceId(3),
-        DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
-            height: Some(DisplayLength::Pixels(16.0)),
-            ascent: Some(DisplayLength::Pixels(12.0)),
-        }),
-    );
+    let replacement_source =
+        crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
 
-    let (_progress, end) = append_display_replacement_item_to_text_row_and_emit(
+    let (_progress, end) = append_display_replacement_stretch_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        item,
+        replacement_source,
+        3,
+        crate::display_source::DisplayReplacementBox::new(13.0, 16.0, 12.0),
         &face_resolver,
         base_face,
-        7,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     )
@@ -2378,6 +2372,92 @@ fn append_display_replacement_item_to_text_row_and_emit_advances_output() {
             col: 2,
         })
     );
+}
+
+#[test]
+fn append_display_replacement_source_mapped_text_to_text_row_and_emit_advances_output() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-replacement-mapped-text", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut font_metrics = None;
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let replacement_source =
+        crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
+
+    let (_progress, end) = append_display_replacement_source_mapped_text_to_text_row_and_emit(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        replacement_source,
+        3,
+        "??",
+        &face_resolver,
+        base_face,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    )
+    .expect("append progress");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[1];
+            assert_eq!(text.len(), 2);
+            assert_eq!(text[0].face_id, 3);
+            assert!(matches!(
+                text[0].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: '?' }
+            ));
+            assert!(matches!(
+                text[1].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: '?' }
+            ));
+        })
+        .expect("current row");
 }
 
 #[test]
