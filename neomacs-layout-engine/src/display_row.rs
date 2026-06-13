@@ -1287,7 +1287,7 @@ impl DisplayRowSourceGeometry {
         )
     }
 
-    pub(crate) fn into_geometry(self) -> DisplayRowGeometry {
+    fn into_geometry(self) -> DisplayRowGeometry {
         DisplayRowGeometry {
             y: self.y,
             width: self.width,
@@ -1348,7 +1348,7 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
 }
 
 impl<'a> DisplayRowSourceRenderRequest<'a> {
-    pub(crate) fn whole_row(
+    fn whole_row(
         geometry: DisplayRowGeometry,
         base_face_id: u32,
         base_face: &'a ResolvedFace,
@@ -1365,7 +1365,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn from_base_face(
+    fn from_base_face(
         geometry: DisplayRowGeometry,
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &'a ResolvedFace,

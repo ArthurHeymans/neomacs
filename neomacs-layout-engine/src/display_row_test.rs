@@ -145,7 +145,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
 }
 
 #[test]
-fn display_row_source_render_request_allocates_dynamic_base_face_id_through_allocator() {
+fn display_row_source_geometry_allocates_dynamic_base_face_id_through_allocator() {
     let mut face = base_face();
     face.face_id = 0;
     let mut face_ids = FrameFaceIdAllocator::new(42);
@@ -170,7 +170,7 @@ fn display_row_source_render_request_allocates_dynamic_base_face_id_through_allo
 }
 
 #[test]
-fn display_row_source_render_request_builds_whole_row() {
+fn display_row_source_geometry_builds_whole_row_request() {
     let face = base_face();
     let geometry = DisplayRowGeometry {
         y: 4.0,
@@ -196,7 +196,7 @@ fn display_row_source_render_request_builds_whole_row() {
 }
 
 #[test]
-fn display_row_source_render_request_allocates_base_face_id() {
+fn display_row_source_geometry_allocates_base_face_id() {
     let mut face = base_face();
     face.face_id = 0;
     let mut face_ids = FrameFaceIdAllocator::new(24);
@@ -231,7 +231,7 @@ fn display_row_source_render_request_allocates_base_face_id() {
 }
 
 #[test]
-fn display_row_source_render_request_overrides_render_bounds() {
+fn display_row_source_geometry_request_overrides_render_bounds() {
     let face = base_face();
     let geometry = DisplayRowGeometry {
         y: 0.0,
