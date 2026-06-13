@@ -4887,8 +4887,8 @@ impl LayoutEngine {
                 );
                 let control_item = special_display.clone().into_append_item();
                 let needed_width = buffer_row_append_context
-                    .item_active_face(&row_geometry)
-                    .measure_fragment_width_or_active_face_fallback_to_text_row(
+                    .measure_item_width_or_active_face_fallback_to_text_row(
+                        &row_geometry,
                         &mut self.matrix_builder,
                         evaluator,
                         &mut self.font_metrics,
@@ -4999,9 +4999,9 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     let _ = face_ids.allocate();
                 }
-                let append_context = buffer_row_append_context.item_active_face(&row_geometry);
-                if let Some((_progress, position)) = append_context
-                    .append_fragment_to_text_row_and_emit(
+                if let Some((_progress, position)) = buffer_row_append_context
+                    .append_item_fragment_to_text_row_and_emit(
+                        &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
@@ -5036,9 +5036,9 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let nobreak_item = special_display.into_append_item();
-                let append_context = buffer_row_append_context.item_active_face(&row_geometry);
-                if let Some((_progress, position)) = append_context
-                    .append_fragment_to_text_row_and_emit(
+                if let Some((_progress, position)) = buffer_row_append_context
+                    .append_item_fragment_to_text_row_and_emit(
+                        &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
@@ -5081,9 +5081,9 @@ impl LayoutEngine {
                     CharPos0::new((charpos + 1) as usize),
                 );
                 let glyphless_item = special_display.into_append_item();
-                let append_context = buffer_row_append_context.item_active_face(&row_geometry);
-                if let Some((_progress, position)) = append_context
-                    .append_fragment_to_text_row_and_emit(
+                if let Some((_progress, position)) = buffer_row_append_context
+                    .append_item_fragment_to_text_row_and_emit(
+                        &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
@@ -5103,7 +5103,7 @@ impl LayoutEngine {
             }
 
             let append_position = DisplayRowPosition { x_px: x, col };
-            let append_context = buffer_row_append_context.fragment_active_face(&row_geometry);
+            let append_geometry = row_geometry;
             let buffer_text_fragment = DisplayTextFragment::buffer_text(
                 CharPos0::new(charpos as usize),
                 CharPos0::new((charpos + 1) as usize),
@@ -5112,7 +5112,8 @@ impl LayoutEngine {
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            let resolved_advance = append_context.resolve_advance_to_text_row(
+            let resolved_advance = buffer_row_append_context.resolve_fragment_advance_to_text_row(
+                &append_geometry,
                 &mut buffer_text_advance,
                 &mut self.matrix_builder,
                 evaluator,
@@ -5121,7 +5122,6 @@ impl LayoutEngine {
                 ch_start_byte_idx,
                 buffer_text_fragment.clone(),
                 face_resolver,
-                &active_face_state,
                 append_position,
                 cluster_state,
             );
@@ -5379,7 +5379,8 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = append_context.append_resolved_to_text_row(
+            let appended = buffer_row_append_context.append_resolved_fragment_to_text_row(
+                &append_geometry,
                 &mut self.matrix_builder,
                 &mut output_emitter,
                 evaluator,

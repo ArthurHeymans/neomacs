@@ -1262,7 +1262,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
-    pub(crate) fn fragment_active_face(
+    fn fragment_active_face(
         &self,
         geometry: &DisplayRowGeometryState,
     ) -> BufferTextFragmentAppendContext<'source, B> {
@@ -1276,7 +1276,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
-    pub(crate) fn item_active_face(
+    fn item_active_face(
         &self,
         geometry: &DisplayRowGeometryState,
     ) -> BufferTextItemAppendContext<'source, B> {
@@ -1288,6 +1288,113 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             self.active_face.resolved_face(),
             frame,
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn measure_item_width_or_active_face_fallback_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        item: BufferTextFragmentAppendItem,
+        position: DisplayRowPosition,
+    ) -> f32 {
+        self.item_active_face(geometry)
+            .measure_fragment_width_or_active_face_fallback_to_text_row(
+                builder,
+                evaluator,
+                font_metrics,
+                fragment,
+                face_resolver,
+                item,
+                position,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_item_fragment_to_text_row_and_emit(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        item: BufferTextFragmentAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.item_active_face(geometry)
+            .append_fragment_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                fragment,
+                face_resolver,
+                item,
+                position,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_fragment_advance_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        resolver: &mut BufferTextFragmentAdvanceResolver,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &[u8],
+        byte_idx: usize,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+        cluster: BufferTextFragmentClusterState,
+    ) -> ResolvedBufferTextFragmentAdvance {
+        self.fragment_active_face(geometry)
+            .resolve_advance_to_text_row(
+                resolver,
+                builder,
+                evaluator,
+                font_metrics,
+                text,
+                byte_idx,
+                fragment,
+                face_resolver,
+                self.active_face,
+                position,
+                cluster,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_resolved_fragment_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        resolved_advance: ResolvedBufferTextFragmentAdvance,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.fragment_active_face(geometry)
+            .append_resolved_to_text_row(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                fragment,
+                face_resolver,
+                resolved_advance,
+                position,
+            )
     }
 }
 

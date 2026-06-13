@@ -1860,10 +1860,10 @@ fn buffer_text_fragment_append_context_appends_source_char() {
 
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0)
-            .fragment_active_face(&geometry);
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (_progress, end) = append_context
-        .append_resolved_to_text_row(
+        .append_resolved_fragment_to_text_row(
+            &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -2423,10 +2423,10 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0)
-            .item_active_face(&geometry);
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (_progress, end) = append_context
-        .append_fragment_to_text_row_and_emit(
+        .append_item_fragment_to_text_row_and_emit(
+            &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -2497,10 +2497,10 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
 
     let append_context =
-        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0)
-            .item_active_face(&geometry);
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (_progress, end) = append_context
-        .append_fragment_to_text_row_and_emit(
+        .append_item_fragment_to_text_row_and_emit(
+            &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
