@@ -44,7 +44,7 @@ use crate::display_row_append::{
     append_buffer_control_char_fragment_to_text_row_and_emit,
     append_buffer_glyphless_fragment_to_text_row_and_emit,
     append_buffer_source_mapped_text_fragment_to_text_row_and_emit,
-    append_display_replacement_item_kind_to_text_row_and_emit,
+    append_display_media_replacement_to_text_row_and_emit,
     append_display_replacement_source_mapped_text_to_text_row_and_emit,
     append_display_replacement_stretch_to_text_row_and_emit,
     append_display_replacement_string_fragment_to_text_row,
@@ -4697,10 +4697,7 @@ impl LayoutEngine {
                         );
 
                         match resolved_replacement {
-                            Some(ResolvedDisplayReplacement::Media {
-                                item: media_item,
-                                geometry: media,
-                            }) => {
+                            Some(ResolvedDisplayReplacement::Media(media)) => {
                                 let display_width = media.width;
                                 let display_height = media.height;
                                 let (cursor_face_h, cursor_face_ascent) = if matches!(
@@ -4741,14 +4738,14 @@ impl LayoutEngine {
                                     ),
                                 );
                                 if let Some((progress, position)) =
-                                    append_display_replacement_item_kind_to_text_row_and_emit(
+                                    append_display_media_replacement_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
                                         &mut self.font_metrics,
                                         display_replacement_source,
                                         active_face_state.face_id(),
-                                        media_item,
+                                        media,
                                         face_resolver,
                                         active_face_state.resolved_face(),
                                         replacement_frame,

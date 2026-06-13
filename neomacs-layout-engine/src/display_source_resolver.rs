@@ -1,7 +1,7 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::DisplayReplacementProperty;
@@ -264,18 +264,12 @@ pub(crate) struct ResolvedDisplaySourceItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ResolvedDisplayReplacement {
-    Media {
-        item: DisplayItemKind,
-        geometry: DisplayMediaReplacement,
-    },
+    Media(DisplayMediaReplacement),
     Placeholder(&'static str),
 }
 
 fn resolved_media_replacement(geometry: DisplayMediaReplacement) -> ResolvedDisplayReplacement {
-    ResolvedDisplayReplacement::Media {
-        item: DisplayItemKind::MediaReplacement(geometry),
-        geometry,
-    }
+    ResolvedDisplayReplacement::Media(geometry)
 }
 
 pub(crate) fn resolve_display_replacement(
@@ -489,7 +483,7 @@ pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display_item::{DisplayItemKind, DisplayXwidgetItem};
+    use crate::display_item::DisplayXwidgetItem;
     use crate::neovm_bridge::LayoutBufferSnapshot;
     use neovm_core::emacs_core::Context;
     use neovm_core::face::FaceTable;
@@ -625,13 +619,7 @@ mod tests {
             16.0,
         );
 
-        assert_eq!(
-            resolved,
-            Some(ResolvedDisplayReplacement::Media {
-                item: DisplayItemKind::MediaReplacement(media),
-                geometry: media,
-            })
-        );
+        assert_eq!(resolved, Some(ResolvedDisplayReplacement::Media(media)));
     }
 
     #[test]

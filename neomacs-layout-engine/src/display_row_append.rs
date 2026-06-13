@@ -1,10 +1,11 @@
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::{
-    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplaySourceMappedText, DisplaySourcePosition,
-    DisplayTextRun, GlyphlessMethod, RenderFaceRef, SourceSpan,
-};
 #[cfg(test)]
-use crate::display_item::{DisplayMediaReplacement, DisplayMediaReplacementKind};
+use crate::display_item::DisplayMediaReplacementKind;
+use crate::display_item::{
+    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
+    SourceSpan,
+};
 use crate::display_origin::DisplayOrigin;
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
@@ -1167,14 +1168,14 @@ pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_replacement_item_kind_to_text_row_and_emit(
+pub(crate) fn append_display_media_replacement_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
     replacement_source: BufferDisplayReplacementSource,
     face_id: u32,
-    kind: DisplayItemKind,
+    media: DisplayMediaReplacement,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     frame: DisplayRowAppendFrame,
@@ -1185,7 +1186,7 @@ pub(crate) fn append_display_replacement_item_kind_to_text_row_and_emit(
         output_emitter,
         evaluator,
         font_metrics,
-        replacement_source.item(face_id, kind),
+        replacement_source.media_item(face_id, media),
         face_resolver,
         base_face,
         face_id,

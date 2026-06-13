@@ -189,6 +189,10 @@ impl BufferDisplayReplacementSource {
         )
     }
 
+    pub(crate) fn media_item(self, face_id: u32, media: DisplayMediaReplacement) -> DisplayItem {
+        self.item(face_id, DisplayItemKind::MediaReplacement(media))
+    }
+
     pub(crate) fn source_mapped_text_item(
         self,
         face_id: u32,
