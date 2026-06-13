@@ -3,7 +3,7 @@ use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
     DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplaySourceId,
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
-    RenderFaceRef,
+    RenderFaceRef, SourceSpan,
 };
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
@@ -297,6 +297,35 @@ fn display_property_source_replacement_resolves_direct_media_item() {
         panic!("expected direct media replacement item");
     };
     assert_eq!(resolved, media);
+}
+
+#[test]
+fn display_property_source_action_builds_cursor_actions() {
+    let span = SourceSpan::synthetic(3, 0, 1);
+    let face = RenderFaceRef::FaceId(7);
+    let layout = DisplayItemLayout {
+        raise: Some(0.25),
+        height: None,
+    };
+
+    let emit = DisplayPropertySourceAction::Emit {
+        kind: DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("x")),
+        layout,
+    }
+    .into_cursor_action(span.clone(), face);
+
+    let DisplayPropertySourceCursorAction::Emit(item) = emit else {
+        panic!("expected emitted cursor item");
+    };
+    assert_eq!(item.span, span);
+    assert_eq!(item.face, face);
+    assert_eq!(item.layout, layout);
+
+    let fallthrough = DisplayPropertySourceAction::Ignore { layout }.into_cursor_action(span, face);
+    assert_eq!(
+        fallthrough,
+        DisplayPropertySourceCursorAction::FallThrough { layout }
+    );
 }
 
 #[test]

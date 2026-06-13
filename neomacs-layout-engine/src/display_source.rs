@@ -406,15 +406,16 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
                 let item_layout = match display_property_source_action(context, display_prop, face)
+                    .into_cursor_action(span, face)
                 {
-                    DisplayPropertySourceAction::PushReplacement { value, base_face } => {
+                    DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                         self.replacement_strings.push(value, base_face);
                         continue;
                     }
-                    DisplayPropertySourceAction::Emit { kind, layout } => {
-                        return Some(DisplayItem::new(span, face, kind).with_layout(layout));
+                    DisplayPropertySourceCursorAction::Emit(item) => {
+                        return Some(item);
                     }
-                    DisplayPropertySourceAction::Ignore { layout } => layout,
+                    DisplayPropertySourceCursorAction::FallThrough { layout } => layout,
                 };
                 let ch = self.char_at(start)?;
                 if let Some(kind) = display_item_kind_for_text_source_char(ch) {
@@ -579,16 +580,16 @@ impl LispStringSourceFrame {
         let mut item_layout = DisplayItemLayout::default();
         if let Some(display_prop) = self.display_prop_at(start) {
             self.char_index = property_end;
-            match display_property_source_action(context, display_prop, face) {
-                DisplayPropertySourceAction::PushReplacement { value, base_face } => {
+            match display_property_source_action(context, display_prop, face)
+                .into_cursor_action(span, face)
+            {
+                DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                     return LispStringAction::PushReplacement { value, base_face };
                 }
-                DisplayPropertySourceAction::Emit { kind, layout } => {
-                    return LispStringAction::Emit(
-                        DisplayItem::new(span, face, kind).with_layout(layout),
-                    );
+                DisplayPropertySourceCursorAction::Emit(item) => {
+                    return LispStringAction::Emit(item);
                 }
-                DisplayPropertySourceAction::Ignore { layout } => {
+                DisplayPropertySourceCursorAction::FallThrough { layout } => {
                     item_layout = layout;
                 }
             }
@@ -713,6 +714,36 @@ enum DisplayPropertySourceAction {
     Ignore {
         layout: DisplayItemLayout,
     },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum DisplayPropertySourceCursorAction {
+    PushReplacement {
+        value: Value,
+        base_face: RenderFaceRef,
+    },
+    Emit(DisplayItem),
+    FallThrough {
+        layout: DisplayItemLayout,
+    },
+}
+
+impl DisplayPropertySourceAction {
+    fn into_cursor_action(
+        self,
+        span: SourceSpan,
+        face: RenderFaceRef,
+    ) -> DisplayPropertySourceCursorAction {
+        match self {
+            Self::PushReplacement { value, base_face } => {
+                DisplayPropertySourceCursorAction::PushReplacement { value, base_face }
+            }
+            Self::Emit { kind, layout } => DisplayPropertySourceCursorAction::Emit(
+                DisplayItem::new(span, face, kind).with_layout(layout),
+            ),
+            Self::Ignore { layout } => DisplayPropertySourceCursorAction::FallThrough { layout },
+        }
+    }
 }
 
 enum DisplayPropertySourceReplacement {
