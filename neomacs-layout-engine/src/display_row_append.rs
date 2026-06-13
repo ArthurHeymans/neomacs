@@ -28,6 +28,7 @@ use crate::display_source::{
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
+use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::{
     ComplexTextRunAdvanceResolver, DisplayTextRunMeasurementPlan,
@@ -35,6 +36,7 @@ use crate::display_text_run_measurement::{
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -1924,6 +1926,13 @@ pub(crate) struct DisplayReplacementStretchAppendItem {
     cursor_slot_width_px: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayReplacementSpaceGeometry {
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) ascent: f32,
+}
+
 impl DisplayReplacementStretchAppendItem {
     pub(crate) fn from_extents(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
         let width_px = width_px.max(0.0);
@@ -1947,6 +1956,186 @@ impl DisplayReplacementStretchAppendItem {
         let mut item = Self::from_extents(width_px, height_px, ascent_px);
         item.cursor_slot_width_px = item.width_px.max(fallback_cursor_width_px);
         item
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn display_space_geometry(
+        spec: &Value,
+        current_x: f32,
+        content_x: f32,
+        face_char_w: f32,
+        display_char_width: f32,
+        default_height: f32,
+        default_ascent: f32,
+        params: &WindowParams,
+    ) -> DisplayReplacementSpaceGeometry {
+        use crate::display_pixel_calc::{PixelCalcContext, calc_pixel_width_or_height};
+
+        let default_width = params.char_width.max(1.0);
+        let default_height = if params.window_system {
+            default_height.max(1.0)
+        } else {
+            params.char_height.max(1.0)
+        };
+        let default_ascent = if params.window_system {
+            default_ascent.max(0.0).min(default_height)
+        } else {
+            default_height
+        };
+        let Some(items) = neovm_core::emacs_core::value::list_to_vec(spec) else {
+            return DisplayReplacementSpaceGeometry {
+                width: default_width,
+                height: default_height,
+                ascent: default_ascent,
+            };
+        };
+
+        let pctx = PixelCalcContext {
+            frame_column_width: params.char_width.max(1.0) as f64,
+            frame_line_height: params.char_height.max(1.0) as f64,
+            frame_res_x: 96.0,
+            frame_res_y: 96.0,
+            face_font_height: default_height as f64,
+            face_font_width: face_char_w.round().max(1.0) as f64,
+            text_area_left: params.text_bounds.x as f64,
+            text_area_right: (params.text_bounds.x + params.text_bounds.width) as f64,
+            text_area_width: params.text_bounds.width as f64,
+            left_margin_left: (params.text_bounds.x
+                - params.left_fringe_width
+                - params.left_margin_width) as f64,
+            left_margin_width: params.left_margin_width as f64,
+            right_margin_left: (params.text_bounds.x
+                + params.text_bounds.width
+                + params.right_fringe_width) as f64,
+            right_margin_width: params.right_margin_width as f64,
+            left_fringe_width: params.left_fringe_width as f64,
+            right_fringe_width: params.right_fringe_width as f64,
+            fringes_outside_margins: false,
+            scroll_bar_width: 0.0,
+            scroll_bar_on_left: false,
+            line_number_pixel_width: 0.0,
+            symbol_values: std::collections::HashMap::new(),
+        };
+
+        let plist_value = |wanted: DisplaySpaceKey| -> Option<Value> {
+            let mut i = 1;
+            while i + 1 < items.len() {
+                if DisplaySpaceKey::from_lisp_value(items[i]) == Some(wanted) {
+                    return Some(items[i + 1]);
+                }
+                i += 2;
+            }
+            None
+        };
+
+        let mut width = if let Some(prop) = plist_value(DisplaySpaceKey::Width)
+            && !prop.is_nil()
+            && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, true, None)
+        {
+            pixels as f32
+        } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeWidth)
+            && let Some(factor) = display_space_positive_number(prop)
+        {
+            factor * display_char_width.max(0.0)
+        } else if let Some(prop) = plist_value(DisplaySpaceKey::AlignTo)
+            && !prop.is_nil()
+        {
+            let mut align_to: i32 = -1;
+            if let Some(pixels) =
+                calc_pixel_width_or_height(&pctx, &prop, true, Some(&mut align_to))
+            {
+                let target_x = if align_to >= 0 {
+                    align_to as f32 + pixels as f32
+                } else {
+                    content_x + pixels as f32
+                };
+                (target_x - current_x).max(0.0)
+            } else {
+                default_width
+            }
+        } else {
+            default_width
+        };
+        let zero_width_ok =
+            plist_value(DisplaySpaceKey::AlignTo).is_some_and(|prop| !prop.is_nil());
+        if width <= 0.0 && (width < 0.0 || !zero_width_ok) {
+            width = 1.0;
+        }
+
+        let (height, ascent) = if params.window_system {
+            let mut height = if let Some(prop) = plist_value(DisplaySpaceKey::Height)
+                && !prop.is_nil()
+                && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
+            {
+                pixels as f32
+            } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeHeight)
+                && let Some(factor) = display_space_positive_number(prop)
+            {
+                default_height * factor
+            } else {
+                default_height
+            };
+            let zero_height_ok =
+                plist_value(DisplaySpaceKey::Height).is_some_and(|prop| !prop.is_nil());
+            if height <= 0.0 && (height < 0.0 || !zero_height_ok) {
+                height = 1.0;
+            }
+
+            let ascent = if let Some(prop) = plist_value(DisplaySpaceKey::Ascent) {
+                if let Some(percent) = display_space_positive_number(prop)
+                    && percent <= 100.0
+                {
+                    height * percent / 100.0
+                } else if !prop.is_nil()
+                    && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
+                {
+                    (pixels as f32).max(0.0).min(height)
+                } else {
+                    height * default_ascent / default_height
+                }
+            } else {
+                height * default_ascent / default_height
+            };
+            (height, ascent)
+        } else {
+            (1.0, 1.0)
+        };
+
+        DisplayReplacementSpaceGeometry {
+            width,
+            height,
+            ascent: ascent.max(0.0).min(height),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_display_space_spec(
+        spec: &Value,
+        current_x: f32,
+        content_x: f32,
+        face_char_w: f32,
+        display_char_width: f32,
+        default_height: f32,
+        default_ascent: f32,
+        fallback_cursor_width_px: f32,
+        params: &WindowParams,
+    ) -> Self {
+        let geometry = Self::display_space_geometry(
+            spec,
+            current_x,
+            content_x,
+            face_char_w,
+            display_char_width,
+            default_height,
+            default_ascent,
+            params,
+        );
+        Self::from_space_extents(
+            geometry.width,
+            geometry.height,
+            geometry.ascent,
+            fallback_cursor_width_px,
+        )
     }
 
     pub(crate) fn source_char_width_px(

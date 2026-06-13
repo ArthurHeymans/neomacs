@@ -3,6 +3,9 @@ use crate::display_item::RenderFaceRef;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy,
 };
+use crate::display_row_append::{
+    DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
+};
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_source::DisplayItemSource;
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -5632,7 +5635,7 @@ fn display_space_relative_height_spec(factor: i64, ascent_percent: i64) -> Value
 fn display_space_relative_width_uses_displayed_character_width() {
     let _eval = Context::new();
     let params = test_window_params();
-    let geometry = eval_display_space_geometry(
+    let geometry = DisplayReplacementStretchAppendItem::display_space_geometry(
         &display_space_relative_width_spec(2),
         0.0,
         0.0,
@@ -5650,7 +5653,7 @@ fn display_space_relative_width_uses_displayed_character_width() {
 fn display_space_geometry_uses_relative_height_and_percent_ascent() {
     let _eval = Context::new();
     let params = test_window_params();
-    let geometry = eval_display_space_geometry(
+    let geometry = DisplayReplacementStretchAppendItem::display_space_geometry(
         &display_space_relative_height_spec(2, 25),
         0.0,
         0.0,
@@ -5663,7 +5666,7 @@ fn display_space_geometry_uses_relative_height_and_percent_ascent() {
 
     assert_eq!(
         geometry,
-        DisplaySpaceGeometry {
+        DisplayReplacementSpaceGeometry {
             width: 16.0,
             height: 20.0,
             ascent: 5.0,
@@ -5682,7 +5685,9 @@ fn display_space_geometry_accepts_pixel_ascent_expression() {
         Value::keyword("ascent"),
         Value::list(vec![Value::fixnum(3)]),
     ]);
-    let geometry = eval_display_space_geometry(&spec, 0.0, 0.0, 8.0, 8.0, 10.0, 7.0, &params);
+    let geometry = DisplayReplacementStretchAppendItem::display_space_geometry(
+        &spec, 0.0, 0.0, 8.0, 8.0, 10.0, 7.0, &params,
+    );
 
     assert_eq!(geometry.height, 20.0);
     assert_eq!(geometry.ascent, 3.0);

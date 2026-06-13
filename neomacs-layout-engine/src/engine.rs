@@ -4,7 +4,6 @@
 //! character position, computes line breaks, positions glyphs on a fixed-width
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
-use super::display_space::{DisplaySpaceKey, display_space_positive_number};
 use super::display_status_line::{
     EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
     InactiveMinibufferDisplayRowRequest, WindowChromeDisplayRowRequest,
@@ -977,13 +976,6 @@ impl DisplayRowPrefixRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct DisplaySpaceGeometry {
-    width: f32,
-    height: f32,
-    ascent: f32,
-}
-
 #[cfg(test)]
 fn eval_status_line_format(
     evaluator: &mut neovm_core::emacs_core::Context,
@@ -1546,179 +1538,6 @@ fn next_window_start_for_point_line_continuation<B: super::neovm_bridge::LayoutB
         .skip(1)
         .find_map(row_next_window_start_charpos)
         .filter(|&pos| pos > current_start)
-}
-
-// ---------------------------------------------------------------------------
-// Display property helpers
-// ---------------------------------------------------------------------------
-
-/// Evaluate a `(space ...)` display spec into GNU-shaped stretch geometry.
-///
-/// Replaces the old `parse_display_space_width` helper. Delegates the
-/// actual expression evaluation to
-/// [`crate::display_pixel_calc::calc_pixel_width_or_height`], the
-/// faithful port of GNU `xdisp.c:30102`. Supports the full GNU
-/// expression grammar: fixnum/float, symbols (`right`, `text`,
-/// `left-fringe`, etc.), arithmetic forms `(+ …)`/`(- …)`,
-/// pixel-literal `(NUM)`, and unit-scaled `(NUM . UNIT)`.
-///
-/// GNU's xdisp.c uses canonical frame column width for these numeric
-/// units, not the currently scaled face width of the covered buffer
-/// position.
-///
-/// Returns canonical frame column/default face metrics when the spec is
-/// invalid or the evaluator can't resolve it.
-fn eval_display_space_geometry(
-    spec: &neovm_core::emacs_core::Value,
-    current_x: f32,
-    content_x: f32,
-    face_char_w: f32,
-    display_char_width: f32,
-    default_height: f32,
-    default_ascent: f32,
-    params: &WindowParams,
-) -> DisplaySpaceGeometry {
-    use crate::display_pixel_calc::{PixelCalcContext, calc_pixel_width_or_height};
-
-    let default_width = params.char_width.max(1.0);
-    let default_height = if params.window_system {
-        default_height.max(1.0)
-    } else {
-        params.char_height.max(1.0)
-    };
-    let default_ascent = if params.window_system {
-        default_ascent.max(0.0).min(default_height)
-    } else {
-        default_height
-    };
-    let Some(items) = neovm_core::emacs_core::value::list_to_vec(spec) else {
-        return DisplaySpaceGeometry {
-            width: default_width,
-            height: default_height,
-            ascent: default_ascent,
-        };
-    };
-
-    let pctx = PixelCalcContext {
-        frame_column_width: params.char_width.max(1.0) as f64,
-        frame_line_height: params.char_height.max(1.0) as f64,
-        frame_res_x: 96.0,
-        frame_res_y: 96.0,
-        face_font_height: default_height as f64,
-        face_font_width: face_char_w.round().max(1.0) as f64,
-        text_area_left: params.text_bounds.x as f64,
-        text_area_right: (params.text_bounds.x + params.text_bounds.width) as f64,
-        text_area_width: params.text_bounds.width as f64,
-        left_margin_left: (params.text_bounds.x
-            - params.left_fringe_width
-            - params.left_margin_width) as f64,
-        left_margin_width: params.left_margin_width as f64,
-        right_margin_left: (params.text_bounds.x
-            + params.text_bounds.width
-            + params.right_fringe_width) as f64,
-        right_margin_width: params.right_margin_width as f64,
-        left_fringe_width: params.left_fringe_width as f64,
-        right_fringe_width: params.right_fringe_width as f64,
-        fringes_outside_margins: false,
-        scroll_bar_width: 0.0,
-        scroll_bar_on_left: false,
-        line_number_pixel_width: 0.0,
-        symbol_values: std::collections::HashMap::new(),
-    };
-
-    let plist_value = |wanted: DisplaySpaceKey| -> Option<Value> {
-        let mut i = 1;
-        while i + 1 < items.len() {
-            if DisplaySpaceKey::from_lisp_value(items[i]) == Some(wanted) {
-                return Some(items[i + 1]);
-            }
-            i += 2;
-        }
-        None
-    };
-
-    let mut width = if let Some(prop) = plist_value(DisplaySpaceKey::Width)
-        && !prop.is_nil()
-        && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, true, None)
-    {
-        pixels as f32
-    } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeWidth)
-        && let Some(factor) = display_space_positive_number(prop)
-    {
-        factor * display_char_width.max(0.0)
-    } else if let Some(prop) = plist_value(DisplaySpaceKey::AlignTo)
-        && !prop.is_nil()
-    {
-        let mut align_to: i32 = -1;
-        if let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, true, Some(&mut align_to)) {
-            // If the expression contained a symbol like `right`, `align_to`
-            // was updated to that position and `pixels` is the offset from it.
-            // Otherwise, numeric-only `:align-to N` is column-relative from
-            // `content_x`, matching GNU's text-area adjustment.
-            let target_x = if align_to >= 0 {
-                align_to as f32 + pixels as f32
-            } else {
-                content_x + pixels as f32
-            };
-            (target_x - current_x).max(0.0)
-        } else {
-            default_width
-        }
-    } else {
-        default_width
-    };
-    let zero_width_ok = plist_value(DisplaySpaceKey::AlignTo).is_some_and(|prop| !prop.is_nil());
-    if width <= 0.0 && (width < 0.0 || !zero_width_ok) {
-        width = 1.0;
-    }
-
-    let (height, ascent) = if params.window_system {
-        let mut height = if let Some(prop) = plist_value(DisplaySpaceKey::Height)
-            && !prop.is_nil()
-            && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
-        {
-            pixels as f32
-        } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeHeight)
-            && let Some(factor) = display_space_positive_number(prop)
-        {
-            default_height * factor
-        } else {
-            default_height
-        };
-        let zero_height_ok =
-            plist_value(DisplaySpaceKey::Height).is_some_and(|prop| !prop.is_nil());
-        if height <= 0.0 && (height < 0.0 || !zero_height_ok) {
-            height = 1.0;
-        }
-
-        let ascent = if let Some(prop) = plist_value(DisplaySpaceKey::Ascent) {
-            if let Some(percent) = display_space_positive_number(prop)
-                && percent <= 100.0
-            {
-                height * percent / 100.0
-            } else if !prop.is_nil()
-                && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
-            {
-                (pixels as f32).max(0.0).min(height)
-            } else {
-                height * default_ascent / default_height
-            }
-        } else {
-            height * default_ascent / default_height
-        };
-        (height, ascent)
-    } else {
-        // GNU `produce_stretch_glyph` does not append a pixel stretch glyph on
-        // terminals; it appends ordinary TTY space glyphs and leaves the row
-        // one terminal cell high, ignoring :height/:relative-height/:ascent.
-        (1.0, 1.0)
-    };
-
-    DisplaySpaceGeometry {
-        width,
-        height,
-        ascent: ascent.max(0.0).min(height),
-    }
 }
 
 fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
@@ -4636,22 +4455,18 @@ impl LayoutEngine {
                                 display_ch,
                                 face_metrics.char_width,
                             );
-                        let space_geometry = eval_display_space_geometry(
-                            &prop_val,
-                            x,
-                            content_x,
-                            face_metrics.char_width,
-                            display_char_width,
-                            face_metrics.row_height,
-                            face_metrics.ascent,
-                            params,
-                        );
-                        let stretch_item = DisplayReplacementStretchAppendItem::from_space_extents(
-                            space_geometry.width,
-                            space_geometry.height,
-                            space_geometry.ascent,
-                            face_metrics.char_width,
-                        );
+                        let stretch_item =
+                            DisplayReplacementStretchAppendItem::from_display_space_spec(
+                                &prop_val,
+                                x,
+                                content_x,
+                                face_metrics.char_width,
+                                display_char_width,
+                                face_metrics.row_height,
+                                face_metrics.ascent,
+                                face_metrics.char_width,
+                                params,
+                            );
                         if point_in_display_replacement {
                             capture_cursor_info(
                                 &mut cursor_info,
