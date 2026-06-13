@@ -2964,8 +2964,14 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 
     assert_eq!(item.cursor_slot_width_px(), 8.0);
     assert!(!item.is_empty());
-    assert_eq!(item.value(), value);
-    assert_eq!(item.source_id(), 9);
+    let request = item.source_append_request(DisplayRowPosition { x_px: 2.0, col: 1 });
+    let request_parts = request.into_parts();
+    assert_eq!(request_parts.value, value);
+    assert_eq!(request_parts.source_id, 9);
+    assert_eq!(
+        request_parts.position,
+        DisplayRowPosition { x_px: 2.0, col: 1 }
+    );
     assert_eq!(
         item.origin(),
         DisplayOrigin::DisplayPropertyString {
@@ -3670,19 +3676,19 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
+    let request =
+        LispStringSourceAppendRequest::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 1, value);
 
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
-    let end = append_context.append_string_source_value_to_text_row(
+    let end = append_context.append_string_source_request_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        value,
-        1,
         &face_resolver,
         &mut face_ids,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+        request,
         &mut measurer,
     );
 

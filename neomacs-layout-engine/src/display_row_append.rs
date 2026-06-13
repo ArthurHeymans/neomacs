@@ -2283,18 +2283,17 @@ impl DisplayReplacementStringAppendItem {
         self.base_face_policy
     }
 
-    fn value(&self) -> Value {
-        self.value
-    }
-
-    fn source_id(&self) -> u64 {
-        self.source_id
-    }
-
     fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
         DisplayReplacementStringItemMeasurer {
             active_face_state: self.active_face_state.clone(),
         }
+    }
+
+    pub(crate) fn source_append_request(
+        &self,
+        position: DisplayRowPosition,
+    ) -> LispStringSourceAppendRequest {
+        LispStringSourceAppendRequest::new(position, self.source_id, self.value)
     }
 }
 
@@ -3428,51 +3427,47 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
-        let value = item.value();
-        let source_id = item.source_id();
+        let request = item.source_append_request(position);
         let mut item_policy = item.string_item_measurer();
-        self.append_string_source_value_to_text_row(
+        self.append_string_source_request_to_text_row(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            value,
-            source_id,
             face_resolver,
             face_ids,
-            position,
+            request,
             &mut item_policy,
         )
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn append_string_source_value_to_text_row(
+    fn append_string_source_request_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        value: Value,
-        source_id: u64,
         face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
-        position: DisplayRowPosition,
+        request: LispStringSourceAppendRequest,
         item_policy: &mut impl DisplayRowRenderPolicy,
     ) -> DisplayRowPosition {
+        let parts = request.into_parts();
         append_display_replacement_string_value_to_text_row(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            value,
+            parts.value,
             self.replacement_source,
-            source_id,
+            parts.source_id,
             face_resolver,
             self.base_face,
             self.face_id,
             face_ids,
             self.frame.clone(),
-            position,
+            parts.position,
             item_policy,
         )
     }
