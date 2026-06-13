@@ -502,18 +502,6 @@ struct DisplayRowSourceAppendRenderParts<'face> {
 }
 
 impl<'face> DisplayRowSourceAppendRequest<'face> {
-    fn from_append_spec(
-        append_spec: DisplayRowAppendSpec,
-        base_face_id: u32,
-        base_face: &'face ResolvedFace,
-    ) -> Self {
-        Self {
-            append_spec,
-            base_face_id,
-            base_face,
-        }
-    }
-
     fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
         let request = self
             .append_spec
@@ -3200,11 +3188,11 @@ impl DisplayRowAppendFrame {
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowSourceAppendRequest<'face> {
-        DisplayRowSourceAppendRequest::from_append_spec(
-            self.append_spec(position, face_id, kind),
-            face_id,
+        DisplayRowSourceAppendRequest {
+            append_spec: self.append_spec(position, face_id, kind),
+            base_face_id: face_id,
             base_face,
-        )
+        }
     }
 }
 

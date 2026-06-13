@@ -657,14 +657,11 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let request = DisplayRowSourceAppendRequest::from_append_spec(
-        frame.append_spec(
-            DisplayRowPosition { x_px: 8.0, col: 1 },
-            7,
-            DisplayRowAppendKind::SourceText,
-        ),
+    let request = frame.source_append_request(
+        DisplayRowPosition { x_px: 8.0, col: 1 },
         7,
         &base_face,
+        DisplayRowAppendKind::SourceText,
     );
 
     let outcome = render_natural_display_source_append_request_into_current_text_row_and_emit(
@@ -1075,7 +1072,7 @@ fn display_row_append_frame_builds_append_spec_directly() {
 }
 
 #[test]
-fn display_row_source_append_request_uses_append_spec() {
+fn display_row_source_append_request_uses_frame_policy() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = test_append_frame_at(
         3,
@@ -1096,16 +1093,16 @@ fn display_row_source_append_request_uses_append_spec() {
         },
         tab_policy,
     );
-    let append_spec = frame.append_spec(
-        DisplayRowPosition { x_px: 18.0, col: 2 },
-        42,
-        DisplayRowAppendKind::ControlChar,
-    );
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, 42, base_face);
+    let request = frame.source_append_request(
+        DisplayRowPosition { x_px: 18.0, col: 2 },
+        42,
+        base_face,
+        DisplayRowAppendKind::ControlChar,
+    );
 
     let parts = request.into_render_parts();
     assert_eq!(
