@@ -1548,6 +1548,7 @@ impl DisplayRowAppendKind {
             DisplayItemKind::ControlChar { .. } => Some(Self::ControlChar),
             DisplayItemKind::Glyphless(_) => Some(Self::Glyphless),
             DisplayItemKind::Stretch(_)
+            | DisplayItemKind::MediaReplacement(_)
             | DisplayItemKind::Image(_)
             | DisplayItemKind::Video(_)
             | DisplayItemKind::Xwidget(_) => Some(Self::DisplayReplacement),
@@ -1673,9 +1674,14 @@ pub(crate) fn append_display_row_spec_item(
     spec: &DisplayRowAppendSpec,
     item: DisplayItem,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    match DisplayMediaReplacement::from_item_kind(&item.kind) {
-        Some(media) => append_media_display_row_spec_item(builder, spec, item, media),
-        None => append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item),
+    let media = match &item.kind {
+        DisplayItemKind::MediaReplacement(media) => Some(*media),
+        _ => None,
+    };
+    if let Some(media) = media {
+        append_media_display_row_spec_item(builder, spec, item, media)
+    } else {
+        append_display_row_item(builder, &spec.layout, spec.position, spec.max_x, item)
     }
 }
 

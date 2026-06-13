@@ -758,6 +758,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 );
             }
             DisplayItemKind::Stretch(stretch) => self.push_stretch(stretch, face_id),
+            DisplayItemKind::MediaReplacement(media) => {
+                self.push_stretch(media.replacement_stretch(), face_id);
+            }
             DisplayItemKind::Image(image) => {
                 let image_id = image.image_id.max(0);
                 let glyph = Glyph {

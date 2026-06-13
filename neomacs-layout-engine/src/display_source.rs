@@ -1,8 +1,8 @@
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
-    DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod,
-    RenderFaceRef, SourceSpan, glyphless_method_for_char,
+    DisplayMediaReplacement, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
+    GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::neovm_bridge::LayoutBufferView;
@@ -722,16 +722,24 @@ fn display_property_source_action(
             value: display_prop,
             base_face: face,
         },
-        Some(replacement) => replacement
-            .display_item_kind()
-            .or_else(|| context.resolve_display_property(display_prop, face))
-            .map(|kind| DisplayPropertySourceAction::Emit {
+        Some(replacement) => {
+            let kind = replacement.display_item_kind().or_else(|| {
+                context
+                    .resolve_display_property(display_prop, face)
+                    .filter(|kind| replacement.accepts_resolved_media_item(kind))
+                    .and_then(|kind| {
+                        DisplayMediaReplacement::from_item_kind(&kind)
+                            .map(DisplayItemKind::MediaReplacement)
+                    })
+            });
+            kind.map(|kind| DisplayPropertySourceAction::Emit {
                 kind,
                 layout: classification.modifiers,
             })
             .unwrap_or(DisplayPropertySourceAction::Ignore {
                 layout: classification.modifiers,
-            }),
+            })
+        }
         None => context
             .resolve_display_property(display_prop, face)
             .map(|kind| DisplayPropertySourceAction::Emit {

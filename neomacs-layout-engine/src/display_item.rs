@@ -157,6 +157,7 @@ pub(crate) enum DisplayItemKind {
     },
     Glyphless(DisplayGlyphless),
     Stretch(DisplayStretch),
+    MediaReplacement(DisplayMediaReplacement),
     Image(DisplayImageItem),
     Video(DisplayVideoItem),
     Xwidget(DisplayXwidgetItem),
@@ -337,6 +338,7 @@ pub(crate) enum DisplayMediaReplacementKind {
 impl DisplayMediaReplacement {
     pub(crate) fn from_item_kind(kind: &DisplayItemKind) -> Option<Self> {
         match kind {
+            DisplayItemKind::MediaReplacement(media) => Some(*media),
             DisplayItemKind::Image(image) => Some(Self::image(*image)),
             DisplayItemKind::Video(video) => Some(Self::video(*video)),
             DisplayItemKind::Xwidget(xwidget) => Some(Self::xwidget(*xwidget)),
@@ -345,12 +347,16 @@ impl DisplayMediaReplacement {
     }
 
     pub(crate) fn replacement_item(self, mut item: DisplayItem) -> DisplayItem {
-        item.kind = DisplayItemKind::Stretch(DisplayStretch {
+        item.kind = DisplayItemKind::Stretch(self.replacement_stretch());
+        item
+    }
+
+    pub(crate) fn replacement_stretch(self) -> DisplayStretch {
+        DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Pixels(self.width)),
             height: Some(DisplayLength::Pixels(self.height)),
             ascent: Some(DisplayLength::Pixels(self.height)),
-        });
-        item
+        }
     }
 
     fn image(image: DisplayImageItem) -> Self {

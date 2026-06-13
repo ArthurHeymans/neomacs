@@ -2194,7 +2194,10 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     row_faces.push(realized);
                 }
             }
-            let media_descriptor = DisplayMediaReplacement::from_item_kind(&item.kind);
+            let media_descriptor = match &item.kind {
+                DisplayItemKind::MediaReplacement(media) => Some(*media),
+                _ => None,
+            };
             let source_item = item.clone();
             let item = media_descriptor
                 .map(|descriptor| descriptor.replacement_item(item.clone()))

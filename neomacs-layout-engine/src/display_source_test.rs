@@ -1,8 +1,9 @@
 use super::*;
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
-    DisplayLengthExpr, DisplayLengthSymbol, DisplaySourceId, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
+    DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplaySourceId,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
+    RenderFaceRef,
 };
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
@@ -257,10 +258,10 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
         match display_property_source_action(&mut context, image_spec, base_face) {
             DisplayPropertySourceAction::Emit {
                 kind:
-                    DisplayItemKind::Image(DisplayImageItem {
-                        image_id: 42,
+                    DisplayItemKind::MediaReplacement(DisplayMediaReplacement {
                         width: 64.0,
                         height: 32.0,
+                        ..
                     }),
                 layout,
             } => assert_eq!(layout, DisplayItemLayout::default()),
@@ -327,14 +328,14 @@ fn lisp_string_source_cursor_resolves_display_property_through_context() {
     };
 
     assert_eq!(resolver.seen_face, Some(RenderFaceRef::FaceId(7)));
-    assert_eq!(
+    assert!(matches!(
         item.kind,
-        DisplayItemKind::Image(DisplayImageItem {
-            image_id: 42,
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement {
             width: 64.0,
             height: 32.0,
+            ..
         })
-    );
+    ));
     assert_eq!(item.face, RenderFaceRef::FaceId(7));
 }
 
@@ -548,14 +549,14 @@ fn display_sources_parse_xwidget_display_specs_as_typed_items() {
     .expect("string source");
     let lisp_items = collect_items(&mut lisp_source);
 
-    assert_eq!(
+    assert!(matches!(
         lisp_items[0].kind,
-        DisplayItemKind::Xwidget(DisplayXwidgetItem {
-            xwidget_id: 1234,
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement {
             width: 96.0,
             height: 54.0,
+            ..
         })
-    );
+    ));
 
     {
         let buffer = eval

@@ -274,7 +274,7 @@ pub(crate) enum ResolvedDisplayReplacement {
 fn resolved_media_replacement(kind: DisplayItemKind) -> Option<ResolvedDisplayReplacement> {
     let geometry = DisplayMediaReplacement::from_item_kind(&kind)?;
     Some(ResolvedDisplayReplacement::Media {
-        item: kind,
+        item: DisplayItemKind::MediaReplacement(geometry),
         geometry,
     })
 }
@@ -628,7 +628,10 @@ mod tests {
         assert_eq!(
             resolved,
             Some(ResolvedDisplayReplacement::Media {
-                item: DisplayItemKind::Xwidget(xwidget),
+                item: DisplayItemKind::MediaReplacement(
+                    DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(xwidget))
+                        .expect("xwidget geometry"),
+                ),
                 geometry: DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(
                     xwidget
                 ))

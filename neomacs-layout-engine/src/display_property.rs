@@ -1,6 +1,6 @@
 use crate::display_item::{
     DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplayStretch, DisplayStretchWidth, DisplayXwidgetItem,
+    DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayXwidgetItem,
 };
 use crate::display_space::{DisplaySpaceKey, is_display_space_spec};
 use crate::display_spec::{DisplaySpecHead, parse_display_xwidget_layout};
@@ -27,7 +27,10 @@ impl DisplayReplacementProperty {
     pub(crate) fn display_item_kind(&self) -> Option<DisplayItemKind> {
         match self {
             Self::Space(stretch) => Some(DisplayItemKind::Stretch(stretch.clone())),
-            Self::Xwidget(xwidget) => Some(DisplayItemKind::Xwidget(*xwidget)),
+            Self::Xwidget(xwidget) => {
+                DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(*xwidget))
+                    .map(DisplayItemKind::MediaReplacement)
+            }
             Self::String | Self::Image | Self::Video | Self::Webkit => None,
         }
     }
