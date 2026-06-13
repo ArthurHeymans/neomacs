@@ -149,20 +149,16 @@ pub(crate) struct BufferTextFragmentAdvanceResolver {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BufferTextFragmentAdvancePath {
-    NaturalFaceColumns,
     NaturalRenderedFragment,
     ResolvedComplexRun,
 }
 
 impl BufferTextFragmentAdvancePath {
     fn for_cluster_state(cluster: BufferTextFragmentClusterState) -> Self {
-        let ch = cluster.ch();
-        if crate::composition::needs_complex_shaping(ch) {
+        if crate::composition::needs_complex_shaping(cluster.ch()) {
             Self::ResolvedComplexRun
-        } else if ch == '\t' || cluster.is_cluster_continuation() || !ch.is_ascii() {
-            Self::NaturalRenderedFragment
         } else {
-            Self::NaturalFaceColumns
+            Self::NaturalRenderedFragment
         }
     }
 }
@@ -516,6 +512,11 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             request: self.request,
             output: self.output,
         }
+    }
+
+    fn with_measurement_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
+        self.request = self.request.with_render_bounds(render_bounds);
+        self
     }
 }
 
@@ -1299,7 +1300,9 @@ fn measure_buffer_text_fragment_append_progress_to_text_row<B: LayoutBufferView 
 ) -> Option<DisplayRowAppendProgress> {
     let (item, append_kind) =
         buffer_text_fragment_source_item(fragment, buffer_id, buffer, face_id)?;
-    let request = frame.source_append_request(position, face_id, base_face, append_kind);
+    let request = frame
+        .source_append_request(position, face_id, base_face, append_kind)
+        .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
@@ -1454,13 +1457,6 @@ impl BufferTextFragmentAdvanceResolver {
                     cluster,
                 );
                 ResolvedBufferTextFragmentAdvance::natural(advance_px)
-            }
-            BufferTextFragmentAdvancePath::NaturalFaceColumns => {
-                ResolvedBufferTextFragmentAdvance::natural(active_face_state.advance_for_columns(
-                    font_metrics,
-                    ch,
-                    1,
-                ))
             }
         }
     }

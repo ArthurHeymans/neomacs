@@ -304,7 +304,7 @@ fn buffer_text_fragment_advance_path_names_append_measurement_policy() {
         BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
             'x', None,
         )),
-        BufferTextFragmentAdvancePath::NaturalFaceColumns
+        BufferTextFragmentAdvancePath::NaturalRenderedFragment
     );
     assert_eq!(
         BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
@@ -373,6 +373,54 @@ fn buffer_text_fragment_append_context_resolves_natural_measurement_for_ascii() 
         &face_resolver,
         &active_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
+        BufferTextFragmentClusterState::for_char('x', None),
+    );
+
+    assert_eq!(resolved.advance_px(), 8.0);
+    assert_eq!(
+        resolved.append_measurement(),
+        BufferTextFragmentAppendMeasurement::Natural
+    );
+}
+
+#[test]
+fn buffer_text_fragment_append_context_measures_ascii_at_right_edge() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut resolver = BufferTextFragmentAdvanceResolver::default();
+    let append_context = BufferTextFragmentAppendContext::new(
+        &snapshot,
+        buf_id,
+        active_face.face_id(),
+        active_face.resolved_face(),
+        frame,
+    );
+
+    let resolved = append_context.resolve_advance_to_text_row(
+        &mut resolver,
+        &mut builder,
+        &mut eval,
+        &mut font_metrics,
+        b"x",
+        0,
+        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
+        &face_resolver,
+        &active_face,
+        DisplayRowPosition {
+            x_px: 80.0,
+            col: 10,
+        },
         BufferTextFragmentClusterState::for_char('x', None),
     );
 

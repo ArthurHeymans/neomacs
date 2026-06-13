@@ -1452,6 +1452,13 @@ impl DisplayRowRenderBounds {
             max_x_px: width_px.max(0.0),
         }
     }
+
+    pub(crate) fn unbounded_from(start: DisplayRowPosition) -> Self {
+        Self {
+            start,
+            max_x_px: f32::INFINITY,
+        }
+    }
 }
 
 pub(crate) fn install_rendered_display_row(
