@@ -1281,8 +1281,17 @@ impl DisplayRowLispStringSourceSession {
         request: DisplayRowSourceRenderRequest<'_>,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<DisplayRowRenderResult> {
-        renderer.render_display_item_source_row_step_from_request_with_context(
-            request,
+        self.render_next_row_plan_with_context(renderer, request.into_render_plan(), context)
+    }
+
+    fn render_next_row_plan_with_context(
+        &mut self,
+        renderer: &mut DisplayRowRenderer<'_>,
+        plan: DisplayRowRenderPlan<'_>,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<DisplayRowRenderResult> {
+        renderer.render_display_item_source_row_step_with_context(
+            plan,
             &mut self.source,
             &mut self.state,
             context,
@@ -2618,9 +2627,11 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
         let base_face_id = plan.base_face_id;
-        let mut source =
-            LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
-        self.render_display_item_source_row_with_context(plan, &mut source, context)
+        let request = DisplayRowLispStringSourceSessionRequest::new(1, rendered, base_face_id);
+        let mut session = DisplayRowLispStringSourceSession::new(request)?;
+        session
+            .render_next_row_plan_with_context(self, plan, context)
+            .map(|result| result.rendered)
     }
 
     pub(crate) fn render_lisp_string_source_row_with_context(
@@ -2648,6 +2659,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         )
     }
 
+    #[cfg(test)]
     fn render_display_item_source_row_with_context(
         &mut self,
         plan: DisplayRowRenderPlan<'_>,
@@ -2673,6 +2685,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         Some(result)
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_item_source_row_step_from_request_with_context(
         &mut self,
         request: DisplayRowSourceRenderRequest<'_>,
