@@ -6,7 +6,6 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
-use crate::bidi::{self, BidiDir};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -82,41 +81,6 @@ pub struct GlyphMatrixBuilder {
     border_color: Color,
     background_alpha: f32,
     no_accept_focus: bool,
-}
-
-#[derive(Clone)]
-struct BidiGlyphUnit {
-    ch: char,
-    cols: Vec<usize>,
-    glyphs: Vec<Glyph>,
-}
-
-fn bidi_char_for_glyph(glyph: &Glyph) -> Option<char> {
-    if glyph.padding {
-        return None;
-    }
-
-    match &glyph.glyph_type {
-        GlyphType::Char { ch } | GlyphType::Glyphless { ch } => Some(*ch),
-        GlyphType::Composite { text } => text.chars().next(),
-        GlyphType::Stretch { .. } => Some(' '),
-        GlyphType::Image { .. } => None,
-    }
-}
-
-fn apply_bidi_mirroring(glyph: &mut Glyph, level: u8) {
-    if level & 1 == 0 {
-        return;
-    }
-
-    match &mut glyph.glyph_type {
-        GlyphType::Char { ch } | GlyphType::Glyphless { ch } => {
-            if let Some(mirrored) = bidi::bidi_mirror(*ch) {
-                *ch = mirrored;
-            }
-        }
-        GlyphType::Composite { .. } | GlyphType::Stretch { .. } | GlyphType::Image { .. } => {}
-    }
 }
 
 impl GlyphMatrixBuilder {
@@ -1370,7 +1334,7 @@ impl GlyphMatrixBuilder {
             let row = &mut matrix.rows[self.current_row];
             row.displays_text = !glyphs.is_empty();
             row.glyphs[GlyphArea::Text.index()] = glyphs;
-            let _ = Self::reorder_row_bidi(row, None);
+            let _ = crate::glyph_row_writer::reorder_row_bidi(row, None);
         }
     }
 
@@ -1562,149 +1526,12 @@ impl GlyphMatrixBuilder {
         state
     }
 
-    fn collect_bidi_units(text: &[Glyph]) -> Vec<BidiGlyphUnit> {
-        let mut units = Vec::new();
-        let mut idx = 0;
-
-        while idx < text.len() {
-            let glyph = &text[idx];
-            let Some(ch) = bidi_char_for_glyph(glyph) else {
-                idx += 1;
-                continue;
-            };
-
-            let mut cols = vec![idx];
-            let mut glyphs = vec![glyph.clone()];
-            idx += 1;
-
-            // Absorb this base's trailing padding cells into the same bidi
-            // unit so the glyph stays a contiguous, base-first block under
-            // visual reordering: a 2-column wide char (one padding) or a
-            // multi-column composed Arabic/Indic run (one padding per extra
-            // character). Padding is only ever emitted immediately after its
-            // base, so consecutive padding always belongs to this glyph.
-            while idx < text.len() && text[idx].padding {
-                cols.push(idx);
-                glyphs.push(text[idx].clone());
-                idx += 1;
-            }
-
-            units.push(BidiGlyphUnit { ch, cols, glyphs });
-        }
-
-        units
-    }
-
-    fn rewrite_units_into_row(
-        row: &mut GlyphRow,
-        original_text: &[Glyph],
-        units: &[BidiGlyphUnit],
-        levels: &[u8],
-        visual_order: Vec<usize>,
-        cursor_logical_idx: Option<usize>,
-        phys_cursor_logical_idx: Option<usize>,
-    ) -> Option<u16> {
-        let available_cols: Vec<usize> = units
-            .iter()
-            .flat_map(|unit| unit.cols.iter().copied())
-            .collect();
-        let mut next_col = 0usize;
-        let mut reordered = original_text.to_vec();
-        let mut visual_cursor_col = None;
-        let mut remapped_phys_cursor_col = None;
-
-        for logical_idx in visual_order {
-            let unit = &units[logical_idx];
-            let unit_len = unit.glyphs.len();
-            let Some(target_cols) = available_cols.get(next_col..next_col + unit_len) else {
-                return None;
-            };
-            if !target_cols.windows(2).all(|w| w[1] == w[0] + 1) {
-                return None;
-            }
-
-            let target_start = target_cols[0];
-            let mut placed = unit.glyphs.clone();
-            for glyph in &mut placed {
-                glyph.bidi_level = levels[logical_idx];
-            }
-            if let Some(first) = placed.first_mut() {
-                apply_bidi_mirroring(first, levels[logical_idx]);
-            }
-            for (offset, glyph) in placed.into_iter().enumerate() {
-                reordered[target_start + offset] = glyph;
-            }
-
-            if cursor_logical_idx == Some(logical_idx) {
-                visual_cursor_col = Some(target_start as u16);
-            }
-            if phys_cursor_logical_idx == Some(logical_idx) {
-                remapped_phys_cursor_col = Some(target_start as u16);
-            }
-
-            next_col += unit_len;
-        }
-
-        row.glyphs[GlyphArea::Text.index()] = reordered;
-        if let Some(col) = visual_cursor_col {
-            row.cursor_col = Some(col);
-        }
-        remapped_phys_cursor_col
-    }
-
+    #[cfg(test)]
     pub(crate) fn reorder_row_bidi(
         row: &mut GlyphRow,
         phys_cursor_col: Option<u16>,
     ) -> Option<u16> {
-        let original_text = row.glyphs[GlyphArea::Text.index()].clone();
-        if original_text.is_empty() {
-            return None;
-        }
-
-        let units = Self::collect_bidi_units(&original_text);
-        if units.is_empty() {
-            return None;
-        }
-
-        let chars: String = units.iter().map(|unit| unit.ch).collect();
-        let levels = bidi::resolve_levels(&chars, BidiDir::Auto);
-        if levels.len() != units.len() {
-            return None;
-        }
-
-        // GNU marks a row whose paragraph base direction is right-to-left as
-        // `reversed_p` and displays it flush to the right margin (src/xdisp.c).
-        // We record the same flag here; row materialization reads it to offset
-        // the glyphs to the right edge. Determined from the logical-order
-        // representative chars (first strong character sets the base level).
-        row.reversed_p = bidi::paragraph_base_level(&chars, BidiDir::Auto) & 1 == 1;
-
-        let cursor_logical_idx = row.cursor_col.and_then(|col| {
-            units
-                .iter()
-                .position(|unit| unit.cols.iter().any(|&idx| idx == col as usize))
-        });
-        let phys_cursor_logical_idx = phys_cursor_col.and_then(|col| {
-            units
-                .iter()
-                .position(|unit| unit.cols.iter().any(|&idx| idx == col as usize))
-        });
-
-        let visual_order = if levels.iter().all(|&level| level == 0) {
-            (0..units.len()).collect()
-        } else {
-            bidi::reorder_visual(&levels)
-        };
-
-        Self::rewrite_units_into_row(
-            row,
-            &original_text,
-            &units,
-            &levels,
-            visual_order,
-            cursor_logical_idx,
-            phys_cursor_logical_idx,
-        )
+        crate::glyph_row_writer::reorder_row_bidi(row, phys_cursor_col)
     }
 
     fn reorder_current_row_bidi(&mut self) {
@@ -1722,7 +1549,10 @@ impl GlyphMatrixBuilder {
                 })
                 .map(|cursor| cursor.col);
 
-            Self::reorder_row_bidi(&mut matrix.rows[self.current_row], phys_cursor_col)
+            crate::glyph_row_writer::reorder_row_bidi(
+                &mut matrix.rows[self.current_row],
+                phys_cursor_col,
+            )
         } else {
             None
         };
