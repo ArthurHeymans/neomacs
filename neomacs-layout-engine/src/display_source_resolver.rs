@@ -1,9 +1,12 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
+use crate::display_origin::DisplayOrigin;
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
-use crate::neovm_bridge::{FaceResolver, ResolvedFace};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use neomacs_display_protocol::face::BasicFaceId;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::HashMap;
@@ -169,6 +172,87 @@ struct DisplayHeightFaceKey {
 pub(crate) struct PendingDisplaySourceFace {
     pub(crate) face_id: u32,
     pub(crate) resolved: ResolvedFace,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayDefaultFaceInstallPolicy {
+    InstallDefaultFace,
+    ReuseInstalledDefaultFace,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ActiveDisplayStringBaseFace<'a> {
+    face_id: u32,
+    resolved: &'a ResolvedFace,
+}
+
+impl<'a> ActiveDisplayStringBaseFace<'a> {
+    pub(crate) fn new(face_id: u32, resolved: &'a ResolvedFace) -> Self {
+        Self { face_id, resolved }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayStringBaseFace {
+    face: ResolvedFace,
+    face_id: u32,
+    pending_face: Option<PendingDisplaySourceFace>,
+}
+
+impl DisplayStringBaseFace {
+    pub(crate) fn face(&self) -> &ResolvedFace {
+        &self.face
+    }
+
+    pub(crate) fn face_id(&self) -> u32 {
+        self.face_id
+    }
+
+    pub(crate) fn pending_face(&self) -> Option<&PendingDisplaySourceFace> {
+        self.pending_face.as_ref()
+    }
+}
+
+pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &FaceResolver,
+    origin: DisplayOrigin,
+    policy: BaseFacePolicy,
+    active_base_face: Option<ActiveDisplayStringBaseFace<'_>>,
+    default_install_policy: DisplayDefaultFaceInstallPolicy,
+    face_ids: &mut FrameFaceIdAllocator,
+) -> DisplayStringBaseFace {
+    let mut next_check = buffer.layout_point_max_char_pos().get();
+    let face = face_resolver.base_face_for_origin(Some(buffer), &origin, policy, &mut next_check);
+
+    let (face_id, pending_face) = if let Some(active_base_face) = active_base_face
+        && same_resolved_face(&face, active_base_face.resolved)
+    {
+        (active_base_face.face_id, None)
+    } else if same_resolved_face(&face, face_resolver.default_face()) {
+        let face_id = u32::from(BasicFaceId::Default);
+        let pending_face = match default_install_policy {
+            DisplayDefaultFaceInstallPolicy::InstallDefaultFace => Some(PendingDisplaySourceFace {
+                face_id,
+                resolved: face.clone(),
+            }),
+            DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace => None,
+        };
+        (face_id, pending_face)
+    } else {
+        let face_id = face_ids.allocate();
+        let pending_face = Some(PendingDisplaySourceFace {
+            face_id,
+            resolved: face.clone(),
+        });
+        (face_id, pending_face)
+    };
+
+    DisplayStringBaseFace {
+        face,
+        face_id,
+        pending_face,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -354,4 +438,123 @@ pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool
         && lhs.box_line_width == rhs.box_line_width
         && lhs.extend == rhs.extend
         && lhs.terminal_inverse_video == rhs.terminal_inverse_video
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::neovm_bridge::LayoutBufferSnapshot;
+    use neovm_core::emacs_core::Context;
+    use neovm_core::face::FaceTable;
+
+    fn test_buffer_snapshot() -> LayoutBufferSnapshot {
+        let mut context = Context::new();
+        let buf_id = context
+            .buffer_manager()
+            .current_buffer()
+            .expect("current buffer")
+            .id();
+        {
+            let buffer = context
+                .buffer_manager_mut()
+                .get_mut(buf_id)
+                .expect("current buffer");
+            buffer.insert("abc");
+            buffer.widen();
+        }
+        let buffer = context
+            .buffer_manager()
+            .get(buf_id)
+            .expect("current buffer");
+        LayoutBufferSnapshot::from_buffer(buffer)
+    }
+
+    fn test_face_resolver(table: &FaceTable) -> FaceResolver {
+        FaceResolver::new(table, 0x00ffffff, 0x000000, 14.0, None)
+    }
+
+    #[test]
+    fn display_string_base_face_reuses_active_face_before_default_policy() {
+        let buffer = test_buffer_snapshot();
+        let table = FaceTable::new();
+        let resolver = test_face_resolver(&table);
+        let mut face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
+
+        let base_face = resolve_display_string_base_face(
+            &buffer,
+            &resolver,
+            DisplayOrigin::EchoArea,
+            BaseFacePolicy::DefaultFace,
+            Some(ActiveDisplayStringBaseFace::new(
+                500,
+                resolver.default_face(),
+            )),
+            DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
+            &mut face_ids,
+        );
+
+        assert_eq!(base_face.face_id(), 500);
+        assert!(base_face.pending_face().is_none());
+        assert!(same_resolved_face(
+            base_face.face(),
+            resolver.default_face()
+        ));
+    }
+
+    #[test]
+    fn display_string_base_face_default_policy_controls_pending_face() {
+        let buffer = test_buffer_snapshot();
+        let table = FaceTable::new();
+        let resolver = test_face_resolver(&table);
+        let mut install_face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
+        let mut reuse_face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
+
+        let installed = resolve_display_string_base_face(
+            &buffer,
+            &resolver,
+            DisplayOrigin::EchoArea,
+            BaseFacePolicy::DefaultFace,
+            None,
+            DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
+            &mut install_face_ids,
+        );
+        let reused = resolve_display_string_base_face(
+            &buffer,
+            &resolver,
+            DisplayOrigin::EchoArea,
+            BaseFacePolicy::DefaultFace,
+            None,
+            DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
+            &mut reuse_face_ids,
+        );
+
+        assert_eq!(installed.face_id(), u32::from(BasicFaceId::Default));
+        assert!(installed.pending_face().is_some());
+        assert_eq!(reused.face_id(), u32::from(BasicFaceId::Default));
+        assert!(reused.pending_face().is_none());
+    }
+
+    #[test]
+    fn display_string_base_face_allocates_pending_face_for_dynamic_source_face() {
+        let buffer = test_buffer_snapshot();
+        let table = FaceTable::new();
+        let resolver = test_face_resolver(&table);
+        let mut face_ids = FrameFaceIdAllocator::new(500);
+
+        let base_face = resolve_display_string_base_face(
+            &buffer,
+            &resolver,
+            DisplayOrigin::ModeLine,
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
+            None,
+            DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
+            &mut face_ids,
+        );
+
+        assert_eq!(base_face.face_id(), 500);
+        let pending_face = base_face.pending_face().expect("pending face");
+        assert_eq!(pending_face.face_id, 500);
+        assert!(same_resolved_face(&pending_face.resolved, base_face.face()));
+        assert_eq!(face_ids.finish(), 501);
+    }
 }

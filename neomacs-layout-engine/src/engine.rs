@@ -60,7 +60,10 @@ use crate::display_row_geometry::{
     DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBox};
-use crate::display_source_resolver::resolve_display_property_media;
+use crate::display_source_resolver::{
+    ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
+    resolve_display_property_media, resolve_display_string_base_face,
+};
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -1892,12 +1895,6 @@ fn text_display_tab_policy(
     )
 }
 
-#[derive(Clone, Debug)]
-struct DisplayStringBaseFace {
-    face: super::neovm_bridge::ResolvedFace,
-    face_id: u32,
-}
-
 fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
     buffer: &B,
     face_resolver: &super::neovm_bridge::FaceResolver,
@@ -1912,7 +1909,7 @@ fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
         origin,
         policy,
         None,
-        true,
+        DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
         face_ids,
         builder,
     )
@@ -1933,8 +1930,11 @@ fn display_string_base_face_for_active_row<B: super::neovm_bridge::LayoutBufferV
         face_resolver,
         origin,
         policy,
-        Some(active_face_state),
-        false,
+        Some(ActiveDisplayStringBaseFace::new(
+            active_face_state.face_id(),
+            active_face_state.resolved_face(),
+        )),
+        DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
         face_ids,
         builder,
     )
@@ -1946,34 +1946,29 @@ fn display_string_base_face_from_origin<B: super::neovm_bridge::LayoutBufferView
     face_resolver: &super::neovm_bridge::FaceResolver,
     origin: DisplayOrigin,
     policy: BaseFacePolicy,
-    active_face_state: Option<&DisplayRowActiveFaceState>,
-    install_default_face: bool,
+    active_base_face: Option<ActiveDisplayStringBaseFace<'_>>,
+    default_install_policy: DisplayDefaultFaceInstallPolicy,
     face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) -> DisplayStringBaseFace {
-    let mut next_check = buffer.layout_point_max_char_pos().get();
-    let face = face_resolver.base_face_for_origin(Some(buffer), &origin, policy, &mut next_check);
-    let (face_id, should_install) = if let Some(active_face_state) = active_face_state
-        && crate::display_source_resolver::same_resolved_face(
-            &face,
-            active_face_state.resolved_face(),
-        ) {
-        (active_face_state.face_id(), false)
-    } else if crate::display_source_resolver::same_resolved_face(
-        &face,
-        face_resolver.default_face(),
-    ) {
-        (
-            u32::from(neomacs_display_protocol::face::BasicFaceId::Default),
-            install_default_face,
-        )
-    } else {
-        (face_ids.allocate(), true)
-    };
-    if should_install {
-        insert_resolved_display_row_face(builder, face_id, &face, None);
+    let base_face = resolve_display_string_base_face(
+        buffer,
+        face_resolver,
+        origin,
+        policy,
+        active_base_face,
+        default_install_policy,
+        face_ids,
+    );
+    if let Some(pending_face) = base_face.pending_face() {
+        insert_resolved_display_row_face(
+            builder,
+            pending_face.face_id,
+            &pending_face.resolved,
+            None,
+        );
     }
-    DisplayStringBaseFace { face, face_id }
+    base_face
 }
 
 /// Render overlay string bytes into the layout.
@@ -2067,7 +2062,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
         1,
         text_value,
-        crate::display_item::RenderFaceRef::FaceId(base_face.face_id),
+        crate::display_item::RenderFaceRef::FaceId(base_face.face_id()),
     ) else {
         return;
     };
@@ -2104,8 +2099,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             &mut source,
             &mut source_state,
             face_resolver,
-            &base_face.face,
-            base_face.face_id,
+            base_face.face(),
+            base_face.face_id(),
             face_ids,
             frame,
             DisplayRowPosition {
@@ -2121,7 +2116,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             face_width: face_char_w,
             face_height: char_h,
             face_ascent: default_row_ascent,
-            background: Color::from_pixel(base_face.face.bg),
+            background: Color::from_pixel(base_face.face().bg),
         };
         for slot in &outcome.source_slots {
             capture_overlay_string_cursor_at_slot(
@@ -4241,8 +4236,8 @@ impl LayoutEngine {
                         prefix_fragment,
                         2,
                         face_resolver,
-                        &prefix_base_face.face,
-                        prefix_base_face.face_id,
+                        prefix_base_face.face(),
+                        prefix_base_face.face_id(),
                         &mut face_ids,
                         append_frame,
                         DisplayRowPosition { x_px: x, col },
@@ -4593,8 +4588,8 @@ impl LayoutEngine {
                                 display_replacement_source,
                                 1,
                                 face_resolver,
-                                &replacement_base_face.face,
-                                replacement_base_face.face_id,
+                                replacement_base_face.face(),
+                                replacement_base_face.face_id(),
                                 &mut face_ids,
                                 append_frame,
                                 DisplayRowPosition { x_px: x, col },
