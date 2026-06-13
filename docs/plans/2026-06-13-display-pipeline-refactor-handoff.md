@@ -52,6 +52,7 @@ Continuation work after this handoff:
 - Buffer text fragment append advance selection now uses typed `BufferTextFragmentAdvancePath` variants for natural face-column, natural rendered-fragment, and resolved complex-run paths instead of inline conditional policy.
 - Buffer text fragment natural fallback advance now uses typed `BufferTextFragmentNaturalFallbackAdvance` variants for tab, cluster-continuation, and face-column width policy instead of raw fallback conditionals.
 - Overlay string rendering now consumes the shared `DisplayRowAppendSurface` from the main text row instead of rebuilding append bounds from raw right-limit/content-x values at every overlay call site.
+- Overlay string rendering now receives a typed `OverlayStringRenderRowContext`, and display-property replacement strings derive their full text-width append surface from the shared text-row append surface instead of rebuilding raw width geometry in `engine.rs`.
 - Latest local verification:
 
   ```bash
@@ -64,7 +65,7 @@ Continuation work after this handoff:
   cargo check
   ```
 
-  Full layout-engine nextest passed with 1059 tests after routing overlay string rendering through the shared append surface.
+  Full layout-engine nextest passed with 1059 tests after grouping overlay row context and replacement-string append geometry behind typed row append inputs.
 
 ## Why This Refactor Exists
 

@@ -1018,6 +1018,10 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
     assert_eq!(surface.content_x(), 8.0);
     assert_eq!(surface.right_edge(), 128.0);
 
+    let full_text_surface = surface.full_text_width_surface();
+    assert_eq!(full_text_surface.content_x(), 8.0);
+    assert_eq!(full_text_surface.right_edge(), 148.0);
+
     let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
     let frame = surface.frame_from_geometry_state(
         &geometry,

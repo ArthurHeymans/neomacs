@@ -1353,6 +1353,13 @@ impl DisplayRowAppendArea {
     pub(crate) fn right_edge(self) -> f32 {
         self.content_x + self.width
     }
+
+    fn full_text_width(self) -> Self {
+        Self {
+            width: (self.text_width - self.line_number_width).max(0.0),
+            ..self
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1372,6 +1379,13 @@ impl DisplayRowAppendSurface {
 
     pub(crate) fn right_edge(&self) -> f32 {
         self.area.right_edge()
+    }
+
+    pub(crate) fn full_text_width_surface(&self) -> Self {
+        Self {
+            area: self.area.full_text_width(),
+            tab_policy: self.tab_policy.clone(),
+        }
     }
 
     fn frame(

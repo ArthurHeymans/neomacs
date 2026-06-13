@@ -40,8 +40,8 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem, DisplayReplacementAppendItem,
-    DisplayReplacementStringItemMeasurer, DisplayRowAppendArea, DisplayRowAppendSurface,
-    append_buffer_text_item_fragment_to_text_row_and_emit,
+    DisplayReplacementStringItemMeasurer, DisplayRowAppendArea, DisplayRowAppendFrame,
+    DisplayRowAppendSurface, append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
@@ -1967,6 +1967,80 @@ fn display_string_base_face_from_origin<B: super::neovm_bridge::LayoutBufferView
     base_face
 }
 
+#[derive(Clone, Copy)]
+struct OverlayStringRenderRowContext<'a> {
+    append_surface: &'a DisplayRowAppendSurface,
+    face_char_w: f32,
+    char_h: f32,
+    default_row_ascent: f32,
+    text_y: f32,
+    row_base: usize,
+    max_rows: usize,
+}
+
+impl<'a> OverlayStringRenderRowContext<'a> {
+    fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        face_char_w: f32,
+        char_h: f32,
+        default_row_ascent: f32,
+        text_y: f32,
+        row_base: usize,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            append_surface,
+            face_char_w,
+            char_h,
+            default_row_ascent,
+            text_y,
+            row_base,
+            max_rows,
+        }
+    }
+
+    fn content_x(self) -> f32 {
+        self.append_surface.content_x()
+    }
+
+    fn right_edge(self) -> f32 {
+        self.append_surface.right_edge()
+    }
+
+    fn geometry_defaults(self) -> DisplayRowGeometryDefaults {
+        DisplayRowGeometryDefaults::new(self.text_y, self.char_h, self.default_row_ascent)
+    }
+
+    fn row_limit(self) -> DisplayRowLimit {
+        DisplayRowLimit {
+            max_rows: self.max_rows,
+        }
+    }
+
+    fn frame_for_geometry(self, geometry: &DisplayRowGeometryState) -> DisplayRowAppendFrame {
+        self.append_surface.text_row_frame_from_geometry_state(
+            geometry,
+            0.0,
+            self.char_h,
+            self.default_row_ascent,
+            self.face_char_w,
+            self.char_h,
+        )
+    }
+
+    fn cursor_visual_state(
+        self,
+        base_face: &super::neovm_bridge::ResolvedFace,
+    ) -> CapturedCursorVisualState {
+        CapturedCursorVisualState {
+            face_width: self.face_char_w,
+            face_height: self.char_h,
+            face_ascent: self.default_row_ascent,
+            background: Color::from_pixel(base_face.bg),
+        }
+    }
+}
+
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
@@ -1987,13 +2061,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     hit_row_range: &mut HitRowRangeTracker,
     anchor_charpos: i64,
     row_y_positions: &mut DisplayRowYPositions,
-    append_surface: &DisplayRowAppendSurface,
-    face_char_w: f32,
-    char_h: f32,
-    default_row_ascent: f32,
-    text_y: f32,
-    row_base: usize,
-    max_rows: usize,
+    row_context: OverlayStringRenderRowContext<'_>,
     face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) {
@@ -2012,10 +2080,10 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         face_ids,
         builder,
     );
-    let content_x = append_surface.content_x();
-    let max_x = append_surface.right_edge();
-    let row_geometry_defaults = DisplayRowGeometryDefaults::new(text_y, char_h, default_row_ascent);
-    let row_limit = DisplayRowLimit { max_rows };
+    let content_x = row_context.content_x();
+    let max_x = row_context.right_edge();
+    let row_geometry_defaults = row_context.geometry_defaults();
+    let row_limit = row_context.row_limit();
 
     macro_rules! finish_overlay_string_row {
         () => {{
@@ -2023,7 +2091,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 DisplayRowBoundaryTarget::line_break(
                     hit_row_range.range_to(anchor_charpos),
                     row_geometry_defaults,
-                    row_base,
+                    row_context.row_base,
                     0,
                     content_x,
                     0.0,
@@ -2069,14 +2137,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             break;
         }
 
-        let frame = append_surface.text_row_frame_from_geometry_state(
-            geometry,
-            0.0,
-            char_h,
-            default_row_ascent,
-            face_char_w,
-            char_h,
-        );
+        let frame = row_context.frame_for_geometry(geometry);
         let Some(outcome) = render_lisp_string_source_append_to_text_row_and_emit(
             builder,
             output_emitter,
@@ -2098,12 +2159,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         };
         let stop = outcome.stop;
         geometry.include_glyph_vertical_metrics(outcome.row_height_px, outcome.row_ascent_px);
-        let overlay_cursor_visual_state = CapturedCursorVisualState {
-            face_width: face_char_w,
-            face_height: char_h,
-            face_ascent: default_row_ascent,
-            background: Color::from_pixel(base_face.face().bg),
-        };
+        let overlay_cursor_visual_state = row_context.cursor_visual_state(base_face.face());
         for slot in &outcome.source_slots {
             capture_overlay_string_cursor_at_slot(
                 text_props.as_ref(),
@@ -4324,13 +4380,15 @@ impl LayoutEngine {
                                     &mut hit_row_range,
                                     charpos,
                                     &mut row_y_positions,
-                                    &text_append_surface,
-                                    face_metrics.char_width,
-                                    char_h,
-                                    default_face_ascent,
-                                    text_y,
-                                    text_matrix_row_base,
-                                    max_rows,
+                                    OverlayStringRenderRowContext::new(
+                                        &text_append_surface,
+                                        face_metrics.char_width,
+                                        char_h,
+                                        default_face_ascent,
+                                        text_y,
+                                        text_matrix_row_base,
+                                        max_rows,
+                                    ),
                                     &mut face_ids,
                                     &mut self.matrix_builder,
                                 );
@@ -4526,16 +4584,8 @@ impl LayoutEngine {
                             );
                         }
                         if !replacement.is_empty() {
-                            let right_limit = content_x + (text_width - lnum_pixel_width);
-                            let replacement_string_surface = DisplayRowAppendSurface::new(
-                                DisplayRowAppendArea::new(
-                                    content_x,
-                                    right_limit - content_x,
-                                    text_width,
-                                    lnum_pixel_width,
-                                ),
-                                text_display_tab_policy(content_x, params),
-                            );
+                            let replacement_string_surface =
+                                text_append_surface.full_text_width_surface();
                             let replacement_fragment = DisplayTextFragment::display_property_string(
                                 prop_val,
                                 display_property_char_pos,
@@ -5584,13 +5634,15 @@ impl LayoutEngine {
                             &mut hit_row_range,
                             charpos,
                             &mut row_y_positions,
-                            &text_append_surface,
-                            face_metrics.char_width,
-                            char_h,
-                            default_face_ascent,
-                            text_y,
-                            text_matrix_row_base,
-                            max_rows,
+                            OverlayStringRenderRowContext::new(
+                                &text_append_surface,
+                                face_metrics.char_width,
+                                char_h,
+                                default_face_ascent,
+                                text_y,
+                                text_matrix_row_base,
+                                max_rows,
+                            ),
                             &mut face_ids,
                             &mut self.matrix_builder,
                         );
@@ -5679,13 +5731,15 @@ impl LayoutEngine {
                             &mut hit_row_range,
                             charpos,
                             &mut row_y_positions,
-                            &text_append_surface,
-                            face_metrics.char_width,
-                            char_h,
-                            default_face_ascent,
-                            text_y,
-                            text_matrix_row_base,
-                            max_rows,
+                            OverlayStringRenderRowContext::new(
+                                &text_append_surface,
+                                face_metrics.char_width,
+                                char_h,
+                                default_face_ascent,
+                                text_y,
+                                text_matrix_row_base,
+                                max_rows,
+                            ),
                             &mut face_ids,
                             &mut self.matrix_builder,
                         );
@@ -5761,13 +5815,15 @@ impl LayoutEngine {
                     &mut hit_row_range,
                     charpos,
                     &mut row_y_positions,
-                    &text_append_surface,
-                    face_metrics.char_width,
-                    char_h,
-                    default_face_ascent,
-                    text_y,
-                    text_matrix_row_base,
-                    max_rows,
+                    OverlayStringRenderRowContext::new(
+                        &text_append_surface,
+                        face_metrics.char_width,
+                        char_h,
+                        default_face_ascent,
+                        text_y,
+                        text_matrix_row_base,
+                        max_rows,
+                    ),
                     &mut face_ids,
                     &mut self.matrix_builder,
                 );
@@ -5793,13 +5849,15 @@ impl LayoutEngine {
                     &mut hit_row_range,
                     charpos,
                     &mut row_y_positions,
-                    &text_append_surface,
-                    face_metrics.char_width,
-                    char_h,
-                    default_face_ascent,
-                    text_y,
-                    text_matrix_row_base,
-                    max_rows,
+                    OverlayStringRenderRowContext::new(
+                        &text_append_surface,
+                        face_metrics.char_width,
+                        char_h,
+                        default_face_ascent,
+                        text_y,
+                        text_matrix_row_base,
+                        max_rows,
+                    ),
                     &mut face_ids,
                     &mut self.matrix_builder,
                 );
