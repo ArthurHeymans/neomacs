@@ -142,6 +142,27 @@ fn display_row_spec_allocates_dynamic_base_face_id_through_allocator() {
 }
 
 #[test]
+fn display_row_render_context_builds_source_resolve_params() {
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let base_face = face_resolver.default_face();
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let context = DisplayRowRenderContext::new(&face_resolver, None, &mut face_ids);
+    let fallback =
+        crate::display_source_resolver::DisplaySourceFallbackMetrics::new(8.0, 12.0, 16.0);
+
+    let params = context.source_resolve_params(7, base_face, fallback);
+
+    assert_eq!(params.face_basis().base_face_id(), 7);
+    assert_eq!(params.face_basis().fallback_metrics(), fallback);
+    assert!(std::ptr::eq(params.face_basis().base_face(), base_face));
+    assert!(std::ptr::eq(
+        params.face_basis().canonical_face(),
+        base_face
+    ));
+}
+
+#[test]
 fn display_row_resolved_measured_face_installs_render_and_measurement_identity() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let mut font_metrics = None;
@@ -693,6 +714,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     let mut state = DisplayRowSourceState::default();
     let mut policy = DirectTextRunPolicy;
+    let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
     let result = renderer
         .render_display_item_source_row_fragment_step_into_row_with_policy(
@@ -714,9 +736,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
             &mut row,
             &mut source,
             &mut state,
-            &resolver,
-            None,
-            &mut face_ids,
+            &mut context,
             &mut policy,
         )
         .expect("rendered row");

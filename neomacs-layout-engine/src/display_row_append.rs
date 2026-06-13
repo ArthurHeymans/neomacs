@@ -14,8 +14,8 @@ use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
     DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
-    DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, install_rendered_display_row_fragment_assets,
+    DisplayRowRenderContext, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
+    DisplayRowSourceState, DisplayRowSpec, install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
 #[cfg(test)]
@@ -161,14 +161,17 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
     let role = row_spec.role;
     let mut renderer = DisplayRowRenderer::new(font_metrics);
     let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
+        let mut context = DisplayRowRenderContext::new(
+            face_resolver,
+            evaluator.display_host.as_deref(),
+            face_ids,
+        );
         let result = renderer.render_display_item_source_row_fragment_step_into_row_with_policy(
             row_spec,
             row,
             source,
             source_state,
-            face_resolver,
-            evaluator.display_host.as_deref(),
-            face_ids,
+            &mut context,
             render_policy,
         )?;
         Some((result, row.height_px, row.ascent_px))

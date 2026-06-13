@@ -1733,6 +1733,45 @@ impl From<DisplayMediaReplacementKind> for RenderedDisplayRowMediaKind {
     }
 }
 
+pub(crate) struct DisplayRowRenderContext<'a, 'ids> {
+    face_resolver: &'a FaceResolver,
+    display_host: Option<&'a dyn DisplayHost>,
+    face_ids: &'ids mut FrameFaceIdAllocator,
+}
+
+impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
+    pub(crate) fn new(
+        face_resolver: &'a FaceResolver,
+        display_host: Option<&'a dyn DisplayHost>,
+        face_ids: &'ids mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            face_resolver,
+            display_host,
+            face_ids,
+        }
+    }
+
+    pub(crate) fn source_resolve_params<'b>(
+        &self,
+        base_face_id: u32,
+        base_face: &'b ResolvedFace,
+        fallback: DisplaySourceFallbackMetrics,
+    ) -> DisplaySourceResolveParams<'b>
+    where
+        'a: 'b,
+    {
+        DisplaySourceResolveParams::new(
+            DisplaySourceFaceBasis::new(self.face_resolver, base_face_id, base_face, fallback),
+            self.display_host.map(|host| host as &'b dyn DisplayHost),
+        )
+    }
+
+    fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
+        self.face_ids
+    }
+}
+
 pub(crate) struct DisplayRowRenderer<'metrics> {
     font_metrics: &'metrics mut Option<FontMetricsService>,
 }
@@ -1761,16 +1800,20 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
+        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        self.render_lisp_string_row_with_context(spec, rendered, &mut context)
+    }
+
+    pub(crate) fn render_lisp_string_row_with_context(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        rendered: Value,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<RenderedDisplayRow> {
         let base_face_id = spec.base_face_id;
         let mut source =
             LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
-        self.render_display_item_source_row_with_display_host(
-            spec,
-            &mut source,
-            face_resolver,
-            display_host,
-            face_ids,
-        )
+        self.render_display_item_source_row_with_context(spec, &mut source, context)
     }
 
     #[cfg(test)]
@@ -1798,6 +1841,16 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
+        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        self.render_display_text_fragment_row_with_context(spec, fragment, &mut context)
+    }
+
+    pub(crate) fn render_display_text_fragment_row_with_context(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        fragment: DisplayTextFragment,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<RenderedDisplayRow> {
         let rendered = match fragment.storage {
             DisplayTextStorage::LispString(value) => value,
             DisplayTextStorage::Static(value) => Value::string(value),
@@ -1806,13 +1859,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let base_face_id = spec.base_face_id;
         let mut source =
             LispStringSourceCursor::new(1, rendered, RenderFaceRef::FaceId(base_face_id))?;
-        self.render_display_item_source_row_with_display_host(
-            spec,
-            &mut source,
-            face_resolver,
-            display_host,
-            face_ids,
-        )
+        self.render_display_item_source_row_with_context(spec, &mut source, context)
     }
 
     #[cfg(test)]
@@ -1832,6 +1879,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_item_source_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -1840,16 +1888,19 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<RenderedDisplayRow> {
+        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        self.render_display_item_source_row_with_context(spec, source, &mut context)
+    }
+
+    pub(crate) fn render_display_item_source_row_with_context(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut impl DisplayItemSource,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<RenderedDisplayRow> {
         let mut state = DisplayRowSourceState::default();
-        self.render_display_item_source_row_step_with_display_host(
-            spec,
-            source,
-            &mut state,
-            face_resolver,
-            display_host,
-            face_ids,
-        )
-        .map(|result| result.rendered)
+        self.render_display_item_source_row_step_with_context(spec, source, &mut state, context)
+            .map(|result| result.rendered)
     }
 
     pub(crate) fn render_display_item_source_row_step_with_display_host(
@@ -1861,18 +1912,25 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderResult> {
-        let mut result = self.render_display_item_source_row_fragment_step_with_display_host(
-            spec,
-            source,
-            state,
-            face_resolver,
-            display_host,
-            face_ids,
+        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        self.render_display_item_source_row_step_with_context(spec, source, state, &mut context)
+    }
+
+    pub(crate) fn render_display_item_source_row_step_with_context(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<DisplayRowRenderResult> {
+        let mut result = self.render_display_item_source_row_fragment_step_with_context(
+            spec, source, state, context,
         )?;
         GlyphMatrixBuilder::normalize_external_row(&mut result.rendered.row);
         Some(result)
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_item_source_row_fragment_step_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -1882,19 +1940,30 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderResult> {
-        let mut row = GlyphRow::new(spec.role);
-        let result = self.render_display_item_source_row_fragment_step_into_row_with_display_host(
+        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        self.render_display_item_source_row_fragment_step_with_context(
             spec,
-            &mut row,
             source,
             state,
-            face_resolver,
-            display_host,
-            face_ids,
+            &mut context,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_with_context(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<DisplayRowRenderResult> {
+        let mut row = GlyphRow::new(spec.role);
+        let result = self.render_display_item_source_row_fragment_step_into_row_with_context(
+            spec, &mut row, source, state, context,
         )?;
         Some(result.with_row(row))
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_item_source_row_fragment_step_into_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -1905,15 +1974,31 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         display_host: Option<&dyn DisplayHost>,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderIntoRowResult> {
+        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        self.render_display_item_source_row_fragment_step_into_row_with_context(
+            spec,
+            row,
+            source,
+            state,
+            &mut context,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_row_fragment_step_into_row_with_context(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        row: &mut GlyphRow,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<DisplayRowRenderIntoRowResult> {
         let mut policy = NaturalDisplayRowRenderPolicy;
         self.render_display_item_source_row_fragment_step_into_row_with_policy(
             spec,
             row,
             source,
             state,
-            face_resolver,
-            display_host,
-            face_ids,
+            context,
             &mut policy,
         )
     }
@@ -1927,9 +2012,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         row: &mut GlyphRow,
         source: &mut S,
         state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
+        context: &mut DisplayRowRenderContext<'_, '_>,
         policy: &mut P,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         if state.is_finished() {
@@ -1944,7 +2027,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             role,
             symbol_values,
         } = spec;
-        face_ids.reserve_after(base_face_id);
+        context.face_ids().reserve_after(base_face_id);
         let mut face_realizer = DisplayRowFaceRealizer::new(&mut *self.font_metrics);
         let row_face = face_realizer.realize_face(
             base_face_id,
@@ -1976,18 +2059,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let mut position = render_bounds.start;
         let mut source_slots = Vec::new();
         let mut media = Vec::new();
-        let face_basis = DisplaySourceFaceBasis::new(
-            face_resolver,
-            row_face.face_id,
-            base_face,
-            DisplaySourceFallbackMetrics::new(char_width, geometry.ascent, geometry.height),
-        );
+        let fallback_metrics =
+            DisplaySourceFallbackMetrics::new(char_width, geometry.ascent, geometry.height);
         let stop = loop {
-            let resolved = state.next_resolved_item(
-                source,
-                DisplaySourceResolveParams::new(face_basis, display_host),
-                face_ids,
-            );
+            let params =
+                context.source_resolve_params(row_face.face_id, base_face, fallback_metrics);
+            let resolved = state.next_resolved_item(source, params, context.face_ids());
             let item = resolved.item;
             for pending in resolved.pending_faces {
                 let row_face = face_realizer.realize_face(
