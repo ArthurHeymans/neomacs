@@ -2887,6 +2887,7 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 
     assert_eq!(item.cursor_slot_width_px(), 8.0);
     assert!(!item.is_empty());
+    assert_eq!(item.value(), value);
     assert_eq!(item.source_id(), 9);
     assert_eq!(
         item.origin(),

@@ -2182,7 +2182,9 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
 
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementStringAppendItem {
-    fragment: DisplayTextFragment,
+    value: Value,
+    origin: DisplayOrigin,
+    base_face_policy: BaseFacePolicy,
     source_id: u64,
     active_face_state: DisplayRowActiveFaceState,
     cursor_slot_width_px: f32,
@@ -2204,7 +2206,12 @@ impl DisplayReplacementStringAppendItem {
         let measurer =
             DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state);
         Some(Self {
-            fragment: DisplayTextFragment::display_property_string(value, anchor_charpos, source),
+            value,
+            origin: DisplayOrigin::DisplayPropertyString {
+                anchor_charpos,
+                source,
+            },
+            base_face_policy: BaseFacePolicy::DisplayPropertyUnderlyingFace,
             source_id,
             active_face_state: active_face_state.clone(),
             cursor_slot_width_px: measurer.replacement_string_cursor_slot_width_px(
@@ -2225,15 +2232,15 @@ impl DisplayReplacementStringAppendItem {
     }
 
     pub(crate) fn origin(&self) -> DisplayOrigin {
-        self.fragment.origin
+        self.origin
     }
 
     pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
-        self.fragment.base_face_policy
+        self.base_face_policy
     }
 
-    fn fragment(&self) -> DisplayTextFragment {
-        self.fragment
+    fn value(&self) -> Value {
+        self.value
     }
 
     fn source_id(&self) -> u64 {
@@ -3246,15 +3253,15 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
-        let fragment = item.fragment();
+        let value = item.value();
         let source_id = item.source_id();
         let mut item_policy = item.string_item_measurer();
-        self.append_string_fragment_to_text_row(
+        self.append_string_source_value_to_text_row(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            fragment,
+            value,
             source_id,
             face_resolver,
             face_ids,
@@ -3264,6 +3271,39 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn append_string_source_value_to_text_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        value: Value,
+        source_id: u64,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+        item_policy: &mut impl DisplayRowRenderPolicy,
+    ) -> DisplayRowPosition {
+        append_display_replacement_string_value_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            value,
+            self.replacement_source,
+            source_id,
+            face_resolver,
+            self.base_face,
+            self.face_id,
+            face_ids,
+            self.frame.clone(),
+            position,
+            item_policy,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn append_string_fragment_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
@@ -3366,6 +3406,48 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn append_display_replacement_string_value_to_text_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    text_value: Value,
+    replacement_source: BufferDisplayReplacementSource,
+    source_id: u64,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    face_ids: &mut FrameFaceIdAllocator,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    item_policy: &mut impl DisplayRowRenderPolicy,
+) -> DisplayRowPosition {
+    let Some(string_source) = LispStringSourceCursor::new(
+        source_id,
+        text_value,
+        RenderFaceRef::FaceId(fallback_face_id),
+    ) else {
+        return position;
+    };
+    let source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
+    append_display_replacement_string_source_to_text_row(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        source,
+        face_resolver,
+        base_face,
+        fallback_face_id,
+        face_ids,
+        frame,
+        position,
+        item_policy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn append_display_replacement_string_fragment_to_text_row(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -3385,20 +3467,14 @@ fn append_display_replacement_string_fragment_to_text_row(
     let DisplayTextStorage::LispString(text_value) = fragment.storage else {
         return position;
     };
-    let Some(string_source) = LispStringSourceCursor::new(
-        source_id,
-        text_value,
-        RenderFaceRef::FaceId(fallback_face_id),
-    ) else {
-        return position;
-    };
-    let source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
-    append_display_replacement_string_source_to_text_row(
+    append_display_replacement_string_value_to_text_row(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        source,
+        text_value,
+        replacement_source,
+        source_id,
         face_resolver,
         base_face,
         fallback_face_id,
