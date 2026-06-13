@@ -29,14 +29,14 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAppendMeasurement, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendKind, DisplayRowAppendMetrics, DisplayRowAppendSurface,
-    DisplayRowSourceAppendRequest, append_buffer_text_item_fragment_to_text_row_and_emit,
+    DisplayRowAppendMetrics, DisplayRowAppendSurface,
+    append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
     append_measured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
     measure_buffer_text_fragment_natural_advance_to_text_row,
-    render_natural_display_source_append_request_into_current_text_row_and_emit,
+    render_lisp_string_source_append_to_text_row_and_emit,
 };
 use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{
@@ -2103,31 +2103,23 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             },
             text_display_tab_policy(content_x, params),
         );
-        let request = DisplayRowSourceAppendRequest::from_append_spec(
-            frame.append_spec(
-                DisplayRowPosition {
-                    x_px: *x,
-                    col: *col,
-                },
-                base_face.face_id,
-                DisplayRowAppendKind::SourceText,
-            ),
-            base_face.face_id,
+        let Some(outcome) = render_lisp_string_source_append_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            &mut source,
+            &mut source_state,
+            face_resolver,
             &base_face.face,
-        );
-        let Some(outcome) =
-            render_natural_display_source_append_request_into_current_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                &mut source,
-                &mut source_state,
-                face_resolver,
-                face_ids,
-                request,
-            )
-        else {
+            base_face.face_id,
+            face_ids,
+            frame,
+            DisplayRowPosition {
+                x_px: *x,
+                col: *col,
+            },
+        ) else {
             break;
         };
         let stop = outcome.stop;

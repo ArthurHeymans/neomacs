@@ -25,7 +25,9 @@ use crate::display_row_builder::{
     DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
-use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
+use crate::display_source::{
+    BufferTextItemSource, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
+};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
@@ -472,6 +474,37 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
         return position;
     };
     outcome.end
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_lisp_string_source_append_to_text_row_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut LispStringSourceCursor,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    base_face_id: u32,
+    face_ids: &mut FrameFaceIdAllocator,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let append_spec = frame.append_spec(position, base_face_id, DisplayRowAppendKind::SourceText);
+    let request =
+        DisplayRowSourceAppendRequest::from_append_spec(append_spec, base_face_id, base_face);
+    render_natural_display_source_append_request_into_current_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        source,
+        source_state,
+        face_resolver,
+        face_ids,
+        request,
+    )
 }
 
 pub(crate) fn synthetic_display_text_item(
