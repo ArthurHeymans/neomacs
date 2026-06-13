@@ -1820,7 +1820,7 @@ impl DisplayReplacementActiveFaceMeasurer {
         }
     }
 
-    pub(crate) fn char_advance_px(
+    pub(crate) fn source_char_width_px(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
         ch: char,
@@ -1830,7 +1830,7 @@ impl DisplayReplacementActiveFaceMeasurer {
             .advance_for_char(font_metrics, ch, fallback_advance_px)
     }
 
-    fn replacement_string_cursor_slot_width(
+    fn replacement_string_cursor_slot_width_px(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
         replacement: &str,
@@ -1839,7 +1839,7 @@ impl DisplayReplacementActiveFaceMeasurer {
         replacement
             .chars()
             .next()
-            .map(|ch| self.char_advance_px(font_metrics, ch, fallback_char_width))
+            .map(|ch| self.source_char_width_px(font_metrics, ch, fallback_char_width))
             .unwrap_or_else(|| fallback_char_width.max(1.0))
     }
 }
@@ -1922,7 +1922,7 @@ impl DisplayReplacementStringAppendItem {
             fragment: DisplayTextFragment::display_property_string(value, anchor_charpos, source),
             source_id,
             active_face_state: active_face_state.clone(),
-            cursor_slot_width_px: measurer.replacement_string_cursor_slot_width(
+            cursor_slot_width_px: measurer.replacement_string_cursor_slot_width_px(
                 font_metrics,
                 replacement,
                 fallback_char_width,
@@ -2267,7 +2267,7 @@ impl DisplayReplacementStretchAppendItem {
         fallback_advance_px: f32,
     ) -> f32 {
         DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state)
-            .char_advance_px(font_metrics, ch, fallback_advance_px)
+            .source_char_width_px(font_metrics, ch, fallback_advance_px)
     }
 
     pub(crate) fn width_px(self) -> f32 {

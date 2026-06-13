@@ -2538,14 +2538,17 @@ fn display_replacement_active_face_measurer_names_cursor_and_display_width_polic
     let mut font_metrics = None;
 
     assert_eq!(
-        measurer.replacement_string_cursor_slot_width(&mut font_metrics, "ab", 8.0),
+        measurer.replacement_string_cursor_slot_width_px(&mut font_metrics, "ab", 8.0),
         8.0
     );
     assert_eq!(
-        measurer.replacement_string_cursor_slot_width(&mut font_metrics, "", 9.0),
+        measurer.replacement_string_cursor_slot_width_px(&mut font_metrics, "", 9.0),
         9.0
     );
-    assert_eq!(measurer.char_advance_px(&mut font_metrics, 'x', 8.0), 8.0);
+    assert_eq!(
+        measurer.source_char_width_px(&mut font_metrics, 'x', 8.0),
+        8.0
+    );
 }
 
 #[test]
