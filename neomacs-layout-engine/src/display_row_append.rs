@@ -1718,19 +1718,48 @@ impl BufferTextSourceChar {
         self.range
     }
 
-    pub(crate) fn precluster_special_display(&self) -> Option<&BufferTextSourceSpecialDisplay> {
+    fn precluster_special_display(&self) -> Option<&BufferTextSourceSpecialDisplay> {
         self.precluster_special_display.as_ref()
+    }
+
+    fn special_request_for_display(
+        &self,
+        display: BufferTextSourceSpecialDisplay,
+    ) -> BufferTextSpecialSourceCharRequest {
+        BufferTextSpecialSourceCharRequest::new(self, display)
+    }
+
+    pub(crate) fn control_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.precluster_special_display()
+            .filter(|display| display.is_control())
+            .cloned()
+            .map(|display| self.special_request_for_display(display))
+    }
+
+    pub(crate) fn nobreak_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.precluster_special_display()
+            .filter(|display| display.is_nobreak())
+            .cloned()
+            .map(|display| self.special_request_for_display(display))
     }
 
     pub(crate) fn cluster_state(&self, tail: Option<(char, bool)>) -> BufferTextSourceClusterState {
         BufferTextSourceClusterState::for_char(self.ch, tail)
     }
 
-    pub(crate) fn cluster_special_display(
+    fn cluster_special_display(
         &self,
         tail: Option<(char, bool)>,
     ) -> Option<BufferTextSourceSpecialDisplay> {
         BufferTextSourceSpecialDisplay::for_cluster_state(self.cluster_state(tail))
+    }
+
+    pub(crate) fn cluster_special_request(
+        &self,
+        tail: Option<(char, bool)>,
+    ) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.cluster_special_display(tail)
+            .map(|display| self.special_request_for_display(display))
     }
 }
 
@@ -1927,11 +1956,11 @@ impl BufferTextSourceSpecialDisplay {
         }
     }
 
-    pub(crate) fn is_control(&self) -> bool {
+    fn is_control(&self) -> bool {
         matches!(self, Self::Control(_))
     }
 
-    pub(crate) fn is_nobreak(&self) -> bool {
+    fn is_nobreak(&self) -> bool {
         matches!(self, Self::Nobreak(_))
     }
 

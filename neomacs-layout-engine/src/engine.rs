@@ -39,11 +39,11 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    BufferTextSourceCharAdvanceRequest, BufferTextSpecialSourceCharRequest,
-    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
-    DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
+    BufferTextSourceCharAdvanceRequest, DisplayPropertyReplacementAppendItem,
+    DisplayPropertyReplacementAppendRequest, DisplayPropertyReplacementAppendResolveRequest,
+    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
+    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
+    LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
     SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -5045,16 +5045,9 @@ impl LayoutEngine {
             );
 
             // Control characters: render as ^X notation
-            if let Some(special_display) = buffer_source_char
-                .precluster_special_display()
-                .filter(|display| display.is_control())
-            {
+            if let Some(special_source_request) = buffer_source_char.control_special_request() {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let special_source_request = BufferTextSpecialSourceCharRequest::new(
-                    &buffer_source_char,
-                    special_display.clone(),
-                );
                 let measure_request =
                     special_source_request.measure_at(DisplayRowPosition { x_px: x, col });
                 let needed_width = buffer_row_append_context
@@ -5191,20 +5184,13 @@ impl LayoutEngine {
             }
 
             // Nobreak character display (U+00A0 non-breaking space, U+00AD soft hyphen)
-            if let Some(special_display) = buffer_source_char
-                .precluster_special_display()
-                .filter(|display| display.is_nobreak())
-            {
+            if let Some(special_source_request) = buffer_source_char.nobreak_special_request() {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
                 if params.nobreak_char_fg != 0 {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
                 }
-                let special_source_request = BufferTextSpecialSourceCharRequest::new(
-                    &buffer_source_char,
-                    special_display.clone(),
-                );
                 let special_request =
                     special_source_request.append_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
@@ -5239,13 +5225,12 @@ impl LayoutEngine {
             let cluster_state = buffer_source_char.cluster_state(cluster_tail);
 
             // Glyphless character detection (C1 controls, format chars, etc.)
-            if let Some(special_display) = buffer_source_char.cluster_special_display(cluster_tail)
+            if let Some(special_source_request) =
+                buffer_source_char.cluster_special_request(cluster_tail)
             {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
-                let special_source_request =
-                    BufferTextSpecialSourceCharRequest::new(&buffer_source_char, special_display);
                 let special_request =
                     special_source_request.append_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context

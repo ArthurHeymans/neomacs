@@ -2326,16 +2326,24 @@ fn buffer_text_source_special_display_names_cluster_policy() {
 #[test]
 fn buffer_text_source_char_names_range_and_precluster_policy() {
     let source_char = BufferTextSourceChar::new('\u{00A0}', CharPos0::new(4), 2);
+    let request = source_char
+        .nobreak_special_request()
+        .expect("nobreak source char should produce source request");
 
     assert_eq!(
         source_char.range(),
         BufferTextSourceRange::new(CharPos0::new(4), CharPos0::new(5))
     );
+    assert!(source_char.control_special_request().is_none());
     assert_eq!(
-        source_char.precluster_special_display(),
-        Some(&BufferTextSourceSpecialDisplay::Nobreak(
-            BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }
-        ))
+        request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 }),
+        BufferTextSpecialSourceCharRequest::new(
+            &source_char,
+            BufferTextSourceSpecialDisplay::Nobreak(BufferTextSourceAppendItem::SourceMappedText {
+                text: "\\ ".into()
+            }),
+        )
+        .append_at(DisplayRowPosition { x_px: 0.0, col: 0 })
     );
 }
 
@@ -2348,14 +2356,21 @@ fn buffer_text_source_char_names_cluster_policy() {
         source_char.cluster_state(cluster_tail),
         BufferTextSourceClusterState::for_char('\u{FE0F}', cluster_tail)
     );
-    assert_eq!(source_char.cluster_special_display(cluster_tail), None);
+    assert_eq!(source_char.cluster_special_request(cluster_tail), None);
 
     let standalone_joiner = BufferTextSourceChar::new('\u{200D}', CharPos0::new(2), 2);
     assert_eq!(
-        standalone_joiner.cluster_special_display(None),
+        standalone_joiner
+            .cluster_special_request(None)
+            .map(|request| request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 })),
         BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
             '\u{200D}', None
         ))
+        .map(|display| BufferTextSpecialSourceCharRequest::new(
+            &standalone_joiner,
+            display
+        )
+        .append_at(DisplayRowPosition { x_px: 0.0, col: 0 }))
     );
 }
 
@@ -2477,11 +2492,9 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('\u{00A0}', CharPos0::new(0), 2);
-    let special_display = source_char
-        .precluster_special_display()
-        .cloned()
+    let source_request = source_char
+        .nobreak_special_request()
         .expect("nobreak source char should map to a display item");
-    let source_request = BufferTextSpecialSourceCharRequest::new(&source_char, special_display);
     let measure_request = source_request.measure_at(DisplayRowPosition { x_px: 0.0, col: 0 });
     let measured_width = append_context
         .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
@@ -2565,10 +2578,9 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('\u{fff0}', CharPos0::new(0), 2);
-    let special_display = source_char
-        .cluster_special_display(None)
+    let source_request = source_char
+        .cluster_special_request(None)
         .expect("glyphless source char should map to a display item");
-    let source_request = BufferTextSpecialSourceCharRequest::new(&source_char, special_display);
     let request = source_request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
         .append_special_source_char_request_to_text_row_and_emit(
