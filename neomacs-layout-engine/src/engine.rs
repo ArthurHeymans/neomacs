@@ -5,7 +5,9 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number};
-use super::display_status_line::{FrameTabBarDisplayRowRender, WindowChromeDisplayRowRequest};
+use super::display_status_line::{
+    FrameTabBarDisplayRowRender, InactiveMinibufferDisplayRowRequest, WindowChromeDisplayRowRequest,
+};
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
@@ -21,9 +23,8 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics, DisplayRowGeometry,
-    DisplayRowMeasurementPolicy, DisplayRowRenderContext, DisplayRowRenderStop,
-    DisplayRowSourceRenderRequest, DisplayRowSourceState, WindowChromeKind,
+    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
+    DisplayRowMeasurementPolicy, DisplayRowRenderStop, DisplayRowSourceState, WindowChromeKind,
     insert_resolved_display_row_face, install_rendered_display_row,
 };
 use crate::display_row_append::{
@@ -39,7 +40,7 @@ use crate::display_row_append::{
     measure_buffer_text_fragment_natural_advance_to_text_row,
     render_lisp_string_source_append_to_text_row_and_emit,
 };
-use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMarker,
@@ -3885,43 +3886,22 @@ impl LayoutEngine {
             // buffer in the minibuffer window.  With no current message that
             // buffer is empty; the inactive minibuffer must not redisplay the
             // ordinary buffer attached to the window record.
-            let cols = (text_width / char_w).ceil().max(1.0) as usize;
-            self.matrix_builder.begin_window_with_text_bounds(
-                params.window_id as u64,
-                1,
-                cols,
-                params.bounds,
-                params.text_bounds,
-                params.selected,
-            );
-            let row_spec = DisplayRowSourceRenderRequest::from_base_face(
-                DisplayRowGeometry {
-                    y: params.bounds.y,
-                    width: text_width,
-                    height: char_h,
-                    char_width: char_w,
-                    ascent: default_face_ascent,
-                    tab_policy: DisplayTabPolicy::every(8),
-                },
-                &mut face_ids,
-                default_resolved,
-                GlyphRowRole::Minibuffer,
-                std::collections::HashMap::new(),
-            );
-            let mut render_context = DisplayRowRenderContext::new(
+            self.render_inactive_minibuffer_window(
                 face_resolver,
                 evaluator.display_host.as_deref(),
                 &mut face_ids,
+                InactiveMinibufferDisplayRowRequest {
+                    window_id: params.window_id as u64,
+                    window_bounds: params.bounds,
+                    text_bounds: params.text_bounds,
+                    selected: params.selected,
+                    text_width,
+                    row_height: char_h,
+                    char_width: char_w,
+                    ascent: default_face_ascent,
+                    base_face: default_resolved,
+                },
             );
-            let rendered = self
-                .render_lisp_string_source_row_with_context(
-                    row_spec,
-                    Value::string(""),
-                    &mut render_context,
-                )
-                .expect("empty Lisp string should render an inactive minibuffer row");
-            install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
-            self.matrix_builder.end_window();
             return;
         }
 

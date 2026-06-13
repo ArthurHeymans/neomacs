@@ -23,6 +23,7 @@ use crate::display_row::{
     DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRenderRequest, DisplayRowSourceState,
     FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
     install_measured_frame_chrome_row, install_measured_window_display_row,
+    install_rendered_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -76,6 +77,18 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
     pub(crate) text: DisplayTextFragment,
+}
+
+pub(crate) struct InactiveMinibufferDisplayRowRequest<'face> {
+    pub(crate) window_id: u64,
+    pub(crate) window_bounds: Rect,
+    pub(crate) text_bounds: Rect,
+    pub(crate) selected: bool,
+    pub(crate) text_width: f32,
+    pub(crate) row_height: f32,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) base_face: &'face ResolvedFace,
 }
 
 fn window_chrome_glyph_row_role(kind: WindowChromeKind) -> GlyphRowRole {
@@ -225,6 +238,51 @@ impl LayoutEngine {
             &measured,
         );
         Some(FrameTabBarDisplayRowRender::Measured(measured))
+    }
+
+    pub(crate) fn render_inactive_minibuffer_window(
+        &mut self,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        face_ids: &mut FrameFaceIdAllocator,
+        request: InactiveMinibufferDisplayRowRequest<'_>,
+    ) {
+        let cols = (request.text_width / request.char_width.max(1.0))
+            .ceil()
+            .max(1.0) as usize;
+        self.matrix_builder.begin_window_with_text_bounds(
+            request.window_id,
+            1,
+            cols,
+            request.window_bounds,
+            request.text_bounds,
+            request.selected,
+        );
+        let row_spec = DisplayRowSourceRenderRequest::from_base_face(
+            DisplayRowGeometry {
+                y: request.window_bounds.y,
+                width: request.text_width,
+                height: request.row_height,
+                char_width: request.char_width,
+                ascent: request.ascent,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
+            face_ids,
+            request.base_face,
+            GlyphRowRole::Minibuffer,
+            std::collections::HashMap::new(),
+        );
+        let mut render_context =
+            DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        let rendered = self
+            .render_lisp_string_source_row_with_context(
+                row_spec,
+                Value::string(""),
+                &mut render_context,
+            )
+            .expect("empty Lisp string should render an inactive minibuffer row");
+        install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
+        self.matrix_builder.end_window();
     }
 
     /// Build minibuffer echo rows through the shared display-source path.
