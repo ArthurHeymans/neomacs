@@ -13,6 +13,26 @@ pub(crate) struct DisplayPropertyClassification {
     pub(crate) modifiers: DisplayTextPropertyModifiers,
 }
 
+impl DisplayPropertyClassification {
+    pub(crate) fn is_string_replacement(&self) -> bool {
+        matches!(self.replacement, Some(DisplayReplacementProperty::String))
+    }
+
+    pub(crate) fn stretch_replacement(&self) -> Option<&DisplayStretch> {
+        match &self.replacement {
+            Some(DisplayReplacementProperty::Stretch(stretch)) => Some(stretch),
+            Some(DisplayReplacementProperty::String | DisplayReplacementProperty::Media(_))
+            | None => None,
+        }
+    }
+
+    pub(crate) fn media_replacement(&self) -> Option<&DisplayMediaReplacementProperty> {
+        self.replacement
+            .as_ref()
+            .and_then(DisplayReplacementProperty::media)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayReplacementProperty {
     String,

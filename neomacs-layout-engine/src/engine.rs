@@ -31,7 +31,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
-use crate::display_property::{DisplayReplacementProperty, classify_display_property};
+use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowMeasurementPolicy, DisplayRowRenderStop, DisplayRowSourceState, WindowChromeKind,
@@ -4373,19 +4373,17 @@ impl LayoutEngine {
                     );
                     let display_property = classify_display_property(prop_val);
                     // Case 1: String replacement — render the string instead of buffer text
-                    if matches!(
-                        display_property.replacement,
-                        Some(DisplayReplacementProperty::String)
-                    ) && let Some(replacement_item) =
-                        DisplayReplacementStringAppendItem::display_property_string(
-                            prop_val,
-                            display_property_char_pos,
-                            DisplayPropertySource::TextProperty,
-                            1,
-                            &active_face_state,
-                            &mut self.font_metrics,
-                            char_w,
-                        )
+                    if display_property.is_string_replacement()
+                        && let Some(replacement_item) =
+                            DisplayReplacementStringAppendItem::display_property_string(
+                                prop_val,
+                                display_property_char_pos,
+                                DisplayPropertySource::TextProperty,
+                                1,
+                                &active_face_state,
+                                &mut self.font_metrics,
+                                char_w,
+                            )
                     {
                         if point_in_display_replacement {
                             capture_cursor_info(
@@ -4445,10 +4443,7 @@ impl LayoutEngine {
                     }
 
                     // Case 2: Space spec — (space :width …) or (space :align-to …)
-                    if matches!(
-                        display_property.replacement,
-                        Some(DisplayReplacementProperty::Stretch(_))
-                    ) {
+                    if display_property.stretch_replacement().is_some() {
                         let stretch_item =
                             DisplayReplacementStretchAppendItem::from_display_space_property(
                                 &prop_val,
@@ -4519,11 +4514,7 @@ impl LayoutEngine {
                     // Case 3: media specs — direct xwidget specs already carry a
                     // media item; image/video/webkit resolve through the display
                     // host and keep TTY placeholders when unresolved.
-                    if let Some(media_replacement) = display_property
-                        .replacement
-                        .as_ref()
-                        .and_then(DisplayReplacementProperty::media)
-                    {
+                    if let Some(media_replacement) = display_property.media_replacement() {
                         let resolved_replacement =
                             DisplayReplacementMediaAppendItem::resolve_display_property(
                                 prop_val,
