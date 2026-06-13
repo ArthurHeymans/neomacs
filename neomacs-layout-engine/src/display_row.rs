@@ -25,7 +25,7 @@ use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
-use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
+use neomacs_display_protocol::face::{BasicFaceId, BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 #[cfg(test)]
 use neomacs_display_protocol::glyph_matrix::GlyphArea;
@@ -988,6 +988,33 @@ pub(crate) struct DisplayRowSourceState {
     exhausted: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FrameFaceIdAllocator {
+    next_face_id: u32,
+}
+
+impl FrameFaceIdAllocator {
+    pub(crate) fn new(next_face_id: u32) -> Self {
+        Self {
+            next_face_id: next_face_id.max(BasicFaceId::SENTINEL),
+        }
+    }
+
+    pub(crate) fn allocate(&mut self) -> u32 {
+        let face_id = self.next_face_id;
+        self.next_face_id += 1;
+        face_id
+    }
+
+    pub(crate) fn raw_mut(&mut self) -> &mut u32 {
+        &mut self.next_face_id
+    }
+
+    pub(crate) fn finish(self) -> u32 {
+        self.next_face_id
+    }
+}
+
 impl DisplayRowSourceState {
     pub(crate) fn next_resolved_item(
         &mut self,
@@ -1241,7 +1268,7 @@ impl DisplayRowRenderBounds {
 impl<'a> DisplayRowSpec<'a> {
     pub(crate) fn from_base_face(
         geometry: DisplayRowGeometry,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
         base_face: &'a ResolvedFace,
         role: GlyphRowRole,
         symbol_values: std::collections::HashMap<String, Value>,
@@ -1249,9 +1276,7 @@ impl<'a> DisplayRowSpec<'a> {
         let base_face_id = if base_face.face_id != 0 {
             base_face.face_id
         } else {
-            let id = *next_face_id;
-            *next_face_id += 1;
-            id
+            face_ids.allocate()
         };
         Self {
             render_bounds: DisplayRowRenderBounds::whole_row(geometry.width),

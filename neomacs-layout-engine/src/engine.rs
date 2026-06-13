@@ -22,8 +22,8 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner,
     DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
-    insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    DisplayRowSpec, FrameChromeKind, FrameFaceIdAllocator, MeasuredDisplayRow, RenderedDisplayRow,
+    WindowChromeKind, insert_resolved_display_row_face, install_measured_frame_chrome_row,
     install_rendered_display_row,
 };
 use crate::display_row_append::{
@@ -422,11 +422,6 @@ struct FaceScanCheckpoint {
     next_check: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct FrameFaceIdAllocator {
-    next_face_id: u32,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BoxFaceRowState {
     Inactive,
@@ -810,28 +805,6 @@ impl FaceScanCheckpoint {
 
     fn next_check_mut(&mut self) -> &mut usize {
         &mut self.next_check
-    }
-}
-
-impl FrameFaceIdAllocator {
-    fn new(next_face_id: u32) -> Self {
-        Self {
-            next_face_id: next_face_id.max(BasicFaceId::SENTINEL),
-        }
-    }
-
-    fn allocate(&mut self) -> u32 {
-        let face_id = self.next_face_id;
-        self.next_face_id += 1;
-        face_id
-    }
-
-    fn raw_mut(&mut self) -> &mut u32 {
-        &mut self.next_face_id
-    }
-
-    fn finish(self) -> u32 {
-        self.next_face_id
     }
 }
 
@@ -3951,7 +3924,7 @@ impl LayoutEngine {
                     ascent: default_face_ascent,
                     tab_policy: DisplayTabPolicy::every(8),
                 },
-                face_ids.raw_mut(),
+                &mut face_ids,
                 default_resolved,
                 GlyphRowRole::Minibuffer,
                 std::collections::HashMap::new(),
@@ -6479,7 +6452,7 @@ impl LayoutEngine {
                     ascent: font_ascent,
                     tab_policy: text_display_tab_policy(0.0, params),
                 },
-                face_ids.raw_mut(),
+                &mut face_ids,
                 tl_face,
                 GlyphRowRole::TabLine,
                 status_line_symbol_values.clone(),
@@ -6537,7 +6510,7 @@ impl LayoutEngine {
                     ascent: font_ascent,
                     tab_policy: text_display_tab_policy(0.0, params),
                 },
-                face_ids.raw_mut(),
+                &mut face_ids,
                 hl_face,
                 GlyphRowRole::HeaderLine,
                 status_line_symbol_values.clone(),
@@ -6615,7 +6588,7 @@ impl LayoutEngine {
                     ascent: font_ascent,
                     tab_policy: text_display_tab_policy(0.0, params),
                 },
-                face_ids.raw_mut(),
+                &mut face_ids,
                 ml_face,
                 GlyphRowRole::ModeLine,
                 status_line_symbol_values.clone(),
@@ -6932,7 +6905,7 @@ impl LayoutEngine {
             0
         };
         let tab_bar_y = chrome_before_tab;
-        let mut current_face_id = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
+        let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
         let tab_bar_spec = DisplayRowSpec::from_base_face(
             DisplayRowGeometry {
                 y: tab_bar_y,
@@ -6942,7 +6915,7 @@ impl LayoutEngine {
                 ascent: tab_bar_face.font_ascent,
                 tab_policy: DisplayTabPolicy::every(8),
             },
-            &mut current_face_id,
+            &mut face_ids,
             &tab_bar_face,
             GlyphRowRole::TabBar,
             std::collections::HashMap::new(),
@@ -6952,11 +6925,11 @@ impl LayoutEngine {
             DisplayTextFragment::tab_bar(tab_bar.text),
             face_resolver,
             evaluator.display_host.as_deref(),
-            &mut current_face_id,
+            face_ids.raw_mut(),
         ) else {
             return None;
         };
-        self.frame_face_id_counter = current_face_id;
+        self.frame_face_id_counter = face_ids.finish();
         if rendered.row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
             .is_empty()
         {

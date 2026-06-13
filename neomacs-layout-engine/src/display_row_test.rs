@@ -117,6 +117,31 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
 }
 
 #[test]
+fn display_row_spec_allocates_dynamic_base_face_id_through_allocator() {
+    let mut face = base_face();
+    face.face_id = 0;
+    let mut face_ids = FrameFaceIdAllocator::new(42);
+
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 80.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: DisplayTabPolicy::every(8),
+        },
+        &mut face_ids,
+        &face,
+        GlyphRowRole::Text,
+        std::collections::HashMap::new(),
+    );
+
+    assert_eq!(spec.base_face_id, 42);
+    assert_eq!(face_ids.finish(), 43);
+}
+
+#[test]
 fn display_row_resolved_measured_face_installs_render_and_measurement_identity() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let mut font_metrics = None;
@@ -277,7 +302,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -287,14 +312,14 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
     );
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("A中"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("A中"), &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
@@ -309,7 +334,7 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -319,7 +344,7 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
@@ -327,7 +352,7 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
     let fragment = DisplayTextFragment::tab_line(Value::string("A中"));
 
     let rendered = renderer
-        .render_display_text_fragment_row(spec, fragment, &resolver, &mut next_face_id)
+        .render_display_text_fragment_row(spec, fragment, &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
@@ -410,7 +435,7 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.font_char_width = 8.0;
     test_base_face.font_ascent = 12.0;
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -420,14 +445,14 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         &test_base_face,
         GlyphRowRole::ModeLine,
         std::collections::HashMap::new(),
     );
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
@@ -445,7 +470,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.font_char_width = 8.0;
     test_base_face.font_ascent = 12.0;
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let mut spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -455,7 +480,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         &test_base_face,
         GlyphRowRole::ModeLine,
         std::collections::HashMap::new(),
@@ -466,7 +491,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     };
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("ABC"), &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "AB");
@@ -486,7 +511,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.font_char_width = 8.0;
     test_base_face.font_ascent = 12.0;
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let mut spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -496,7 +521,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(4),
         },
-        &mut next_face_id,
+        &mut face_ids,
         &test_base_face,
         GlyphRowRole::ModeLine,
         std::collections::HashMap::new(),
@@ -507,7 +532,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     };
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -787,7 +812,7 @@ fn render_lisp_display_row_output_with_symbols(
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -797,13 +822,13 @@ fn render_lisp_display_row_output_with_symbols(
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         role,
         symbol_values,
     );
     renderer
-        .render_lisp_string_row(spec, rendered, &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, rendered, &resolver, face_ids.raw_mut())
         .expect("display source row")
 }
 
@@ -864,7 +889,7 @@ fn render_buffer_display_row_with_properties(
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -874,14 +899,14 @@ fn render_buffer_display_row_with_properties(
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         role,
         std::collections::HashMap::new(),
     );
 
     renderer
-        .render_display_item_source_row(spec, &mut source, &resolver, &mut next_face_id)
+        .render_display_item_source_row(spec, &mut source, &resolver, face_ids.raw_mut())
         .expect("buffer display source row")
         .row
 }
@@ -903,7 +928,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let mut source = crate::display_source::BufferTextSourceCursor::new(
         buf_id,
         buffer,
@@ -931,7 +956,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
             },
             &mut source,
             &resolver,
-            &mut next_face_id,
+            face_ids.raw_mut(),
         )
         .expect("display source row");
 
@@ -1012,7 +1037,7 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
     base_face.font_char_width = 8.0;
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 4.0,
@@ -1022,14 +1047,14 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         &base_face,
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
     );
 
     let rendered = renderer
-        .render_lisp_string_row(spec, rendered_text, &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, rendered_text, &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -1068,7 +1093,7 @@ fn render_tab_line_with_media_host(
     base_face.font_char_width = 8.0;
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 4.0,
@@ -1078,7 +1103,7 @@ fn render_tab_line_with_media_host(
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         &base_face,
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
@@ -1089,7 +1114,7 @@ fn render_tab_line_with_media_host(
             rendered_text,
             &resolver,
             Some(&host),
-            &mut next_face_id,
+            face_ids.raw_mut(),
         )
         .expect("display source row");
     (rendered, host)
@@ -1462,7 +1487,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let mut source = crate::display_source::BufferTextSourceCursor::new(
         buf_id,
         buffer,
@@ -1495,7 +1520,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
             },
             &mut source,
             &resolver,
-            &mut next_face_id,
+            face_ids.raw_mut(),
         )
         .expect("display source row");
 
@@ -1514,7 +1539,7 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
     let mut engine = crate::engine::LayoutEngine::new();
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -1528,14 +1553,14 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
                 &[2],
             ),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
     );
 
     let rendered = engine
-        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("\tX"), &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
@@ -2215,7 +2240,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
             ]),
         }],
     );
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -2225,14 +2250,14 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         &base_face,
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
     );
 
     let row = engine
-        .render_lisp_string_row(spec, rendered, &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, rendered, &resolver, face_ids.raw_mut())
         .expect("display source row")
         .row;
     let glyphs = &row.glyphs[1];
@@ -2338,7 +2363,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -2348,7 +2373,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
@@ -2369,7 +2394,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
             &mut state,
             &resolver,
             None,
-            &mut next_face_id,
+            face_ids.raw_mut(),
         )
         .expect("unfinalized row fragment")
         .rendered
@@ -2390,7 +2415,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let mut spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -2400,7 +2425,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         GlyphRowRole::Text,
         std::collections::HashMap::new(),
@@ -2425,7 +2450,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
             &mut state,
             &resolver,
             None,
-            &mut next_face_id,
+            face_ids.raw_mut(),
         )
         .expect("row render fragment");
 
@@ -2453,7 +2478,7 @@ fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
     let mut engine = crate::engine::LayoutEngine::new();
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = DisplayRowSpec::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -2463,13 +2488,13 @@ fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        &mut next_face_id,
+        &mut face_ids,
         resolver.default_face(),
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
     );
     let rendered = engine
-        .render_lisp_string_row(spec, Value::string("אב"), &resolver, &mut next_face_id)
+        .render_lisp_string_row(spec, Value::string("אב"), &resolver, face_ids.raw_mut())
         .expect("display source row");
 
     assert!(rendered.row.reversed_p);
