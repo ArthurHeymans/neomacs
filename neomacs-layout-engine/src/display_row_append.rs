@@ -1550,7 +1550,9 @@ fn measure_buffer_display_item_fragment_append_progress_to_text_row<
 ) -> Option<DisplayRowAppendProgress> {
     let (item, append_kind) =
         buffer_display_item_fragment_source_item(fragment, buffer_id, buffer, face_id, item)?;
-    let request = frame.source_append_request(position, face_id, base_face, append_kind);
+    let request = frame
+        .source_append_request(position, face_id, base_face, append_kind)
+        .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));

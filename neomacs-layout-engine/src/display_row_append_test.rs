@@ -2176,6 +2176,19 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         DisplayRowPosition { x_px: 0.0, col: 0 },
         8.0,
     );
+    let edge_width = append_context.measure_fragment_width_or_fallback_to_text_row(
+        &mut builder,
+        &mut eval,
+        &mut font_metrics,
+        fragment.clone(),
+        &face_resolver,
+        item.clone(),
+        DisplayRowPosition {
+            x_px: 80.0,
+            col: 10,
+        },
+        8.0,
+    );
 
     let (progress, end) = append_context
         .append_fragment_to_text_row_and_emit(
@@ -2193,6 +2206,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(measured_width, 16.0);
     assert_eq!(fallback_width, 16.0);
+    assert_eq!(edge_width, 16.0);
     assert_eq!(progress.metrics.width_px, measured_width);
     builder
         .with_current_row_mut(|row| {
