@@ -244,6 +244,44 @@ pub(crate) fn begin_text_window_output(
     TextMatrixRowOutput::new(builder, output_emitter, evaluator).begin(request.first_row);
 }
 
+pub(crate) fn finish_text_matrix_row_output(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    metrics: TextMatrixRowMetrics,
+) {
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator).finish(metrics);
+}
+
+pub(crate) fn finish_and_end_text_matrix_row_output(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    metrics: TextMatrixRowMetrics,
+) {
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator).finish_and_end(metrics);
+}
+
+pub(crate) fn emit_text_matrix_row_transition(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    transition: TextMatrixRowGeometryTransition,
+) {
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator).emit(transition);
+}
+
+pub(crate) fn emit_text_matrix_row_transition_with_limit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    transition: TextMatrixRowGeometryTransition,
+    max_rows: usize,
+) -> TextMatrixRowTransition {
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator)
+        .emit_with_row_limit(transition, max_rows)
+}
+
 pub(crate) fn finish_text_window_output_rows(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,

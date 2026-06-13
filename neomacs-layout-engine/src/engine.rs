@@ -15,10 +15,11 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, TextWindowBegin,
-    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, finish_text_window_output_rows,
-    install_text_window_right_edge_markers,
+    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowRightEdgeMarkerColumn,
+    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
+    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
+    finish_and_end_text_matrix_row_output, finish_text_matrix_row_output,
+    finish_text_window_output_rows, install_text_window_right_edge_markers,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -2060,15 +2061,23 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             );
             hit_row_range.advance_to(anchor_charpos);
             if !geometry.is_within_row_limit(row_limit) {
-                TextMatrixRowOutput::new(builder, output_emitter, evaluator)
-                    .finish_and_end(geometry_transition.finished_row);
+                finish_and_end_text_matrix_row_output(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    geometry_transition.finished_row,
+                );
                 false
             } else {
                 geometry.record_current_row_y(row_y_positions);
                 *x = content_x;
                 *col = 0;
-                TextMatrixRowOutput::new(builder, output_emitter, evaluator)
-                    .emit(geometry_transition);
+                emit_text_matrix_row_transition(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    geometry_transition,
+                );
                 true
             }
         }};
@@ -4415,12 +4424,13 @@ impl LayoutEngine {
                     );
                     // Record hit-test row (hscroll newline)
                     hit_row_range.advance_to(charpos);
-                    let row_transition = TextMatrixRowOutput::new(
+                    let row_transition = emit_text_matrix_row_transition_with_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                    )
-                    .emit_with_row_limit(geometry_transition, max_rows);
+                        geometry_transition,
+                        max_rows,
+                    );
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -4956,12 +4966,13 @@ impl LayoutEngine {
                             ),
                             &mut hit_rows,
                         );
-                        let row_transition = TextMatrixRowOutput::new(
+                        let row_transition = emit_text_matrix_row_transition_with_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                        )
-                        .emit_with_row_limit(geometry_transition, max_rows);
+                            geometry_transition,
+                            max_rows,
+                        );
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -5059,12 +5070,13 @@ impl LayoutEngine {
                     ),
                     &mut hit_rows,
                 );
-                let row_transition = TextMatrixRowOutput::new(
+                let row_transition = emit_text_matrix_row_transition_with_limit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                )
-                .emit_with_row_limit(geometry_transition, max_rows);
+                    geometry_transition,
+                    max_rows,
+                );
                 if row_transition.is_exhausted() {
                     break;
                 }
@@ -5170,12 +5182,13 @@ impl LayoutEngine {
                             &mut hit_rows,
                         );
                         // Record hit-test row (wrap/truncation break)
-                        let row_transition = TextMatrixRowOutput::new(
+                        let row_transition = emit_text_matrix_row_transition_with_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                        )
-                        .emit_with_row_limit(geometry_transition, max_rows);
+                            geometry_transition,
+                            max_rows,
+                        );
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -5209,12 +5222,13 @@ impl LayoutEngine {
                         );
                         // Record hit-test row (wrap/truncation break)
                         hit_row_range.advance_to(charpos);
-                        let row_transition = TextMatrixRowOutput::new(
+                        let row_transition = emit_text_matrix_row_transition_with_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                        )
-                        .emit_with_row_limit(geometry_transition, max_rows);
+                            geometry_transition,
+                            max_rows,
+                        );
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -5517,12 +5531,13 @@ impl LayoutEngine {
                         &mut hit_rows,
                     );
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = TextMatrixRowOutput::new(
+                    let row_transition = emit_text_matrix_row_transition_with_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                    )
-                    .emit_with_row_limit(geometry_transition, max_rows);
+                        geometry_transition,
+                        max_rows,
+                    );
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -5566,12 +5581,13 @@ impl LayoutEngine {
                         &mut hit_rows,
                     );
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = TextMatrixRowOutput::new(
+                    let row_transition = emit_text_matrix_row_transition_with_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                    )
-                    .emit_with_row_limit(geometry_transition, max_rows);
+                        geometry_transition,
+                        max_rows,
+                    );
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -5616,12 +5632,13 @@ impl LayoutEngine {
                         &mut hit_rows,
                     );
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = TextMatrixRowOutput::new(
+                    let row_transition = emit_text_matrix_row_transition_with_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                    )
-                    .emit_with_row_limit(geometry_transition, max_rows);
+                        geometry_transition,
+                        max_rows,
+                    );
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -6136,8 +6153,12 @@ impl LayoutEngine {
             let row_y_start = row_geometry.current_row_y(&row_y_positions, text_y, char_h);
             let row_cursor = row_geometry.with_row_y(row_y_start).cursor();
             hit_rows.push(row_cursor.hit_row(hit_row_range.start(), charpos));
-            TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
-                .finish(row_cursor.finish_current_row());
+            finish_text_matrix_row_output(
+                &mut self.matrix_builder,
+                &mut output_emitter,
+                evaluator,
+                row_cursor.finish_current_row(),
+            );
         }
 
         for spec in &params.visual_cursors {

@@ -9,6 +9,10 @@ use super::TextRowOutput;
 use super::TextWindowRightEdgeMarkerColumn;
 use super::TextWindowRightEdgeMarkers;
 use super::WindowOutputEmitter;
+use super::emit_text_matrix_row_transition;
+use super::emit_text_matrix_row_transition_with_limit;
+use super::finish_and_end_text_matrix_row_output;
+use super::finish_text_matrix_row_output;
 use super::install_text_window_right_edge_markers;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
@@ -496,11 +500,16 @@ fn text_matrix_row_commands_begin_and_finish_output() {
         })
     );
 
-    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).finish(TextMatrixRowMetrics {
-        y: 0.0,
-        height: 16.0,
-        ascent: 12.0,
-    });
+    finish_text_matrix_row_output(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextMatrixRowMetrics {
+            y: 0.0,
+            height: 16.0,
+            ascent: 12.0,
+        },
+    );
 
     assert_eq!(emitter.rows().len(), 1);
     assert_eq!(emitter.rows()[0].row, 0);
@@ -541,7 +550,10 @@ fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
         x: 0.0,
     });
 
-    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).finish_and_end(
+    finish_and_end_text_matrix_row_output(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
         TextMatrixRowMetrics {
             y: 0.0,
             height: 16.0,
@@ -625,24 +637,26 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
         x: 0.0,
     });
 
-    let transition = TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval)
-        .emit_with_row_limit(
-            TextMatrixRowGeometryTransition {
-                finished_row: TextMatrixRowMetrics {
-                    y: 0.0,
-                    height: 16.0,
-                    ascent: 12.0,
-                },
-                begin_row: TextMatrixRowBegin {
-                    matrix_row: 1,
-                    row: 1,
-                    col: 0,
-                    y: 16.0,
-                    x: 0.0,
-                },
+    let transition = emit_text_matrix_row_transition_with_limit(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextMatrixRowGeometryTransition {
+            finished_row: TextMatrixRowMetrics {
+                y: 0.0,
+                height: 16.0,
+                ascent: 12.0,
             },
-            1,
-        );
+            begin_row: TextMatrixRowBegin {
+                matrix_row: 1,
+                row: 1,
+                col: 0,
+                y: 16.0,
+                x: 0.0,
+            },
+        },
+        1,
+    );
 
     assert_eq!(transition, TextMatrixRowTransition::ExhaustedRows);
     assert_eq!(emitter.rows().len(), 1);
@@ -682,7 +696,10 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
         x: 0.0,
     });
 
-    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).emit(
+    emit_text_matrix_row_transition(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
         TextMatrixRowGeometryTransition {
             finished_row: TextMatrixRowMetrics {
                 y: 0.0,
