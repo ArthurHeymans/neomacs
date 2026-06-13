@@ -4,6 +4,7 @@ use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
 };
+use crate::display_origin::DisplayPropertySource;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
@@ -2092,7 +2093,7 @@ impl DisplayRowItemMeasurer for SourceMappedTextWidthByFace {
 }
 
 #[test]
-fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_measurements() {
+fn append_display_replacement_string_fragment_to_text_row_walks_source_faces_and_measurements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2131,14 +2132,12 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
             ]),
         }],
     );
-    let string_source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(7))
-            .expect("string source");
     let replacement_source =
         crate::display_source::BufferDisplayReplacementSource::new(buf_id, 0, 0);
-    let source = crate::display_source::BufferDisplayReplacementStringSource::new(
-        replacement_source,
-        string_source,
+    let fragment = DisplayTextFragment::display_property_string(
+        value,
+        CharPos0::new(0),
+        DisplayPropertySource::TextProperty,
     );
     let frame = DisplayRowAppendFrame::from_parts(
         DisplayRowAppendPlacement {
@@ -2164,12 +2163,14 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
 
-    let end = append_display_replacement_string_source_to_text_row(
+    let end = append_display_replacement_string_fragment_to_text_row(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
-        source,
+        fragment,
+        replacement_source,
+        1,
         &face_resolver,
         base_face,
         7,

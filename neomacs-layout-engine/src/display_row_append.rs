@@ -26,7 +26,8 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{
-    BufferTextItemSource, DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
+    DisplayItemSource, DisplaySourceContext, LispStringSourceCursor,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -924,6 +925,50 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
         return position;
     };
     outcome.end
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_display_replacement_string_fragment_to_text_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    fragment: DisplayTextFragment,
+    replacement_source: BufferDisplayReplacementSource,
+    source_id: u64,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    fallback_face_id: u32,
+    face_ids: &mut FrameFaceIdAllocator,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    item_measurer: &mut impl DisplayReplacementStringItemMeasurementPolicy,
+) -> DisplayRowPosition {
+    let DisplayTextStorage::LispString(text_value) = fragment.storage else {
+        return position;
+    };
+    let Some(string_source) = LispStringSourceCursor::new(
+        source_id,
+        text_value,
+        RenderFaceRef::FaceId(fallback_face_id),
+    ) else {
+        return position;
+    };
+    let source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
+    append_display_replacement_string_source_to_text_row(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        source,
+        face_resolver,
+        base_face,
+        fallback_face_id,
+        face_ids,
+        frame,
+        position,
+        item_measurer,
+    )
 }
 
 pub(crate) struct DisplayRowAppendOutput {

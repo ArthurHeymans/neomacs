@@ -32,7 +32,7 @@ use crate::display_row_append::{
     DisplayRowAppendMetrics, DisplayRowAppendSurface,
     append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_to_text_row_and_emit,
-    append_display_replacement_string_source_to_text_row,
+    append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
     append_measured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
     measure_buffer_text_fragment_natural_advance_to_text_row,
@@ -45,9 +45,7 @@ use crate::display_row_geometry::{
     DisplayRowScopedValue, DisplayRowStartMarker, DisplayRowTextPosition,
     DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
-use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, DisplayReplacementBox,
-};
+use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBox};
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::DisplayTextRunByteAdvance;
@@ -4653,49 +4651,33 @@ impl LayoutEngine {
                                     );
                                     face_id
                                 };
-                            let DisplayTextStorage::LispString(replacement_value) =
-                                replacement_fragment.storage
-                            else {
-                                continue;
-                            };
-                            if let Some(source) = crate::display_source::LispStringSourceCursor::new(
+                            let append_frame = replacement_string_surface.frame_for_active_face(
+                                row_geometry.append_placement(raise_span.value_or(0.0)),
+                                &active_face_state,
+                                char_h,
+                            );
+                            let mut item_measurer =
+                                ReplacementStringItemMeasurer::from_active_face_state(
+                                    &active_face_state,
+                                );
+                            let position = append_display_replacement_string_fragment_to_text_row(
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                &mut self.font_metrics,
+                                replacement_fragment,
+                                replacement_source,
                                 1,
-                                replacement_value,
-                                crate::display_item::RenderFaceRef::FaceId(
-                                    replacement_base_face_id,
-                                ),
-                            ) {
-                                let source = BufferDisplayReplacementStringSource::new(
-                                    replacement_source,
-                                    source,
-                                );
-                                let append_frame = replacement_string_surface
-                                    .frame_for_active_face(
-                                        row_geometry.append_placement(raise_span.value_or(0.0)),
-                                        &active_face_state,
-                                        char_h,
-                                    );
-                                let mut item_measurer =
-                                    ReplacementStringItemMeasurer::from_active_face_state(
-                                        &active_face_state,
-                                    );
-                                let position = append_display_replacement_string_source_to_text_row(
-                                    &mut self.matrix_builder,
-                                    &mut output_emitter,
-                                    evaluator,
-                                    &mut self.font_metrics,
-                                    source,
-                                    face_resolver,
-                                    &replacement_base_face,
-                                    replacement_base_face_id,
-                                    &mut face_ids,
-                                    append_frame,
-                                    DisplayRowPosition { x_px: x, col },
-                                    &mut item_measurer,
-                                );
-                                x = position.x_px;
-                                col = position.col;
-                            }
+                                face_resolver,
+                                &replacement_base_face,
+                                replacement_base_face_id,
+                                &mut face_ids,
+                                append_frame,
+                                DisplayRowPosition { x_px: x, col },
+                                &mut item_measurer,
+                            );
+                            x = position.x_px;
+                            col = position.col;
                         }
 
                         // Skip the buffer text that this display property covers
