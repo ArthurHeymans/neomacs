@@ -4509,13 +4509,12 @@ impl LayoutEngine {
                         match replacement_item {
                             DisplayPropertyReplacementAppendItem::String(replacement_item) => {
                                 if !replacement_item.is_empty() {
-                                    let replacement_fragment = replacement_item.fragment();
                                     let replacement_base_face =
                                         display_string_base_face_for_active_row(
                                             buffer,
                                             face_resolver,
-                                            replacement_fragment.origin,
-                                            replacement_fragment.base_face_policy,
+                                            replacement_item.origin(),
+                                            replacement_item.base_face_policy(),
                                             &active_face_state,
                                             &mut face_ids,
                                             &mut self.matrix_builder,

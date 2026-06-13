@@ -1,11 +1,12 @@
 use super::*;
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayLength, DisplayMediaReplacement,
     DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
     DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
-use crate::display_origin::DisplayPropertySource;
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
     classify_display_property,
@@ -2868,7 +2869,7 @@ fn display_replacement_active_face_measurer_names_cursor_and_display_width_polic
 }
 
 #[test]
-fn display_replacement_string_append_item_names_cursor_and_fragment_policy() {
+fn display_replacement_string_append_item_names_cursor_and_source_policy() {
     let _eval = Context::new();
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
@@ -2888,12 +2889,15 @@ fn display_replacement_string_append_item_names_cursor_and_fragment_policy() {
     assert!(!item.is_empty());
     assert_eq!(item.source_id(), 9);
     assert_eq!(
-        item.fragment(),
-        DisplayTextFragment::display_property_string(
-            value,
-            CharPos0::new(4),
-            DisplayPropertySource::TextProperty,
-        )
+        item.origin(),
+        DisplayOrigin::DisplayPropertyString {
+            anchor_charpos: CharPos0::new(4),
+            source: DisplayPropertySource::TextProperty,
+        }
+    );
+    assert_eq!(
+        item.base_face_policy(),
+        BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
 
     let empty = DisplayReplacementStringAppendItem::display_property_string(

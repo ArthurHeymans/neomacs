@@ -1,4 +1,5 @@
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
     DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessJoinerPolicy,
@@ -2177,16 +2178,24 @@ impl DisplayReplacementStringAppendItem {
         })
     }
 
-    pub(crate) fn fragment(&self) -> DisplayTextFragment {
-        self.fragment
-    }
-
     pub(crate) fn cursor_slot_width_px(&self) -> f32 {
         self.cursor_slot_width_px
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         self.is_empty
+    }
+
+    pub(crate) fn origin(&self) -> DisplayOrigin {
+        self.fragment.origin
+    }
+
+    pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
+        self.fragment.base_face_policy
+    }
+
+    fn fragment(&self) -> DisplayTextFragment {
+        self.fragment
     }
 
     fn source_id(&self) -> u64 {
