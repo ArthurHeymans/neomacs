@@ -12914,6 +12914,133 @@ fn jit_direct_call_speculation_mid_execution_redefinition() {
     assert_eq!(print_value(&r), "(1 2)", "interpreter agrees on strictness");
 }
 
+/// End-to-end: the classic hot shapes the poisoning analysis used to BAIL on
+/// now compile — recursive fib (arithmetic after recursive calls) and a
+/// while-loop mixing a call with arithmetic (guards at the loop join). Both
+/// must match the interpreter exactly, including the deopt path.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_fib_and_loops_compile_under_precise_deopt() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mut ev = Context::new();
+    // fib: (lambda (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) —
+    // self-recursive through its constant symbol (also exercises direct-call
+    // speculation), with Sub/Add guards AFTER the recursive calls.
+    let fib_sym = Value::symbol("jit-pd-fib");
+    let ValueKind::Symbol(fib_id) = fib_sym.kind() else {
+        panic!("symbol expected");
+    };
+    let mk_fib = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::StackRef(0),  // 0  [n n]
+            Op::Constant(0),  // 1  [n n 2]
+            Op::Lss,          // 2  [n c]
+            Op::GotoIfNil(6), // 3  [n]
+            Op::StackRef(0),  // 4  [n n]
+            Op::Return,       // 5
+            Op::Constant(1),  // 6  [n f]
+            Op::StackRef(1),  // 7  [n f n]
+            Op::Constant(2),  // 8  [n f n 1]
+            Op::Sub,          // 9  [n f n-1]
+            Op::Call(1),      // 10 [n r1]
+            Op::Constant(1),  // 11 [n r1 f]
+            Op::StackRef(2),  // 12 [n r1 f n]
+            Op::Constant(0),  // 13 [n r1 f n 2]
+            Op::Sub,          // 14 [n r1 f n-2]   guard AFTER a call
+            Op::Call(1),      // 15 [n r1 r2]
+            Op::Add,          // 16 [n r]          guard AFTER both calls
+            Op::Return,       // 17
+        ];
+        f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    // Interpreter oracle first (cold installed), then the hot version.
+    ev.obarray.set_symbol_function_id(fib_id, mk_fib(false));
+    let interp = ev
+        .funcall_general_untraced(mk_fib(false), vec![Value::make_int(12)])
+        .expect("interpreted fib runs");
+    assert_eq!(interp, Value::make_int(144));
+    let hot = mk_fib(true);
+    ev.obarray.set_symbol_function_id(fib_id, hot);
+    let native = ev
+        .funcall_general_untraced(hot, vec![Value::make_int(12)])
+        .expect("native fib runs");
+    assert_eq!(native, Value::make_int(144), "fib compiles + runs natively");
+    // Non-fixnum argument: the Lss guard deopts and the resumed interpreter
+    // signals wrong-type-argument, exactly like the oracle.
+    assert!(
+        ev.funcall_general_untraced(hot, vec![Value::string("x")])
+            .is_err()
+    );
+
+    // while-loop with a call + arithmetic at the join:
+    // (lambda (n) (while (> n 0) (setq n (1- (identity-callee n)))) n).
+    let id_sym = Value::symbol("jit-pd-id");
+    let ValueKind::Symbol(id_id) = id_sym.kind() else {
+        panic!("symbol expected");
+    };
+    let mut ident = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    ident.lexical = true;
+    ident.ops = vec![Op::StackRef(0), Op::Return];
+    ident.max_stack = 16;
+    ev.obarray
+        .set_symbol_function_id(id_id, Value::make_bytecode(ident));
+    let mk_loop = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::StackRef(0),   // 0  [n n]      <- loop head (backedge target)
+            Op::Constant(0),   // 1  [n n 0]
+            Op::Gtr,           // 2  [n c]      guard at the loop JOIN
+            Op::GotoIfNil(10), // 3  [n]
+            Op::Constant(1),   // 4  [n f]
+            Op::StackRef(1),   // 5  [n f n]
+            Op::Call(1),       // 6  [n r]
+            Op::Sub1,          // 7  [n r-1]    guard AFTER the call
+            Op::StackSet(1),   // 8  [r-1]
+            Op::Goto(0),       // 9  backedge
+            Op::StackRef(0),   // 10 [n n]
+            Op::Return,        // 11
+        ];
+        f.constants = vec![Value::make_int(0), id_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let native = ev
+        .funcall_general_untraced(mk_loop(true), vec![Value::make_int(300)])
+        .expect("native loop runs");
+    let interp = ev
+        .funcall_general_untraced(mk_loop(false), vec![Value::make_int(300)])
+        .expect("interpreted loop runs");
+    assert_eq!(native, Value::make_int(0));
+    assert_eq!(native, interp, "loop with call+guards matches interpreter");
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();

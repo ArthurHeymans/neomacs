@@ -3185,50 +3185,18 @@ struct Cfg {
     max_depth: usize,
 }
 
-/// True iff lowering this op emits a speculation guard (a possible deopt). Used
-/// by the poisoning analysis: a guard reachable after a `Call` would make
-/// rerun-on-deopt unsound (the call's side effects already happened), so such
-/// bodies bail to the interpreter instead of compiling.
-fn emits_guard(op: &Op) -> bool {
-    matches!(
-        op,
-        Op::Add
-            | Op::Sub
-            | Op::Mul
-            | Op::Div
-            | Op::Rem
-            | Op::Add1
-            | Op::Sub1
-            | Op::Negate
-            | Op::Eqlsign
-            | Op::Lss
-            | Op::Gtr
-            | Op::Leq
-            | Op::Geq
-            | Op::Car
-            | Op::Cdr
-            | Op::Max
-            | Op::Min
-    )
-}
-
 /// Record that `target` is entered with stack depth `d`, outstanding dynamic
-/// bind count `binds`, active handler stack `handlers`, and side-effect state
-/// `poisoned`, scheduling (or re-scheduling) it for analysis. Depth, bind
-/// count, and handler stack must be non-negative and consistent across all
-/// paths (the byte-compiler guarantees a single static value per program
-/// point); poison merges with OR and forces a re-visit when it newly turns on,
-/// so the fixpoint is reached in <= 2 visits per block.
-#[allow(clippy::too_many_arguments)]
+/// bind count `binds`, and active handler stack `handlers`, scheduling it for
+/// analysis on first sight. Depth, bind count, and handler stack must be
+/// non-negative and consistent across all paths (the byte-compiler guarantees
+/// a single static value per program point), so each block is analyzed once.
 fn push_succ(
     entry_depth: &mut HashMap<usize, usize>,
-    entry_poison: &mut HashMap<usize, bool>,
     entry_binds: &mut HashMap<usize, usize>,
     entry_handlers: &mut HashMap<usize, Vec<HandlerStatic>>,
     work: &mut Vec<usize>,
     target: usize,
     d: i64,
-    poisoned: bool,
     binds: usize,
     handlers: &[HandlerStatic],
 ) -> Result<(), CompileError> {
@@ -3250,16 +3218,10 @@ fn push_succ(
             {
                 return Err(CompileError::UnsupportedOp("inconsistent handler stack"));
             }
-            let prior = entry_poison.get(&target).copied().unwrap_or(false);
-            if poisoned && !prior {
-                entry_poison.insert(target, true);
-                work.push(target);
-            }
             Ok(())
         }
         None => {
             entry_depth.insert(target, d);
-            entry_poison.insert(target, poisoned);
             entry_binds.insert(target, binds);
             entry_handlers.insert(target, handlers.to_vec());
             work.push(target);
@@ -3339,16 +3301,13 @@ fn analyze_cfg(
     let leaders: Vec<usize> = leader_set.into_iter().collect();
     let next_leader = |idx: usize| leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
 
-    // 2. Propagate entry depths + call-poisoning over the CFG (worklist).
-    // "Poisoned" = a `Call` may already have executed on some path reaching this
-    // point; encountering a guard-emitting op while poisoned makes
-    // rerun-on-deopt unsound, so such bodies bail.
+    // 2. Propagate entry depths over the CFG (worklist). Guards deopt at a
+    // PRECISE pc (the interpreter resumes mid-function with the live state),
+    // so side effects before a guard are fine — no poisoning dimension.
     let mut entry_depth: HashMap<usize, usize> = HashMap::new();
-    let mut entry_poison: HashMap<usize, bool> = HashMap::new();
     let mut entry_binds: HashMap<usize, usize> = HashMap::new();
     let mut entry_handlers: HashMap<usize, Vec<HandlerStatic>> = HashMap::new();
     entry_depth.insert(0, arity);
-    entry_poison.insert(0, false);
     entry_binds.insert(0, 0);
     entry_handlers.insert(0, Vec::new());
     let mut work = vec![0usize];
@@ -3356,7 +3315,6 @@ fn analyze_cfg(
 
     while let Some(l) = work.pop() {
         let mut cur = entry_depth[&l] as i64;
-        let mut poisoned = entry_poison.get(&l).copied().unwrap_or(false);
         let mut binds = entry_binds.get(&l).copied().unwrap_or(0);
         let mut handlers = entry_handlers.get(&l).cloned().unwrap_or_default();
         let end = next_leader(l);
@@ -3386,13 +3344,11 @@ fn analyze_cfg(
                 Op::Goto(t) => {
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         *t as usize,
                         cur,
-                        poisoned,
                         binds,
                         &handlers,
                     )?;
@@ -3406,26 +3362,22 @@ fn analyze_cfg(
                     cur -= 1; // pop the condition
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         *t as usize,
                         cur,
-                        poisoned,
                         binds,
                         &handlers,
                     )?;
                     // fall-through
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         end,
                         cur,
-                        poisoned,
                         binds,
                         &handlers,
                     )?;
@@ -3439,25 +3391,21 @@ fn analyze_cfg(
                     // The jump preserves TOS (depth cur); the fall-through pops it.
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         *t as usize,
                         cur,
-                        poisoned,
                         binds,
                         &handlers,
                     )?;
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         end,
                         cur - 1,
-                        poisoned,
                         binds,
                         &handlers,
                     )?;
@@ -3481,26 +3429,22 @@ fn analyze_cfg(
                     for &(_, t) in switch_targets.get(&i).expect("resolved in pass 1") {
                         push_succ(
                             &mut entry_depth,
-                            &mut entry_poison,
                             &mut entry_binds,
                             &mut entry_handlers,
                             &mut work,
                             t,
                             cur,
-                            poisoned,
                             binds,
                             &handlers,
                         )?;
                     }
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         end,
                         cur,
-                        poisoned,
                         binds,
                         &handlers,
                     )?;
@@ -3522,18 +3466,15 @@ fn analyze_cfg(
                     // Handler edge: entered with the push-time stack plus the
                     // error value, the handler stack as of BEFORE this push
                     // (the matched frame and everything above it were popped
-                    // by the unwind), the push-time bind count (the catch
-                    // restored the specpdl/bind state), and always poisoned —
-                    // reaching it means a side-effecting runtime call ran.
+                    // by the unwind), and the push-time bind count (the catch
+                    // restored the specpdl/bind state).
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         *t as usize,
                         cur + 1,
-                        true,
                         binds,
                         &handlers,
                     )?;
@@ -3544,13 +3485,11 @@ fn analyze_cfg(
                     // Fall-through edge: same stack, handler now active.
                     push_succ(
                         &mut entry_depth,
-                        &mut entry_poison,
                         &mut entry_binds,
                         &mut entry_handlers,
                         &mut work,
                         end,
                         cur,
-                        poisoned,
                         binds,
                         &handlers,
                     )?;
@@ -3567,9 +3506,6 @@ fn analyze_cfg(
                     }
                 }
                 other => {
-                    if poisoned && emits_guard(other) {
-                        return Err(CompileError::UnsupportedOp("guard-after-call"));
-                    }
                     let (needs, delta) = simple_effect(other)?;
                     if cur < needs as i64 {
                         return Err(CompileError::StackUnderflow);
@@ -3596,29 +3532,6 @@ fn analyze_cfg(
                         }
                         _ => {}
                     }
-                    if direct_builtin_spec(other).is_some_and(|(_, _, mutates)| mutates)
-                        || slice_builtin_spec(other).is_some_and(|(_, _, mutates)| mutates)
-                        || matches!(
-                            other,
-                            Op::Call(_)
-                                | Op::Apply(_)
-                                | Op::CallBuiltin(..)
-                                | Op::CallBuiltinSym(..)
-                                | Op::Aset
-                                | Op::SaveWindowExcursion
-                                | Op::VarSet(_)
-                                | Op::VarBind(_)
-                                | Op::Unbind(_)
-                                | Op::SaveCurrentBuffer
-                                | Op::SaveExcursion
-                                | Op::SaveRestriction
-                                | Op::UnwindProtectPop
-                        )
-                    {
-                        // Side effects (calls, assignment, mutation, specpdl
-                        // push/pop): a later deopt-rerun would replay them.
-                        poisoned = true;
-                    }
                 }
             }
         }
@@ -3630,13 +3543,11 @@ fn analyze_cfg(
             }
             push_succ(
                 &mut entry_depth,
-                &mut entry_poison,
                 &mut entry_binds,
                 &mut entry_handlers,
                 &mut work,
                 end,
                 cur,
-                poisoned,
                 binds,
                 &handlers,
             )?;
@@ -5069,16 +4980,19 @@ mod tests {
             assert_eq!(ev.specpdl.len(), specpdl_before);
         }
 
-        // Save* poisons: a later guard must bail.
-        let err = lower_nullary_leaf(
+        // Precise deopt: a guard after the Save* record compiles and runs
+        // (a failing guard would resume the interpreter mid-frame with the
+        // record still registered).
+        let after = lower_nullary_leaf(
             &[Op::SaveExcursion, Op::Constant(1), Op::Add1, Op::Return],
             &constants,
         )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+        .expect("guard after a side effect compiles under precise deopt");
+        match after.call(ctx_ptr, &[]) {
+            NativeRun::Ok(_) => {}
+            other => panic!("guard-after-save must run, got {other:?}"),
+        }
+        assert_eq!(ev.specpdl.len(), specpdl_before);
     }
 
     #[test]
@@ -5242,22 +5156,23 @@ mod tests {
         );
         assert_eq!(cell.cons_car(), Value::make_int(99), "mutation visible");
 
-        // setcar poisons later guards.
-        let err = lower_nullary_leaf(
-            &[
-                Op::Constant(0),
-                Op::Constant(1),
-                Op::Setcar,
-                Op::Add1,
-                Op::Return,
-            ],
-            &[cell, Value::make_int(1)],
-        )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+        // Precise deopt: a guard after the mutation compiles and runs —
+        // (1+ (setcar cell 1)) = 2 with the mutation visible.
+        assert_eq!(
+            run(
+                &[
+                    Op::Constant(0),
+                    Op::Constant(1),
+                    Op::Setcar,
+                    Op::Add1,
+                    Op::Return,
+                ],
+                &[cell, Value::make_int(1)],
+                ctx_ptr
+            ),
+            ok_int(2)
+        );
+        assert_eq!(cell.cons_car(), Value::make_int(1), "mutation visible");
 
         // symbol-value: live read + void-variable signal.
         let var = Value::symbol("jit-bw-var");
@@ -5793,8 +5708,9 @@ mod tests {
 
     #[test]
     fn guard_after_varbind_and_unbalanced_unbind_bail() {
-        // Bindings are side effects: later guards must bail.
-        let err = lower_nullary_leaf(
+        // Precise deopt: a guard after a binding compiles (a failing guard
+        // transfers the bind to the resumed interpreter frame).
+        lower_nullary_leaf(
             &[
                 Op::Constant(1),
                 Op::VarBind(0),
@@ -5804,11 +5720,7 @@ mod tests {
             ],
             &[Value::symbol("jit-test-bind-poison"), Value::make_int(1)],
         )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+        .expect("guard after a binding compiles under precise deopt");
 
         // Unbinding more than this function bound bails to the interpreter.
         let err = lower_nullary_leaf(&[Op::Unbind(1), Op::Nil, Op::Return], &[]).unwrap_err();
@@ -5819,9 +5731,12 @@ mod tests {
     }
 
     #[test]
-    fn guard_after_varset_bails() {
-        // VarSet is a side effect: a later deopt guard would rerun it.
-        let err = lower_nullary_leaf(
+    fn guard_after_varset_compiles_and_runs() {
+        // Precise deopt: a guard after an assignment compiles and runs; the
+        // assignment is NOT replayed on a later deopt (resume is mid-frame).
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let leaf = lower_nullary_leaf(
             &[
                 Op::Constant(1),
                 Op::VarSet(0),
@@ -5831,11 +5746,11 @@ mod tests {
             ],
             &[Value::symbol("jit-test-poison-var"), Value::make_int(1)],
         )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+        .expect("guard after an assignment compiles under precise deopt");
+        assert_eq!(
+            leaf.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(2).bits())
+        );
     }
 
     #[test]
@@ -6076,18 +5991,110 @@ mod tests {
     }
 
     #[test]
-    fn bails_on_guard_after_call() {
-        // A deopt guard reachable after a call would make rerun-on-deopt unsound
-        // (the call's side effects already ran) -> must refuse to compile.
-        let err = lower_nullary_leaf(
-            &[Op::Constant(0), Op::Call(0), Op::Add1, Op::Return],
-            &[Value::symbol("jit-test-any")],
-        )
-        .unwrap_err();
-        assert!(matches!(
-            err,
-            CompileError::UnsupportedOp("guard-after-call")
-        ));
+    fn guard_after_call_deopts_without_replaying_the_call() {
+        // THE precise-deopt capability test: a guard after a side-effecting
+        // call compiles; when it fails, the interpreter resumes AT the guard
+        // op — the call's side effect happened exactly once (rerun-from-start
+        // would have replayed it). Full Context: the resumed 1+ promotes to a
+        // bignum through the real builtin dispatch.
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        // Callee (lambda (x) (setcar CELL (1+ (car CELL))) x): observable
+        // side effect (counter cons), returns its argument unchanged.
+        let cell = Value::cons(Value::make_int(0), Value::NIL);
+        let sym_val = Value::symbol("jit-test-effect-callee");
+        let crate::emacs_core::value::ValueKind::Symbol(sym_id) = sym_val.kind() else {
+            panic!("symbol expected");
+        };
+        let mut callee = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        callee.lexical = true;
+        callee.ops = vec![
+            Op::Constant(0), // CELL
+            Op::Constant(0), // CELL
+            Op::Car,
+            Op::Add1,
+            Op::Setcar,
+            Op::Pop,
+            Op::StackRef(0),
+            Op::Return,
+        ];
+        callee.constants = vec![cell];
+        callee.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(sym_id, Value::make_bytecode(callee));
+
+        // Caller: (1+ (callee MOST-POSITIVE-FIXNUM)) — the 1+ guard fails
+        // AFTER the call ran.
+        let ops = vec![
+            Op::Constant(0), // 'callee
+            Op::Constant(1), // MOST_POSITIVE
+            Op::Call(1),
+            Op::Add1, // pc 3: deopts (overflow)
+            Op::Return,
+        ];
+        let constants = vec![sym_val, Value::make_int(Value::MOST_POSITIVE_FIXNUM)];
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 16;
+        let leaf = lower_nullary_leaf(&ops, &constants).expect("guard after call compiles now");
+        let native = match leaf.call(ctx_ptr, &[]) {
+            NativeRun::DeoptAt {
+                pc,
+                stack,
+                handlers,
+                binds,
+                spec_base,
+                cond_base,
+            } => {
+                assert_eq!(pc, 3, "deopt at the 1+ after the call");
+                assert_eq!(
+                    cell.cons_car(),
+                    Value::make_int(1),
+                    "the call's side effect ran exactly once before the deopt"
+                );
+                let mut vm = Vm::from_context(&mut ev);
+                vm.run_resumed_frame(
+                    &f,
+                    Value::NIL,
+                    pc,
+                    &stack,
+                    handlers,
+                    &binds,
+                    spec_base,
+                    cond_base,
+                )
+                .expect("resume computes the bignum")
+            }
+            other => panic!("expected a precise deopt after the call, got {other:?}"),
+        };
+        assert_eq!(
+            cell.cons_car(),
+            Value::make_int(1),
+            "resume must NOT replay the call"
+        );
+        // Differential: the pure interpreter on the same body (fresh counter
+        // state) computes the same bignum and also increments exactly once.
+        b::builtin_setcar_2(&mut ev, cell, Value::make_int(0)).expect("reset counter");
+        let interp = {
+            let mut vm = Vm::from_context(&mut ev);
+            vm.execute(&f, vec![]).expect("interpreter computes")
+        };
+        assert_eq!(
+            crate::emacs_core::print::print_value(&native),
+            crate::emacs_core::print::print_value(&interp),
+            "resume result must equal the interpreter's"
+        );
+        assert_eq!(cell.cons_car(), Value::make_int(1));
     }
 
     #[test]
