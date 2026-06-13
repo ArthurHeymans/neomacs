@@ -3156,29 +3156,37 @@ impl DisplayRowAppendFrame {
         }
     }
 
-    fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {
-        DisplayRowAppendContext {
-            row: self.row,
-            glyph_y: self.glyph_y,
-            x: position.x_px,
-            col: position.col,
-            geometry: self.geometry,
-            default_row_height: self.default_row_height,
-            content_x: self.content_x,
-            text_width: self.text_width,
-            line_number_width: self.line_number_width,
-            face_space_width: self.face_space_width,
-            face_id,
-        }
-    }
-
     fn append_spec(
         &self,
         position: DisplayRowPosition,
         face_id: u32,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowAppendSpec {
-        self.clone().at(position, face_id).append_spec(kind)
+        let char_width = kind.char_width(self);
+        let max_x = kind.max_x(self);
+        let output_height = kind.output_height(self);
+
+        DisplayRowAppendSpec {
+            geometry: DisplayRowGeometry {
+                char_width,
+                ..self.geometry.clone()
+            },
+            layout: self.geometry.to_layout(
+                GlyphRowRole::Text,
+                char_width,
+                self.geometry.ascent,
+                RenderFaceRef::FaceId(face_id),
+                HashMap::new(),
+            ),
+            position,
+            max_x,
+            output: DisplayRowAppendOutput {
+                row: self.row,
+                row_y: self.geometry.y,
+                glyph_y: self.glyph_y,
+                height: output_height,
+            },
+        }
     }
 
     fn source_append_request<'face>(
@@ -3196,20 +3204,6 @@ impl DisplayRowAppendFrame {
     }
 }
 
-struct DisplayRowAppendContext {
-    row: usize,
-    glyph_y: f32,
-    x: f32,
-    col: usize,
-    geometry: DisplayRowGeometry,
-    default_row_height: f32,
-    content_x: f32,
-    text_width: f32,
-    line_number_width: f32,
-    face_space_width: f32,
-    face_id: u32,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DisplayRowAppendKind {
     SourceText,
@@ -3222,38 +3216,36 @@ enum DisplayRowAppendKind {
 }
 
 impl DisplayRowAppendKind {
-    fn char_width(self, context: &DisplayRowAppendContext) -> f32 {
+    fn char_width(self, frame: &DisplayRowAppendFrame) -> f32 {
         match self {
-            Self::Tab | Self::DisplayReplacementString => context.face_space_width,
+            Self::Tab | Self::DisplayReplacementString => frame.face_space_width,
             Self::SourceText
             | Self::ControlChar
             | Self::SourceMappedText
             | Self::Glyphless
-            | Self::DisplayReplacement => context.geometry.char_width,
+            | Self::DisplayReplacement => frame.geometry.char_width,
         }
     }
 
-    fn max_x(self, context: &DisplayRowAppendContext) -> f32 {
+    fn max_x(self, frame: &DisplayRowAppendFrame) -> f32 {
         match self {
             Self::Tab => f32::INFINITY,
-            Self::ControlChar => {
-                context.content_x + (context.text_width - context.line_number_width)
-            }
+            Self::ControlChar => frame.content_x + (frame.text_width - frame.line_number_width),
             Self::SourceText
             | Self::SourceMappedText
             | Self::Glyphless
             | Self::DisplayReplacement
-            | Self::DisplayReplacementString => context.content_x + context.geometry.width,
+            | Self::DisplayReplacementString => frame.content_x + frame.geometry.width,
         }
     }
 
-    fn output_height(self, context: &DisplayRowAppendContext) -> f32 {
+    fn output_height(self, frame: &DisplayRowAppendFrame) -> f32 {
         match self {
             Self::SourceText
             | Self::Glyphless
             | Self::DisplayReplacement
-            | Self::DisplayReplacementString => context.geometry.height,
-            Self::Tab | Self::ControlChar | Self::SourceMappedText => context.default_row_height,
+            | Self::DisplayReplacementString => frame.geometry.height,
+            Self::Tab | Self::ControlChar | Self::SourceMappedText => frame.default_row_height,
         }
     }
 }
@@ -3264,39 +3256,6 @@ struct DisplayRowAppendSpec {
     position: DisplayRowPosition,
     max_x: f32,
     output: DisplayRowAppendOutput,
-}
-
-impl DisplayRowAppendContext {
-    fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
-        let char_width = kind.char_width(self);
-        let max_x = kind.max_x(self);
-        let output_height = kind.output_height(self);
-
-        DisplayRowAppendSpec {
-            geometry: DisplayRowGeometry {
-                char_width,
-                ..self.geometry.clone()
-            },
-            layout: self.geometry.to_layout(
-                GlyphRowRole::Text,
-                char_width,
-                self.geometry.ascent,
-                RenderFaceRef::FaceId(self.face_id),
-                HashMap::new(),
-            ),
-            position: DisplayRowPosition {
-                x_px: self.x,
-                col: self.col,
-            },
-            max_x,
-            output: DisplayRowAppendOutput {
-                row: self.row,
-                row_y: self.geometry.y,
-                glyph_y: self.glyph_y,
-                height: output_height,
-            },
-        }
-    }
 }
 
 impl DisplayRowAppendSpec {

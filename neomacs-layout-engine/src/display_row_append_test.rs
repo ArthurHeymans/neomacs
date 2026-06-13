@@ -874,8 +874,11 @@ fn display_row_append_surface_builds_positioned_specs() {
                 default_row_height: 14.0,
             },
         )
-        .at(DisplayRowPosition { x_px: 18.0, col: 2 }, 42)
-        .append_spec(DisplayRowAppendKind::SourceText);
+        .append_spec(
+            DisplayRowPosition { x_px: 18.0, col: 2 },
+            42,
+            DisplayRowAppendKind::SourceText,
+        );
 
     assert_eq!(spec.position, DisplayRowPosition { x_px: 18.0, col: 2 });
     assert_eq!(spec.max_x, 128.0);
@@ -900,30 +903,30 @@ fn display_row_append_surface_builds_positioned_specs() {
 }
 
 #[test]
-fn display_row_append_context_derives_layout_output_and_bounds() {
+fn display_row_append_frame_derives_layout_output_and_bounds() {
     let tab_policy = DisplayTabPolicy::from_tab_width_and_stops(8.0, 4, &[6, 10]);
-    let context = DisplayRowAppendContext {
-        row: 3,
-        glyph_y: 22.0,
-        x: 8.0,
-        col: 0,
-        geometry: DisplayRowGeometry {
-            y: 20.0,
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
+        DisplayRowAppendArea {
+            content_x: 8.0,
             width: 120.0,
-            height: 16.0,
-            char_width: 9.0,
-            ascent: 11.0,
-            tab_policy: tab_policy.clone(),
+            text_width: 150.0,
+            line_number_width: 10.0,
         },
-        default_row_height: 14.0,
-        content_x: 8.0,
-        text_width: 150.0,
-        line_number_width: 10.0,
-        face_space_width: 7.0,
-        face_id: 42,
-    };
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        tab_policy,
+    );
+    let position = DisplayRowPosition { x_px: 8.0, col: 0 };
 
-    let ordinary: DisplayRowAppendSpec = context.append_spec(DisplayRowAppendKind::SourceText);
+    let ordinary = frame.append_spec(position, 42, DisplayRowAppendKind::SourceText);
     assert_eq!(ordinary.position, DisplayRowPosition { x_px: 8.0, col: 0 });
     assert_eq!(ordinary.max_x, 128.0);
     assert_eq!(ordinary.layout.char_width_px, 9.0);
@@ -932,30 +935,31 @@ fn display_row_append_context_derives_layout_output_and_bounds() {
     assert_eq!(ordinary.output.glyph_y, 22.0);
     assert_eq!(ordinary.output.height, 16.0);
 
-    let tab = context.append_spec(DisplayRowAppendKind::Tab);
+    let tab = frame.append_spec(position, 42, DisplayRowAppendKind::Tab);
     assert_eq!(tab.max_x, f32::INFINITY);
     assert_eq!(tab.layout.char_width_px, 7.0);
     assert_eq!(tab.output.height, 14.0);
 
-    let control = context.append_spec(DisplayRowAppendKind::ControlChar);
+    let control = frame.append_spec(position, 42, DisplayRowAppendKind::ControlChar);
     assert_eq!(control.max_x, 148.0);
     assert_eq!(control.layout.char_width_px, 9.0);
     assert_eq!(control.output.height, 14.0);
 
-    let mapped = context.append_spec(DisplayRowAppendKind::SourceMappedText);
+    let mapped = frame.append_spec(position, 42, DisplayRowAppendKind::SourceMappedText);
     assert_eq!(mapped.max_x, 128.0);
     assert_eq!(mapped.output.height, 14.0);
 
-    let glyphless = context.append_spec(DisplayRowAppendKind::Glyphless);
+    let glyphless = frame.append_spec(position, 42, DisplayRowAppendKind::Glyphless);
     assert_eq!(glyphless.max_x, 128.0);
     assert_eq!(glyphless.output.height, 16.0);
 
-    let replacement = context.append_spec(DisplayRowAppendKind::DisplayReplacement);
+    let replacement = frame.append_spec(position, 42, DisplayRowAppendKind::DisplayReplacement);
     assert_eq!(replacement.max_x, 128.0);
     assert_eq!(replacement.layout.char_width_px, 9.0);
     assert_eq!(replacement.output.height, 16.0);
 
-    let replacement_string = context.append_spec(DisplayRowAppendKind::DisplayReplacementString);
+    let replacement_string =
+        frame.append_spec(position, 42, DisplayRowAppendKind::DisplayReplacementString);
     assert_eq!(replacement_string.max_x, 128.0);
     assert_eq!(replacement_string.layout.char_width_px, 7.0);
     assert_eq!(replacement_string.output.height, 16.0);
@@ -963,48 +967,47 @@ fn display_row_append_context_derives_layout_output_and_bounds() {
 
 #[test]
 fn display_row_append_kind_names_width_clip_and_output_policy() {
-    let context = DisplayRowAppendContext {
-        row: 3,
-        glyph_y: 22.0,
-        x: 8.0,
-        col: 0,
-        geometry: DisplayRowGeometry {
-            y: 20.0,
+    let frame = test_append_frame_at(
+        3,
+        20.0,
+        22.0,
+        DisplayRowAppendArea {
+            content_x: 8.0,
             width: 120.0,
-            height: 16.0,
-            char_width: 9.0,
-            ascent: 11.0,
-            tab_policy: DisplayTabPolicy::every(4),
+            text_width: 150.0,
+            line_number_width: 10.0,
         },
-        default_row_height: 14.0,
-        content_x: 8.0,
-        text_width: 150.0,
-        line_number_width: 10.0,
-        face_space_width: 7.0,
-        face_id: 42,
-    };
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        DisplayTabPolicy::every(4),
+    );
 
-    assert_eq!(DisplayRowAppendKind::SourceText.char_width(&context), 9.0);
-    assert_eq!(DisplayRowAppendKind::Tab.char_width(&context), 7.0);
+    assert_eq!(DisplayRowAppendKind::SourceText.char_width(&frame), 9.0);
+    assert_eq!(DisplayRowAppendKind::Tab.char_width(&frame), 7.0);
     assert_eq!(
-        DisplayRowAppendKind::DisplayReplacementString.char_width(&context),
+        DisplayRowAppendKind::DisplayReplacementString.char_width(&frame),
         7.0
     );
-    assert!(DisplayRowAppendKind::Tab.max_x(&context).is_infinite());
-    assert_eq!(DisplayRowAppendKind::ControlChar.max_x(&context), 148.0);
-    assert_eq!(DisplayRowAppendKind::Glyphless.max_x(&context), 128.0);
+    assert!(DisplayRowAppendKind::Tab.max_x(&frame).is_infinite());
+    assert_eq!(DisplayRowAppendKind::ControlChar.max_x(&frame), 148.0);
+    assert_eq!(DisplayRowAppendKind::Glyphless.max_x(&frame), 128.0);
     assert_eq!(
-        DisplayRowAppendKind::DisplayReplacement.output_height(&context),
+        DisplayRowAppendKind::DisplayReplacement.output_height(&frame),
         16.0
     );
     assert_eq!(
-        DisplayRowAppendKind::ControlChar.output_height(&context),
+        DisplayRowAppendKind::ControlChar.output_height(&frame),
         14.0
     );
 }
 
 #[test]
-fn display_row_append_frame_builds_positioned_context() {
+fn display_row_append_frame_builds_positioned_spec() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = test_append_frame_at(
         3,
@@ -1026,9 +1029,11 @@ fn display_row_append_frame_builds_positioned_context() {
         tab_policy,
     );
 
-    let spec = frame
-        .at(DisplayRowPosition { x_px: 18.0, col: 2 }, 42)
-        .append_spec(DisplayRowAppendKind::SourceText);
+    let spec = frame.append_spec(
+        DisplayRowPosition { x_px: 18.0, col: 2 },
+        42,
+        DisplayRowAppendKind::SourceText,
+    );
 
     assert_eq!(spec.position, DisplayRowPosition { x_px: 18.0, col: 2 });
     assert_eq!(spec.max_x, 128.0);
