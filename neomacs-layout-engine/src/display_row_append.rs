@@ -652,11 +652,7 @@ impl<'a> LispStringAppendContext<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct LispStringRowAppendContext<'row> {
-    append_surface: &'row DisplayRowAppendSurface,
-    geometry: &'row DisplayRowGeometryState,
-    active_face: &'row DisplayRowActiveFaceState,
-    glyph_y_offset: f32,
-    default_row_height: f32,
+    active_face_context: DisplayRowActiveFaceAppendContext<'row>,
 }
 
 impl<'row> LispStringRowAppendContext<'row> {
@@ -668,11 +664,13 @@ impl<'row> LispStringRowAppendContext<'row> {
         default_row_height: f32,
     ) -> Self {
         Self {
-            append_surface,
-            geometry,
-            active_face,
-            glyph_y_offset,
-            default_row_height,
+            active_face_context: DisplayRowActiveFaceAppendContext::new(
+                append_surface,
+                geometry,
+                active_face,
+                glyph_y_offset,
+                default_row_height,
+            ),
         }
     }
 
@@ -681,14 +679,7 @@ impl<'row> LispStringRowAppendContext<'row> {
         base_face_id: u32,
         base_face: &'face ResolvedFace,
     ) -> LispStringAppendContext<'face> {
-        let frame = self
-            .append_surface
-            .frame_for_active_face_from_geometry_state(
-                self.geometry,
-                self.glyph_y_offset,
-                self.active_face,
-                self.default_row_height,
-            );
+        let frame = self.active_face_context.active_face_frame();
         LispStringAppendContext::new(base_face_id, base_face, frame)
     }
 }
