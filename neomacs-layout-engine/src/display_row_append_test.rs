@@ -374,7 +374,38 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     builder.begin_row(0, GlyphRowRole::Text);
     builder.push_char_with_pixel_width('e', 7, 0, 8.0);
 
-    let outcome = render_natural_display_item_source_into_current_text_row_and_emit(
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 0,
+            y: 0.0,
+            glyph_y: 0.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 12.0,
+            char_width: 8.0,
+            space_width: 8.0,
+            default_row_height: 16.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let request = DisplayRowSourceAppendRequest::from_append_spec(
+        frame.append_spec(
+            DisplayRowPosition { x_px: 8.0, col: 1 },
+            7,
+            DisplayRowAppendKind::SourceText,
+        ),
+        7,
+        &base_face,
+    );
+
+    let outcome = render_natural_display_source_append_request_into_current_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
@@ -383,30 +414,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         &mut source_state,
         &face_resolver,
         &mut face_ids,
-        DisplayRowSpec {
-            geometry: DisplayRowGeometry {
-                y: 0.0,
-                width: 80.0,
-                height: 16.0,
-                char_width: 8.0,
-                ascent: 12.0,
-                tab_policy: DisplayTabPolicy::every(8),
-            },
-            render_bounds: DisplayRowRenderBounds {
-                start: DisplayRowPosition { x_px: 8.0, col: 1 },
-                max_x_px: 80.0,
-            },
-            base_face_id: 7,
-            base_face: &base_face,
-            role: GlyphRowRole::Text,
-            symbol_values: std::collections::HashMap::new(),
-        },
-        crate::window_output::TextRowOutput {
-            row: 0,
-            row_y: 0.0,
-            glyph_y: 0.0,
-            height: 16.0,
-        },
+        request,
     )
     .expect("current-row fragment outcome");
 
