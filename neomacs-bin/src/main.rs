@@ -9,6 +9,14 @@
 //! (loaded .el files), just like GNU Emacs.  Only the core command loop and
 //! low-level primitives are implemented in Rust.
 
+// Global allocator: mimalloc handles the heavy Rust-side small-object churn
+// (per-string StringObj boxes, Vec/String temporaries) far faster than the
+// system allocator. Feature-gated so `--no-default-features` reverts to system
+// malloc. Only affects Rust allocations, not the linked C libraries.
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod args;
 mod input_bridge;
 mod termcap_input;
