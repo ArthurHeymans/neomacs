@@ -384,8 +384,35 @@ struct Reader<'a> {
 }
 
 struct ReaderToken {
-    name: crate::heap_types::LispString,
+    /// Raw token bytes, kept inline (SmallVec) so the common short-symbol case
+    /// never touches the heap. The `LispString` name is materialized lazily by
+    /// `to_lisp_string()` only on the cold paths (uninterned `#:` symbols,
+    /// non-ASCII / escaped tokens, shorthand rewrite); ASCII symbols intern
+    /// straight from the `&str` view via the interner's no-alloc fast path.
+    bytes: ReaderTokenBytes,
+    /// Whether the source string was multibyte when the token was read; decides
+    /// how `to_lisp_string` reconstructs the exact Lisp-string encoding.
+    multibyte: bool,
     had_escape: bool,
+}
+
+impl ReaderToken {
+    /// UTF-8 view of the token bytes if valid. Always true for ASCII; for a
+    /// multibyte source the bytes are Emacs-internal encoding, so non-ASCII
+    /// returns `None` and the caller falls back to the `LispString` path.
+    fn as_utf8(&self) -> Option<&str> {
+        std::str::from_utf8(&self.bytes).ok()
+    }
+
+    /// Materialize the exact Lisp-string name (heap). Reconstructs the same
+    /// encoding `read_symbol_token` used to before this was made lazy.
+    fn to_lisp_string(&self) -> crate::heap_types::LispString {
+        if self.multibyte {
+            crate::heap_types::LispString::from_emacs_bytes(self.bytes.to_vec())
+        } else {
+            crate::heap_types::LispString::from_unibyte(self.bytes.to_vec())
+        }
+    }
 }
 
 type ReaderTokenBytes = SmallVec<[u8; 64]>;
@@ -1653,7 +1680,7 @@ impl<'a> Reader<'a> {
                 self.bump();
                 let token = self.read_symbol_token();
                 Ok(Value::from_sym_id(intern_uninterned_lisp_string(
-                    &token.name,
+                    &token.to_lisp_string(),
                 )))
             }
             x if x == b'$' as u32 => {
@@ -2047,17 +2074,19 @@ impl<'a> Reader<'a> {
     fn read_atom(&mut self) -> Result<Value, ReadError> {
         let token = self.read_symbol_token();
 
-        if token.name.as_bytes().is_empty() {
+        if token.bytes.is_empty() {
             return Err(self.error("expected atom"));
         }
 
         // Keywords (:foo) — including bare `:` which is a keyword in Emacs
-        if token.name.as_bytes().first() == Some(&b':') {
-            return Ok(Value::keyword_id(intern_lisp_string(&token.name)));
+        if token.bytes.first() == Some(&b':') {
+            return Ok(Value::keyword_id(intern_lisp_string(
+                &token.to_lisp_string(),
+            )));
         }
 
         if !token.had_escape {
-            if let Some(token_text) = token.name.as_utf8_str() {
+            if let Some(token_text) = token.as_utf8() {
                 // Try integer. Funnel through Value::make_integer so a value
                 // that fits in i64 but not in fixnum (62-bit) is promoted to
                 // a bignum, matching GNU `string_to_number` behavior. On i64
@@ -2097,11 +2126,33 @@ impl<'a> Reader<'a> {
             }
         }
 
-        let name = self
-            .shorthands
-            .and_then(|shorthands| shorthands.rewrite(&token.name))
-            .unwrap_or(token.name);
+        // Fast path: a plain ASCII symbol with no shorthand rewrite and no
+        // escapes interns straight from its &str view. `intern(&str)` hits the
+        // interner's utf8_map without allocating, and on miss builds exactly the
+        // same atom the LispString path would (name_atom_from_str for ASCII ==
+        // LispString::from_unibyte). This skips the per-token heap LispString
+        // for the overwhelming majority of symbols read while loading.
+        if self.shorthands.is_none() && !token.had_escape {
+            if let Some(text) = token.as_utf8() {
+                if text.is_ascii() {
+                    return Ok(Value::from_sym_id(intern(text)));
+                }
+            }
+        }
+
+        // Cold path: non-ASCII / escaped / shorthand-rewritten symbols keep the
+        // exact LispString encoding.
+        let name = self.to_lisp_string_for_token(&token);
         Ok(Value::from_sym_id(intern_lisp_string(&name)))
+    }
+
+    /// Build the token's exact `LispString` name, applying any active reader
+    /// shorthand rewrite (`read-symbol-shorthands`).
+    fn to_lisp_string_for_token(&self, token: &ReaderToken) -> crate::heap_types::LispString {
+        let name = token.to_lisp_string();
+        self.shorthands
+            .and_then(|shorthands| shorthands.rewrite(&name))
+            .unwrap_or(name)
     }
 
     fn read_symbol_token(&mut self) -> ReaderToken {
@@ -2126,17 +2177,14 @@ impl<'a> Reader<'a> {
             self.push_symbol_token_code(&mut bytes, ch);
             self.bump();
         }
-        let bytes = bytes.into_vec();
-        let name = if self.source_multibyte {
-            crate::heap_types::LispString::from_emacs_bytes(bytes)
-        } else {
-            crate::heap_types::LispString::from_unibyte(bytes)
-        };
-        // No owned `text` copy here: the integer/float/`t`/`nil` checks in
-        // `read_atom` borrow `name.as_utf8_str()` directly (a `&str`, no alloc).
-        // This used to `to_owned()` a String for every symbol/atom token —
-        // pure churn, since Doom loading reads a huge number of tokens.
-        ReaderToken { name, had_escape }
+        // Keep `bytes` inline (no into_vec / LispString here). read_atom interns
+        // ASCII symbols directly from the &str view (interner no-alloc fast
+        // path); only the cold paths materialize a LispString via to_lisp_string.
+        ReaderToken {
+            bytes,
+            multibyte: self.source_multibyte,
+            had_escape,
+        }
     }
 
     fn push_symbol_token_code(&self, bytes: &mut ReaderTokenBytes, code: u32) {
