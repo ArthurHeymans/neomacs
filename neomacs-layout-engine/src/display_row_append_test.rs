@@ -10,8 +10,7 @@ use crate::display_property::DisplayMediaReplacementProperty;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceRenderRequest,
-    DisplayRowSourceState,
+    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceGeometry, DisplayRowSourceState,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
@@ -772,19 +771,15 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         let mut source_state = DisplayRowSourceState::default();
         renderer
             .render_display_item_source_row_fragment_step_from_request_with_display_host(
-                DisplayRowSourceRenderRequest::whole_row(
-                    DisplayRowGeometry {
-                        y: 0.0,
-                        width: 160.0,
-                        height: 16.0,
-                        char_width: 8.0,
-                        ascent: 12.0,
-                        tab_policy: DisplayTabPolicy::every(8),
-                    },
-                    7,
-                    &base_face,
-                    GlyphRowRole::Text,
+                DisplayRowSourceGeometry::new(
+                    0.0,
+                    160.0,
+                    16.0,
+                    8.0,
+                    12.0,
+                    DisplayTabPolicy::every(8),
                 )
+                .source_request_for_base_face_id(7, &base_face, GlyphRowRole::Text)
                 .with_render_bounds(DisplayRowRenderBounds {
                     start: DisplayRowPosition { x_px: 16.0, col: 2 },
                     max_x_px: 160.0,

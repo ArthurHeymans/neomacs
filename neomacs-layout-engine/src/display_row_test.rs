@@ -27,8 +27,7 @@ fn display_row_request_from_base_face<'a>(
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 ) -> DisplayRowSourceRenderRequest<'a> {
-    DisplayRowSourceRenderRequest::from_base_face(
-        geometry,
+    DisplayRowSourceGeometry::from_display_row_geometry(geometry).source_request_from_base_face(
         face_ids,
         base_face,
         role,
@@ -42,7 +41,11 @@ fn display_row_request_for_face<'a>(
     base_face: &'a crate::neovm_bridge::ResolvedFace,
     role: GlyphRowRole,
 ) -> DisplayRowSourceRenderRequest<'a> {
-    DisplayRowSourceRenderRequest::whole_row(geometry, base_face_id, base_face, role)
+    DisplayRowSourceGeometry::from_display_row_geometry(geometry).source_request_for_base_face_id(
+        base_face_id,
+        base_face,
+        role,
+    )
 }
 
 #[derive(Default)]
@@ -178,12 +181,8 @@ fn display_row_source_render_request_builds_whole_row() {
         tab_policy: DisplayTabPolicy::every(4),
     };
 
-    let request = DisplayRowSourceRenderRequest::whole_row(
-        geometry.clone(),
-        17,
-        &face,
-        GlyphRowRole::Minibuffer,
-    );
+    let request =
+        display_row_request_for_face(geometry.clone(), 17, &face, GlyphRowRole::Minibuffer);
 
     assert_eq!(request.geometry(), &geometry);
     assert_eq!(
@@ -212,7 +211,7 @@ fn display_row_source_render_request_allocates_base_face_id() {
     let mut symbol_values = std::collections::HashMap::new();
     symbol_values.insert("header-line-indent-width".to_string(), Value::fixnum(3));
 
-    let request = DisplayRowSourceRenderRequest::from_base_face(
+    let request = display_row_request_from_base_face(
         geometry.clone(),
         &mut face_ids,
         &face,
@@ -247,7 +246,7 @@ fn display_row_source_render_request_overrides_render_bounds() {
         max_x_px: 40.0,
     };
 
-    let request = DisplayRowSourceRenderRequest::whole_row(geometry, 7, &face, GlyphRowRole::Text)
+    let request = display_row_request_for_face(geometry, 7, &face, GlyphRowRole::Text)
         .with_render_bounds(bounds);
 
     assert_eq!(request.render_bounds(), bounds);
@@ -438,7 +437,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let request = DisplayRowSourceRenderRequest::from_base_face(
+    let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -470,7 +469,7 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let request = DisplayRowSourceRenderRequest::from_base_face(
+    let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -723,7 +722,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
 
     let first = renderer
         .render_display_item_source_row_step_from_request_with_context(
-            DisplayRowSourceRenderRequest::whole_row(
+            display_row_request_for_face(
                 DisplayRowGeometry {
                     y: 0.0,
                     width: 16.0,
@@ -743,7 +742,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
         .expect("first row");
     let second = renderer
         .render_display_item_source_row_step_from_request_with_context(
-            DisplayRowSourceRenderRequest::whole_row(
+            display_row_request_for_face(
                 DisplayRowGeometry {
                     y: 16.0,
                     width: 16.0,
@@ -941,7 +940,7 @@ fn render_lisp_display_row_output_with_symbols(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let request = DisplayRowSourceRenderRequest::from_base_face(
+    let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -1011,7 +1010,7 @@ fn render_buffer_display_row_with_properties(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let request = DisplayRowSourceRenderRequest::from_base_face(
+    let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2403,7 +2402,7 @@ fn layout_engine_renders_display_text_fragment_with_render_context() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face().clone();
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let request = DisplayRowSourceRenderRequest::from_base_face(
+    let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2526,7 +2525,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let request = DisplayRowSourceRenderRequest::from_base_face(
+    let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
