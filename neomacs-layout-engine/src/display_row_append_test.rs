@@ -680,7 +680,10 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     )
     .expect("current-row fragment outcome");
 
-    assert_eq!(outcome.end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(
+        outcome.end_position(),
+        DisplayRowPosition { x_px: 8.0, col: 1 }
+    );
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];

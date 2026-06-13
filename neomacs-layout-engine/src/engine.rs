@@ -1971,10 +1971,10 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         ) else {
             break;
         };
-        let stop = outcome.stop;
-        geometry.include_glyph_vertical_metrics(outcome.row_height_px, outcome.row_ascent_px);
+        let stop = outcome.stop();
+        outcome.include_vertical_metrics(geometry);
         let overlay_cursor_visual_state = row_context.cursor_visual_state(base_face.face());
-        for slot in &outcome.source_slots {
+        for slot in outcome.source_slots() {
             capture_overlay_string_cursor_at_slot(
                 text_props.as_ref(),
                 slot,
@@ -1984,8 +1984,9 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
                 overlay_cursor_visual_state,
             );
         }
-        *x = outcome.end.x_px;
-        *col = outcome.end.col;
+        let end = outcome.end_position();
+        *x = end.x_px;
+        *col = end.col;
 
         if stop == DisplayRowRenderStop::RowBreak {
             // End current row, start a new one — mirrors the main text loop.

@@ -266,6 +266,22 @@ pub(crate) struct CurrentTextRowRenderOutcome {
 }
 
 impl CurrentTextRowRenderOutcome {
+    pub(crate) fn stop(&self) -> DisplayRowRenderStop {
+        self.stop
+    }
+
+    pub(crate) fn source_slots(&self) -> &[crate::display_row_builder::DisplayRowGlyphSlot] {
+        &self.source_slots
+    }
+
+    pub(crate) fn end_position(&self) -> DisplayRowPosition {
+        self.end
+    }
+
+    pub(crate) fn include_vertical_metrics(&self, geometry: &mut DisplayRowGeometryState) {
+        geometry.include_glyph_vertical_metrics(self.row_height_px, self.row_ascent_px);
+    }
+
     fn into_append_progress(self, start: DisplayRowPosition) -> DisplayRowAppendProgress {
         display_row_append_progress_from_render_result(
             start,
@@ -583,7 +599,7 @@ fn append_lisp_string_fragment_to_text_row_and_emit(
     ) else {
         return position;
     };
-    outcome.end
+    outcome.end_position()
 }
 
 #[derive(Clone)]
@@ -1025,7 +1041,7 @@ pub(crate) fn append_lisp_string_to_text_row(
     ) else {
         return position;
     };
-    outcome.end
+    outcome.end_position()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2720,7 +2736,7 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
     ) else {
         return position;
     };
-    outcome.end
+    outcome.end_position()
 }
 
 #[allow(clippy::too_many_arguments)]
