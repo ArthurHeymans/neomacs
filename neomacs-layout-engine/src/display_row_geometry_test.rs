@@ -661,9 +661,7 @@ fn display_row_geometry_state_builds_append_placement_with_glyph_offset() {
 
     let placement = geometry.append_placement(2.5);
 
-    assert_eq!(placement.row, 3);
-    assert_eq!(placement.y, 69.0);
-    assert_eq!(placement.glyph_y, 71.5);
+    assert_eq!(placement, DisplayRowAppendPlacement::new(3, 69.0, 71.5));
 }
 
 #[test]

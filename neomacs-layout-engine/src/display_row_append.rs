@@ -1254,17 +1254,34 @@ struct DisplayRowAppendOutput {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendPlacement {
-    pub(crate) row: usize,
-    pub(crate) y: f32,
-    pub(crate) glyph_y: f32,
+    row: usize,
+    y: f32,
+    glyph_y: f32,
+}
+
+impl DisplayRowAppendPlacement {
+    pub(crate) fn new(row: usize, y: f32, glyph_y: f32) -> Self {
+        Self { row, y, glyph_y }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendArea {
-    pub(crate) content_x: f32,
-    pub(crate) width: f32,
-    pub(crate) text_width: f32,
-    pub(crate) line_number_width: f32,
+    content_x: f32,
+    width: f32,
+    text_width: f32,
+    line_number_width: f32,
+}
+
+impl DisplayRowAppendArea {
+    pub(crate) fn new(content_x: f32, width: f32, text_width: f32, line_number_width: f32) -> Self {
+        Self {
+            content_x,
+            width,
+            text_width,
+            line_number_width,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1301,14 +1318,30 @@ impl DisplayRowAppendSurface {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendMetrics {
-    pub(crate) height: f32,
-    pub(crate) ascent: f32,
-    pub(crate) char_width: f32,
-    pub(crate) space_width: f32,
-    pub(crate) default_row_height: f32,
+    height: f32,
+    ascent: f32,
+    char_width: f32,
+    space_width: f32,
+    default_row_height: f32,
 }
 
 impl DisplayRowAppendMetrics {
+    pub(crate) fn new(
+        height: f32,
+        ascent: f32,
+        char_width: f32,
+        space_width: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            height,
+            ascent,
+            char_width,
+            space_width,
+            default_row_height,
+        }
+    }
+
     pub(crate) fn from_active_face_state(
         active_face: &DisplayRowActiveFaceState,
         default_row_height: f32,
@@ -1323,26 +1356,26 @@ impl DisplayRowAppendMetrics {
         default_row_height: f32,
     ) -> Self {
         let metrics = active_face.metrics();
-        Self {
+        Self::new(
             height,
             ascent,
-            char_width: metrics.char_width,
-            space_width: metrics.space_width,
+            metrics.char_width,
+            metrics.space_width,
             default_row_height,
-        }
+        )
     }
 
     pub(crate) fn from_measured_face_metrics(
         metrics: DisplayRowMeasuredFaceMetrics,
         default_row_height: f32,
     ) -> Self {
-        Self {
-            height: metrics.row_height,
-            ascent: metrics.ascent,
-            char_width: metrics.char_width,
-            space_width: metrics.space_width,
+        Self::new(
+            metrics.row_height,
+            metrics.ascent,
+            metrics.char_width,
+            metrics.space_width,
             default_row_height,
-        }
+        )
     }
 }
 

@@ -581,11 +581,7 @@ impl DisplayRowGeometryState {
     }
 
     pub(crate) fn append_placement(&self, glyph_y_offset: f32) -> DisplayRowAppendPlacement {
-        DisplayRowAppendPlacement {
-            row: self.row,
-            y: self.y,
-            glyph_y: self.glyph_y(glyph_y_offset),
-        }
+        DisplayRowAppendPlacement::new(self.row, self.y, self.glyph_y(glyph_y_offset))
     }
 
     pub(crate) fn glyph_y(&self, glyph_y_offset: f32) -> f32 {

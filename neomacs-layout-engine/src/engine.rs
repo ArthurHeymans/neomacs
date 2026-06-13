@@ -2073,19 +2073,14 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         let frame = DisplayRowAppendFrame::from_geometry_state(
             geometry,
             0.0,
-            DisplayRowAppendArea {
-                content_x,
-                width: max_x - content_x,
-                text_width: max_x - content_x,
-                line_number_width: 0.0,
-            },
-            DisplayRowAppendMetrics {
-                height: char_h,
-                ascent: default_row_ascent,
-                char_width: face_char_w,
-                space_width: face_char_w,
-                default_row_height: char_h,
-            },
+            DisplayRowAppendArea::new(content_x, max_x - content_x, max_x - content_x, 0.0),
+            DisplayRowAppendMetrics::new(
+                char_h,
+                default_row_ascent,
+                face_char_w,
+                face_char_w,
+                char_h,
+            ),
             text_display_tab_policy(content_x, params),
         );
         let Some(outcome) = render_lisp_string_source_append_to_text_row_and_emit(
@@ -3949,12 +3944,7 @@ impl LayoutEngine {
             - reserve_right_special_width)
             .max(char_w);
         let text_append_surface = DisplayRowAppendSurface::new(
-            DisplayRowAppendArea {
-                content_x,
-                width: avail_width,
-                text_width,
-                line_number_width: lnum_pixel_width,
-            },
+            DisplayRowAppendArea::new(content_x, avail_width, text_width, lnum_pixel_width),
             text_display_tab_policy(content_x, params),
         );
 
@@ -4437,13 +4427,13 @@ impl LayoutEngine {
                         let trunc_face_id: u32 = BasicFaceId::Default.into();
                         let trunc_frame = text_append_surface.frame(
                             row_geometry.append_placement(0.0),
-                            DisplayRowAppendMetrics {
-                                height: char_h,
-                                ascent: default_face_ascent,
-                                char_width: char_w,
-                                space_width: char_w,
-                                default_row_height: char_h,
-                            },
+                            DisplayRowAppendMetrics::new(
+                                char_h,
+                                default_face_ascent,
+                                char_w,
+                                char_w,
+                                char_h,
+                            ),
                         );
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
@@ -4545,12 +4535,12 @@ impl LayoutEngine {
                         if !replacement.is_empty() {
                             let right_limit = content_x + (text_width - lnum_pixel_width);
                             let replacement_string_surface = DisplayRowAppendSurface::new(
-                                DisplayRowAppendArea {
+                                DisplayRowAppendArea::new(
                                     content_x,
-                                    width: right_limit - content_x,
+                                    right_limit - content_x,
                                     text_width,
-                                    line_number_width: lnum_pixel_width,
-                                },
+                                    lnum_pixel_width,
+                                ),
                                 text_display_tab_policy(content_x, params),
                             );
                             let replacement_fragment = DisplayTextFragment::display_property_string(
