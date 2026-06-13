@@ -1109,6 +1109,11 @@ fn display_row_source_append_request_uses_frame_policy() {
         DisplayRowAppendKind::ControlChar,
     );
 
+    assert_eq!(
+        request.start_position(),
+        DisplayRowPosition { x_px: 18.0, col: 2 }
+    );
+    assert_eq!(request.base_face_id(), 42);
     let parts = request.into_render_parts();
     assert_eq!(
         parts.request.render_bounds().start,
@@ -1151,6 +1156,11 @@ fn display_row_append_frame_builds_source_append_request() {
         DisplayRowAppendKind::ControlChar,
     );
 
+    assert_eq!(
+        request.start_position(),
+        DisplayRowPosition { x_px: 18.0, col: 2 }
+    );
+    assert_eq!(request.base_face_id(), 42);
     let parts = request.into_render_parts();
     assert_eq!(
         parts.request.render_bounds().start,

@@ -491,9 +491,10 @@ fn display_row_append_progress_from_render_result(
 }
 
 struct DisplayRowSourceAppendRequest<'face> {
-    append_spec: DisplayRowAppendSpec,
+    request: DisplayRowSourceRenderRequest<'face>,
+    output: TextRowOutput,
+    start: DisplayRowPosition,
     base_face_id: u32,
-    base_face: &'face ResolvedFace,
 }
 
 struct DisplayRowSourceAppendRenderParts<'face> {
@@ -502,12 +503,19 @@ struct DisplayRowSourceAppendRenderParts<'face> {
 }
 
 impl<'face> DisplayRowSourceAppendRequest<'face> {
+    fn start_position(&self) -> DisplayRowPosition {
+        self.start
+    }
+
+    fn base_face_id(&self) -> u32 {
+        self.base_face_id
+    }
+
     fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
-        let request = self
-            .append_spec
-            .display_row_source_render_request(self.base_face_id, self.base_face);
-        let output = self.append_spec.text_row_output();
-        DisplayRowSourceAppendRenderParts { request, output }
+        DisplayRowSourceAppendRenderParts {
+            request: self.request,
+            output: self.output,
+        }
     }
 }
 
@@ -522,11 +530,12 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
     request: DisplayRowSourceAppendRequest<'_>,
     render_policy: &mut P,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    item.face = RenderFaceRef::FaceId(request.base_face_id);
+    let base_face_id = request.base_face_id();
+    item.face = RenderFaceRef::FaceId(base_face_id);
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
-    let mut face_ids = FrameFaceIdAllocator::new(request.base_face_id.saturating_add(1));
-    let start = request.append_spec.position;
+    let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
+    let start = request.start_position();
     let outcome = render_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -3196,10 +3205,12 @@ impl DisplayRowAppendFrame {
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowSourceAppendRequest<'face> {
+        let append_spec = self.append_spec(position, face_id, kind);
         DisplayRowSourceAppendRequest {
-            append_spec: self.append_spec(position, face_id, kind),
+            request: append_spec.display_row_source_render_request(face_id, base_face),
+            output: append_spec.text_row_output(),
+            start: append_spec.position,
             base_face_id: face_id,
-            base_face,
         }
     }
 }
