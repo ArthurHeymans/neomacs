@@ -6,17 +6,28 @@ use super::TextMatrixRowMetrics;
 use super::TextMatrixRowOutput;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
+use super::TextWindowRightEdgeMarkerColumn;
+use super::TextWindowRightEdgeMarkers;
 use super::WindowOutputEmitter;
+use super::install_text_window_right_edge_markers;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
     DisplayRowWriteMetrics,
 };
+use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::display_status_line::DisplayRowOutputProgress;
 use crate::matrix_builder::GlyphMatrixBuilder;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::{Glyph, GlyphArea, GlyphType};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
+
+fn assert_char_glyph(glyph: &Glyph, ch: char, face_id: u32) {
+    assert_eq!(glyph.glyph_type, GlyphType::Char { ch });
+    assert_eq!(glyph.face_id, face_id);
+}
 
 #[test]
 fn emit_text_span_advances_live_output_before_row_finish() {
@@ -543,6 +554,45 @@ fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
     builder.end_window();
     let state = builder.finish(10, 1, 8.0, 16.0);
     assert_eq!(state.window_matrices[0].matrix.rows.len(), 1);
+}
+
+#[test]
+fn text_window_right_edge_markers_use_row_flags() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
+    for row in 0..3 {
+        builder.begin_row(row, GlyphRowRole::Text);
+        builder.push_char('x', 7, row);
+        builder.end_row();
+    }
+
+    let mut row_flags = DisplayRowFlags::new(3);
+    row_flags.mark(0, DisplayRowFlagKind::Truncated);
+    row_flags.mark(1, DisplayRowFlagKind::Continued);
+    row_flags.mark(2, DisplayRowFlagKind::Continuation);
+
+    install_text_window_right_edge_markers(
+        &mut builder,
+        TextWindowRightEdgeMarkers {
+            text_matrix_row_base: 0,
+            matrix_cols: 5,
+            column: TextWindowRightEdgeMarkerColumn::BeforeRightBorder,
+            row_flags: &row_flags,
+            face_id: 9,
+        },
+    );
+
+    builder.end_window();
+    let state = builder.finish(10, 3, 8.0, 16.0);
+    let matrix = &state.window_matrices[0].matrix;
+    let row0 = &matrix.rows[0].glyphs[GlyphArea::Text.index()];
+    let row1 = &matrix.rows[1].glyphs[GlyphArea::Text.index()];
+    let row2 = &matrix.rows[2].glyphs[GlyphArea::Text.index()];
+
+    assert_char_glyph(&row0[3], '$', 9);
+    assert_char_glyph(&row1[3], '\\', 9);
+    assert_eq!(row2.len(), 1);
+    assert_char_glyph(&row2[0], 'x', 7);
 }
 
 #[test]

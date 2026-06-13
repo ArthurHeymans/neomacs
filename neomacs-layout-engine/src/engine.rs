@@ -15,8 +15,10 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, TextWindowBegin, WindowOutputEmitter,
+    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, TextWindowBegin,
+    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
     begin_text_window_output, finish_text_window_output_rows,
+    install_text_window_right_edge_markers,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -6343,21 +6345,21 @@ impl LayoutEngine {
         // into their real glyph-matrix slots before closing the window. ---
         finish_text_window_output_rows(&mut self.matrix_builder, &output_emitter);
         if reserve_right_special_col {
-            let target_col = if reserve_right_border_col {
-                matrix_cols.saturating_sub(2)
+            let marker_column = if reserve_right_border_col {
+                TextWindowRightEdgeMarkerColumn::BeforeRightBorder
             } else {
-                matrix_cols.saturating_sub(1)
+                TextWindowRightEdgeMarkerColumn::LastColumn
             };
-            for row_idx in 0..row_flags.len() {
-                let matrix_row = text_matrix_row_base + row_idx;
-                if row_flags.is_set(row_idx, DisplayRowFlagKind::Truncated) {
-                    self.matrix_builder
-                        .overwrite_current_window_row_glyph_at_col(matrix_row, target_col, '$', 0);
-                } else if row_flags.is_set(row_idx, DisplayRowFlagKind::Continued) {
-                    self.matrix_builder
-                        .overwrite_current_window_row_glyph_at_col(matrix_row, target_col, '\\', 0);
-                }
-            }
+            install_text_window_right_edge_markers(
+                &mut self.matrix_builder,
+                TextWindowRightEdgeMarkers {
+                    text_matrix_row_base,
+                    matrix_cols,
+                    column: marker_column,
+                    row_flags: &row_flags,
+                    face_id: 0,
+                },
+            );
         }
 
         let mut status_line_symbol_values = std::collections::HashMap::new();

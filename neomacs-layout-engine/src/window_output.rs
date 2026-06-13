@@ -11,6 +11,7 @@ use crate::display_item::DisplaySourcePosition;
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
+use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::types::Rect;
@@ -129,6 +130,29 @@ pub(crate) struct TextWindowBegin {
     pub(crate) first_row: TextMatrixRowBegin,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextWindowRightEdgeMarkerColumn {
+    LastColumn,
+    BeforeRightBorder,
+}
+
+impl TextWindowRightEdgeMarkerColumn {
+    fn target_col(self, matrix_cols: usize) -> usize {
+        match self {
+            Self::LastColumn => matrix_cols.saturating_sub(1),
+            Self::BeforeRightBorder => matrix_cols.saturating_sub(2),
+        }
+    }
+}
+
+pub(crate) struct TextWindowRightEdgeMarkers<'a> {
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) matrix_cols: usize,
+    pub(crate) column: TextWindowRightEdgeMarkerColumn,
+    pub(crate) row_flags: &'a DisplayRowFlags,
+    pub(crate) face_id: u32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextMatrixRowGeometryTransition {
     pub(crate) finished_row: TextMatrixRowMetrics,
@@ -228,6 +252,37 @@ pub(crate) fn finish_text_window_output_rows(
         builder.set_row_metrics(metric.row, metric.pixel_y, metric.height, metric.ascent);
     }
     builder.end_row();
+}
+
+pub(crate) fn install_text_window_right_edge_markers(
+    builder: &mut GlyphMatrixBuilder,
+    request: TextWindowRightEdgeMarkers<'_>,
+) {
+    let target_col = request.column.target_col(request.matrix_cols);
+    for row_idx in 0..request.row_flags.len() {
+        let matrix_row = request.text_matrix_row_base + row_idx;
+        if request
+            .row_flags
+            .is_set(row_idx, DisplayRowFlagKind::Truncated)
+        {
+            builder.overwrite_current_window_row_glyph_at_col(
+                matrix_row,
+                target_col,
+                '$',
+                request.face_id,
+            );
+        } else if request
+            .row_flags
+            .is_set(row_idx, DisplayRowFlagKind::Continued)
+        {
+            builder.overwrite_current_window_row_glyph_at_col(
+                matrix_row,
+                target_col,
+                '\\',
+                request.face_id,
+            );
+        }
+    }
 }
 
 pub(crate) trait DisplayProgressSink {
