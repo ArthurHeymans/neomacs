@@ -8,17 +8,19 @@ use crate::display_item::{
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{DisplayMediaReplacementProperty, DisplayPropertyClassification};
 #[cfg(test)]
+use crate::display_row::DisplayRowRenderStop;
+#[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy, DisplayRowGeometry,
-    DisplayRowMeasuredFaceMetrics, DisplayRowOutputProgress, DisplayRowRenderBounds,
-    DisplayRowRenderClipBehavior, DisplayRowRenderContext, DisplayRowRenderPolicy,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceAppendRequest,
-    DisplayRowSourceGeometry, DisplayRowSourceRenderRequest, DisplayRowSourceState,
-    install_rendered_display_row_fragment_assets,
-    merge_display_row_source_slot_bounds_to_current_row,
+    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
+    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds,
+    DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowSourceAppendRequest,
+    DisplayRowSourceGeometry, DisplayRowSourceState, NaturalDisplayRowAppendRenderPolicy,
+    measure_display_source_append_request_against_current_text_row,
+    render_display_source_append_request_into_current_text_row_and_emit,
+    render_natural_display_source_append_request_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
@@ -101,10 +103,6 @@ impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
         }
     }
 }
-
-struct NaturalDisplayRowAppendRenderPolicy;
-
-impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BufferTextSourceAppendMeasurement {
@@ -251,239 +249,6 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
     output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
     end
-}
-
-pub(crate) struct CurrentTextRowRenderOutcome {
-    pub(crate) stop: DisplayRowRenderStop,
-    pub(crate) source_slots: Vec<crate::display_row_builder::DisplayRowGlyphSlot>,
-    pub(crate) end: DisplayRowPosition,
-    pub(crate) row_height_px: f32,
-    pub(crate) row_ascent_px: f32,
-}
-
-impl CurrentTextRowRenderOutcome {
-    pub(crate) fn stop(&self) -> DisplayRowRenderStop {
-        self.stop
-    }
-
-    pub(crate) fn source_slots(&self) -> &[crate::display_row_builder::DisplayRowGlyphSlot] {
-        &self.source_slots
-    }
-
-    pub(crate) fn end_position(&self) -> DisplayRowPosition {
-        self.end
-    }
-
-    pub(crate) fn include_vertical_metrics(&self, geometry: &mut DisplayRowGeometryState) {
-        geometry.include_glyph_vertical_metrics(self.row_height_px, self.row_ascent_px);
-    }
-
-    fn into_append_progress(self, start: DisplayRowPosition) -> DisplayRowAppendProgress {
-        display_row_append_progress_from_render_result(
-            start,
-            self.end,
-            self.stop,
-            self.source_slots,
-        )
-    }
-
-    fn into_append_progress_and_position(
-        self,
-        start: DisplayRowPosition,
-    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
-        let end = self.end;
-        (self.into_append_progress(start), end)
-    }
-}
-
-fn display_row_position_from_output_progress(
-    progress: DisplayRowOutputProgress,
-) -> DisplayRowPosition {
-    DisplayRowPosition {
-        x_px: progress.end_x,
-        col: usize::try_from(progress.end_col.max(0)).unwrap_or(usize::MAX),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_display_item_source_into_current_text_row_and_emit<
-    S: DisplayItemSource,
-    P: DisplayRowRenderPolicy,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
-    request: DisplayRowSourceRenderRequest<'_>,
-    output: TextRowOutput,
-    render_policy: &mut P,
-) -> Option<CurrentTextRowRenderOutcome> {
-    let role = request.role();
-    let mut renderer = DisplayRowRenderer::new(font_metrics);
-    let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
-        let mut context = DisplayRowRenderContext::new(
-            face_resolver,
-            evaluator.display_host.as_deref(),
-            face_ids,
-        );
-        let result = renderer
-            .render_display_item_source_row_fragment_step_from_request_into_row_with_policy(
-                request,
-                row,
-                source,
-                source_state,
-                &mut context,
-                render_policy,
-            )?;
-        Some((result, row.height_px, row.ascent_px))
-    })??;
-    let end = display_row_position_from_output_progress(result.progress);
-    install_rendered_display_row_fragment_assets(
-        builder,
-        role,
-        output.row,
-        &result.faces,
-        &result.media,
-    );
-    merge_display_row_source_slot_bounds_to_current_row(builder, &result.source_slots);
-    let source_slots = result.source_slots;
-    output_emitter.emit_text_source_slots(evaluator, output, &source_slots, end);
-    Some(CurrentTextRowRenderOutcome {
-        stop: result.stop,
-        source_slots,
-        end,
-        row_height_px,
-        row_ascent_px,
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_display_source_append_request_into_current_text_row_and_emit<
-    S: DisplayItemSource,
-    P: DisplayRowRenderPolicy,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
-    request: DisplayRowSourceAppendRequest<'_>,
-    render_policy: &mut P,
-) -> Option<CurrentTextRowRenderOutcome> {
-    let parts = request.into_render_parts();
-    render_display_item_source_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        source,
-        source_state,
-        face_resolver,
-        face_ids,
-        parts.request,
-        parts.output,
-        render_policy,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_natural_display_source_append_request_into_current_text_row_and_emit<
-    S: DisplayItemSource,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
-    request: DisplayRowSourceAppendRequest<'_>,
-) -> Option<CurrentTextRowRenderOutcome> {
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    render_display_source_append_request_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        source,
-        source_state,
-        face_resolver,
-        face_ids,
-        request,
-        &mut render_policy,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn measure_display_source_append_request_against_current_text_row<
-    S: DisplayItemSource,
-    P: DisplayRowRenderPolicy,
->(
-    builder: &mut GlyphMatrixBuilder,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    source: &mut S,
-    source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
-    request: DisplayRowSourceAppendRequest<'_>,
-    render_policy: &mut P,
-) -> Option<CurrentTextRowRenderOutcome> {
-    let parts = request.into_render_parts();
-    let mut renderer = DisplayRowRenderer::new(font_metrics);
-    let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
-        let mut scratch_row = row.clone();
-        let mut context = DisplayRowRenderContext::new(
-            face_resolver,
-            evaluator.display_host.as_deref(),
-            face_ids,
-        );
-        let result = renderer
-            .render_display_item_source_row_fragment_step_from_request_into_row_with_policy(
-                parts.request,
-                &mut scratch_row,
-                source,
-                source_state,
-                &mut context,
-                render_policy,
-            )?;
-        Some((result, scratch_row.height_px, scratch_row.ascent_px))
-    })??;
-    let end = display_row_position_from_output_progress(result.progress);
-    let source_slots = result.source_slots;
-    Some(CurrentTextRowRenderOutcome {
-        stop: result.stop,
-        source_slots,
-        end,
-        row_height_px,
-        row_ascent_px,
-    })
-}
-
-fn display_row_append_progress_from_render_result(
-    start: DisplayRowPosition,
-    end: DisplayRowPosition,
-    stop: DisplayRowRenderStop,
-    slots: Vec<crate::display_row_builder::DisplayRowGlyphSlot>,
-) -> DisplayRowAppendProgress {
-    DisplayRowAppendProgress::from_positions(
-        start,
-        end,
-        match stop {
-            DisplayRowRenderStop::SourceExhausted => DisplayRowAppendStatus::Complete,
-            DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
-            DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
-        },
-        slots,
-    )
 }
 
 #[allow(clippy::too_many_arguments)]

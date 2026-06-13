@@ -10,6 +10,7 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter,
     DisplayTabPolicy,
 };
+use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -28,7 +29,7 @@ use crate::glyph_row_writer;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
-use crate::window_output::TextRowOutput;
+use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 #[cfg(test)]
@@ -36,8 +37,8 @@ use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
-use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::{Context, Value};
 
 fn underline_style_from_code(code: u8) -> UnderlineStyle {
     UnderlineStyle::from_gnu_code(code).unwrap_or_default()
@@ -1162,6 +1163,10 @@ struct NaturalDisplayRowRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowRenderPolicy {}
 
+pub(crate) struct NaturalDisplayRowAppendRenderPolicy;
+
+impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
+
 pub(crate) struct DisplayRowRenderResult {
     pub(crate) rendered: RenderedDisplayRow,
     pub(crate) stop: DisplayRowRenderStop,
@@ -1510,6 +1515,233 @@ impl DisplayRowRenderBounds {
     }
 }
 
+pub(crate) struct CurrentTextRowRenderOutcome {
+    pub(crate) stop: DisplayRowRenderStop,
+    pub(crate) source_slots: Vec<DisplayRowGlyphSlot>,
+    pub(crate) end: DisplayRowPosition,
+    pub(crate) row_height_px: f32,
+    pub(crate) row_ascent_px: f32,
+}
+
+impl CurrentTextRowRenderOutcome {
+    pub(crate) fn stop(&self) -> DisplayRowRenderStop {
+        self.stop
+    }
+
+    pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
+        &self.source_slots
+    }
+
+    pub(crate) fn end_position(&self) -> DisplayRowPosition {
+        self.end
+    }
+
+    pub(crate) fn include_vertical_metrics(&self, geometry: &mut DisplayRowGeometryState) {
+        geometry.include_glyph_vertical_metrics(self.row_height_px, self.row_ascent_px);
+    }
+
+    pub(crate) fn into_append_progress(
+        self,
+        start: DisplayRowPosition,
+    ) -> DisplayRowAppendProgress {
+        display_row_append_progress_from_render_result(
+            start,
+            self.end,
+            self.stop,
+            self.source_slots,
+        )
+    }
+
+    pub(crate) fn into_append_progress_and_position(
+        self,
+        start: DisplayRowPosition,
+    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
+        let end = self.end;
+        (self.into_append_progress(start), end)
+    }
+}
+
+fn display_row_append_progress_from_render_result(
+    start: DisplayRowPosition,
+    end: DisplayRowPosition,
+    stop: DisplayRowRenderStop,
+    slots: Vec<DisplayRowGlyphSlot>,
+) -> DisplayRowAppendProgress {
+    DisplayRowAppendProgress::from_positions(
+        start,
+        end,
+        match stop {
+            DisplayRowRenderStop::SourceExhausted => DisplayRowAppendStatus::Complete,
+            DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
+            DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
+        },
+        slots,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+    request: DisplayRowSourceRenderRequest<'_>,
+    output: TextRowOutput,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let role = request.role();
+    let mut renderer = DisplayRowRenderer::new(font_metrics);
+    let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
+        let mut context = DisplayRowRenderContext::new(
+            face_resolver,
+            evaluator.display_host.as_deref(),
+            face_ids,
+        );
+        let result = renderer
+            .render_display_item_source_row_fragment_step_from_request_into_row_with_policy(
+                request,
+                row,
+                source,
+                source_state,
+                &mut context,
+                render_policy,
+            )?;
+        Some((result, row.height_px, row.ascent_px))
+    })??;
+    let end = display_row_output_end_position(result.progress);
+    install_rendered_display_row_fragment_assets(
+        builder,
+        role,
+        output.row,
+        &result.faces,
+        &result.media,
+    );
+    merge_display_row_source_slot_bounds_to_current_row(builder, &result.source_slots);
+    let source_slots = result.source_slots;
+    output_emitter.emit_text_source_slots(evaluator, output, &source_slots, end);
+    Some(CurrentTextRowRenderOutcome {
+        stop: result.stop,
+        source_slots,
+        end,
+        row_height_px,
+        row_ascent_px,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_display_source_append_request_into_current_text_row_and_emit<
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+    request: DisplayRowSourceAppendRequest<'_>,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let parts = request.into_render_parts();
+    render_display_item_source_into_current_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        source,
+        source_state,
+        face_resolver,
+        face_ids,
+        parts.request,
+        parts.output,
+        render_policy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_natural_display_source_append_request_into_current_text_row_and_emit<
+    S: DisplayItemSource,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+    request: DisplayRowSourceAppendRequest<'_>,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    render_display_source_append_request_into_current_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        source,
+        source_state,
+        face_resolver,
+        face_ids,
+        request,
+        &mut render_policy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn measure_display_source_append_request_against_current_text_row<
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    source: &mut S,
+    source_state: &mut DisplayRowSourceState,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceIdAllocator,
+    request: DisplayRowSourceAppendRequest<'_>,
+    render_policy: &mut P,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let parts = request.into_render_parts();
+    let mut renderer = DisplayRowRenderer::new(font_metrics);
+    let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
+        let mut scratch_row = row.clone();
+        let mut context = DisplayRowRenderContext::new(
+            face_resolver,
+            evaluator.display_host.as_deref(),
+            face_ids,
+        );
+        let result = renderer
+            .render_display_item_source_row_fragment_step_from_request_into_row_with_policy(
+                parts.request,
+                &mut scratch_row,
+                source,
+                source_state,
+                &mut context,
+                render_policy,
+            )?;
+        Some((result, scratch_row.height_px, scratch_row.ascent_px))
+    })??;
+    let end = display_row_output_end_position(result.progress);
+    let source_slots = result.source_slots;
+    Some(CurrentTextRowRenderOutcome {
+        stop: result.stop,
+        source_slots,
+        end,
+        row_height_px,
+        row_ascent_px,
+    })
+}
+
 pub(crate) fn install_rendered_display_row(
     builder: &mut GlyphMatrixBuilder,
     rendered: &RenderedDisplayRow,
@@ -1840,7 +2072,6 @@ fn set_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
     row.end_charpos = end;
 }
 
-#[cfg(test)]
 fn display_row_output_end_position(progress: DisplayRowOutputProgress) -> DisplayRowPosition {
     DisplayRowPosition {
         x_px: progress.end_x,
