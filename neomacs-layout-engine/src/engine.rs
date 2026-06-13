@@ -34,9 +34,9 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
-    DisplayRowMeasurementPolicy, DisplayRowRenderStop, DisplayRowSourceState, WindowChromeKind,
-    insert_resolved_display_row_face,
+    DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy, DisplayRowFace,
+    DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderStop,
+    DisplayRowSourceState, WindowChromeKind, insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
     BufferTextFragmentAppendMeasurement, DisplayReplacementStringItemMeasurer,
@@ -61,7 +61,7 @@ use crate::display_row_geometry::{
 use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBox};
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::{ComplexTextRunAdvanceCache, ComplexTextRunSpan};
+use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -3924,7 +3924,7 @@ impl LayoutEngine {
         // Exact joined-form advances for the current contextual-shaping run,
         // shaped once via shape_run and keyed by absolute byte offset (robust
         // to wrap re-processing). Empty/unused for non-complex text.
-        let mut complex_run_cache = ComplexTextRunAdvanceCache::default();
+        let mut complex_run_advance = ComplexTextRunAdvanceResolver::default();
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
@@ -5333,42 +5333,17 @@ impl LayoutEngine {
             // from a simple per-face ASCII advance.
             let complex_text = crate::composition::needs_complex_shaping(ch);
             let advance = if complex_text {
-                if is_cluster_continuation {
-                    0.0
-                } else {
-                    let char_cols = crate::composition::base_width_cols(ch) as usize;
-                    // Use the joined-form advance from shaping the whole run, so
-                    // composed Arabic/Indic text is tight and cursor columns line
-                    // up with the rendered letters (isolated-form widths over-
-                    // reserve). Shape the run once and cache advances by absolute
-                    // byte offset.
-                    if !complex_run_cache.contains(ch_start_byte_idx) {
-                        let run_span =
-                            ComplexTextRunSpan::from_text_at(&text, ch_start_byte_idx, ch);
-                        let measurement = active_face_state
-                            .text_run_measurement(&mut self.font_metrics, run_span.text());
-                        // Leave the cache empty when shaping yields nothing (no
-                        // font / unavailable) so each char falls back to its
-                        // isolated width rather than collapsing to zero.
-                        complex_run_cache.record(
-                            ch_start_byte_idx,
-                            run_span.end_byte_idx(),
-                            measurement.base_char_byte_advances(run_span.text(), ch_start_byte_idx),
-                        );
-                    }
-                    match complex_run_cache.advance_for(ch_start_byte_idx) {
-                        // In the shaped run: use it, including 0 for a character
-                        // covered by a preceding ligature glyph (no double-count).
-                        Some(a) => a,
-                        // Not cached (shaping unavailable / no font): fall back to
-                        // the isolated-form width.
-                        None => active_face_state.advance_for_columns(
-                            &mut self.font_metrics,
-                            ch,
-                            char_cols,
-                        ),
-                    }
-                }
+                let mut policy = DisplayRowComplexTextRunAdvancePolicy::new(
+                    &active_face_state,
+                    &mut self.font_metrics,
+                );
+                complex_run_advance.advance_for_char(
+                    &text,
+                    ch_start_byte_idx,
+                    ch,
+                    is_cluster_continuation,
+                    &mut policy,
+                )
             } else if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
                 measure_buffer_text_fragment_natural_advance_to_text_row(
                     &mut self.matrix_builder,

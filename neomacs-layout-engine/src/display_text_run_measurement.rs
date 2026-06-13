@@ -35,14 +35,14 @@ impl DisplayTextRunByteAdvance {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct ComplexTextRunAdvanceCache {
+struct ComplexTextRunAdvanceCache {
     start_byte_idx: usize,
     end_byte_idx: usize,
     advances: Vec<DisplayTextRunByteAdvance>,
 }
 
 impl ComplexTextRunAdvanceCache {
-    pub(crate) fn record(
+    fn record(
         &mut self,
         start_byte_idx: usize,
         end_byte_idx: usize,
@@ -53,11 +53,11 @@ impl ComplexTextRunAdvanceCache {
         self.advances = advances;
     }
 
-    pub(crate) fn contains(&self, byte_idx: usize) -> bool {
+    fn contains(&self, byte_idx: usize) -> bool {
         self.start_byte_idx <= byte_idx && byte_idx < self.end_byte_idx
     }
 
-    pub(crate) fn advance_for(&self, byte_idx: usize) -> Option<f32> {
+    fn advance_for(&self, byte_idx: usize) -> Option<f32> {
         self.advances
             .iter()
             .find(|advance| advance.byte_offset == byte_idx)
@@ -66,13 +66,13 @@ impl ComplexTextRunAdvanceCache {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ComplexTextRunSpan {
+struct ComplexTextRunSpan {
     text: String,
     end_byte_idx: usize,
 }
 
 impl ComplexTextRunSpan {
-    pub(crate) fn from_text_at(text: &[u8], start_byte_idx: usize, first_char: char) -> Self {
+    fn from_text_at(text: &[u8], start_byte_idx: usize, first_char: char) -> Self {
         let script = crate::composition::complex_script(first_char);
         let mut end_byte_idx = start_byte_idx;
         let mut run_text = String::new();
@@ -94,12 +94,52 @@ impl ComplexTextRunSpan {
         }
     }
 
-    pub(crate) fn text(&self) -> &str {
+    fn text(&self) -> &str {
         &self.text
     }
 
-    pub(crate) fn end_byte_idx(&self) -> usize {
+    fn end_byte_idx(&self) -> usize {
         self.end_byte_idx
+    }
+}
+
+pub(crate) trait ComplexTextRunAdvancePolicy {
+    fn text_run_measurement(&mut self, text: &str) -> DisplayTextRunMeasurement;
+    fn advance_for_columns(&mut self, ch: char, columns: usize) -> f32;
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ComplexTextRunAdvanceResolver {
+    cache: ComplexTextRunAdvanceCache,
+}
+
+impl ComplexTextRunAdvanceResolver {
+    pub(crate) fn advance_for_char(
+        &mut self,
+        text: &[u8],
+        byte_idx: usize,
+        ch: char,
+        is_cluster_continuation: bool,
+        policy: &mut impl ComplexTextRunAdvancePolicy,
+    ) -> f32 {
+        if is_cluster_continuation {
+            return 0.0;
+        }
+
+        let columns = crate::composition::base_width_cols(ch) as usize;
+        if !self.cache.contains(byte_idx) {
+            let run_span = ComplexTextRunSpan::from_text_at(text, byte_idx, ch);
+            let measurement = policy.text_run_measurement(run_span.text());
+            self.cache.record(
+                byte_idx,
+                run_span.end_byte_idx(),
+                measurement.base_char_byte_advances(run_span.text(), byte_idx),
+            );
+        }
+
+        self.cache
+            .advance_for(byte_idx)
+            .unwrap_or_else(|| policy.advance_for_columns(ch, columns))
     }
 }
 
@@ -300,6 +340,37 @@ impl DisplayTextRunMeasurementPlan {
 mod tests {
     use super::*;
 
+    #[derive(Clone, Debug)]
+    struct FakeComplexAdvancePolicy {
+        measurement: DisplayTextRunMeasurement,
+        fallback_advance: f32,
+        measured_runs: Vec<String>,
+        fallback_requests: Vec<(char, usize)>,
+    }
+
+    impl FakeComplexAdvancePolicy {
+        fn new(measurement: DisplayTextRunMeasurement, fallback_advance: f32) -> Self {
+            Self {
+                measurement,
+                fallback_advance,
+                measured_runs: Vec::new(),
+                fallback_requests: Vec::new(),
+            }
+        }
+    }
+
+    impl ComplexTextRunAdvancePolicy for FakeComplexAdvancePolicy {
+        fn text_run_measurement(&mut self, text: &str) -> DisplayTextRunMeasurement {
+            self.measured_runs.push(text.to_string());
+            self.measurement.clone()
+        }
+
+        fn advance_for_columns(&mut self, ch: char, columns: usize) -> f32 {
+            self.fallback_requests.push((ch, columns));
+            self.fallback_advance
+        }
+    }
+
     fn shaped(cluster_start: usize, x_advance: f32) -> ShapedGlyph {
         ShapedGlyph {
             font_id: fontdb::ID::dummy(),
@@ -387,5 +458,60 @@ mod tests {
 
         assert_eq!(span.text(), "\u{0915}\u{093C}");
         assert_eq!(span.end_byte_idx(), "\u{0915}\u{093C}".len());
+    }
+
+    #[test]
+    fn complex_text_run_advance_resolver_uses_cached_measured_advances() {
+        let text = "\u{0633}\u{0644}x".as_bytes();
+        let measurement = DisplayTextRunMeasurement::Measured(vec![
+            DisplayTextRunAdvance::new(0, 0, 7.5),
+            DisplayTextRunAdvance::new(1, "\u{0633}".len(), 4.0),
+        ]);
+        let mut policy = FakeComplexAdvancePolicy::new(measurement, 99.0);
+        let mut resolver = ComplexTextRunAdvanceResolver::default();
+
+        assert_eq!(
+            resolver.advance_for_char(text, 0, '\u{0633}', false, &mut policy),
+            7.5
+        );
+        assert_eq!(
+            resolver.advance_for_char(text, "\u{0633}".len(), '\u{0644}', false, &mut policy),
+            4.0
+        );
+
+        assert_eq!(policy.measured_runs, vec!["\u{0633}\u{0644}"]);
+        assert!(policy.fallback_requests.is_empty());
+    }
+
+    #[test]
+    fn complex_text_run_advance_resolver_falls_back_when_run_measurement_is_empty() {
+        let text = "\u{0633}x".as_bytes();
+        let mut policy = FakeComplexAdvancePolicy::new(DisplayTextRunMeasurement::PerChar, 12.0);
+        let mut resolver = ComplexTextRunAdvanceResolver::default();
+
+        assert_eq!(
+            resolver.advance_for_char(text, 0, '\u{0633}', false, &mut policy),
+            12.0
+        );
+
+        assert_eq!(policy.measured_runs, vec!["\u{0633}"]);
+        assert_eq!(policy.fallback_requests, vec![('\u{0633}', 1)]);
+    }
+
+    #[test]
+    fn complex_text_run_advance_resolver_zeroes_cluster_continuations() {
+        let text = "\u{0633}".as_bytes();
+        let measurement =
+            DisplayTextRunMeasurement::Measured(vec![DisplayTextRunAdvance::new(0, 0, 7.5)]);
+        let mut policy = FakeComplexAdvancePolicy::new(measurement, 99.0);
+        let mut resolver = ComplexTextRunAdvanceResolver::default();
+
+        assert_eq!(
+            resolver.advance_for_char(text, 0, '\u{0633}', true, &mut policy),
+            0.0
+        );
+
+        assert!(policy.measured_runs.is_empty());
+        assert!(policy.fallback_requests.is_empty());
     }
 }

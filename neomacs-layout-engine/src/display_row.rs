@@ -18,7 +18,7 @@ use crate::display_source_resolver::{
 };
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
 use crate::display_text_run_measurement::{
-    DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
+    ComplexTextRunAdvancePolicy, DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
 };
 use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
@@ -764,6 +764,35 @@ impl DisplayRowActiveFaceMeasurementState {
 pub(crate) struct DisplayRowActiveFaceState {
     render: DisplayRowActiveFaceRenderState,
     measurement: DisplayRowActiveFaceMeasurementState,
+}
+
+pub(crate) struct DisplayRowComplexTextRunAdvancePolicy<'a> {
+    active_face_state: &'a DisplayRowActiveFaceState,
+    font_metrics: &'a mut Option<FontMetricsService>,
+}
+
+impl<'a> DisplayRowComplexTextRunAdvancePolicy<'a> {
+    pub(crate) fn new(
+        active_face_state: &'a DisplayRowActiveFaceState,
+        font_metrics: &'a mut Option<FontMetricsService>,
+    ) -> Self {
+        Self {
+            active_face_state,
+            font_metrics,
+        }
+    }
+}
+
+impl ComplexTextRunAdvancePolicy for DisplayRowComplexTextRunAdvancePolicy<'_> {
+    fn text_run_measurement(&mut self, text: &str) -> DisplayTextRunMeasurement {
+        self.active_face_state
+            .text_run_measurement(self.font_metrics, text)
+    }
+
+    fn advance_for_columns(&mut self, ch: char, columns: usize) -> f32 {
+        self.active_face_state
+            .advance_for_columns(self.font_metrics, ch, columns)
+    }
 }
 
 impl DisplayRowActiveFaceState {
