@@ -40,11 +40,11 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
-    BufferTextFragmentAppendItem, BufferTextItemAppendContext, DisplayReplacementAppendContext,
-    DisplayReplacementAppendItem, DisplayReplacementStringItemMeasurer,
-    DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
-    LispStringSourceAppendContext, SyntheticTextAppendContext,
+    BufferTextFragmentAppendItem, BufferTextItemAppendContext,
+    DisplayReplacementActiveFaceMeasurer, DisplayReplacementAppendContext,
+    DisplayReplacementAppendItem, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
+    DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
+    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4568,18 +4568,17 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::String)
                     ) && let Some(replacement) = prop_val.as_utf8_str()
                     {
+                        let replacement_measurement =
+                            DisplayReplacementActiveFaceMeasurer::from_active_face_state(
+                                &active_face_state,
+                            );
                         if point_in_display_replacement {
-                            let slot_width = replacement
-                                .chars()
-                                .next()
-                                .map(|rch| {
-                                    active_face_state.advance_for_char(
-                                        &mut self.font_metrics,
-                                        rch,
-                                        face_metrics.char_width,
-                                    )
-                                })
-                                .unwrap_or_else(|| char_w.max(1.0));
+                            let slot_width = replacement_measurement
+                                .replacement_string_cursor_slot_width(
+                                    &mut self.font_metrics,
+                                    replacement,
+                                    char_w,
+                                );
                             capture_cursor_info(
                                 &mut cursor_info,
                                 CapturedCursorInfo::from_active_face_state(
@@ -4615,10 +4614,7 @@ impl LayoutEngine {
                                 char_h,
                             )
                             .full_text_width_active_face_frame();
-                            let mut item_policy =
-                                DisplayReplacementStringItemMeasurer::from_active_face_state(
-                                    &active_face_state,
-                                );
+                            let mut item_policy = replacement_measurement.string_item_measurer();
                             let append_context = DisplayReplacementAppendContext::new(
                                 display_replacement_source,
                                 replacement_base_face.face_id(),
@@ -4652,7 +4648,11 @@ impl LayoutEngine {
                         Some(DisplayReplacementProperty::Stretch(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
-                        let display_char_width = active_face_state.advance_for_char(
+                        let replacement_measurement =
+                            DisplayReplacementActiveFaceMeasurer::from_active_face_state(
+                                &active_face_state,
+                            );
+                        let display_char_width = replacement_measurement.char_advance_px(
                             &mut self.font_metrics,
                             display_ch,
                             face_metrics.char_width,

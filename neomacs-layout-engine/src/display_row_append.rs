@@ -1363,16 +1363,50 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     }
 }
 
-pub(crate) struct DisplayReplacementStringItemMeasurer {
+#[derive(Clone)]
+pub(crate) struct DisplayReplacementActiveFaceMeasurer {
     active_face_state: DisplayRowActiveFaceState,
 }
 
-impl DisplayReplacementStringItemMeasurer {
+impl DisplayReplacementActiveFaceMeasurer {
     pub(crate) fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
         Self {
             active_face_state: active_face_state.clone(),
         }
     }
+
+    pub(crate) fn char_advance_px(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        ch: char,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        self.active_face_state
+            .advance_for_char(font_metrics, ch, fallback_advance_px)
+    }
+
+    pub(crate) fn replacement_string_cursor_slot_width(
+        &self,
+        font_metrics: &mut Option<FontMetricsService>,
+        replacement: &str,
+        fallback_char_width: f32,
+    ) -> f32 {
+        replacement
+            .chars()
+            .next()
+            .map(|ch| self.char_advance_px(font_metrics, ch, fallback_char_width))
+            .unwrap_or_else(|| fallback_char_width.max(1.0))
+    }
+
+    pub(crate) fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
+        DisplayReplacementStringItemMeasurer {
+            active_face_state: self.active_face_state.clone(),
+        }
+    }
+}
+
+pub(crate) struct DisplayReplacementStringItemMeasurer {
+    active_face_state: DisplayRowActiveFaceState,
 }
 
 impl DisplayRowRenderPolicy for DisplayReplacementStringItemMeasurer {

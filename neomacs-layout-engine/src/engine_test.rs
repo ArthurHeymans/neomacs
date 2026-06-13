@@ -2216,10 +2216,11 @@ fn replacement_string_item_measurer_returns_direct_text_run_plan() {
     );
     let active_face_state = DisplayRowActiveFaceState::new(default_face, measured_face);
     let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
-    let mut measurer =
-        crate::display_row_append::DisplayReplacementStringItemMeasurer::from_active_face_state(
+    let replacement_measurer =
+        crate::display_row_append::DisplayReplacementActiveFaceMeasurer::from_active_face_state(
             &active_face_state,
         );
+    let mut measurer = replacement_measurer.string_item_measurer();
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(11, 0, 3),
         RenderFaceRef::FaceId(7),
