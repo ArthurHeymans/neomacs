@@ -15,8 +15,8 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowOutputProgress, DisplayRowRenderBounds,
     DisplayRowRenderClipBehavior, DisplayRowRenderContext, DisplayRowRenderPolicy,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceGeometry,
-    DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceAppendRequest,
+    DisplayRowSourceGeometry, DisplayRowSourceRenderRequest, DisplayRowSourceState,
     install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
@@ -484,40 +484,6 @@ fn display_row_append_progress_from_render_result(
         },
         slots,
     )
-}
-
-struct DisplayRowSourceAppendRequest<'face> {
-    request: DisplayRowSourceRenderRequest<'face>,
-    output: TextRowOutput,
-    start: DisplayRowPosition,
-    base_face_id: u32,
-}
-
-struct DisplayRowSourceAppendRenderParts<'face> {
-    request: DisplayRowSourceRenderRequest<'face>,
-    output: TextRowOutput,
-}
-
-impl<'face> DisplayRowSourceAppendRequest<'face> {
-    fn start_position(&self) -> DisplayRowPosition {
-        self.start
-    }
-
-    fn base_face_id(&self) -> u32 {
-        self.base_face_id
-    }
-
-    fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
-        DisplayRowSourceAppendRenderParts {
-            request: self.request,
-            output: self.output,
-        }
-    }
-
-    fn with_measurement_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
-        self.request = self.request.with_render_bounds(render_bounds);
-        self
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3779,12 +3745,7 @@ impl DisplayRowAppendFrame {
             glyph_y: self.glyph_y,
             height: kind.output_height(self),
         };
-        DisplayRowSourceAppendRequest {
-            request,
-            output,
-            start: position,
-            base_face_id: face_id,
-        }
+        DisplayRowSourceAppendRequest::new(request, output, position, face_id)
     }
 }
 

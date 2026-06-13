@@ -28,6 +28,7 @@ use crate::glyph_row_writer;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
+use crate::window_output::TextRowOutput;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 #[cfg(test)]
@@ -1345,6 +1346,54 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
     base_face: &'a ResolvedFace,
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
+}
+
+pub(crate) struct DisplayRowSourceAppendRequest<'face> {
+    request: DisplayRowSourceRenderRequest<'face>,
+    output: TextRowOutput,
+    start: DisplayRowPosition,
+    base_face_id: u32,
+}
+
+pub(crate) struct DisplayRowSourceAppendRenderParts<'face> {
+    pub(crate) request: DisplayRowSourceRenderRequest<'face>,
+    pub(crate) output: TextRowOutput,
+}
+
+impl<'face> DisplayRowSourceAppendRequest<'face> {
+    pub(crate) fn new(
+        request: DisplayRowSourceRenderRequest<'face>,
+        output: TextRowOutput,
+        start: DisplayRowPosition,
+        base_face_id: u32,
+    ) -> Self {
+        Self {
+            request,
+            output,
+            start,
+            base_face_id,
+        }
+    }
+
+    pub(crate) fn start_position(&self) -> DisplayRowPosition {
+        self.start
+    }
+
+    pub(crate) fn base_face_id(&self) -> u32 {
+        self.base_face_id
+    }
+
+    pub(crate) fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
+        DisplayRowSourceAppendRenderParts {
+            request: self.request,
+            output: self.output,
+        }
+    }
+
+    pub(crate) fn with_measurement_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
+        self.request = self.request.with_render_bounds(render_bounds);
+        self
+    }
 }
 
 impl<'a> DisplayRowSourceRenderRequest<'a> {
