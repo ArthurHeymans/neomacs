@@ -13403,6 +13403,66 @@ fn jit_bench_loop() {
     );
 }
 
+/// Subr-call-dominated benchmark: a loop that calls the primitive `length` via
+/// the general `Op::Call` path each iteration (NOT the inlined `Op::Length`
+/// opcode) — isolates the cost of the JIT's subr-call dispatch, the 75.4% of
+/// real-elisp calls that go to primitives. The decrement (`1-`) is inlined, so
+/// the per-iteration delta over a pure loop is the subr call.
+#[cfg(feature = "jit")]
+fn jit_bench_subr_value(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::StackRef(0),   // 0  [n n]      <- loop head
+        Op::Constant(0),   // 1  [n n 0]
+        Op::Gtr,           // 2  [n c]
+        Op::GotoIfNil(12), // 3  [n]
+        Op::Constant(1),   // 4  'length    [n length]
+        Op::Constant(2),   // 5  '(a b c)   [n length list]
+        Op::Call(1),       // 6  [n len]    <- subr call via general dispatch
+        Op::Pop,           // 7  [n]
+        Op::StackRef(0),   // 8  [n n]
+        Op::Sub1,          // 9  [n n-1]    inlined decrement
+        Op::StackSet(1),   // 10 [n-1]
+        Op::Goto(0),       // 11 backedge
+        Op::StackRef(0),   // 12 [n n]
+        Op::Return,        // 13
+    ];
+    f.constants = vec![
+        Value::make_int(0),
+        Value::symbol("length"),
+        Value::list_from_slice(&[Value::symbol("a"), Value::symbol("b"), Value::symbol("c")]),
+    ];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_subr() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let native = jit_bench_subr_value(BenchTier::Hot);
+    let cold = jit_bench_subr_value(BenchTier::Cold);
+    let n = 2_000_000i64;
+    let want = Value::make_int(0);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH subr-loop(2M length-calls): native {nat:?} interp {int:?} -> {:.2}x",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 #[test]
 fn direct_context_apply_accepts_uninterned_symbol_function_designators() {
     crate::test_utils::init_test_tracing();
