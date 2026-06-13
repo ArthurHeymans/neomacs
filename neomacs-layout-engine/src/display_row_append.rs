@@ -3154,7 +3154,7 @@ impl DisplayRowAppendSurface {
         DisplayRowAppendFrame::from_parts(placement, self.area, metrics, self.tab_policy.clone())
     }
 
-    pub(crate) fn frame_from_geometry_state(
+    fn frame_from_geometry_state(
         &self,
         geometry: &DisplayRowGeometryState,
         glyph_y_offset: f32,
@@ -3166,7 +3166,7 @@ impl DisplayRowAppendSurface {
         )
     }
 
-    pub(crate) fn text_row_frame_from_geometry_state(
+    fn text_row_frame_from_geometry_state(
         &self,
         geometry: &DisplayRowGeometryState,
         glyph_y_offset: f32,
@@ -3182,7 +3182,7 @@ impl DisplayRowAppendSurface {
         )
     }
 
-    pub(crate) fn frame_for_active_face_from_geometry_state(
+    fn frame_for_active_face_from_geometry_state(
         &self,
         geometry: &DisplayRowGeometryState,
         glyph_y_offset: f32,
