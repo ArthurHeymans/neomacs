@@ -4826,7 +4826,7 @@ pub(crate) fn load_buffer_manager(
     decoder: &mut LoadDecoder,
     dbm: &DumpBufferManager,
 ) -> BufferManager {
-    let buffers: HashMap<BufferId, Buffer> = dbm
+    let buffers: FxHashMap<BufferId, Buffer> = dbm
         .buffers
         .iter()
         .map(|(id, buf)| (BufferId(id.0), load_buffer(decoder, buf)))

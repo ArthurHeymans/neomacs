@@ -3629,16 +3629,19 @@ impl Buffer {
 /// Owns every live buffer, tracks the current buffer, and hands out ids.
 #[derive(Clone)]
 pub struct BufferManager {
-    buffers: HashMap<BufferId, Buffer>,
+    // FxHashMap (not default SipHash): `buffers` is looked up on the hot
+    // buffer-local access/bind path (specbind, get_buffer_local) keyed by the
+    // small-int BufferId, where SipHash dominated the per-lookup cost.
+    buffers: FxHashMap<BufferId, Buffer>,
     /// Killed buffer objects. GNU does not destroy the Lisp buffer object;
     /// it makes `BUFFER_LIVE_P` false while keeping slots like
     /// `last_name` and `filename` queryable.
-    dead_buffers: HashMap<BufferId, Buffer>,
+    dead_buffers: FxHashMap<BufferId, Buffer>,
     buffer_order: Vec<BufferId>,
     current: Option<BufferId>,
     next_id: u64,
     next_marker_id: u64,
-    labeled_restrictions: HashMap<BufferId, Vec<LabeledRestriction>>,
+    labeled_restrictions: FxHashMap<BufferId, Vec<LabeledRestriction>>,
     default_text_backend_kind: ImplementedBufferTextBackendKind,
     /// Global default values for `BUFFER_OBJFWD` slots. Mirrors GNU's
     /// `buffer_defaults` (`buffer.c:84-90`), which is itself a
@@ -3865,13 +3868,13 @@ impl BufferManager {
             buffer_defaults[info.offset.index()] = info.default.to_value();
         }
         let mut mgr = Self {
-            buffers: HashMap::new(),
-            dead_buffers: HashMap::new(),
+            buffers: FxHashMap::default(),
+            dead_buffers: FxHashMap::default(),
             buffer_order: Vec::new(),
             current: None,
             next_id: 1,
             next_marker_id: 1,
-            labeled_restrictions: HashMap::new(),
+            labeled_restrictions: FxHashMap::default(),
             default_text_backend_kind: ImplementedBufferTextBackendKind::GAP_BUFFER,
             buffer_defaults,
         };
@@ -5705,7 +5708,7 @@ impl BufferManager {
     }
 
     // pdump accessors
-    pub(crate) fn dump_buffers(&self) -> &HashMap<BufferId, Buffer> {
+    pub(crate) fn dump_buffers(&self) -> &FxHashMap<BufferId, Buffer> {
         &self.buffers
     }
     pub(crate) fn dump_buffer_order(&self) -> &[BufferId] {
@@ -5721,7 +5724,7 @@ impl BufferManager {
         self.next_marker_id
     }
     pub(crate) fn from_dump(
-        mut buffers: HashMap<BufferId, Buffer>,
+        mut buffers: FxHashMap<BufferId, Buffer>,
         current: Option<BufferId>,
         next_id: u64,
         next_marker_id: u64,
@@ -5777,8 +5780,8 @@ impl BufferManager {
             current,
             next_id,
             next_marker_id,
-            labeled_restrictions: HashMap::new(),
-            dead_buffers: HashMap::new(),
+            labeled_restrictions: FxHashMap::default(),
+            dead_buffers: FxHashMap::default(),
             default_text_backend_kind,
             buffer_defaults,
         };
