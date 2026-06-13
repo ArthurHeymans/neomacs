@@ -1,6 +1,6 @@
 use crate::font_metrics::ShapedGlyph;
 use crate::glyph_advance::GlyphAdvanceQuantization;
-use crate::unicode::is_cluster_extender;
+use crate::unicode::{decode_utf8, is_cluster_extender};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayTextRunAdvance {
@@ -31,6 +31,75 @@ impl DisplayTextRunByteAdvance {
             byte_offset,
             advance_px,
         }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ComplexTextRunAdvanceCache {
+    start_byte_idx: usize,
+    end_byte_idx: usize,
+    advances: Vec<DisplayTextRunByteAdvance>,
+}
+
+impl ComplexTextRunAdvanceCache {
+    pub(crate) fn record(
+        &mut self,
+        start_byte_idx: usize,
+        end_byte_idx: usize,
+        advances: Vec<DisplayTextRunByteAdvance>,
+    ) {
+        self.start_byte_idx = start_byte_idx;
+        self.end_byte_idx = end_byte_idx;
+        self.advances = advances;
+    }
+
+    pub(crate) fn contains(&self, byte_idx: usize) -> bool {
+        self.start_byte_idx <= byte_idx && byte_idx < self.end_byte_idx
+    }
+
+    pub(crate) fn advance_for(&self, byte_idx: usize) -> Option<f32> {
+        self.advances
+            .iter()
+            .find(|advance| advance.byte_offset == byte_idx)
+            .map(|advance| advance.advance_px)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ComplexTextRunSpan {
+    text: String,
+    end_byte_idx: usize,
+}
+
+impl ComplexTextRunSpan {
+    pub(crate) fn from_text_at(text: &[u8], start_byte_idx: usize, first_char: char) -> Self {
+        let script = crate::composition::complex_script(first_char);
+        let mut end_byte_idx = start_byte_idx;
+        let mut run_text = String::new();
+        while end_byte_idx < text.len() {
+            let (ch, ch_len) = decode_utf8(&text[end_byte_idx..]);
+            if crate::composition::complex_script(ch) == script
+                || (end_byte_idx > start_byte_idx && is_cluster_extender(ch))
+            {
+                run_text.push(ch);
+                end_byte_idx += ch_len;
+            } else {
+                break;
+            }
+        }
+
+        Self {
+            text: run_text,
+            end_byte_idx,
+        }
+    }
+
+    pub(crate) fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub(crate) fn end_byte_idx(&self) -> usize {
+        self.end_byte_idx
     }
 }
 
@@ -275,5 +344,48 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(0, 0, 5.0), (1, 1, 5.0), (2, 3, 5.0)]
         );
+    }
+
+    #[test]
+    fn complex_run_advance_cache_records_byte_scoped_advances() {
+        let mut cache = ComplexTextRunAdvanceCache::default();
+
+        cache.record(
+            10,
+            18,
+            vec![
+                DisplayTextRunByteAdvance::new(10, 7.0),
+                DisplayTextRunByteAdvance::new(14, 11.0),
+            ],
+        );
+
+        assert!(!cache.contains(9));
+        assert!(cache.contains(10));
+        assert!(cache.contains(17));
+        assert!(!cache.contains(18));
+        assert_eq!(cache.advance_for(10), Some(7.0));
+        assert_eq!(cache.advance_for(14), Some(11.0));
+        assert_eq!(cache.advance_for(12), None);
+    }
+
+    #[test]
+    fn complex_text_run_span_keeps_same_script_text() {
+        let text = "abc\u{0633}\u{0644}\u{0627}def".as_bytes();
+        let start = "abc".len();
+
+        let span = ComplexTextRunSpan::from_text_at(text, start, '\u{0633}');
+
+        assert_eq!(span.text(), "\u{0633}\u{0644}\u{0627}");
+        assert_eq!(span.end_byte_idx(), "abc\u{0633}\u{0644}\u{0627}".len());
+    }
+
+    #[test]
+    fn complex_text_run_span_keeps_following_cluster_extenders() {
+        let text = "\u{0915}\u{093C}x".as_bytes();
+
+        let span = ComplexTextRunSpan::from_text_at(text, 0, '\u{0915}');
+
+        assert_eq!(span.text(), "\u{0915}\u{093C}");
+        assert_eq!(span.end_byte_idx(), "\u{0915}\u{093C}".len());
     }
 }

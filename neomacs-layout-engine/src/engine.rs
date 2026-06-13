@@ -61,7 +61,7 @@ use crate::display_row_geometry::{
 use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBox};
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::DisplayTextRunByteAdvance;
+use crate::display_text_run_measurement::{ComplexTextRunAdvanceCache, ComplexTextRunSpan};
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -407,13 +407,6 @@ struct WordWrapRenderState {
     candidate: WordWrapBreakCandidate,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-struct ComplexTextRunAdvanceCache {
-    start_byte_idx: usize,
-    end_byte_idx: usize,
-    advances: Vec<DisplayTextRunByteAdvance>,
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct HorizontalScrollSkipState {
     configured_columns: i32,
@@ -669,30 +662,6 @@ impl WordWrapRenderState {
 
     fn candidate(self) -> WordWrapBreakCandidate {
         self.candidate
-    }
-}
-
-impl ComplexTextRunAdvanceCache {
-    fn record(
-        &mut self,
-        start_byte_idx: usize,
-        end_byte_idx: usize,
-        advances: Vec<DisplayTextRunByteAdvance>,
-    ) {
-        self.start_byte_idx = start_byte_idx;
-        self.end_byte_idx = end_byte_idx;
-        self.advances = advances;
-    }
-
-    fn contains(&self, byte_idx: usize) -> bool {
-        self.start_byte_idx <= byte_idx && byte_idx < self.end_byte_idx
-    }
-
-    fn advance_for(&self, byte_idx: usize) -> Option<f32> {
-        self.advances
-            .iter()
-            .find(|advance| advance.byte_offset == byte_idx)
-            .map(|advance| advance.advance_px)
     }
 }
 
@@ -5374,29 +5343,17 @@ impl LayoutEngine {
                     // reserve). Shape the run once and cache advances by absolute
                     // byte offset.
                     if !complex_run_cache.contains(ch_start_byte_idx) {
-                        let script = crate::composition::complex_script(ch);
-                        let mut end = ch_start_byte_idx;
-                        let mut run_text = String::new();
-                        while end < text.len() {
-                            let (c, clen) = decode_utf8(&text[end..]);
-                            if crate::composition::complex_script(c) == script
-                                || (end > ch_start_byte_idx && is_cluster_extender(c))
-                            {
-                                run_text.push(c);
-                                end += clen;
-                            } else {
-                                break;
-                            }
-                        }
+                        let run_span =
+                            ComplexTextRunSpan::from_text_at(&text, ch_start_byte_idx, ch);
                         let measurement = active_face_state
-                            .text_run_measurement(&mut self.font_metrics, &run_text);
+                            .text_run_measurement(&mut self.font_metrics, run_span.text());
                         // Leave the cache empty when shaping yields nothing (no
                         // font / unavailable) so each char falls back to its
                         // isolated width rather than collapsing to zero.
                         complex_run_cache.record(
                             ch_start_byte_idx,
-                            end,
-                            measurement.base_char_byte_advances(&run_text, ch_start_byte_idx),
+                            run_span.end_byte_idx(),
+                            measurement.base_char_byte_advances(run_span.text(), ch_start_byte_idx),
                         );
                     }
                     match complex_run_cache.advance_for(ch_start_byte_idx) {
