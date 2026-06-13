@@ -5,7 +5,7 @@ use crate::display_item::{
     GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
-use crate::display_property::DisplayMediaReplacementProperty;
+use crate::display_property::{DisplayMediaReplacementProperty, DisplayPropertyClassification};
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
@@ -2485,6 +2485,69 @@ pub(crate) struct DisplayReplacementMediaAppendItem {
 pub(crate) enum DisplayReplacementMediaAppendResolution {
     Media(DisplayReplacementMediaAppendItem),
     Placeholder(DisplayReplacementSourceMappedTextAppendItem),
+}
+
+#[derive(Clone)]
+pub(crate) enum DisplayPropertyReplacementAppendItem {
+    String(DisplayReplacementStringAppendItem),
+    Stretch(DisplayReplacementStretchAppendItem),
+    Media(DisplayReplacementMediaAppendResolution),
+}
+
+impl DisplayPropertyReplacementAppendItem {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve(
+        display_property: &DisplayPropertyClassification,
+        value: Value,
+        anchor_charpos: CharPos0,
+        source_text: &[u8],
+        active_face_state: &DisplayRowActiveFaceState,
+        font_metrics: &mut Option<FontMetricsService>,
+        current_x: f32,
+        content_x: f32,
+        face_metrics: DisplayRowMeasuredFaceMetrics,
+        params: &WindowParams,
+        display_host: Option<&dyn DisplayHost>,
+    ) -> Option<Self> {
+        if display_property.is_string_replacement() {
+            DisplayReplacementStringAppendItem::display_property_string(
+                value,
+                anchor_charpos,
+                DisplayPropertySource::TextProperty,
+                1,
+                active_face_state,
+                font_metrics,
+                face_metrics.char_width,
+            )
+            .map(Self::String)
+        } else if display_property.stretch_replacement().is_some() {
+            Some(Self::Stretch(
+                DisplayReplacementStretchAppendItem::from_display_space_property(
+                    &value,
+                    source_text,
+                    active_face_state,
+                    font_metrics,
+                    current_x,
+                    content_x,
+                    face_metrics.char_width,
+                    face_metrics.row_height,
+                    face_metrics.ascent,
+                    params,
+                ),
+            ))
+        } else {
+            let media_replacement = display_property.media_replacement()?;
+            DisplayReplacementMediaAppendItem::resolve_display_property(
+                value,
+                media_replacement,
+                display_host,
+                active_face_state,
+                face_metrics.char_width,
+                face_metrics.row_height,
+            )
+            .map(Self::Media)
+        }
+    }
 }
 
 impl DisplayReplacementMediaAppendItem {

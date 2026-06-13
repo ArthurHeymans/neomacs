@@ -6,7 +6,10 @@ use crate::display_item::{
     DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::DisplayPropertySource;
-use crate::display_property::DisplayMediaReplacementProperty;
+use crate::display_property::{
+    DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
+    classify_display_property,
+};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
@@ -2970,6 +2973,114 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
             .collect::<Vec<_>>(),
         vec![(0, 0), (1, 1), (2, 2)]
     );
+}
+
+#[test]
+fn display_property_replacement_append_item_resolves_string_replacement() {
+    let _eval = Context::new();
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let value = Value::string("ab");
+    let classification = classify_display_property(value);
+
+    let item = DisplayPropertyReplacementAppendItem::resolve(
+        &classification,
+        value,
+        CharPos0::new(4),
+        b"x",
+        &active_face,
+        &mut font_metrics,
+        0.0,
+        0.0,
+        active_face.metrics(),
+        &test_display_space_window_params(),
+        None,
+    )
+    .expect("string replacement append item");
+
+    let DisplayPropertyReplacementAppendItem::String(item) = item else {
+        panic!("expected string replacement append item");
+    };
+    assert_eq!(item.cursor_slot_width_px(), 8.0);
+    assert!(!item.is_empty());
+}
+
+#[test]
+fn display_property_replacement_append_item_resolves_stretch_replacement() {
+    let _eval = Context::new();
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let value = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("relative-width"),
+        Value::fixnum(2),
+        Value::keyword("height"),
+        Value::fixnum(3),
+    ]);
+    let classification = classify_display_property(value);
+
+    let item = DisplayPropertyReplacementAppendItem::resolve(
+        &classification,
+        value,
+        CharPos0::new(4),
+        b"x",
+        &active_face,
+        &mut font_metrics,
+        0.0,
+        0.0,
+        active_face.metrics(),
+        &test_display_space_window_params(),
+        None,
+    )
+    .expect("stretch replacement append item");
+
+    let DisplayPropertyReplacementAppendItem::Stretch(item) = item else {
+        panic!("expected stretch replacement append item");
+    };
+    assert_eq!(item.width_px(), 16.0);
+    assert_eq!(item.height_px(), 48.0);
+}
+
+#[test]
+fn display_property_replacement_append_item_resolves_media_replacement() {
+    let _eval = Context::new();
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let media = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+        xwidget_id: 17,
+        width: 42.0,
+        height: 11.0,
+    });
+    let classification = DisplayPropertyClassification {
+        replacement: Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Xwidget(media),
+        )),
+        modifiers: Default::default(),
+    };
+
+    let item = DisplayPropertyReplacementAppendItem::resolve(
+        &classification,
+        Value::NIL,
+        CharPos0::new(4),
+        b"x",
+        &active_face,
+        &mut font_metrics,
+        0.0,
+        0.0,
+        active_face.metrics(),
+        &test_display_space_window_params(),
+        None,
+    )
+    .expect("media replacement append item");
+
+    let DisplayPropertyReplacementAppendItem::Media(
+        DisplayReplacementMediaAppendResolution::Media(item),
+    ) = item
+    else {
+        panic!("expected media replacement append item");
+    };
+    assert_eq!(item.width_px(), 42.0);
+    assert_eq!(item.display_height_px(), 11.0);
 }
 
 #[test]
