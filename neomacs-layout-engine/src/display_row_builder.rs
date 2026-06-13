@@ -761,32 +761,13 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayItemKind::MediaReplacement(media) => {
                 self.push_stretch(media.replacement_stretch(), face_id);
             }
-            DisplayItemKind::Image(image) => {
-                let image_id = image.image_id.max(0);
-                let glyph = Glyph {
-                    glyph_type: GlyphType::Image { image_id },
-                    face_id,
-                    charpos: source_span_start_char(&item.span),
-                    bidi_level: 0,
-                    wide: false,
-                    pixel_width: 0.0,
-                    pixel_height: 0.0,
-                    pixel_ascent: 0.0,
-                    vertical_offset_px: 0.0,
-                    padding: false,
-                };
-                self.row.glyphs[GlyphArea::Text.index()].push(glyph);
-                self.row.displays_text = true;
-            }
             DisplayItemKind::ControlChar { ch } => {
                 self.push_control_char(ch, face_id, source_span_start_char(&item.span));
             }
             DisplayItemKind::Glyphless(glyphless) => {
                 self.push_glyphless(glyphless, face_id, source_span_start_char(&item.span));
             }
-            DisplayItemKind::Video(_)
-            | DisplayItemKind::Xwidget(_)
-            | DisplayItemKind::RowBreak(_)
+            DisplayItemKind::RowBreak(_)
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => {}
         }

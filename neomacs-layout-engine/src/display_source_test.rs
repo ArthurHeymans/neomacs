@@ -205,7 +205,7 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
     ) -> Option<DisplayMediaReplacement> {
         self.seen_face = Some(face);
         if display_prop.cons_car().is_symbol_named("image") {
-            DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Image(DisplayImageItem {
+            Some(DisplayMediaReplacement::image(DisplayImageItem {
                 image_id: 42,
                 width: 64.0,
                 height: 32.0,

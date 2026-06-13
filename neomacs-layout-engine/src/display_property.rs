@@ -19,7 +19,7 @@ pub(crate) enum DisplayReplacementProperty {
     Space(DisplayStretch),
     Image,
     Video,
-    Xwidget(DisplayXwidgetItem),
+    Xwidget(DisplayMediaReplacement),
     Webkit,
 }
 
@@ -27,10 +27,7 @@ impl DisplayReplacementProperty {
     pub(crate) fn display_item_kind(&self) -> Option<DisplayItemKind> {
         match self {
             Self::Space(stretch) => Some(DisplayItemKind::Stretch(stretch.clone())),
-            Self::Xwidget(xwidget) => {
-                DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(*xwidget))
-                    .map(DisplayItemKind::MediaReplacement)
-            }
+            Self::Xwidget(media) => Some(DisplayItemKind::MediaReplacement(*media)),
             Self::String | Self::Image | Self::Video | Self::Webkit => None,
         }
     }
@@ -60,9 +57,7 @@ impl DisplayReplacementProperty {
 
     pub(crate) fn direct_media_replacement(&self) -> Option<DisplayMediaReplacement> {
         match self {
-            Self::Xwidget(xwidget) => {
-                DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(*xwidget))
-            }
+            Self::Xwidget(media) => Some(*media),
             Self::String | Self::Space(_) | Self::Image | Self::Video | Self::Webkit => None,
         }
     }
@@ -89,11 +84,13 @@ pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassifi
         Some(DisplayReplacementProperty::Video)
     } else if DisplaySpecHead::Xwidget.is_head_of(&value) {
         parse_display_xwidget_layout(&value).map(|layout| {
-            DisplayReplacementProperty::Xwidget(DisplayXwidgetItem {
-                xwidget_id: layout.xwidget_id.min(i32::MAX as u32) as i32,
-                width: layout.width,
-                height: layout.height,
-            })
+            DisplayReplacementProperty::Xwidget(DisplayMediaReplacement::xwidget(
+                DisplayXwidgetItem {
+                    xwidget_id: layout.xwidget_id.min(i32::MAX as u32) as i32,
+                    width: layout.width,
+                    height: layout.height,
+                },
+            ))
         })
     } else if DisplaySpecHead::Webkit.is_head_of(&value) {
         Some(DisplayReplacementProperty::Webkit)

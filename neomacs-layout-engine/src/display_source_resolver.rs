@@ -464,7 +464,6 @@ pub(crate) fn resolve_display_property_media(
             fallback_row_height,
         },
     )
-    .and_then(|kind| DisplayMediaReplacement::from_item_kind(&kind))
 }
 
 pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
@@ -615,10 +614,11 @@ mod tests {
             width: 120.0,
             height: 36.0,
         };
+        let media = DisplayMediaReplacement::xwidget(xwidget);
 
         let resolved = resolve_display_replacement(
             Value::NIL,
-            &DisplayReplacementProperty::Xwidget(xwidget),
+            &DisplayReplacementProperty::Xwidget(media),
             None,
             resolver.default_face(),
             8.0,
@@ -628,14 +628,8 @@ mod tests {
         assert_eq!(
             resolved,
             Some(ResolvedDisplayReplacement::Media {
-                item: DisplayItemKind::MediaReplacement(
-                    DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(xwidget))
-                        .expect("xwidget geometry"),
-                ),
-                geometry: DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(
-                    xwidget
-                ))
-                .expect("xwidget geometry"),
+                item: DisplayItemKind::MediaReplacement(media),
+                geometry: media,
             })
         );
     }

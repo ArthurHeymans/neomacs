@@ -2927,16 +2927,11 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replace
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::FaceId(3),
-        DisplayItemKind::MediaReplacement(
-            DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(
-                DisplayXwidgetItem {
-                    xwidget_id: 1234,
-                    width: 96.0,
-                    height: 54.0,
-                },
-            ))
-            .expect("xwidget media replacement"),
-        ),
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+            xwidget_id: 1234,
+            width: 96.0,
+            height: 54.0,
+        })),
     );
 
     let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
@@ -3059,14 +3054,11 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_image_replaceme
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::FaceId(3),
-        DisplayItemKind::MediaReplacement(
-            DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Image(DisplayImageItem {
-                image_id: 42,
-                width: 64.0,
-                height: 32.0,
-            }))
-            .expect("image media replacement"),
-        ),
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::image(DisplayImageItem {
+            image_id: 42,
+            width: 64.0,
+            height: 32.0,
+        })),
     );
 
     let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
@@ -3189,16 +3181,13 @@ fn append_display_replacement_item_to_text_row_and_emit_installs_video_replaceme
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::FaceId(3),
-        DisplayItemKind::MediaReplacement(
-            DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Video(DisplayVideoItem {
-                video_id: 88,
-                width: 80.0,
-                height: 45.0,
-                loop_count: -1,
-                autoplay: true,
-            }))
-            .expect("video media replacement"),
-        ),
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::video(DisplayVideoItem {
+            video_id: 88,
+            width: 80.0,
+            height: 45.0,
+            loop_count: -1,
+            autoplay: true,
+        })),
     );
 
     let (progress, end) = append_display_replacement_item_to_text_row_and_emit(

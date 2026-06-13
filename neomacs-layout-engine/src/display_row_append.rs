@@ -1547,11 +1547,9 @@ impl DisplayRowAppendKind {
             DisplayItemKind::SourceMappedText(_) => Some(Self::SourceMappedText),
             DisplayItemKind::ControlChar { .. } => Some(Self::ControlChar),
             DisplayItemKind::Glyphless(_) => Some(Self::Glyphless),
-            DisplayItemKind::Stretch(_)
-            | DisplayItemKind::MediaReplacement(_)
-            | DisplayItemKind::Image(_)
-            | DisplayItemKind::Video(_)
-            | DisplayItemKind::Xwidget(_) => Some(Self::DisplayReplacement),
+            DisplayItemKind::Stretch(_) | DisplayItemKind::MediaReplacement(_) => {
+                Some(Self::DisplayReplacement)
+            }
             DisplayItemKind::RowBreak(_)
             | DisplayItemKind::CursorAnchor(_)
             | DisplayItemKind::HitTestAnchor(_) => None,

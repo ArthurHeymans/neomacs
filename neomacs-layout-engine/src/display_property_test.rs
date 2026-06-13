@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_item::{
-    DisplayImageItem, DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
+    DisplayImageItem, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
     DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayVideoItem,
     DisplayXwidgetItem,
 };
@@ -66,11 +66,13 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             xwidget,
         ]))
         .replacement,
-        Some(DisplayReplacementProperty::Xwidget(DisplayXwidgetItem {
-            xwidget_id: 1234,
-            width: 96.0,
-            height: 54.0,
-        }))
+        Some(DisplayReplacementProperty::Xwidget(
+            DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+                xwidget_id: 1234,
+                width: 96.0,
+                height: 54.0,
+            })
+        ))
     );
 
     assert_eq!(
@@ -143,29 +145,23 @@ fn classify_display_property_keeps_space_replacement_without_explicit_width() {
 
 #[test]
 fn display_replacement_property_accepts_only_matching_media_replacements() {
-    let image =
-        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Image(DisplayImageItem {
-            image_id: 1,
-            width: 10.0,
-            height: 20.0,
-        }))
-        .expect("image replacement");
-    let video =
-        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Video(DisplayVideoItem {
-            video_id: 2,
-            width: 30.0,
-            height: 40.0,
-            loop_count: 0,
-            autoplay: false,
-        }))
-        .expect("video replacement");
-    let xwidget =
-        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(DisplayXwidgetItem {
-            xwidget_id: 3,
-            width: 50.0,
-            height: 60.0,
-        }))
-        .expect("xwidget replacement");
+    let image = DisplayMediaReplacement::image(DisplayImageItem {
+        image_id: 1,
+        width: 10.0,
+        height: 20.0,
+    });
+    let video = DisplayMediaReplacement::video(DisplayVideoItem {
+        video_id: 2,
+        width: 30.0,
+        height: 40.0,
+        loop_count: 0,
+        autoplay: false,
+    });
+    let xwidget = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+        xwidget_id: 3,
+        width: 50.0,
+        height: 60.0,
+    });
 
     assert!(DisplayReplacementProperty::Image.accepts_media_replacement(&image));
     assert!(!DisplayReplacementProperty::Image.accepts_media_replacement(&video));
@@ -182,11 +178,12 @@ fn display_replacement_property_describes_media_replacement_behavior() {
         width: 50.0,
         height: 60.0,
     };
+    let xwidget_replacement = DisplayMediaReplacement::xwidget(xwidget);
 
     assert!(DisplayReplacementProperty::Image.is_media_replacement());
     assert!(DisplayReplacementProperty::Video.is_media_replacement());
     assert!(DisplayReplacementProperty::Webkit.is_media_replacement());
-    assert!(DisplayReplacementProperty::Xwidget(xwidget).is_media_replacement());
+    assert!(DisplayReplacementProperty::Xwidget(xwidget_replacement).is_media_replacement());
     assert!(!DisplayReplacementProperty::String.is_media_replacement());
     assert_eq!(
         DisplayReplacementProperty::Image.media_fallback_placeholder(),
@@ -201,12 +198,12 @@ fn display_replacement_property_describes_media_replacement_behavior() {
         Some("     ")
     );
     assert_eq!(
-        DisplayReplacementProperty::Xwidget(xwidget).media_fallback_placeholder(),
+        DisplayReplacementProperty::Xwidget(xwidget_replacement).media_fallback_placeholder(),
         None
     );
     assert_eq!(
-        DisplayReplacementProperty::Xwidget(xwidget).direct_media_replacement(),
-        DisplayMediaReplacement::from_item_kind(&DisplayItemKind::Xwidget(xwidget))
+        DisplayReplacementProperty::Xwidget(xwidget_replacement).direct_media_replacement(),
+        Some(xwidget_replacement)
     );
     assert_eq!(
         DisplayReplacementProperty::Image.direct_media_replacement(),

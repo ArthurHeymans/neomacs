@@ -158,9 +158,6 @@ pub(crate) enum DisplayItemKind {
     Glyphless(DisplayGlyphless),
     Stretch(DisplayStretch),
     MediaReplacement(DisplayMediaReplacement),
-    Image(DisplayImageItem),
-    Video(DisplayVideoItem),
-    Xwidget(DisplayXwidgetItem),
     RowBreak(DisplayRowBreak),
     #[allow(dead_code)]
     CursorAnchor(CursorAnchor),
@@ -336,16 +333,6 @@ pub(crate) enum DisplayMediaReplacementKind {
 }
 
 impl DisplayMediaReplacement {
-    pub(crate) fn from_item_kind(kind: &DisplayItemKind) -> Option<Self> {
-        match kind {
-            DisplayItemKind::MediaReplacement(media) => Some(*media),
-            DisplayItemKind::Image(image) => Some(Self::image(*image)),
-            DisplayItemKind::Video(video) => Some(Self::video(*video)),
-            DisplayItemKind::Xwidget(xwidget) => Some(Self::xwidget(*xwidget)),
-            _ => None,
-        }
-    }
-
     pub(crate) fn replacement_item(self, mut item: DisplayItem) -> DisplayItem {
         item.kind = DisplayItemKind::Stretch(self.replacement_stretch());
         item
@@ -359,7 +346,7 @@ impl DisplayMediaReplacement {
         }
     }
 
-    fn image(image: DisplayImageItem) -> Self {
+    pub(crate) fn image(image: DisplayImageItem) -> Self {
         Self {
             kind: DisplayMediaReplacementKind::Image {
                 image_id: image.image_id.max(0) as u32,
@@ -369,7 +356,7 @@ impl DisplayMediaReplacement {
         }
     }
 
-    fn video(video: DisplayVideoItem) -> Self {
+    pub(crate) fn video(video: DisplayVideoItem) -> Self {
         Self {
             kind: DisplayMediaReplacementKind::Video {
                 video_id: video.video_id.max(0) as u32,
@@ -381,7 +368,7 @@ impl DisplayMediaReplacement {
         }
     }
 
-    fn xwidget(xwidget: DisplayXwidgetItem) -> Self {
+    pub(crate) fn xwidget(xwidget: DisplayXwidgetItem) -> Self {
         Self {
             kind: DisplayMediaReplacementKind::Xwidget {
                 xwidget_id: xwidget.xwidget_id.max(0) as u32,

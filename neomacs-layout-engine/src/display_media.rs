@@ -1,5 +1,5 @@
 use crate::display_item::{
-    DisplayImageItem, DisplayItemKind, DisplayVideoItem, DisplayXwidgetItem,
+    DisplayImageItem, DisplayMediaReplacement, DisplayVideoItem, DisplayXwidgetItem,
 };
 use crate::display_spec::{
     parse_display_image_layout, parse_display_video_layout, parse_display_webkit_layout,
@@ -19,7 +19,7 @@ pub(crate) struct DisplayMediaResolveParams<'a> {
 pub(crate) fn resolve_display_media_property(
     display_prop: &Value,
     params: DisplayMediaResolveParams<'_>,
-) -> Option<DisplayItemKind> {
+) -> Option<DisplayMediaReplacement> {
     resolve_image_display_property(display_prop, params)
         .or_else(|| resolve_video_display_property(display_prop, params))
         .or_else(|| resolve_webkit_display_property(display_prop, params))
@@ -28,7 +28,7 @@ pub(crate) fn resolve_display_media_property(
 fn resolve_image_display_property(
     display_prop: &Value,
     params: DisplayMediaResolveParams<'_>,
-) -> Option<DisplayItemKind> {
+) -> Option<DisplayMediaReplacement> {
     let spec = parse_display_image_layout(display_prop, params.default_fg, params.default_bg)?;
     let scale = spec.scale;
     let resolved = params
@@ -42,7 +42,7 @@ fn resolve_image_display_property(
         width = (width * scale).round().max(1.0);
         height = (height * scale).round().max(1.0);
     }
-    Some(DisplayItemKind::Image(DisplayImageItem {
+    Some(DisplayMediaReplacement::image(DisplayImageItem {
         image_id: display_media_id(resolved.image_id),
         width,
         height,
@@ -52,7 +52,7 @@ fn resolve_image_display_property(
 fn resolve_video_display_property(
     display_prop: &Value,
     params: DisplayMediaResolveParams<'_>,
-) -> Option<DisplayItemKind> {
+) -> Option<DisplayMediaReplacement> {
     let spec = parse_display_video_layout(
         display_prop,
         params.fallback_char_width * 40.0,
@@ -63,7 +63,7 @@ fn resolve_video_display_property(
         .request_video(spec.request.clone())
         .ok()
         .flatten()?;
-    Some(DisplayItemKind::Video(DisplayVideoItem {
+    Some(DisplayMediaReplacement::video(DisplayVideoItem {
         video_id: display_media_id(resolved.video_id),
         width: spec.width.max(1.0),
         height: spec.height.max(1.0),
@@ -75,7 +75,7 @@ fn resolve_video_display_property(
 fn resolve_webkit_display_property(
     display_prop: &Value,
     params: DisplayMediaResolveParams<'_>,
-) -> Option<DisplayItemKind> {
+) -> Option<DisplayMediaReplacement> {
     let spec = parse_display_webkit_layout(
         display_prop,
         params.fallback_char_width * 40.0,
@@ -86,7 +86,7 @@ fn resolve_webkit_display_property(
         .request_webkit(spec.request.clone())
         .ok()
         .flatten()?;
-    Some(DisplayItemKind::Xwidget(DisplayXwidgetItem {
+    Some(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
         xwidget_id: display_media_id(resolved.webkit_id),
         width: spec.width.max(1.0),
         height: spec.height.max(1.0),

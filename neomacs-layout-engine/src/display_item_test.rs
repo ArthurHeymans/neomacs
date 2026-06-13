@@ -63,58 +63,58 @@ fn display_item_inline_media_slots_are_source_neutral() {
     let image = DisplayItem::new(
         span.clone(),
         RenderFaceRef::Inherit,
-        DisplayItemKind::Image(DisplayImageItem {
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
             width: 64.0,
             height: 32.0,
-        }),
+        })),
     );
     let video = DisplayItem::new(
         span.clone(),
         RenderFaceRef::Inherit,
-        DisplayItemKind::Video(DisplayVideoItem {
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::video(DisplayVideoItem {
             video_id: 43,
             width: 80.0,
             height: 45.0,
             loop_count: -1,
             autoplay: true,
-        }),
+        })),
     );
     let xwidget = DisplayItem::new(
         span,
         RenderFaceRef::Inherit,
-        DisplayItemKind::Xwidget(DisplayXwidgetItem {
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
             xwidget_id: 44,
             width: 96.0,
             height: 54.0,
-        }),
+        })),
     );
 
     assert_eq!(
         image.kind,
-        DisplayItemKind::Image(DisplayImageItem {
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
             width: 64.0,
             height: 32.0,
-        })
+        }))
     );
     assert_eq!(
         video.kind,
-        DisplayItemKind::Video(DisplayVideoItem {
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::video(DisplayVideoItem {
             video_id: 43,
             width: 80.0,
             height: 45.0,
             loop_count: -1,
             autoplay: true,
-        })
+        }))
     );
     assert_eq!(
         xwidget.kind,
-        DisplayItemKind::Xwidget(DisplayXwidgetItem {
+        DisplayItemKind::MediaReplacement(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
             xwidget_id: 44,
             width: 96.0,
             height: 54.0,
-        })
+        }))
     );
 }
 
