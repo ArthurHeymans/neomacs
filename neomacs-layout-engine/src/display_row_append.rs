@@ -155,10 +155,11 @@ enum BufferTextFragmentAdvancePath {
 }
 
 impl BufferTextFragmentAdvancePath {
-    fn for_char(ch: char, is_cluster_continuation: bool) -> Self {
+    fn for_cluster_state(cluster: BufferTextFragmentClusterState) -> Self {
+        let ch = cluster.ch();
         if crate::composition::needs_complex_shaping(ch) {
             Self::ResolvedComplexRun
-        } else if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
+        } else if ch == '\t' || cluster.is_cluster_continuation() || !ch.is_ascii() {
             Self::NaturalRenderedFragment
         } else {
             Self::NaturalFaceColumns
@@ -174,10 +175,11 @@ enum BufferTextFragmentNaturalFallbackAdvance {
 }
 
 impl BufferTextFragmentNaturalFallbackAdvance {
-    fn for_char(ch: char, is_cluster_continuation: bool) -> Self {
+    fn for_cluster_state(cluster: BufferTextFragmentClusterState) -> Self {
+        let ch = cluster.ch();
         if ch == '\t' {
             Self::Tab
-        } else if is_cluster_continuation {
+        } else if cluster.is_cluster_continuation() {
             Self::ClusterContinuation
         } else {
             Self::FaceColumns {
@@ -1127,8 +1129,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
         face_resolver: &FaceResolver,
         active_face_state: &DisplayRowActiveFaceState,
         position: DisplayRowPosition,
-        ch: char,
-        is_cluster_continuation: bool,
+        cluster: BufferTextFragmentClusterState,
     ) -> ResolvedBufferTextFragmentAdvance {
         resolver.resolve_to_text_row(
             builder,
@@ -1143,8 +1144,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextFragmentAppendContext<'a, B> {
             active_face_state,
             self.frame.clone(),
             position,
-            ch,
-            is_cluster_continuation,
+            cluster,
         )
     }
 
@@ -1343,8 +1343,7 @@ fn resolve_buffer_text_fragment_natural_advance_to_text_row<B: LayoutBufferView 
     active_face_state: &DisplayRowActiveFaceState,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
-    ch: char,
-    is_cluster_continuation: bool,
+    cluster: BufferTextFragmentClusterState,
 ) -> f32 {
     if let Some(measured_width) = measure_buffer_text_fragment_natural_advance_to_text_row(
         builder,
@@ -1367,8 +1366,7 @@ fn resolve_buffer_text_fragment_natural_advance_to_text_row<B: LayoutBufferView 
         active_face_state,
         &frame,
         position,
-        ch,
-        is_cluster_continuation,
+        cluster,
     )
 }
 
@@ -1377,11 +1375,15 @@ fn fallback_buffer_text_fragment_natural_advance_to_text_row(
     active_face_state: &DisplayRowActiveFaceState,
     frame: &DisplayRowAppendFrame,
     position: DisplayRowPosition,
-    ch: char,
-    is_cluster_continuation: bool,
+    cluster: BufferTextFragmentClusterState,
 ) -> f32 {
-    BufferTextFragmentNaturalFallbackAdvance::for_char(ch, is_cluster_continuation)
-        .resolve_to_text_row(font_metrics, active_face_state, frame, position, ch)
+    BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(cluster).resolve_to_text_row(
+        font_metrics,
+        active_face_state,
+        frame,
+        position,
+        cluster.ch(),
+    )
 }
 
 impl BufferTextFragmentAdvanceResolver {
@@ -1400,10 +1402,10 @@ impl BufferTextFragmentAdvanceResolver {
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
-        ch: char,
-        is_cluster_continuation: bool,
+        cluster: BufferTextFragmentClusterState,
     ) -> ResolvedBufferTextFragmentAdvance {
-        match BufferTextFragmentAdvancePath::for_char(ch, is_cluster_continuation) {
+        let ch = cluster.ch();
+        match BufferTextFragmentAdvancePath::for_cluster_state(cluster) {
             BufferTextFragmentAdvancePath::ResolvedComplexRun => {
                 let mut policy =
                     DisplayRowComplexTextRunAdvancePolicy::new(active_face_state, font_metrics);
@@ -1411,7 +1413,7 @@ impl BufferTextFragmentAdvanceResolver {
                     text,
                     byte_idx,
                     ch,
-                    is_cluster_continuation,
+                    cluster.is_cluster_continuation(),
                     &mut policy,
                 );
                 ResolvedBufferTextFragmentAdvance::resolved(advance_px)
@@ -1428,8 +1430,7 @@ impl BufferTextFragmentAdvanceResolver {
                     active_face_state,
                     frame,
                     position,
-                    ch,
-                    is_cluster_continuation,
+                    cluster,
                 );
                 ResolvedBufferTextFragmentAdvance::natural(advance_px)
             }

@@ -5135,7 +5135,6 @@ impl LayoutEngine {
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
             let cluster_state = BufferTextFragmentClusterState::for_char(ch, cluster_tail);
-            let is_cluster_continuation = cluster_state.is_cluster_continuation();
 
             // Glyphless character detection (C1 controls, format chars, etc.)
             if let Some(glyphless_item) =
@@ -5208,8 +5207,7 @@ impl LayoutEngine {
                 face_resolver,
                 &active_face_state,
                 append_position,
-                ch,
-                is_cluster_continuation,
+                cluster_state,
             );
             let advance = resolved_advance.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);

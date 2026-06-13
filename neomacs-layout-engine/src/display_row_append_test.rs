@@ -231,8 +231,7 @@ fn fallback_buffer_text_fragment_natural_advance_uses_frame_tab_policy() {
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
-        '\t',
-        false,
+        BufferTextFragmentClusterState::for_char('\t', None),
     );
 
     assert_eq!(advance, 24.0);
@@ -249,8 +248,7 @@ fn fallback_buffer_text_fragment_natural_advance_zeroes_cluster_continuation() {
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
-        '\u{301}',
-        true,
+        BufferTextFragmentClusterState::for_char('\u{301}', Some(('e', false))),
     );
 
     assert_eq!(advance, 0.0);
@@ -267,8 +265,7 @@ fn fallback_buffer_text_fragment_natural_advance_uses_face_columns() {
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        '中',
-        false,
+        BufferTextFragmentClusterState::for_char('中', None),
     );
 
     assert_eq!(advance, 16.0);
@@ -277,19 +274,27 @@ fn fallback_buffer_text_fragment_natural_advance_uses_face_columns() {
 #[test]
 fn buffer_text_fragment_natural_fallback_advance_names_width_policy() {
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_char('\t', false),
+        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
+            BufferTextFragmentClusterState::for_char('\t', None),
+        ),
         BufferTextFragmentNaturalFallbackAdvance::Tab
     );
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_char('\u{301}', true),
+        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
+            BufferTextFragmentClusterState::for_char('\u{301}', Some(('e', false))),
+        ),
         BufferTextFragmentNaturalFallbackAdvance::ClusterContinuation
     );
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_char('x', false),
+        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
+            BufferTextFragmentClusterState::for_char('x', None),
+        ),
         BufferTextFragmentNaturalFallbackAdvance::FaceColumns { columns: 1 }
     );
     assert_eq!(
-        BufferTextFragmentNaturalFallbackAdvance::for_char('中', false),
+        BufferTextFragmentNaturalFallbackAdvance::for_cluster_state(
+            BufferTextFragmentClusterState::for_char('中', None),
+        ),
         BufferTextFragmentNaturalFallbackAdvance::FaceColumns { columns: 2 }
     );
 }
@@ -297,23 +302,34 @@ fn buffer_text_fragment_natural_fallback_advance_names_width_policy() {
 #[test]
 fn buffer_text_fragment_advance_path_names_append_measurement_policy() {
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_char('x', false),
+        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+            'x', None,
+        )),
         BufferTextFragmentAdvancePath::NaturalFaceColumns
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_char('\t', false),
+        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+            '\t', None,
+        )),
         BufferTextFragmentAdvancePath::NaturalRenderedFragment
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_char('\u{301}', true),
+        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+            '\u{301}',
+            Some(('e', false)),
+        )),
         BufferTextFragmentAdvancePath::NaturalRenderedFragment
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_char('中', false),
+        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+            '中', None,
+        )),
         BufferTextFragmentAdvancePath::NaturalRenderedFragment
     );
     assert_eq!(
-        BufferTextFragmentAdvancePath::for_char('\u{0633}', false),
+        BufferTextFragmentAdvancePath::for_cluster_state(BufferTextFragmentClusterState::for_char(
+            '\u{0633}', None,
+        )),
         BufferTextFragmentAdvancePath::ResolvedComplexRun
     );
 }
@@ -358,8 +374,7 @@ fn buffer_text_fragment_append_context_resolves_natural_measurement_for_ascii() 
         &face_resolver,
         &active_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        'x',
-        false,
+        BufferTextFragmentClusterState::for_char('x', None),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
@@ -404,8 +419,7 @@ fn buffer_text_fragment_append_context_resolves_complex_text_measurement() {
         &face_resolver,
         &active_face,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        '\u{0633}',
-        false,
+        BufferTextFragmentClusterState::for_char('\u{0633}', None),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
