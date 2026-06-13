@@ -1987,17 +1987,15 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     hit_row_range: &mut HitRowRangeTracker,
     anchor_charpos: i64,
     row_y_positions: &mut DisplayRowYPositions,
+    append_surface: &DisplayRowAppendSurface,
     face_char_w: f32,
     char_h: f32,
     default_row_ascent: f32,
-    max_x: f32,
-    content_x: f32,
     text_y: f32,
     row_base: usize,
     max_rows: usize,
     face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    params: &WindowParams,
 ) {
     let DisplayTextStorage::LispString(text_value) = fragment.storage else {
         return;
@@ -2014,6 +2012,8 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         face_ids,
         builder,
     );
+    let content_x = append_surface.content_x();
+    let max_x = append_surface.right_edge();
     let row_geometry_defaults = DisplayRowGeometryDefaults::new(text_y, char_h, default_row_ascent);
     let row_limit = DisplayRowLimit { max_rows };
 
@@ -2069,11 +2069,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             break;
         }
 
-        let overlay_append_surface = DisplayRowAppendSurface::new(
-            DisplayRowAppendArea::new(content_x, max_x - content_x, max_x - content_x, 0.0),
-            text_display_tab_policy(content_x, params),
-        );
-        let frame = overlay_append_surface.text_row_frame_from_geometry_state(
+        let frame = append_surface.text_row_frame_from_geometry_state(
             geometry,
             0.0,
             char_h,
@@ -4307,7 +4303,6 @@ impl LayoutEngine {
                         if !after_strings.is_empty() {
                             flush_run(&self.run_buf, ligatures);
                             self.run_buf.clear();
-                            let right_limit = content_x + avail_width;
                             for overlay_string in &after_strings {
                                 render_overlay_string(
                                     evaluator,
@@ -4329,17 +4324,15 @@ impl LayoutEngine {
                                     &mut hit_row_range,
                                     charpos,
                                     &mut row_y_positions,
+                                    &text_append_surface,
                                     face_metrics.char_width,
                                     char_h,
                                     default_face_ascent,
-                                    right_limit,
-                                    content_x,
                                     text_y,
                                     text_matrix_row_base,
                                     max_rows,
                                     &mut face_ids,
                                     &mut self.matrix_builder,
-                                    params,
                                 );
                             }
                         }
@@ -5570,7 +5563,6 @@ impl LayoutEngine {
                     // Flush run buffer before emitting overlay chars
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let right_limit = content_x + avail_width;
                     for overlay_string in &before_strings {
                         render_overlay_string(
                             evaluator,
@@ -5592,17 +5584,15 @@ impl LayoutEngine {
                             &mut hit_row_range,
                             charpos,
                             &mut row_y_positions,
+                            &text_append_surface,
                             face_metrics.char_width,
                             char_h,
                             default_face_ascent,
-                            right_limit,
-                            content_x,
                             text_y,
                             text_matrix_row_base,
                             max_rows,
                             &mut face_ids,
                             &mut self.matrix_builder,
-                            params,
                         );
                     }
                 }
@@ -5668,7 +5658,6 @@ impl LayoutEngine {
                     // Flush run buffer before emitting overlay chars
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let right_limit = content_x + avail_width;
                     for overlay_string in &after_strings {
                         render_overlay_string(
                             evaluator,
@@ -5690,17 +5679,15 @@ impl LayoutEngine {
                             &mut hit_row_range,
                             charpos,
                             &mut row_y_positions,
+                            &text_append_surface,
                             face_metrics.char_width,
                             char_h,
                             default_face_ascent,
-                            right_limit,
-                            content_x,
                             text_y,
                             text_matrix_row_base,
                             max_rows,
                             &mut face_ids,
                             &mut self.matrix_builder,
-                            params,
                         );
                     }
                 }
@@ -5753,7 +5740,6 @@ impl LayoutEngine {
                 params.window_id as u64,
             );
             let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
-            let right_limit = content_x + avail_width;
             for overlay_string in &before_strings {
                 render_overlay_string(
                     evaluator,
@@ -5775,17 +5761,15 @@ impl LayoutEngine {
                     &mut hit_row_range,
                     charpos,
                     &mut row_y_positions,
+                    &text_append_surface,
                     face_metrics.char_width,
                     char_h,
                     default_face_ascent,
-                    right_limit,
-                    content_x,
                     text_y,
                     text_matrix_row_base,
                     max_rows,
                     &mut face_ids,
                     &mut self.matrix_builder,
-                    params,
                 );
             }
             for overlay_string in &after_strings {
@@ -5809,17 +5793,15 @@ impl LayoutEngine {
                     &mut hit_row_range,
                     charpos,
                     &mut row_y_positions,
+                    &text_append_surface,
                     face_metrics.char_width,
                     char_h,
                     default_face_ascent,
-                    right_limit,
-                    content_x,
                     text_y,
                     text_matrix_row_base,
                     max_rows,
                     &mut face_ids,
                     &mut self.matrix_builder,
-                    params,
                 );
             }
         }

@@ -1015,6 +1015,9 @@ fn display_row_append_surface_builds_frames_with_shared_area() {
         tab_policy.clone(),
     );
 
+    assert_eq!(surface.content_x(), 8.0);
+    assert_eq!(surface.right_edge(), 128.0);
+
     let geometry = DisplayRowGeometryState::new(3, 20.0, 0.0, 16.0, 11.0);
     let frame = surface.frame_from_geometry_state(
         &geometry,

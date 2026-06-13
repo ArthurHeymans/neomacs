@@ -1345,6 +1345,14 @@ impl DisplayRowAppendArea {
             line_number_width,
         }
     }
+
+    pub(crate) fn content_x(self) -> f32 {
+        self.content_x
+    }
+
+    pub(crate) fn right_edge(self) -> f32 {
+        self.content_x + self.width
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1356,6 +1364,14 @@ pub(crate) struct DisplayRowAppendSurface {
 impl DisplayRowAppendSurface {
     pub(crate) fn new(area: DisplayRowAppendArea, tab_policy: DisplayTabPolicy) -> Self {
         Self { area, tab_policy }
+    }
+
+    pub(crate) fn content_x(&self) -> f32 {
+        self.area.content_x()
+    }
+
+    pub(crate) fn right_edge(&self) -> f32 {
+        self.area.right_edge()
     }
 
     fn frame(
