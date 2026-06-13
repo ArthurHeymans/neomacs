@@ -19,10 +19,11 @@ use crate::display_row::{
     merge_display_row_source_slot_bounds_to_current_row,
 };
 #[cfg(test)]
-use crate::display_row_builder::{DisplayRowAppendCursor, DisplayRowLayout};
+use crate::display_row_builder::DisplayRowAppendCursor;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
-    DisplayRowItemMeasurer, DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
+    DisplayRowItemMeasurer, DisplayRowLayout, DisplayRowPosition, DisplayRowWriteMetrics,
+    DisplayTabPolicy,
 };
 use crate::display_source::{BufferTextItemSource, DisplayItemSource, DisplaySourceContext};
 #[cfg(test)]
@@ -511,35 +512,18 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
     );
-    let mut geometry = frame.geometry.clone();
-    let mut max_x_px = frame.content_x + frame.geometry.width;
-    let mut output_height = frame.geometry.height;
-    if ch == '\t' {
-        geometry.char_width = frame.face_space_width;
-        max_x_px = f32::INFINITY;
-        output_height = frame.default_row_height;
-    }
-    let row_spec = DisplayRowSpec {
-        geometry,
-        render_bounds: DisplayRowRenderBounds {
-            start: position,
-            max_x_px,
-        },
-        base_face_id: face_id,
-        base_face,
-        role: GlyphRowRole::Text,
-        symbol_values: HashMap::new(),
+    let append_kind = if ch == '\t' {
+        DisplayRowAppendKind::Tab
+    } else {
+        DisplayRowAppendKind::SourceText
     };
+    let append_spec = frame.append_spec(position, face_id, append_kind);
+    let row_spec = append_spec.display_row_spec(face_id, base_face);
+    let output = append_spec.text_row_output();
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy = TextRunDisplayRowRenderPolicy::new(measurement);
-    let output = TextRowOutput {
-        row: frame.row,
-        row_y: frame.geometry.y,
-        glyph_y: frame.glyph_y,
-        height: output_height,
-    };
     let outcome = render_display_item_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -597,23 +581,12 @@ pub(crate) fn append_buffer_text_item_fragment_to_text_row_and_emit<
         buffer.layout_char_pos_to_emacs_byte_pos(end),
     );
 
-    let max_x_px = if matches!(kind, DisplayItemKind::ControlChar { .. }) {
-        frame.content_x + (frame.text_width - frame.line_number_width)
-    } else {
-        frame.content_x + frame.geometry.width
-    };
-    let output_height = if matches!(
-        kind,
-        DisplayItemKind::ControlChar { .. } | DisplayItemKind::SourceMappedText(_)
-    ) {
-        frame.default_row_height
-    } else {
-        frame.geometry.height
-    };
+    let append_kind = DisplayRowAppendKind::from_display_item_kind(&kind)?;
+    let append_spec = frame.append_spec(position, face_id, append_kind);
     let item = source.item(RenderFaceRef::FaceId(face_id), kind);
     let request = DisplayRowFragmentAppendRequest::for_frame(frame, position, face_id, base_face)
-        .with_max_x_px(max_x_px)
-        .with_output_height(output_height);
+        .with_max_x_px(append_spec.max_x)
+        .with_output_height(append_spec.output.height);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_single_display_item_fragment_to_text_row_and_emit(
         builder,
@@ -877,19 +850,13 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     position: DisplayRowPosition,
     item_measurer: &mut impl DisplayRowItemMeasurer,
 ) -> DisplayRowPosition {
-    let mut geometry = frame.geometry.clone();
-    geometry.char_width = frame.face_space_width;
-    let row_spec = DisplayRowSpec {
-        geometry,
-        render_bounds: DisplayRowRenderBounds {
-            start: position,
-            max_x_px: frame.content_x + frame.geometry.width,
-        },
-        base_face_id: fallback_face_id,
-        base_face,
-        role: GlyphRowRole::Text,
-        symbol_values: HashMap::new(),
-    };
+    let append_spec = frame.append_spec(
+        position,
+        fallback_face_id,
+        DisplayRowAppendKind::DisplayReplacementString,
+    );
+    let row_spec = append_spec.display_row_spec(fallback_face_id, base_face);
+    let output = append_spec.text_row_output();
     let mut source_state = DisplayRowSourceState::default();
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_measurer };
     let mut font_metrics = None;
@@ -903,12 +870,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
         face_resolver,
         face_ids,
         row_spec,
-        TextRowOutput {
-            row: frame.row,
-            row_y: frame.geometry.y,
-            glyph_y: frame.glyph_y,
-            height: frame.geometry.height,
-        },
+        output,
         &mut render_policy,
     ) else {
         return position;
@@ -916,7 +878,6 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     outcome.end
 }
 
-#[cfg(test)]
 pub(crate) struct DisplayRowAppendOutput {
     pub(crate) row: usize,
     pub(crate) row_y: f32,
@@ -1056,7 +1017,6 @@ impl DisplayRowAppendFrame {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {
         DisplayRowAppendContext {
             row: self.row,
@@ -1072,9 +1032,17 @@ impl DisplayRowAppendFrame {
             face_id,
         }
     }
+
+    pub(crate) fn append_spec(
+        &self,
+        position: DisplayRowPosition,
+        face_id: u32,
+        kind: DisplayRowAppendKind,
+    ) -> DisplayRowAppendSpec {
+        self.clone().at(position, face_id).append_spec(kind)
+    }
 }
 
-#[cfg(test)]
 pub(crate) struct DisplayRowAppendContext {
     pub(crate) row: usize,
     pub(crate) glyph_y: f32,
@@ -1089,7 +1057,6 @@ pub(crate) struct DisplayRowAppendContext {
     pub(crate) face_id: u32,
 }
 
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowAppendKind {
     SourceText,
@@ -1101,7 +1068,6 @@ pub(crate) enum DisplayRowAppendKind {
     DisplayReplacementString,
 }
 
-#[cfg(test)]
 impl DisplayRowAppendKind {
     pub(crate) fn from_display_item_kind(kind: &DisplayItemKind) -> Option<Self> {
         match kind {
@@ -1120,15 +1086,14 @@ impl DisplayRowAppendKind {
     }
 }
 
-#[cfg(test)]
 pub(crate) struct DisplayRowAppendSpec {
+    pub(crate) geometry: DisplayRowGeometry,
     pub(crate) layout: DisplayRowLayout,
     pub(crate) position: DisplayRowPosition,
     pub(crate) max_x: f32,
     pub(crate) output: DisplayRowAppendOutput,
 }
 
-#[cfg(test)]
 impl DisplayRowAppendContext {
     pub(crate) fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
         let char_width = match kind {
@@ -1162,6 +1127,10 @@ impl DisplayRowAppendContext {
         };
 
         DisplayRowAppendSpec {
+            geometry: DisplayRowGeometry {
+                char_width,
+                ..self.geometry.clone()
+            },
             layout: self.geometry.to_layout(
                 GlyphRowRole::Text,
                 char_width,
@@ -1180,6 +1149,35 @@ impl DisplayRowAppendContext {
                 glyph_y: self.glyph_y,
                 height: output_height,
             },
+        }
+    }
+}
+
+impl DisplayRowAppendSpec {
+    pub(crate) fn display_row_spec<'face>(
+        &self,
+        base_face_id: u32,
+        base_face: &'face ResolvedFace,
+    ) -> DisplayRowSpec<'face> {
+        DisplayRowSpec {
+            geometry: self.geometry.clone(),
+            render_bounds: DisplayRowRenderBounds {
+                start: self.position,
+                max_x_px: self.max_x,
+            },
+            base_face_id,
+            base_face,
+            role: self.layout.role,
+            symbol_values: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn text_row_output(&self) -> TextRowOutput {
+        TextRowOutput {
+            row: self.output.row,
+            row_y: self.output.row_y,
+            glyph_y: self.output.glyph_y,
+            height: self.output.height,
         }
     }
 }

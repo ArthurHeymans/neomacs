@@ -698,6 +698,43 @@ fn display_row_append_frame_builds_positioned_context() {
 }
 
 #[test]
+fn display_row_append_frame_builds_append_spec_directly() {
+    let tab_policy = DisplayTabPolicy::every(4);
+    let frame = DisplayRowAppendFrame::from_parts(
+        DisplayRowAppendPlacement {
+            row: 3,
+            y: 20.0,
+            glyph_y: 22.0,
+        },
+        DisplayRowAppendArea {
+            content_x: 8.0,
+            width: 120.0,
+            text_width: 150.0,
+            line_number_width: 10.0,
+        },
+        DisplayRowAppendMetrics {
+            height: 16.0,
+            ascent: 11.0,
+            char_width: 9.0,
+            space_width: 7.0,
+            default_row_height: 14.0,
+        },
+        tab_policy,
+    );
+
+    let spec = frame.append_spec(
+        DisplayRowPosition { x_px: 18.0, col: 2 },
+        42,
+        DisplayRowAppendKind::SourceText,
+    );
+
+    assert_eq!(spec.position, DisplayRowPosition { x_px: 18.0, col: 2 });
+    assert_eq!(spec.max_x, 128.0);
+    assert_eq!(spec.layout.base_face, RenderFaceRef::FaceId(42));
+    assert_eq!(spec.output.row, 3);
+}
+
+#[test]
 fn display_row_append_surface_builds_frames_with_shared_area() {
     let tab_policy = DisplayTabPolicy::every(4);
     let surface = DisplayRowAppendSurface::new(
