@@ -39,10 +39,11 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
-    DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
+    BufferTextSpecialSourceCharAppendRequest, DisplayPropertyReplacementAppendItem,
+    DisplayPropertyReplacementAppendRequest, DisplayPropertyReplacementAppendResolveRequest,
+    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
+    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
+    LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
     SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -5163,17 +5164,20 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     let _ = face_ids.allocate();
                 }
+                let special_request = BufferTextSpecialSourceCharAppendRequest::new(
+                    &buffer_source_char,
+                    special_display.clone(),
+                    DisplayRowPosition { x_px: x, col },
+                );
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_to_text_row_and_emit(
+                    .append_special_source_char_request_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        &buffer_source_char,
                         face_resolver,
-                        special_display.clone(),
-                        DisplayRowPosition { x_px: x, col },
+                        special_request,
                     )
                 {
                     x = position.x_px;
@@ -5196,17 +5200,20 @@ impl LayoutEngine {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
                 }
+                let special_request = BufferTextSpecialSourceCharAppendRequest::new(
+                    &buffer_source_char,
+                    special_display.clone(),
+                    DisplayRowPosition { x_px: x, col },
+                );
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_to_text_row_and_emit(
+                    .append_special_source_char_request_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        &buffer_source_char,
                         face_resolver,
-                        special_display.clone(),
-                        DisplayRowPosition { x_px: x, col },
+                        special_request,
                     )
                 {
                     x = position.x_px;
@@ -5235,17 +5242,20 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
+                let special_request = BufferTextSpecialSourceCharAppendRequest::new(
+                    &buffer_source_char,
+                    special_display,
+                    DisplayRowPosition { x_px: x, col },
+                );
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_to_text_row_and_emit(
+                    .append_special_source_char_request_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
-                        &buffer_source_char,
                         face_resolver,
-                        special_display,
-                        DisplayRowPosition { x_px: x, col },
+                        special_request,
                     )
                 {
                     x = position.x_px;

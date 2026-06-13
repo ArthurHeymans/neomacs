@@ -2464,17 +2464,20 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         .precluster_special_display()
         .cloned()
         .expect("nobreak source char should map to a display item");
+    let request = BufferTextSpecialSourceCharAppendRequest::new(
+        &source_char,
+        special_display,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    );
     let (_progress, end) = append_context
-        .append_special_source_char_to_text_row_and_emit(
+        .append_special_source_char_request_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            &source_char,
             &face_resolver,
-            special_display,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            request,
         )
         .expect("appended source-mapped buffer text item fragment");
 
@@ -2540,17 +2543,20 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let special_display = source_char
         .cluster_special_display(None)
         .expect("glyphless source char should map to a display item");
+    let request = BufferTextSpecialSourceCharAppendRequest::new(
+        &source_char,
+        special_display,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    );
     let (_progress, end) = append_context
-        .append_special_source_char_to_text_row_and_emit(
+        .append_special_source_char_request_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            &source_char,
             &face_resolver,
-            special_display,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            request,
         )
         .expect("appended glyphless buffer text item fragment");
 

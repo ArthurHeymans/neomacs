@@ -1259,28 +1259,27 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_special_source_char_to_text_row_and_emit(
+    pub(crate) fn append_special_source_char_request_to_text_row_and_emit(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        source_char: &BufferTextSourceChar,
         face_resolver: &FaceResolver,
-        special_display: BufferTextSourceSpecialDisplay,
-        position: DisplayRowPosition,
+        request: BufferTextSpecialSourceCharAppendRequest,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let parts = request.into_parts();
         self.append_item_source_range_to_text_row_and_emit(
             geometry,
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            source_char.range(),
+            parts.range,
             face_resolver,
-            special_display.into_append_item(),
-            position,
+            parts.special_display.into_append_item(),
+            parts.position,
         )
     }
 
@@ -1738,6 +1737,41 @@ impl BufferTextSourceChar {
     ) -> Option<BufferTextSourceSpecialDisplay> {
         BufferTextSourceSpecialDisplay::for_cluster_state(self.cluster_state(tail))
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSpecialSourceCharAppendRequest {
+    range: BufferTextSourceRange,
+    special_display: BufferTextSourceSpecialDisplay,
+    position: DisplayRowPosition,
+}
+
+impl BufferTextSpecialSourceCharAppendRequest {
+    pub(crate) fn new(
+        source_char: &BufferTextSourceChar,
+        special_display: BufferTextSourceSpecialDisplay,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            range: source_char.range(),
+            special_display,
+            position,
+        }
+    }
+
+    fn into_parts(self) -> BufferTextSpecialSourceCharAppendRequestParts {
+        BufferTextSpecialSourceCharAppendRequestParts {
+            range: self.range,
+            special_display: self.special_display,
+            position: self.position,
+        }
+    }
+}
+
+struct BufferTextSpecialSourceCharAppendRequestParts {
+    range: BufferTextSourceRange,
+    special_display: BufferTextSourceSpecialDisplay,
+    position: DisplayRowPosition,
 }
 
 impl BufferTextSourceSpecialDisplay {
