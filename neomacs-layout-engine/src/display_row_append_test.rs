@@ -257,6 +257,93 @@ fn fallback_buffer_text_fragment_natural_advance_uses_face_columns() {
     assert_eq!(advance, 16.0);
 }
 
+fn current_buffer_snapshot(eval: &Context, buf_id: BufferId) -> LayoutBufferSnapshot {
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    LayoutBufferSnapshot::from_buffer(buffer)
+}
+
+#[test]
+fn buffer_text_fragment_advance_resolver_returns_natural_measurement_for_ascii() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut resolver = BufferTextFragmentAdvanceResolver::default();
+
+    let resolved = resolver.resolve_to_text_row(
+        &mut builder,
+        &mut eval,
+        &mut font_metrics,
+        b"x",
+        0,
+        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
+        &face_resolver,
+        buf_id,
+        &snapshot,
+        &active_face,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        'x',
+        false,
+    );
+
+    assert_eq!(resolved.advance_px(), 8.0);
+    assert_eq!(
+        resolved.append_measurement(),
+        BufferTextFragmentAppendMeasurement::Natural
+    );
+}
+
+#[test]
+fn buffer_text_fragment_advance_resolver_returns_resolved_measurement_for_complex_text() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut resolver = BufferTextFragmentAdvanceResolver::default();
+
+    let resolved = resolver.resolve_to_text_row(
+        &mut builder,
+        &mut eval,
+        &mut font_metrics,
+        "\u{0633}".as_bytes(),
+        0,
+        DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1)),
+        &face_resolver,
+        buf_id,
+        &snapshot,
+        &active_face,
+        frame,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        '\u{0633}',
+        false,
+    );
+
+    assert_eq!(resolved.advance_px(), 8.0);
+    assert_eq!(
+        resolved.append_measurement(),
+        BufferTextFragmentAppendMeasurement::ResolvedAdvance { advance_px: 8.0 }
+    );
+}
+
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
     let item = synthetic_display_text_item(9, "...", 7);

@@ -34,13 +34,13 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy, DisplayRowFace,
-    DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderStop,
-    DisplayRowSourceState, WindowChromeKind, insert_resolved_display_row_face,
+    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
+    DisplayRowMeasurementPolicy, DisplayRowRenderStop, DisplayRowSourceState, WindowChromeKind,
+    insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAppendMeasurement, DisplayReplacementStringItemMeasurer,
-    DisplayRowAppendArea, DisplayRowAppendFrame, DisplayRowAppendMetrics, DisplayRowAppendSurface,
+    BufferTextFragmentAdvanceResolver, DisplayReplacementStringItemMeasurer, DisplayRowAppendArea,
+    DisplayRowAppendFrame, DisplayRowAppendMetrics, DisplayRowAppendSurface,
     append_buffer_text_item_fragment_to_text_row_and_emit,
     append_display_replacement_item_kind_to_text_row_and_emit,
     append_display_replacement_source_mapped_text_to_text_row_and_emit,
@@ -49,7 +49,6 @@ use crate::display_row_append::{
     append_lisp_string_fragment_to_text_row_and_emit,
     append_measured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
     render_lisp_string_source_append_to_text_row_and_emit,
-    resolve_buffer_text_fragment_natural_advance_to_text_row,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -61,7 +60,6 @@ use crate::display_row_geometry::{
 use crate::display_source::{BufferDisplayReplacementSource, DisplayReplacementBox};
 use crate::display_source_resolver::resolve_display_property_media;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::LayoutBufferView;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -3924,7 +3922,7 @@ impl LayoutEngine {
         // Exact joined-form advances for the current contextual-shaping run,
         // shaped once via shape_run and keyed by absolute byte offset (robust
         // to wrap re-processing). Empty/unused for non-complex text.
-        let mut complex_run_advance = ComplexTextRunAdvanceResolver::default();
+        let mut buffer_text_advance = BufferTextFragmentAdvanceResolver::default();
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
@@ -5331,37 +5329,23 @@ impl LayoutEngine {
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            let complex_text = crate::composition::needs_complex_shaping(ch);
-            let advance = if complex_text {
-                let mut policy = DisplayRowComplexTextRunAdvancePolicy::new(
-                    &active_face_state,
-                    &mut self.font_metrics,
-                );
-                complex_run_advance.advance_for_char(
-                    &text,
-                    ch_start_byte_idx,
-                    ch,
-                    is_cluster_continuation,
-                    &mut policy,
-                )
-            } else if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
-                resolve_buffer_text_fragment_natural_advance_to_text_row(
-                    &mut self.matrix_builder,
-                    evaluator,
-                    &mut self.font_metrics,
-                    buffer_text_fragment.clone(),
-                    face_resolver,
-                    buf_id,
-                    buffer,
-                    &active_face_state,
-                    frame.clone(),
-                    append_position,
-                    ch,
-                    is_cluster_continuation,
-                )
-            } else {
-                active_face_state.advance_for_columns(&mut self.font_metrics, ch, 1)
-            };
+            let resolved_advance = buffer_text_advance.resolve_to_text_row(
+                &mut self.matrix_builder,
+                evaluator,
+                &mut self.font_metrics,
+                &text,
+                ch_start_byte_idx,
+                buffer_text_fragment.clone(),
+                face_resolver,
+                buf_id,
+                buffer,
+                &active_face_state,
+                frame.clone(),
+                append_position,
+                ch,
+                is_cluster_continuation,
+            );
+            let advance = resolved_advance.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > content_x + avail_width {
                 flush_run(&self.run_buf, ligatures);
@@ -5616,13 +5600,6 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let append_measurement = if complex_text {
-                BufferTextFragmentAppendMeasurement::ResolvedAdvance {
-                    advance_px: advance,
-                }
-            } else {
-                BufferTextFragmentAppendMeasurement::Natural
-            };
             let appended = append_measured_buffer_text_fragment_to_text_row(
                 &mut self.matrix_builder,
                 &mut output_emitter,
@@ -5634,7 +5611,7 @@ impl LayoutEngine {
                 buf_id,
                 buffer,
                 active_face_state.face_id(),
-                append_measurement,
+                resolved_advance.append_measurement(),
                 frame,
                 append_position,
             );

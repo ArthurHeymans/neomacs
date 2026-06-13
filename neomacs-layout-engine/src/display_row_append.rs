@@ -10,10 +10,10 @@ use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
-    DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
-    DisplayRowRenderContext, DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy, DisplayRowGeometry,
+    DisplayRowMeasuredFaceMetrics, DisplayRowOutputProgress, DisplayRowRenderBounds,
+    DisplayRowRenderClipBehavior, DisplayRowRenderContext, DisplayRowRenderPolicy,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRenderRequest, DisplayRowSourceState,
     install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
@@ -32,7 +32,9 @@ use crate::display_source::{
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_text::{DisplayTextFragment, DisplayTextStorage};
-use crate::display_text_run_measurement::DisplayTextRunMeasurementPlan;
+use crate::display_text_run_measurement::{
+    ComplexTextRunAdvanceResolver, DisplayTextRunMeasurementPlan,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -104,9 +106,45 @@ struct NaturalDisplayRowAppendRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum BufferTextFragmentAppendMeasurement {
     Natural,
     ResolvedAdvance { advance_px: f32 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ResolvedBufferTextFragmentAdvance {
+    advance_px: f32,
+    append_measurement: BufferTextFragmentAppendMeasurement,
+}
+
+impl ResolvedBufferTextFragmentAdvance {
+    fn natural(advance_px: f32) -> Self {
+        Self {
+            advance_px,
+            append_measurement: BufferTextFragmentAppendMeasurement::Natural,
+        }
+    }
+
+    fn resolved(advance_px: f32) -> Self {
+        Self {
+            advance_px,
+            append_measurement: BufferTextFragmentAppendMeasurement::ResolvedAdvance { advance_px },
+        }
+    }
+
+    pub(crate) fn advance_px(self) -> f32 {
+        self.advance_px
+    }
+
+    pub(crate) fn append_measurement(self) -> BufferTextFragmentAppendMeasurement {
+        self.append_measurement
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct BufferTextFragmentAdvanceResolver {
+    complex_run: ComplexTextRunAdvanceResolver,
 }
 
 enum BufferTextFragmentRenderPolicy {
@@ -813,6 +851,64 @@ pub(crate) fn fallback_buffer_text_fragment_natural_advance_to_text_row(
     }
     let char_cols = crate::composition::base_width_cols(ch) as usize;
     active_face_state.advance_for_columns(font_metrics, ch, char_cols)
+}
+
+impl BufferTextFragmentAdvanceResolver {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_to_text_row<B: LayoutBufferView + ?Sized>(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        text: &[u8],
+        byte_idx: usize,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        buffer_id: BufferId,
+        buffer: &B,
+        active_face_state: &DisplayRowActiveFaceState,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        ch: char,
+        is_cluster_continuation: bool,
+    ) -> ResolvedBufferTextFragmentAdvance {
+        if crate::composition::needs_complex_shaping(ch) {
+            let mut policy =
+                DisplayRowComplexTextRunAdvancePolicy::new(active_face_state, font_metrics);
+            let advance_px = self.complex_run.advance_for_char(
+                text,
+                byte_idx,
+                ch,
+                is_cluster_continuation,
+                &mut policy,
+            );
+            return ResolvedBufferTextFragmentAdvance::resolved(advance_px);
+        }
+
+        if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
+            let advance_px = resolve_buffer_text_fragment_natural_advance_to_text_row(
+                builder,
+                evaluator,
+                font_metrics,
+                fragment,
+                face_resolver,
+                buffer_id,
+                buffer,
+                active_face_state,
+                frame,
+                position,
+                ch,
+                is_cluster_continuation,
+            );
+            return ResolvedBufferTextFragmentAdvance::natural(advance_px);
+        }
+
+        ResolvedBufferTextFragmentAdvance::natural(active_face_state.advance_for_columns(
+            font_metrics,
+            ch,
+            1,
+        ))
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
