@@ -1859,9 +1859,25 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(0), CharPos0::new(1));
+    let item = BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' };
 
     let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
-    let (_progress, end) = append_context
+    let measured_width = append_context
+        .measure_fragment_width_to_text_row(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            fragment.clone(),
+            &face_resolver,
+            item.clone(),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("measured buffer text item fragment");
+    builder
+        .with_current_row_mut(|row| assert!(row.glyphs[1].is_empty()))
+        .expect("current row");
+
+    let (progress, end) = append_context
         .append_fragment_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
@@ -1869,12 +1885,14 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             &mut font_metrics,
             fragment,
             &face_resolver,
-            BufferTextFragmentAppendItem::ControlChar { ch: '\u{0001}' },
+            item,
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended buffer text item fragment");
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(measured_width, 16.0);
+    assert_eq!(progress.metrics.width_px, measured_width);
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];

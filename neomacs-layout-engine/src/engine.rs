@@ -5132,9 +5132,39 @@ impl LayoutEngine {
             if (ch < ' ' && ch != '\t') || ch == '\x7F' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let needed_width = 2.0 * face_metrics.char_width;
+                let buffer_text_fragment = DisplayTextFragment::buffer_text(
+                    CharPos0::new(charpos as usize),
+                    CharPos0::new((charpos + 1) as usize),
+                );
+                let text_item_frame = DisplayRowActiveFaceAppendContext::new(
+                    &text_append_surface,
+                    &row_geometry,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                    char_h,
+                )
+                .active_face_frame();
+                let append_context = BufferTextItemAppendContext::new(
+                    buffer,
+                    buf_id,
+                    active_face_state.face_id(),
+                    active_face_state.resolved_face(),
+                    text_item_frame,
+                );
+                let control_item = BufferTextFragmentAppendItem::ControlChar { ch };
+                let needed_width = append_context
+                    .measure_fragment_width_to_text_row(
+                        &mut self.matrix_builder,
+                        evaluator,
+                        &mut self.font_metrics,
+                        buffer_text_fragment.clone(),
+                        face_resolver,
+                        control_item.clone(),
+                        DisplayRowPosition { x_px: x, col },
+                    )
+                    .unwrap_or(2.0 * face_metrics.char_width);
 
-                // Check if we have room for ^X (2 columns)
+                // Check if the renderer-measured caret notation fits.
                 if x + needed_width > text_append_surface.full_text_right_edge() {
                     // Doesn't fit — wrap or truncate
                     if params.truncate_lines {
@@ -5235,25 +5265,6 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     let _ = face_ids.allocate();
                 }
-                let buffer_text_fragment = DisplayTextFragment::buffer_text(
-                    CharPos0::new(charpos as usize),
-                    CharPos0::new((charpos + 1) as usize),
-                );
-                let text_item_frame = DisplayRowActiveFaceAppendContext::new(
-                    &text_append_surface,
-                    &row_geometry,
-                    &active_face_state,
-                    raise_span.value_or(0.0),
-                    char_h,
-                )
-                .active_face_frame();
-                let append_context = BufferTextItemAppendContext::new(
-                    buffer,
-                    buf_id,
-                    active_face_state.face_id(),
-                    active_face_state.resolved_face(),
-                    text_item_frame,
-                );
                 if let Some((_progress, position)) = append_context
                     .append_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
@@ -5262,7 +5273,7 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                         buffer_text_fragment,
                         face_resolver,
-                        BufferTextFragmentAppendItem::ControlChar { ch },
+                        control_item,
                         DisplayRowPosition { x_px: x, col },
                     )
                 {

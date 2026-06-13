@@ -1213,22 +1213,13 @@ impl BufferTextFragmentAdvanceResolver {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
+fn buffer_display_item_fragment_source_item<B: LayoutBufferView + ?Sized>(
     fragment: DisplayTextFragment,
-    buffer: &B,
     buffer_id: BufferId,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
+    buffer: &B,
     face_id: u32,
     item: BufferTextFragmentAppendItem,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+) -> Option<(DisplayItem, DisplayRowAppendKind)> {
     let DisplayTextStorage::BufferSpan { start, end } = fragment.storage else {
         return None;
     };
@@ -1252,6 +1243,27 @@ fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView 
         RenderFaceRef::FaceId(face_id),
         item.into_display_item_kind(),
     );
+    Some((item, append_kind))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView + ?Sized>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    fragment: DisplayTextFragment,
+    buffer: &B,
+    buffer_id: BufferId,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    face_id: u32,
+    item: BufferTextFragmentAppendItem,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let (item, append_kind) =
+        buffer_display_item_fragment_source_item(fragment, buffer_id, buffer, face_id, item)?;
     let append_spec = frame.append_spec(position, face_id, append_kind);
     let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
     let mut source = SingleDisplayItemSource::new(item);
@@ -1275,6 +1287,50 @@ fn append_buffer_display_item_fragment_to_text_row_and_emit<B: LayoutBufferView 
         outcome.source_slots,
     );
     Some((progress, outcome.end))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn measure_buffer_display_item_fragment_append_progress_to_text_row<
+    B: LayoutBufferView + ?Sized,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    fragment: DisplayTextFragment,
+    buffer: &B,
+    buffer_id: BufferId,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    face_id: u32,
+    item: BufferTextFragmentAppendItem,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<DisplayRowAppendProgress> {
+    let (item, append_kind) =
+        buffer_display_item_fragment_source_item(fragment, buffer_id, buffer, face_id, item)?;
+    let append_spec = frame.append_spec(position, face_id, append_kind);
+    let request = DisplayRowSourceAppendRequest::from_append_spec(append_spec, face_id, base_face);
+    let mut source = SingleDisplayItemSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    let outcome = measure_display_source_append_request_against_current_text_row(
+        builder,
+        evaluator,
+        font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        &mut face_ids,
+        request,
+        &mut render_policy,
+    )?;
+    Some(display_row_append_progress_from_render_result(
+        position,
+        outcome.end,
+        outcome.stop,
+        outcome.source_slots,
+    ))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1357,6 +1413,37 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
             item,
             self.frame.clone(),
             position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn measure_fragment_width_to_text_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        fragment: DisplayTextFragment,
+        face_resolver: &FaceResolver,
+        item: BufferTextFragmentAppendItem,
+        position: DisplayRowPosition,
+    ) -> Option<f32> {
+        Some(
+            measure_buffer_display_item_fragment_append_progress_to_text_row(
+                builder,
+                evaluator,
+                font_metrics,
+                fragment,
+                self.buffer,
+                self.buffer_id,
+                face_resolver,
+                self.base_face,
+                self.face_id,
+                item,
+                self.frame.clone(),
+                position,
+            )?
+            .metrics
+            .width_px,
         )
     }
 }
