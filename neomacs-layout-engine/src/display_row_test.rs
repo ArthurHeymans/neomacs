@@ -386,7 +386,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
             .expect("string source");
     let mut state = DisplayRowSourceState::default();
-    let mut next_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let (first, second, third) = {
         let mut next_item = || {
             state.next_resolved_item(
@@ -401,7 +401,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
                     fallback_ascent: 12.0,
                     fallback_row_height: 16.0,
                 },
-                &mut next_face_id,
+                &mut face_ids,
             )
         };
         (next_item(), next_item(), next_item())
@@ -422,7 +422,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         RenderFaceRef::FaceId(20)
     );
     assert!(third.pending_faces.is_empty());
-    assert_eq!(next_face_id, 21);
+    assert_eq!(face_ids.finish(), 21);
 }
 
 #[test]

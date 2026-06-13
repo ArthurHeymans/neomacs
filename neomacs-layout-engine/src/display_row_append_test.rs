@@ -979,7 +979,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1010,7 +1010,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
                     &face_resolver,
                     base_face,
                     0,
-                    &mut current_face_id,
+                    &mut face_ids,
                     None,
                     8.0,
                     12.0,
@@ -1026,7 +1026,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
     assert_eq!(first.face, RenderFaceRef::FaceId(20));
     assert_eq!(second.face, RenderFaceRef::FaceId(0));
     assert_eq!(third.face, RenderFaceRef::FaceId(20));
-    assert_eq!(current_face_id, 21);
+    assert_eq!(face_ids.finish(), 21);
     assert_eq!(
         builder.faces().get(&20).map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))

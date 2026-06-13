@@ -1024,7 +1024,7 @@ impl DisplayRowSourceState {
         &mut self,
         source: &mut impl DisplayItemSource,
         params: DisplaySourceResolveParams<'_>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> ResolvedDisplaySourceItem {
         if self.is_finished() {
             return ResolvedDisplaySourceItem {
@@ -1038,8 +1038,12 @@ impl DisplayRowSourceState {
                 pending_faces: Vec::new(),
             };
         }
-        let resolved =
-            resolve_next_display_source_item(source, params, &mut self.resolve_state, next_face_id);
+        let resolved = resolve_next_display_source_item(
+            source,
+            params,
+            &mut self.resolve_state,
+            face_ids.raw_mut(),
+        );
         if resolved.item.is_none() {
             self.mark_exhausted();
         }
@@ -1100,7 +1104,7 @@ impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
         face_resolver: &FaceResolver,
         base_face: &ResolvedFace,
         base_face_id: u32,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
         display_host: Option<&dyn DisplayHost>,
         fallback_char_width: f32,
         fallback_ascent: f32,
@@ -1118,7 +1122,7 @@ impl<S: DisplayItemSource> DisplayRowSourceWalker<S> {
                 fallback_ascent,
                 fallback_row_height,
             },
-            next_face_id,
+            face_ids,
         );
         resolved.item.map(|item| DisplayRowSourceStep {
             item,
@@ -2018,7 +2022,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     fallback_ascent: geometry.ascent,
                     fallback_row_height: geometry.height,
                 },
-                face_ids.raw_mut(),
+                face_ids,
             );
             let item = resolved.item;
             for pending in resolved.pending_faces {

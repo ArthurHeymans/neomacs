@@ -788,7 +788,7 @@ pub(crate) fn append_display_item_source_to_text_row<
                 face_resolver,
                 base_face,
                 fallback_face_id,
-                face_ids.raw_mut(),
+                face_ids,
                 display_host,
                 fallback_char_width,
                 fallback_ascent,
