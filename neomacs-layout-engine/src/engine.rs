@@ -45,7 +45,7 @@ use crate::display_row_append::{
     DisplayReplacementSourceMappedTextAppendItem, DisplayReplacementStretchAppendItem,
     DisplayReplacementStringAppendItem, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
     DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
-    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextAppendContext,
+    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4317,18 +4317,16 @@ impl LayoutEngine {
                         flush_run(&self.run_buf, ligatures);
                         self.run_buf.clear();
 
-                        let ellipsis_frame = DisplayRowActiveFaceAppendContext::new(
+                        let append_context = SyntheticTextRowAppendContext::new(
                             &text_append_surface,
                             &row_geometry,
                             &active_face_state,
                             raise_span.value_or(0.0),
                             char_h,
                         )
-                        .active_face_frame();
-                        let append_context = SyntheticTextAppendContext::new(
+                        .active_face(
                             active_face_state.face_id(),
                             active_face_state.resolved_face(),
-                            ellipsis_frame,
                         );
                         if let Some((_progress, position)) = append_context
                             .append_to_text_row_and_emit(
@@ -4479,23 +4477,19 @@ impl LayoutEngine {
 
                     // When hscroll is exhausted, show $ indicator at left edge
                     if !hscroll_skip.should_skip() && hscroll_skip.should_show_left_truncation() {
-                        let trunc_face_id: u32 = BasicFaceId::Default.into();
-                        let trunc_frame = DisplayRowActiveFaceAppendContext::new(
+                        let append_context = SyntheticTextRowAppendContext::new(
                             &text_append_surface,
                             &row_geometry,
                             &active_face_state,
                             0.0,
                             char_h,
                         )
-                        .text_row_frame(
+                        .text_row(
+                            BasicFaceId::Default.into(),
+                            face_resolver.default_face(),
                             char_h,
                             default_face_ascent,
                             char_w,
-                        );
-                        let append_context = SyntheticTextAppendContext::new(
-                            trunc_face_id,
-                            face_resolver.default_face(),
-                            trunc_frame,
                         );
                         if let Some((_progress, position)) = append_context
                             .append_to_text_row_and_emit(
@@ -4897,18 +4891,16 @@ impl LayoutEngine {
             if selective_display > 0 && ch == '\r' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let ellipsis_frame = DisplayRowActiveFaceAppendContext::new(
+                let append_context = SyntheticTextRowAppendContext::new(
                     &text_append_surface,
                     &row_geometry,
                     &active_face_state,
                     raise_span.value_or(0.0),
                     char_h,
                 )
-                .active_face_frame();
-                let append_context = SyntheticTextAppendContext::new(
+                .active_face(
                     active_face_state.face_id(),
                     active_face_state.resolved_face(),
-                    ellipsis_frame,
                 );
                 if let Some((_progress, position)) = append_context.append_to_text_row_and_emit(
                     &mut self.matrix_builder,

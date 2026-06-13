@@ -763,6 +763,59 @@ impl<'a> SyntheticTextAppendContext<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct SyntheticTextRowAppendContext<'a> {
+    active_face_context: DisplayRowActiveFaceAppendContext<'a>,
+}
+
+impl<'a> SyntheticTextRowAppendContext<'a> {
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &'a DisplayRowGeometryState,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            active_face_context: DisplayRowActiveFaceAppendContext::new(
+                append_surface,
+                geometry,
+                active_face,
+                glyph_y_offset,
+                default_row_height,
+            ),
+        }
+    }
+
+    pub(crate) fn active_face(
+        self,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+    ) -> SyntheticTextAppendContext<'a> {
+        SyntheticTextAppendContext::new(
+            face_id,
+            base_face,
+            self.active_face_context.active_face_frame(),
+        )
+    }
+
+    pub(crate) fn text_row(
+        self,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        height_px: f32,
+        ascent_px: f32,
+        char_width_px: f32,
+    ) -> SyntheticTextAppendContext<'a> {
+        SyntheticTextAppendContext::new(
+            face_id,
+            base_face,
+            self.active_face_context
+                .text_row_frame(height_px, ascent_px, char_width_px),
+        )
+    }
+}
+
 pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     match face {
         RenderFaceRef::FaceId(face_id) => face_id,

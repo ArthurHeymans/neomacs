@@ -486,14 +486,25 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver.default_face();
+    let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let append_context =
+        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0)
+            .active_face(active_face.face_id(), active_face.resolved_face());
     let (progress, end) = append_context
         .append_to_text_row_and_emit(
             &mut builder,
@@ -2919,27 +2930,21 @@ fn synthetic_text_append_context_uses_source_append_request() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame_at(
-        0,
-        0.0,
-        0.0,
+    let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea {
             content_x: 0.0,
             width: 80.0,
             text_width: 80.0,
             line_number_width: 0.0,
         },
-        DisplayRowAppendMetrics {
-            height: 16.0,
-            ascent: 12.0,
-            char_width: 8.0,
-            space_width: 8.0,
-            default_row_height: 10.0,
-        },
         DisplayTabPolicy::every(8),
     );
+    let active_face = test_active_face_state(3, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 18.0, 13.0);
 
-    let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
+    let append_context =
+        SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0)
+            .text_row(7, base_face, 16.0, 12.0, 8.0);
     let (_progress, end) = append_context
         .append_to_text_row_and_emit(
             &mut builder,
