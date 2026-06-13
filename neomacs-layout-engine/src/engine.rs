@@ -2016,6 +2016,38 @@ impl OverlayStringRenderSource {
     }
 }
 
+#[derive(Clone, Copy)]
+struct OverlayStringRenderBatchSource<'a> {
+    overlay_strings: &'a [super::neovm_bridge::OverlayDisplayString],
+    anchor_charpos: CharPos0,
+    kind: OverlayStringKind,
+}
+
+impl<'a> OverlayStringRenderBatchSource<'a> {
+    fn new(
+        overlay_strings: &'a [super::neovm_bridge::OverlayDisplayString],
+        anchor_charpos: CharPos0,
+        kind: OverlayStringKind,
+    ) -> Self {
+        Self {
+            overlay_strings,
+            anchor_charpos,
+            kind,
+        }
+    }
+
+    fn is_empty(self) -> bool {
+        self.overlay_strings.is_empty()
+    }
+
+    fn source_for(
+        self,
+        overlay_string: super::neovm_bridge::OverlayDisplayString,
+    ) -> OverlayStringRenderSource {
+        OverlayStringRenderSource::new(overlay_string, self.anchor_charpos, self.kind)
+    }
+}
+
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
@@ -2182,9 +2214,7 @@ fn render_overlay_string_batch<B: super::neovm_bridge::LayoutBufferView>(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
     buffer: &B,
-    overlay_strings: &[super::neovm_bridge::OverlayDisplayString],
-    anchor_charpos: CharPos0,
-    kind: OverlayStringKind,
+    source_batch: OverlayStringRenderBatchSource<'_>,
     font_metrics: &mut Option<FontMetricsService>,
     face_resolver: &super::neovm_bridge::FaceResolver,
     x: &mut f32,
@@ -2198,12 +2228,15 @@ fn render_overlay_string_batch<B: super::neovm_bridge::LayoutBufferView>(
     face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) {
-    for overlay_string in overlay_strings {
+    if source_batch.is_empty() {
+        return;
+    }
+    for overlay_string in source_batch.overlay_strings {
         render_overlay_string(
             evaluator,
             output_emitter,
             buffer,
-            OverlayStringRenderSource::new(*overlay_string, anchor_charpos, kind),
+            source_batch.source_for(*overlay_string),
             font_metrics,
             face_resolver,
             x,
@@ -4384,9 +4417,11 @@ impl LayoutEngine {
                                 evaluator,
                                 &mut output_emitter,
                                 buffer,
-                                &after_strings,
-                                CharPos0::new(charpos as usize),
-                                OverlayStringKind::After,
+                                OverlayStringRenderBatchSource::new(
+                                    &after_strings,
+                                    CharPos0::new(charpos as usize),
+                                    OverlayStringKind::After,
+                                ),
                                 &mut self.font_metrics,
                                 face_resolver,
                                 &mut x,
@@ -5413,9 +5448,11 @@ impl LayoutEngine {
                         evaluator,
                         &mut output_emitter,
                         buffer,
-                        &before_strings,
-                        CharPos0::new(charpos as usize),
-                        OverlayStringKind::Before,
+                        OverlayStringRenderBatchSource::new(
+                            &before_strings,
+                            CharPos0::new(charpos as usize),
+                            OverlayStringKind::Before,
+                        ),
                         &mut self.font_metrics,
                         face_resolver,
                         &mut x,
@@ -5500,9 +5537,11 @@ impl LayoutEngine {
                         evaluator,
                         &mut output_emitter,
                         buffer,
-                        &after_strings,
-                        CharPos0::new(charpos as usize),
-                        OverlayStringKind::After,
+                        OverlayStringRenderBatchSource::new(
+                            &after_strings,
+                            CharPos0::new(charpos as usize),
+                            OverlayStringKind::After,
+                        ),
                         &mut self.font_metrics,
                         face_resolver,
                         &mut x,
@@ -5578,9 +5617,11 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 buffer,
-                &before_strings,
-                CharPos0::new(charpos as usize),
-                OverlayStringKind::Before,
+                OverlayStringRenderBatchSource::new(
+                    &before_strings,
+                    CharPos0::new(charpos as usize),
+                    OverlayStringKind::Before,
+                ),
                 &mut self.font_metrics,
                 face_resolver,
                 &mut x,
@@ -5606,9 +5647,11 @@ impl LayoutEngine {
                 evaluator,
                 &mut output_emitter,
                 buffer,
-                &after_strings,
-                CharPos0::new(charpos as usize),
-                OverlayStringKind::After,
+                OverlayStringRenderBatchSource::new(
+                    &after_strings,
+                    CharPos0::new(charpos as usize),
+                    OverlayStringKind::After,
+                ),
                 &mut self.font_metrics,
                 face_resolver,
                 &mut x,
