@@ -930,6 +930,48 @@ fn display_row_append_context_derives_layout_output_and_bounds() {
 }
 
 #[test]
+fn display_row_append_kind_names_width_clip_and_output_policy() {
+    let context = DisplayRowAppendContext {
+        row: 3,
+        glyph_y: 22.0,
+        x: 8.0,
+        col: 0,
+        geometry: DisplayRowGeometry {
+            y: 20.0,
+            width: 120.0,
+            height: 16.0,
+            char_width: 9.0,
+            ascent: 11.0,
+            tab_policy: DisplayTabPolicy::every(4),
+        },
+        default_row_height: 14.0,
+        content_x: 8.0,
+        text_width: 150.0,
+        line_number_width: 10.0,
+        face_space_width: 7.0,
+        face_id: 42,
+    };
+
+    assert_eq!(DisplayRowAppendKind::SourceText.char_width(&context), 9.0);
+    assert_eq!(DisplayRowAppendKind::Tab.char_width(&context), 7.0);
+    assert_eq!(
+        DisplayRowAppendKind::DisplayReplacementString.char_width(&context),
+        7.0
+    );
+    assert!(DisplayRowAppendKind::Tab.max_x(&context).is_infinite());
+    assert_eq!(DisplayRowAppendKind::ControlChar.max_x(&context), 148.0);
+    assert_eq!(DisplayRowAppendKind::Glyphless.max_x(&context), 128.0);
+    assert_eq!(
+        DisplayRowAppendKind::DisplayReplacement.output_height(&context),
+        16.0
+    );
+    assert_eq!(
+        DisplayRowAppendKind::ControlChar.output_height(&context),
+        14.0
+    );
+}
+
+#[test]
 fn display_row_append_frame_builds_positioned_context() {
     let tab_policy = DisplayTabPolicy::every(4);
     let frame = test_append_frame_at(

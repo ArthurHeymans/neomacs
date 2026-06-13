@@ -3227,6 +3227,43 @@ enum DisplayRowAppendKind {
     DisplayReplacementString,
 }
 
+impl DisplayRowAppendKind {
+    fn char_width(self, context: &DisplayRowAppendContext) -> f32 {
+        match self {
+            Self::Tab | Self::DisplayReplacementString => context.face_space_width,
+            Self::SourceText
+            | Self::ControlChar
+            | Self::SourceMappedText
+            | Self::Glyphless
+            | Self::DisplayReplacement => context.geometry.char_width,
+        }
+    }
+
+    fn max_x(self, context: &DisplayRowAppendContext) -> f32 {
+        match self {
+            Self::Tab => f32::INFINITY,
+            Self::ControlChar => {
+                context.content_x + (context.text_width - context.line_number_width)
+            }
+            Self::SourceText
+            | Self::SourceMappedText
+            | Self::Glyphless
+            | Self::DisplayReplacement
+            | Self::DisplayReplacementString => context.content_x + context.geometry.width,
+        }
+    }
+
+    fn output_height(self, context: &DisplayRowAppendContext) -> f32 {
+        match self {
+            Self::SourceText
+            | Self::Glyphless
+            | Self::DisplayReplacement
+            | Self::DisplayReplacementString => context.geometry.height,
+            Self::Tab | Self::ControlChar | Self::SourceMappedText => context.default_row_height,
+        }
+    }
+}
+
 struct DisplayRowAppendSpec {
     geometry: DisplayRowGeometry,
     layout: DisplayRowLayout,
@@ -3237,35 +3274,9 @@ struct DisplayRowAppendSpec {
 
 impl DisplayRowAppendContext {
     fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
-        let char_width = match kind {
-            DisplayRowAppendKind::Tab => self.face_space_width,
-            DisplayRowAppendKind::DisplayReplacementString => self.face_space_width,
-            DisplayRowAppendKind::SourceText => self.geometry.char_width,
-            DisplayRowAppendKind::ControlChar => self.geometry.char_width,
-            DisplayRowAppendKind::SourceMappedText => self.geometry.char_width,
-            DisplayRowAppendKind::Glyphless => self.geometry.char_width,
-            DisplayRowAppendKind::DisplayReplacement => self.geometry.char_width,
-        };
-        let max_x = match kind {
-            DisplayRowAppendKind::Tab => f32::INFINITY,
-            DisplayRowAppendKind::ControlChar => {
-                self.content_x + (self.text_width - self.line_number_width)
-            }
-            DisplayRowAppendKind::SourceText => self.content_x + self.geometry.width,
-            DisplayRowAppendKind::SourceMappedText => self.content_x + self.geometry.width,
-            DisplayRowAppendKind::Glyphless => self.content_x + self.geometry.width,
-            DisplayRowAppendKind::DisplayReplacement => self.content_x + self.geometry.width,
-            DisplayRowAppendKind::DisplayReplacementString => self.content_x + self.geometry.width,
-        };
-        let output_height = match kind {
-            DisplayRowAppendKind::SourceText => self.geometry.height,
-            DisplayRowAppendKind::Glyphless => self.geometry.height,
-            DisplayRowAppendKind::DisplayReplacement => self.geometry.height,
-            DisplayRowAppendKind::DisplayReplacementString => self.geometry.height,
-            DisplayRowAppendKind::Tab => self.default_row_height,
-            DisplayRowAppendKind::ControlChar => self.default_row_height,
-            DisplayRowAppendKind::SourceMappedText => self.default_row_height,
-        };
+        let char_width = kind.char_width(self);
+        let max_x = kind.max_x(self);
+        let output_height = kind.output_height(self);
 
         DisplayRowAppendSpec {
             geometry: DisplayRowGeometry {
