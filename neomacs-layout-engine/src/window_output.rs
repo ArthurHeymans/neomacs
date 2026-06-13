@@ -13,6 +13,7 @@ use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::matrix_builder::GlyphMatrixBuilder;
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
@@ -185,6 +186,19 @@ pub(crate) struct TextWindowCursor {
     pub(crate) cursor_fg: Color,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TextWindowDecorativeCursor {
+    pub(crate) window_id: i64,
+    pub(crate) slot_id: DisplaySlotId,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) style: CursorStyle,
+    pub(crate) color: Color,
+    pub(crate) effects: Option<EffectsConfig>,
 }
 
 impl TextWindowCursor {
@@ -424,6 +438,25 @@ pub(crate) fn publish_text_window_cursor(
     if cursor.selected {
         builder.set_phys_cursor(cursor.phys_cursor());
     }
+}
+
+pub(crate) fn publish_text_window_decorative_cursor(
+    builder: &mut GlyphMatrixBuilder,
+    cursor: TextWindowDecorativeCursor,
+) {
+    if let Some(effects) = cursor.effects {
+        builder.set_window_cursor_effects(cursor.window_id, effects);
+    }
+    builder.push_cursor(
+        cursor.window_id,
+        cursor.slot_id,
+        cursor.x,
+        cursor.y,
+        cursor.width,
+        cursor.height,
+        cursor.style,
+        cursor.color,
+    );
 }
 
 pub(crate) fn finish_text_window_output_rows(

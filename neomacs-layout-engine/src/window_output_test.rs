@@ -7,6 +7,7 @@ use super::TextMatrixRowOutput;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
 use super::TextWindowCursor;
+use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
 use super::TextWindowLineNumberMargin;
 use super::TextWindowRightEdgeMarkerColumn;
@@ -21,6 +22,7 @@ use super::finish_text_matrix_row_output;
 use super::install_text_window_right_edge_markers;
 use super::mark_current_text_row_truncated_left;
 use super::publish_text_window_cursor;
+use super::publish_text_window_decorative_cursor;
 use super::record_text_window_display_range;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
@@ -30,6 +32,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::display_status_line::DisplayRowOutputProgress;
 use crate::matrix_builder::GlyphMatrixBuilder;
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, WindowInfo,
 };
@@ -620,6 +623,39 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     assert_eq!(live.y, 16);
     assert_eq!(live.row, 0);
     assert_eq!(live.col, 0);
+}
+
+#[test]
+fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only() {
+    let mut builder = GlyphMatrixBuilder::new();
+    let effects = EffectsConfig::default();
+
+    publish_text_window_decorative_cursor(
+        &mut builder,
+        TextWindowDecorativeCursor {
+            window_id: 77,
+            slot_id: DisplaySlotId {
+                window_id: 77,
+                row: 3,
+                col: 5,
+            },
+            x: 40.0,
+            y: 24.0,
+            width: 8.0,
+            height: 16.0,
+            style: CursorStyle::Bar(2.0),
+            color: Color::WHITE,
+            effects: Some(effects.clone()),
+        },
+    );
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert!(state.phys_cursor.is_none());
+    assert_eq!(state.cursors.len(), 1);
+    assert_eq!(state.cursors[0].window_id, 77);
+    assert_eq!(state.cursors[0].slot_id.row, 3);
+    assert_eq!(state.cursors[0].slot_id.col, 5);
+    assert_eq!(state.cursor_effects_by_window.get(&77), Some(&effects));
 }
 
 #[test]

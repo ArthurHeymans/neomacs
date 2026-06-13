@@ -15,14 +15,15 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowCursor, TextWindowDisplayRange,
-    TextWindowLineNumberMargin, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
-    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
-    finish_text_matrix_row_output, finish_text_window_output_rows,
-    install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
-    publish_text_window_cursor, record_text_window_display_range,
+    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowCursor,
+    TextWindowDecorativeCursor, TextWindowDisplayRange, TextWindowLineNumberMargin,
+    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
+    begin_text_window_output, close_text_window_output, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
+    finish_and_end_text_matrix_row_output, finish_text_matrix_row_output,
+    finish_text_window_output_rows, install_text_window_right_edge_markers,
+    mark_current_text_row_truncated_left, publish_text_window_cursor,
+    publish_text_window_decorative_cursor, record_text_window_display_range,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -6124,19 +6125,19 @@ impl LayoutEngine {
             {
                 continue;
             }
-            if let Some(effects) = spec.effects.clone() {
-                self.matrix_builder
-                    .set_window_cursor_effects(spec.id as i64, effects);
-            }
-            self.matrix_builder.push_cursor(
-                resolved_cursor.window_id(),
-                resolved_cursor.slot_id,
-                resolved_cursor.x,
-                resolved_cursor.y,
-                resolved_cursor.width,
-                resolved_cursor.height,
-                resolved_cursor.style,
-                resolved_cursor.color,
+            publish_text_window_decorative_cursor(
+                &mut self.matrix_builder,
+                TextWindowDecorativeCursor {
+                    window_id: resolved_cursor.window_id(),
+                    slot_id: resolved_cursor.slot_id,
+                    x: resolved_cursor.x,
+                    y: resolved_cursor.y,
+                    width: resolved_cursor.width,
+                    height: resolved_cursor.height,
+                    style: resolved_cursor.style,
+                    color: resolved_cursor.color,
+                    effects: spec.effects.clone(),
+                },
             );
         }
 
