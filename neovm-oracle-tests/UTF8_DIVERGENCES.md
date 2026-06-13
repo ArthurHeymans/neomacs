@@ -19,7 +19,7 @@ cargo nextest run -p neovm-oracle-tests -E 'test(/div_utf8/)' --no-fail-fast
 GNU Emacs is expected on `PATH` (or `NEOVM_FORCE_ORACLE_PATH=/path/to/emacs`);
 the Neomacs binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH=...`).
 
-Scope at time of writing: **195 tests, 160 pass, 35 divergences.**
+Scope at time of writing: **201 tests, 165 pass, 36 divergences.**
 
 Root cause theme: **Neomacs uses a UTF-8-internal string model**, diverging
 from GNU's eight-bit-charset model. Almost every divergence traces back to
@@ -101,12 +101,15 @@ property itself is stored in an incompatible format: Neomacs uses
 - `bidi_compose_misc::div_utf8_find_composition_explicit_compose`
 - `compose_bidi_syntax::div_utf8_compose_string_find_composition`
 
-### Theme 8 — Bidi RTL paragraph direction wrong
-`(current-bidi-paragraph-direction)` of Hebrew / RTL text returns
-`left-to-right` in Neomacs; GNU returns `right-to-left`. RTL paragraph
-direction detection is broken (affects RTL display/logical-order handling).
-LTR text is detected correctly.
+### Theme 8 — Bidi RTL paragraph direction auto-detection broken
+`(current-bidi-paragraph-direction)` with `bidi-paragraph-direction` left at
+its default (nil = auto) returns `left-to-right` for Arabic AND Hebrew text in
+Neomacs; GNU returns `right-to-left`. RTL auto-detection is broken for all
+RTL scripts; LTR text, CJK, digits, and empty buffers are detected correctly.
+Note: an EXPLICIT `bidi-paragraph-direction` value (e.g. `'right-to-left`) IS
+honored — only auto-detection is broken.
 - `compose_bidi_syntax::div_utf8_current_bidi_paragraph_direction_rtl`
+- `bidi_deep::div_utf8_bidi_direction_across_scripts`
 
 ## What already works (coverage, not divergences)
 UTF-8/UTF-16 encode-decode, Unicode property tables (general-category,
@@ -119,8 +122,8 @@ multibyte (classes/alternation/groups/word-boundary), string-width and
 of normal multibyte.
 
 ## Files
-`divergence_utf8_{bidi_compose_misc, buffer_charset_props, buffer_io,
-buffer_multibyte_toggle, buffer_region_ops, char_ops_regex, char_properties,
-char_tables, charset_conv_deep, coding, coding_deep, compose_bidi_syntax,
-digest_print, more_codings, print_escape, string_compare_format,
-string_primitives, syntax_display}.rs`
+`divergence_utf8_{bidi_compose_misc, bidi_deep, buffer_charset_props,
+buffer_io, buffer_multibyte_toggle, buffer_region_ops, char_ops_regex,
+char_properties, char_tables, charset_conv_deep, coding, coding_deep,
+compose_bidi_syntax, digest_print, more_codings, print_escape,
+string_compare_format, string_primitives, syntax_display}.rs`

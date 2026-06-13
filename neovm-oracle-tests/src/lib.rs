@@ -1897,6 +1897,7 @@ mod divergence_undo_deep_2;
 mod divergence_undo_semantics;
 mod divergence_unicode_normalization;
 mod divergence_utf8_bidi_compose_misc;
+mod divergence_utf8_bidi_deep;
 mod divergence_utf8_compose_bidi_syntax;
 mod divergence_utf8_buffer_charset_props;
 mod divergence_utf8_buffer_io;
