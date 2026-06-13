@@ -14,6 +14,7 @@ use super::emit_text_matrix_row_transition_with_limit;
 use super::finish_and_end_text_matrix_row_output;
 use super::finish_text_matrix_row_output;
 use super::install_text_window_right_edge_markers;
+use super::mark_current_text_row_truncated_left;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
@@ -605,6 +606,22 @@ fn text_window_right_edge_markers_use_row_flags() {
     assert_char_glyph(&row1[3], '\\', 9);
     assert_eq!(row2.len(), 1);
     assert_char_glyph(&row2[0], 'x', 7);
+}
+
+#[test]
+fn mark_current_text_row_truncated_left_sets_current_row_flag() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
+    builder.begin_row(1, GlyphRowRole::Text);
+
+    mark_current_text_row_truncated_left(&mut builder);
+
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(10, 2, 8.0, 16.0);
+    let matrix = &state.window_matrices[0].matrix;
+    assert!(!matrix.rows[0].truncated_left);
+    assert!(matrix.rows[1].truncated_left);
 }
 
 #[test]

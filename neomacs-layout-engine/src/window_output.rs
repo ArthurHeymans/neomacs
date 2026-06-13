@@ -282,6 +282,12 @@ pub(crate) fn emit_text_matrix_row_transition_with_limit(
         .emit_with_row_limit(transition, max_rows)
 }
 
+pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuilder) {
+    builder.with_current_row_mut(|glyph_row| {
+        glyph_row.truncated_left = true;
+    });
+}
+
 pub(crate) fn finish_text_window_output_rows(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,

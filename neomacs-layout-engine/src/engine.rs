@@ -20,6 +20,7 @@ use super::window_output::{
     emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
     finish_and_end_text_matrix_row_output, finish_text_matrix_row_output,
     finish_text_window_output_rows, install_text_window_right_edge_markers,
+    mark_current_text_row_truncated_left,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -4499,9 +4500,7 @@ impl LayoutEngine {
                             x = position.x_px;
                             col = position.col;
                         }
-                        self.matrix_builder.with_current_row_mut(|glyph_row| {
-                            glyph_row.truncated_left = true;
-                        });
+                        mark_current_text_row_truncated_left(&mut self.matrix_builder);
                     }
                     if cursor_info.is_missing() && point_charpos == charpos {
                         capture_cursor_info(
