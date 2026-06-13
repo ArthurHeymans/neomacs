@@ -44,7 +44,7 @@ use crate::display_row_append::{
     DisplayReplacementAppendItem, DisplayReplacementStringItemMeasurer,
     DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
     DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
-    SyntheticTextAppendContext, render_lisp_string_source_append_to_text_row_and_emit,
+    LispStringSourceAppendContext, SyntheticTextAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -2123,6 +2123,12 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         return;
     };
     let mut source_state = DisplayRowSourceState::default();
+    let mut source_context = LispStringSourceAppendContext::new(
+        &mut source,
+        &mut source_state,
+        base_face.face_id(),
+        base_face.face(),
+    );
 
     while geometry.is_within_row_limit(row_limit) {
         if *x >= max_x {
@@ -2130,16 +2136,12 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         }
 
         let frame = row_context.frame_for_geometry(geometry);
-        let Some(outcome) = render_lisp_string_source_append_to_text_row_and_emit(
+        let Some(outcome) = source_context.render_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            &mut source,
-            &mut source_state,
             face_resolver,
-            base_face.face(),
-            base_face.face_id(),
             face_ids,
             frame,
             DisplayRowPosition {
@@ -2175,8 +2177,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         match stop {
             DisplayRowRenderStop::SourceExhausted => break,
             DisplayRowRenderStop::Clipped => {
-                source_state.discard_pending_item();
-                if source.discard_until_row_break() {
+                if source_context.discard_pending_until_row_break() {
                     if !finish_overlay_string_row!() {
                         break;
                     }

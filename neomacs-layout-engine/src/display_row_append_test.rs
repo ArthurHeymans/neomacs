@@ -2068,7 +2068,7 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
 }
 
 #[test]
-fn render_lisp_string_source_append_to_text_row_preserves_source_after_row_break() {
+fn lisp_string_source_append_context_preserves_source_after_row_break() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2106,21 +2106,21 @@ fn render_lisp_string_source_append_to_text_row_preserves_source_after_row_break
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
-    let first = render_lisp_string_source_append_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &mut source,
-        &mut source_state,
-        &face_resolver,
-        base_face,
-        7,
-        &mut face_ids,
-        frame.clone(),
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("first lisp source append");
+    let mut append_context =
+        LispStringSourceAppendContext::new(&mut source, &mut source_state, 7, base_face);
+
+    let first = append_context
+        .render_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+            frame.clone(),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("first lisp source append");
 
     assert_eq!(first.end, DisplayRowPosition { x_px: 8.0, col: 1 });
     assert_eq!(
@@ -2128,21 +2128,18 @@ fn render_lisp_string_source_append_to_text_row_preserves_source_after_row_break
         crate::display_row::DisplayRowRenderStop::RowBreak
     );
 
-    let second = render_lisp_string_source_append_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &mut source,
-        &mut source_state,
-        &face_resolver,
-        base_face,
-        7,
-        &mut face_ids,
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("second lisp source append");
+    let second = append_context
+        .render_to_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+            frame,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("second lisp source append");
 
     assert_eq!(second.end, DisplayRowPosition { x_px: 8.0, col: 1 });
     assert_eq!(

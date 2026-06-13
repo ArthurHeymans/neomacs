@@ -617,7 +617,7 @@ impl<'a> LispStringAppendContext<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn render_lisp_string_source_append_to_text_row_and_emit(
+fn render_lisp_string_source_append_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
@@ -645,6 +645,62 @@ pub(crate) fn render_lisp_string_source_append_to_text_row_and_emit(
         face_ids,
         request,
     )
+}
+
+pub(crate) struct LispStringSourceAppendContext<'a> {
+    source: &'a mut LispStringSourceCursor,
+    source_state: &'a mut DisplayRowSourceState,
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+}
+
+impl<'a> LispStringSourceAppendContext<'a> {
+    pub(crate) fn new(
+        source: &'a mut LispStringSourceCursor,
+        source_state: &'a mut DisplayRowSourceState,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+    ) -> Self {
+        Self {
+            source,
+            source_state,
+            base_face_id,
+            base_face,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_to_text_row_and_emit(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        render_lisp_string_source_append_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            self.source,
+            self.source_state,
+            face_resolver,
+            self.base_face,
+            self.base_face_id,
+            face_ids,
+            frame,
+            position,
+        )
+    }
+
+    pub(crate) fn discard_pending_until_row_break(&mut self) -> bool {
+        self.source_state.discard_pending_item();
+        self.source.discard_until_row_break()
+    }
 }
 
 pub(crate) fn synthetic_display_text_item(

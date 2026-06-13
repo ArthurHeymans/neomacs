@@ -2,7 +2,7 @@
 
 Date: 2026-06-13
 Branch: `main`
-Latest relevant pushed commit before this batch: `e86a1db80 refactor: measure synthetic text in source append`
+Latest relevant pushed commit before this batch: `41d074f2b refactor: group buffer text append context`
 
 ## Goal
 
@@ -59,6 +59,7 @@ Continuation work after this handoff:
 - Main-buffer control chars, nobreak source-mapped text, and glyphless item append now use `BufferTextItemAppendContext`; the older raw buffer/replacement append helper functions are private implementation details of `display_row_append.rs`.
 - Main-buffer line/wrap prefixes and synthetic ellipsis/truncation markers now use `LispStringAppendContext` and `SyntheticTextAppendContext`; direct Lisp-fragment and synthetic-text append helpers are private implementation details.
 - Ordinary main-buffer text append now uses `BufferTextFragmentAppendContext`; `engine.rs` still computes resolved advances for wrap/cursor decisions, but final append request wiring is contained in `display_row_append.rs`.
+- Overlay Lisp-string source append now uses `LispStringSourceAppendContext`; `engine.rs` still owns overlay row breaks, hit rows, and cursor capture, but source-state append request wiring is contained in `display_row_append.rs`.
 - Latest local verification:
 
   ```bash
@@ -71,7 +72,7 @@ Continuation work after this handoff:
   cargo check
   ```
 
-  Full layout-engine nextest passed with 1061 tests after grouping ordinary main-buffer text append request wiring behind `BufferTextFragmentAppendContext`.
+  Full layout-engine nextest passed with 1061 tests after grouping overlay Lisp-string source append request wiring behind `LispStringSourceAppendContext`.
 
 ## Why This Refactor Exists
 
@@ -188,7 +189,7 @@ The old caller-facing `DisplayRowSpec` name is gone from source. The lowered row
 Preserve these while refactoring:
 
 - Use `cargo nextest`, never `cargo test`.
-- One architectural slice per commit.
+- Keep commits as cohesive architectural batches. Avoid tiny wrapper-only commits when related pipeline containment work can be verified together.
 - Do not hide layout bugs with frontend workarounds.
 - Do not let renderer code infer row source semantics from pixels or glyphs.
 - Keep row ownership explicit:
