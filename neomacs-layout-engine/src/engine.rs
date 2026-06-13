@@ -39,13 +39,13 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendContext,
-    BufferTextFragmentAppendItem, BufferTextItemRowAppendContext,
+    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem,
+    BufferTextFragmentRowAppendContext, BufferTextItemRowAppendContext,
     DisplayReplacementMediaAppendItem, DisplayReplacementRowAppendContext,
     DisplayReplacementSourceMappedTextAppendItem, DisplayReplacementStretchAppendItem,
-    DisplayReplacementStringAppendItem, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
-    DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
-    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextRowAppendContext,
+    DisplayReplacementStringAppendItem, DisplayRowAppendArea, DisplayRowAppendFrame,
+    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringRowAppendContext,
+    LispStringSourceAppendContext, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4254,19 +4254,14 @@ impl LayoutEngine {
                         &mut self.matrix_builder,
                     );
 
-                    let append_frame = DisplayRowActiveFaceAppendContext::new(
+                    let append_context = LispStringRowAppendContext::new(
                         &text_append_surface,
                         &row_geometry,
                         &active_face_state,
                         raise_span.value_or(0.0),
                         char_h,
                     )
-                    .active_face_frame();
-                    let append_context = LispStringAppendContext::new(
-                        prefix_base_face.face_id(),
-                        prefix_base_face.face(),
-                        append_frame,
-                    );
+                    .active_face(prefix_base_face.face_id(), prefix_base_face.face());
                     let position = append_context.append_fragment_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -5395,24 +5390,19 @@ impl LayoutEngine {
             }
 
             let append_position = DisplayRowPosition { x_px: x, col };
-            let frame = DisplayRowActiveFaceAppendContext::new(
+            let append_context = BufferTextFragmentRowAppendContext::new(
+                buffer,
+                buf_id,
                 &text_append_surface,
                 &row_geometry,
                 &active_face_state,
                 raise_span.value_or(0.0),
                 char_h,
             )
-            .active_face_frame();
+            .active_face();
             let buffer_text_fragment = DisplayTextFragment::buffer_text(
                 CharPos0::new(charpos as usize),
                 CharPos0::new((charpos + 1) as usize),
-            );
-            let append_context = BufferTextFragmentAppendContext::new(
-                buffer,
-                buf_id,
-                active_face_state.face_id(),
-                active_face_state.resolved_face(),
-                frame,
             );
 
             // Check for line wrap / truncation. Use the same append renderer
