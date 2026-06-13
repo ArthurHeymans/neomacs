@@ -3863,7 +3863,6 @@ impl LayoutEngine {
             DisplayRowActiveFaceState::new(default_resolved.clone(), default_measured_face);
         // Per-face metrics — start with defaults, updated on face change.
         let mut face_metrics = active_face_state.metrics();
-        let default_face_state = active_face_state.clone();
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -4359,8 +4358,6 @@ impl LayoutEngine {
                             &active_face_state,
                             char_h,
                         );
-                        let measurement =
-                            active_face_state.text_run_measurement(&mut self.font_metrics, "...");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4373,7 +4370,6 @@ impl LayoutEngine {
                             SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
                             "...",
                             active_face_state.face_id(),
-                            Some(measurement),
                         ) {
                             x = position.x_px;
                             col = position.col;
@@ -4523,8 +4519,6 @@ impl LayoutEngine {
                                 default_row_height: char_h,
                             },
                         );
-                        let measurement =
-                            default_face_state.text_run_measurement(&mut self.font_metrics, "$");
                         if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -4540,7 +4534,6 @@ impl LayoutEngine {
                             SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
                             "$",
                             trunc_face_id,
-                            Some(measurement),
                         ) {
                             x = position.x_px;
                             col = position.col;
@@ -4994,8 +4987,6 @@ impl LayoutEngine {
                     &active_face_state,
                     char_h,
                 );
-                let measurement =
-                    active_face_state.text_run_measurement(&mut self.font_metrics, "...");
                 if let Some((_progress, position)) = append_synthetic_text_to_display_row(
                     &mut self.matrix_builder,
                     &mut output_emitter,
@@ -5008,7 +4999,6 @@ impl LayoutEngine {
                     SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
                     "...",
                     active_face_state.face_id(),
-                    Some(measurement),
                 ) {
                     x = position.x_px;
                     col = position.col;

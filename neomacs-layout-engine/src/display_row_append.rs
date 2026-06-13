@@ -1523,38 +1523,20 @@ pub(crate) fn append_synthetic_text_to_display_row(
     source_id: u64,
     text: impl Into<Box<str>>,
     face_id: u32,
-    measurement: Option<DisplayTextRunMeasurement>,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let item = synthetic_display_text_item(source_id, text, face_id);
     let request = DisplayRowSourceAppendRequest::for_frame(frame, position, face_id, base_face);
-    match measurement {
-        Some(measurement) => {
-            let mut render_policy = PremeasuredTextRunRenderPolicy::new(measurement);
-            append_single_display_item_fragment_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                item,
-                face_resolver,
-                request,
-                &mut render_policy,
-            )
-        }
-        None => {
-            let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-            append_single_display_item_fragment_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                item,
-                face_resolver,
-                request,
-                &mut render_policy,
-            )
-        }
-    }
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    append_single_display_item_fragment_to_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        item,
+        face_resolver,
+        request,
+        &mut render_policy,
+    )
 }
 
 #[cfg(test)]

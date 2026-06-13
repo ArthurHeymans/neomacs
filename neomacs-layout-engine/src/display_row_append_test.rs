@@ -264,12 +264,11 @@ fn append_synthetic_text_to_display_row_renders_fragment_and_emits_slots() {
         99,
         "...",
         7,
-        Some(DisplayTextRunMeasurementPlan::uniform_for_text("...", 5.0)),
     )
     .expect("synthetic text progress");
 
-    assert_eq!(end, DisplayRowPosition { x_px: 15.0, col: 3 });
-    assert_eq!(progress.metrics.width_px, 15.0);
+    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    assert_eq!(progress.metrics.width_px, 24.0);
     assert_eq!(progress.metrics.width_cols, 3);
     assert_eq!(progress.slots.len(), 3);
     assert_eq!(
@@ -353,7 +352,6 @@ fn append_synthetic_text_to_display_row_composes_with_current_row_tail() {
         100,
         "\u{301}",
         7,
-        None,
     )
     .expect("combining fragment progress");
 

@@ -36,12 +36,13 @@ cargo check -p neomacs-layout-engine
 
 `cargo nextest run -p neomacs-layout-engine` passed with 1053 tests. Do not use `cargo test`; the project owner explicitly requested `cargo nextest`.
 
-Uncommitted continuation work after this handoff:
+Continuation work after this handoff:
 
 - `DisplayRowSpec` has been contained to `display_row.rs`; external tests/callers now use `DisplayRowSourceRenderRequest` or request-native helpers.
 - Main buffer ordinary text and several special buffer item paths now append through shared source append requests; complex shaping keeps a premeasured policy only where the buffer walker still needs it for wrap/cursor decisions.
 - Replacement-string display sources now use the renderer-owned font metrics slot through render policy measurement callbacks.
 - The dormant `neomacs-layout-engine::display_backend` / `display_row_sink` scaffolding has been deleted. It represented an older backend-oriented width path and was no longer wired into production layout.
+- Synthetic ellipses and truncation markers now let the source-row append renderer own text measurement instead of passing caller-precomputed `DisplayTextRunMeasurement`.
 - Latest local verification:
 
   ```bash
@@ -52,7 +53,7 @@ Uncommitted continuation work after this handoff:
   cargo nextest run -p neomacs-layout-engine
   ```
 
-  Full layout-engine nextest passed with 1030 tests after deleting the dormant backend tests.
+  Full layout-engine nextest passed with 1031 tests after deleting the dormant backend tests and adding append-measurement coverage.
 
 ## Why This Refactor Exists
 
