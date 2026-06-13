@@ -1348,14 +1348,14 @@ impl DisplayRowAppendMetrics {
 
 #[derive(Clone)]
 pub(crate) struct DisplayRowAppendFrame {
-    pub(crate) row: usize,
-    pub(crate) glyph_y: f32,
-    pub(crate) geometry: DisplayRowGeometry,
-    pub(crate) default_row_height: f32,
-    pub(crate) content_x: f32,
-    pub(crate) text_width: f32,
-    pub(crate) line_number_width: f32,
-    pub(crate) face_space_width: f32,
+    row: usize,
+    glyph_y: f32,
+    geometry: DisplayRowGeometry,
+    default_row_height: f32,
+    content_x: f32,
+    text_width: f32,
+    line_number_width: f32,
+    face_space_width: f32,
 }
 
 impl DisplayRowAppendFrame {
