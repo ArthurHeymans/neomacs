@@ -4,7 +4,7 @@ use crate::display_item::{
     DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
     SourceSpan,
 };
-use crate::display_origin::DisplayOrigin;
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
@@ -38,10 +38,8 @@ use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::unicode::decode_utf8;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neovm_core::buffer::{BufferId, CharLen, EmacsByteRange};
-use neovm_core::emacs_core::Context;
-#[cfg(test)]
-use neovm_core::emacs_core::Value;
+use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
+use neovm_core::emacs_core::{Context, Value};
 use std::collections::HashMap;
 
 struct SingleDisplayItemSource {
@@ -1385,7 +1383,7 @@ impl DisplayReplacementActiveFaceMeasurer {
             .advance_for_char(font_metrics, ch, fallback_advance_px)
     }
 
-    pub(crate) fn replacement_string_cursor_slot_width(
+    fn replacement_string_cursor_slot_width(
         &self,
         font_metrics: &mut Option<FontMetricsService>,
         replacement: &str,
@@ -1396,12 +1394,6 @@ impl DisplayReplacementActiveFaceMeasurer {
             .next()
             .map(|ch| self.char_advance_px(font_metrics, ch, fallback_char_width))
             .unwrap_or_else(|| fallback_char_width.max(1.0))
-    }
-
-    pub(crate) fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
-        DisplayReplacementStringItemMeasurer {
-            active_face_state: self.active_face_state.clone(),
-        }
     }
 }
 
@@ -1452,6 +1444,65 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
             DisplayRowRenderClipBehavior::Stop
         } else {
             DisplayRowRenderClipBehavior::Continue
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct DisplayReplacementStringAppendItem {
+    fragment: DisplayTextFragment,
+    source_id: u64,
+    active_face_state: DisplayRowActiveFaceState,
+    cursor_slot_width_px: f32,
+    is_empty: bool,
+}
+
+impl DisplayReplacementStringAppendItem {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn display_property_string(
+        value: Value,
+        anchor_charpos: CharPos0,
+        source: DisplayPropertySource,
+        source_id: u64,
+        active_face_state: &DisplayRowActiveFaceState,
+        font_metrics: &mut Option<FontMetricsService>,
+        fallback_char_width: f32,
+    ) -> Option<Self> {
+        let replacement = value.as_utf8_str()?;
+        let measurer =
+            DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state);
+        Some(Self {
+            fragment: DisplayTextFragment::display_property_string(value, anchor_charpos, source),
+            source_id,
+            active_face_state: active_face_state.clone(),
+            cursor_slot_width_px: measurer.replacement_string_cursor_slot_width(
+                font_metrics,
+                replacement,
+                fallback_char_width,
+            ),
+            is_empty: replacement.is_empty(),
+        })
+    }
+
+    pub(crate) fn fragment(&self) -> DisplayTextFragment {
+        self.fragment
+    }
+
+    pub(crate) fn cursor_slot_width_px(&self) -> f32 {
+        self.cursor_slot_width_px
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.is_empty
+    }
+
+    fn source_id(&self) -> u64 {
+        self.source_id
+    }
+
+    fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
+        DisplayReplacementStringItemMeasurer {
+            active_face_state: self.active_face_state.clone(),
         }
     }
 }
@@ -1710,7 +1761,36 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_string_fragment_to_text_row(
+    pub(crate) fn append_string_item_to_text_row(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        item: DisplayReplacementStringAppendItem,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        let fragment = item.fragment();
+        let source_id = item.source_id();
+        let mut item_policy = item.string_item_measurer();
+        self.append_string_fragment_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            fragment,
+            source_id,
+            face_resolver,
+            face_ids,
+            position,
+            &mut item_policy,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn append_string_fragment_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,

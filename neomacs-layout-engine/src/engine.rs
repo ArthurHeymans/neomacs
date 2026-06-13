@@ -43,9 +43,10 @@ use crate::display_row_append::{
     BufferTextFragmentAppendItem, BufferTextItemAppendContext,
     DisplayReplacementActiveFaceMeasurer, DisplayReplacementAppendContext,
     DisplayReplacementMediaAppendItem, DisplayReplacementSourceMappedTextAppendItem,
-    DisplayReplacementStretchAppendItem, DisplayRowActiveFaceAppendContext, DisplayRowAppendArea,
-    DisplayRowAppendFrame, DisplayRowAppendSurface, DisplayRowTextAppendContext,
-    LispStringAppendContext, LispStringSourceAppendContext, SyntheticTextAppendContext,
+    DisplayReplacementStretchAppendItem, DisplayReplacementStringAppendItem,
+    DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
+    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringAppendContext,
+    LispStringSourceAppendContext, SyntheticTextAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4567,37 +4568,34 @@ impl LayoutEngine {
                     if matches!(
                         display_property.replacement,
                         Some(DisplayReplacementProperty::String)
-                    ) && let Some(replacement) = prop_val.as_utf8_str()
+                    ) && let Some(replacement_item) =
+                        DisplayReplacementStringAppendItem::display_property_string(
+                            prop_val,
+                            display_property_char_pos,
+                            DisplayPropertySource::TextProperty,
+                            1,
+                            &active_face_state,
+                            &mut self.font_metrics,
+                            char_w,
+                        )
                     {
-                        let replacement_measurement =
-                            DisplayReplacementActiveFaceMeasurer::from_active_face_state(
-                                &active_face_state,
-                            );
                         if point_in_display_replacement {
-                            let slot_width = replacement_measurement
-                                .replacement_string_cursor_slot_width(
-                                    &mut self.font_metrics,
-                                    replacement,
-                                    char_w,
-                                );
                             capture_cursor_info(
                                 &mut cursor_info,
                                 CapturedCursorInfo::from_active_face_state(
                                     &active_face_state,
                                     CapturedCursorPlacement::from_row_text_position(
                                         row_geometry.text_position(x, byte_idx, col),
-                                        CapturedCursorSlotWidth::Explicit(slot_width),
+                                        CapturedCursorSlotWidth::Explicit(
+                                            replacement_item.cursor_slot_width_px(),
+                                        ),
                                         false,
                                     ),
                                 ),
                             );
                         }
-                        if !replacement.is_empty() {
-                            let replacement_fragment = DisplayTextFragment::display_property_string(
-                                prop_val,
-                                display_property_char_pos,
-                                DisplayPropertySource::TextProperty,
-                            );
+                        if !replacement_item.is_empty() {
+                            let replacement_fragment = replacement_item.fragment();
                             let replacement_base_face = display_string_base_face_for_active_row(
                                 buffer,
                                 face_resolver,
@@ -4615,24 +4613,21 @@ impl LayoutEngine {
                                 char_h,
                             )
                             .full_text_width_active_face_frame();
-                            let mut item_policy = replacement_measurement.string_item_measurer();
                             let append_context = DisplayReplacementAppendContext::new(
                                 display_replacement_source,
                                 replacement_base_face.face_id(),
                                 replacement_base_face.face(),
                                 append_frame,
                             );
-                            let position = append_context.append_string_fragment_to_text_row(
+                            let position = append_context.append_string_item_to_text_row(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
-                                replacement_fragment,
-                                1,
+                                replacement_item,
                                 face_resolver,
                                 &mut face_ids,
                                 DisplayRowPosition { x_px: x, col },
-                                &mut item_policy,
                             );
                             x = position.x_px;
                             col = position.col;

@@ -2,16 +2,17 @@ use super::*;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayLength, DisplayMediaReplacement,
-    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayVideoItem,
-    DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
+    DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::DisplayPropertySource;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderer, DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceRenderRequest,
+    DisplayRowSourceState,
 };
-use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_text::DisplayTextFragment;
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
@@ -2331,6 +2332,89 @@ fn display_replacement_active_face_measurer_names_cursor_and_display_width_polic
         9.0
     );
     assert_eq!(measurer.char_advance_px(&mut font_metrics, 'x', 8.0), 8.0);
+}
+
+#[test]
+fn display_replacement_string_append_item_names_cursor_and_fragment_policy() {
+    let _eval = Context::new();
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let value = Value::string("ab");
+    let item = DisplayReplacementStringAppendItem::display_property_string(
+        value,
+        CharPos0::new(4),
+        DisplayPropertySource::TextProperty,
+        9,
+        &active_face,
+        &mut font_metrics,
+        8.0,
+    )
+    .expect("display property string item");
+
+    assert_eq!(item.cursor_slot_width_px(), 8.0);
+    assert!(!item.is_empty());
+    assert_eq!(item.source_id(), 9);
+    assert_eq!(
+        item.fragment(),
+        DisplayTextFragment::display_property_string(
+            value,
+            CharPos0::new(4),
+            DisplayPropertySource::TextProperty,
+        )
+    );
+
+    let empty = DisplayReplacementStringAppendItem::display_property_string(
+        Value::string(""),
+        CharPos0::new(4),
+        DisplayPropertySource::TextProperty,
+        10,
+        &active_face,
+        &mut font_metrics,
+        9.0,
+    )
+    .expect("empty display property string item");
+    assert!(empty.is_empty());
+    assert_eq!(empty.cursor_slot_width_px(), 9.0);
+}
+
+#[test]
+fn display_replacement_string_append_item_measures_source_text_from_active_face() {
+    let _eval = Context::new();
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
+    let item = DisplayReplacementStringAppendItem::display_property_string(
+        Value::string("abc"),
+        CharPos0::new(0),
+        DisplayPropertySource::TextProperty,
+        11,
+        &active_face,
+        &mut font_metrics,
+        8.0,
+    )
+    .expect("display property string item");
+    let mut measurer = item.string_item_measurer();
+    let source_item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(11, 0, 3),
+        RenderFaceRef::FaceId(7),
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("abc")),
+    );
+
+    let measurement =
+        DisplayRowRenderPolicy::measurement_for(&mut measurer, &source_item, 7, &mut font_metrics);
+
+    let DisplayRowItemMeasurement::TextRun(measurement) = measurement else {
+        panic!("replacement string text should use a direct text-run measurement");
+    };
+    let DisplayTextRunMeasurement::Measured(advances) = measurement else {
+        panic!("replacement string run should be measured");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset))
+            .collect::<Vec<_>>(),
+        vec![(0, 0), (1, 1), (2, 2)]
+    );
 }
 
 #[test]
