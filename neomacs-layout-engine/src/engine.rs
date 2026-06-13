@@ -6535,16 +6535,8 @@ impl LayoutEngine {
         };
 
         let width = frame_params.width;
-        let mut tab_bar_face = face_resolver.resolve_named_face("tab-bar");
-        if tab_bar_face.font_char_width <= 0.0 {
-            tab_bar_face.font_char_width = frame_params.char_width;
-        }
-        if tab_bar_face.font_ascent <= 0.0 {
-            tab_bar_face.font_ascent = frame_params.char_height * 0.8;
-        }
-        if tab_bar_face.font_line_height <= 0.0 {
-            tab_bar_face.font_line_height = frame_params.char_height.max(tab_bar_face.font_ascent);
-        }
+        let tab_bar_face = face_resolver.resolve_named_face("tab-bar");
+        let tab_bar_ascent = frame_params.char_height * 0.8;
         let chrome_before_tab = frame_params.menu_bar_height
             + frame_params.tool_bar_height
             + frame_params.compact_bar_height;
@@ -6566,6 +6558,8 @@ impl LayoutEngine {
             width,
             tab_bar_height,
             frame_params.char_width,
+            tab_bar_ascent,
+            frame_params.char_height,
             &tab_bar_face,
             DisplayTextFragment::tab_bar(tab_bar.text),
         ) else {

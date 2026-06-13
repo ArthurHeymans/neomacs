@@ -212,6 +212,8 @@ impl LayoutEngine {
         width: f32,
         height: f32,
         char_width: f32,
+        ascent: f32,
+        row_height: f32,
         tab_bar_face: &ResolvedFace,
         rendered_text: DisplayTextFragment,
     ) -> Option<FrameTabBarDisplayRowRender> {
@@ -219,9 +221,9 @@ impl LayoutEngine {
             DisplayRowGeometry {
                 y,
                 width,
-                height,
+                height: row_height,
                 char_width,
-                ascent: tab_bar_face.font_ascent,
+                ascent,
                 tab_policy: DisplayTabPolicy::every(8),
             },
             face_ids,
@@ -361,13 +363,7 @@ impl LayoutEngine {
         reserve_right_special_col: bool,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Vec<RenderedDisplayRow> {
-        let mut base_face = default_resolved.clone();
-        if base_face.font_char_width <= 0.0 {
-            base_face.font_char_width = char_w.max(1.0);
-        }
-        if base_face.font_ascent <= 0.0 {
-            base_face.font_ascent = ascent.max(row_height * 0.8);
-        }
+        let base_face = default_resolved.clone();
         let row_face = self.realize_display_row_face(0, &base_face, char_w, ascent, row_height);
         let base_render_face = row_face.render_face();
         let char_width = self.display_row_char_width(&row_face, char_w);
