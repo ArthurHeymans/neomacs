@@ -1275,6 +1275,12 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
+        self.render_bounds = render_bounds;
+        self
+    }
+
     pub(crate) fn display_row_spec(self) -> DisplayRowSpec<'a> {
         DisplayRowSpec {
             geometry: self.geometry,

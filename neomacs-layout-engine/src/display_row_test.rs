@@ -37,6 +37,16 @@ fn display_row_spec_from_base_face<'a>(
     .display_row_spec()
 }
 
+fn display_row_spec_for_face<'a>(
+    geometry: DisplayRowGeometry,
+    base_face_id: u32,
+    base_face: &'a crate::neovm_bridge::ResolvedFace,
+    role: GlyphRowRole,
+) -> DisplayRowSpec<'a> {
+    DisplayRowSourceRenderRequest::whole_row(geometry, base_face_id, base_face, role)
+        .display_row_spec()
+}
+
 #[derive(Default)]
 struct RecordingDisplayRowMediaHost {
     image_requests: Mutex<Vec<ImageResolveRequest>>,
@@ -217,6 +227,31 @@ fn display_row_source_render_request_allocates_base_face_id() {
     assert_eq!(face_ids.finish(), 25);
     assert_eq!(spec.role, GlyphRowRole::HeaderLine);
     assert_eq!(spec.symbol_values, symbol_values);
+}
+
+#[test]
+fn display_row_source_render_request_overrides_render_bounds() {
+    let face = base_face();
+    let geometry = DisplayRowGeometry {
+        y: 0.0,
+        width: 80.0,
+        height: 16.0,
+        char_width: 8.0,
+        ascent: 12.0,
+        tab_policy: DisplayTabPolicy::every(8),
+    };
+    let bounds = DisplayRowRenderBounds {
+        start: DisplayRowPosition { x_px: 16.0, col: 2 },
+        max_x_px: 40.0,
+    };
+
+    let spec = DisplayRowSourceRenderRequest::whole_row(geometry, 7, &face, GlyphRowRole::Text)
+        .with_render_bounds(bounds)
+        .display_row_spec();
+
+    assert_eq!(spec.render_bounds, bounds);
+    assert_eq!(spec.base_face_id, 7);
+    assert_eq!(spec.role, GlyphRowRole::Text);
 }
 
 #[test]
@@ -685,8 +720,8 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
 
     let first = renderer
         .render_display_item_source_row_step_with_display_host(
-            DisplayRowSpec {
-                geometry: DisplayRowGeometry {
+            display_row_spec_for_face(
+                DisplayRowGeometry {
                     y: 0.0,
                     width: 16.0,
                     height: 16.0,
@@ -694,12 +729,10 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
                     ascent: 12.0,
                     tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 },
-                render_bounds: DisplayRowRenderBounds::whole_row(16.0),
                 base_face_id,
-                base_face: &test_base_face,
-                role: GlyphRowRole::Text,
-                symbol_values: std::collections::HashMap::new(),
-            },
+                &test_base_face,
+                GlyphRowRole::Text,
+            ),
             &mut source,
             &mut state,
             &resolver,
@@ -709,8 +742,8 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
         .expect("first row");
     let second = renderer
         .render_display_item_source_row_step_with_display_host(
-            DisplayRowSpec {
-                geometry: DisplayRowGeometry {
+            display_row_spec_for_face(
+                DisplayRowGeometry {
                     y: 16.0,
                     width: 16.0,
                     height: 16.0,
@@ -718,12 +751,10 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
                     ascent: 12.0,
                     tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 },
-                render_bounds: DisplayRowRenderBounds::whole_row(16.0),
                 base_face_id,
-                base_face: &test_base_face,
-                role: GlyphRowRole::Text,
-                symbol_values: std::collections::HashMap::new(),
-            },
+                &test_base_face,
+                GlyphRowRole::Text,
+            ),
             &mut source,
             &mut state,
             &resolver,
@@ -796,8 +827,8 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
 
     let result = renderer
         .render_display_item_source_row_fragment_step_into_row_with_policy(
-            DisplayRowSpec {
-                geometry: DisplayRowGeometry {
+            display_row_spec_for_face(
+                DisplayRowGeometry {
                     y: 0.0,
                     width: 240.0,
                     height: 16.0,
@@ -805,12 +836,10 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
                     ascent: 12.0,
                     tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 },
-                render_bounds: DisplayRowRenderBounds::whole_row(240.0),
                 base_face_id,
                 base_face,
-                role: GlyphRowRole::Text,
-                symbol_values: std::collections::HashMap::new(),
-            },
+                GlyphRowRole::Text,
+            ),
             &mut row,
             &mut source,
             &mut state,
@@ -1038,8 +1067,8 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
 
     let rendered = renderer
         .render_display_item_source_row(
-            DisplayRowSpec {
-                geometry: DisplayRowGeometry {
+            display_row_spec_for_face(
+                DisplayRowGeometry {
                     y: 0.0,
                     width: 240.0,
                     height: 16.0,
@@ -1047,12 +1076,10 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
                     ascent: 12.0,
                     tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
                 },
-                render_bounds: DisplayRowRenderBounds::whole_row(240.0),
-                base_face_id: 1,
-                base_face: resolver.default_face(),
-                role: GlyphRowRole::TabLine,
-                symbol_values: std::collections::HashMap::new(),
-            },
+                1,
+                resolver.default_face(),
+                GlyphRowRole::TabLine,
+            ),
             &mut source,
             &resolver,
             &mut face_ids,
@@ -1597,8 +1624,8 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
 
     let rendered = renderer
         .render_display_item_source_row(
-            DisplayRowSpec {
-                geometry: DisplayRowGeometry {
+            display_row_spec_for_face(
+                DisplayRowGeometry {
                     y: 0.0,
                     width: 240.0,
                     height: 16.0,
@@ -1611,12 +1638,10 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
                             &[2],
                         ),
                 },
-                render_bounds: DisplayRowRenderBounds::whole_row(240.0),
-                base_face_id: 1,
-                base_face: resolver.default_face(),
-                role: GlyphRowRole::TabLine,
-                symbol_values: std::collections::HashMap::new(),
-            },
+                1,
+                resolver.default_face(),
+                GlyphRowRole::TabLine,
+            ),
             &mut source,
             &resolver,
             &mut face_ids,

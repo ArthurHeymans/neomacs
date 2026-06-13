@@ -7,7 +7,7 @@ use crate::display_item::{
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
+    DisplayRowRenderer, DisplayRowSourceRenderRequest, DisplayRowSourceState,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -513,8 +513,8 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         let mut source_state = DisplayRowSourceState::default();
         renderer
             .render_display_item_source_row_fragment_step_with_display_host(
-                DisplayRowSpec {
-                    geometry: DisplayRowGeometry {
+                DisplayRowSourceRenderRequest::whole_row(
+                    DisplayRowGeometry {
                         y: 0.0,
                         width: 160.0,
                         height: 16.0,
@@ -522,15 +522,15 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
                         ascent: 12.0,
                         tab_policy: DisplayTabPolicy::every(8),
                     },
-                    render_bounds: DisplayRowRenderBounds {
-                        start: DisplayRowPosition { x_px: 16.0, col: 2 },
-                        max_x_px: 160.0,
-                    },
-                    base_face_id: 7,
-                    base_face: &base_face,
-                    role: GlyphRowRole::Text,
-                    symbol_values: std::collections::HashMap::new(),
-                },
+                    7,
+                    &base_face,
+                    GlyphRowRole::Text,
+                )
+                .with_render_bounds(DisplayRowRenderBounds {
+                    start: DisplayRowPosition { x_px: 16.0, col: 2 },
+                    max_x_px: 160.0,
+                })
+                .display_row_spec(),
                 &mut source,
                 &mut source_state,
                 &face_resolver,
