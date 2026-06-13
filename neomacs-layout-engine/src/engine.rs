@@ -23,8 +23,8 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner,
     DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceRenderRequest, DisplayRowSourceState, DisplayRowSpec, FrameChromeKind,
-    MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
+    DisplayRowSourceRenderRequest, DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow,
+    RenderedDisplayRow, WindowChromeKind, insert_resolved_display_row_face,
     install_measured_frame_chrome_row, install_rendered_display_row,
 };
 use crate::display_row_append::{
@@ -3928,7 +3928,7 @@ impl LayoutEngine {
                 params.text_bounds,
                 params.selected,
             );
-            let row_spec = DisplayRowSpec::from_base_face(
+            let row_spec = DisplayRowSourceRenderRequest::from_base_face(
                 DisplayRowGeometry {
                     y: params.bounds.y,
                     width: text_width,
@@ -3949,7 +3949,7 @@ impl LayoutEngine {
             );
             let rendered = self
                 .render_lisp_string_row_with_context(
-                    row_spec,
+                    row_spec.display_row_spec(),
                     Value::string(""),
                     &mut render_context,
                 )
@@ -6459,7 +6459,7 @@ impl LayoutEngine {
                 row: tl_row,
                 y: tl_y,
             };
-            let tab_row_spec = DisplayRowSpec::from_base_face(
+            let tab_row_spec = DisplayRowSourceRenderRequest::from_base_face(
                 DisplayRowGeometry {
                     y: tl_y,
                     width: params.bounds.width,
@@ -6485,7 +6485,7 @@ impl LayoutEngine {
                     kind: WindowChromeKind::TabLine,
                 },
                 Rect::new(params.bounds.x, tl_y, params.bounds.width, tab_line_height),
-                tab_row_spec,
+                tab_row_spec.display_row_spec(),
                 DisplayTextFragment::tab_line(tab_text),
             );
         }
@@ -6517,7 +6517,7 @@ impl LayoutEngine {
                 row: hl_row,
                 y: hl_y,
             };
-            let header_row_spec = DisplayRowSpec::from_base_face(
+            let header_row_spec = DisplayRowSourceRenderRequest::from_base_face(
                 DisplayRowGeometry {
                     y: hl_y,
                     width: params.bounds.width,
@@ -6548,7 +6548,7 @@ impl LayoutEngine {
                     params.bounds.width,
                     header_line_height,
                 ),
-                header_row_spec,
+                header_row_spec.display_row_spec(),
                 DisplayTextFragment::header_line(header_text, params.selected),
             );
         }
@@ -6595,7 +6595,7 @@ impl LayoutEngine {
                 row: ml_row,
                 y: ml_y,
             };
-            let mode_row_spec = DisplayRowSpec::from_base_face(
+            let mode_row_spec = DisplayRowSourceRenderRequest::from_base_face(
                 DisplayRowGeometry {
                     y: ml_y,
                     width: params.bounds.width,
@@ -6621,7 +6621,7 @@ impl LayoutEngine {
                     kind: WindowChromeKind::ModeLine,
                 },
                 Rect::new(params.bounds.x, ml_y, params.bounds.width, mode_line_height),
-                mode_row_spec,
+                mode_row_spec.display_row_spec(),
                 DisplayTextFragment::mode_line(mode_text, params.selected),
             );
         }
@@ -6918,7 +6918,7 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let tab_bar_spec = DisplayRowSpec::from_base_face(
+        let tab_bar_spec = DisplayRowSourceRenderRequest::from_base_face(
             DisplayRowGeometry {
                 y: tab_bar_y,
                 width,
@@ -6938,7 +6938,7 @@ impl LayoutEngine {
             &mut face_ids,
         );
         let Some(rendered) = self.render_display_text_fragment_row_with_context(
-            tab_bar_spec,
+            tab_bar_spec.display_row_spec(),
             DisplayTextFragment::tab_bar(tab_bar.text),
             &mut render_context,
         ) else {

@@ -170,6 +170,39 @@ fn display_row_source_render_request_builds_whole_row_spec() {
 }
 
 #[test]
+fn display_row_source_render_request_allocates_base_face_id() {
+    let mut face = base_face();
+    face.face_id = 0;
+    let mut face_ids = FrameFaceIdAllocator::new(24);
+    let geometry = DisplayRowGeometry {
+        y: 5.0,
+        width: 120.0,
+        height: 20.0,
+        char_width: 10.0,
+        ascent: 14.0,
+        tab_policy: DisplayTabPolicy::every(8),
+    };
+    let mut symbol_values = std::collections::HashMap::new();
+    symbol_values.insert("header-line-indent-width".to_string(), Value::fixnum(3));
+
+    let request = DisplayRowSourceRenderRequest::from_base_face(
+        geometry.clone(),
+        &mut face_ids,
+        &face,
+        GlyphRowRole::HeaderLine,
+        symbol_values.clone(),
+    );
+    let spec = request.display_row_spec();
+
+    assert_eq!(spec.geometry, geometry);
+    assert_eq!(spec.render_bounds, DisplayRowRenderBounds::whole_row(120.0));
+    assert_eq!(spec.base_face_id, 24);
+    assert_eq!(face_ids.finish(), 25);
+    assert_eq!(spec.role, GlyphRowRole::HeaderLine);
+    assert_eq!(spec.symbol_values, symbol_values);
+}
+
+#[test]
 fn display_row_render_context_builds_source_resolve_params() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
