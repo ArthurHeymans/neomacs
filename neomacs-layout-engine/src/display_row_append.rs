@@ -1245,11 +1245,11 @@ pub(crate) fn append_display_replacement_string_fragment_to_text_row(
     )
 }
 
-pub(crate) struct DisplayRowAppendOutput {
-    pub(crate) row: usize,
-    pub(crate) row_y: f32,
-    pub(crate) glyph_y: f32,
-    pub(crate) height: f32,
+struct DisplayRowAppendOutput {
+    row: usize,
+    row_y: f32,
+    glyph_y: f32,
+    height: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1399,7 +1399,7 @@ impl DisplayRowAppendFrame {
         )
     }
 
-    pub(crate) fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {
+    fn at(self, position: DisplayRowPosition, face_id: u32) -> DisplayRowAppendContext {
         DisplayRowAppendContext {
             row: self.row,
             glyph_y: self.glyph_y,
@@ -1415,7 +1415,7 @@ impl DisplayRowAppendFrame {
         }
     }
 
-    pub(crate) fn append_spec(
+    fn append_spec(
         &self,
         position: DisplayRowPosition,
         face_id: u32,
@@ -1425,22 +1425,22 @@ impl DisplayRowAppendFrame {
     }
 }
 
-pub(crate) struct DisplayRowAppendContext {
-    pub(crate) row: usize,
-    pub(crate) glyph_y: f32,
-    pub(crate) x: f32,
-    pub(crate) col: usize,
-    pub(crate) geometry: DisplayRowGeometry,
-    pub(crate) default_row_height: f32,
-    pub(crate) content_x: f32,
-    pub(crate) text_width: f32,
-    pub(crate) line_number_width: f32,
-    pub(crate) face_space_width: f32,
-    pub(crate) face_id: u32,
+struct DisplayRowAppendContext {
+    row: usize,
+    glyph_y: f32,
+    x: f32,
+    col: usize,
+    geometry: DisplayRowGeometry,
+    default_row_height: f32,
+    content_x: f32,
+    text_width: f32,
+    line_number_width: f32,
+    face_space_width: f32,
+    face_id: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DisplayRowAppendKind {
+enum DisplayRowAppendKind {
     SourceText,
     Tab,
     ControlChar,
@@ -1450,16 +1450,16 @@ pub(crate) enum DisplayRowAppendKind {
     DisplayReplacementString,
 }
 
-pub(crate) struct DisplayRowAppendSpec {
-    pub(crate) geometry: DisplayRowGeometry,
-    pub(crate) layout: DisplayRowLayout,
-    pub(crate) position: DisplayRowPosition,
-    pub(crate) max_x: f32,
-    pub(crate) output: DisplayRowAppendOutput,
+struct DisplayRowAppendSpec {
+    geometry: DisplayRowGeometry,
+    layout: DisplayRowLayout,
+    position: DisplayRowPosition,
+    max_x: f32,
+    output: DisplayRowAppendOutput,
 }
 
 impl DisplayRowAppendContext {
-    pub(crate) fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
+    fn append_spec(&self, kind: DisplayRowAppendKind) -> DisplayRowAppendSpec {
         let char_width = match kind {
             DisplayRowAppendKind::Tab => self.face_space_width,
             DisplayRowAppendKind::DisplayReplacementString => self.face_space_width,
@@ -1518,7 +1518,7 @@ impl DisplayRowAppendContext {
 }
 
 impl DisplayRowAppendSpec {
-    pub(crate) fn display_row_source_render_request<'face>(
+    fn display_row_source_render_request<'face>(
         &self,
         base_face_id: u32,
         base_face: &'face ResolvedFace,
@@ -1535,7 +1535,7 @@ impl DisplayRowAppendSpec {
         })
     }
 
-    pub(crate) fn text_row_output(&self) -> TextRowOutput {
+    fn text_row_output(&self) -> TextRowOutput {
         TextRowOutput {
             row: self.output.row,
             row_y: self.output.row_y,
