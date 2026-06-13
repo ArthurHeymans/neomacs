@@ -35,7 +35,7 @@ use crate::display_row_append::{
     append_display_replacement_string_source_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
     append_measured_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
-    measure_buffer_text_fragment_append_to_text_row,
+    measure_buffer_text_fragment_natural_advance_to_text_row,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy};
@@ -5522,7 +5522,7 @@ impl LayoutEngine {
                     }
                 }
             } else if ch == '\t' || is_cluster_continuation || !ch.is_ascii() {
-                measure_buffer_text_fragment_append_to_text_row(
+                measure_buffer_text_fragment_natural_advance_to_text_row(
                     &mut self.matrix_builder,
                     evaluator,
                     &mut self.font_metrics,
@@ -5535,7 +5535,6 @@ impl LayoutEngine {
                     frame.clone(),
                     append_position,
                 )
-                .map(|progress| progress.metrics.width_px)
                 .unwrap_or_else(|| {
                     if ch == '\t' {
                         text_display_tab_policy(content_x, params)

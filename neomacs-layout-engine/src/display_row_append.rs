@@ -636,7 +636,7 @@ pub(crate) fn append_measured_buffer_text_fragment_to_text_row<B: LayoutBufferVi
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn measure_buffer_text_fragment_append_to_text_row<B: LayoutBufferView + ?Sized>(
+fn measure_buffer_text_fragment_append_progress_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
@@ -675,6 +675,41 @@ pub(crate) fn measure_buffer_text_fragment_append_to_text_row<B: LayoutBufferVie
         outcome.stop,
         outcome.source_slots,
     ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn measure_buffer_text_fragment_natural_advance_to_text_row<
+    B: LayoutBufferView + ?Sized,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    fragment: DisplayTextFragment,
+    face_resolver: &FaceResolver,
+    base_face: &ResolvedFace,
+    buffer_id: BufferId,
+    buffer: &B,
+    face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<f32> {
+    Some(
+        measure_buffer_text_fragment_append_progress_to_text_row(
+            builder,
+            evaluator,
+            font_metrics,
+            fragment,
+            face_resolver,
+            base_face,
+            buffer_id,
+            buffer,
+            face_id,
+            frame,
+            position,
+        )?
+        .metrics
+        .width_px,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]

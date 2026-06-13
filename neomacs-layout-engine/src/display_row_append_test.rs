@@ -1425,7 +1425,7 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
     let fragment = DisplayTextFragment::buffer_text(CharPos0::new(1), CharPos0::new(2));
 
-    let measured = measure_buffer_text_fragment_append_to_text_row(
+    let measured_width = measure_buffer_text_fragment_natural_advance_to_text_row(
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -1465,10 +1465,8 @@ fn measure_buffer_text_fragment_append_uses_shared_renderer_without_mutating_row
     )
     .expect("appended buffer fragment");
 
-    assert_eq!(measured.end, end);
-    assert_eq!(measured.metrics, appended.metrics);
-    assert_eq!(measured.status, appended.status);
-    assert_eq!(measured.slots.len(), appended.slots.len());
+    assert_eq!(end.x_px - position.x_px, measured_width);
+    assert_eq!(appended.metrics.width_px, measured_width);
 }
 
 #[test]
