@@ -38,7 +38,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             ]),
         ]))
         .replacement,
-        Some(DisplayReplacementProperty::Space(DisplayStretch {
+        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
             width: DisplayStretchWidth::AlignTo(DisplayLengthExpr::Sub(vec![
                 DisplayLengthExpr::Symbol(DisplayLengthSymbol::Right),
                 DisplayLengthExpr::Em(2.0),
@@ -49,15 +49,21 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
     );
     assert_eq!(
         classify_display_property(Value::list(vec![Value::symbol("image")])).replacement,
-        Some(DisplayReplacementProperty::Image)
+        Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Image
+        ))
     );
     assert_eq!(
         classify_display_property(Value::list(vec![Value::symbol("video")])).replacement,
-        Some(DisplayReplacementProperty::Video)
+        Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Video
+        ))
     );
     assert_eq!(
         classify_display_property(Value::list(vec![Value::symbol("webkit")])).replacement,
-        Some(DisplayReplacementProperty::Webkit)
+        Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Webkit
+        ))
     );
     assert_eq!(
         classify_display_property(Value::list(vec![
@@ -66,12 +72,14 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             xwidget,
         ]))
         .replacement,
-        Some(DisplayReplacementProperty::Xwidget(
-            DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-                xwidget_id: 1234,
-                width: 96.0,
-                height: 54.0,
-            })
+        Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Xwidget(DisplayMediaReplacement::xwidget(
+                DisplayXwidgetItem {
+                    xwidget_id: 1234,
+                    width: 96.0,
+                    height: 54.0,
+                }
+            ))
         ))
     );
 
@@ -116,7 +124,7 @@ fn classify_display_property_parses_space_width_height_and_ascent() {
             Value::fixnum(50),
         ]))
         .replacement,
-        Some(DisplayReplacementProperty::Space(DisplayStretch {
+        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Em(3.0)),
             height: Some(DisplayLength::Em(2.0)),
             ascent: Some(DisplayLength::Em(50.0)),
@@ -135,7 +143,7 @@ fn classify_display_property_keeps_space_replacement_without_explicit_width() {
             Value::fixnum(2),
         ]))
         .replacement,
-        Some(DisplayReplacementProperty::Space(DisplayStretch {
+        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Em(1.0)),
             height: Some(DisplayLength::Em(2.0)),
             ascent: None,
@@ -163,12 +171,12 @@ fn display_replacement_property_accepts_only_matching_media_replacements() {
         height: 60.0,
     });
 
-    assert!(DisplayReplacementProperty::Image.accepts_media_replacement(&image));
-    assert!(!DisplayReplacementProperty::Image.accepts_media_replacement(&video));
-    assert!(DisplayReplacementProperty::Video.accepts_media_replacement(&video));
-    assert!(!DisplayReplacementProperty::Video.accepts_media_replacement(&image));
-    assert!(DisplayReplacementProperty::Webkit.accepts_media_replacement(&xwidget));
-    assert!(!DisplayReplacementProperty::Webkit.accepts_media_replacement(&image));
+    assert!(DisplayMediaReplacementProperty::Image.accepts_media_replacement(&image));
+    assert!(!DisplayMediaReplacementProperty::Image.accepts_media_replacement(&video));
+    assert!(DisplayMediaReplacementProperty::Video.accepts_media_replacement(&video));
+    assert!(!DisplayMediaReplacementProperty::Video.accepts_media_replacement(&image));
+    assert!(DisplayMediaReplacementProperty::Webkit.accepts_media_replacement(&xwidget));
+    assert!(!DisplayMediaReplacementProperty::Webkit.accepts_media_replacement(&image));
 }
 
 #[test]
@@ -180,30 +188,31 @@ fn display_replacement_property_describes_media_replacement_behavior() {
     };
     let xwidget_replacement = DisplayMediaReplacement::xwidget(xwidget);
 
-    assert!(DisplayReplacementProperty::Image.is_media_replacement());
-    assert!(DisplayReplacementProperty::Video.is_media_replacement());
-    assert!(DisplayReplacementProperty::Webkit.is_media_replacement());
-    assert!(DisplayReplacementProperty::Xwidget(xwidget_replacement).is_media_replacement());
-    assert!(!DisplayReplacementProperty::String.is_media_replacement());
     assert_eq!(
-        DisplayReplacementProperty::Image.media_fallback_placeholder(),
+        DisplayMediaReplacementProperty::Image.media_fallback_placeholder(),
         Some("[img]")
     );
     assert_eq!(
-        DisplayReplacementProperty::Video.media_fallback_placeholder(),
+        DisplayMediaReplacementProperty::Video.media_fallback_placeholder(),
         Some("     ")
     );
     assert_eq!(
-        DisplayReplacementProperty::Webkit.media_fallback_placeholder(),
+        DisplayMediaReplacementProperty::Webkit.media_fallback_placeholder(),
         Some("     ")
     );
     assert_eq!(
-        DisplayReplacementProperty::Xwidget(xwidget_replacement).media_fallback_placeholder(),
+        DisplayMediaReplacementProperty::Xwidget(xwidget_replacement).media_fallback_placeholder(),
         None
     );
     assert_eq!(
-        DisplayReplacementProperty::Xwidget(xwidget_replacement).direct_replacement(),
+        DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Xwidget(
+            xwidget_replacement
+        ))
+        .direct_replacement(),
         Some(DisplayDirectReplacement::Media(xwidget_replacement))
     );
-    assert_eq!(DisplayReplacementProperty::Image.direct_replacement(), None);
+    assert_eq!(
+        DisplayMediaReplacementProperty::Image.direct_replacement(),
+        None
+    );
 }

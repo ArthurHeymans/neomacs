@@ -16,7 +16,12 @@ pub(crate) struct DisplayPropertyClassification {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayReplacementProperty {
     String,
-    Space(DisplayStretch),
+    Stretch(DisplayStretch),
+    Media(DisplayMediaReplacementProperty),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DisplayMediaReplacementProperty {
     Image,
     Video,
     Xwidget(DisplayMediaReplacement),
@@ -32,9 +37,32 @@ pub(crate) enum DisplayDirectReplacement {
 impl DisplayReplacementProperty {
     pub(crate) fn direct_replacement(&self) -> Option<DisplayDirectReplacement> {
         match self {
-            Self::Space(stretch) => Some(DisplayDirectReplacement::Stretch(stretch.clone())),
-            Self::Xwidget(media) => Some(DisplayDirectReplacement::Media(*media)),
-            Self::String | Self::Image | Self::Video | Self::Webkit => None,
+            Self::Stretch(stretch) => Some(DisplayDirectReplacement::Stretch(stretch.clone())),
+            Self::Media(media) => media
+                .direct_replacement()
+                .map(DisplayDirectReplacement::Media),
+            Self::String => None,
+        }
+    }
+
+    pub(crate) fn accepts_media_replacement(&self, media: &DisplayMediaReplacement) -> bool {
+        self.media()
+            .is_some_and(|replacement| replacement.accepts_media_replacement(media))
+    }
+
+    pub(crate) fn media(&self) -> Option<&DisplayMediaReplacementProperty> {
+        match self {
+            Self::Media(media) => Some(media),
+            Self::String | Self::Stretch(_) => None,
+        }
+    }
+}
+
+impl DisplayMediaReplacementProperty {
+    pub(crate) fn direct_replacement(&self) -> Option<DisplayMediaReplacement> {
+        match self {
+            Self::Xwidget(media) => Some(*media),
+            Self::Image | Self::Video | Self::Webkit => None,
         }
     }
 
@@ -54,18 +82,15 @@ impl DisplayReplacementProperty {
         )
     }
 
-    pub(crate) fn is_media_replacement(&self) -> bool {
-        matches!(
-            self,
-            Self::Image | Self::Video | Self::Xwidget(_) | Self::Webkit
-        )
+    pub(crate) fn uses_xwidget_cursor_extents(&self) -> bool {
+        matches!(self, Self::Xwidget(_))
     }
 
     pub(crate) fn media_fallback_placeholder(&self) -> Option<&'static str> {
         match self {
             Self::Image => Some("[img]"),
             Self::Video | Self::Webkit => Some("     "),
-            Self::String | Self::Space(_) | Self::Xwidget(_) => None,
+            Self::Xwidget(_) => None,
         }
     }
 }
@@ -76,23 +101,29 @@ pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassifi
     let replacement = if value.is_string() {
         Some(DisplayReplacementProperty::String)
     } else if is_display_space_spec(&value) {
-        parse_display_space(value).map(DisplayReplacementProperty::Space)
+        parse_display_space(value).map(DisplayReplacementProperty::Stretch)
     } else if DisplaySpecHead::Image.is_head_of(&value) {
-        Some(DisplayReplacementProperty::Image)
+        Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Image,
+        ))
     } else if DisplaySpecHead::Video.is_head_of(&value) {
-        Some(DisplayReplacementProperty::Video)
+        Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Video,
+        ))
     } else if DisplaySpecHead::Xwidget.is_head_of(&value) {
         parse_display_xwidget_layout(&value).map(|layout| {
-            DisplayReplacementProperty::Xwidget(DisplayMediaReplacement::xwidget(
-                DisplayXwidgetItem {
+            DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Xwidget(
+                DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
                     xwidget_id: layout.xwidget_id.min(i32::MAX as u32) as i32,
                     width: layout.width,
                     height: layout.height,
-                },
+                }),
             ))
         })
     } else if DisplaySpecHead::Webkit.is_head_of(&value) {
-        Some(DisplayReplacementProperty::Webkit)
+        Some(DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Webkit,
+        ))
     } else {
         None
     };

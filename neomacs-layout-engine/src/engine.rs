@@ -4607,7 +4607,7 @@ impl LayoutEngine {
                     // Case 2: Space spec — (space :width …) or (space :align-to …)
                     if matches!(
                         display_property.replacement,
-                        Some(DisplayReplacementProperty::Space(_))
+                        Some(DisplayReplacementProperty::Stretch(_))
                     ) {
                         let (display_ch, _) = decode_utf8(&text[byte_idx..]);
                         let display_char_width = active_face_state.advance_for_char(
@@ -4684,12 +4684,14 @@ impl LayoutEngine {
                     // Case 3: media specs — direct xwidget specs already carry a
                     // media item; image/video/webkit resolve through the display
                     // host and keep TTY placeholders when unresolved.
-                    if let Some(replacement) = display_property.replacement.as_ref()
-                        && replacement.is_media_replacement()
+                    if let Some(media_replacement) = display_property
+                        .replacement
+                        .as_ref()
+                        .and_then(DisplayReplacementProperty::media)
                     {
                         let resolved_replacement = resolve_display_replacement(
                             prop_val,
-                            replacement,
+                            media_replacement,
                             evaluator.display_host.as_deref(),
                             active_face_state.resolved_face(),
                             face_metrics.char_width,
@@ -4700,17 +4702,15 @@ impl LayoutEngine {
                             Some(ResolvedDisplayReplacement::Media(media)) => {
                                 let display_width = media.width;
                                 let display_height = media.height;
-                                let (cursor_face_h, cursor_face_ascent) = if matches!(
-                                    replacement,
-                                    DisplayReplacementProperty::Xwidget(_)
-                                ) {
-                                    (
-                                        display_height.max(face_metrics.row_height),
-                                        display_height.max(face_metrics.ascent),
-                                    )
-                                } else {
-                                    (display_height, display_height)
-                                };
+                                let (cursor_face_h, cursor_face_ascent) =
+                                    if media_replacement.uses_xwidget_cursor_extents() {
+                                        (
+                                            display_height.max(face_metrics.row_height),
+                                            display_height.max(face_metrics.ascent),
+                                        )
+                                    } else {
+                                        (display_height, display_height)
+                                    };
 
                                 if point_in_display_replacement {
                                     capture_cursor_info(

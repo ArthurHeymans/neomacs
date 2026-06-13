@@ -4,7 +4,7 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::{DisplayDirectReplacement, DisplayReplacementProperty};
+use crate::display_property::DisplayMediaReplacementProperty;
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
@@ -274,13 +274,13 @@ fn resolved_media_replacement(geometry: DisplayMediaReplacement) -> ResolvedDisp
 
 pub(crate) fn resolve_display_replacement(
     display_prop: Value,
-    replacement: &DisplayReplacementProperty,
+    replacement: &DisplayMediaReplacementProperty,
     display_host: Option<&dyn DisplayHost>,
     resolved_face: &ResolvedFace,
     fallback_char_width: f32,
     fallback_row_height: f32,
 ) -> Option<ResolvedDisplayReplacement> {
-    if let Some(DisplayDirectReplacement::Media(media)) = replacement.direct_replacement() {
+    if let Some(media) = replacement.direct_replacement() {
         return Some(resolved_media_replacement(media));
     }
 
@@ -612,7 +612,7 @@ mod tests {
 
         let resolved = resolve_display_replacement(
             Value::NIL,
-            &DisplayReplacementProperty::Xwidget(media),
+            &DisplayMediaReplacementProperty::Xwidget(media),
             None,
             resolver.default_face(),
             8.0,
@@ -629,7 +629,7 @@ mod tests {
 
         let resolved = resolve_display_replacement(
             Value::NIL,
-            &DisplayReplacementProperty::Image,
+            &DisplayMediaReplacementProperty::Image,
             None,
             resolver.default_face(),
             8.0,
