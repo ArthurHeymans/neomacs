@@ -1922,6 +1922,42 @@ impl<'a> OverlayStringRenderRowContext<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
+struct OverlayStringRenderSource {
+    string: Value,
+    overlay_id: Value,
+    anchor_charpos: CharPos0,
+    kind: OverlayStringKind,
+}
+
+impl OverlayStringRenderSource {
+    fn new(
+        overlay_string: super::neovm_bridge::OverlayDisplayString,
+        anchor_charpos: CharPos0,
+        kind: OverlayStringKind,
+    ) -> Self {
+        Self {
+            string: overlay_string.string,
+            overlay_id: overlay_string.overlay_id,
+            anchor_charpos,
+            kind,
+        }
+    }
+
+    fn anchor_i64(self) -> i64 {
+        self.anchor_charpos.get() as i64
+    }
+
+    fn fragment(self) -> DisplayTextFragment {
+        DisplayTextFragment::overlay_string(
+            self.string,
+            self.overlay_id,
+            self.anchor_charpos,
+            self.kind,
+        )
+    }
+}
+
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
@@ -1931,7 +1967,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     evaluator: &mut Context,
     output_emitter: &mut WindowOutputEmitter,
     buffer: &B,
-    fragment: DisplayTextFragment,
+    source_request: OverlayStringRenderSource,
     font_metrics: &mut Option<FontMetricsService>,
     face_resolver: &super::neovm_bridge::FaceResolver,
     x: &mut f32,
@@ -1940,12 +1976,13 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
     cursor_info: &mut CursorCaptureState,
     hit_rows: &mut Vec<HitRow>,
     hit_row_range: &mut HitRowRangeTracker,
-    anchor_charpos: i64,
     row_y_positions: &mut DisplayRowYPositions,
     row_context: OverlayStringRenderRowContext<'_>,
     face_ids: &mut FrameFaceIdAllocator,
     builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
 ) {
+    let fragment = source_request.fragment();
+    let anchor_charpos = source_request.anchor_i64();
     let DisplayTextStorage::LispString(text_value) = fragment.storage else {
         return;
     };
@@ -4250,9 +4287,8 @@ impl LayoutEngine {
                                     evaluator,
                                     &mut output_emitter,
                                     buffer,
-                                    DisplayTextFragment::overlay_string(
-                                        overlay_string.string,
-                                        overlay_string.overlay_id,
+                                    OverlayStringRenderSource::new(
+                                        *overlay_string,
                                         CharPos0::new(charpos as usize),
                                         OverlayStringKind::After,
                                     ),
@@ -4264,7 +4300,6 @@ impl LayoutEngine {
                                     &mut cursor_info,
                                     &mut hit_rows,
                                     &mut hit_row_range,
-                                    charpos,
                                     &mut row_y_positions,
                                     OverlayStringRenderRowContext::new(
                                         &text_append_surface,
@@ -5295,9 +5330,8 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             buffer,
-                            DisplayTextFragment::overlay_string(
-                                overlay_string.string,
-                                overlay_string.overlay_id,
+                            OverlayStringRenderSource::new(
+                                *overlay_string,
                                 CharPos0::new(charpos as usize),
                                 OverlayStringKind::Before,
                             ),
@@ -5309,7 +5343,6 @@ impl LayoutEngine {
                             &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_range,
-                            charpos,
                             &mut row_y_positions,
                             OverlayStringRenderRowContext::new(
                                 &text_append_surface,
@@ -5389,9 +5422,8 @@ impl LayoutEngine {
                             evaluator,
                             &mut output_emitter,
                             buffer,
-                            DisplayTextFragment::overlay_string(
-                                overlay_string.string,
-                                overlay_string.overlay_id,
+                            OverlayStringRenderSource::new(
+                                *overlay_string,
                                 CharPos0::new(charpos as usize),
                                 OverlayStringKind::After,
                             ),
@@ -5403,7 +5435,6 @@ impl LayoutEngine {
                             &mut cursor_info,
                             &mut hit_rows,
                             &mut hit_row_range,
-                            charpos,
                             &mut row_y_positions,
                             OverlayStringRenderRowContext::new(
                                 &text_append_surface,
@@ -5473,9 +5504,8 @@ impl LayoutEngine {
                     evaluator,
                     &mut output_emitter,
                     buffer,
-                    DisplayTextFragment::overlay_string(
-                        overlay_string.string,
-                        overlay_string.overlay_id,
+                    OverlayStringRenderSource::new(
+                        *overlay_string,
                         CharPos0::new(charpos as usize),
                         OverlayStringKind::Before,
                     ),
@@ -5487,7 +5517,6 @@ impl LayoutEngine {
                     &mut cursor_info,
                     &mut hit_rows,
                     &mut hit_row_range,
-                    charpos,
                     &mut row_y_positions,
                     OverlayStringRenderRowContext::new(
                         &text_append_surface,
@@ -5507,9 +5536,8 @@ impl LayoutEngine {
                     evaluator,
                     &mut output_emitter,
                     buffer,
-                    DisplayTextFragment::overlay_string(
-                        overlay_string.string,
-                        overlay_string.overlay_id,
+                    OverlayStringRenderSource::new(
+                        *overlay_string,
                         CharPos0::new(charpos as usize),
                         OverlayStringKind::After,
                     ),
@@ -5521,7 +5549,6 @@ impl LayoutEngine {
                     &mut cursor_info,
                     &mut hit_rows,
                     &mut hit_row_range,
-                    charpos,
                     &mut row_y_positions,
                     OverlayStringRenderRowContext::new(
                         &text_append_surface,
