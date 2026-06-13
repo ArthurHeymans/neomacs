@@ -19,7 +19,7 @@ use crate::display_row::{
     merge_display_row_source_slot_bounds_to_current_row,
 };
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout,
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
     DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -45,7 +45,6 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
-use std::collections::HashMap;
 
 struct SingleDisplayItemSource {
     source_position: DisplaySourcePosition,
@@ -2780,13 +2779,6 @@ fn append_display_replacement_string_fragment_to_text_row(
     )
 }
 
-struct DisplayRowAppendOutput {
-    row: usize,
-    row_y: f32,
-    glyph_y: f32,
-    height: f32,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct DisplayRowAppendPlacement {
     row: usize,
@@ -3165,39 +3157,6 @@ impl DisplayRowAppendFrame {
         }
     }
 
-    fn append_spec(
-        &self,
-        position: DisplayRowPosition,
-        face_id: u32,
-        kind: DisplayRowAppendKind,
-    ) -> DisplayRowAppendSpec {
-        let char_width = kind.char_width(self);
-        let max_x = kind.max_x(self);
-        let output_height = kind.output_height(self);
-
-        DisplayRowAppendSpec {
-            geometry: DisplayRowGeometry {
-                char_width,
-                ..self.geometry.clone()
-            },
-            layout: self.geometry.to_layout(
-                GlyphRowRole::Text,
-                char_width,
-                self.geometry.ascent,
-                RenderFaceRef::FaceId(face_id),
-                HashMap::new(),
-            ),
-            position,
-            max_x,
-            output: DisplayRowAppendOutput {
-                row: self.row,
-                row_y: self.geometry.y,
-                glyph_y: self.glyph_y,
-                height: output_height,
-            },
-        }
-    }
-
     fn source_append_request<'face>(
         &self,
         position: DisplayRowPosition,
@@ -3205,11 +3164,30 @@ impl DisplayRowAppendFrame {
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowSourceAppendRequest<'face> {
-        let append_spec = self.append_spec(position, face_id, kind);
+        let geometry = DisplayRowGeometry {
+            char_width: kind.char_width(self),
+            ..self.geometry.clone()
+        };
+        let request = DisplayRowSourceRenderRequest::whole_row(
+            geometry,
+            face_id,
+            base_face,
+            GlyphRowRole::Text,
+        )
+        .with_render_bounds(DisplayRowRenderBounds {
+            start: position,
+            max_x_px: kind.max_x(self),
+        });
+        let output = TextRowOutput {
+            row: self.row,
+            row_y: self.geometry.y,
+            glyph_y: self.glyph_y,
+            height: kind.output_height(self),
+        };
         DisplayRowSourceAppendRequest {
-            request: append_spec.display_row_source_render_request(face_id, base_face),
-            output: append_spec.text_row_output(),
-            start: append_spec.position,
+            request,
+            output,
+            start: position,
             base_face_id: face_id,
         }
     }
@@ -3257,42 +3235,6 @@ impl DisplayRowAppendKind {
             | Self::DisplayReplacement
             | Self::DisplayReplacementString => frame.geometry.height,
             Self::Tab | Self::ControlChar | Self::SourceMappedText => frame.default_row_height,
-        }
-    }
-}
-
-struct DisplayRowAppendSpec {
-    geometry: DisplayRowGeometry,
-    layout: DisplayRowLayout,
-    position: DisplayRowPosition,
-    max_x: f32,
-    output: DisplayRowAppendOutput,
-}
-
-impl DisplayRowAppendSpec {
-    fn display_row_source_render_request<'face>(
-        &self,
-        base_face_id: u32,
-        base_face: &'face ResolvedFace,
-    ) -> DisplayRowSourceRenderRequest<'face> {
-        DisplayRowSourceRenderRequest::whole_row(
-            self.geometry.clone(),
-            base_face_id,
-            base_face,
-            self.layout.role,
-        )
-        .with_render_bounds(DisplayRowRenderBounds {
-            start: self.position,
-            max_x_px: self.max_x,
-        })
-    }
-
-    fn text_row_output(&self) -> TextRowOutput {
-        TextRowOutput {
-            row: self.output.row,
-            row_y: self.output.row_y,
-            glyph_y: self.output.glyph_y,
-            height: self.output.height,
         }
     }
 }
