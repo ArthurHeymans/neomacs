@@ -3,8 +3,8 @@ use crate::composition::{
 };
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
-    DisplayLengthExpr, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, GlyphlessMethod, RenderFaceRef, SourceSpan, control_char_caret_char,
+    DisplayLengthExpr, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod,
+    RenderFaceRef, SourceSpan, control_char_caret_char,
 };
 #[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
@@ -293,6 +293,33 @@ pub(crate) struct DisplayRowAppendProgress {
     pub(crate) slots: Vec<DisplayRowGlyphSlot>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisplayTextSourceMapping {
+    NaturalText,
+    SourceMapped,
+}
+
+impl DisplayTextSourceMapping {
+    fn charpos(self, start_char: usize, char_offset: usize) -> usize {
+        match self {
+            Self::NaturalText => start_char + char_offset,
+            Self::SourceMapped => start_char,
+        }
+    }
+
+    fn slot_source(
+        self,
+        span_start: &DisplaySourcePosition,
+        char_offset: usize,
+        byte_offset: usize,
+    ) -> DisplaySourcePosition {
+        match self {
+            Self::NaturalText => source_position_advance(span_start, char_offset, byte_offset),
+            Self::SourceMapped => span_start.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) struct DisplayRowBuilder<'a> {
     layout: DisplayRowLayout,
@@ -537,107 +564,24 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         } = item;
         let status = match kind {
             DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
-            DisplayItemKind::TextRun(run) => {
-                let face_id = self.writer.face_id(face);
-                let measurement = self.text_run_measurement(run.text.as_ref(), face_id);
-                let mut charpos = source_span_start_char(&span);
-                let mut char_offset = 0usize;
-                let mut byte_offset = 0usize;
-                let mut status = DisplayRowAppendStatus::Complete;
-                for ch in run.text.chars() {
-                    let advance = self
-                        .writer
-                        .text_char_advance_px_at_position_with_measurement(
-                            ch,
-                            face_id,
-                            self.position,
-                            char_offset,
-                            byte_offset,
-                            &measurement,
-                        );
-                    if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
-                        status = DisplayRowAppendStatus::Clipped;
-                        break;
-                    }
-
-                    let before_len = self.text_area_len();
-                    let slot_start = self.position;
-                    self.writer.push_text_char_at_position_with_measurement(
-                        ch,
-                        face_id,
-                        charpos,
-                        self.position,
-                        char_offset,
-                        byte_offset,
-                        &measurement,
-                    );
-                    self.writer.apply_item_layout_since(before_len, item_layout);
-                    let written = self.metrics_since(before_len);
-                    slots.push(DisplayRowGlyphSlot {
-                        source: source_position_advance(&span.start, char_offset, byte_offset),
-                        x_px: slot_start.x_px,
-                        col: slot_start.col,
-                        width_px: written.width_px,
-                        width_cols: written.width_cols,
-                    });
-                    self.advance(written);
-                    metrics.add(written);
-                    charpos += 1;
-                    char_offset += 1;
-                    byte_offset += ch.len_utf8();
-                }
-                status
-            }
-            DisplayItemKind::SourceMappedText(text) => {
-                let face_id = self.writer.face_id(face);
-                let measurement = self.text_run_measurement(text.text.as_ref(), face_id);
-                let charpos = source_span_start_char(&span);
-                let mut char_offset = 0usize;
-                let mut byte_offset = 0usize;
-                let mut status = DisplayRowAppendStatus::Complete;
-                for ch in text.text.chars() {
-                    let advance = self
-                        .writer
-                        .text_char_advance_px_at_position_with_measurement(
-                            ch,
-                            face_id,
-                            self.position,
-                            char_offset,
-                            byte_offset,
-                            &measurement,
-                        );
-                    if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
-                        status = DisplayRowAppendStatus::Clipped;
-                        break;
-                    }
-
-                    let before_len = self.text_area_len();
-                    let slot_start = self.position;
-                    self.writer.push_text_char_at_position_with_measurement(
-                        ch,
-                        face_id,
-                        charpos,
-                        self.position,
-                        char_offset,
-                        byte_offset,
-                        &measurement,
-                    );
-                    self.writer.apply_item_layout_since(before_len, item_layout);
-                    let written = self.metrics_since(before_len);
-                    slots.push(DisplayRowGlyphSlot {
-                        source: span.start.clone(),
-                        x_px: slot_start.x_px,
-                        col: slot_start.col,
-                        width_px: written.width_px,
-                        width_cols: written.width_cols,
-                    });
-                    self.advance(written);
-                    metrics.add(written);
-                    char_offset += 1;
-                    byte_offset += ch.len_utf8();
-                }
-                status
-            }
+            DisplayItemKind::TextRun(run) => self.push_text_item(
+                &span,
+                face,
+                item_layout,
+                run.text.as_ref(),
+                DisplayTextSourceMapping::NaturalText,
+                &mut metrics,
+                &mut slots,
+            ),
+            DisplayItemKind::SourceMappedText(text) => self.push_text_item(
+                &span,
+                face,
+                item_layout,
+                text.text.as_ref(),
+                DisplayTextSourceMapping::SourceMapped,
+                &mut metrics,
+                &mut slots,
+            ),
             kind => {
                 let slot_start = self.position;
                 let slot_source = span.start.clone();
@@ -677,6 +621,66 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             status,
             slots,
         }
+    }
+
+    fn push_text_item(
+        &mut self,
+        span: &SourceSpan,
+        face: RenderFaceRef,
+        item_layout: DisplayItemLayout,
+        text: &str,
+        source_mapping: DisplayTextSourceMapping,
+        metrics: &mut DisplayRowWriteMetrics,
+        slots: &mut Vec<DisplayRowGlyphSlot>,
+    ) -> DisplayRowAppendStatus {
+        let face_id = self.writer.face_id(face);
+        let measurement = self.text_run_measurement(text, face_id);
+        let start_char = source_span_start_char(span);
+        let mut status = DisplayRowAppendStatus::Complete;
+        let mut char_offset = 0usize;
+        let mut byte_offset = 0usize;
+        for ch in text.chars() {
+            let advance = self
+                .writer
+                .text_char_advance_px_at_position_with_measurement(
+                    ch,
+                    face_id,
+                    self.position,
+                    char_offset,
+                    byte_offset,
+                    &measurement,
+                );
+            if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
+                status = DisplayRowAppendStatus::Clipped;
+                break;
+            }
+
+            let before_len = self.text_area_len();
+            let slot_start = self.position;
+            self.writer.push_text_char_at_position_with_measurement(
+                ch,
+                face_id,
+                source_mapping.charpos(start_char, char_offset),
+                self.position,
+                char_offset,
+                byte_offset,
+                &measurement,
+            );
+            self.writer.apply_item_layout_since(before_len, item_layout);
+            let written = self.metrics_since(before_len);
+            slots.push(DisplayRowGlyphSlot {
+                source: source_mapping.slot_source(&span.start, char_offset, byte_offset),
+                x_px: slot_start.x_px,
+                col: slot_start.col,
+                width_px: written.width_px,
+                width_cols: written.width_cols,
+            });
+            self.advance(written);
+            metrics.add(written);
+            char_offset += 1;
+            byte_offset += ch.len_utf8();
+        }
+        status
     }
 
     fn text_area_len(&self) -> usize {
@@ -742,31 +746,19 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let before_len = self.row.glyphs[text_area].len();
         match item.kind {
             DisplayItemKind::TextRun(run) => {
-                let measurement = self.text_run_measurement(run.text.as_ref(), face_id);
-                let mut charpos = source_span_start_char(&item.span);
-                let mut char_offset = 0usize;
-                let mut byte_offset = 0usize;
-                for ch in run.text.chars() {
-                    self.push_text_char_with_measurement(
-                        ch,
-                        face_id,
-                        charpos,
-                        char_offset,
-                        byte_offset,
-                        &measurement,
-                    );
-                    charpos += 1;
-                    char_offset += 1;
-                    byte_offset += ch.len_utf8();
-                }
+                self.push_text_item(
+                    run.text.as_ref(),
+                    face_id,
+                    &item.span,
+                    DisplayTextSourceMapping::NaturalText,
+                );
             }
             DisplayItemKind::SourceMappedText(text) => {
-                let measurement = self.text_run_measurement(text.text.as_ref(), face_id);
-                self.push_source_mapped_text(
-                    text,
+                self.push_text_item(
+                    text.text.as_ref(),
                     face_id,
-                    source_span_start_char(&item.span),
-                    &measurement,
+                    &item.span,
+                    DisplayTextSourceMapping::SourceMapped,
                 );
             }
             DisplayItemKind::Stretch(stretch) => self.push_stretch(stretch, face_id),
@@ -817,6 +809,31 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             metrics.add(self.push_item(item));
         }
         metrics
+    }
+
+    fn push_text_item(
+        &mut self,
+        text: &str,
+        face_id: u32,
+        span: &SourceSpan,
+        source_mapping: DisplayTextSourceMapping,
+    ) {
+        let measurement = self.text_run_measurement(text, face_id);
+        let start_char = source_span_start_char(span);
+        let mut char_offset = 0usize;
+        let mut byte_offset = 0usize;
+        for ch in text.chars() {
+            self.push_text_char_with_measurement(
+                ch,
+                face_id,
+                source_mapping.charpos(start_char, char_offset),
+                char_offset,
+                byte_offset,
+                &measurement,
+            );
+            char_offset += 1;
+            byte_offset += ch.len_utf8();
+        }
     }
 
     fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {
@@ -1052,29 +1069,6 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         };
         self.push_text_char('^', face_id, charpos);
         self.push_text_char(caret_char, face_id, charpos);
-    }
-
-    fn push_source_mapped_text(
-        &mut self,
-        text: DisplaySourceMappedText,
-        face_id: u32,
-        charpos: usize,
-        measurement: &DisplayTextRunMeasurement,
-    ) {
-        let mut char_offset = 0usize;
-        let mut byte_offset = 0usize;
-        for ch in text.text.chars() {
-            self.push_text_char_with_measurement(
-                ch,
-                face_id,
-                charpos,
-                char_offset,
-                byte_offset,
-                measurement,
-            );
-            char_offset += 1;
-            byte_offset += ch.len_utf8();
-        }
     }
 
     fn push_glyphless(&mut self, glyphless: DisplayGlyphless, face_id: u32, charpos: usize) {
