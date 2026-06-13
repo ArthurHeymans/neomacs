@@ -38,7 +38,7 @@ cargo check -p neomacs-layout-engine
 
 Continuation work after this handoff:
 
-- `DisplayRowSpec` has been contained to `display_row.rs`; external tests/callers now use `DisplayRowSourceRenderRequest` or request-native helpers.
+- `DisplayRowSpec` has been contained and renamed to the private `LoweredDisplayRowSpec` in `display_row.rs`; external tests/callers now use `DisplayRowSourceRenderRequest` or request-native helpers.
 - Main buffer ordinary text and several special buffer item paths now append through shared source append requests; complex shaping keeps a premeasured policy only where the buffer walker still needs it for wrap/cursor decisions.
 - Replacement-string display sources now use the renderer-owned font metrics slot through render policy measurement callbacks.
 - The dormant `neomacs-layout-engine::display_backend` / `display_row_sink` scaffolding has been deleted. It represented an older backend-oriented width path and was no longer wired into production layout.
@@ -47,6 +47,7 @@ Continuation work after this handoff:
 - `.config/nextest.toml` caps the default nextest worker pool at 24 threads while keeping the memory-limit wrapper on every test.
 - Main buffer complex text append no longer constructs `DisplayTextRunMeasurement` in `engine.rs`; the append layer now lowers the already-resolved fragment advance into its render policy. The buffer walker still computes that advance for wrap and cursor decisions, so full width-path unification remains open.
 - Buffer text fragment append now uses one typed append helper with `BufferTextFragmentAppendMeasurement::{Natural, ResolvedAdvance}` instead of separate natural/resolved append entry points. This keeps measurement policy at the source-append boundary while the main buffer walker still decides when a resolved advance is required.
+- Append placement is private to `display_row_append.rs`, and append tests now build frames through `DisplayRowAppendSurface` instead of constructing lowered placement/frame internals.
 - Latest local verification:
 
   ```bash
@@ -124,7 +125,7 @@ Important boundary:
   - Source cursor abstraction: `DisplayItemSource`, `LispStringSourceCursor`, buffer/string source-facing cursor logic.
 
 - `neomacs-layout-engine/src/display_row.rs`
-  - Current row rendering center: `DisplayRowSourceRenderRequest`, `DisplayRowSpec`, `DisplayRowRenderContext`, `DisplayRowRenderer`, fragment rendering, row finalization helpers.
+  - Current row rendering center: `DisplayRowSourceRenderRequest`, private `LoweredDisplayRowSpec`, `DisplayRowRenderContext`, `DisplayRowRenderer`, fragment rendering, row finalization helpers.
 
 - `neomacs-layout-engine/src/display_row_append.rs`
   - Bridge for appending rendered fragments into current text rows and emitting output. Still has significant builder coupling.
@@ -161,13 +162,13 @@ engine.rs buffer loop
 String/chrome path
 ------------------
 DisplayRowSourceRenderRequest
-  -> DisplayRowSpec
+  -> LoweredDisplayRowSpec
   -> DisplayItemSource
   -> DisplayRowRenderer
   -> GlyphRow
 ```
 
-`DisplayRowSpec` is now mostly an internal lowered form. The remaining direct uses should be limited to renderer internals and tests that explicitly verify lowering or the private lowered append primitive. New caller coverage should use `DisplayRowSourceRenderRequest`, `DisplayRowSourceAppendRequest`, or a higher-level row request.
+The old caller-facing `DisplayRowSpec` name is gone from source. The lowered row request is now the private `LoweredDisplayRowSpec` inside `display_row.rs`; new caller coverage should use `DisplayRowSourceRenderRequest`, `DisplayRowSourceAppendRequest`, or a higher-level row request.
 
 ## Important Invariants
 
@@ -188,9 +189,11 @@ Preserve these while refactoring:
 
 ## Suggested Next Slices
 
-### Slice 1: Contain `DisplayRowSpec`
+### Slice 1: Contain `DisplayRowSpec` (done)
 
 Goal: make `DisplayRowSpec` an internal lowering type for `DisplayRowRenderer`.
+
+Status: complete in source. The lowered type is now private `LoweredDisplayRowSpec`; keep it that way.
 
 Steps:
 
@@ -202,7 +205,7 @@ Steps:
 
 2. For every test/caller that can use `DisplayRowSourceRenderRequest`, migrate it.
 
-3. Keep direct `DisplayRowSpec` use only in renderer internals or tests that explicitly verify lowering.
+3. Keep direct lowered-spec use only in renderer internals.
 
 4. Focused verification:
 
@@ -359,10 +362,10 @@ Expect some unrelated warnings from `neovm-core` during `cargo check`; do not mi
 
 ## Good First Task For The Next Developer
 
-Start with Slice 1: contain `DisplayRowSpec`.
+Start with Slice 2: retire old width paths.
 
-It is low-risk, continues the latest commit naturally, and gives cleaner architecture for the harder buffer-row migration. The concrete success criterion is:
+Slice 1 is complete in source: external tests and non-renderer callers construct `DisplayRowSourceRenderRequest` or a higher-level request, and lowered row construction is local to renderer lowering. The next concrete success criteria are:
 
-- external tests and non-renderer callers construct `DisplayRowSourceRenderRequest` or a higher-level request;
-- `DisplayRowSpec` construction is local to renderer lowering;
+- reduce duplicated width/advance decisions outside row rendering;
+- keep main-buffer tests covering ASCII, wide characters, grapheme clusters, and display replacements green;
 - full `neomacs-layout-engine` nextest remains green.

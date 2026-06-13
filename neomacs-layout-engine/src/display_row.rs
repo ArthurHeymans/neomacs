@@ -1229,7 +1229,7 @@ impl DisplayRowGeometry {
     }
 }
 
-struct DisplayRowSpec<'a> {
+struct LoweredDisplayRowSpec<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
     base_face_id: u32,
@@ -1327,8 +1327,8 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         &self.symbol_values
     }
 
-    fn into_lowered_spec(self) -> DisplayRowSpec<'a> {
-        DisplayRowSpec {
+    fn into_lowered_spec(self) -> LoweredDisplayRowSpec<'a> {
+        LoweredDisplayRowSpec {
             geometry: self.geometry,
             render_bounds: self.render_bounds,
             base_face_id: self.base_face_id,
@@ -1898,7 +1898,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
     fn render_lisp_string_row_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        spec: LoweredDisplayRowSpec<'_>,
         rendered: Value,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
@@ -1919,7 +1919,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
     fn render_display_text_fragment_row_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        spec: LoweredDisplayRowSpec<'_>,
         fragment: DisplayTextFragment,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
@@ -1965,7 +1965,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
     fn render_display_item_source_row_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        spec: LoweredDisplayRowSpec<'_>,
         source: &mut impl DisplayItemSource,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
@@ -1976,7 +1976,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
     fn render_display_item_source_row_step_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        spec: LoweredDisplayRowSpec<'_>,
         source: &mut impl DisplayItemSource,
         state: &mut DisplayRowSourceState,
         context: &mut DisplayRowRenderContext<'_, '_>,
@@ -2024,7 +2024,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
     fn render_display_item_source_row_fragment_step_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        spec: LoweredDisplayRowSpec<'_>,
         source: &mut impl DisplayItemSource,
         state: &mut DisplayRowSourceState,
         context: &mut DisplayRowRenderContext<'_, '_>,
@@ -2059,7 +2059,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
 
     fn render_display_item_source_row_fragment_step_into_row_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        spec: LoweredDisplayRowSpec<'_>,
         row: &mut GlyphRow,
         source: &mut impl DisplayItemSource,
         state: &mut DisplayRowSourceState,
@@ -2103,7 +2103,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         P: DisplayRowRenderPolicy,
     >(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        spec: LoweredDisplayRowSpec<'_>,
         row: &mut GlyphRow,
         source: &mut S,
         state: &mut DisplayRowSourceState,
@@ -2114,7 +2114,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             return None;
         }
 
-        let DisplayRowSpec {
+        let LoweredDisplayRowSpec {
             geometry,
             render_bounds,
             base_face_id,
