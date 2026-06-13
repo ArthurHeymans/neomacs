@@ -391,7 +391,7 @@ fn display_row_append_progress_from_render_result(
     }
 }
 
-pub(crate) struct DisplayRowSourceAppendRequest<'face> {
+struct DisplayRowSourceAppendRequest<'face> {
     append_spec: DisplayRowAppendSpec,
     base_face_id: u32,
     base_face: &'face ResolvedFace,
@@ -403,7 +403,7 @@ struct DisplayRowSourceAppendRenderParts<'face> {
 }
 
 impl<'face> DisplayRowSourceAppendRequest<'face> {
-    pub(crate) fn from_append_spec(
+    fn from_append_spec(
         append_spec: DisplayRowAppendSpec,
         base_face_id: u32,
         base_face: &'face ResolvedFace,
