@@ -20,7 +20,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop,
-    DisplayRowRenderer, DisplayRowSourceGeometry, DisplayRowSourceState, FrameChromeKind,
+    DisplayRowRenderer, DisplayRowSourceRequestPolicy, DisplayRowSourceState, FrameChromeKind,
     MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, install_measured_frame_chrome_row,
     install_measured_window_display_row, install_rendered_display_row,
 };
@@ -38,7 +38,6 @@ use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
-use std::collections::HashMap;
 
 fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<RenderedDisplayRow> {
     let mut row = GlyphRow::new(GlyphRowRole::Minibuffer);
@@ -170,20 +169,17 @@ impl LayoutEngine {
             window_id: request.window_id,
             kind: request.kind,
         };
-        let row_request = DisplayRowSourceGeometry::new(
+        let row_request = DisplayRowSourceRequestPolicy::new(
             request.bounds.y,
             request.bounds.width,
             request.bounds.height,
             request.char_width,
             request.ascent,
             request.tab_policy,
-        )
-        .source_request_from_base_face(
-            face_ids,
-            request.base_face,
             window_chrome_glyph_row_role(request.kind),
-            request.symbol_values,
-        );
+        )
+        .with_symbol_values(request.symbol_values)
+        .source_request_from_base_face(face_ids, request.base_face);
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
         output_emitter.begin_chrome_progress(evaluator, output);
         let mut render_context = DisplayRowRenderContext::new(
@@ -231,20 +227,16 @@ impl LayoutEngine {
         tab_bar_face: &ResolvedFace,
         rendered_text: Value,
     ) -> Option<FrameTabBarDisplayRowRender> {
-        let row_request = DisplayRowSourceGeometry::new(
+        let row_request = DisplayRowSourceRequestPolicy::new(
             y,
             width,
             row_height,
             char_width,
             ascent,
             DisplayTabPolicy::every(8),
-        )
-        .source_request_from_base_face(
-            face_ids,
-            tab_bar_face,
             GlyphRowRole::TabBar,
-            HashMap::new(),
-        );
+        )
+        .source_request_from_base_face(face_ids, tab_bar_face);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let rendered = self.render_lisp_string_source_row_with_context(
@@ -290,20 +282,16 @@ impl LayoutEngine {
             request.text_bounds,
             request.selected,
         );
-        let row_request = DisplayRowSourceGeometry::new(
+        let row_request = DisplayRowSourceRequestPolicy::new(
             request.window_bounds.y,
             request.text_width,
             request.row_height,
             request.char_width,
             request.ascent,
             DisplayTabPolicy::every(8),
-        )
-        .source_request_from_base_face(
-            face_ids,
-            request.base_face,
             GlyphRowRole::Minibuffer,
-            HashMap::new(),
-        );
+        )
+        .source_request_from_base_face(face_ids, request.base_face);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let rendered = self
@@ -411,19 +399,16 @@ impl LayoutEngine {
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
         while rows.len() < max_rows {
-            let request = DisplayRowSourceGeometry::new(
+            let request = DisplayRowSourceRequestPolicy::new(
                 y + rows.len() as f32 * row_height,
                 wrap_width,
                 row_height,
                 char_w,
                 ascent,
                 DisplayTabPolicy::every(8),
-            )
-            .source_request_for_base_face_id(
-                base_face_id,
-                &base_face,
                 GlyphRowRole::Minibuffer,
-            );
+            )
+            .source_request_for_base_face_id(base_face_id, &base_face);
             let Some(result) = renderer
                 .render_display_item_source_row_step_from_request_with_context(
                     request,

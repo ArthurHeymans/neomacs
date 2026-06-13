@@ -278,6 +278,47 @@ fn display_row_source_geometry_allocates_base_face_id() {
 }
 
 #[test]
+fn display_row_source_request_policy_builds_chrome_request() {
+    let mut face = base_face();
+    face.face_id = 0;
+    let mut face_ids = FrameFaceIdAllocator::new(31);
+    let mut symbol_values = std::collections::HashMap::new();
+    symbol_values.insert("tab-bar-tab-hscroll".to_string(), Value::fixnum(2));
+
+    let request = DisplayRowSourceRequestPolicy::new(
+        6.0,
+        144.0,
+        22.0,
+        11.0,
+        16.0,
+        DisplayTabPolicy::every(8),
+        GlyphRowRole::TabBar,
+    )
+    .with_symbol_values(symbol_values.clone())
+    .source_request_from_base_face(&mut face_ids, &face);
+
+    assert_eq!(
+        request.geometry(),
+        &DisplayRowGeometry {
+            y: 6.0,
+            width: 144.0,
+            height: 22.0,
+            char_width: 11.0,
+            ascent: 16.0,
+            tab_policy: DisplayTabPolicy::every(8),
+        }
+    );
+    assert_eq!(
+        request.render_bounds(),
+        DisplayRowRenderBounds::whole_row(144.0)
+    );
+    assert_eq!(request.base_face_id(), 31);
+    assert_eq!(face_ids.finish(), 32);
+    assert_eq!(request.role(), GlyphRowRole::TabBar);
+    assert_eq!(request.symbol_values(), &symbol_values);
+}
+
+#[test]
 fn display_row_source_geometry_request_overrides_render_bounds() {
     let face = base_face();
     let geometry = DisplayRowGeometry {
