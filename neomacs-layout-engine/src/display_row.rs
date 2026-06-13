@@ -1792,6 +1792,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         self.render_lisp_string_row_with_display_host(spec, rendered, face_resolver, None, face_ids)
     }
 
+    #[cfg(test)]
     pub(crate) fn render_lisp_string_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -1833,6 +1834,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_text_fragment_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -1903,6 +1905,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .map(|result| result.rendered)
     }
 
+    #[cfg(test)]
     pub(crate) fn render_display_item_source_row_step_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -2196,6 +2199,7 @@ impl LayoutEngine {
         self.render_lisp_string_row_with_display_host(spec, rendered, face_resolver, None, face_ids)
     }
 
+    #[cfg(test)]
     pub(crate) fn render_lisp_string_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -2213,22 +2217,24 @@ impl LayoutEngine {
         )
     }
 
-    pub(crate) fn render_display_text_fragment_row_with_display_host(
+    pub(crate) fn render_lisp_string_row_with_context(
+        &mut self,
+        spec: DisplayRowSpec<'_>,
+        rendered: Value,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<RenderedDisplayRow> {
+        DisplayRowRenderer::new(&mut self.font_metrics)
+            .render_lisp_string_row_with_context(spec, rendered, context)
+    }
+
+    pub(crate) fn render_display_text_fragment_row_with_context(
         &mut self,
         spec: DisplayRowSpec<'_>,
         fragment: DisplayTextFragment,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
+        context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
         DisplayRowRenderer::new(&mut self.font_metrics)
-            .render_display_text_fragment_row_with_display_host(
-                spec,
-                fragment,
-                face_resolver,
-                display_host,
-                face_ids,
-            )
+            .render_display_text_fragment_row_with_context(spec, fragment, context)
     }
 }
 

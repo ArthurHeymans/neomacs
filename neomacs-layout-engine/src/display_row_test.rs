@@ -2291,6 +2291,42 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
 }
 
 #[test]
+fn layout_engine_renders_display_text_fragment_with_render_context() {
+    let _eval = Context::new();
+    let mut engine = crate::engine::LayoutEngine::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let base_face = resolver.default_face().clone();
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let spec = DisplayRowSpec::from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut face_ids,
+        &base_face,
+        GlyphRowRole::TabBar,
+        std::collections::HashMap::new(),
+    );
+    let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
+
+    let rendered = engine
+        .render_display_text_fragment_row_with_context(
+            spec,
+            DisplayTextFragment::tab_bar(Value::string("ctx")),
+            &mut context,
+        )
+        .expect("rendered context row");
+
+    assert_eq!(rendered.row.role, GlyphRowRole::TabBar);
+    assert_eq!(row_text_expanding_stretches(&rendered.row), "ctx");
+}
+
+#[test]
 fn display_row_tab_line_wide_char_uses_shared_wide_glyph() {
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("A中B"), GlyphRowRole::TabLine);

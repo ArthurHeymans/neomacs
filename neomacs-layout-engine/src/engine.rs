@@ -22,9 +22,9 @@ use crate::display_property::{DisplayReplacementProperty, classify_display_prope
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowBoundsPolicy, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasurementPolicy, DisplayRowOutputProgress, DisplayRowOwner,
-    DisplayRowRenderBounds, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
-    insert_resolved_display_row_face, install_measured_frame_chrome_row,
+    DisplayRowRenderBounds, DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
+    DisplayRowSourceState, DisplayRowSpec, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
+    WindowChromeKind, insert_resolved_display_row_face, install_measured_frame_chrome_row,
     install_rendered_display_row,
 };
 use crate::display_row_append::{
@@ -3930,13 +3930,16 @@ impl LayoutEngine {
                 GlyphRowRole::Minibuffer,
                 std::collections::HashMap::new(),
             );
+            let mut render_context = DisplayRowRenderContext::new(
+                face_resolver,
+                evaluator.display_host.as_deref(),
+                &mut face_ids,
+            );
             let rendered = self
-                .render_lisp_string_row_with_display_host(
+                .render_lisp_string_row_with_context(
                     row_spec,
                     Value::string(""),
-                    face_resolver,
-                    evaluator.display_host.as_deref(),
-                    &mut face_ids,
+                    &mut render_context,
                 )
                 .expect("empty Lisp string should render an inactive minibuffer row");
             install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
@@ -6780,6 +6783,8 @@ impl LayoutEngine {
         };
         let mut source_state = DisplayRowSourceState::default();
         let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
+        let mut render_context =
+            DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
 
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
@@ -6799,13 +6804,11 @@ impl LayoutEngine {
                 role: GlyphRowRole::Minibuffer,
                 symbol_values: std::collections::HashMap::new(),
             };
-            let Some(result) = renderer.render_display_item_source_row_step_with_display_host(
+            let Some(result) = renderer.render_display_item_source_row_step_with_context(
                 row_spec,
                 &mut source,
                 &mut source_state,
-                face_resolver,
-                display_host,
-                face_ids,
+                &mut render_context,
             ) else {
                 break;
             };
@@ -6919,12 +6922,15 @@ impl LayoutEngine {
             GlyphRowRole::TabBar,
             std::collections::HashMap::new(),
         );
-        let Some(rendered) = self.render_display_text_fragment_row_with_display_host(
-            tab_bar_spec,
-            DisplayTextFragment::tab_bar(tab_bar.text),
+        let mut render_context = DisplayRowRenderContext::new(
             face_resolver,
             evaluator.display_host.as_deref(),
             &mut face_ids,
+        );
+        let Some(rendered) = self.render_display_text_fragment_row_with_context(
+            tab_bar_spec,
+            DisplayTextFragment::tab_bar(tab_bar.text),
+            &mut render_context,
         ) else {
             return None;
         };
