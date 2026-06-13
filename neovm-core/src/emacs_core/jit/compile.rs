@@ -3779,6 +3779,14 @@ pub fn lower_leaf_full(
         handlers: core::cell::Cell::new(0),
     });
 
+    // Baseline tier runs Cranelift at the default opt_level="none": its job is
+    // FAST compilation (low tier-up latency; the soak compiles every function).
+    // Measured opt_level="speed" (2026-06-13): no runtime win on fib (call-
+    // bound) or the arithmetic loop, because Cranelift sees our tagged Values
+    // as opaque i64 — it can't unbox, drop fixnum guards, or reason about lisp
+    // effects. The real headroom is semantic (unboxing/inlining), which needs
+    // an MIR-level optimizing Tier-2; opt_level="speed" belongs there, not at
+    // this tier where it would only cost compile time.
     let mut builder = JITBuilder::new(default_libcall_names())
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
     builder.symbol("neovm_jit_gc_save", neovm_jit_gc_save as *const u8);
