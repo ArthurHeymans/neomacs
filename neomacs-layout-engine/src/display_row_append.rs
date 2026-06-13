@@ -586,6 +586,35 @@ impl<'a> SyntheticTextAppendContext<'a> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SyntheticTextAppendRequest {
+    position: DisplayRowPosition,
+    source_id: u64,
+    text: Box<str>,
+}
+
+impl SyntheticTextAppendRequest {
+    pub(crate) fn new(
+        position: DisplayRowPosition,
+        source_id: u64,
+        text: impl Into<Box<str>>,
+    ) -> Self {
+        Self {
+            position,
+            source_id,
+            text: text.into(),
+        }
+    }
+
+    pub(crate) fn position(&self) -> DisplayRowPosition {
+        self.position
+    }
+
+    fn into_source_text(self) -> (u64, Box<str>) {
+        (self.source_id, self.text)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct SyntheticTextRowAppendContext<'a> {
     active_face_context: DisplayRowActiveFaceAppendContext<'a, 'a>,
@@ -662,6 +691,30 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
                 source_id,
                 text,
             )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_active_face_request_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        request: SyntheticTextAppendRequest,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let position = request.position();
+        let (source_id, text) = request.into_source_text();
+        self.append_active_face_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            position,
+            source_id,
+            text,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]

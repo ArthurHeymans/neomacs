@@ -570,16 +570,17 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
+    let request =
+        SyntheticTextAppendRequest::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 99, "...");
+    assert_eq!(request.position(), DisplayRowPosition { x_px: 0.0, col: 0 });
     let (progress, end) = append_context
-        .append_active_face_to_text_row_and_emit(
+        .append_active_face_request_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-            99,
-            "...",
+            request,
         )
         .expect("synthetic text progress");
 

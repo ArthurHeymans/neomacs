@@ -42,7 +42,8 @@ use crate::display_row_append::{
     DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
     DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
     DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
+    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextAppendRequest,
+    SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -4483,16 +4484,19 @@ impl LayoutEngine {
                             raise_span.value_or(0.0),
                             char_h,
                         );
+                        let ellipsis_request = SyntheticTextAppendRequest::new(
+                            DisplayRowPosition { x_px: x, col },
+                            SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
+                            "...",
+                        );
                         if let Some((_progress, position)) = append_context
-                            .append_active_face_to_text_row_and_emit(
+                            .append_active_face_request_to_text_row_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
                                 face_resolver,
-                                DisplayRowPosition { x_px: x, col },
-                                SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
-                                "...",
+                                ellipsis_request,
                             )
                         {
                             x = position.x_px;
@@ -4816,16 +4820,19 @@ impl LayoutEngine {
                     raise_span.value_or(0.0),
                     char_h,
                 );
+                let ellipsis_request = SyntheticTextAppendRequest::new(
+                    DisplayRowPosition { x_px: x, col },
+                    SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
+                    "...",
+                );
                 if let Some((_progress, position)) = append_context
-                    .append_active_face_to_text_row_and_emit(
+                    .append_active_face_request_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
-                        DisplayRowPosition { x_px: x, col },
-                        SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
-                        "...",
+                        ellipsis_request,
                     )
                 {
                     x = position.x_px;
