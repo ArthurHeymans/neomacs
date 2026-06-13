@@ -1281,6 +1281,11 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         self
     }
 
+    #[cfg(test)]
+    pub(crate) fn base_face_ref(&self) -> RenderFaceRef {
+        RenderFaceRef::FaceId(self.base_face_id)
+    }
+
     pub(crate) fn display_row_spec(self) -> DisplayRowSpec<'a> {
         DisplayRowSpec {
             geometry: self.geometry,
@@ -1837,6 +1842,22 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
     }
 
     #[cfg(test)]
+    pub(crate) fn render_lisp_string_source_row(
+        &mut self,
+        request: DisplayRowSourceRenderRequest<'_>,
+        rendered: Value,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<RenderedDisplayRow> {
+        self.render_lisp_string_row(
+            request.display_row_spec(),
+            rendered,
+            face_resolver,
+            face_ids,
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn render_lisp_string_row_with_display_host(
         &mut self,
         spec: DisplayRowSpec<'_>,
@@ -1861,34 +1882,13 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         self.render_display_item_source_row_with_context(spec, &mut source, context)
     }
 
-    #[cfg(test)]
-    pub(crate) fn render_display_text_fragment_row(
+    pub(crate) fn render_lisp_string_source_row_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
-        fragment: DisplayTextFragment,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
+        request: DisplayRowSourceRenderRequest<'_>,
+        rendered: Value,
+        context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
-        self.render_display_text_fragment_row_with_display_host(
-            spec,
-            fragment,
-            face_resolver,
-            None,
-            face_ids,
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_display_text_fragment_row_with_display_host(
-        &mut self,
-        spec: DisplayRowSpec<'_>,
-        fragment: DisplayTextFragment,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        self.render_display_text_fragment_row_with_context(spec, fragment, &mut context)
+        self.render_lisp_string_row_with_context(request.display_row_spec(), rendered, context)
     }
 
     pub(crate) fn render_display_text_fragment_row_with_context(
@@ -1908,6 +1908,19 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         self.render_display_item_source_row_with_context(spec, &mut source, context)
     }
 
+    pub(crate) fn render_display_text_fragment_source_row_with_context(
+        &mut self,
+        request: DisplayRowSourceRenderRequest<'_>,
+        fragment: DisplayTextFragment,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<RenderedDisplayRow> {
+        self.render_display_text_fragment_row_with_context(
+            request.display_row_spec(),
+            fragment,
+            context,
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn render_display_item_source_row(
         &mut self,
@@ -1921,6 +1934,22 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             source,
             face_resolver,
             None,
+            face_ids,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_display_item_source_row_from_request(
+        &mut self,
+        request: DisplayRowSourceRenderRequest<'_>,
+        source: &mut impl DisplayItemSource,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<RenderedDisplayRow> {
+        self.render_display_item_source_row(
+            request.display_row_spec(),
+            source,
+            face_resolver,
             face_ids,
         )
     }
@@ -1975,6 +2004,21 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         )?;
         GlyphMatrixBuilder::normalize_external_row(&mut result.rendered.row);
         Some(result)
+    }
+
+    pub(crate) fn render_display_item_source_row_step_from_request_with_context(
+        &mut self,
+        request: DisplayRowSourceRenderRequest<'_>,
+        source: &mut impl DisplayItemSource,
+        state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<DisplayRowRenderResult> {
+        self.render_display_item_source_row_step_with_context(
+            request.display_row_spec(),
+            source,
+            state,
+            context,
+        )
     }
 
     #[cfg(test)]
@@ -2261,24 +2305,24 @@ impl LayoutEngine {
         )
     }
 
-    pub(crate) fn render_lisp_string_row_with_context(
+    pub(crate) fn render_lisp_string_source_row_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        request: DisplayRowSourceRenderRequest<'_>,
         rendered: Value,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
         DisplayRowRenderer::new(&mut self.font_metrics)
-            .render_lisp_string_row_with_context(spec, rendered, context)
+            .render_lisp_string_source_row_with_context(request, rendered, context)
     }
 
-    pub(crate) fn render_display_text_fragment_row_with_context(
+    pub(crate) fn render_display_text_fragment_source_row_with_context(
         &mut self,
-        spec: DisplayRowSpec<'_>,
+        request: DisplayRowSourceRenderRequest<'_>,
         fragment: DisplayTextFragment,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
         DisplayRowRenderer::new(&mut self.font_metrics)
-            .render_display_text_fragment_row_with_context(spec, fragment, context)
+            .render_display_text_fragment_source_row_with_context(request, fragment, context)
     }
 }
 

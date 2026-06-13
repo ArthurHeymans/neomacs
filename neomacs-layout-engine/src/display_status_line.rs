@@ -18,8 +18,8 @@ use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowRenderContext, DisplayRowSpec,
-    MeasuredDisplayRow, install_measured_window_display_row,
+    DisplayRowBoundsPolicy, DisplayRowOwner, DisplayRowRenderContext,
+    DisplayRowSourceRenderRequest, MeasuredDisplayRow, install_measured_window_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -69,7 +69,7 @@ impl LayoutEngine {
         output: ChromeRowOutput,
         owner: DisplayRowOwner,
         fallback_bounds: Rect,
-        row_spec: DisplayRowSpec<'_>,
+        row_spec: DisplayRowSourceRenderRequest<'_>,
         rendered_text: DisplayTextFragment,
     ) -> Option<MeasuredDisplayRow> {
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
@@ -79,7 +79,7 @@ impl LayoutEngine {
             evaluator.display_host.as_deref(),
             face_ids,
         );
-        let rendered_row = self.render_display_text_fragment_row_with_context(
+        let rendered_row = self.render_display_text_fragment_source_row_with_context(
             row_spec,
             rendered_text,
             &mut render_context,

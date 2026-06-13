@@ -3948,8 +3948,8 @@ impl LayoutEngine {
                 &mut face_ids,
             );
             let rendered = self
-                .render_lisp_string_row_with_context(
-                    row_spec.display_row_spec(),
+                .render_lisp_string_source_row_with_context(
+                    row_spec,
                     Value::string(""),
                     &mut render_context,
                 )
@@ -6485,7 +6485,7 @@ impl LayoutEngine {
                     kind: WindowChromeKind::TabLine,
                 },
                 Rect::new(params.bounds.x, tl_y, params.bounds.width, tab_line_height),
-                tab_row_spec.display_row_spec(),
+                tab_row_spec,
                 DisplayTextFragment::tab_line(tab_text),
             );
         }
@@ -6548,7 +6548,7 @@ impl LayoutEngine {
                     params.bounds.width,
                     header_line_height,
                 ),
-                header_row_spec.display_row_spec(),
+                header_row_spec,
                 DisplayTextFragment::header_line(header_text, params.selected),
             );
         }
@@ -6621,7 +6621,7 @@ impl LayoutEngine {
                     kind: WindowChromeKind::ModeLine,
                 },
                 Rect::new(params.bounds.x, ml_y, params.bounds.width, mode_line_height),
-                mode_row_spec.display_row_spec(),
+                mode_row_spec,
                 DisplayTextFragment::mode_line(mode_text, params.selected),
             );
         }
@@ -6814,12 +6814,14 @@ impl LayoutEngine {
                 &base_face,
                 GlyphRowRole::Minibuffer,
             );
-            let Some(result) = renderer.render_display_item_source_row_step_with_context(
-                request.display_row_spec(),
-                &mut source,
-                &mut source_state,
-                &mut render_context,
-            ) else {
+            let Some(result) = renderer
+                .render_display_item_source_row_step_from_request_with_context(
+                    request,
+                    &mut source,
+                    &mut source_state,
+                    &mut render_context,
+                )
+            else {
                 break;
             };
             let stop = result.stop;
@@ -6937,8 +6939,8 @@ impl LayoutEngine {
             evaluator.display_host.as_deref(),
             &mut face_ids,
         );
-        let Some(rendered) = self.render_display_text_fragment_row_with_context(
-            tab_bar_spec.display_row_spec(),
+        let Some(rendered) = self.render_display_text_fragment_source_row_with_context(
+            tab_bar_spec,
             DisplayTextFragment::tab_bar(tab_bar.text),
             &mut render_context,
         ) else {

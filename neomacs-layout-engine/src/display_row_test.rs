@@ -437,7 +437,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = display_row_spec_from_base_face(
+    let request = DisplayRowSourceRenderRequest::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -453,7 +453,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     );
 
     let rendered = renderer
-        .render_lisp_string_row(spec, Value::string("A中"), &resolver, &mut face_ids)
+        .render_lisp_string_source_row(request, Value::string("A中"), &resolver, &mut face_ids)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
@@ -469,7 +469,7 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = display_row_spec_from_base_face(
+    let request = DisplayRowSourceRenderRequest::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -484,9 +484,10 @@ fn display_row_renderer_renders_chrome_fragment_without_raw_value_boundary() {
         std::collections::HashMap::new(),
     );
     let fragment = DisplayTextFragment::tab_line(Value::string("A中"));
+    let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
     let rendered = renderer
-        .render_display_text_fragment_row(spec, fragment, &resolver, &mut face_ids)
+        .render_display_text_fragment_source_row_with_context(request, fragment, &mut context)
         .expect("display source row");
 
     assert_eq!(row_text_expanding_stretches(&rendered.row), "A中");
@@ -941,7 +942,7 @@ fn render_lisp_display_row_output_with_symbols(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = display_row_spec_from_base_face(
+    let request = DisplayRowSourceRenderRequest::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -956,7 +957,7 @@ fn render_lisp_display_row_output_with_symbols(
         symbol_values,
     );
     renderer
-        .render_lisp_string_row(spec, rendered, &resolver, &mut face_ids)
+        .render_lisp_string_source_row(request, rendered, &resolver, &mut face_ids)
         .expect("display source row")
 }
 
@@ -1006,19 +1007,12 @@ fn render_buffer_display_row_with_properties(
 
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
-        buf_id,
-        &snapshot,
-        CharPos0::ZERO,
-        snapshot.layout_point_max_char_pos(),
-        RenderFaceRef::FaceId(1),
-    );
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = display_row_spec_from_base_face(
+    let request = DisplayRowSourceRenderRequest::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -1032,9 +1026,16 @@ fn render_buffer_display_row_with_properties(
         role,
         std::collections::HashMap::new(),
     );
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        snapshot.layout_point_max_char_pos(),
+        request.base_face_ref(),
+    );
 
     renderer
-        .render_display_item_source_row(spec, &mut source, &resolver, &mut face_ids)
+        .render_display_item_source_row_from_request(request, &mut source, &resolver, &mut face_ids)
         .expect("buffer display source row")
         .row
 }
@@ -2401,7 +2402,7 @@ fn layout_engine_renders_display_text_fragment_with_render_context() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face().clone();
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = display_row_spec_from_base_face(
+    let request = DisplayRowSourceRenderRequest::from_base_face(
         DisplayRowGeometry {
             y: 0.0,
             width: 240.0,
@@ -2418,8 +2419,8 @@ fn layout_engine_renders_display_text_fragment_with_render_context() {
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
     let rendered = engine
-        .render_display_text_fragment_row_with_context(
-            spec,
+        .render_display_text_fragment_source_row_with_context(
+            request,
             DisplayTextFragment::tab_bar(Value::string("ctx")),
             &mut context,
         )
