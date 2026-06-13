@@ -2188,7 +2188,7 @@ fn minibuffer_echo_rows_continue_after_display_property_clips() {
         }],
     );
     let mut engine = LayoutEngine::new_without_font_metrics();
-    let mut next_face_id = 1;
+    let mut face_ids = FrameFaceIdAllocator::new(1);
 
     let rows = engine.render_minibuffer_echo_rows(
         0.0,
@@ -2203,7 +2203,7 @@ fn minibuffer_echo_rows_continue_after_display_property_clips() {
         2,
         false,
         false,
-        &mut next_face_id,
+        &mut face_ids,
     );
     let rendered = rows
         .iter()

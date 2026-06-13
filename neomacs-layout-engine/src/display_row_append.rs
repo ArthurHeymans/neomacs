@@ -14,7 +14,7 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
     DisplayRowOutputProgress, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
     DisplayRowRenderPolicy, DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceState,
-    DisplayRowSpec, install_rendered_display_row_fragment_assets,
+    DisplayRowSpec, FrameFaceIdAllocator, install_rendered_display_row_fragment_assets,
     merge_display_row_source_slot_bounds_to_current_row,
 };
 #[cfg(test)]
@@ -152,7 +152,7 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
     source: &mut S,
     source_state: &mut DisplayRowSourceState,
     face_resolver: &FaceResolver,
-    next_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     row_spec: DisplayRowSpec<'_>,
     output: TextRowOutput,
     render_policy: &mut P,
@@ -167,7 +167,7 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
             source_state,
             face_resolver,
             evaluator.display_host.as_deref(),
-            next_face_id,
+            face_ids,
             render_policy,
         )?;
         Some((result, row.height_px, row.ascent_px))
@@ -203,7 +203,7 @@ pub(crate) fn render_natural_display_item_source_into_current_text_row_and_emit<
     source: &mut S,
     source_state: &mut DisplayRowSourceState,
     face_resolver: &FaceResolver,
-    next_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     row_spec: DisplayRowSpec<'_>,
     output: TextRowOutput,
 ) -> Option<CurrentTextRowRenderOutcome> {
@@ -216,7 +216,7 @@ pub(crate) fn render_natural_display_item_source_into_current_text_row_and_emit<
         source,
         source_state,
         face_resolver,
-        next_face_id,
+        face_ids,
         row_spec,
         output,
         &mut render_policy,
@@ -309,7 +309,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
     };
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
-    let mut next_face_id = request.base_face_id.saturating_add(1);
+    let mut face_ids = FrameFaceIdAllocator::new(request.base_face_id.saturating_add(1));
     let output = TextRowOutput {
         row: request.frame.row,
         row_y: request.frame.geometry.y,
@@ -324,7 +324,7 @@ fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderP
         &mut source,
         &mut source_state,
         face_resolver,
-        &mut next_face_id,
+        &mut face_ids,
         row_spec,
         output,
         render_policy,
@@ -347,7 +347,7 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     base_face_id: u32,
-    current_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> DisplayRowPosition {
@@ -381,7 +381,7 @@ pub(crate) fn append_lisp_string_fragment_to_text_row_and_emit(
         &mut source,
         &mut source_state,
         face_resolver,
-        current_face_id,
+        face_ids,
         row_spec,
         TextRowOutput {
             row: frame.row,
@@ -441,7 +441,7 @@ pub(crate) fn append_lisp_string_to_text_row(
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     base_face_id: u32,
-    current_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> DisplayRowPosition {
@@ -461,7 +461,7 @@ pub(crate) fn append_lisp_string_to_text_row(
         face_resolver,
         base_face,
         base_face_id,
-        current_face_id,
+        face_ids,
         frame,
         position,
         &mut policy,
@@ -528,7 +528,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
     };
     let mut source = SingleDisplayItemSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
-    let mut next_face_id = face_id.saturating_add(1);
+    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy = TextRunDisplayRowRenderPolicy::new(measurement);
     let output = TextRowOutput {
         row: frame.row,
@@ -544,7 +544,7 @@ pub(crate) fn append_buffer_text_fragment_to_text_row<B: LayoutBufferView + ?Siz
         &mut source,
         &mut source_state,
         face_resolver,
-        &mut next_face_id,
+        &mut face_ids,
         row_spec,
         output,
         &mut render_policy,
@@ -766,7 +766,7 @@ pub(crate) fn append_display_item_source_to_text_row<
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     fallback_face_id: u32,
-    current_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
     policy: &mut P,
@@ -788,7 +788,7 @@ pub(crate) fn append_display_item_source_to_text_row<
                 face_resolver,
                 base_face,
                 fallback_face_id,
-                current_face_id,
+                face_ids.raw_mut(),
                 display_host,
                 fallback_char_width,
                 fallback_ascent,
@@ -868,7 +868,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     fallback_face_id: u32,
-    current_face_id: &mut u32,
+    face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
     item_measurer: &mut impl DisplayRowItemMeasurer,
@@ -897,7 +897,7 @@ pub(crate) fn append_display_replacement_string_source_to_text_row<S: DisplayIte
         &mut source,
         &mut source_state,
         face_resolver,
-        current_face_id,
+        face_ids,
         row_spec,
         TextRowOutput {
             row: frame.row,

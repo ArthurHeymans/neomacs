@@ -571,7 +571,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     test_base_face.font_char_width = 8.0;
     test_base_face.font_ascent = 12.0;
     let base_face_id = 1;
-    let mut next_face_id = 2;
+    let mut face_ids = FrameFaceIdAllocator::new(2);
     let mut source = OnceSource {
         item: Some(crate::display_item::DisplayItem::new(
             crate::display_item::SourceSpan::synthetic(9, 0, 1),
@@ -604,7 +604,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
             &mut state,
             &resolver,
             None,
-            &mut next_face_id,
+            &mut face_ids,
         )
         .expect("first row");
     let second = renderer
@@ -628,7 +628,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
             &mut state,
             &resolver,
             None,
-            &mut next_face_id,
+            &mut face_ids,
         )
         .expect("second row");
 
@@ -679,7 +679,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face();
     let base_face_id = 1;
-    let mut next_face_id = 2;
+    let mut face_ids = FrameFaceIdAllocator::new(2);
     let mut source = OnceSource {
         item: Some(crate::display_item::DisplayItem::new(
             crate::display_item::SourceSpan::synthetic(10, 0, 3),
@@ -715,7 +715,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
             &mut state,
             &resolver,
             None,
-            &mut next_face_id,
+            &mut face_ids,
             &mut policy,
         )
         .expect("rendered row");
@@ -2394,7 +2394,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
             &mut state,
             &resolver,
             None,
-            face_ids.raw_mut(),
+            &mut face_ids,
         )
         .expect("unfinalized row fragment")
         .rendered
@@ -2450,7 +2450,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
             &mut state,
             &resolver,
             None,
-            face_ids.raw_mut(),
+            &mut face_ids,
         )
         .expect("row render fragment");
 

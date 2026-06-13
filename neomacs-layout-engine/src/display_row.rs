@@ -1010,6 +1010,10 @@ impl FrameFaceIdAllocator {
         &mut self.next_face_id
     }
 
+    pub(crate) fn reserve_after(&mut self, face_id: u32) {
+        self.next_face_id = self.next_face_id.max(face_id.saturating_add(1));
+    }
+
     pub(crate) fn finish(self) -> u32 {
         self.next_face_id
     }
@@ -1872,7 +1876,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             &mut state,
             face_resolver,
             display_host,
-            face_ids.raw_mut(),
+            face_ids,
         )
         .map(|result| result.rendered)
     }
@@ -1884,7 +1888,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         state: &mut DisplayRowSourceState,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderResult> {
         let mut result = self.render_display_item_source_row_fragment_step_with_display_host(
             spec,
@@ -1892,7 +1896,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             state,
             face_resolver,
             display_host,
-            next_face_id,
+            face_ids,
         )?;
         GlyphMatrixBuilder::normalize_external_row(&mut result.rendered.row);
         Some(result)
@@ -1905,7 +1909,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         state: &mut DisplayRowSourceState,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderResult> {
         let mut row = GlyphRow::new(spec.role);
         let result = self.render_display_item_source_row_fragment_step_into_row_with_display_host(
@@ -1915,7 +1919,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             state,
             face_resolver,
             display_host,
-            next_face_id,
+            face_ids,
         )?;
         Some(result.with_row(row))
     }
@@ -1928,7 +1932,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         state: &mut DisplayRowSourceState,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         let mut policy = NaturalDisplayRowRenderPolicy;
         self.render_display_item_source_row_fragment_step_into_row_with_policy(
@@ -1938,7 +1942,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             state,
             face_resolver,
             display_host,
-            next_face_id,
+            face_ids,
             &mut policy,
         )
     }
@@ -1954,7 +1958,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         state: &mut DisplayRowSourceState,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
         policy: &mut P,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         if state.is_finished() {
@@ -1969,7 +1973,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             role,
             symbol_values,
         } = spec;
-        *next_face_id = (*next_face_id).max(base_face_id.saturating_add(1));
+        face_ids.reserve_after(base_face_id);
         let mut face_realizer = DisplayRowFaceRealizer::new(&mut *self.font_metrics);
         let row_face = face_realizer.realize_face(
             base_face_id,
@@ -2014,7 +2018,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     fallback_ascent: geometry.ascent,
                     fallback_row_height: geometry.height,
                 },
-                next_face_id,
+                face_ids.raw_mut(),
             );
             let item = resolved.item;
             for pending in resolved.pending_faces {

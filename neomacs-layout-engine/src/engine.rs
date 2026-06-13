@@ -2113,7 +2113,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             &mut source,
             &mut source_state,
             face_resolver,
-            face_ids.raw_mut(),
+            face_ids,
             row_spec,
             geometry.text_row_output(char_h),
         ) else {
@@ -3882,7 +3882,7 @@ impl LayoutEngine {
                 max_mini,
                 truncate_echo_lines,
                 reserve_right_special_col,
-                face_ids.raw_mut(),
+                &mut face_ids,
             );
             let max_rows_echo = rows.len().clamp(1, max_mini);
             let cols_echo = (text_width / char_w).ceil().max(1.0) as usize;
@@ -4300,7 +4300,7 @@ impl LayoutEngine {
                         face_resolver,
                         &prefix_base_face.face,
                         prefix_base_face.face_id,
-                        face_ids.raw_mut(),
+                        &mut face_ids,
                         append_frame,
                         DisplayRowPosition { x_px: x, col },
                     );
@@ -4690,7 +4690,7 @@ impl LayoutEngine {
                                     face_resolver,
                                     &replacement_base_face,
                                     replacement_base_face_id,
-                                    face_ids.raw_mut(),
+                                    &mut face_ids,
                                     append_frame,
                                     DisplayRowPosition { x_px: x, col },
                                     &mut item_measurer,
@@ -6739,7 +6739,7 @@ impl LayoutEngine {
         max_rows: usize,
         truncate_lines: bool,
         reserve_right_special_col: bool,
-        next_face_id: &mut u32,
+        face_ids: &mut FrameFaceIdAllocator,
     ) -> Vec<RenderedDisplayRow> {
         use neomacs_display_protocol::glyph_matrix::Glyph;
 
@@ -6768,9 +6768,7 @@ impl LayoutEngine {
         let base_face_id = if base_face.face_id != 0 {
             base_face.face_id
         } else {
-            let face_id = *next_face_id;
-            *next_face_id += 1;
-            face_id
+            face_ids.allocate()
         };
         let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
             1,
@@ -6806,7 +6804,7 @@ impl LayoutEngine {
                 &mut source_state,
                 face_resolver,
                 display_host,
-                next_face_id,
+                face_ids,
             ) else {
                 break;
             };

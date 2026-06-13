@@ -6,7 +6,7 @@ use crate::display_item::{
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec,
+    DisplayRowRenderer, DisplayRowSourceState, DisplayRowSpec, FrameFaceIdAllocator,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_text::DisplayTextFragment;
@@ -366,7 +366,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     .expect("lisp string source");
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
-    let mut next_face_id = 8;
+    let mut face_ids = FrameFaceIdAllocator::new(8);
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -381,7 +381,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         &mut source,
         &mut source_state,
         &face_resolver,
-        &mut next_face_id,
+        &mut face_ids,
         DisplayRowSpec {
             geometry: DisplayRowGeometry {
                 y: 0.0,
@@ -454,7 +454,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
     let mut base_face = face_resolver.default_face().clone();
     base_face.font_char_width = 8.0;
     base_face.font_ascent = 12.0;
-    let mut next_face_id = 8;
+    let mut face_ids = FrameFaceIdAllocator::new(8);
     let mut font_metrics = None;
     let rendered = {
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -491,7 +491,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
                 &mut source_state,
                 &face_resolver,
                 None,
-                &mut next_face_id,
+                &mut face_ids,
             )
             .expect("rendered fragment")
             .rendered
@@ -1058,7 +1058,7 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1104,13 +1104,13 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
         &face_resolver,
         base_face,
         0,
-        &mut current_face_id,
+        &mut face_ids,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     );
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
-    assert_eq!(current_face_id, 21);
+    assert_eq!(face_ids.finish(), 21);
     assert_eq!(
         builder.faces().get(&20).map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
@@ -1444,7 +1444,7 @@ fn append_display_item_source_to_text_row_uses_policy_decisions() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1485,7 +1485,7 @@ fn append_display_item_source_to_text_row_uses_policy_decisions() {
         &face_resolver,
         base_face,
         7,
-        &mut current_face_id,
+        &mut face_ids,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
         &mut policy,
@@ -1533,7 +1533,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00112233, 0x00445566, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
     builder.begin_window_with_text_bounds(
@@ -1593,7 +1593,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
         &face_resolver,
         base_face,
         7,
-        &mut current_face_id,
+        &mut face_ids,
         frame,
         DisplayRowPosition { x_px: 16.0, col: 2 },
     );
@@ -1678,7 +1678,7 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut current_face_id = 20;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1733,14 +1733,14 @@ fn append_display_replacement_string_source_to_text_row_walks_source_faces_and_m
         &face_resolver,
         base_face,
         7,
-        &mut current_face_id,
+        &mut face_ids,
         frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
         &mut measurer,
     );
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 2 });
-    assert_eq!(current_face_id, 21);
+    assert_eq!(face_ids.finish(), 21);
     assert_eq!(
         builder.faces().get(&20).map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
