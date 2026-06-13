@@ -4331,6 +4331,62 @@ impl<'a> Vm<'a> {
         Ok(result)
     }
 
+    /// V3 speculated direct call: the caller's spec site is armed, so `callee`
+    /// is the compile-time bytecode object the symbol still names. Resolve and
+    /// cache the callee's compiled leaf in `leaf_slot`, then run it DIRECTLY
+    /// under the recursion-depth guard — skipping the `funcall_general`
+    /// dispatch and the compiled-cache hash lookup that
+    /// `call_for_jit -> call_function -> try_run_compiled` would otherwise pay
+    /// on every call. Returns `None` when the callee can't be fast-pathed (body
+    /// `NotCompilable`, or an arity mismatch the strict path must signal),
+    /// leaving the shim to fall back to `call_for_jit`.
+    ///
+    /// The recursion-depth guard is applied exactly as `call_for_jit` applies
+    /// it (one increment per call): without it a deeply recursive compiled
+    /// function would exhaust the native stack instead of signalling
+    /// `max-lisp-eval-depth`. The cached leaf handle is sound because the
+    /// per-thread `COMPILED` cache never evicts (see `resolve_compiled_leaf_ptr`).
+    pub(crate) fn call_armed_callee_direct(
+        &mut self,
+        callee: Value,
+        leaf_slot: &core::sync::atomic::AtomicU64,
+        args: &[Value],
+    ) -> Option<Result<Value, Flow>> {
+        use core::sync::atomic::Ordering;
+        let bc = callee.get_bytecode_data()?;
+        let mut ptr = leaf_slot.load(Ordering::Relaxed)
+            as *const crate::emacs_core::jit::compile::CompiledLeaf;
+        if ptr.is_null() {
+            let ctx_ptr = core::ptr::from_mut(&mut *self.ctx);
+            ptr = crate::emacs_core::jit::cache::resolve_compiled_leaf_ptr(ctx_ptr, bc)?;
+            leaf_slot.store(ptr as usize as u64, Ordering::Relaxed);
+        }
+        // SAFETY: the COMPILED cache never evicts; `ptr` names a cache-held
+        // leaf, valid for this thread's lifetime.
+        let leaf = unsafe { &*ptr };
+        if !leaf.accepts(args.len()) {
+            // Wrong arg count: defer to the strict path, which signals
+            // wrong-number-of-arguments exactly as the interpreter would.
+            return None;
+        }
+        // Debug-build evidence that the fast path actually fires (vs silently
+        // falling back to call_for_jit on every call).
+        #[cfg(debug_assertions)]
+        crate::emacs_core::jit::compile::SPEC_FAST_CALL_COUNT
+            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        let res = self.with_bytecode_call_depth(|vm| {
+            let ctx_ptr = core::ptr::from_mut(&mut *vm.ctx);
+            match crate::emacs_core::jit::cache::run_resolved_leaf(ctx_ptr, bc, callee, leaf, args)?
+            {
+                Some(bits) => Ok(Value::from_bits(bits)),
+                // Plain Deopt only arises with a null ctx (not here);
+                // defensively run the callee on the interpreter.
+                None => vm.execute_with_func_value(bc, args.to_vec(), callee),
+            }
+        });
+        Some(res)
+    }
+
     fn call_function_from_stack_args(
         &mut self,
         func_val: Value,

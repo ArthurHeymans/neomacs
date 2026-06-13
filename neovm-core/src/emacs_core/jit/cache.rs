@@ -124,35 +124,83 @@ pub fn try_run_compiled(
     // Execute OUTSIDE the cache borrow (see `CacheEntry::Compiled`).
     match leaf {
         None => Ok(None),
-        Some(leaf) => match leaf.call(ctx as *mut u8, args) {
-            NativeRun::Ok(bits) => Ok(Some(bits)),
-            NativeRun::Deopt => Ok(None),
-            NativeRun::DeoptAt {
-                pc,
-                stack,
-                handlers,
-                binds,
-                spec_base,
-                cond_base,
-            } => {
-                if ctx.is_null() {
-                    // call() maps null-vmctx deopts to Deopt; defensive only.
-                    return Ok(None);
-                }
-                // Precise deopt: resume the Tier-0 interpreter mid-function
-                // with the live stack and the (still registered) frame state.
-                // SAFETY: the seam-provided &mut Context is dormant during the
-                // native call — the same contract every runtime shim uses.
-                let ctx = unsafe { &mut *ctx };
-                let mut vm = crate::emacs_core::bytecode::Vm::from_context(ctx);
-                vm.run_resumed_frame(
-                    func, func_value, pc, &stack, handlers, &binds, spec_base, cond_base,
-                )
-                .map(|v| Some(v.bits()))
+        Some(leaf) => run_resolved_leaf(ctx, func, func_value, &leaf, args),
+    }
+}
+
+/// A stable raw pointer to the compiled leaf for `func` (compiling it on first
+/// use), or `None` if the body is `NotCompilable`. The pointer stays valid for
+/// the thread's lifetime: the per-thread `COMPILED` cache never evicts, so the
+/// owning `Rc<CompiledLeaf>` (and the heap box it points at) outlive every use.
+/// Used by the V3 speculated-call fast path to cache a callee leaf handle in a
+/// spec slot, skipping the cache hash lookup on subsequent calls.
+pub(crate) fn resolve_compiled_leaf_ptr(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+) -> Option<*const CompiledLeaf> {
+    let id = func.runtime.compiled_id_or_assign();
+    if id > max_compiled_id() {
+        return None;
+    }
+    COMPILED.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        match cache.entry(id).or_insert_with(|| {
+            // SAFETY: same dormant-Context contract as try_run_compiled.
+            let obarray = (!ctx.is_null()).then(|| unsafe { &(*ctx).obarray });
+            match compile_bytecode_function_with(func, obarray) {
+                Ok(leaf) => CacheEntry::Compiled(Rc::new(leaf)),
+                Err(_) => CacheEntry::NotCompilable,
             }
-            NativeRun::Signal => Err(take_pending_flow()
-                .expect("STATUS_SIGNAL from compiled code implies a stashed Flow")),
-        },
+        }) {
+            CacheEntry::Compiled(leaf) => Some(Rc::as_ptr(leaf)),
+            CacheEntry::NotCompilable => None,
+        }
+    })
+}
+
+/// Run an already-resolved `leaf` (the caller validated arity) with the full
+/// `NativeRun` outcome handling — including precise-deopt resume via
+/// `run_resumed_frame`. Shared by `try_run_compiled` and the V3 fast path so
+/// both have byte-identical deopt/signal semantics. Same return shape as
+/// `try_run_compiled`: `Ok(Some(bits))` success, `Ok(None)` fall-back, `Err`
+/// on a non-local flow.
+pub(crate) fn run_resolved_leaf(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+    func_value: Value,
+    leaf: &CompiledLeaf,
+    args: &[Value],
+) -> Result<Option<usize>, Flow> {
+    match leaf.call(ctx as *mut u8, args) {
+        NativeRun::Ok(bits) => Ok(Some(bits)),
+        NativeRun::Deopt => Ok(None),
+        NativeRun::DeoptAt {
+            pc,
+            stack,
+            handlers,
+            binds,
+            spec_base,
+            cond_base,
+        } => {
+            if ctx.is_null() {
+                // call() maps null-vmctx deopts to Deopt; defensive only.
+                return Ok(None);
+            }
+            // Precise deopt: resume the Tier-0 interpreter mid-function with
+            // the live stack and the (still registered) frame state.
+            // SAFETY: the seam-provided &mut Context is dormant during the
+            // native call — the same contract every runtime shim uses.
+            let ctx = unsafe { &mut *ctx };
+            let mut vm = crate::emacs_core::bytecode::Vm::from_context(ctx);
+            vm.run_resumed_frame(
+                func, func_value, pc, &stack, handlers, &binds, spec_base, cond_base,
+            )
+            .map(|v| Some(v.bits()))
+        }
+        NativeRun::Signal => {
+            Err(take_pending_flow()
+                .expect("STATUS_SIGNAL from compiled code implies a stashed Flow"))
+        }
     }
 }
 

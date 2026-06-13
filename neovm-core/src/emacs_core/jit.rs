@@ -199,6 +199,13 @@ pub struct Runtime {
     /// stale cache entry can never be mis-looked-up after the (non-moving) GC
     /// reuses its address — a new function gets a new id. Reset to 0 on clone.
     compiled_id: AtomicU64,
+    /// Test-only: pin this function to the Tier-0 interpreter regardless of
+    /// hotness (the benchmark harness measures native vs interpreter in ONE
+    /// process — a hot copy and a forced-cold copy — to cancel the
+    /// cross-process CPU-frequency variance that wrecks a two-process A/B).
+    /// Absent from the production library (only the test binary carries it).
+    #[cfg(test)]
+    force_interpret: std::sync::atomic::AtomicBool,
 }
 
 /// Source of process-unique [`Runtime::compiled_id`] values. Ids are
@@ -230,6 +237,8 @@ impl Runtime {
             heat: AtomicU32::new(0),
             feedback: FeedbackVec::new(),
             compiled_id: AtomicU64::new(0),
+            #[cfg(test)]
+            force_interpret: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -243,6 +252,11 @@ impl Runtime {
     /// bodies and on deopt.
     #[inline]
     pub fn dispatch(&self) -> Plan {
+        // Test-only: a forced-cold function never tiers up (benchmark A/B).
+        #[cfg(test)]
+        if self.force_interpret.load(Ordering::Relaxed) {
+            return Plan::Interpret;
+        }
         // Saturating bump — a long-lived hot function must never wrap to cold.
         let prev = self.heat.load(Ordering::Relaxed);
         let now = prev.saturating_add(1);
@@ -291,6 +305,14 @@ impl Runtime {
     #[cfg(test)]
     pub(crate) fn set_hot_for_test(&self) {
         self.heat.store(Self::HOT_THRESHOLD, Ordering::Relaxed);
+    }
+
+    /// Test-only: pin this function to the Tier-0 interpreter forever (the
+    /// forced-cold half of the benchmark A/B; see `force_interpret`).
+    #[cfg(test)]
+    pub(crate) fn set_cold_for_test(&self) {
+        self.force_interpret
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Record an observed callee `sym` at the call site at instruction `pc`

@@ -139,6 +139,13 @@ pub const STATUS_DEOPT_AT: i64 = 3;
 #[cfg(debug_assertions)]
 pub(crate) static SPEC_CALL_COUNT: AtomicU64 = AtomicU64::new(0);
 
+/// Debug-build counter of V3 fast-path engagements: a speculated call that
+/// ran the cached callee leaf DIRECTLY (skipping funcall dispatch + the cache
+/// hash lookup), as opposed to falling back to `call_for_jit`. Test evidence
+/// that the fast path actually fires instead of silently no-op'ing.
+#[cfg(debug_assertions)]
+pub(crate) static SPEC_FAST_CALL_COUNT: AtomicU64 = AtomicU64::new(0);
+
 /// Take the `Flow` stashed by a shim that returned [`STATUS_SIGNAL`].
 pub fn take_pending_flow() -> Option<Flow> {
     PENDING_FLOW.with(|p| p.borrow_mut().take())
@@ -764,25 +771,40 @@ extern "C" fn neovm_jit_call_spec(
         }
         Ok(()) => {
             // SAFETY: slot points into the executing leaf's spec_slots.
-            let slot = unsafe { &*(slot as *const AtomicU64) };
+            let slot = unsafe { &*(slot as *const SpecSlot) };
             let epoch = ctx.obarray.function_epoch();
-            let armed = slot.load(Ordering::Relaxed) == epoch || {
+            let armed = slot.epoch.load(Ordering::Relaxed) == epoch || {
                 let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
                 if cur.is_some_and(|v| v.bits() as i64 == expected) {
-                    slot.store(epoch, Ordering::Relaxed);
+                    slot.epoch.store(epoch, Ordering::Relaxed);
                     true
                 } else {
+                    // The binding changed: drop any cached callee leaf so a
+                    // later re-arm can't reuse a stale callee.
+                    slot.leaf.store(0, Ordering::Relaxed);
                     false
                 }
             };
-            let target = if armed {
-                Value::from_bits(expected as usize)
-            } else {
-                Value::from_sym_id(SymId(sym as u32))
-            };
-            push_scratch_gc_root(target);
+            // Armed: the symbol still names the compile-time bytecode object.
+            // Try the V3 fast path (cached leaf, direct native call, no funcall
+            // dispatch / cache hash lookup). Fall back to the strict call on the
+            // VALUE if it can't be fast-pathed (arity / not compilable). Not
+            // armed: strict call on the SYMBOL (resolves the new binding —
+            // fset/advice take effect immediately).
             let mut vm = Vm::from_context(ctx);
-            match vm.call_for_jit(target, args) {
+            let outcome = if armed {
+                let target = Value::from_bits(expected as usize);
+                push_scratch_gc_root(target);
+                match vm.call_armed_callee_direct(target, &slot.leaf, &args) {
+                    Some(res) => res,
+                    None => vm.call_for_jit(target, args),
+                }
+            } else {
+                let target = Value::from_sym_id(SymId(sym as u32));
+                push_scratch_gc_root(target);
+                vm.call_for_jit(target, args)
+            };
+            match outcome {
                 Ok(value) => {
                     // SAFETY: `out` is the generated code's result stack slot.
                     unsafe { *out = value.bits() as i64 };
@@ -1256,11 +1278,11 @@ pub struct CompiledLeaf {
     deopt_spill: Box<[core::cell::Cell<i64>]>,
     /// Precise-deopt pc/depth/handler-count cells (see [`DeoptCells`]).
     deopt_meta: Box<DeoptCells>,
-    /// Armed-epoch slots for direct-call speculation sites: slot k holds the
-    /// obarray function_epoch at which site k's callee binding was last
-    /// validated. Generated code holds raw pointers into this Box (stable:
-    /// boxed slice, owned here, code only runs under a live Rc of this leaf).
-    spec_slots: Box<[AtomicU64]>,
+    /// Per-site direct-call speculation state ([`SpecSlot`]): armed epoch +
+    /// lazily-cached callee leaf pointer. Generated code holds raw pointers
+    /// into this Box (stable: boxed slice, owned here, code only runs under a
+    /// live Rc of this leaf).
+    spec_slots: Box<[SpecSlot]>,
     /// Whether the body registers handler frames (`condition-case`/`catch`).
     /// When set, [`call`](Self::call) truncates `ctx.condition_stack` back to
     /// the entry depth on every exit (before the specpdl unwind, exactly like
@@ -3065,6 +3087,20 @@ struct SpecSite {
     slot: usize,
 }
 
+/// Per-site speculation state, baked into generated code by raw address and
+/// read by `neovm_jit_call_spec`. `epoch` is the obarray `function_epoch` at
+/// which this site's callee binding was last validated. `leaf` lazily caches a
+/// `*const CompiledLeaf` (as `usize` bits; 0 = none) for the armed callee, so
+/// repeat calls skip the compiled-cache hash lookup (the V3 fast path). The
+/// leaf pointer is cleared whenever revalidation fails (the binding changed),
+/// and is sound while set because the per-thread `COMPILED` cache never evicts.
+/// `repr(C)` pins the field order the baked pointer arithmetic relies on.
+#[repr(C)]
+pub(crate) struct SpecSlot {
+    epoch: AtomicU64,
+    leaf: AtomicU64,
+}
+
 /// Find direct-call speculation sites: the byte-compiler's standard call
 /// shape `Constant(f) arg-push* Call(n)` where every op between the callee
 /// push and its call only PUSHES new slots (Constant/Nil/True/Dup/StackRef —
@@ -3671,15 +3707,20 @@ pub fn lower_leaf_full(
     // Direct-call speculation sites + their armed-epoch slots. The Box's heap
     // storage is address-stable: slot pointers are baked into the generated
     // code as immediates and the Box moves into the CompiledLeaf at the end.
-    let (spec_sites, spec_slots): (HashMap<usize, SpecSite>, Box<[AtomicU64]>) = match obarray {
+    let (spec_sites, spec_slots): (HashMap<usize, SpecSite>, Box<[SpecSlot]>) = match obarray {
         Some(ob) => {
             let sites = find_spec_sites(ops, constants, &cfg.leaders, ob);
-            let slots: Box<[AtomicU64]> = (0..sites.len()).map(|_| AtomicU64::new(0)).collect();
+            let slots: Box<[SpecSlot]> = (0..sites.len())
+                .map(|_| SpecSlot {
+                    epoch: AtomicU64::new(0),
+                    leaf: AtomicU64::new(0),
+                })
+                .collect();
             // Arm every slot with the epoch the bindings were observed at; any
             // bump before first execution self-heals via shim re-validation.
             let epoch = ob.function_epoch();
             for site in sites.values() {
-                slots[site.slot].store(epoch, Ordering::Relaxed);
+                slots[site.slot].epoch.store(epoch, Ordering::Relaxed);
             }
             (sites, slots)
         }
@@ -4229,7 +4270,7 @@ pub fn lower_leaf_full(
                             (
                                 site.sym,
                                 site.expected_bits,
-                                &spec_slots[site.slot] as *const AtomicU64 as i64,
+                                &spec_slots[site.slot] as *const SpecSlot as i64,
                             )
                         });
                         lower_simple_op(
