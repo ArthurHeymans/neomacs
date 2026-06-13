@@ -2615,7 +2615,7 @@ fn append_raw_display_replacement_item_to_text_row_and_emit_uses_face_fallback()
 }
 
 #[test]
-fn append_display_replacement_stretch_to_text_row_and_emit_advances_output() {
+fn append_display_replacement_item_to_text_row_and_emit_advances_stretch_output() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2670,14 +2670,16 @@ fn append_display_replacement_stretch_to_text_row_and_emit_advances_output() {
         EmacsBytePos::new(0),
     );
 
-    let (_progress, end) = append_display_replacement_stretch_to_text_row_and_emit(
+    let (_progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
         replacement_source,
         3,
-        crate::display_source::DisplayReplacementBox::new(13.0, 16.0, 12.0),
+        DisplayReplacementAppendItem::Stretch(crate::display_source::DisplayReplacementBox::new(
+            13.0, 16.0, 12.0,
+        )),
         &face_resolver,
         base_face,
         frame,
@@ -2704,7 +2706,7 @@ fn append_display_replacement_stretch_to_text_row_and_emit_advances_output() {
 }
 
 #[test]
-fn append_display_replacement_source_mapped_text_to_text_row_and_emit_advances_output() {
+fn append_display_replacement_item_to_text_row_and_emit_advances_source_mapped_text_output() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2759,14 +2761,14 @@ fn append_display_replacement_source_mapped_text_to_text_row_and_emit_advances_o
         EmacsBytePos::new(0),
     );
 
-    let (_progress, end) = append_display_replacement_source_mapped_text_to_text_row_and_emit(
+    let (_progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
         replacement_source,
         3,
-        "??",
+        DisplayReplacementAppendItem::SourceMappedText("??".into()),
         &face_resolver,
         base_face,
         frame,
@@ -2869,7 +2871,7 @@ fn append_synthetic_text_to_display_row_uses_source_append_request() {
 }
 
 #[test]
-fn append_display_media_replacement_to_text_row_and_emit_installs_xwidget_replacements() {
+fn append_display_replacement_item_to_text_row_and_emit_installs_xwidget_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -2932,18 +2934,18 @@ fn append_display_media_replacement_to_text_row_and_emit_installs_xwidget_replac
         EmacsBytePos::new(0),
     );
 
-    let (progress, end) = append_display_media_replacement_to_text_row_and_emit(
+    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
         replacement_source,
         3,
-        DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+        DisplayReplacementAppendItem::Media(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
             xwidget_id: 1234,
             width: 96.0,
             height: 54.0,
-        }),
+        })),
         &face_resolver,
         base_face,
         frame,
@@ -2997,7 +2999,7 @@ fn append_display_media_replacement_to_text_row_and_emit_installs_xwidget_replac
 }
 
 #[test]
-fn append_display_media_replacement_to_text_row_and_emit_installs_image_replacements() {
+fn append_display_replacement_item_to_text_row_and_emit_installs_image_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -3060,18 +3062,18 @@ fn append_display_media_replacement_to_text_row_and_emit_installs_image_replacem
         EmacsBytePos::new(0),
     );
 
-    let (progress, end) = append_display_media_replacement_to_text_row_and_emit(
+    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
         replacement_source,
         3,
-        DisplayMediaReplacement::image(DisplayImageItem {
+        DisplayReplacementAppendItem::Media(DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
             width: 64.0,
             height: 32.0,
-        }),
+        })),
         &face_resolver,
         base_face,
         frame,
@@ -3125,7 +3127,7 @@ fn append_display_media_replacement_to_text_row_and_emit_installs_image_replacem
 }
 
 #[test]
-fn append_display_media_replacement_to_text_row_and_emit_installs_video_replacements() {
+fn append_display_replacement_item_to_text_row_and_emit_installs_video_replacements() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -3188,20 +3190,20 @@ fn append_display_media_replacement_to_text_row_and_emit_installs_video_replacem
         EmacsBytePos::new(0),
     );
 
-    let (progress, end) = append_display_media_replacement_to_text_row_and_emit(
+    let (progress, end) = append_display_replacement_item_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
         replacement_source,
         3,
-        DisplayMediaReplacement::video(DisplayVideoItem {
+        DisplayReplacementAppendItem::Media(DisplayMediaReplacement::video(DisplayVideoItem {
             video_id: 88,
             width: 80.0,
             height: 45.0,
             loop_count: -1,
             autoplay: true,
-        }),
+        })),
         &face_resolver,
         base_face,
         frame,

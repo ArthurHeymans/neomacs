@@ -1108,82 +1108,50 @@ fn append_raw_display_replacement_item_to_text_row_and_emit(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_media_replacement_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    replacement_source: BufferDisplayReplacementSource,
-    face_id: u32,
-    media: DisplayMediaReplacement,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_raw_display_replacement_item_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        replacement_source.media_item(face_id, media),
-        face_resolver,
-        base_face,
-        face_id,
-        frame,
-        position,
-    )
+#[derive(Clone, Debug)]
+pub(crate) enum DisplayReplacementAppendItem {
+    Media(DisplayMediaReplacement),
+    Stretch(DisplayReplacementBox),
+    SourceMappedText(Box<str>),
+}
+
+impl DisplayReplacementAppendItem {
+    fn into_display_item(
+        self,
+        replacement_source: BufferDisplayReplacementSource,
+        face_id: u32,
+    ) -> DisplayItem {
+        match self {
+            Self::Media(media) => replacement_source.media_item(face_id, media),
+            Self::Stretch(geometry) => replacement_source.stretch_item(face_id, geometry),
+            Self::SourceMappedText(text) => {
+                replacement_source.source_mapped_text_item(face_id, text)
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_replacement_stretch_to_text_row_and_emit(
+pub(crate) fn append_display_replacement_item_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
     replacement_source: BufferDisplayReplacementSource,
     face_id: u32,
-    geometry: DisplayReplacementBox,
+    item: DisplayReplacementAppendItem,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let item = item.into_display_item(replacement_source, face_id);
     append_raw_display_replacement_item_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        replacement_source.stretch_item(face_id, geometry),
-        face_resolver,
-        base_face,
-        face_id,
-        frame,
-        position,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_display_replacement_source_mapped_text_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    replacement_source: BufferDisplayReplacementSource,
-    face_id: u32,
-    text: impl Into<Box<str>>,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    append_raw_display_replacement_item_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        replacement_source.source_mapped_text_item(face_id, text),
+        item,
         face_resolver,
         base_face,
         face_id,

@@ -39,13 +39,11 @@ use crate::display_row::{
     insert_resolved_display_row_face,
 };
 use crate::display_row_append::{
-    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem,
+    BufferTextFragmentAdvanceResolver, BufferTextFragmentAppendItem, DisplayReplacementAppendItem,
     DisplayReplacementStringItemMeasurer, DisplayRowAppendArea, DisplayRowAppendFrame,
     DisplayRowAppendMetrics, DisplayRowAppendSurface,
     append_buffer_text_item_fragment_to_text_row_and_emit,
-    append_display_media_replacement_to_text_row_and_emit,
-    append_display_replacement_source_mapped_text_to_text_row_and_emit,
-    append_display_replacement_stretch_to_text_row_and_emit,
+    append_display_replacement_item_to_text_row_and_emit,
     append_display_replacement_string_fragment_to_text_row,
     append_lisp_string_fragment_to_text_row_and_emit,
     append_resolved_buffer_text_fragment_to_text_row, append_synthetic_text_to_display_row,
@@ -4652,17 +4650,19 @@ impl LayoutEngine {
                                 char_h,
                             );
                             if let Some((_progress, position)) =
-                                append_display_replacement_stretch_to_text_row_and_emit(
+                                append_display_replacement_item_to_text_row_and_emit(
                                     &mut self.matrix_builder,
                                     &mut output_emitter,
                                     evaluator,
                                     &mut self.font_metrics,
                                     display_replacement_source,
                                     active_face_state.face_id(),
-                                    DisplayReplacementBox::new(
-                                        space_width,
-                                        space_geometry.height,
-                                        space_geometry.ascent,
+                                    DisplayReplacementAppendItem::Stretch(
+                                        DisplayReplacementBox::new(
+                                            space_width,
+                                            space_geometry.height,
+                                            space_geometry.ascent,
+                                        ),
                                     ),
                                     face_resolver,
                                     active_face_state.resolved_face(),
@@ -4737,14 +4737,14 @@ impl LayoutEngine {
                                     ),
                                 );
                                 if let Some((progress, position)) =
-                                    append_display_media_replacement_to_text_row_and_emit(
+                                    append_display_replacement_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
                                         &mut self.font_metrics,
                                         display_replacement_source,
                                         active_face_state.face_id(),
-                                        media,
+                                        DisplayReplacementAppendItem::Media(media),
                                         face_resolver,
                                         active_face_state.resolved_face(),
                                         replacement_frame,
@@ -4780,14 +4780,16 @@ impl LayoutEngine {
                                     char_h,
                                 );
                                 if let Some((_progress, position)) =
-                                    append_display_replacement_source_mapped_text_to_text_row_and_emit(
+                                    append_display_replacement_item_to_text_row_and_emit(
                                         &mut self.matrix_builder,
                                         &mut output_emitter,
                                         evaluator,
                                         &mut self.font_metrics,
                                         display_replacement_source,
                                         active_face_state.face_id(),
-                                        placeholder,
+                                        DisplayReplacementAppendItem::SourceMappedText(
+                                            placeholder.into(),
+                                        ),
                                         face_resolver,
                                         active_face_state.resolved_face(),
                                         replacement_frame,
