@@ -19,7 +19,7 @@ cargo nextest run -p neovm-oracle-tests -E 'test(/div_utf8/)' --no-fail-fast
 GNU Emacs is expected on `PATH` (or `NEOVM_FORCE_ORACLE_PATH=/path/to/emacs`);
 the Neomacs binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH=...`).
 
-Scope at time of writing: **188 tests, 155 pass, 33 divergences.**
+Scope at time of writing: **195 tests, 160 pass, 35 divergences.**
 
 Root cause theme: **Neomacs uses a UTF-8-internal string model**, diverging
 from GNU's eight-bit-charset model. Almost every divergence traces back to
@@ -92,11 +92,21 @@ the raw-byte promotion path.
 - `buffer_multibyte_toggle::div_utf8_toggle_unibyte_to_multibyte_interleaved`
 - `buffer_multibyte_toggle::div_utf8_toggle_unibyte_to_multibyte_preserves_point_max`
 
-### Theme 7 — Display composition not registered
-`(compose-region ...)` followed by `(find-composition ...)` returns `nil` in
-Neomacs; GNU returns the recorded composition info `(FROM TO COMPONENTS ...)`.
-The display composition layer is not tracked.
+### Theme 7 — Display composition not registered / incompatible format
+`(compose-region ...)` / `(compose-string ...)` followed by
+`(find-composition ...)` returns `nil` in Neomacs; GNU returns the recorded
+composition info `(FROM TO COMPONENTS ...)`. Worse, the composition text
+property itself is stored in an incompatible format: Neomacs uses
+`((4 . ""))` (alist), GNU uses `(0 4 [])`.
 - `bidi_compose_misc::div_utf8_find_composition_explicit_compose`
+- `compose_bidi_syntax::div_utf8_compose_string_find_composition`
+
+### Theme 8 — Bidi RTL paragraph direction wrong
+`(current-bidi-paragraph-direction)` of Hebrew / RTL text returns
+`left-to-right` in Neomacs; GNU returns `right-to-left`. RTL paragraph
+direction detection is broken (affects RTL display/logical-order handling).
+LTR text is detected correctly.
+- `compose_bidi_syntax::div_utf8_current_bidi_paragraph_direction_rtl`
 
 ## What already works (coverage, not divergences)
 UTF-8/UTF-16 encode-decode, Unicode property tables (general-category,
@@ -111,6 +121,6 @@ of normal multibyte.
 ## Files
 `divergence_utf8_{bidi_compose_misc, buffer_charset_props, buffer_io,
 buffer_multibyte_toggle, buffer_region_ops, char_ops_regex, char_properties,
-char_tables, charset_conv_deep, coding, coding_deep, digest_print,
-more_codings, print_escape, string_compare_format, string_primitives,
-syntax_display}.rs`
+char_tables, charset_conv_deep, coding, coding_deep, compose_bidi_syntax,
+digest_print, more_codings, print_escape, string_compare_format,
+string_primitives, syntax_display}.rs`
