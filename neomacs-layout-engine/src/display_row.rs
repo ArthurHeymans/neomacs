@@ -11,7 +11,7 @@ use crate::display_row_builder::{
     DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
-use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
+use crate::display_source::{DisplayItemSource, LispStringSourceCursor, SingleDisplayItemSource};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
@@ -1167,6 +1167,37 @@ pub(crate) struct NaturalDisplayRowAppendRenderPolicy;
 
 impl DisplayRowRenderPolicy for NaturalDisplayRowAppendRenderPolicy {}
 
+pub(crate) struct ResolvedSourceAdvanceRenderPolicy {
+    advance_px: f32,
+}
+
+impl ResolvedSourceAdvanceRenderPolicy {
+    pub(crate) fn new(advance_px: f32) -> Self {
+        Self { advance_px }
+    }
+
+    fn measurement_for_text(&self, text: &str) -> DisplayRowItemMeasurement {
+        DisplayRowItemMeasurement::TextRun(
+            DisplayTextRunMeasurementPlan::from_resolved_source_advance(text, self.advance_px),
+        )
+    }
+}
+
+impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
+    fn measurement_for(
+        &mut self,
+        item: &DisplayItem,
+        _face_id: u32,
+        _font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowItemMeasurement {
+        match &item.kind {
+            DisplayItemKind::TextRun(run) => self.measurement_for_text(&run.text),
+            DisplayItemKind::SourceMappedText(text) => self.measurement_for_text(&text.text),
+            _ => DisplayRowItemMeasurement::Default,
+        }
+    }
+}
+
 pub(crate) struct DisplayRowRenderResult {
     pub(crate) rendered: RenderedDisplayRow,
     pub(crate) stop: DisplayRowRenderStop,
@@ -1740,6 +1771,40 @@ pub(crate) fn measure_display_source_append_request_against_current_text_row<
         row_height_px,
         row_ascent_px,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn append_single_display_item_fragment_to_text_row_and_emit<
+    P: DisplayRowRenderPolicy,
+>(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    font_metrics: &mut Option<FontMetricsService>,
+    mut item: DisplayItem,
+    face_resolver: &FaceResolver,
+    request: DisplayRowSourceAppendRequest<'_>,
+    render_policy: &mut P,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let base_face_id = request.base_face_id();
+    item.face = RenderFaceRef::FaceId(base_face_id);
+    let mut source = SingleDisplayItemSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
+    let start = request.start_position();
+    let outcome = render_display_source_append_request_into_current_text_row_and_emit(
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        &mut source,
+        &mut source_state,
+        face_resolver,
+        &mut face_ids,
+        request,
+        render_policy,
+    )?;
+    Some(outcome.into_append_progress_and_position(start))
 }
 
 pub(crate) fn install_rendered_display_row(

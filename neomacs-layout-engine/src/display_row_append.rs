@@ -2,8 +2,8 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessJoinerPolicy,
-    GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
+    DisplaySourceMappedText, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
+    SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{DisplayMediaReplacementProperty, DisplayPropertyClassification};
@@ -18,6 +18,7 @@ use crate::display_row::{
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds,
     DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowSourceAppendRequest,
     DisplayRowSourceGeometry, DisplayRowSourceState, NaturalDisplayRowAppendRenderPolicy,
+    ResolvedSourceAdvanceRenderPolicy, append_single_display_item_fragment_to_text_row_and_emit,
     measure_display_source_append_request_against_current_text_row,
     render_display_source_append_request_into_current_text_row_and_emit,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
@@ -29,15 +30,13 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayItemSource, DisplayReplacementBox, DisplaySourceContext, LispStringSourceCursor,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SingleDisplayItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{ResolvedDisplayReplacement, resolve_display_replacement};
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
-use crate::display_text_run_measurement::{
-    ComplexTextRunAdvanceResolver, DisplayTextRunMeasurementPlan,
-};
+use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -48,61 +47,6 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
-
-struct SingleDisplayItemSource {
-    source_position: DisplaySourcePosition,
-    item: Option<DisplayItem>,
-}
-
-impl SingleDisplayItemSource {
-    fn new(item: DisplayItem) -> Self {
-        Self {
-            source_position: item.span.start.clone(),
-            item: Some(item),
-        }
-    }
-}
-
-impl DisplayItemSource for SingleDisplayItemSource {
-    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        self.item.take()
-    }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.source_position.clone()
-    }
-}
-
-struct ResolvedSourceAdvanceRenderPolicy {
-    advance_px: f32,
-}
-
-impl ResolvedSourceAdvanceRenderPolicy {
-    fn new(advance_px: f32) -> Self {
-        Self { advance_px }
-    }
-
-    fn measurement_for_text(&self, text: &str) -> DisplayRowItemMeasurement {
-        DisplayRowItemMeasurement::TextRun(
-            DisplayTextRunMeasurementPlan::from_resolved_source_advance(text, self.advance_px),
-        )
-    }
-}
-
-impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
-    fn measurement_for(
-        &mut self,
-        item: &DisplayItem,
-        _face_id: u32,
-        _font_metrics: &mut Option<FontMetricsService>,
-    ) -> DisplayRowItemMeasurement {
-        match &item.kind {
-            DisplayItemKind::TextRun(run) => self.measurement_for_text(&run.text),
-            DisplayItemKind::SourceMappedText(text) => self.measurement_for_text(&text.text),
-            _ => DisplayRowItemMeasurement::Default,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BufferTextSourceAppendMeasurement {
@@ -249,38 +193,6 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
     output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
     end
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_single_display_item_fragment_to_text_row_and_emit<P: DisplayRowRenderPolicy>(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    mut item: DisplayItem,
-    face_resolver: &FaceResolver,
-    request: DisplayRowSourceAppendRequest<'_>,
-    render_policy: &mut P,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let base_face_id = request.base_face_id();
-    item.face = RenderFaceRef::FaceId(base_face_id);
-    let mut source = SingleDisplayItemSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
-    let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
-    let start = request.start_position();
-    let outcome = render_display_source_append_request_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        &mut source,
-        &mut source_state,
-        face_resolver,
-        &mut face_ids,
-        request,
-        render_policy,
-    )?;
-    Some(outcome.into_append_progress_and_position(start))
 }
 
 #[allow(clippy::too_many_arguments)]

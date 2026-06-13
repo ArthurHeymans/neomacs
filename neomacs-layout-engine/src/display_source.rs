@@ -72,6 +72,30 @@ pub(crate) trait DisplayItemFaceResolver {
     }
 }
 
+pub(crate) struct SingleDisplayItemSource {
+    source_position: DisplaySourcePosition,
+    item: Option<DisplayItem>,
+}
+
+impl SingleDisplayItemSource {
+    pub(crate) fn new(item: DisplayItem) -> Self {
+        Self {
+            source_position: item.span.start.clone(),
+            item: Some(item),
+        }
+    }
+}
+
+impl DisplayItemSource for SingleDisplayItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.item.take()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BufferTextItemSource {
     buffer_id: BufferId,
