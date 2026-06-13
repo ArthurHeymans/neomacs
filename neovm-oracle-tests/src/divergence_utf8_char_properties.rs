@@ -1,0 +1,125 @@
+//! UTF-8 / multibyte *character property* divergence probes.
+//!
+//! Probes Unicode property tables that GNU loads from the Unicode database:
+//! `get-char-code-property` (general-category, bidi-class, case mapping),
+//! `char-script`, `char-to-name`, `char-category`.  A UTF-8-internal reimpl
+//! frequently lacks or simplifies these tables, making them high-yield
+//! divergence targets.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_utf8_general_category_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r#"
+(list (get-char-code-property ?a 'general-category)
+      (get-char-code-property ?A 'general-category)
+      (get-char-code-property ?1 'general-category)
+      (get-char-code-property ?é 'general-category)
+      (get-char-code-property ?\x3042 'general-category)
+      (get-char-code-property ?\x4e2d 'general-category)
+      (get-char-code-property #x1f600 'general-category)
+      (get-char-code-property ?\s 'general-category))
+"#,
+    );
+}
+
+#[test]
+fn div_utf8_unicode_case_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r#"
+(list (get-char-code-property ?a 'lowercase)
+      (get-char-code-property ?A 'uppercase)
+      (get-char-code-property ?é 'lowercase)
+      (get-char-code-property ?ß 'uppercase)
+      (get-char-code-property ?\x4e2d 'lowercase))
+"#,
+    );
+}
+
+#[test]
+fn div_utf8_bidi_class_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r#"
+(list (get-char-code-property ?a 'bidi-class)
+      (get-char-code-property ?\x5d0 'bidi-class)
+      (get-char-code-property ?\x627 'bidi-class)
+      (get-char-code-property ?\x300 'bidi-class))
+"#,
+    );
+}
+
+#[test]
+fn div_utf8_char_script_classification() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r#"
+(list (char-script ?a)
+      (char-script ?é)
+      (char-script ?\x3042)
+      (char-script ?\x4e2d)
+      (char-script ?\x627)
+      (char-script ?\x5d0)
+      (char-script #x1f600))
+"#,
+    );
+}
+
+#[test]
+fn div_utf8_char_to_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r#"
+(list (char-to-name ?a)
+      (char-to-name ?é)
+      (char-to-name ?\x3042)
+      (char-to-name ?\x4e2d)
+      (char-to-name #x1f600)
+      (char-to-name ?\x300))
+"#,
+    );
+}
+
+#[test]
+fn div_utf8_char_category_bits() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Emacs char-category table (independent of Unicode properties).
+    assert_oracle_parity(
+        r#"
+(list (char-category ?a)
+      (char-category ?A)
+      (char-category ?1)
+      (char-category ?é)
+      (char-category ?\x3042)
+      (char-category ?\s))
+"#,
+    );
+}
+
+#[test]
+fn div_utf8_get_char_code_property_canonical_decomposition() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Precomposed chars should decompose to their combining sequence.
+    assert_oracle_parity(
+        r#"
+(list (get-char-code-property ?á 'canonical-class)
+      (get-char-code-property ?é 'decomposition)
+      (get-char-code-property ?ü 'decomposition))
+"#,
+    );
+}
+
+#[test]
+fn div_utf8_char_script_table_membership() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r#"
+(list (char-script-table-p (char-script ?a))
+      (sort (delete-dups (mapcar #'char-script "aA1 éあ中")) #'string<))
+"#,
+    );
+}
