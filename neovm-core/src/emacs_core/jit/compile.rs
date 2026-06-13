@@ -1600,7 +1600,107 @@ pub fn compile_bytecode_function(f: &ByteCodeFunction) -> Result<CompiledLeaf, C
 
 /// [`compile_bytecode_function`] with the compiling thread's obarray for
 /// direct-call speculation.
+/// Profiling chokepoint (env-gated, zero cost when off): record the op-mix of
+/// every distinct bytecode function the JIT attempts to compile, so a real
+/// workload can be characterized — is hot elisp arithmetic-heavy (unboxing
+/// helps), call-heavy (inlining helps), or dispatch/alloc-bound (an MIR tier
+/// helps little)? Set `NEOVM_JIT_PROFILE=<path>` to append one CSV row per
+/// function. Used to justify (or not) the optimizing Tier-2 investment.
+fn jit_profile_path() -> Option<&'static str> {
+    use std::sync::OnceLock;
+    static PATH: OnceLock<Option<String>> = OnceLock::new();
+    PATH.get_or_init(|| std::env::var("NEOVM_JIT_PROFILE").ok())
+        .as_deref()
+}
+
+fn jit_profile_emit(f: &ByteCodeFunction, compiled: bool) {
+    let Some(path) = jit_profile_path() else {
+        return;
+    };
+    let ops = &f.ops;
+    let mut arith = 0u32;
+    let mut calls = 0u32;
+    let mut alloc = 0u32;
+    let mut listops = 0u32;
+    let mut varops = 0u32;
+    let mut preds = 0u32;
+    let mut backedges = 0u32;
+    for (i, op) in ops.iter().enumerate() {
+        match op {
+            Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Div
+            | Op::Rem
+            | Op::Add1
+            | Op::Sub1
+            | Op::Negate
+            | Op::Max
+            | Op::Min
+            | Op::Eqlsign
+            | Op::Lss
+            | Op::Gtr
+            | Op::Leq
+            | Op::Geq => arith += 1,
+            Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) | Op::CallBuiltinSym(..) => calls += 1,
+            Op::Cons | Op::List(_) | Op::Concat(_) | Op::Nconc => alloc += 1,
+            Op::Car | Op::Cdr | Op::CarSafe | Op::CdrSafe => listops += 1,
+            Op::VarRef(_) | Op::VarSet(_) | Op::VarBind(_) | Op::Unbind(_) => varops += 1,
+            Op::Null
+            | Op::Not
+            | Op::Consp
+            | Op::Stringp
+            | Op::Listp
+            | Op::Symbolp
+            | Op::Integerp
+            | Op::Numberp => preds += 1,
+            Op::Goto(t)
+            | Op::GotoIfNil(t)
+            | Op::GotoIfNotNil(t)
+            | Op::GotoIfNilElsePop(t)
+            | Op::GotoIfNotNilElsePop(t) => {
+                if (*t as usize) <= i {
+                    backedges += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    let line = format!(
+        "{},{},{},{},{},{},{},{},{},{}\n",
+        ops.len(),
+        arith,
+        calls,
+        alloc,
+        listops,
+        varops,
+        preds,
+        backedges,
+        u8::from(backedges > 0),
+        u8::from(compiled),
+    );
+    use std::io::Write;
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
 pub fn compile_bytecode_function_with(
+    f: &ByteCodeFunction,
+    obarray: Option<&Obarray>,
+) -> Result<CompiledLeaf, CompileError> {
+    let result = compile_bytecode_function_inner(f, obarray);
+    if jit_profile_path().is_some() {
+        jit_profile_emit(f, result.is_ok());
+    }
+    result
+}
+
+fn compile_bytecode_function_inner(
     f: &ByteCodeFunction,
     obarray: Option<&Obarray>,
 ) -> Result<CompiledLeaf, CompileError> {
