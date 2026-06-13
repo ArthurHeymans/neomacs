@@ -1317,32 +1317,29 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_source_char_advance_to_text_row(
+    pub(crate) fn resolve_source_char_advance_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         resolver: &mut BufferTextSourceAdvanceResolver,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        text: &[u8],
-        byte_idx: usize,
-        source_char: &BufferTextSourceChar,
         face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
-        cluster: BufferTextSourceClusterState,
+        request: BufferTextSourceCharAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
+        let parts = request.into_parts();
         self.resolve_source_range_advance_to_text_row(
             geometry,
             resolver,
             builder,
             evaluator,
             font_metrics,
-            text,
-            byte_idx,
-            source_char.range(),
+            parts.text,
+            parts.byte_idx,
+            parts.range,
             face_resolver,
-            position,
-            cluster,
+            parts.position,
+            parts.cluster,
         )
     }
 
@@ -1807,6 +1804,52 @@ struct BufferTextResolvedSourceCharAppendRequestParts {
     range: BufferTextSourceRange,
     resolved_advance: ResolvedBufferTextSourceAdvance,
     position: DisplayRowPosition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceCharAdvanceRequest<'text> {
+    text: &'text [u8],
+    byte_idx: usize,
+    range: BufferTextSourceRange,
+    position: DisplayRowPosition,
+    cluster: BufferTextSourceClusterState,
+}
+
+impl<'text> BufferTextSourceCharAdvanceRequest<'text> {
+    pub(crate) fn new(
+        text: &'text [u8],
+        byte_idx: usize,
+        source_char: &BufferTextSourceChar,
+        position: DisplayRowPosition,
+        cluster: BufferTextSourceClusterState,
+    ) -> Self {
+        Self {
+            text,
+            byte_idx,
+            range: source_char.range(),
+            position,
+            cluster,
+        }
+    }
+
+    fn into_parts(self) -> BufferTextSourceCharAdvanceRequestParts<'text> {
+        BufferTextSourceCharAdvanceRequestParts {
+            text: self.text,
+            byte_idx: self.byte_idx,
+            range: self.range,
+            position: self.position,
+            cluster: self.cluster,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BufferTextSourceCharAdvanceRequestParts<'text> {
+    text: &'text [u8],
+    byte_idx: usize,
+    range: BufferTextSourceRange,
+    position: DisplayRowPosition,
+    cluster: BufferTextSourceClusterState,
 }
 
 impl BufferTextSourceSpecialDisplay {

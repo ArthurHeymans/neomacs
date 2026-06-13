@@ -39,7 +39,7 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextResolvedSourceCharAppendRequest, BufferTextRowAppendContext,
-    BufferTextSourceAdvanceResolver, BufferTextSourceChar,
+    BufferTextSourceAdvanceResolver, BufferTextSourceChar, BufferTextSourceCharAdvanceRequest,
     BufferTextSpecialSourceCharAppendRequest, DisplayPropertyReplacementAppendItem,
     DisplayPropertyReplacementAppendRequest, DisplayPropertyReplacementAppendResolveRequest,
     DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
@@ -5273,19 +5273,22 @@ impl LayoutEngine {
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
+            let advance_request = BufferTextSourceCharAdvanceRequest::new(
+                &text,
+                ch_start_byte_idx,
+                &buffer_source_char,
+                append_position,
+                cluster_state,
+            );
             let resolved_advance = buffer_row_append_context
-                .resolve_source_char_advance_to_text_row(
+                .resolve_source_char_advance_request_to_text_row(
                     &append_geometry,
                     &mut buffer_text_advance,
                     &mut self.matrix_builder,
                     evaluator,
                     &mut self.font_metrics,
-                    &text,
-                    ch_start_byte_idx,
-                    &buffer_source_char,
                     face_resolver,
-                    append_position,
-                    cluster_state,
+                    advance_request,
                 );
             let advance = resolved_advance.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
