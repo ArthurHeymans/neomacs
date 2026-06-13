@@ -136,10 +136,6 @@ pub(crate) enum DisplayRowItemMeasurement {
     TextRun(DisplayTextRunMeasurement),
 }
 
-pub(crate) trait DisplayRowItemMeasurer {
-    fn measurement_for(&mut self, item: &DisplayItem, face_id: u32) -> DisplayRowItemMeasurement;
-}
-
 #[cfg(test)]
 pub(crate) struct FixedGlyphAdvance {
     ch: char,

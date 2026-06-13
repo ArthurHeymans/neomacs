@@ -21,9 +21,8 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendCursor;
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
-    DisplayRowItemMeasurer, DisplayRowLayout, DisplayRowPosition, DisplayRowWriteMetrics,
-    DisplayTabPolicy,
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout,
+    DisplayRowPosition, DisplayRowWriteMetrics, DisplayTabPolicy,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{
@@ -1088,17 +1087,6 @@ pub(crate) trait DisplayReplacementStringItemMeasurementPolicy {
         face_id: u32,
         font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement;
-}
-
-impl<M: DisplayRowItemMeasurer> DisplayReplacementStringItemMeasurementPolicy for M {
-    fn measurement_for(
-        &mut self,
-        item: &DisplayItem,
-        face_id: u32,
-        _font_metrics: &mut Option<FontMetricsService>,
-    ) -> DisplayRowItemMeasurement {
-        DisplayRowItemMeasurer::measurement_for(self, item, face_id)
-    }
 }
 
 pub(crate) struct DisplayReplacementStringItemMeasurer {

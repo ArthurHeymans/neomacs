@@ -2389,11 +2389,12 @@ impl SourceMappedTextWidthByFace {
     }
 }
 
-impl DisplayRowItemMeasurer for SourceMappedTextWidthByFace {
+impl DisplayReplacementStringItemMeasurementPolicy for SourceMappedTextWidthByFace {
     fn measurement_for(
         &mut self,
         item: &crate::display_item::DisplayItem,
         face_id: u32,
+        _font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         let DisplayItemKind::SourceMappedText(text) = &item.kind else {
             return DisplayRowItemMeasurement::Default;
