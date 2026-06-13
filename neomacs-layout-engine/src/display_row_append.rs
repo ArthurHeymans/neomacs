@@ -17,8 +17,9 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds,
     DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowSourceAppendRequest,
-    DisplayRowSourceGeometry, DisplayRowSourceState, NaturalDisplayRowAppendRenderPolicy,
-    ResolvedSourceAdvanceRenderPolicy, append_single_display_item_fragment_to_text_row_and_emit,
+    DisplayRowSourceGeometry, DisplayRowSourceState, DisplaySourceAppendMeasurement,
+    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    append_single_display_item_fragment_to_text_row_and_emit,
     measure_display_source_append_request_against_current_text_row,
     render_display_source_append_request_into_current_text_row_and_emit,
     render_natural_display_source_append_request_into_current_text_row_and_emit,
@@ -49,29 +50,23 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum BufferTextSourceAppendMeasurement {
-    Natural,
-    ResolvedAdvance { advance_px: f32 },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ResolvedBufferTextSourceAdvance {
     advance_px: f32,
-    append_measurement: BufferTextSourceAppendMeasurement,
+    append_measurement: DisplaySourceAppendMeasurement,
 }
 
 impl ResolvedBufferTextSourceAdvance {
     fn natural(advance_px: f32) -> Self {
         Self {
             advance_px,
-            append_measurement: BufferTextSourceAppendMeasurement::Natural,
+            append_measurement: DisplaySourceAppendMeasurement::Natural,
         }
     }
 
     fn resolved(advance_px: f32) -> Self {
         Self {
             advance_px,
-            append_measurement: BufferTextSourceAppendMeasurement::ResolvedAdvance { advance_px },
+            append_measurement: DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px },
         }
     }
 
@@ -79,7 +74,7 @@ impl ResolvedBufferTextSourceAdvance {
         self.advance_px
     }
 
-    fn append_measurement(self) -> BufferTextSourceAppendMeasurement {
+    fn append_measurement(self) -> DisplaySourceAppendMeasurement {
         self.append_measurement
     }
 }
@@ -146,38 +141,6 @@ impl BufferTextSourceNaturalFallbackAdvance {
             Self::FaceColumns { columns } => {
                 active_face_state.advance_for_columns(font_metrics, ch, columns)
             }
-        }
-    }
-}
-
-enum BufferTextSourceRenderPolicy {
-    Natural(NaturalDisplayRowAppendRenderPolicy),
-    Resolved(ResolvedSourceAdvanceRenderPolicy),
-}
-
-impl BufferTextSourceRenderPolicy {
-    fn new(measurement: BufferTextSourceAppendMeasurement) -> Self {
-        match measurement {
-            BufferTextSourceAppendMeasurement::Natural => {
-                Self::Natural(NaturalDisplayRowAppendRenderPolicy)
-            }
-            BufferTextSourceAppendMeasurement::ResolvedAdvance { advance_px } => {
-                Self::Resolved(ResolvedSourceAdvanceRenderPolicy::new(advance_px))
-            }
-        }
-    }
-}
-
-impl DisplayRowRenderPolicy for BufferTextSourceRenderPolicy {
-    fn measurement_for(
-        &mut self,
-        item: &DisplayItem,
-        face_id: u32,
-        font_metrics: &mut Option<FontMetricsService>,
-    ) -> DisplayRowItemMeasurement {
-        match self {
-            Self::Natural(policy) => policy.measurement_for(item, face_id, font_metrics),
-            Self::Resolved(policy) => policy.measurement_for(item, face_id, font_metrics),
         }
     }
 }
@@ -881,7 +844,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
-        BufferTextSourceRenderPolicy::new(resolved_advance.append_measurement());
+        DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
     let outcome = render_display_source_append_request_into_current_text_row_and_emit(
         builder,
         output_emitter,
@@ -1211,7 +1174,7 @@ fn measure_buffer_text_source_range_append_progress_to_text_row<B: LayoutBufferV
     let mut source_state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
-        BufferTextSourceRenderPolicy::new(BufferTextSourceAppendMeasurement::Natural);
+        DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
     let outcome = measure_display_source_append_request_against_current_text_row(
         builder,
         evaluator,

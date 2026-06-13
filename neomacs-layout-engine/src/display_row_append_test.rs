@@ -382,7 +382,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     assert_eq!(resolved.advance_px(), 8.0);
     assert_eq!(
         resolved.append_measurement(),
-        BufferTextSourceAppendMeasurement::Natural
+        DisplaySourceAppendMeasurement::Natural
     );
 }
 
@@ -430,7 +430,7 @@ fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
     assert_eq!(resolved.advance_px(), 8.0);
     assert_eq!(
         resolved.append_measurement(),
-        BufferTextSourceAppendMeasurement::Natural
+        DisplaySourceAppendMeasurement::Natural
     );
 }
 
@@ -475,7 +475,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     assert_eq!(resolved.advance_px(), 8.0);
     assert_eq!(
         resolved.append_measurement(),
-        BufferTextSourceAppendMeasurement::ResolvedAdvance { advance_px: 8.0 }
+        DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px: 8.0 }
     );
 }
 

@@ -1198,6 +1198,44 @@ impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplaySourceAppendMeasurement {
+    Natural,
+    ResolvedAdvance { advance_px: f32 },
+}
+
+pub(crate) enum DisplaySourceAppendRenderPolicy {
+    Natural(NaturalDisplayRowAppendRenderPolicy),
+    Resolved(ResolvedSourceAdvanceRenderPolicy),
+}
+
+impl DisplaySourceAppendRenderPolicy {
+    pub(crate) fn new(measurement: DisplaySourceAppendMeasurement) -> Self {
+        match measurement {
+            DisplaySourceAppendMeasurement::Natural => {
+                Self::Natural(NaturalDisplayRowAppendRenderPolicy)
+            }
+            DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px } => {
+                Self::Resolved(ResolvedSourceAdvanceRenderPolicy::new(advance_px))
+            }
+        }
+    }
+}
+
+impl DisplayRowRenderPolicy for DisplaySourceAppendRenderPolicy {
+    fn measurement_for(
+        &mut self,
+        item: &DisplayItem,
+        face_id: u32,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowItemMeasurement {
+        match self {
+            Self::Natural(policy) => policy.measurement_for(item, face_id, font_metrics),
+            Self::Resolved(policy) => policy.measurement_for(item, face_id, font_metrics),
+        }
+    }
+}
+
 pub(crate) struct DisplayRowRenderResult {
     pub(crate) rendered: RenderedDisplayRow,
     pub(crate) stop: DisplayRowRenderStop,
