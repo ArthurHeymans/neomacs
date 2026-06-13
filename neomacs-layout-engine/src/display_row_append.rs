@@ -1808,7 +1808,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn measure_fragment_width_or_fallback_to_text_row(
+    pub(crate) fn measure_fragment_width_or_active_face_fallback_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
@@ -1817,9 +1817,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         face_resolver: &FaceResolver,
         item: BufferTextFragmentAppendItem,
         position: DisplayRowPosition,
-        fallback_char_width: f32,
     ) -> f32 {
-        let fallback_width = item.fallback_width_policy().width_px(fallback_char_width);
+        let fallback_width = item
+            .fallback_width_policy()
+            .width_px(self.frame.geometry.char_width);
         self.measure_fragment_width_to_text_row(
             builder,
             evaluator,

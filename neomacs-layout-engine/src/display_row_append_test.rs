@@ -2169,7 +2169,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder
         .with_current_row_mut(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
-    let fallback_width = append_context.measure_fragment_width_or_fallback_to_text_row(
+    let fallback_width = append_context.measure_fragment_width_or_active_face_fallback_to_text_row(
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -2177,9 +2177,8 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         &face_resolver,
         item.clone(),
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        8.0,
     );
-    let edge_width = append_context.measure_fragment_width_or_fallback_to_text_row(
+    let edge_width = append_context.measure_fragment_width_or_active_face_fallback_to_text_row(
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -2190,7 +2189,6 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             x_px: 80.0,
             col: 10,
         },
-        8.0,
     );
 
     let (progress, end) = append_context

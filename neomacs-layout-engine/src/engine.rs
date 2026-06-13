@@ -4904,7 +4904,7 @@ impl LayoutEngine {
                     char_h,
                 )
                 .active_face()
-                .measure_fragment_width_or_fallback_to_text_row(
+                .measure_fragment_width_or_active_face_fallback_to_text_row(
                     &mut self.matrix_builder,
                     evaluator,
                     &mut self.font_metrics,
@@ -4912,7 +4912,6 @@ impl LayoutEngine {
                     face_resolver,
                     control_item.clone(),
                     DisplayRowPosition { x_px: x, col },
-                    face_metrics.char_width,
                 );
 
                 // Check if the renderer-measured caret notation fits.
