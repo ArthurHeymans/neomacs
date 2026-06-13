@@ -13,6 +13,7 @@ use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
@@ -118,6 +119,17 @@ pub(crate) struct TextMatrixRowBegin {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowBegin {
+    pub(crate) window_id: u64,
+    pub(crate) rows: usize,
+    pub(crate) cols: usize,
+    pub(crate) bounds: Rect,
+    pub(crate) text_bounds: Rect,
+    pub(crate) selected: bool,
+    pub(crate) first_row: TextMatrixRowBegin,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextMatrixRowGeometryTransition {
     pub(crate) finished_row: TextMatrixRowMetrics,
     pub(crate) begin_row: TextMatrixRowBegin,
@@ -189,6 +201,23 @@ impl<'a> TextMatrixRowOutput<'a> {
         self.emit(transition);
         TextMatrixRowTransition::BeganNextRow
     }
+}
+
+pub(crate) fn begin_text_window_output(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    request: TextWindowBegin,
+) {
+    builder.begin_window_with_text_bounds(
+        request.window_id,
+        request.rows,
+        request.cols,
+        request.bounds,
+        request.text_bounds,
+        request.selected,
+    );
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator).begin(request.first_row);
 }
 
 pub(crate) trait DisplayProgressSink {

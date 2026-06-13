@@ -15,7 +15,8 @@ use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, WindowOutputEmitter,
+    ChromeRowOutput, RowMetricsSnapshot, TextMatrixRowOutput, TextWindowBegin, WindowOutputEmitter,
+    begin_text_window_output,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -4122,16 +4123,20 @@ impl LayoutEngine {
         // --- GlyphMatrix builder: begin window and first row ---
         let matrix_rows = text_matrix_row_base + text_matrix_rows + bottom_chrome_rows;
         let matrix_cols = cols.max(1);
-        self.matrix_builder.begin_window_with_text_bounds(
-            params.window_id as u64,
-            matrix_rows,
-            matrix_cols,
-            params.bounds,
-            params.text_bounds,
-            params.selected,
+        begin_text_window_output(
+            &mut self.matrix_builder,
+            &mut output_emitter,
+            evaluator,
+            TextWindowBegin {
+                window_id: params.window_id as u64,
+                rows: matrix_rows,
+                cols: matrix_cols,
+                bounds: params.bounds,
+                text_bounds: params.text_bounds,
+                selected: params.selected,
+                first_row: row_geometry.text_matrix_row_begin(text_matrix_row_base, col, x),
+            },
         );
-        TextMatrixRowOutput::new(&mut self.matrix_builder, &mut output_emitter, evaluator)
-            .begin(row_geometry.text_matrix_row_begin(text_matrix_row_base, col, x));
 
         let row_visibility_limit = DisplayRowVisibilityLimit {
             max_rows,
