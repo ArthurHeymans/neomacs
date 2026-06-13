@@ -46,8 +46,8 @@
 use cranelift_codegen::ir::Value as ClifValue;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
-    AbiParam, Block, FuncRef, Function, InstBuilder, MemFlags, Signature, StackSlot, StackSlotData,
-    StackSlotKind, Type, UserFuncName, types,
+    AbiParam, Block, BlockArg, FuncRef, Function, InstBuilder, MemFlags, Signature, StackSlot,
+    StackSlotData, StackSlotKind, Type, UserFuncName, types,
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::{JITBuilder, JITModule};
@@ -57,6 +57,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::backend::BackendError;
+use super::mir;
 use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::bytecode::vm::condition_frame_resume;
@@ -2021,6 +2022,256 @@ fn lower_car_cdr(
 /// kept for the existing call sites/tests.
 pub fn lower_nullary_leaf(ops: &[Op], constants: &[Value]) -> Result<CompiledLeaf, CompileError> {
     lower_leaf(ops, constants, 0)
+}
+
+/// **MIR Tier-2, Phase 4b (pure subset).** Lower a [`mir::MirFunction`] to a
+/// [`CompiledLeaf`] by driving CLIF emission from the MIR instead of a bytecode
+/// walk — the first proof that the bytecode→MIR→CLIF pipeline produces runnable
+/// native code. Scoped to the *pure* op subset (arithmetic / comparisons /
+/// type predicates / car-cdr / stack — no calls, cons, eq, or other shim-using
+/// ops; those and precise-deopt framestates come in follow-up increments), so
+/// no vmctx is needed and a failing guard can rerun the interpreter from the
+/// start (sound: a pure body has no side effect before any guard).
+///
+/// Uses CLIF **block parameters** as the SSA phis — each MIR block becomes a
+/// CLIF block whose params are its entry operand stack, and terminator edges
+/// pass the live stack as block arguments. Behaviour-neutral: not wired into
+/// the live compile pipeline; validated only by differential tests against the
+/// interpreter.
+pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, CompileError> {
+    use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
+
+    let builder = JITBuilder::new(default_libcall_names())
+        .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
+    let mut module = JITModule::new(builder);
+    let call_conv = module.target_config().default_call_conv;
+    let ptr_ty = module.target_config().pointer_type();
+
+    // ABI identical to lower_leaf: fn(vmctx, args, out) -> status.
+    let mut sig = Signature::new(call_conv);
+    sig.params.push(AbiParam::new(ptr_ty)); // vmctx (unused for pure)
+    sig.params.push(AbiParam::new(ptr_ty)); // args
+    sig.params.push(AbiParam::new(ptr_ty)); // out
+    sig.returns.push(AbiParam::new(types::I64));
+
+    let mut func = Function::with_name_signature(UserFuncName::user(0, 0), sig.clone());
+    let mut fbctx = FunctionBuilderContext::new();
+    {
+        let mut fb = FunctionBuilder::new(&mut func, &mut fbctx);
+
+        // One CLIF block per MIR block, params = the MIR block's params.
+        let clif_blocks: Vec<Block> = m
+            .blocks
+            .iter()
+            .map(|blk| {
+                let cb = fb.create_block();
+                for _ in &blk.params {
+                    fb.append_block_param(cb, types::I64);
+                }
+                cb
+            })
+            .collect();
+
+        // Map every MIR value to its CLIF value (filled in dominance order: a
+        // single forward pass works because the MIR is SSA and block params
+        // carry all cross-block values).
+        let mut cval: Vec<Option<ClifValue>> = vec![None; m.value_types.len()];
+
+        // Shared deopt landing block: pure bodies rerun the interpreter from the
+        // start (STATUS_DEOPT), created lazily on the first guard.
+        let mut deopt: Option<Block> = None;
+
+        // Function-entry block: stash the out pointer + load args, jump into MIR
+        // block 0 passing the args as block params.
+        let entry = fb.create_block();
+        fb.append_block_params_for_function_params(entry);
+        fb.switch_to_block(entry);
+        let args_ptr = fb.block_params(entry)[1];
+        let out_ptr = fb.block_params(entry)[2];
+        let arg_vals: Vec<BlockArg> = (0..m.arity)
+            .map(|i| {
+                let v = fb
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), args_ptr, (i * 8) as i32);
+                BlockArg::Value(v)
+            })
+            .collect();
+        fb.ins().jump(clif_blocks[0], &arg_vals);
+
+        let map =
+            |cval: &[Option<ClifValue>], v: mir::MirValue| -> Result<ClifValue, CompileError> {
+                cval[v.0 as usize].ok_or(CompileError::BadOperand)
+            };
+
+        for (bi, blk) in m.blocks.iter().enumerate() {
+            let cb = clif_blocks[bi];
+            fb.switch_to_block(cb);
+            // Bind this block's params to the CLIF block params.
+            let bp = fb.block_params(cb).to_vec();
+            for (p, &cv) in blk.params.iter().zip(bp.iter()) {
+                cval[p.0 as usize] = Some(cv);
+            }
+
+            for inst in &blk.insts {
+                let r = inst.result.0 as usize;
+                match &inst.op {
+                    MirOp::Arg(_) => {
+                        // The param already holds the argument (bound above).
+                    }
+                    MirOp::Const(v) => {
+                        cval[r] = Some(fb.ins().iconst(types::I64, v.bits() as i64));
+                    }
+                    MirOp::Bin(kind, a, b) => {
+                        let is_sub = match kind {
+                            BinKind::Add => false,
+                            BinKind::Sub => true,
+                            // Mul/Div/Rem/Max/Min need their own helpers / the
+                            // shim path; deferred past the pure subset.
+                            _ => return Err(CompileError::UnsupportedOp("mir-pure-binop")),
+                        };
+                        let d = *deopt.get_or_insert_with(|| fb.create_block());
+                        let a = map(&cval, *a)?;
+                        let b = map(&cval, *b)?;
+                        cval[r] = Some(lower_fixnum_binop(&mut fb, d, is_sub, a, b));
+                    }
+                    MirOp::Unary(kind, a) => {
+                        let k = match kind {
+                            MU::Add1 => UnaryKind::Add1,
+                            MU::Sub1 => UnaryKind::Sub1,
+                            MU::Negate => UnaryKind::Negate,
+                        };
+                        let d = *deopt.get_or_insert_with(|| fb.create_block());
+                        let a = map(&cval, *a)?;
+                        cval[r] = Some(lower_fixnum_unop(&mut fb, d, k, a));
+                    }
+                    MirOp::Cmp(kind, a, b) => {
+                        let cc = match kind {
+                            CmpKind::NumEq => IntCC::Equal,
+                            CmpKind::Lt => IntCC::SignedLessThan,
+                            CmpKind::Gt => IntCC::SignedGreaterThan,
+                            CmpKind::Le => IntCC::SignedLessThanOrEqual,
+                            CmpKind::Ge => IntCC::SignedGreaterThanOrEqual,
+                        };
+                        let d = *deopt.get_or_insert_with(|| fb.create_block());
+                        let a = map(&cval, *a)?;
+                        let b = map(&cval, *b)?;
+                        cval[r] = Some(lower_fixnum_compare(&mut fb, d, cc, a, b));
+                    }
+                    MirOp::Pred(kind, a) => {
+                        let k = match kind {
+                            MP::Null | MP::Not => PredKind::Null,
+                            MP::Consp => PredKind::Consp,
+                            MP::Stringp => PredKind::Stringp,
+                            MP::Listp => PredKind::Listp,
+                            // Symbolp/Integerp/Numberp use shims; deferred.
+                            _ => return Err(CompileError::UnsupportedOp("mir-pure-pred")),
+                        };
+                        let a = map(&cval, *a)?;
+                        cval[r] = Some(lower_predicate(&mut fb, k, a));
+                    }
+                    MirOp::CarCdr { cdr, safe, arg } => {
+                        let d = if *safe {
+                            None
+                        } else {
+                            Some(*deopt.get_or_insert_with(|| fb.create_block()))
+                        };
+                        let a = map(&cval, *arg)?;
+                        cval[r] = Some(lower_car_cdr(&mut fb, d, *cdr, *safe, a));
+                    }
+                    // Shim-using ops (calls / cons / eq / opaque): deferred.
+                    MirOp::Eq(..) | MirOp::Cons(..) | MirOp::Opaque { .. } => {
+                        return Err(CompileError::UnsupportedOp("mir-pure-shim-op"));
+                    }
+                }
+            }
+
+            // Terminator.
+            match &blk.term {
+                MirTerm::Return(v) => {
+                    let rv = map(&cval, *v)?;
+                    let out = out_ptr;
+                    fb.ins().store(MemFlags::trusted(), rv, out, 0);
+                    let ok = fb.ins().iconst(types::I64, STATUS_OK);
+                    fb.ins().return_(&[ok]);
+                }
+                MirTerm::Goto { target, args } => {
+                    let a: Result<Vec<BlockArg>, _> = args
+                        .iter()
+                        .map(|v| map(&cval, *v).map(BlockArg::Value))
+                        .collect();
+                    fb.ins().jump(clif_blocks[target.0 as usize], &a?);
+                }
+                MirTerm::Branch {
+                    cond,
+                    on_nil,
+                    taken,
+                    taken_args,
+                    fallthrough,
+                    fallthrough_args,
+                    ..
+                } => {
+                    let c = map(&cval, *cond)?;
+                    let is_nil = fb.ins().icmp_imm(IntCC::Equal, c, Value::NIL.bits() as i64);
+                    let ta: Vec<BlockArg> = taken_args
+                        .iter()
+                        .map(|v| map(&cval, *v).map(BlockArg::Value))
+                        .collect::<Result<_, _>>()?;
+                    let fa: Vec<BlockArg> = fallthrough_args
+                        .iter()
+                        .map(|v| map(&cval, *v).map(BlockArg::Value))
+                        .collect::<Result<_, _>>()?;
+                    let tb = clif_blocks[taken.0 as usize];
+                    let fbk = clif_blocks[fallthrough.0 as usize];
+                    // brif takes the `then` block when the condition is true.
+                    if *on_nil {
+                        fb.ins().brif(is_nil, tb, &ta, fbk, &fa);
+                    } else {
+                        fb.ins().brif(is_nil, fbk, &fa, tb, &ta);
+                    }
+                }
+            }
+        }
+
+        if let Some(db) = deopt {
+            fb.switch_to_block(db);
+            let code = fb.ins().iconst(types::I64, STATUS_DEOPT);
+            fb.ins().return_(&[code]);
+        }
+
+        fb.seal_all_blocks();
+        fb.finalize();
+    }
+
+    let fid = module
+        .declare_function("__neovm_mir_leaf", Linkage::Local, &sig)
+        .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))?;
+    let mut ctx = module.make_context();
+    ctx.func = func;
+    module
+        .define_function(fid, &mut ctx)
+        .map_err(|e| CompileError::Backend(BackendError::Define(e.to_string())))?;
+    module.clear_context(&mut ctx);
+    module
+        .finalize_definitions()
+        .map_err(|e| CompileError::Backend(BackendError::Finalize(e.to_string())))?;
+    let entry = module.get_finalized_function(fid);
+
+    Ok(CompiledLeaf {
+        arity: m.arity,
+        required: m.arity,
+        has_rest: false,
+        has_binds: false,
+        has_handlers: false,
+        spec_slots: Box::from([]),
+        deopt_spill: Box::from([]),
+        deopt_meta: Box::new(DeoptCells {
+            pc: core::cell::Cell::new(0),
+            depth: core::cell::Cell::new(0),
+            handlers: core::cell::Cell::new(0),
+        }),
+        entry,
+        _module: module,
+    })
 }
 
 /// Per-function runtime-call machinery: shim references plus the vmctx variable
@@ -5503,6 +5754,125 @@ mod tests {
             "cleanup ran on the signal path"
         );
         assert_eq!(ev.specpdl.len(), specpdl_before);
+    }
+
+    /// MIR Tier-2 Phase 4b: a pure body lowered bytecode→MIR→CLIF produces the
+    /// SAME native result as the interpreter — the first end-to-end proof of the
+    /// MIR pipeline.
+    #[test]
+    fn mir_pure_lowering_matches_interpreter() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::value::LambdaParams;
+
+        let cases: Vec<(Vec<Op>, Vec<Value>, usize, Vec<Value>)> = vec![
+            // (lambda (a b) (+ a b)) on (40, 2) -> 42.
+            (
+                vec![Op::StackRef(1), Op::StackRef(1), Op::Add, Op::Return],
+                vec![],
+                2,
+                vec![Value::make_int(40), Value::make_int(2)],
+            ),
+            // (lambda (n) (if (< n 2) n (1- n))) — branch + arithmetic.
+            (
+                vec![
+                    Op::StackRef(0),
+                    Op::Constant(0),
+                    Op::Lss,
+                    Op::GotoIfNil(6),
+                    Op::StackRef(0),
+                    Op::Return,
+                    Op::StackRef(0),
+                    Op::Sub1,
+                    Op::Return,
+                ],
+                vec![Value::make_int(2)],
+                1,
+                vec![Value::make_int(9)],
+            ),
+            // Pure countdown loop: (lambda (n) (let ((acc 0)) (while (> n 0)
+            // (setq acc (+ acc n)) (setq n (1- n))) acc)).
+            (
+                vec![
+                    Op::Constant(0),   // 0  acc=0      [n 0]
+                    Op::StackRef(1),   // 1  [n acc n]   <- head
+                    Op::Constant(0),   // 2  0
+                    Op::Gtr,           // 3  [n acc c]
+                    Op::GotoIfNil(13), // 4  [n acc]
+                    Op::StackRef(1),   // 5  n
+                    Op::StackRef(1),   // 6  acc
+                    Op::Add,           // 7  acc'
+                    Op::StackSet(1),   // 8  [n acc']
+                    Op::StackRef(1),   // 9  n
+                    Op::Sub1,          // 10 n-1
+                    Op::StackSet(2),   // 11 [n-1 acc']
+                    Op::Goto(1),       // 12 backedge
+                    Op::StackRef(0),   // 13 [n acc acc]
+                    Op::Return,        // 14
+                ],
+                vec![Value::make_int(0)],
+                1,
+                vec![Value::make_int(10)],
+            ),
+        ];
+
+        for (ops, constants, arity, args) in cases {
+            let mir = mir::build_mir(&ops, &constants, arity).expect("MIR builds");
+            let leaf = lower_mir_pure(&mir).expect("MIR lowers (pure subset)");
+
+            // Interpreter oracle.
+            let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: (1..=arity)
+                    .map(|i| crate::emacs_core::intern::SymId(i as u32))
+                    .collect(),
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.clone();
+            f.constants = constants.clone();
+            f.max_stack = 32;
+            let want = {
+                let mut vm = Vm::from_context(&mut ev);
+                vm.execute(&f, args.clone()).expect("interpreter runs")
+            };
+
+            match leaf.call_for_test(&args) {
+                Some(bits) => assert_eq!(
+                    Value::from_bits(bits),
+                    want,
+                    "MIR-lowered native result must equal the interpreter for {ops:?}"
+                ),
+                None => panic!("MIR-lowered pure body deopted unexpectedly for {ops:?}"),
+            }
+        }
+    }
+
+    /// A pure-arithmetic guard deopts cleanly (non-fixnum input) — same as the
+    /// baseline tier, since the pure subset reruns the interpreter from start.
+    #[test]
+    fn mir_pure_lowering_deopts_on_nonfixnum() {
+        // (lambda (a b) (+ a b)) called with a string -> the fixnum guard fails.
+        let ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Add, Op::Return];
+        let mir = mir::build_mir(&ops, &[], 2).expect("builds");
+        let leaf = lower_mir_pure(&mir).expect("lowers");
+        assert_eq!(
+            leaf.call_for_test(&[Value::string("x"), Value::make_int(2)]),
+            None,
+            "non-fixnum operand deopts (rerun-from-start)"
+        );
+    }
+
+    /// Shim-using ops (a call) are out of the pure-subset scope: bail.
+    #[test]
+    fn mir_pure_lowering_bails_on_calls() {
+        // (lambda () (foo)) — has a Call (opaque) -> pure lowering refuses.
+        let ops = vec![Op::Constant(0), Op::Call(0), Op::Return];
+        let mir = mir::build_mir(&ops, &[Value::symbol("foo")], 0).expect("MIR builds");
+        assert!(matches!(
+            lower_mir_pure(&mir),
+            Err(CompileError::UnsupportedOp("mir-pure-shim-op"))
+        ));
     }
 
     #[test]
