@@ -3084,6 +3084,78 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
 }
 
 #[test]
+fn display_property_replacement_append_item_names_cursor_policy() {
+    let _eval = Context::new();
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let value = Value::string("ab");
+    let classification = classify_display_property(value);
+    let string = DisplayPropertyReplacementAppendItem::resolve(
+        &classification,
+        value,
+        CharPos0::new(4),
+        b"x",
+        &active_face,
+        &mut font_metrics,
+        0.0,
+        0.0,
+        active_face.metrics(),
+        &test_display_space_window_params(),
+        None,
+    )
+    .expect("string replacement append item");
+
+    assert_eq!(
+        string.cursor_policy(),
+        DisplayPropertyReplacementCursorPolicy::TextSlot {
+            width_px: 8.0,
+            stretch_like: false,
+        }
+    );
+
+    let stretch = DisplayPropertyReplacementAppendItem::Stretch(
+        DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
+    );
+    assert_eq!(
+        stretch.cursor_policy(),
+        DisplayPropertyReplacementCursorPolicy::TextSlot {
+            width_px: 13.0,
+            stretch_like: true,
+        }
+    );
+
+    let media = DisplayPropertyReplacementAppendItem::Media(
+        DisplayReplacementMediaAppendResolution::Media(DisplayReplacementMediaAppendItem::new(
+            DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
+                xwidget_id: 17,
+                width: 42.0,
+                height: 11.0,
+            }),
+            &active_face,
+            true,
+        )),
+    );
+    assert_eq!(
+        media.cursor_policy(),
+        DisplayPropertyReplacementCursorPolicy::DisplayBox {
+            width_px: 42.0,
+            cursor_face_height_px: 18.0,
+            cursor_face_ascent_px: 13.0,
+        }
+    );
+
+    let placeholder = DisplayPropertyReplacementAppendItem::Media(
+        DisplayReplacementMediaAppendResolution::Placeholder(
+            DisplayReplacementSourceMappedTextAppendItem::new("[img]"),
+        ),
+    );
+    assert_eq!(
+        placeholder.cursor_policy(),
+        DisplayPropertyReplacementCursorPolicy::FaceChar
+    );
+}
+
+#[test]
 fn display_replacement_stretch_append_item_names_cursor_and_extent_policy() {
     let item = DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0);
     assert_eq!(item.width_px(), 13.0);

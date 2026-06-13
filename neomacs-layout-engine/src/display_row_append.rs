@@ -2494,6 +2494,20 @@ pub(crate) enum DisplayPropertyReplacementAppendItem {
     Media(DisplayReplacementMediaAppendResolution),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayPropertyReplacementCursorPolicy {
+    TextSlot {
+        width_px: f32,
+        stretch_like: bool,
+    },
+    DisplayBox {
+        width_px: f32,
+        cursor_face_height_px: f32,
+        cursor_face_ascent_px: f32,
+    },
+    FaceChar,
+}
+
 impl DisplayPropertyReplacementAppendItem {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve(
@@ -2546,6 +2560,29 @@ impl DisplayPropertyReplacementAppendItem {
                 face_metrics.row_height,
             )
             .map(Self::Media)
+        }
+    }
+
+    pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
+        match self {
+            Self::String(item) => DisplayPropertyReplacementCursorPolicy::TextSlot {
+                width_px: item.cursor_slot_width_px(),
+                stretch_like: false,
+            },
+            Self::Stretch(item) => DisplayPropertyReplacementCursorPolicy::TextSlot {
+                width_px: item.cursor_slot_width_px(),
+                stretch_like: true,
+            },
+            Self::Media(DisplayReplacementMediaAppendResolution::Media(item)) => {
+                DisplayPropertyReplacementCursorPolicy::DisplayBox {
+                    width_px: item.width_px(),
+                    cursor_face_height_px: item.cursor_face_height_px(),
+                    cursor_face_ascent_px: item.cursor_face_ascent_px(),
+                }
+            }
+            Self::Media(DisplayReplacementMediaAppendResolution::Placeholder(_)) => {
+                DisplayPropertyReplacementCursorPolicy::FaceChar
+            }
         }
     }
 }

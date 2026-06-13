@@ -41,9 +41,9 @@ use crate::display_row_append::{
     BufferTextFragmentAdvanceResolver, BufferTextFragmentClusterState,
     BufferTextFragmentRowAppendContext, BufferTextFragmentSpecialDisplay,
     BufferTextItemRowAppendContext, DisplayPropertyReplacementAppendItem,
-    DisplayReplacementMediaAppendResolution, DisplayReplacementRowAppendContext,
-    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
-    LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
+    DisplayPropertyReplacementCursorPolicy, DisplayReplacementMediaAppendResolution,
+    DisplayReplacementRowAppendContext, DisplayRowAppendArea, DisplayRowAppendSurface,
+    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -556,6 +556,50 @@ impl CursorCaptureState {
 
 fn capture_cursor_info(target: &mut CursorCaptureState, info: CapturedCursorInfo) {
     target.capture_once(info);
+}
+
+fn display_property_replacement_cursor_info(
+    policy: DisplayPropertyReplacementCursorPolicy,
+    active_face_state: &DisplayRowActiveFaceState,
+    position: DisplayRowTextPosition,
+) -> CapturedCursorInfo {
+    match policy {
+        DisplayPropertyReplacementCursorPolicy::TextSlot {
+            width_px,
+            stretch_like,
+        } => CapturedCursorInfo::from_active_face_state(
+            active_face_state,
+            CapturedCursorPlacement::from_row_text_position(
+                position,
+                CapturedCursorSlotWidth::Explicit(width_px),
+                stretch_like,
+            ),
+        ),
+        DisplayPropertyReplacementCursorPolicy::DisplayBox {
+            width_px,
+            cursor_face_height_px,
+            cursor_face_ascent_px,
+        } => CapturedCursorInfo::display_box_from_active_face_state(
+            active_face_state,
+            CapturedCursorPlacement::from_row_text_position(
+                position,
+                CapturedCursorSlotWidth::Explicit(width_px),
+                false,
+            ),
+            cursor_face_height_px,
+            cursor_face_ascent_px,
+        ),
+        DisplayPropertyReplacementCursorPolicy::FaceChar => {
+            CapturedCursorInfo::from_active_face_state(
+                active_face_state,
+                CapturedCursorPlacement::from_row_text_position(
+                    position,
+                    CapturedCursorSlotWidth::FaceChar,
+                    false,
+                ),
+            )
+        }
+    }
 }
 
 fn update_cursor_info_for_main_char(
@@ -4415,23 +4459,18 @@ impl LayoutEngine {
                         params,
                         evaluator.display_host.as_deref(),
                     ) {
+                        if point_in_display_replacement {
+                            capture_cursor_info(
+                                &mut cursor_info,
+                                display_property_replacement_cursor_info(
+                                    replacement_item.cursor_policy(),
+                                    &active_face_state,
+                                    row_geometry.text_position(x, byte_idx, col),
+                                ),
+                            );
+                        }
                         match replacement_item {
                             DisplayPropertyReplacementAppendItem::String(replacement_item) => {
-                                if point_in_display_replacement {
-                                    capture_cursor_info(
-                                        &mut cursor_info,
-                                        CapturedCursorInfo::from_active_face_state(
-                                            &active_face_state,
-                                            CapturedCursorPlacement::from_row_text_position(
-                                                row_geometry.text_position(x, byte_idx, col),
-                                                CapturedCursorSlotWidth::Explicit(
-                                                    replacement_item.cursor_slot_width_px(),
-                                                ),
-                                                false,
-                                            ),
-                                        ),
-                                    );
-                                }
                                 if !replacement_item.is_empty() {
                                     let replacement_fragment = replacement_item.fragment();
                                     let replacement_base_face =
@@ -4471,21 +4510,6 @@ impl LayoutEngine {
                                 }
                             }
                             DisplayPropertyReplacementAppendItem::Stretch(stretch_item) => {
-                                if point_in_display_replacement {
-                                    capture_cursor_info(
-                                        &mut cursor_info,
-                                        CapturedCursorInfo::from_active_face_state(
-                                            &active_face_state,
-                                            CapturedCursorPlacement::from_row_text_position(
-                                                row_geometry.text_position(x, byte_idx, col),
-                                                CapturedCursorSlotWidth::Explicit(
-                                                    stretch_item.cursor_slot_width_px(),
-                                                ),
-                                                true,
-                                            ),
-                                        ),
-                                    );
-                                }
                                 if stretch_item.width_px() > 0.0 {
                                     let _bg = Color::from_pixel(default_resolved.bg);
                                     row_geometry.include_glyph_vertical_metrics(
@@ -4523,24 +4547,6 @@ impl LayoutEngine {
                             DisplayPropertyReplacementAppendItem::Media(
                                 DisplayReplacementMediaAppendResolution::Media(media_item),
                             ) => {
-                                if point_in_display_replacement {
-                                    capture_cursor_info(
-                                        &mut cursor_info,
-                                        CapturedCursorInfo::display_box_from_active_face_state(
-                                            &active_face_state,
-                                            CapturedCursorPlacement::from_row_text_position(
-                                                row_geometry.text_position(x, byte_idx, col),
-                                                CapturedCursorSlotWidth::Explicit(
-                                                    media_item.width_px(),
-                                                ),
-                                                false,
-                                            ),
-                                            media_item.cursor_face_height_px(),
-                                            media_item.cursor_face_ascent_px(),
-                                        ),
-                                    );
-                                }
-
                                 let append_context = DisplayReplacementRowAppendContext::new(
                                     display_replacement_source,
                                     &text_append_surface,
@@ -4578,19 +4584,6 @@ impl LayoutEngine {
                                     placeholder_item,
                                 ),
                             ) => {
-                                if point_in_display_replacement {
-                                    capture_cursor_info(
-                                        &mut cursor_info,
-                                        CapturedCursorInfo::from_active_face_state(
-                                            &active_face_state,
-                                            CapturedCursorPlacement::from_row_text_position(
-                                                row_geometry.text_position(x, byte_idx, col),
-                                                CapturedCursorSlotWidth::FaceChar,
-                                                false,
-                                            ),
-                                        ),
-                                    );
-                                }
                                 let append_context = DisplayReplacementRowAppendContext::new(
                                     display_replacement_source,
                                     &text_append_surface,
