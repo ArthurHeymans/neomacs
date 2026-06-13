@@ -2208,10 +2208,30 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let first_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let second_geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
 
-    let mut append_context =
-        LispStringSourceAppendContext::new(&mut source, &mut source_state, 7, base_face);
+    let mut append_context = LispStringSourceRowAppendContext::new(
+        &mut source,
+        &mut source_state,
+        7,
+        base_face,
+        &surface,
+        16.0,
+        12.0,
+        8.0,
+        0.0,
+        16.0,
+    );
 
     let first = append_context
         .render_to_text_row_and_emit(
@@ -2221,7 +2241,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
             &mut font_metrics,
             &face_resolver,
             &mut face_ids,
-            frame.clone(),
+            &first_geometry,
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("first lisp source append");
@@ -2240,7 +2260,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
             &mut font_metrics,
             &face_resolver,
             &mut face_ids,
-            frame,
+            &second_geometry,
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("second lisp source append");

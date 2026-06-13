@@ -43,9 +43,8 @@ use crate::display_row_append::{
     BufferTextFragmentRowAppendContext, BufferTextItemRowAppendContext,
     DisplayReplacementMediaAppendItem, DisplayReplacementRowAppendContext,
     DisplayReplacementSourceMappedTextAppendItem, DisplayReplacementStretchAppendItem,
-    DisplayReplacementStringAppendItem, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendSurface, DisplayRowTextAppendContext, LispStringRowAppendContext,
-    LispStringSourceAppendContext, SyntheticTextRowAppendContext,
+    DisplayReplacementStringAppendItem, DisplayRowAppendArea, DisplayRowAppendSurface,
+    LispStringRowAppendContext, LispStringSourceRowAppendContext, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -2016,11 +2015,6 @@ impl<'a> OverlayStringRenderRowContext<'a> {
         }
     }
 
-    fn frame_for_geometry(self, geometry: &DisplayRowGeometryState) -> DisplayRowAppendFrame {
-        DisplayRowTextAppendContext::new(self.append_surface, geometry, 0.0, self.char_h)
-            .text_row_frame(self.char_h, self.default_row_ascent, self.face_char_w)
-    }
-
     fn cursor_visual_state(
         self,
         base_face: &super::neovm_bridge::ResolvedFace,
@@ -2124,11 +2118,17 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
         return;
     };
     let mut source_state = DisplayRowSourceState::default();
-    let mut source_context = LispStringSourceAppendContext::new(
+    let mut source_context = LispStringSourceRowAppendContext::new(
         &mut source,
         &mut source_state,
         base_face.face_id(),
         base_face.face(),
+        row_context.append_surface,
+        row_context.char_h,
+        row_context.default_row_ascent,
+        row_context.face_char_w,
+        0.0,
+        row_context.char_h,
     );
 
     while geometry.is_within_row_limit(row_limit) {
@@ -2136,7 +2136,6 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             break;
         }
 
-        let frame = row_context.frame_for_geometry(geometry);
         let Some(outcome) = source_context.render_to_text_row_and_emit(
             builder,
             output_emitter,
@@ -2144,7 +2143,7 @@ fn render_overlay_string<B: super::neovm_bridge::LayoutBufferView>(
             font_metrics,
             face_resolver,
             face_ids,
-            frame,
+            geometry,
             DisplayRowPosition {
                 x_px: *x,
                 col: *col,

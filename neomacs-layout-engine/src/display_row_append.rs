@@ -744,6 +744,83 @@ impl<'a> LispStringSourceAppendContext<'a> {
     }
 }
 
+pub(crate) struct LispStringSourceRowAppendContext<'a> {
+    source_context: LispStringSourceAppendContext<'a>,
+    append_surface: &'a DisplayRowAppendSurface,
+    height_px: f32,
+    ascent_px: f32,
+    char_width_px: f32,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+}
+
+impl<'a> LispStringSourceRowAppendContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        source: &'a mut LispStringSourceCursor,
+        source_state: &'a mut DisplayRowSourceState,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        append_surface: &'a DisplayRowAppendSurface,
+        height_px: f32,
+        ascent_px: f32,
+        char_width_px: f32,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            source_context: LispStringSourceAppendContext::new(
+                source,
+                source_state,
+                base_face_id,
+                base_face,
+            ),
+            append_surface,
+            height_px,
+            ascent_px,
+            char_width_px,
+            glyph_y_offset,
+            default_row_height,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_to_text_row_and_emit(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        geometry: &DisplayRowGeometryState,
+        position: DisplayRowPosition,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        let frame = self.append_surface.text_row_frame_from_geometry_state(
+            geometry,
+            self.glyph_y_offset,
+            self.height_px,
+            self.ascent_px,
+            self.char_width_px,
+            self.default_row_height,
+        );
+        self.source_context.render_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            frame,
+            position,
+        )
+    }
+
+    pub(crate) fn discard_pending_until_row_break(&mut self) -> bool {
+        self.source_context.discard_pending_until_row_break()
+    }
+}
+
 pub(crate) fn synthetic_display_text_item(
     source_id: u64,
     text: impl Into<Box<str>>,
