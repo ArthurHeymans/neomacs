@@ -4820,7 +4820,6 @@ impl LayoutEngine {
                 }
                 // Selective display: skip lines indented beyond threshold
                 if selective_display > 0 && selective_display < i32::MAX && byte_idx < text.len() {
-                    let mut shown_ellipsis = false;
                     loop {
                         if byte_idx >= text.len() {
                             break;
@@ -4842,22 +4841,6 @@ impl LayoutEngine {
                             }
                         }
                         if indent > selective_display {
-                            // Show ... ellipsis once for the hidden block
-                            let current_row = row_geometry.row();
-                            if !shown_ellipsis && current_row > 0 {
-                                let _prev_row_y = row_y_positions.y_for_row(
-                                    current_row - 1,
-                                    row_geometry_defaults.row_y_fallback(0.0),
-                                );
-                                for dot_i in 0..3 {
-                                    let dot_x = content_x + dot_i as f32 * face_metrics.char_width;
-                                    if dot_x + face_metrics.char_width
-                                        <= text_append_surface.right_edge()
-                                    {
-                                    }
-                                }
-                                shown_ellipsis = true;
-                            }
                             // Skip this hidden line
                             while byte_idx < text.len() {
                                 let (skip_ch, skip_len) = decode_utf8(&text[byte_idx..]);
