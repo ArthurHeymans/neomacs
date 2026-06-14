@@ -5774,7 +5774,7 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         context.row_limit,
     )
     .finalize_and_apply(BufferTextWindowTailFinalizeState {
-        cursor_info,
+        cursor_info: &mut cursor_info,
         row_geometry: &context.geometry,
         row_y_positions: &context.row_y_positions,
         hit_row_range: &mut hit_row_range,

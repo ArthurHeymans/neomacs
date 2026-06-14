@@ -4,8 +4,8 @@ use crate::display_row::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy}
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
     BufferDisplayPropertyCheckpointRenderState, BufferDisplayPropertyTextWalkOutcome,
-    BufferEndOfBufferTailRenderRequest, BufferHscrollSkipRenderRequest,
-    BufferHscrollSkipRenderState, BufferInvisibleTextRenderOutcome,
+    BufferEndOfBufferTailRenderRequest, BufferEndOfBufferTailRenderState,
+    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderOutcome,
     BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
     BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
@@ -14,8 +14,10 @@ use crate::display_row_append::{
     BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
     BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
-    BufferTextWindowBodyInstallRequest, BufferTextWindowFinishRequest,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowVisibilityRetryRequest,
+    BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
+    BufferTextWindowFinishRequest, BufferTextWindowTailFinalizeOutcome,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
+    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
     DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     DisplayRowTransitionContinuation, TextWindowAppendSurfaceRequest,
 };
@@ -38,7 +40,7 @@ use crate::neovm_bridge::{
     buffer_display_line_numbers_mode, buffer_local_bool, buffer_local_int, buffer_local_value,
 };
 use crate::types::WindowParams;
-use crate::window_output::WindowOutputEmitter;
+use crate::window_output::{TextWindowRedisplayPositions, WindowOutputEmitter};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
@@ -211,6 +213,25 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     mode_line_height: f32,
     header_line_height: f32,
     tab_line_height: f32,
+}
+
+pub(crate) struct BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
+    output_emitter: &'emit mut WindowOutputEmitter,
+    x: &'emit mut f32,
+    col: &'emit mut usize,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    cursor_info: &'emit mut CursorCaptureState,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    row_y_positions: &'rows mut DisplayRowYPositions,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    row_flags: &'emit DisplayRowFlags,
+    row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'emit BoxFaceRowState,
 }
 
 pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
@@ -980,6 +1001,159 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
     #[cfg(test)]
     pub(crate) fn accessible_range(&self) -> (i64, i64) {
         (self.accessible_start, self.accessible_end)
+    }
+}
+
+impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        output_emitter: &'emit mut WindowOutputEmitter,
+        x: &'emit mut f32,
+        col: &'emit mut usize,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        cursor_info: &'emit mut CursorCaptureState,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        row_y_positions: &'rows mut DisplayRowYPositions,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+        builder: &'emit mut GlyphMatrixBuilder,
+        evaluator: &'emit mut Context,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        row_flags: &'emit DisplayRowFlags,
+        row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'emit BoxFaceRowState,
+    ) -> Self {
+        Self {
+            output_emitter,
+            x,
+            col,
+            row_geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            row_flags,
+            row_extend,
+            box_face,
+        }
+    }
+
+    pub(crate) fn render_end_of_buffer_tail<'request, B: LayoutBufferView>(
+        &mut self,
+        loop_context: BufferTextWindowLoopRequestContext,
+        byte_idx: usize,
+        charpos: i64,
+        has_overlays: bool,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> bool {
+        loop_context
+            .end_of_buffer_tail_request(
+                byte_idx,
+                charpos,
+                has_overlays,
+                overlay_context,
+                active_face_state,
+            )
+            .render_and_apply(
+                buffer,
+                BufferEndOfBufferTailRenderState {
+                    output_emitter: self.output_emitter,
+                    x: self.x,
+                    col: self.col,
+                    row_geometry: self.row_geometry,
+                    cursor_info: self.cursor_info,
+                    hit_rows: self.hit_rows,
+                    hit_row_range: self.hit_row_range,
+                    row_y_positions: self.row_y_positions,
+                    face_ids: self.face_ids,
+                    builder: self.builder,
+                    evaluator: self.evaluator,
+                    font_metrics: self.font_metrics,
+                    face_resolver: self.face_resolver,
+                },
+            )
+            .point_is_visible_eob()
+    }
+
+    pub(crate) fn apply_tail_decorations(
+        &self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text_append_surface: &DisplayRowAppendSurface,
+    ) -> BufferTextWindowTailDecorationOutcome {
+        tail_context
+            .tail_decoration_request()
+            .apply(BufferTextWindowTailDecorationState {
+                x: *self.x,
+                text_append_surface,
+                row_geometry: self.row_geometry,
+                row_y_positions: self.row_y_positions,
+                row_flags: self.row_flags,
+                row_extend: self.row_extend,
+                box_face: self.box_face,
+            })
+    }
+
+    pub(crate) fn finalize_tail(
+        &mut self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text: &[u8],
+        charpos: i64,
+        point_is_visible_eob: bool,
+    ) -> BufferTextWindowTailFinalizeOutcome {
+        tail_context
+            .tail_finalize_request(text, charpos, point_is_visible_eob)
+            .finalize_and_apply(BufferTextWindowTailFinalizeState {
+                cursor_info: self.cursor_info,
+                row_geometry: self.row_geometry,
+                row_y_positions: self.row_y_positions,
+                hit_row_range: self.hit_row_range,
+                hit_rows: self.hit_rows,
+                builder: self.builder,
+                output_emitter: self.output_emitter,
+                evaluator: self.evaluator,
+            })
+    }
+
+    pub(crate) fn decide_visibility_retry<'buf, B: LayoutBufferView>(
+        &self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        charpos: i64,
+        point_is_visible_eob: bool,
+        buf_access: &'rows RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowVisibilityRetryOutcome {
+        tail_context
+            .visibility_retry_request(
+                self.output_emitter.rows(),
+                charpos,
+                point_is_visible_eob,
+                buf_access,
+            )
+            .decide()
+    }
+
+    pub(crate) fn rendered_rows_len(&self) -> usize {
+        self.output_emitter.rows().len()
+    }
+
+    pub(crate) fn install_body(
+        &mut self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        byte_idx: usize,
+    ) -> TextWindowRedisplayPositions {
+        tail_context
+            .body_install_request(byte_idx, self.row_flags)
+            .install_and_apply(BufferTextWindowBodyInstallState {
+                builder: self.builder,
+                output_emitter: self.output_emitter,
+            })
     }
 }
 

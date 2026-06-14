@@ -665,7 +665,7 @@ pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
-    pub(crate) cursor_info: CursorCaptureState,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) row_geometry: &'a DisplayRowGeometryState,
     pub(crate) row_y_positions: &'a DisplayRowYPositions,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
