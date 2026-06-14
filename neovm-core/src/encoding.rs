@@ -1205,20 +1205,23 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
     }
 }
 
+/// Decode `bytes` under `coding_system` directly to canonical Emacs internal
+/// bytes (issue #131) — never through the in-Unicode "storage string". UTF-8
+/// uses the sentinel-free decoder (eight-bit -> 0x3FFF00+ extended, real PUA
+/// glyphs keep their code points); the other families decode to real Unicode
+/// text whose UTF-8 already IS the Emacs internal encoding.
+pub(crate) fn decode_bytes_emacs(bytes: &[u8], coding_system: &str) -> Vec<u8> {
+    if matches!(coding_system_family(coding_system), "utf-8" | "utf-8-emacs") {
+        return decode_utf8_coding_to_emacs_bytes(bytes, coding_system);
+    }
+    decode_bytes(bytes, coding_system).into_bytes()
+}
+
 pub(crate) fn decode_bytes_to_lisp_string(
     bytes: &[u8],
     coding_system: &str,
 ) -> crate::heap_types::LispString {
-    if matches!(coding_system_family(coding_system), "utf-8" | "utf-8-emacs") {
-        // Sentinel-free path: eight-bit bytes become 0x3FFF00+ extended, real
-        // PUA glyphs keep their code points (issue #131).
-        return crate::heap_types::LispString::from_emacs_bytes(decode_utf8_coding_to_emacs_bytes(
-            bytes,
-            coding_system,
-        ));
-    }
-    let text = decode_bytes(bytes, coding_system);
-    crate::emacs_core::builtins::runtime_string_to_lisp_string(&text, true)
+    crate::heap_types::LispString::from_emacs_bytes(decode_bytes_emacs(bytes, coding_system))
 }
 
 fn is_byte_preserving_coding_system(coding_system: &str) -> bool {

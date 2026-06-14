@@ -418,7 +418,7 @@ fn destination_writes_to_buffer_in_state(
 fn insert_process_output_in_state(
     buffers: &mut BufferManager,
     destination: &Value,
-    output: &str,
+    output: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
     match destination.kind() {
         ValueKind::String => {
@@ -426,23 +426,25 @@ fn insert_process_output_in_state(
             let id = buffers
                 .find_buffer_by_name(&name_str)
                 .unwrap_or_else(|| buffers.create_buffer(&name_str));
-            buffers.insert_into_buffer(id, output).ok_or_else(|| {
-                signal(
-                    "error",
-                    vec![Value::string("No such live buffer for process output")],
-                )
-            })?;
+            buffers
+                .insert_lisp_string_into_buffer(id, output)
+                .ok_or_else(|| {
+                    signal(
+                        "error",
+                        vec![Value::string("No such live buffer for process output")],
+                    )
+                })?;
             Ok(())
         }
         ValueKind::Veclike(VecLikeType::Buffer) => {
             buffers
-                .insert_into_buffer(destination.as_buffer_id().unwrap(), output)
+                .insert_lisp_string_into_buffer(destination.as_buffer_id().unwrap(), output)
                 .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
             Ok(())
         }
         _ => {
             if let Some(current_id) = buffers.current_buffer_id() {
-                let _ = buffers.insert_into_buffer(current_id, output);
+                let _ = buffers.insert_lisp_string_into_buffer(current_id, output);
             }
             Ok(())
         }
@@ -458,7 +460,10 @@ fn write_output_target_in_state(
     match target {
         OutputTarget::Discard => Ok(()),
         OutputTarget::Buffer(destination) => {
-            let text = crate::encoding::decode_bytes(output, "utf-8-unix");
+            // Issue #131: decode to Emacs bytes + insert via the LispString path so
+            // process output keeps real PUA glyphs / eight-bit bytes (the old
+            // decode_bytes->insert_into_buffer storage path corrupted them).
+            let text = crate::encoding::decode_bytes_to_lisp_string(output, "utf-8-unix");
             insert_process_output_in_state(buffers, destination, &text)
         }
         OutputTarget::File(path) => {

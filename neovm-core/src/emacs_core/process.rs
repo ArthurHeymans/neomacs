@@ -1053,8 +1053,10 @@ fn decode_process_output_bytes(bytes: &[u8], coding: Value) -> LispString {
     if process_coding_is_binary(coding) {
         LispString::from_unibyte(bytes.to_vec())
     } else {
-        let decoded = crate::encoding::decode_bytes(bytes, process_coding_symbol_name(coding));
-        LispString::from_utf8(&decoded)
+        // Issue #131: decode straight to Emacs bytes so process output keeps real
+        // PUA glyphs and eight-bit raw bytes instead of round-tripping through the
+        // lossy storage-string form (the old `from_utf8(decode_bytes(..))`).
+        crate::encoding::decode_bytes_to_lisp_string(bytes, process_coding_symbol_name(coding))
     }
 }
 
