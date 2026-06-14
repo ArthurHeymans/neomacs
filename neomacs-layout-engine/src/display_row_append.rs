@@ -1788,6 +1788,123 @@ impl BufferTextSourceRangeItemAppendRequest {
     }
 }
 
+struct BufferTextSourceAppendOperation<'face> {
+    append_item: BufferTextSourceRangeItemAppendRequest,
+    base_face: &'face ResolvedFace,
+    face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+}
+
+impl<'face> BufferTextSourceAppendOperation<'face> {
+    fn new(
+        append_item: BufferTextSourceRangeItemAppendRequest,
+        base_face: &'face ResolvedFace,
+        face_id: u32,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            append_item,
+            base_face,
+            face_id,
+            frame,
+            position,
+        }
+    }
+
+    fn for_buffer_text_range<B: LayoutBufferView + ?Sized>(
+        range: BufferTextSourceRange,
+        buffer_id: BufferId,
+        buffer: &B,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> Option<Self> {
+        let append_item =
+            buffer_text_source_range_append_request(range, buffer_id, buffer, face_id)?;
+        Some(Self::new(append_item, base_face, face_id, frame, position))
+    }
+
+    fn for_display_item_range<B: LayoutBufferView + ?Sized>(
+        range: BufferTextSourceRange,
+        buffer_id: BufferId,
+        buffer: &B,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        item: BufferTextSourceAppendItem,
+    ) -> Option<Self> {
+        let append_item = buffer_display_item_source_range_append_request(
+            range, buffer_id, buffer, face_id, item,
+        )?;
+        Some(Self::new(append_item, base_face, face_id, frame, position))
+    }
+
+    fn request(&self) -> DisplayRowSourceAppendRequest<'face> {
+        self.frame.source_append_request(
+            self.position,
+            self.face_id,
+            self.base_face,
+            self.append_item.append_kind(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_to_text_row_and_emit<P: DisplayRowRenderPolicy>(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let mut face_ids = FrameFaceIdAllocator::new(self.face_id.saturating_add(1));
+        let position = self.position;
+        let request = self.request();
+        let outcome = request.render_single_display_item_into_current_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            self.append_item.into_item(),
+            face_resolver,
+            &mut face_ids,
+            render_policy,
+        )?;
+        Some(outcome.into_append_progress_and_position(position))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn measure_to_text_row<P: DisplayRowRenderPolicy>(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        render_policy: &mut P,
+    ) -> Option<DisplayRowAppendProgress> {
+        let mut face_ids = FrameFaceIdAllocator::new(self.face_id.saturating_add(1));
+        let position = self.position;
+        let request = self
+            .request()
+            .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
+        let outcome = request.measure_single_display_item_against_current_text_row(
+            builder,
+            evaluator,
+            font_metrics,
+            self.append_item.into_item(),
+            face_resolver,
+            &mut face_ids,
+            render_policy,
+        )?;
+        Some(outcome.into_append_progress(position))
+    }
+}
+
 fn buffer_text_source_range_append_request<B: LayoutBufferView + ?Sized>(
     range: BufferTextSourceRange,
     buffer_id: BufferId,
@@ -1822,41 +1939,6 @@ fn buffer_text_source_range_append_request<B: LayoutBufferView + ?Sized>(
         item,
         append_kind,
     ))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    range: BufferTextSourceRange,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    buffer_id: BufferId,
-    buffer: &B,
-    face_id: u32,
-    resolved_advance: ResolvedBufferTextSourceAdvance,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let append_item = buffer_text_source_range_append_request(range, buffer_id, buffer, face_id)?;
-    let request =
-        frame.source_append_request(position, face_id, base_face, append_item.append_kind());
-    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy =
-        DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
-    let outcome = request.render_single_display_item_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        append_item.into_item(),
-        face_resolver,
-        &mut face_ids,
-        &mut render_policy,
-    )?;
-    Some(outcome.into_append_progress_and_position(position))
 }
 
 #[cfg(test)]
@@ -1932,20 +2014,24 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         resolved_advance: ResolvedBufferTextSourceAdvance,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        append_resolved_buffer_text_source_range_to_text_row(
+        let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
+            range,
+            self.buffer_id,
+            self.buffer,
+            self.face_id,
+            self.base_face,
+            self.frame.clone(),
+            position,
+        )?;
+        let mut render_policy =
+            DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
+        operation.render_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            range,
             face_resolver,
-            self.base_face,
-            self.buffer_id,
-            self.buffer,
-            self.face_id,
-            resolved_advance,
-            self.frame.clone(),
-            position,
+            &mut render_policy,
         )
     }
 
@@ -2284,20 +2370,24 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        append_resolved_buffer_text_source_range_to_text_row(
+        let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
+            range,
+            self.buffer_id,
+            self.buffer,
+            self.active_face.face_id(),
+            self.active_face.resolved_face(),
+            frame,
+            position,
+        )?;
+        let mut render_policy =
+            DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
+        operation.render_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            range,
             face_resolver,
-            self.active_face.resolved_face(),
-            self.buffer_id,
-            self.buffer,
-            self.active_face.face_id(),
-            resolved_advance,
-            frame,
-            position,
+            &mut render_policy,
         )
     }
 
@@ -2402,39 +2492,6 @@ impl BufferTextSourceCharPreparedAppend {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn measure_buffer_text_source_range_append_progress_to_text_row<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    range: BufferTextSourceRange,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    buffer_id: BufferId,
-    buffer: &B,
-    face_id: u32,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<DisplayRowAppendProgress> {
-    let append_item = buffer_text_source_range_append_request(range, buffer_id, buffer, face_id)?;
-    let request = frame
-        .source_append_request(position, face_id, base_face, append_item.append_kind())
-        .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
-    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy =
-        DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
-    let outcome = request.measure_single_display_item_against_current_text_row(
-        builder,
-        evaluator,
-        font_metrics,
-        append_item.into_item(),
-        face_resolver,
-        &mut face_ids,
-        &mut render_policy,
-    )?;
-    Some(outcome.into_append_progress(position))
-}
-
-#[allow(clippy::too_many_arguments)]
 fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
     builder: &mut GlyphMatrixBuilder,
     evaluator: &mut Context,
@@ -2448,22 +2505,22 @@ fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<f32> {
+    let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
+        range, buffer_id, buffer, face_id, base_face, frame, position,
+    )?;
+    let mut render_policy =
+        DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
     Some(
-        measure_buffer_text_source_range_append_progress_to_text_row(
-            builder,
-            evaluator,
-            font_metrics,
-            range,
-            face_resolver,
-            base_face,
-            buffer_id,
-            buffer,
-            face_id,
-            frame,
-            position,
-        )?
-        .metrics
-        .width_px,
+        operation
+            .measure_to_text_row(
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                &mut render_policy,
+            )?
+            .metrics
+            .width_px,
     )
 }
 
@@ -2604,77 +2661,6 @@ fn buffer_display_item_source_range_append_request<B: LayoutBufferView + ?Sized>
         item,
         append_kind,
     ))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_buffer_display_item_source_range_to_text_row_and_emit<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    range: BufferTextSourceRange,
-    buffer: &B,
-    buffer_id: BufferId,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    face_id: u32,
-    item: BufferTextSourceAppendItem,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let append_item =
-        buffer_display_item_source_range_append_request(range, buffer_id, buffer, face_id, item)?;
-    let request =
-        frame.source_append_request(position, face_id, base_face, append_item.append_kind());
-    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let outcome = request.render_single_display_item_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        append_item.into_item(),
-        face_resolver,
-        &mut face_ids,
-        &mut render_policy,
-    )?;
-    Some(outcome.into_append_progress_and_position(position))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn measure_buffer_display_item_source_range_append_progress_to_text_row<
-    B: LayoutBufferView + ?Sized,
->(
-    builder: &mut GlyphMatrixBuilder,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    range: BufferTextSourceRange,
-    buffer: &B,
-    buffer_id: BufferId,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    face_id: u32,
-    item: BufferTextSourceAppendItem,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<DisplayRowAppendProgress> {
-    let append_item =
-        buffer_display_item_source_range_append_request(range, buffer_id, buffer, face_id, item)?;
-    let request = frame
-        .source_append_request(position, face_id, base_face, append_item.append_kind())
-        .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
-    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let outcome = request.measure_single_display_item_against_current_text_row(
-        builder,
-        evaluator,
-        font_metrics,
-        append_item.into_item(),
-        face_resolver,
-        &mut face_ids,
-        &mut render_policy,
-    )?;
-    Some(outcome.into_append_progress(position))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3178,20 +3164,24 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        append_buffer_display_item_source_range_to_text_row_and_emit(
+        let operation = BufferTextSourceAppendOperation::for_display_item_range(
+            range,
+            self.buffer_id,
+            self.buffer,
+            self.face_id,
+            self.base_face,
+            self.frame.clone(),
+            position,
+            item,
+        )?;
+        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+        operation.render_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            range,
-            self.buffer,
-            self.buffer_id,
             face_resolver,
-            self.base_face,
-            self.face_id,
-            item,
-            self.frame.clone(),
-            position,
+            &mut render_policy,
         )
     }
 
@@ -3206,23 +3196,28 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         item: BufferTextSourceAppendItem,
         position: DisplayRowPosition,
     ) -> Option<f32> {
+        let operation = BufferTextSourceAppendOperation::for_display_item_range(
+            range,
+            self.buffer_id,
+            self.buffer,
+            self.face_id,
+            self.base_face,
+            self.frame.clone(),
+            position,
+            item,
+        )?;
+        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         Some(
-            measure_buffer_display_item_source_range_append_progress_to_text_row(
-                builder,
-                evaluator,
-                font_metrics,
-                range,
-                self.buffer,
-                self.buffer_id,
-                face_resolver,
-                self.base_face,
-                self.face_id,
-                item,
-                self.frame.clone(),
-                position,
-            )?
-            .metrics
-            .width_px,
+            operation
+                .measure_to_text_row(
+                    builder,
+                    evaluator,
+                    font_metrics,
+                    face_resolver,
+                    &mut render_policy,
+                )?
+                .metrics
+                .width_px,
         )
     }
 
