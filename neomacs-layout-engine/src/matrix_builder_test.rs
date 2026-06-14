@@ -95,6 +95,18 @@ fn write_left_margin_stretch_to_current_row(
         .expect("current row");
 }
 
+fn prebuilt_text_row(role: GlyphRowRole, glyphs: Vec<Glyph>) -> GlyphRow {
+    let mut row = GlyphRow::new(role);
+    row.mode_line = matches!(
+        role,
+        GlyphRowRole::ModeLine | GlyphRowRole::HeaderLine | GlyphRowRole::TabLine
+    );
+    row.displays_text = !glyphs.is_empty();
+    row.glyphs[GlyphArea::Text.index()] = glyphs;
+    crate::glyph_row_writer::normalize_external_row(&mut row);
+    row
+}
+
 #[test]
 fn builder_starts_empty() {
     let builder = GlyphMatrixBuilder::new();
@@ -249,25 +261,25 @@ fn builder_resets_on_new_frame() {
 #[test]
 fn builder_installs_status_line_row_glyphs_wholesale() {
     let mut builder = GlyphMatrixBuilder::new();
-    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_window(1, 4, 80, Rect::new(0.0, 0.0, 640.0, 64.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'a', 0, 0);
     builder.end_row();
 
-    // Status-line row is added to the current window BEFORE closing.
-    builder.begin_status_line_row(GlyphRowRole::ModeLine);
+    builder.begin_row(3, GlyphRowRole::ModeLine);
     let glyphs = vec![
         Glyph::char('-', 5, 0),
         Glyph::char('U', 5, 0),
         Glyph::char(':', 5, 0),
     ];
-    builder.install_status_line_row_glyphs(glyphs);
+    let row = prebuilt_text_row(GlyphRowRole::ModeLine, glyphs);
+    builder.install_prebuilt_current_row(&row);
+    builder.end_prebuilt_row();
     builder.end_window();
 
-    let state = builder.finish(80, 3, 8.0, 16.0);
+    let state = builder.finish(80, 4, 8.0, 16.0);
     let matrix = &state.window_matrices[0].matrix;
 
-    // Original 3 rows + 1 appended mode-line row
     assert_eq!(matrix.nrows, 4);
     assert_eq!(matrix.rows.len(), 4);
 
@@ -287,25 +299,26 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
 #[test]
 fn builder_status_line_empty_row_when_no_chars_pushed() {
     let mut builder = GlyphMatrixBuilder::new();
-    builder.begin_window(1, 2, 40, Rect::new(0.0, 0.0, 320.0, 32.0), true);
+    builder.begin_window(1, 3, 40, Rect::new(0.0, 0.0, 320.0, 48.0), true);
 
-    // Status-line row added before closing the window.
-    builder.begin_status_line_row(GlyphRowRole::ModeLine);
+    builder.begin_row(2, GlyphRowRole::ModeLine);
+    let row = prebuilt_text_row(GlyphRowRole::ModeLine, Vec::new());
+    builder.install_prebuilt_current_row(&row);
+    builder.end_prebuilt_row();
     builder.end_window();
 
-    let state = builder.finish(40, 2, 8.0, 16.0);
-    let ml_row = &state.window_matrices[0].matrix.rows[2]; // appended row
+    let state = builder.finish(40, 3, 8.0, 16.0);
+    let ml_row = &state.window_matrices[0].matrix.rows[2];
     assert_eq!(ml_row.glyphs[GlyphArea::Text as usize].len(), 0);
 }
 
 #[test]
-fn builder_status_line_no_window_is_noop() {
+fn builder_prebuilt_row_without_window_is_noop() {
     let mut builder = GlyphMatrixBuilder::new();
-    // No window started — should not panic
-    assert!(!builder.begin_status_line_row(GlyphRowRole::ModeLine));
-    // install_status_line_row_glyphs is also a no-op when no
-    // window is pushed.
-    builder.install_status_line_row_glyphs(vec![Glyph::char('x', 0, 0)]);
+    builder.begin_row(0, GlyphRowRole::ModeLine);
+    let row = prebuilt_text_row(GlyphRowRole::ModeLine, vec![Glyph::char('x', 0, 0)]);
+    builder.install_prebuilt_current_row(&row);
+    builder.end_prebuilt_row();
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert!(state.window_matrices.is_empty());
 }
@@ -863,14 +876,18 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
 #[test]
 fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
 
-    // Status-line row added before closing the window.
-    builder.begin_status_line_row(GlyphRowRole::ModeLine);
-    builder.install_status_line_row_glyphs(vec![Glyph::char('א', 5, 0), Glyph::char('ב', 5, 1)]);
+    builder.begin_row(1, GlyphRowRole::ModeLine);
+    let row = prebuilt_text_row(
+        GlyphRowRole::ModeLine,
+        vec![Glyph::char('א', 5, 0), Glyph::char('ב', 5, 1)],
+    );
+    builder.install_prebuilt_current_row(&row);
+    builder.end_prebuilt_row();
     builder.end_window();
 
-    let state = builder.finish(10, 1, 8.0, 16.0);
+    let state = builder.finish(10, 2, 8.0, 16.0);
     let glyphs = &state.window_matrices[0].matrix.rows[1].glyphs[GlyphArea::Text as usize];
     assert_eq!(glyphs.len(), 2);
     assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'ב' });

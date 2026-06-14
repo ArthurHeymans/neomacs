@@ -3936,6 +3936,7 @@ fn mock_display_row_from_line(
     char_h: f32,
     ascent: f32,
     left_margin: Option<&str>,
+    fill_to_cols: Option<(usize, u32)>,
 ) -> neomacs_display_protocol::glyph_matrix::GlyphRow {
     use super::mock_frame::MockDisplayProperty;
     use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
@@ -3977,6 +3978,18 @@ fn mock_display_row_from_line(
         }
     }
     drop(writer);
+    if let Some((target_cols, face_id)) = fill_to_cols {
+        let current_cols = row.glyphs[GlyphArea::Text.index()].len();
+        if current_cols < target_cols {
+            let mut writer = DisplayRowWriter::new(&layout, &mut row);
+            push_mock_display_text(
+                &mut writer,
+                " ".repeat(target_cols - current_cols),
+                face_id,
+                &mut source_offset,
+            );
+        }
+    }
     crate::glyph_row_writer::normalize_external_row(&mut row);
     row
 }
@@ -4074,7 +4087,6 @@ impl LayoutEngine {
     ) -> Vec<neomacs_display_protocol::glyph_matrix::FrameDisplayState> {
         use super::matrix_builder::GlyphMatrixBuilder;
         use neomacs_display_protocol::face::FaceAttributes;
-        use neomacs_display_protocol::glyph_matrix::Glyph;
         use neomacs_display_protocol::types::Color;
 
         let font_metrics = self.font_metrics.as_mut();
@@ -4140,7 +4152,7 @@ impl LayoutEngine {
         // renderer knows where to place each row.  Text rows stack from
         // the window top; the mode-line is pinned to the window bottom.
         for window in &content.windows {
-            let nrows = window.lines.len();
+            let nrows = window.lines.len() + 1;
             let ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
             builder.begin_window(
                 window.window_id,
@@ -4162,30 +4174,29 @@ impl LayoutEngine {
                     char_h,
                     ascent,
                     Some(&lnum),
+                    None,
                 );
                 builder.install_prebuilt_current_row(&row);
                 builder.end_prebuilt_row();
             }
 
             // Mode-line pinned to window bottom.
-            builder.begin_status_line_row(GlyphRowRole::ModeLine);
-            builder.set_current_row_metrics(
+            let mode_line_row = window.lines.len();
+            builder.begin_row(mode_line_row, GlyphRowRole::ModeLine);
+            let ml_ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
+            let row = mock_display_row_from_line(
+                GlyphRowRole::ModeLine,
+                &window.mode_line,
                 window.pixel_bounds.y + window.pixel_bounds.height - char_h,
+                window.pixel_bounds.width,
+                char_w,
                 char_h,
                 ascent,
+                None,
+                Some((ml_ncols, 1)),
             );
-            let ml_ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
-            let mut ml: Vec<Glyph> = window
-                .mode_line
-                .glyphs
-                .iter()
-                .map(|g| Glyph::char(g.ch, g.face_id, 0))
-                .collect();
-            while ml.len() < ml_ncols {
-                ml.push(Glyph::char(' ', 1, 0));
-            }
-            ml.truncate(ml_ncols);
-            builder.install_status_line_row_glyphs(ml);
+            builder.install_prebuilt_current_row(&row);
+            builder.end_prebuilt_row();
 
             builder.end_window();
         }
@@ -4194,7 +4205,8 @@ impl LayoutEngine {
         // and optionally a thin mode-line, matching GNU's design where
         // the echo-area text is buffer content, not a mode-line.
         if let Some(ref mini) = content.minibuffer {
-            let nrows = mini.lines.len();
+            let has_mode_line = !mini.mode_line.glyphs.is_empty();
+            let nrows = mini.lines.len() + usize::from(has_mode_line);
             let ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
             builder.begin_window(
                 mini.window_id,
@@ -4216,30 +4228,29 @@ impl LayoutEngine {
                     char_h,
                     ascent,
                     None,
+                    None,
                 );
                 builder.install_prebuilt_current_row(&row);
                 builder.end_prebuilt_row();
             }
 
-            if !mini.mode_line.glyphs.is_empty() {
-                builder.begin_status_line_row(GlyphRowRole::ModeLine);
-                builder.set_current_row_metrics(
+            if has_mode_line {
+                let mode_line_row = mini.lines.len();
+                builder.begin_row(mode_line_row, GlyphRowRole::ModeLine);
+                let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
+                let row = mock_display_row_from_line(
+                    GlyphRowRole::ModeLine,
+                    &mini.mode_line,
                     mini.pixel_bounds.y + mini.pixel_bounds.height - char_h,
+                    mini.pixel_bounds.width,
+                    char_w,
                     char_h,
                     ascent,
+                    None,
+                    Some((mini_ncols, 1)),
                 );
-                let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
-                let mut ml: Vec<Glyph> = mini
-                    .mode_line
-                    .glyphs
-                    .iter()
-                    .map(|g| Glyph::char(g.ch, g.face_id, 0))
-                    .collect();
-                while ml.len() < mini_ncols {
-                    ml.push(Glyph::char(' ', 1, 0));
-                }
-                ml.truncate(mini_ncols);
-                builder.install_status_line_row_glyphs(ml);
+                builder.install_prebuilt_current_row(&row);
+                builder.end_prebuilt_row();
             }
 
             builder.end_window();
@@ -4292,6 +4303,7 @@ impl LayoutEngine {
                     char_w,
                     char_h,
                     ascent,
+                    None,
                     None,
                 );
                 cb.install_prebuilt_current_row(&row);

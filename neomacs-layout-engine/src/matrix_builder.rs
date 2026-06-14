@@ -1066,25 +1066,6 @@ impl GlyphMatrixBuilder {
         self.no_accept_focus = no_accept_focus;
     }
 
-    /// Begin a new status-line row in the currently open window.
-    ///
-    /// Call this BEFORE `end_window()`.  Pushes a new enabled, mode-line
-    /// row to the current window's matrix and returns `true` on success.
-    /// Returns `false` when no window is currently open (`current_matrix`
-    /// is None).
-    pub fn begin_status_line_row(&mut self, role: GlyphRowRole) -> bool {
-        let Some(ref mut matrix) = self.current_matrix else {
-            return false;
-        };
-        let mut row = GlyphRow::new(role);
-        row.enabled = true;
-        row.mode_line = true;
-        self.current_row = matrix.rows.len();
-        matrix.rows.push(row);
-        matrix.nrows += 1;
-        true
-    }
-
     /// Record authoritative geometry for the last row in the currently
     /// open window.
     ///
@@ -1104,22 +1085,6 @@ impl GlyphMatrixBuilder {
         };
         let pixel_y_rel = pixel_y - window_y;
         Self::write_row_metrics(row, pixel_y_rel, height_px, ascent_px);
-    }
-
-    /// Install a complete set of text-area glyphs into the current
-    /// status-line row of the currently open window.
-    ///
-    /// Must be called after `begin_status_line_row`.
-    pub fn install_status_line_row_glyphs(&mut self, glyphs: Vec<Glyph>) {
-        let Some(ref mut matrix) = self.current_matrix else {
-            return;
-        };
-        if self.current_row < matrix.rows.len() {
-            let row = &mut matrix.rows[self.current_row];
-            row.displays_text = !glyphs.is_empty();
-            row.glyphs[GlyphArea::Text.index()] = glyphs;
-            let _ = crate::glyph_row_writer::reorder_row_bidi(row, None);
-        }
     }
 
     /// Patch the last-closed window matrix so its rightmost
