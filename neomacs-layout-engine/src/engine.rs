@@ -59,7 +59,8 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextRenderContext,
-    BufferHscrollSkipAction, BufferHscrollSkipSourceChar, BufferLinePrefixRenderContext,
+    BufferHscrollSkipAction, BufferHscrollSkipSourceChar, BufferInvisibleTextScanAction,
+    BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSyntheticTextRenderContext,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceChar, BufferTextSourceCharOverflowAction,
@@ -2107,75 +2108,75 @@ impl LayoutEngine {
             }
 
             // --- Invisible text check ---
-            // Only call check_invisible at property change boundaries for efficiency
-            if text_property_checkpoints.should_check_invisible(charpos) {
-                let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
-                let (invisible, next_visible) = text_props.check_invisible(charpos);
-                if invisible.hidden {
-                    let skip_to = next_visible.min(accessible_end);
-                    let point_in_hidden_region = cursor_info.is_missing()
-                        && point_charpos >= charpos
-                        && point_charpos < skip_to;
-                    if point_in_hidden_region {
-                        capture_cursor_info(
-                            &mut cursor_info,
-                            CapturedCursorInfo::from_active_face_state(
-                                &active_face_state,
-                                CapturedCursorPlacement::from_row_text_position(
-                                    row_geometry.text_position(x, byte_idx, col),
-                                    CapturedCursorSlotWidth::FaceChar,
-                                    false,
-                                ),
-                            ),
-                        );
-                    }
-
-                    skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
-                    text_property_checkpoints.record_invisible_next(next_visible);
-
-                    // GNU displays ellipsis only when the matching
-                    // `buffer-invisibility-spec' entry requests it.
-                    if invisible.ellipsis {
-                        if let Some(position) = synthetic_text_context!(raise_span.value_or(0.0))
-                            .render_active_marker_to_text_row(
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                                &mut self.font_metrics,
-                                face_resolver,
-                                &row_geometry,
-                                DisplayRowPosition { x_px: x, col },
-                                SyntheticTextMarker::InvisibleEllipsis,
-                            )
-                        {
-                            x = position.x_px;
-                            col = position.col;
-                        }
-                    }
-
-                    // Check for overlay strings at invisible region boundary.
-                    // Packages like org-mode use overlay after-strings at invisible
-                    // boundaries to show fold indicators (e.g. "[N lines]").
-                    overlay_string_context!().render_after_at(
-                        evaluator,
-                        &mut output_emitter,
-                        buffer,
-                        charpos,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &mut x,
-                        &mut col,
-                        &mut row_geometry,
+            if let BufferInvisibleTextScanAction::Hidden(hidden_text) =
+                BufferInvisibleTextScanContext::new(
+                    text,
+                    accessible_end,
+                    point_charpos,
+                    cursor_info.is_missing(),
+                )
+                .consume_at_checkpoint(
+                    buffer,
+                    &mut text_property_checkpoints,
+                    &mut byte_idx,
+                    &mut charpos,
+                )
+            {
+                if hidden_text.point_in_hidden_region() {
+                    capture_cursor_info(
                         &mut cursor_info,
-                        &mut hit_rows,
-                        &mut hit_row_range,
-                        &mut row_y_positions,
-                        &mut face_ids,
-                        &mut self.matrix_builder,
+                        CapturedCursorInfo::from_active_face_state(
+                            &active_face_state,
+                            CapturedCursorPlacement::from_row_text_position(
+                                row_geometry.text_position(x, hidden_text.start_byte_idx(), col),
+                                CapturedCursorSlotWidth::FaceChar,
+                                false,
+                            ),
+                        ),
                     );
-                    continue;
                 }
-                text_property_checkpoints.record_invisible_next(next_visible);
+
+                // GNU displays ellipsis only when the matching
+                // `buffer-invisibility-spec' entry requests it.
+                if hidden_text.ellipsis() {
+                    if let Some(position) = synthetic_text_context!(raise_span.value_or(0.0))
+                        .render_active_marker_to_text_row(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            &mut self.font_metrics,
+                            face_resolver,
+                            &row_geometry,
+                            DisplayRowPosition { x_px: x, col },
+                            SyntheticTextMarker::InvisibleEllipsis,
+                        )
+                    {
+                        x = position.x_px;
+                        col = position.col;
+                    }
+                }
+
+                // Check for overlay strings at invisible region boundary.
+                // Packages like org-mode use overlay after-strings at invisible
+                // boundaries to show fold indicators (e.g. "[N lines]").
+                overlay_string_context!().render_after_at(
+                    evaluator,
+                    &mut output_emitter,
+                    buffer,
+                    charpos,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut x,
+                    &mut col,
+                    &mut row_geometry,
+                    &mut cursor_info,
+                    &mut hit_rows,
+                    &mut hit_row_range,
+                    &mut row_y_positions,
+                    &mut face_ids,
+                    &mut self.matrix_builder,
+                );
+                continue;
             }
 
             // Handle hscroll: skip columns consumed by horizontal scroll

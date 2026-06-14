@@ -40,6 +40,7 @@ use crate::display_row_walk_state::{
     HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
     TextPropertyScanCheckpoints, TextRowTransitionPrefixAction, TextRowTransitionStatePolicy,
     TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
+    skip_text_to_charpos,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -4136,6 +4137,130 @@ impl BufferHscrollSkipSourceChar {
         }
 
         if is_wide_char(self.ch) { 2 } else { 1 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferInvisibleTextScanAction {
+    Unchecked,
+    Visible { next_visible: i64 },
+    Hidden(BufferInvisibleTextSkip),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferInvisibleTextSkip {
+    start_byte_idx: usize,
+    start_charpos: i64,
+    skip_to: i64,
+    next_visible: i64,
+    point_in_hidden_region: bool,
+    ellipsis: bool,
+}
+
+impl BufferInvisibleTextSkip {
+    fn new(
+        start_byte_idx: usize,
+        start_charpos: i64,
+        skip_to: i64,
+        next_visible: i64,
+        point_in_hidden_region: bool,
+        ellipsis: bool,
+    ) -> Self {
+        Self {
+            start_byte_idx,
+            start_charpos,
+            skip_to,
+            next_visible,
+            point_in_hidden_region,
+            ellipsis,
+        }
+    }
+
+    pub(crate) fn start_byte_idx(self) -> usize {
+        self.start_byte_idx
+    }
+
+    #[cfg(test)]
+    pub(crate) fn start_charpos(self) -> i64 {
+        self.start_charpos
+    }
+
+    #[cfg(test)]
+    pub(crate) fn skip_to(self) -> i64 {
+        self.skip_to
+    }
+
+    #[cfg(test)]
+    pub(crate) fn next_visible(self) -> i64 {
+        self.next_visible
+    }
+
+    pub(crate) fn point_in_hidden_region(self) -> bool {
+        self.point_in_hidden_region
+    }
+
+    pub(crate) fn ellipsis(self) -> bool {
+        self.ellipsis
+    }
+}
+
+pub(crate) struct BufferInvisibleTextScanContext<'a> {
+    text: &'a [u8],
+    accessible_end: i64,
+    point_charpos: i64,
+    cursor_missing: bool,
+}
+
+impl<'a> BufferInvisibleTextScanContext<'a> {
+    pub(crate) fn new(
+        text: &'a [u8],
+        accessible_end: i64,
+        point_charpos: i64,
+        cursor_missing: bool,
+    ) -> Self {
+        Self {
+            text,
+            accessible_end,
+            point_charpos,
+            cursor_missing,
+        }
+    }
+
+    pub(crate) fn consume_at_checkpoint<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        checkpoints: &mut TextPropertyScanCheckpoints,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+    ) -> BufferInvisibleTextScanAction {
+        if !checkpoints.should_check_invisible(*charpos) {
+            return BufferInvisibleTextScanAction::Unchecked;
+        }
+
+        let start_byte_idx = *byte_idx;
+        let start_charpos = *charpos;
+        let text_props = RustTextPropAccess::new(buffer);
+        let (invisible, next_visible) = text_props.check_invisible(start_charpos);
+        checkpoints.record_invisible_next(next_visible);
+
+        if !invisible.hidden {
+            return BufferInvisibleTextScanAction::Visible { next_visible };
+        }
+
+        let skip_to = next_visible.min(self.accessible_end);
+        let point_in_hidden_region = self.cursor_missing
+            && self.point_charpos >= start_charpos
+            && self.point_charpos < skip_to;
+        skip_text_to_charpos(self.text, byte_idx, charpos, skip_to);
+
+        BufferInvisibleTextScanAction::Hidden(BufferInvisibleTextSkip::new(
+            start_byte_idx,
+            start_charpos,
+            skip_to,
+            next_visible,
+            point_in_hidden_region,
+            invisible.ellipsis,
+        ))
     }
 }
 
