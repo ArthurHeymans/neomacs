@@ -828,6 +828,26 @@ fn synthetic_text_marker_names_source_ids_and_text() {
 }
 
 #[test]
+fn display_row_prefix_source_builds_append_request_with_prefix_source_id() {
+    let _eval = Context::new();
+    let value = Value::string("=>");
+    let source = DisplayRowPrefixRequest::Line
+        .source_for_value(value, CharPos0::new(4))
+        .expect("prefix source");
+
+    let request_parts = source
+        .append_request(DisplayRowPosition { x_px: 10.0, col: 2 })
+        .into_parts();
+
+    assert_eq!(request_parts.value, value);
+    assert_eq!(request_parts.source_id, LISP_STRING_SOURCE_PREFIX);
+    assert_eq!(
+        request_parts.position,
+        DisplayRowPosition { x_px: 10.0, col: 2 }
+    );
+}
+
+#[test]
 fn synthetic_text_append_context_composes_with_current_row_tail() {
     let mut eval = Context::new();
     let buf_id = eval

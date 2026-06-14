@@ -101,7 +101,6 @@ use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
-const LISP_STRING_SOURCE_PREFIX: u64 = 2;
 
 #[derive(Clone, Copy, Debug)]
 struct ScrollBarMetrics {
@@ -2073,7 +2072,6 @@ impl LayoutEngine {
                         &prefix_base_face,
                         prefix_source,
                         DisplayRowPosition { x_px: x, col },
-                        LISP_STRING_SOURCE_PREFIX,
                     );
                     x = position.x_px;
                     col = position.col;

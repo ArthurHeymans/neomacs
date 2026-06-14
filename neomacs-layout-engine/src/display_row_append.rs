@@ -70,6 +70,7 @@ use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
 
 const LISP_STRING_SOURCE_OVERLAY_STRING: u64 = 1;
+const LISP_STRING_SOURCE_PREFIX: u64 = 2;
 const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
 const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
 const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
@@ -493,7 +494,6 @@ impl<'row> LispStringRowAppendContext<'row> {
         base_face: &DisplayStringBaseFace,
         prefix_source: DisplayRowPrefixSource,
         position: DisplayRowPosition,
-        source_id: u64,
     ) -> DisplayRowPosition {
         self.render_active_face_source_request_to_text_row_and_emit(
             builder,
@@ -504,7 +504,7 @@ impl<'row> LispStringRowAppendContext<'row> {
             face_ids,
             base_face.face_id(),
             base_face.face(),
-            prefix_source.append_request(position, source_id),
+            prefix_source.append_request(position),
         )
     }
 }
@@ -859,12 +859,8 @@ impl DisplayRowPrefixSource {
         BaseFacePolicy::DefaultFace
     }
 
-    fn append_request(
-        self,
-        position: DisplayRowPosition,
-        source_id: u64,
-    ) -> LispStringSourceAppendRequest {
-        LispStringSourceAppendRequest::new(position, source_id, self.value)
+    fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
+        LispStringSourceAppendRequest::new(position, LISP_STRING_SOURCE_PREFIX, self.value)
     }
 }
 
