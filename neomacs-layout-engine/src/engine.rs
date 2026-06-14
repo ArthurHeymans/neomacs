@@ -1281,7 +1281,7 @@ impl LayoutEngine {
             buffer,
         );
 
-        let (retry_outcome, rendered_rows_len) = {
+        let post_loop_outcome = {
             let mut post_loop_state = BufferTextWindowPostLoopState::new(
                 &mut output_emitter,
                 &mut x,
@@ -1300,38 +1300,22 @@ impl LayoutEngine {
                 &row_extend,
                 &box_face,
             );
-            let point_is_visible_eob = post_loop_state.render_end_of_buffer_tail(
+            post_loop_state.render_tail_and_decide_retry(
                 loop_request_context,
+                &tail_request_context,
+                text,
+                &text_append_surface,
                 byte_idx,
                 charpos,
                 has_overlays,
                 overlay_text_row_context,
                 &active_face_state,
                 buffer,
-            );
-
-            post_loop_state.apply_tail_decorations(&tail_request_context, &text_append_surface);
-
-            post_loop_state.finalize_tail(
-                &tail_request_context,
-                text,
-                charpos,
-                point_is_visible_eob,
-            );
-
-            // GNU redisplay keeps iterating until point visibility converges or no
-            // further progress can be made.  Advance by actual rendered row spans
-            // from this pass rather than rescanning by logical newlines, since
-            // wrapped and variable-height lines are exactly where newline-based
-            // retry selection goes wrong.
-            let retry_outcome = post_loop_state.decide_visibility_retry(
-                &tail_request_context,
-                charpos,
-                point_is_visible_eob,
                 &buf_access,
-            );
-            (retry_outcome, post_loop_state.rendered_rows_len())
+            )
         };
+        let retry_outcome = post_loop_outcome.retry();
+        let rendered_rows_len = post_loop_outcome.rendered_rows_len();
         if retry_outcome.scroll_down_window_start().is_some() {
             tracing::debug!(
                 "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",

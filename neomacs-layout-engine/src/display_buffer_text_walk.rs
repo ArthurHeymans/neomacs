@@ -234,6 +234,12 @@ pub(crate) struct BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
     box_face: &'emit BoxFaceRowState,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowPostLoopRenderOutcome {
+    retry: BufferTextWindowVisibilityRetryOutcome,
+    rendered_rows_len: usize,
+}
+
 pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
 where
     B: LayoutBufferView,
@@ -1147,6 +1153,46 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
 
     pub(crate) fn rendered_rows_len(&self) -> usize {
         self.output_emitter.rows().len()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
+        &mut self,
+        loop_context: BufferTextWindowLoopRequestContext,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text: &'request [u8],
+        text_append_surface: &DisplayRowAppendSurface,
+        byte_idx: usize,
+        charpos: i64,
+        has_overlays: bool,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+        buf_access: &'rows RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowPostLoopRenderOutcome {
+        let point_is_visible_eob = self.render_end_of_buffer_tail(
+            loop_context,
+            byte_idx,
+            charpos,
+            has_overlays,
+            overlay_context,
+            active_face_state,
+            buffer,
+        );
+
+        self.apply_tail_decorations(tail_context, text_append_surface);
+        self.finalize_tail(tail_context, text, charpos, point_is_visible_eob);
+
+        // GNU redisplay keeps iterating until point visibility converges or no
+        // further progress can be made. Advance by actual rendered row spans
+        // from this pass, since wrapped and variable-height lines are exactly
+        // where newline-based retry selection goes wrong.
+        let retry =
+            self.decide_visibility_retry(tail_context, charpos, point_is_visible_eob, buf_access);
+        BufferTextWindowPostLoopRenderOutcome {
+            retry,
+            rendered_rows_len: self.rendered_rows_len(),
+        }
     }
 
     pub(crate) fn install_body(
@@ -2073,6 +2119,16 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 raise_span: self.raise_span,
             },
         )
+    }
+}
+
+impl BufferTextWindowPostLoopRenderOutcome {
+    pub(crate) fn retry(self) -> BufferTextWindowVisibilityRetryOutcome {
+        self.retry
+    }
+
+    pub(crate) fn rendered_rows_len(self) -> usize {
+        self.rendered_rows_len
     }
 }
 
