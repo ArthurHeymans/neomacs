@@ -215,6 +215,55 @@ fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
 }
 
 #[test]
+fn special_text_row_overflow_decision_names_fit_truncate_and_wrap() {
+    assert_eq!(
+        SpecialTextRowOverflowDecision::for_width(4.0, 6.0, 10.0, true),
+        SpecialTextRowOverflowDecision::Fits
+    );
+    assert_eq!(
+        SpecialTextRowOverflowDecision::for_width(5.0, 6.0, 10.0, true),
+        SpecialTextRowOverflowDecision::Truncate
+    );
+    assert_eq!(
+        SpecialTextRowOverflowDecision::for_width(5.0, 6.0, 10.0, false),
+        SpecialTextRowOverflowDecision::Wrap
+    );
+}
+
+#[test]
+fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
+    let empty_wrap = WordWrapRenderState::new(true);
+
+    assert_eq!(
+        BufferTextRowOverflowDecision::for_char('x', 4.0, 6.0, 10.0, true, empty_wrap),
+        BufferTextRowOverflowDecision::Fits
+    );
+    assert_eq!(
+        BufferTextRowOverflowDecision::for_char('\t', 12.0, 16.0, 10.0, true, empty_wrap),
+        BufferTextRowOverflowDecision::Fits
+    );
+    assert_eq!(
+        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, true, empty_wrap),
+        BufferTextRowOverflowDecision::Truncate
+    );
+    assert_eq!(
+        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, false, empty_wrap),
+        BufferTextRowOverflowDecision::CharacterWrap
+    );
+
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    word_wrap.record_candidate('a', 7, 11, 2, (Some(LispCharPos1::new(3)), None));
+
+    assert_eq!(
+        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, false, word_wrap),
+        BufferTextRowOverflowDecision::WordWrap {
+            break_candidate: word_wrap.candidate(),
+        }
+    );
+}
+
+#[test]
 fn active_display_property_span_returns_value_until_expired() {
     let mut span = ActiveDisplayPropertySpan::inactive();
 

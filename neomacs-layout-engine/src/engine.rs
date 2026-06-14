@@ -74,9 +74,10 @@ use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayR
 #[cfg(test)]
 use crate::display_row_walk_state::WordWrapBreakCandidate;
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
-    TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapRenderState,
+    ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
+    HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
+    SpecialTextRowOverflowDecision, TextPropertyScanCheckpoints, TextRowTransitionStatePolicy,
+    TrailingWhitespaceRenderState, WordWrapRenderState,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos, skip_to_newline,
@@ -2685,10 +2686,14 @@ impl LayoutEngine {
                     );
                 let needed_width = special_layout_plan.measured_width_px();
 
-                // Check if the renderer-measured caret notation fits.
-                if x + needed_width > text_append_surface.full_text_right_edge() {
-                    // Doesn't fit — wrap or truncate
-                    if params.truncate_lines {
+                match SpecialTextRowOverflowDecision::for_width(
+                    x,
+                    needed_width,
+                    text_append_surface.full_text_right_edge(),
+                    params.truncate_lines,
+                ) {
+                    SpecialTextRowOverflowDecision::Fits => {}
+                    SpecialTextRowOverflowDecision::Truncate => {
                         row_geometry.mark_current_row_flag_kind(
                             &mut row_flags,
                             DisplayRowFlagKind::Truncated,
@@ -2739,7 +2744,8 @@ impl LayoutEngine {
                             ),
                         );
                         continue;
-                    } else {
+                    }
+                    SpecialTextRowOverflowDecision::Wrap => {
                         row_geometry.mark_current_row_flag_kind(
                             &mut row_flags,
                             DisplayRowFlagKind::Continued,
@@ -2901,8 +2907,16 @@ impl LayoutEngine {
             );
             let advance = prepared_append.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
-            if ch != '\t' && x + advance > text_append_surface.right_edge() {
-                if params.truncate_lines {
+            match BufferTextRowOverflowDecision::for_char(
+                ch,
+                x,
+                advance,
+                text_append_surface.right_edge(),
+                params.truncate_lines,
+                word_wrap,
+            ) {
+                BufferTextRowOverflowDecision::Fits => {}
+                BufferTextRowOverflowDecision::Truncate => {
                     row_geometry.mark_current_row_flag_kind(
                         &mut row_flags,
                         DisplayRowFlagKind::Truncated,
@@ -2953,9 +2967,11 @@ impl LayoutEngine {
                         ),
                     );
                     continue;
-                } else if word_wrap.has_candidate() {
+                }
+                BufferTextRowOverflowDecision::WordWrap {
+                    break_candidate: wrap_break,
+                } => {
                     // Word-wrap: rewind to last break point
-                    let wrap_break = word_wrap.candidate();
                     output_emitter.truncate_display_points(wrap_break.display_point_count());
                     let (row_first_display_pos, row_last_display_pos) =
                         wrap_break.row_display_positions();
@@ -3020,7 +3036,8 @@ impl LayoutEngine {
                         break;
                     }
                     continue;
-                } else {
+                }
+                BufferTextRowOverflowDecision::CharacterWrap => {
                     // Character wrap (no break point available)
                     row_geometry.mark_current_row_flag_kind(
                         &mut row_flags,

@@ -111,6 +111,23 @@ pub(crate) struct TextPropertyScanCheckpoints {
     display_next: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum SpecialTextRowOverflowDecision {
+    Fits,
+    Truncate,
+    Wrap,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum BufferTextRowOverflowDecision {
+    Fits,
+    Truncate,
+    WordWrap {
+        break_candidate: WordWrapBreakCandidate,
+    },
+    CharacterWrap,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextRowTransitionPrefixAction {
     Line,
@@ -171,6 +188,46 @@ impl WordWrapBreakCandidate {
 
     pub(crate) fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
         (self.row_first_display_pos, self.row_last_display_pos)
+    }
+}
+
+impl SpecialTextRowOverflowDecision {
+    pub(crate) fn for_width(
+        x_px: f32,
+        width_px: f32,
+        right_edge_px: f32,
+        truncate_lines: bool,
+    ) -> Self {
+        if x_px + width_px <= right_edge_px {
+            Self::Fits
+        } else if truncate_lines {
+            Self::Truncate
+        } else {
+            Self::Wrap
+        }
+    }
+}
+
+impl BufferTextRowOverflowDecision {
+    pub(crate) fn for_char(
+        ch: char,
+        x_px: f32,
+        advance_px: f32,
+        right_edge_px: f32,
+        truncate_lines: bool,
+        word_wrap: WordWrapRenderState,
+    ) -> Self {
+        if ch == '\t' || x_px + advance_px <= right_edge_px {
+            Self::Fits
+        } else if truncate_lines {
+            Self::Truncate
+        } else if word_wrap.has_candidate() {
+            Self::WordWrap {
+                break_candidate: word_wrap.candidate(),
+            }
+        } else {
+            Self::CharacterWrap
+        }
     }
 }
 
