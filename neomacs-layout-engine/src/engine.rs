@@ -42,7 +42,7 @@ use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     CursorGeometryContext, CursorGeometrySource, capture_cursor_info, cursor_style_for_visual,
     cursor_style_for_window, resolve_cursor_geometry, row_metrics_for_cursor,
-    update_cursor_info_for_main_char, visual_cursor_source_from_point,
+    visual_cursor_source_from_point,
 };
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
@@ -2884,12 +2884,9 @@ impl LayoutEngine {
                 append_position,
                 cluster_tail,
             );
-            let advance = prepared_append.advance_px();
-            update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
-            match BufferTextRowOverflowDecision::for_char(
+            prepared_append.update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx);
+            match prepared_append.overflow_decision(
                 ch,
-                x,
-                advance,
                 text_append_surface.right_edge(),
                 params.truncate_lines,
                 word_wrap,
@@ -3060,7 +3057,7 @@ impl LayoutEngine {
                         &active_face_state,
                         CapturedCursorPlacement::from_row_text_position(
                             row_geometry.text_position(x, ch_start_byte_idx, col),
-                            CapturedCursorSlotWidth::Explicit(advance),
+                            prepared_append.cursor_slot_width(),
                             ch == '\t',
                         ),
                     ),
@@ -3167,8 +3164,12 @@ impl LayoutEngine {
                 }
             }
 
-            trailing_whitespace
-                .track_rendered_char(ch, row_geometry.start_marker_at_x(x - advance));
+            prepared_append.track_trailing_whitespace_rendered_char(
+                &mut trailing_whitespace,
+                ch,
+                &row_geometry,
+                x,
+            );
         }
 
         let point_is_visible_eob = point_charpos == accessible_end && charpos == accessible_end;

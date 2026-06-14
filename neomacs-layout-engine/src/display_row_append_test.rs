@@ -1,4 +1,5 @@
 use super::*;
+use crate::display_cursor::CapturedCursorSlotWidth;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
@@ -25,6 +26,7 @@ use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowYPositions,
 };
+use crate::display_row_walk_state::{BufferTextRowOverflowDecision, WordWrapRenderState};
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use crate::window_output::TextMatrixRowTransition;
@@ -2077,7 +2079,14 @@ fn buffer_text_source_append_context_appends_source_char() {
         DisplayRowPosition { x_px: 0.0, col: 0 },
         None,
     );
-    assert_eq!(prepared_append.advance_px(), 8.0);
+    assert_eq!(
+        prepared_append.cursor_slot_width(),
+        CapturedCursorSlotWidth::Explicit(8.0)
+    );
+    assert_eq!(
+        prepared_append.overflow_decision('a', 80.0, false, WordWrapRenderState::new(false)),
+        BufferTextRowOverflowDecision::Fits
+    );
     let (_progress, end) = prepared_append
         .append_to_text_row(
             &append_context,

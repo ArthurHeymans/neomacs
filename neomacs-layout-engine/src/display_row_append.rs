@@ -1,6 +1,7 @@
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
     CapturedCursorVisualState, CursorCaptureState, display_property_replacement_cursor_info,
+    update_cursor_info_for_main_char,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -33,7 +34,10 @@ use crate::display_row_geometry::{
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowTextPosition,
     DisplayRowYPositions, DisplayRowYRecording,
 };
-use crate::display_row_walk_state::{HitRowRangeTracker, TextRowTransitionPrefixAction};
+use crate::display_row_walk_state::{
+    BufferTextRowOverflowDecision, HitRowRangeTracker, TextRowTransitionPrefixAction,
+    TrailingWhitespaceRenderState, WordWrapRenderState,
+};
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
     DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
@@ -2345,8 +2349,50 @@ pub(crate) struct BufferTextSourceCharPreparedAppend {
 }
 
 impl BufferTextSourceCharPreparedAppend {
-    pub(crate) fn advance_px(self) -> f32 {
+    fn advance_px(self) -> f32 {
         self.plan.advance_px()
+    }
+
+    pub(crate) fn update_cursor_info_for_main_char(
+        self,
+        target: &mut CursorCaptureState,
+        byte_idx: usize,
+    ) {
+        update_cursor_info_for_main_char(target, byte_idx, self.advance_px());
+    }
+
+    pub(crate) fn overflow_decision(
+        self,
+        ch: char,
+        right_edge_px: f32,
+        truncate_lines: bool,
+        word_wrap: WordWrapRenderState,
+    ) -> BufferTextRowOverflowDecision {
+        BufferTextRowOverflowDecision::for_char(
+            ch,
+            self.plan.position.x_px,
+            self.advance_px(),
+            right_edge_px,
+            truncate_lines,
+            word_wrap,
+        )
+    }
+
+    pub(crate) fn cursor_slot_width(self) -> CapturedCursorSlotWidth {
+        CapturedCursorSlotWidth::Explicit(self.advance_px())
+    }
+
+    pub(crate) fn track_trailing_whitespace_rendered_char(
+        self,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        ch: char,
+        geometry: &DisplayRowGeometryState,
+        current_x_px: f32,
+    ) {
+        trailing_whitespace.track_rendered_char(
+            ch,
+            geometry.start_marker_at_x(current_x_px - self.advance_px()),
+        );
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2870,7 +2916,7 @@ impl BufferTextSourceCharAppendPlan {
         }
     }
 
-    pub(crate) fn advance_px(self) -> f32 {
+    fn advance_px(self) -> f32 {
         self.resolved_advance.advance_px()
     }
 }
