@@ -1827,19 +1827,17 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         Some(Self::new(append_item, base_face, face_id, frame, position))
     }
 
-    fn for_display_item_range<B: LayoutBufferView + ?Sized>(
-        range: BufferTextSourceRange,
+    fn for_display_item_request<B: LayoutBufferView + ?Sized>(
+        source_item: BufferTextSourceItemRequest,
         buffer_id: BufferId,
         buffer: &B,
         face_id: u32,
         base_face: &'face ResolvedFace,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
-        item: BufferTextSourceAppendItem,
     ) -> Option<Self> {
-        let append_item = buffer_display_item_source_range_append_request(
-            range, buffer_id, buffer, face_id, item,
-        )?;
+        let append_item =
+            buffer_text_source_item_append_request(source_item, buffer_id, buffer, face_id)?;
         Some(Self::new(append_item, base_face, face_id, frame, position))
     }
 
@@ -2279,25 +2277,23 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn measure_item_source_range_width_or_active_face_fallback_to_text_row(
+    fn measure_item_source_request_width_or_active_face_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        item: BufferTextSourceAppendItem,
+        source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
         self.item_active_face(geometry)
-            .measure_source_range_width_or_active_face_fallback_to_text_row(
+            .measure_source_request_width_or_active_face_fallback_to_text_row(
                 builder,
                 evaluator,
                 font_metrics,
-                range,
                 face_resolver,
-                item,
+                source_item,
                 position,
             )
     }
@@ -2312,16 +2308,14 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         request: BufferTextSpecialSourceCharMeasureRequest,
     ) -> f32 {
-        let range = request.range();
         let position = request.position();
-        self.measure_item_source_range_width_or_active_face_fallback_to_text_row(
+        self.measure_item_source_request_width_or_active_face_fallback_to_text_row(
             geometry,
             builder,
             evaluator,
             font_metrics,
-            range,
             face_resolver,
-            request.into_append_item(),
+            request.source_item(),
             position,
         )
     }
@@ -2350,27 +2344,25 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn append_item_source_range_to_text_row_and_emit(
+    fn append_item_source_request_to_text_row_and_emit(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        item: BufferTextSourceAppendItem,
+        source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         self.item_active_face(geometry)
-            .append_source_range_to_text_row_and_emit(
+            .append_source_request_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
-                range,
                 face_resolver,
-                item,
+                source_item,
                 position,
             )
     }
@@ -2386,17 +2378,15 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         plan: BufferTextSpecialSourceCharAppendPlan,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let range = plan.range();
         let position = plan.position();
-        self.append_item_source_range_to_text_row_and_emit(
+        self.append_item_source_request_to_text_row_and_emit(
             geometry,
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            range,
             face_resolver,
-            plan.into_append_item(),
+            plan.source_item(),
             position,
         )
     }
@@ -2787,13 +2777,13 @@ impl BufferTextSourceAdvanceResolver {
     }
 }
 
-fn buffer_display_item_source_range_append_request<B: LayoutBufferView + ?Sized>(
-    range: BufferTextSourceRange,
+fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Sized>(
+    source_item: BufferTextSourceItemRequest,
     buffer_id: BufferId,
     buffer: &B,
     face_id: u32,
-    item: BufferTextSourceAppendItem,
 ) -> Option<BufferTextSourceRangeItemAppendRequest> {
+    let range = source_item.range();
     if range.is_empty_or_reversed() {
         return None;
     }
@@ -2808,10 +2798,10 @@ fn buffer_display_item_source_range_append_request<B: LayoutBufferView + ?Sized>
         buffer.layout_char_pos_to_emacs_byte_pos(end),
     );
 
-    let append_kind = item.append_kind();
+    let append_kind = source_item.append_kind();
     let item = source.item(
         RenderFaceRef::FaceId(face_id),
-        item.into_display_item_kind(),
+        source_item.into_display_item_kind(),
     );
     Some(BufferTextSourceRangeItemAppendRequest::new(
         item,
@@ -2824,6 +2814,36 @@ pub(crate) enum BufferTextSourceAppendItem {
     ControlChar { ch: char },
     SourceMappedText { text: Box<str> },
     Glyphless { ch: char, method: GlyphlessMethod },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct BufferTextSourceItemRequest {
+    range: BufferTextSourceRange,
+    item: BufferTextSourceAppendItem,
+}
+
+impl BufferTextSourceItemRequest {
+    fn new(range: BufferTextSourceRange, item: BufferTextSourceAppendItem) -> Self {
+        Self { range, item }
+    }
+
+    fn range(&self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    fn append_kind(&self) -> DisplayRowAppendKind {
+        self.item.append_kind()
+    }
+
+    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
+        self.item
+            .fallback_width_policy()
+            .width_px(fallback_char_width)
+    }
+
+    fn into_display_item_kind(self) -> DisplayItemKind {
+        self.item.into_display_item_kind()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2939,8 +2959,7 @@ impl BufferTextSpecialSourceCharRequest {
         position: DisplayRowPosition,
     ) -> BufferTextSpecialSourceCharAppendPlan {
         BufferTextSpecialSourceCharAppendPlan {
-            range: self.range,
-            special_display: self.special_display.clone(),
+            source_item: self.source_item_request(),
             position,
         }
     }
@@ -2980,10 +2999,16 @@ impl BufferTextSpecialSourceCharRequest {
         position: DisplayRowPosition,
     ) -> BufferTextSpecialSourceCharMeasureRequest {
         BufferTextSpecialSourceCharMeasureRequest {
-            range: self.range,
-            special_display: self.special_display.clone(),
+            source_item: self.source_item_request(),
             position,
         }
+    }
+
+    fn source_item_request(&self) -> BufferTextSourceItemRequest {
+        BufferTextSourceItemRequest::new(
+            self.range,
+            self.special_display.clone().into_append_item(),
+        )
     }
 }
 
@@ -3039,43 +3064,33 @@ impl BufferTextSpecialSourceCharLayoutPlan {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSpecialSourceCharAppendPlan {
-    range: BufferTextSourceRange,
-    special_display: BufferTextSourceSpecialDisplay,
+    source_item: BufferTextSourceItemRequest,
     position: DisplayRowPosition,
 }
 
 impl BufferTextSpecialSourceCharAppendPlan {
-    fn range(&self) -> BufferTextSourceRange {
-        self.range
+    fn source_item(&self) -> BufferTextSourceItemRequest {
+        self.source_item.clone()
     }
 
     fn position(&self) -> DisplayRowPosition {
         self.position
-    }
-
-    fn into_append_item(self) -> BufferTextSourceAppendItem {
-        self.special_display.into_append_item()
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSpecialSourceCharMeasureRequest {
-    range: BufferTextSourceRange,
-    special_display: BufferTextSourceSpecialDisplay,
+    source_item: BufferTextSourceItemRequest,
     position: DisplayRowPosition,
 }
 
 impl BufferTextSpecialSourceCharMeasureRequest {
-    fn range(&self) -> BufferTextSourceRange {
-        self.range
+    fn source_item(&self) -> BufferTextSourceItemRequest {
+        self.source_item.clone()
     }
 
     fn position(&self) -> DisplayRowPosition {
         self.position
-    }
-
-    fn into_append_item(self) -> BufferTextSourceAppendItem {
-        self.special_display.into_append_item()
     }
 }
 
@@ -3309,26 +3324,24 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_source_range_to_text_row_and_emit(
+    fn append_source_request_to_text_row_and_emit(
         &self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        item: BufferTextSourceAppendItem,
+        source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let operation = BufferTextSourceAppendOperation::for_display_item_range(
-            range,
+        let operation = BufferTextSourceAppendOperation::for_display_item_request(
+            source_item,
             self.buffer_id,
             self.buffer,
             self.face_id,
             self.base_face,
             self.frame.clone(),
             position,
-            item,
         )?;
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         operation.render_to_text_row_and_emit(
@@ -3342,25 +3355,23 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn measure_source_range_width_to_text_row(
+    fn measure_source_request_width_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        item: BufferTextSourceAppendItem,
+        source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> Option<f32> {
-        let operation = BufferTextSourceAppendOperation::for_display_item_range(
-            range,
+        let operation = BufferTextSourceAppendOperation::for_display_item_request(
+            source_item,
             self.buffer_id,
             self.buffer,
             self.face_id,
             self.base_face,
             self.frame.clone(),
             position,
-            item,
         )?;
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         Some(
@@ -3378,26 +3389,22 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn measure_source_range_width_or_active_face_fallback_to_text_row(
+    fn measure_source_request_width_or_active_face_fallback_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        item: BufferTextSourceAppendItem,
+        source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width = item
-            .fallback_width_policy()
-            .width_px(self.frame.geometry.char_width);
-        self.measure_source_range_width_to_text_row(
+        let fallback_width = source_item.fallback_width_px(self.frame.geometry.char_width);
+        self.measure_source_request_width_to_text_row(
             builder,
             evaluator,
             font_metrics,
-            range,
             face_resolver,
-            item,
+            source_item,
             position,
         )
         .unwrap_or(fallback_width)

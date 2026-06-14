@@ -602,12 +602,14 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
         DisplayItemKind::TextRun(run) if run.text.as_ref() == "\t"
     ));
 
-    let mapped_request = buffer_display_item_source_range_append_request(
-        BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
+    let mapped_request = buffer_text_source_item_append_request(
+        BufferTextSourceItemRequest::new(
+            BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
+            BufferTextSourceAppendItem::SourceMappedText { text: "x".into() },
+        ),
         buf_id,
         &snapshot,
         9,
-        BufferTextSourceAppendItem::SourceMappedText { text: "x".into() },
     )
     .expect("mapped append request");
     assert_eq!(
@@ -2460,16 +2462,19 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let item = BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' };
+    let source_item = BufferTextSourceItemRequest::new(
+        BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+        item.clone(),
+    );
 
     let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
-        .measure_source_range_width_to_text_row(
+        .measure_source_request_width_to_text_row(
             &mut builder,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
             &face_resolver,
-            item.clone(),
+            source_item.clone(),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("measured buffer text item fragment");
@@ -2477,37 +2482,38 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         .with_current_row_mut(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
     let fallback_width = append_context
-        .measure_source_range_width_or_active_face_fallback_to_text_row(
+        .measure_source_request_width_or_active_face_fallback_to_text_row(
             &mut builder,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
             &face_resolver,
-            item.clone(),
+            BufferTextSourceItemRequest::new(
+                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
+                item.clone(),
+            ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         );
-    let edge_width = append_context.measure_source_range_width_or_active_face_fallback_to_text_row(
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-        &face_resolver,
-        item.clone(),
-        DisplayRowPosition {
-            x_px: 80.0,
-            col: 10,
-        },
-    );
+    let edge_width = append_context
+        .measure_source_request_width_or_active_face_fallback_to_text_row(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            source_item.clone(),
+            DisplayRowPosition {
+                x_px: 80.0,
+                col: 10,
+            },
+        );
 
     let (progress, end) = append_context
-        .append_source_range_to_text_row_and_emit(
+        .append_source_request_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
             &face_resolver,
-            item,
+            source_item,
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended buffer text item fragment");
