@@ -17,6 +17,7 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
+use neomacs_display_protocol::glyph_matrix::Glyph;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
@@ -412,14 +413,16 @@ pub(crate) fn emit_text_window_line_number_margin(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowLineNumberMargin<'_>,
 ) {
+    let mut glyphs = Vec::new();
     let padding = (request.cols - 1) - request.text.chars().count() as i32;
     if padding > 0 {
-        builder.push_left_margin_stretch(padding as u16, request.face_id);
+        glyphs.push(Glyph::stretch(padding as u16, request.face_id));
     }
     for ch in request.text.chars() {
-        builder.push_left_margin_char(ch, request.face_id);
+        glyphs.push(Glyph::char(ch, request.face_id, 0));
     }
-    builder.push_left_margin_stretch(1, request.face_id);
+    glyphs.push(Glyph::stretch(1, request.face_id));
+    builder.install_current_row_left_margin_glyphs(glyphs);
 }
 
 pub(crate) fn publish_text_window_cursor(

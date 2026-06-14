@@ -404,6 +404,15 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    pub(crate) fn install_current_row_left_margin_glyphs(&mut self, glyphs: Vec<Glyph>) {
+        if let Some(ref mut matrix) = self.current_matrix
+            && self.current_row < matrix.rows.len()
+        {
+            matrix.rows[self.current_row].glyphs[GlyphArea::LeftMargin.index()] = glyphs;
+        }
+    }
+
+    #[cfg(test)]
     pub fn push_left_margin_char(&mut self, ch: char, face_id: u32) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
@@ -413,6 +422,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    #[cfg(test)]
     pub fn push_left_margin_stretch(&mut self, width_cols: u16, face_id: u32) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
