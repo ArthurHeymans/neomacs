@@ -1555,6 +1555,49 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         self.hscroll_skip.should_skip()
     }
 
+    pub(crate) fn render_row_prelude<B: LayoutBufferView>(
+        &mut self,
+        context: BufferTextWindowRowPreludeRequestContext,
+        append_surface: &DisplayRowAppendSurface,
+        active_face_state: &DisplayRowActiveFaceState,
+        buffer: &B,
+    ) {
+        context.line_number_margin_request().render_pending(
+            self.line_numbers,
+            self.face_resolver,
+            self.face_ids,
+            self.builder,
+            self.row_geometry,
+            self.face_scan,
+            context.char_width(),
+        );
+
+        context
+            .line_prefix_request(
+                append_surface,
+                self.row_geometry,
+                active_face_state,
+                self.raise_span.value_or(0.0),
+                DisplayRowPosition {
+                    x_px: *self.x,
+                    col: *self.col,
+                },
+            )
+            .render_requested_to_text_row_and_apply(
+                self.prefix_request,
+                self.evaluator,
+                self.output_emitter,
+                buffer,
+                *self.charpos,
+                self.font_metrics,
+                self.face_resolver,
+                self.face_ids,
+                self.builder,
+                self.x,
+                self.col,
+            );
+    }
+
     pub(crate) fn consume_source_char(
         &mut self,
         text: &[u8],

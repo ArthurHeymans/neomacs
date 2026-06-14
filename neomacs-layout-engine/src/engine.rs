@@ -64,8 +64,8 @@ use crate::display_row_append::{
     BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest, BufferTextWindowFinishState,
 };
 use crate::display_row_builder::{
-    DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
-    display_row_text_glyph_count, new_display_row,
+    DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
+    new_display_row,
 };
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
@@ -1240,40 +1240,6 @@ impl LayoutEngine {
         });
 
         while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
-            row_prelude_request_context
-                .line_number_margin_request()
-                .render_pending(
-                    &mut line_numbers,
-                    face_resolver,
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                    &row_geometry,
-                    &mut face_scan,
-                    row_prelude_request_context.char_width(),
-                );
-
-            row_prelude_request_context
-                .line_prefix_request(
-                    &text_append_surface,
-                    &row_geometry,
-                    &active_face_state,
-                    raise_span.value_or(0.0),
-                    DisplayRowPosition { x_px: x, col },
-                )
-                .render_requested_to_text_row_and_apply(
-                    &mut prefix_request,
-                    evaluator,
-                    &mut output_emitter,
-                    buffer,
-                    charpos,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                    &mut x,
-                    &mut col,
-                );
-
             let mut loop_render_state = BufferTextWindowLoopRenderState::new(
                 &mut buffer_text_append_state,
                 &mut text_property_checkpoints,
@@ -1303,6 +1269,12 @@ impl LayoutEngine {
                 &mut face_ids,
                 &mut raise_span,
                 &mut height_span,
+            );
+            loop_render_state.render_row_prelude(
+                row_prelude_request_context,
+                &text_append_surface,
+                &active_face_state,
+                buffer,
             );
 
             // --- Invisible text check ---
