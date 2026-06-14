@@ -1686,6 +1686,93 @@ impl<'a> OverlayStringRenderState<'a> {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct BufferOverlayStringTextRowRenderContext<'a> {
+    enabled: bool,
+    window_id: u64,
+    append_surface: &'a DisplayRowAppendSurface,
+    char_h: f32,
+    default_row_ascent: f32,
+    text_y: f32,
+    row_base: usize,
+    max_rows: usize,
+}
+
+impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        enabled: bool,
+        window_id: u64,
+        append_surface: &'a DisplayRowAppendSurface,
+        char_h: f32,
+        default_row_ascent: f32,
+        text_y: f32,
+        row_base: usize,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            enabled,
+            window_id,
+            append_surface,
+            char_h,
+            default_row_ascent,
+            text_y,
+            row_base,
+            max_rows,
+        }
+    }
+
+    fn overlay_context(
+        self,
+        active_face_state: &DisplayRowActiveFaceState,
+    ) -> BufferOverlayStringRenderContext<'a> {
+        BufferOverlayStringRenderContext::for_text_row(
+            self.enabled,
+            self.window_id,
+            self.append_surface,
+            active_face_state,
+            self.char_h,
+            self.default_row_ascent,
+            self.text_y,
+            self.row_base,
+            self.max_rows,
+        )
+    }
+
+    pub(crate) fn render_before_at<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        anchor_charpos: i64,
+        active_face_state: &DisplayRowActiveFaceState,
+        state: &mut OverlayStringRenderState<'_>,
+    ) {
+        self.overlay_context(active_face_state)
+            .render_before_at(buffer, anchor_charpos, state);
+    }
+
+    pub(crate) fn render_after_at<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        anchor_charpos: i64,
+        active_face_state: &DisplayRowActiveFaceState,
+        state: &mut OverlayStringRenderState<'_>,
+    ) {
+        self.overlay_context(active_face_state)
+            .render_after_at(buffer, anchor_charpos, state);
+    }
+
+    pub(crate) fn render_both_at<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        anchor_charpos: i64,
+        active_face_state: &DisplayRowActiveFaceState,
+        state: &mut OverlayStringRenderState<'_>,
+    ) {
+        self.overlay_context(active_face_state)
+            .render_both_at(buffer, anchor_charpos, state);
+    }
+}
+
 impl<'a> BufferOverlayStringRenderContext<'a> {
     pub(crate) fn new(
         enabled: bool,

@@ -60,7 +60,7 @@ use crate::display_row_append::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
     BufferEndOfBufferCursorAction, BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState,
     BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
-    BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
+    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayContext,
     BufferSyntheticTextRenderContext, BufferSyntheticTextRenderState,
     BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
     BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
@@ -1924,54 +1924,16 @@ impl LayoutEngine {
             frame_params.window_system,
         );
 
-        macro_rules! overlay_string_context {
-            () => {
-                BufferOverlayStringRenderContext::for_text_row(
-                    has_overlays,
-                    params.window_id as u64,
-                    &text_append_surface,
-                    &active_face_state,
-                    char_h,
-                    default_face_ascent,
-                    text_y,
-                    text_matrix_row_base,
-                    max_rows,
-                )
-            };
-        }
-
-        macro_rules! overlay_render_state {
-            () => {
-                OverlayStringRenderState::new(
-                    evaluator,
-                    &mut output_emitter,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut x,
-                    &mut col,
-                    &mut row_geometry,
-                    &mut cursor_info,
-                    &mut hit_rows,
-                    &mut hit_row_range,
-                    &mut row_y_positions,
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                )
-            };
-        }
-
-        macro_rules! synthetic_text_context {
-            ($glyph_y_offset:expr) => {
-                BufferSyntheticTextRenderContext::new(
-                    &text_append_surface,
-                    &active_face_state,
-                    $glyph_y_offset,
-                    char_h,
-                    default_face_ascent,
-                    char_w,
-                )
-            };
-        }
+        let overlay_text_row_context = BufferOverlayStringTextRowRenderContext::new(
+            has_overlays,
+            params.window_id as u64,
+            &text_append_surface,
+            char_h,
+            default_face_ascent,
+            text_y,
+            text_matrix_row_base,
+            max_rows,
+        );
 
         // --- GlyphMatrix builder: begin window and first row ---
         let matrix_rows = text_matrix_row_base + text_matrix_rows + bottom_chrome_rows;
@@ -2086,7 +2048,14 @@ impl LayoutEngine {
                     &mut col,
                 );
                 hidden_text.append_to_text_row_and_apply(
-                    synthetic_text_context!(raise_span.value_or(0.0)),
+                    BufferSyntheticTextRenderContext::new(
+                        &text_append_surface,
+                        &active_face_state,
+                        raise_span.value_or(0.0),
+                        char_h,
+                        default_face_ascent,
+                        char_w,
+                    ),
                     &row_geometry,
                     &mut hidden_text_state,
                 );
@@ -2094,8 +2063,27 @@ impl LayoutEngine {
                 // Check for overlay strings at invisible region boundary.
                 // Packages like org-mode use overlay after-strings at invisible
                 // boundaries to show fold indicators (e.g. "[N lines]").
-                let mut overlay_state = overlay_render_state!();
-                overlay_string_context!().render_after_at(buffer, charpos, &mut overlay_state);
+                let mut overlay_state = OverlayStringRenderState::new(
+                    evaluator,
+                    &mut output_emitter,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut x,
+                    &mut col,
+                    &mut row_geometry,
+                    &mut cursor_info,
+                    &mut hit_rows,
+                    &mut hit_row_range,
+                    &mut row_y_positions,
+                    &mut face_ids,
+                    &mut self.matrix_builder,
+                );
+                overlay_text_row_context.render_after_at(
+                    buffer,
+                    charpos,
+                    &active_face_state,
+                    &mut overlay_state,
+                );
                 continue;
             }
 
@@ -2176,7 +2164,14 @@ impl LayoutEngine {
                         &mut col,
                     );
                     hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
-                        synthetic_text_context!(0.0),
+                        BufferSyntheticTextRenderContext::new(
+                            &text_append_surface,
+                            &active_face_state,
+                            0.0,
+                            char_h,
+                            default_face_ascent,
+                            char_w,
+                        ),
                         &row_geometry,
                         &mut synthetic_text_state,
                         face_resolver,
@@ -2305,7 +2300,14 @@ impl LayoutEngine {
                     &mut col,
                 );
                 selective_tail_marker.append_to_text_row_and_apply(
-                    synthetic_text_context!(raise_span.value_or(0.0)),
+                    BufferSyntheticTextRenderContext::new(
+                        &text_append_surface,
+                        &active_face_state,
+                        raise_span.value_or(0.0),
+                        char_h,
+                        default_face_ascent,
+                        char_w,
+                    ),
                     &row_geometry,
                     &mut synthetic_text_state,
                 );
@@ -2823,8 +2825,27 @@ impl LayoutEngine {
             );
 
             // --- Overlay before-strings ---
-            let mut overlay_state = overlay_render_state!();
-            overlay_string_context!().render_before_at(buffer, charpos, &mut overlay_state);
+            let mut overlay_state = OverlayStringRenderState::new(
+                evaluator,
+                &mut output_emitter,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut x,
+                &mut col,
+                &mut row_geometry,
+                &mut cursor_info,
+                &mut hit_rows,
+                &mut hit_row_range,
+                &mut row_y_positions,
+                &mut face_ids,
+                &mut self.matrix_builder,
+            );
+            overlay_text_row_context.render_before_at(
+                buffer,
+                charpos,
+                &active_face_state,
+                &mut overlay_state,
+            );
 
             if prepared_append
                 .append_to_text_row_and_apply(
@@ -2850,8 +2871,27 @@ impl LayoutEngine {
             }
 
             // --- Overlay after-strings ---
-            let mut overlay_state = overlay_render_state!();
-            overlay_string_context!().render_after_at(buffer, charpos, &mut overlay_state);
+            let mut overlay_state = OverlayStringRenderState::new(
+                evaluator,
+                &mut output_emitter,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut x,
+                &mut col,
+                &mut row_geometry,
+                &mut cursor_info,
+                &mut hit_rows,
+                &mut hit_row_range,
+                &mut row_y_positions,
+                &mut face_ids,
+                &mut self.matrix_builder,
+            );
+            overlay_text_row_context.render_after_at(
+                buffer,
+                charpos,
+                &active_face_state,
+                &mut overlay_state,
+            );
         }
 
         let point_is_visible_eob = point_charpos == accessible_end && charpos == accessible_end;
@@ -2865,8 +2905,27 @@ impl LayoutEngine {
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position
         if has_overlays && row_geometry.is_within_row_limit(row_limit) {
-            let mut overlay_state = overlay_render_state!();
-            overlay_string_context!().render_both_at(buffer, charpos, &mut overlay_state);
+            let mut overlay_state = OverlayStringRenderState::new(
+                evaluator,
+                &mut output_emitter,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut x,
+                &mut col,
+                &mut row_geometry,
+                &mut cursor_info,
+                &mut hit_rows,
+                &mut hit_row_range,
+                &mut row_y_positions,
+                &mut face_ids,
+                &mut self.matrix_builder,
+            );
+            overlay_text_row_context.render_both_at(
+                buffer,
+                charpos,
+                &active_face_state,
+                &mut overlay_state,
+            );
         }
 
         // Face :extend at end-of-buffer: fill remaining empty rows

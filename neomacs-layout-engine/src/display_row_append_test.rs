@@ -3156,8 +3156,8 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
         DisplayTabPolicy::every(8),
     );
     let active_face = test_active_face_state(7, 8.0);
-    let row_context =
-        OverlayStringRenderRowContext::new(&surface, &active_face, 16.0, 12.0, 0.0, 0, 4);
+    let render_context =
+        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
@@ -3183,8 +3183,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &mut face_ids,
             &mut ctx.builder,
         );
-        BufferOverlayStringRenderContext::new(false, 1, row_context)
-            .render_before_at(&buffer, 5, &mut state);
+        render_context.render_before_at(&buffer, 5, &active_face, &mut state);
     }
 
     assert_eq!(x, 24.0);
