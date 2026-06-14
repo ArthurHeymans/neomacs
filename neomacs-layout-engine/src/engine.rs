@@ -2962,18 +2962,17 @@ impl LayoutEngine {
             // Reset raise offset when past the raise region
             raise_span.clear_if_expired(charpos, window_start);
 
-            // Capture cursor metrics at point position during the main layout
-            // so cursor emission uses the correct per-face height/width.
-            if cursor_info.is_missing() && charpos == point_charpos {
-                capture_cursor_info(
-                    &mut cursor_info,
-                    prepared_append.cursor_info_for_main_char(
-                        &active_face_state,
-                        row_geometry.text_position(x, ch_start_byte_idx, col),
-                        ch == '\t',
-                    ),
-                );
-            }
+            prepared_append.capture_cursor_info_for_main_char_if_point(
+                &mut cursor_info,
+                &active_face_state,
+                &row_geometry,
+                x,
+                ch_start_byte_idx,
+                col,
+                ch == '\t',
+                charpos,
+                point_charpos,
+            );
 
             // --- Overlay before-strings ---
             overlay_string_context!().render_before_at(

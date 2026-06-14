@@ -1,7 +1,7 @@
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
-    CapturedCursorVisualState, CursorCaptureState, display_property_replacement_cursor_info,
-    update_cursor_info_for_main_char,
+    CapturedCursorVisualState, CursorCaptureState, capture_cursor_info,
+    display_property_replacement_cursor_info, update_cursor_info_for_main_char,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -3367,6 +3367,31 @@ impl BufferTextSourceCharPreparedAppend {
         byte_idx: usize,
     ) {
         update_cursor_info_for_main_char(target, byte_idx, self.advance_px());
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn capture_cursor_info_for_main_char_if_point(
+        self,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        geometry: &DisplayRowGeometryState,
+        x_px: f32,
+        byte_idx: usize,
+        col: usize,
+        is_tab: bool,
+        charpos: i64,
+        point_charpos: i64,
+    ) {
+        if target.is_missing() && charpos == point_charpos {
+            capture_cursor_info(
+                target,
+                self.cursor_info_for_main_char(
+                    active_face_state,
+                    geometry.text_position(x_px, byte_idx, col),
+                    is_tab,
+                ),
+            );
+        }
     }
 
     pub(crate) fn overflow_decision(

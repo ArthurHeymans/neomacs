@@ -1,4 +1,5 @@
 use super::*;
+use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
@@ -2358,6 +2359,35 @@ fn buffer_text_source_append_context_appends_source_char() {
     assert_eq!(cursor_info.col, 3);
     assert_eq!(cursor_info.slot_width, Some(8.0));
     assert!(!cursor_info.stretch_like);
+    let mut cursor_capture = CursorCaptureState::new();
+    prepared_append.capture_cursor_info_for_main_char_if_point(
+        &mut cursor_capture,
+        &active_face,
+        &geometry,
+        2.0,
+        0,
+        3,
+        false,
+        4,
+        5,
+    );
+    assert!(cursor_capture.is_missing());
+    prepared_append.capture_cursor_info_for_main_char_if_point(
+        &mut cursor_capture,
+        &active_face,
+        &geometry,
+        2.0,
+        0,
+        3,
+        false,
+        5,
+        5,
+    );
+    let captured_cursor = cursor_capture.as_ref().expect("captured cursor");
+    assert_eq!(captured_cursor.x, 2.0);
+    assert_eq!(captured_cursor.col, 3);
+    assert_eq!(captured_cursor.slot_width, Some(8.0));
+    assert!(!captured_cursor.stretch_like);
     assert_eq!(
         prepared_append.overflow_decision('a', 80.0, false, WordWrapRenderState::new(false)),
         BufferTextRowOverflowDecision::Fits
