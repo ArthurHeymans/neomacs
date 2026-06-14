@@ -52,7 +52,6 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
     DisplayRowMeasurementPolicy, WindowChromeKind, insert_resolved_display_row_face,
@@ -60,12 +59,13 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
+    BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextAppendRequest,
     BufferOverlayStringRenderContext, BufferTextPreparedSourceCharAppend,
     BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
     BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
-    SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
+    DisplayRowLineBreakTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    LispStringRowAppendContext, SyntheticTextMarker, SyntheticTextRowAppendContext,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2325,15 +2325,10 @@ impl LayoutEngine {
 
                 if let Some(prop_val) = display_prop_val {
                     let skip_to = text_property_checkpoints.display_skip_to(accessible_end);
-                    let point_in_display_replacement = cursor_info.is_missing()
-                        && point_charpos >= charpos
-                        && point_charpos < skip_to;
                     let display_property_char_pos = CharPos0::new(charpos.max(0) as usize);
                     let display_property_byte_pos = EmacsBytePos::new(text_start_byte + byte_idx);
-                    let display_property = classify_display_property(prop_val);
-                    let replacement_resolve_request =
-                        DisplayPropertyReplacementAppendResolveRequest::for_text_property(
-                            &display_property,
+                    let display_property_request =
+                        BufferDisplayPropertyTextAppendRequest::for_text_property(
                             prop_val,
                             buf_id,
                             display_property_char_pos,
@@ -2346,58 +2341,62 @@ impl LayoutEngine {
                             raise_span.value_or(0.0),
                             char_h,
                             DisplayRowPosition { x_px: x, col },
+                            text_property_checkpoints.display_next(),
+                            skip_to,
                         );
-                    if let Some(replacement_outcome) = replacement_resolve_request
-                        .resolve_and_append_to_text_row(
-                            buffer,
-                            evaluator,
-                            &mut output_emitter,
-                            &mut self.matrix_builder,
-                            &mut self.font_metrics,
-                            face_resolver,
-                            &mut face_ids,
-                            &text_append_surface,
-                            &mut row_geometry,
-                        )
-                    {
-                        if point_in_display_replacement {
-                            let start_position = replacement_outcome.start_position();
-                            capture_cursor_info(
-                                &mut cursor_info,
-                                replacement_outcome.cursor_info(
-                                    &active_face_state,
-                                    row_geometry.text_position(
-                                        start_position.x_px,
-                                        byte_idx,
-                                        start_position.col,
+                    match display_property_request.resolve_and_append_to_text_row(
+                        buffer,
+                        evaluator,
+                        &mut output_emitter,
+                        &mut self.matrix_builder,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        &mut face_ids,
+                        &text_append_surface,
+                        &mut row_geometry,
+                    ) {
+                        BufferDisplayPropertyTextAppendAction::Replacement(replacement_outcome) => {
+                            if cursor_info.is_missing()
+                                && replacement_outcome.point_in_replacement(point_charpos, charpos)
+                            {
+                                let start_position = replacement_outcome.start_position();
+                                capture_cursor_info(
+                                    &mut cursor_info,
+                                    replacement_outcome.cursor_info(
+                                        &active_face_state,
+                                        row_geometry.text_position(
+                                            start_position.x_px,
+                                            byte_idx,
+                                            start_position.col,
+                                        ),
                                     ),
-                                ),
+                                );
+                            }
+                            let position = replacement_outcome.end_position();
+                            x = position.x_px;
+                            col = position.col;
+
+                            // Skip covered buffer text
+                            skip_text_to_charpos(
+                                text,
+                                &mut byte_idx,
+                                &mut charpos,
+                                replacement_outcome.skip_to(),
                             );
+                            continue;
                         }
-                        let position = replacement_outcome.end_position();
-                        x = position.x_px;
-                        col = position.col;
-
-                        // Skip covered buffer text
-                        skip_text_to_charpos(text, &mut byte_idx, &mut charpos, skip_to);
-                        continue;
-                    }
-
-                    // Case 4: Raise — (raise FACTOR) or plist with :raise
-                    if let Some(factor) = display_property.modifiers.raise {
-                        raise_span
-                            .set(-(factor * char_h), text_property_checkpoints.display_next());
-                    }
-
-                    // Case 5: Height — (height FACTOR) or plist with :height
-                    if let Some(factor) = display_property.modifiers.height {
-                        if factor.is_finite() && factor > 0.0 {
-                            height_span.set(factor, text_property_checkpoints.display_next());
-                            face_scan.invalidate();
-                            resolve_current_face_state!();
+                        BufferDisplayPropertyTextAppendAction::Modifiers(modifiers) => {
+                            if let Some(raise_offset_px) = modifiers.raise_offset_px() {
+                                raise_span.set(raise_offset_px, modifiers.next_change());
+                            }
+                            if let Some(factor) = modifiers.height_factor() {
+                                height_span.set(factor, modifiers.next_change());
+                                face_scan.invalidate();
+                                resolve_current_face_state!();
+                            }
                         }
+                        BufferDisplayPropertyTextAppendAction::None => {}
                     }
-                    // Other display property types: fall through to normal rendering
                 }
             }
 

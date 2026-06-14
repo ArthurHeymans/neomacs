@@ -11,7 +11,9 @@ use crate::display_item::{
     SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
-use crate::display_property::{DisplayMediaReplacementProperty, DisplayPropertyClassification};
+use crate::display_property::{
+    DisplayMediaReplacementProperty, DisplayPropertyClassification, classify_display_property,
+};
 use crate::display_row::DisplayRowRenderStop;
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
@@ -4679,6 +4681,206 @@ pub(crate) enum DisplayPropertyReplacementAppendItem {
     Media(DisplayReplacementMediaAppendResolution),
 }
 
+pub(crate) enum BufferDisplayPropertyTextAppendAction {
+    Replacement(BufferDisplayPropertyTextReplacementOutcome),
+    Modifiers(BufferDisplayPropertyTextModifierAction),
+    None,
+}
+
+pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
+    value: Value,
+    buffer_id: BufferId,
+    anchor_charpos: CharPos0,
+    anchor_bytepos: EmacsBytePos,
+    source_text: &'a [u8],
+    active_face_state: &'a DisplayRowActiveFaceState,
+    current_x: f32,
+    content_x: f32,
+    params: &'a WindowParams,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    start_position: DisplayRowPosition,
+    next_change: i64,
+    skip_to: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
+    replacement: DisplayPropertyReplacementAppendOutcome,
+    skip_to: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferDisplayPropertyTextModifierAction {
+    raise_offset_px: Option<f32>,
+    height_factor: Option<f32>,
+    next_change: i64,
+}
+
+impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn for_text_property(
+        value: Value,
+        buffer_id: BufferId,
+        anchor_charpos: CharPos0,
+        anchor_bytepos: EmacsBytePos,
+        source_text: &'a [u8],
+        active_face_state: &'a DisplayRowActiveFaceState,
+        current_x: f32,
+        content_x: f32,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        start_position: DisplayRowPosition,
+        next_change: i64,
+        skip_to: i64,
+    ) -> Self {
+        Self {
+            value,
+            buffer_id,
+            anchor_charpos,
+            anchor_bytepos,
+            source_text,
+            active_face_state,
+            current_x,
+            content_x,
+            params,
+            glyph_y_offset,
+            default_row_height,
+            start_position,
+            next_change,
+            skip_to,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_and_append_to_text_row<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        evaluator: &mut Context,
+        output_emitter: &mut WindowOutputEmitter,
+        builder: &mut GlyphMatrixBuilder,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        append_surface: &DisplayRowAppendSurface,
+        row_geometry: &mut DisplayRowGeometryState,
+    ) -> BufferDisplayPropertyTextAppendAction {
+        let display_property = classify_display_property(self.value);
+        if let Some(item) = DisplayPropertyReplacementAppendItem::resolve(
+            &display_property,
+            self.value,
+            self.anchor_charpos,
+            self.source_text,
+            self.active_face_state,
+            font_metrics,
+            self.current_x,
+            self.content_x,
+            self.params,
+            evaluator.display_host.as_deref(),
+        ) {
+            let replacement = DisplayPropertyReplacementAppendRequest::new(
+                BufferDisplayReplacementSource::new(
+                    self.buffer_id,
+                    self.anchor_charpos,
+                    self.anchor_bytepos,
+                ),
+                item,
+                self.glyph_y_offset,
+                self.default_row_height,
+                self.start_position,
+            )
+            .append_to_text_row(
+                buffer,
+                evaluator,
+                output_emitter,
+                builder,
+                font_metrics,
+                face_resolver,
+                face_ids,
+                append_surface,
+                row_geometry,
+                self.active_face_state,
+            );
+            return BufferDisplayPropertyTextAppendAction::Replacement(
+                BufferDisplayPropertyTextReplacementOutcome {
+                    replacement,
+                    skip_to: self.skip_to,
+                },
+            );
+        }
+
+        BufferDisplayPropertyTextModifierAction::for_display_property(
+            &display_property,
+            self.default_row_height,
+            self.next_change,
+        )
+        .map(BufferDisplayPropertyTextAppendAction::Modifiers)
+        .unwrap_or(BufferDisplayPropertyTextAppendAction::None)
+    }
+}
+
+impl BufferDisplayPropertyTextReplacementOutcome {
+    pub(crate) fn point_in_replacement(self, point_charpos: i64, start_charpos: i64) -> bool {
+        point_charpos >= start_charpos && point_charpos < self.skip_to
+    }
+
+    pub(crate) fn start_position(self) -> DisplayRowPosition {
+        self.replacement.start_position()
+    }
+
+    pub(crate) fn end_position(self) -> DisplayRowPosition {
+        self.replacement.end_position()
+    }
+
+    pub(crate) fn skip_to(self) -> i64 {
+        self.skip_to
+    }
+
+    pub(crate) fn cursor_info(
+        self,
+        active_face_state: &DisplayRowActiveFaceState,
+        position: DisplayRowTextPosition,
+    ) -> CapturedCursorInfo {
+        self.replacement.cursor_info(active_face_state, position)
+    }
+}
+
+impl BufferDisplayPropertyTextModifierAction {
+    fn for_display_property(
+        display_property: &DisplayPropertyClassification,
+        row_height: f32,
+        next_change: i64,
+    ) -> Option<Self> {
+        let raise_offset_px = display_property
+            .modifiers
+            .raise
+            .map(|factor| -(factor * row_height));
+        let height_factor = display_property
+            .modifiers
+            .height
+            .filter(|factor| factor.is_finite() && *factor > 0.0);
+        (raise_offset_px.is_some() || height_factor.is_some()).then_some(Self {
+            raise_offset_px,
+            height_factor,
+            next_change,
+        })
+    }
+
+    pub(crate) fn raise_offset_px(self) -> Option<f32> {
+        self.raise_offset_px
+    }
+
+    pub(crate) fn height_factor(self) -> Option<f32> {
+        self.height_factor
+    }
+
+    pub(crate) fn next_change(self) -> i64 {
+        self.next_change
+    }
+}
+
+#[cfg(test)]
 pub(crate) struct DisplayPropertyReplacementAppendResolveRequest<'a> {
     display_property: &'a DisplayPropertyClassification,
     value: Value,
@@ -4694,6 +4896,7 @@ pub(crate) struct DisplayPropertyReplacementAppendResolveRequest<'a> {
     start_position: DisplayRowPosition,
 }
 
+#[cfg(test)]
 impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
