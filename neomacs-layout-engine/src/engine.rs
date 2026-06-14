@@ -37,9 +37,10 @@ use crate::display_cursor::CapturedCursorVisualState;
 use crate::display_cursor::CursorSlotWidthPolicy;
 #[cfg(test)]
 use crate::display_cursor::resolve_cursor_vertical_metrics;
+#[cfg(test)]
+use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth};
 use crate::display_cursor::{
-    CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
-    CursorGeometryContext, CursorGeometrySource, capture_cursor_info, cursor_style_for_visual,
+    CursorCaptureState, CursorGeometryContext, CursorGeometrySource, cursor_style_for_visual,
     cursor_style_for_window, resolve_cursor_geometry, row_metrics_for_cursor,
     visual_cursor_source_from_point,
 };
@@ -58,8 +59,8 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
-    BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState, BufferInvisibleTextScanAction,
-    BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
+    BufferEndOfBufferCursorAction, BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState,
+    BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
     BufferSyntheticTextRenderContext, BufferSyntheticTextRenderState,
     BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
@@ -2879,32 +2880,8 @@ impl LayoutEngine {
         }
 
         let point_is_visible_eob = point_charpos == accessible_end && charpos == accessible_end;
-
-        // Capture cursor at end-of-buffer position.
-        // GNU Emacs shows point at point-max+1 as a real cursor location.
-        // In the layout engine's internal 0-based space, that is `accessible_end`.
-        if cursor_info.is_missing() && (charpos == point_charpos || point_is_visible_eob) {
-            if point_is_visible_eob {
-                tracing::debug!(
-                    "layout_window_rust: capturing EOB cursor at x={:.1} y={:.1} point={} point-max={}",
-                    x,
-                    row_geometry.glyph_y(0.0),
-                    point_charpos,
-                    accessible_end
-                );
-            }
-            capture_cursor_info(
-                &mut cursor_info,
-                CapturedCursorInfo::from_active_face_state(
-                    &active_face_state,
-                    CapturedCursorPlacement::from_row_text_position(
-                        row_geometry.text_position(x, byte_idx, col),
-                        CapturedCursorSlotWidth::FaceChar,
-                        false,
-                    ),
-                ),
-            );
-        }
+        BufferEndOfBufferCursorAction::new(byte_idx, charpos, accessible_end, point_charpos)
+            .capture_cursor_if_point(&mut cursor_info, &active_face_state, &row_geometry, x, col);
 
         // Close any remaining box face region at end of text
         if box_face.is_active() {

@@ -4450,6 +4450,37 @@ fn buffer_text_source_append_context_appends_source_char() {
 }
 
 #[test]
+fn buffer_end_of_buffer_cursor_action_captures_visible_eob_cursor() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
+    let action = BufferEndOfBufferCursorAction::new(5, 9, 9, 9);
+    let mut cursor = CursorCaptureState::new();
+
+    action.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 48.0, 6);
+
+    let captured = cursor.as_ref().expect("cursor captured");
+    assert_eq!(captured.x, 48.0);
+    assert_eq!(captured.y, 32.0);
+    assert_eq!(captured.byte_idx, 5);
+    assert_eq!(captured.col, 6);
+    assert_eq!(captured.matrix_row, 2);
+    assert_eq!(captured.slot_width, Some(8.0));
+    assert!(!captured.stretch_like);
+}
+
+#[test]
+fn buffer_end_of_buffer_cursor_action_keeps_cursor_missing_when_point_differs() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
+    let action = BufferEndOfBufferCursorAction::new(5, 9, 12, 10);
+    let mut cursor = CursorCaptureState::new();
+
+    action.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 48.0, 6);
+
+    assert!(cursor.as_ref().is_none());
+}
+
+#[test]
 fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating_row() {
     let mut eval = Context::new();
     let buf_id = eval

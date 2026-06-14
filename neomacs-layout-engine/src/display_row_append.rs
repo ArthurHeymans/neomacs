@@ -4376,6 +4376,69 @@ impl BufferHscrollSkipAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferEndOfBufferCursorAction {
+    byte_idx: usize,
+    charpos: i64,
+    accessible_end: i64,
+    point_charpos: i64,
+}
+
+impl BufferEndOfBufferCursorAction {
+    pub(crate) fn new(
+        byte_idx: usize,
+        charpos: i64,
+        accessible_end: i64,
+        point_charpos: i64,
+    ) -> Self {
+        Self {
+            byte_idx,
+            charpos,
+            accessible_end,
+            point_charpos,
+        }
+    }
+
+    fn point_is_visible_eob(self) -> bool {
+        self.point_charpos == self.accessible_end && self.charpos == self.accessible_end
+    }
+
+    pub(crate) fn capture_cursor_if_point(
+        self,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        x: f32,
+        col: usize,
+    ) {
+        if !target.is_missing()
+            || (self.charpos != self.point_charpos && !self.point_is_visible_eob())
+        {
+            return;
+        }
+        if self.point_is_visible_eob() {
+            tracing::debug!(
+                "layout_window_rust: capturing EOB cursor at x={:.1} y={:.1} point={} point-max={}",
+                x,
+                row_geometry.glyph_y(0.0),
+                self.point_charpos,
+                self.accessible_end
+            );
+        }
+        capture_cursor_info(
+            target,
+            CapturedCursorInfo::from_active_face_state(
+                active_face_state,
+                CapturedCursorPlacement::from_row_text_position(
+                    row_geometry.text_position(x, self.byte_idx, col),
+                    CapturedCursorSlotWidth::FaceChar,
+                    false,
+                ),
+            ),
+        );
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferHscrollSkipSourceChar {
     ch_start_byte_idx: usize,
     ch: char,
