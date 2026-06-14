@@ -84,68 +84,6 @@ pub struct GlyphMatrixBuilder {
 }
 
 impl GlyphMatrixBuilder {
-    fn pad_row_and_write_glyph(
-        row: &mut GlyphRow,
-        target_col: usize,
-        ch: char,
-        face_id: u32,
-        area: GlyphArea,
-    ) {
-        row.enabled = true;
-
-        // Count existing glyphs across the three areas
-        // (LeftMargin, Text, RightMargin). We treat every
-        // glyph as one column advance — matching the TTY
-        // RIF's `col += 1` in rasterize.
-        let current_total = |row: &GlyphRow| -> usize {
-            row.glyphs[GlyphArea::LeftMargin.index()].len()
-                + row.glyphs[GlyphArea::Text.index()].len()
-                + row.glyphs[GlyphArea::RightMargin.index()].len()
-        };
-
-        let preserve_trailing_truncation_marker = matches!(area, GlyphArea::RightMargin)
-            && row.glyphs[GlyphArea::Text.index()]
-                .last()
-                .is_some_and(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '$' }));
-        let preserved_trailing = if preserve_trailing_truncation_marker {
-            row.glyphs[GlyphArea::Text.index()].pop()
-        } else {
-            None
-        };
-        let preserved_cols = usize::from(preserved_trailing.is_some());
-
-        // Truncate anything in the text area that pushes
-        // the glyph count past `target_col`. Left/right
-        // margin columns belong to the caller — we only
-        // touch the text area.
-        let before_final_cols = target_col.saturating_sub(preserved_cols);
-        while current_total(row) > before_final_cols {
-            let text_area = &mut row.glyphs[GlyphArea::Text.index()];
-            if text_area.is_empty() {
-                break;
-            }
-            text_area.pop();
-        }
-
-        // Pad the text area with spaces until the combined
-        // count reaches `target_col`.
-        while current_total(row) < before_final_cols {
-            row.glyphs[GlyphArea::Text.index()].push(Glyph::char(' ', face_id, 0));
-        }
-
-        if let Some(glyph) = preserved_trailing {
-            row.glyphs[GlyphArea::Text.index()].push(glyph);
-        }
-
-        while current_total(row) < target_col {
-            row.glyphs[GlyphArea::Text.index()].push(Glyph::char(' ', face_id, 0));
-        }
-
-        // Push the replacement glyph as the final glyph so it lands
-        // at absolute column `target_col`.
-        row.glyphs[area.index()].push(Glyph::char(ch, face_id, 0));
-    }
-
     fn write_row_metrics(row: &mut GlyphRow, pixel_y_rel: f32, height_px: f32, ascent_px: f32) {
         row.pixel_y = pixel_y_rel;
         row.height_px = height_px.max(0.0);
@@ -1065,48 +1003,6 @@ impl GlyphMatrixBuilder {
         Self::write_row_metrics(row, pixel_y_rel, height_px, ascent_px);
     }
 
-    /// Patch the last-closed window matrix so its rightmost
-    /// column shows a vertical-border glyph on every enabled row.
-    ///
-    /// Mirrors GNU `src/dispnew.c::build_frame_matrix_from_leaf_window`
-    /// (2568-2697), which — for every window that is not the
-    /// rightmost in the frame — takes the window's row slice and
-    /// overwrites its last glyph with `right_border_glyph`
-    /// (default `|`, face `VERTICAL_BORDER_FACE_ID`):
-    ///
-    ///   if (!WINDOW_RIGHTMOST_P (w))
-    ///     SET_GLYPH_FROM_CHAR (right_border_glyph, '|');
-    ///   ...
-    ///   if (GLYPH_CHAR (right_border_glyph) != 0) {
-    ///     struct glyph *border = window_row->glyphs[LAST_AREA] - 1;
-    ///     SET_CHAR_GLYPH_FROM_GLYPH (f, *border, right_border_glyph);
-    ///   }
-    ///
-    /// The window's text has already been laid out to fill all
-    /// `ncols` columns; the last glyph position is then replaced
-    /// with the border character. On TTY, the column corresponds
-    /// to one character cell.
-    ///
-    /// This helper operates on the LAST window pushed into
-    /// `self.windows`, which is the window most recently closed
-    /// by `end_window`. Callers (`engine.rs::layout_frame_rust`)
-    /// invoke this after `layout_window_rust` returns for a
-    /// non-rightmost window.
-    pub fn overwrite_last_window_right_border(&mut self, ch: char, face_id: u32) {
-        let Some(entry) = self.windows.last_mut() else {
-            return;
-        };
-        let ncols = entry.matrix.ncols;
-        if ncols == 0 {
-            return;
-        }
-        let target_col = ncols - 1;
-
-        for row in &mut entry.matrix.rows {
-            Self::pad_row_and_write_glyph(row, target_col, ch, face_id, GlyphArea::RightMargin);
-        }
-    }
-
     pub(crate) fn with_current_window_row_mut<R>(
         &mut self,
         row_idx: usize,
@@ -1120,6 +1016,14 @@ impl GlyphMatrixBuilder {
             return None;
         };
         Some(f(row, ncols))
+    }
+
+    pub(crate) fn with_last_window_rows_mut<R>(
+        &mut self,
+        f: impl FnOnce(&mut [GlyphRow], usize) -> R,
+    ) -> Option<R> {
+        let entry = self.windows.last_mut()?;
+        Some(f(&mut entry.matrix.rows, entry.matrix.ncols))
     }
 
     pub fn current_window_row_enabled(&self, row_idx: usize) -> bool {

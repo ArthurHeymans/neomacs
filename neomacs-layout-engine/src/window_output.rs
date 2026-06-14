@@ -22,7 +22,7 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::glyph_matrix::GlyphArea;
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
@@ -34,6 +34,7 @@ use std::collections::HashMap;
 
 const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
 const RIGHT_EDGE_MARKER_SOURCE_ID: u64 = 0x7265_6467;
+const RIGHT_BORDER_SOURCE_ID: u64 = 0x7262_6f72;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
@@ -170,6 +171,13 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) matrix_cols: usize,
     pub(crate) column: TextWindowRightEdgeMarkerColumn,
     pub(crate) row_flags: &'a DisplayRowFlags,
+    pub(crate) face_id: u32,
+    pub(crate) char_width: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowRightBorder {
+    pub(crate) ch: char,
     pub(crate) face_id: u32,
     pub(crate) char_width: f32,
 }
@@ -470,14 +478,14 @@ fn line_number_margin_stretch_item(
     )
 }
 
-fn glyph_area_glyph_count(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> usize {
+fn glyph_area_glyph_count(row: &GlyphRow) -> usize {
     row.glyphs[GlyphArea::LeftMargin.index()].len()
         + row.glyphs[GlyphArea::Text.index()].len()
         + row.glyphs[GlyphArea::RightMargin.index()].len()
 }
 
 fn current_row_text_layout(
-    row: &neomacs_display_protocol::glyph_matrix::GlyphRow,
+    row: &GlyphRow,
     width_cols: usize,
     char_width: f32,
     face_id: u32,
@@ -497,16 +505,29 @@ fn current_row_text_layout(
 }
 
 fn right_edge_marker_text_item(text: String, face_id: u32, start_offset: usize) -> DisplayItem {
+    synthetic_window_marker_text_item(RIGHT_EDGE_MARKER_SOURCE_ID, text, face_id, start_offset)
+}
+
+fn right_border_text_item(text: String, face_id: u32, start_offset: usize) -> DisplayItem {
+    synthetic_window_marker_text_item(RIGHT_BORDER_SOURCE_ID, text, face_id, start_offset)
+}
+
+fn synthetic_window_marker_text_item(
+    source_id: u64,
+    text: String,
+    face_id: u32,
+    start_offset: usize,
+) -> DisplayItem {
     let end_offset = start_offset.saturating_add(text.chars().count());
     DisplayItem::new(
-        SourceSpan::synthetic(RIGHT_EDGE_MARKER_SOURCE_ID, start_offset, end_offset),
+        SourceSpan::synthetic(source_id, start_offset, end_offset),
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     )
 }
 
 fn append_right_edge_marker_text(
-    row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow,
+    row: &mut GlyphRow,
     layout: &DisplayRowLayout,
     text: String,
     face_id: u32,
@@ -522,8 +543,26 @@ fn append_right_edge_marker_text(
     ));
 }
 
+fn append_right_border_text(
+    row: &mut GlyphRow,
+    layout: &DisplayRowLayout,
+    area: GlyphArea,
+    text: String,
+    face_id: u32,
+    source_offset: usize,
+) {
+    if text.is_empty() {
+        return;
+    }
+    DisplayRowWriter::for_area(layout, row, area).push_item(right_border_text_item(
+        text,
+        face_id,
+        source_offset,
+    ));
+}
+
 fn install_right_edge_marker_into_row(
-    row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow,
+    row: &mut GlyphRow,
     target_col: usize,
     marker: char,
     face_id: u32,
@@ -557,6 +596,81 @@ fn install_right_edge_marker_into_row(
         source_offset = source_offset.saturating_add(padding_cols);
     }
     append_right_edge_marker_text(row, &layout, marker.to_string(), face_id, source_offset);
+}
+
+fn install_right_border_into_row(
+    row: &mut GlyphRow,
+    target_col: usize,
+    request: TextWindowRightBorder,
+    matrix_cols: usize,
+) {
+    if matrix_cols == 0 {
+        return;
+    }
+
+    let prior_displays_text = row.displays_text;
+    row.enabled = true;
+    let target_col = target_col.min(matrix_cols - 1);
+    let preserved_trailing = if row.glyphs[GlyphArea::Text.index()]
+        .last()
+        .is_some_and(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '$' }))
+    {
+        row.glyphs[GlyphArea::Text.index()].pop()
+    } else {
+        None
+    };
+    let preserved_cols = usize::from(preserved_trailing.is_some());
+    let before_final_cols = target_col.saturating_sub(preserved_cols);
+    while glyph_area_glyph_count(row) > before_final_cols {
+        let text_area = &mut row.glyphs[GlyphArea::Text.index()];
+        if text_area.is_empty() {
+            break;
+        }
+        text_area.pop();
+    }
+
+    let layout = current_row_text_layout(row, matrix_cols, request.char_width, request.face_id);
+    let mut source_offset = 0usize;
+    let leading_padding = before_final_cols.saturating_sub(glyph_area_glyph_count(row));
+    if leading_padding > 0 {
+        append_right_border_text(
+            row,
+            &layout,
+            GlyphArea::Text,
+            " ".repeat(leading_padding),
+            request.face_id,
+            source_offset,
+        );
+        source_offset = source_offset.saturating_add(leading_padding);
+    }
+
+    if let Some(glyph) = preserved_trailing {
+        row.glyphs[GlyphArea::Text.index()].push(glyph);
+        source_offset = source_offset.saturating_add(preserved_cols);
+    }
+
+    let trailing_padding = target_col.saturating_sub(glyph_area_glyph_count(row));
+    if trailing_padding > 0 {
+        append_right_border_text(
+            row,
+            &layout,
+            GlyphArea::Text,
+            " ".repeat(trailing_padding),
+            request.face_id,
+            source_offset,
+        );
+        source_offset = source_offset.saturating_add(trailing_padding);
+    }
+
+    append_right_border_text(
+        row,
+        &layout,
+        GlyphArea::RightMargin,
+        request.ch.to_string(),
+        request.face_id,
+        source_offset,
+    );
+    row.displays_text = prior_displays_text;
 }
 
 pub(crate) fn emit_text_window_line_number_margin(
@@ -701,6 +815,21 @@ pub(crate) fn install_text_window_right_edge_markers(
             );
         });
     }
+}
+
+pub(crate) fn install_last_window_right_border(
+    builder: &mut GlyphMatrixBuilder,
+    request: TextWindowRightBorder,
+) {
+    builder.with_last_window_rows_mut(|rows, matrix_cols| {
+        if matrix_cols == 0 {
+            return;
+        }
+        let target_col = matrix_cols - 1;
+        for row in rows {
+            install_right_border_into_row(row, target_col, request, matrix_cols);
+        }
+    });
 }
 
 pub(crate) trait DisplayProgressSink {

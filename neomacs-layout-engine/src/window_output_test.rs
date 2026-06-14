@@ -11,6 +11,7 @@ use super::TextWindowCursorEffects;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
 use super::TextWindowLineNumberMargin;
+use super::TextWindowRightBorder;
 use super::TextWindowRightEdgeMarkerColumn;
 use super::TextWindowRightEdgeMarkers;
 use super::WindowOutputEmitter;
@@ -21,6 +22,7 @@ use super::emit_text_matrix_row_transition_with_limit;
 use super::emit_text_window_line_number_margin;
 use super::finish_and_end_text_matrix_row_output;
 use super::finish_text_matrix_row_output;
+use super::install_last_window_right_border;
 use super::install_text_window_cursor_effects;
 use super::install_text_window_right_edge_markers;
 use super::mark_current_text_row_truncated_left;
@@ -958,6 +960,148 @@ fn text_window_right_edge_markers_render_padding_and_truncation_as_text_items() 
             .iter()
             .all(|glyph| glyph.face_id == 13)
     );
+}
+
+#[test]
+fn text_window_right_border_pads_and_replaces_text_with_row_items() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for ch in "0123456789".chars() {
+        write_char_to_current_row(&mut builder, ch, 0, 0);
+    }
+    builder.end_row();
+    builder.begin_row(1, GlyphRowRole::Text);
+    for ch in "abcde".chars() {
+        write_char_to_current_row(&mut builder, ch, 0, 0);
+    }
+    builder.end_row();
+    builder.end_window();
+
+    install_last_window_right_border(
+        &mut builder,
+        TextWindowRightBorder {
+            ch: '|',
+            face_id: 99,
+            char_width: 8.0,
+        },
+    );
+
+    let state = builder.finish(20, 5, 8.0, 16.0);
+    let matrix = &state.window_matrices[0].matrix;
+    let row0_text = &matrix.rows[0].glyphs[GlyphArea::Text.index()];
+    let row0_right = &matrix.rows[0].glyphs[GlyphArea::RightMargin.index()];
+    let row1_text = &matrix.rows[1].glyphs[GlyphArea::Text.index()];
+    let row1_right = &matrix.rows[1].glyphs[GlyphArea::RightMargin.index()];
+    let row_chars = |glyphs: &[Glyph]| -> String {
+        glyphs
+            .iter()
+            .map(|glyph| match &glyph.glyph_type {
+                GlyphType::Char { ch } => *ch,
+                _ => '?',
+            })
+            .collect()
+    };
+
+    assert_eq!(row0_text.len(), 9);
+    assert_eq!(row_chars(row0_text), "012345678");
+    assert_eq!(row0_right.len(), 1);
+    assert_eq!(row0_right[0].glyph_type, GlyphType::Char { ch: '|' });
+    assert_eq!(row0_right[0].face_id, 99);
+    assert_eq!(row1_text.len(), 9);
+    assert_eq!(row_chars(row1_text), "abcde    ");
+    assert_eq!(row1_right.len(), 1);
+    assert_eq!(row1_right[0].glyph_type, GlyphType::Char { ch: '|' });
+    assert_eq!(row1_right[0].face_id, 99);
+    assert_eq!(row1_text[5].face_id, 99);
+    assert_eq!(row1_text[8].face_id, 99);
+}
+
+#[test]
+fn text_window_right_border_paints_blank_rows_without_marking_text_displayed() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'A', 0, 0);
+    builder.end_row();
+    builder.begin_row(2, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'Z', 0, 0);
+    builder.end_row();
+    builder.end_window();
+
+    install_last_window_right_border(
+        &mut builder,
+        TextWindowRightBorder {
+            ch: '|',
+            face_id: 7,
+            char_width: 8.0,
+        },
+    );
+
+    let state = builder.finish(10, 3, 8.0, 16.0);
+    let matrix = &state.window_matrices[0].matrix;
+    let row0 = &matrix.rows[0].glyphs[GlyphArea::Text.index()];
+    let row0_right = &matrix.rows[0].glyphs[GlyphArea::RightMargin.index()];
+    let row1 = &matrix.rows[1].glyphs[GlyphArea::Text.index()];
+    let row1_right = &matrix.rows[1].glyphs[GlyphArea::RightMargin.index()];
+    let row2 = &matrix.rows[2].glyphs[GlyphArea::Text.index()];
+    let row2_right = &matrix.rows[2].glyphs[GlyphArea::RightMargin.index()];
+
+    assert_eq!(row0.len(), 4);
+    assert_eq!(row0_right.len(), 1);
+    assert_eq!(row1.len(), 4);
+    assert_eq!(
+        row1.iter()
+            .map(|glyph| match &glyph.glyph_type {
+                GlyphType::Char { ch } => *ch,
+                _ => '?',
+            })
+            .collect::<String>(),
+        "    "
+    );
+    assert_eq!(row1_right.len(), 1);
+    assert_eq!(row1_right[0].glyph_type, GlyphType::Char { ch: '|' });
+    assert!(!matrix.rows[1].displays_text);
+    assert_eq!(row2.len(), 4);
+    assert_eq!(row2_right.len(), 1);
+}
+
+#[test]
+fn text_window_right_border_preserves_trailing_truncation_marker() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for ch in "ABCD$".chars() {
+        write_char_to_current_row(&mut builder, ch, 0, 0);
+    }
+    builder.end_row();
+    builder.end_window();
+
+    install_last_window_right_border(
+        &mut builder,
+        TextWindowRightBorder {
+            ch: '|',
+            face_id: 21,
+            char_width: 8.0,
+        },
+    );
+
+    let state = builder.finish(5, 1, 8.0, 16.0);
+    let matrix = &state.window_matrices[0].matrix;
+    let row0_text = &matrix.rows[0].glyphs[GlyphArea::Text.index()];
+    let row0_right = &matrix.rows[0].glyphs[GlyphArea::RightMargin.index()];
+    let row0_chars: String = row0_text
+        .iter()
+        .map(|glyph| match &glyph.glyph_type {
+            GlyphType::Char { ch } => *ch,
+            _ => '?',
+        })
+        .collect();
+
+    assert_eq!(row0_chars, "ABC$");
+    assert_eq!(row0_right.len(), 1);
+    assert_eq!(row0_right[0].glyph_type, GlyphType::Char { ch: '|' });
+    assert_eq!(row0_right[0].face_id, 21);
 }
 
 #[test]

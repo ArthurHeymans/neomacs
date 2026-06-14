@@ -23,10 +23,11 @@ use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
     ChromeRowOutput, TextWindowBegin, TextWindowCursor, TextWindowCursorEffects,
     TextWindowDecorativeCursor, TextWindowDisplayRange, TextWindowLineNumberMargin,
-    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
-    emit_text_window_line_number_margin, finish_text_matrix_row_output,
-    finish_text_window_output_rows, install_text_window_cursor_effects,
+    TextWindowRightBorder, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    current_text_window_cluster_tail, emit_text_window_line_number_margin,
+    finish_text_matrix_row_output, finish_text_window_output_rows,
+    install_last_window_right_border, install_text_window_cursor_effects,
     install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
     publish_text_window_cursor, publish_text_window_decorative_cursor,
     record_text_window_display_range,
@@ -1042,8 +1043,14 @@ impl LayoutEngine {
                             );
                         self.matrix_builder
                             .insert_face(border_face_id, realized_face.render_face());
-                        self.matrix_builder
-                            .overwrite_last_window_right_border('|', border_face_id);
+                        install_last_window_right_border(
+                            &mut self.matrix_builder,
+                            TextWindowRightBorder {
+                                ch: '|',
+                                face_id: border_face_id,
+                                char_width: frame_params.char_width,
+                            },
+                        );
                     }
                 }
 
