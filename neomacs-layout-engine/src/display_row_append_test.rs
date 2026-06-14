@@ -2191,6 +2191,34 @@ fn buffer_text_source_append_context_appends_source_char() {
         prepared_append.overflow_decision('a', 80.0, false, WordWrapRenderState::new(false)),
         BufferTextRowOverflowDecision::Fits
     );
+    assert!(matches!(
+        prepared_append.overflow_action('a', 80.0, false, WordWrapRenderState::new(false)),
+        BufferTextSourceCharOverflowAction::Fits
+    ));
+    assert!(matches!(
+        prepared_append.overflow_action('a', 4.0, true, WordWrapRenderState::new(false)),
+        BufferTextSourceCharOverflowAction::Truncate { .. }
+    ));
+    assert!(matches!(
+        prepared_append.overflow_action('a', 4.0, false, WordWrapRenderState::new(false)),
+        BufferTextSourceCharOverflowAction::CharacterWrap { .. }
+    ));
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    word_wrap.record_candidate(
+        'a',
+        0,
+        0,
+        2,
+        (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
+    );
+    assert!(matches!(
+        prepared_append.overflow_action('a', 4.0, false, word_wrap),
+        BufferTextSourceCharOverflowAction::WordWrap { break_candidate, .. }
+            if break_candidate.byte_idx() == 0
+                && break_candidate.charpos() == 0
+                && break_candidate.display_point_count() == 2
+    ));
     let (_progress, end) = prepared_append
         .append_to_text_row(
             &append_context,
@@ -2834,6 +2862,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         BufferTextSourceSpecialDisplayKind::Nobreak
     );
     assert_eq!(prepared_append.overflow_decision(0.0, 80.0, false), None);
+    assert_eq!(prepared_append.overflow_action(0.0, 80.0, false), None);
     let mut params = test_display_space_window_params();
     params.nobreak_char_fg = 0x00ff00;
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
@@ -2928,6 +2957,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         BufferTextSourceSpecialDisplayKind::Glyphless
     );
     assert_eq!(prepared_append.overflow_decision(0.0, 80.0, false), None);
+    assert_eq!(prepared_append.overflow_action(0.0, 80.0, false), None);
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
     let append_policy = prepared_append
         .prepare_append_policy(&test_display_space_window_params(), &mut policy_face_ids);

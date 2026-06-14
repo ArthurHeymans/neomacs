@@ -35,7 +35,8 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, HitRowRangeTracker, SpecialTextRowOverflowDecision,
-    TextRowTransitionPrefixAction, TrailingWhitespaceRenderState, WordWrapRenderState,
+    TextRowTransitionPrefixAction, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
+    WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -271,6 +272,12 @@ pub(crate) struct DisplayRowOverflowTransitionRequest<'a> {
     max_rows: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowOverflowTransitionPlan {
+    kind: DisplayRowOverflowTransitionKind,
+    state_policy: TextRowTransitionStatePolicy,
+}
+
 impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
     pub(crate) fn new(target: DisplayRowBoundaryTarget<'a>, max_rows: usize) -> Self {
         Self { target, max_rows }
@@ -356,6 +363,64 @@ impl<'a> DisplayRowLineBreakTransitionRequest<'a> {
             output_emitter,
             evaluator,
         )
+    }
+}
+
+impl DisplayRowOverflowTransitionPlan {
+    fn new(
+        kind: DisplayRowOverflowTransitionKind,
+        state_policy: TextRowTransitionStatePolicy,
+    ) -> Self {
+        Self { kind, state_policy }
+    }
+
+    fn truncation(state_policy: TextRowTransitionStatePolicy) -> Self {
+        Self::new(DisplayRowOverflowTransitionKind::Truncation, state_policy)
+    }
+
+    fn visual_wrap(state_policy: TextRowTransitionStatePolicy) -> Self {
+        Self::new(DisplayRowOverflowTransitionKind::VisualWrap, state_policy)
+    }
+
+    pub(crate) fn state_policy(self) -> TextRowTransitionStatePolicy {
+        self.state_policy
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn request<'a>(
+        self,
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+        max_rows: usize,
+    ) -> DisplayRowOverflowTransitionRequest<'a> {
+        match self.kind {
+            DisplayRowOverflowTransitionKind::Truncation => {
+                DisplayRowOverflowTransitionRequest::truncation(
+                    hit_range,
+                    defaults,
+                    row_base,
+                    col,
+                    x,
+                    row_y_recording,
+                    max_rows,
+                )
+            }
+            DisplayRowOverflowTransitionKind::VisualWrap => {
+                DisplayRowOverflowTransitionRequest::visual_wrap(
+                    hit_range,
+                    defaults,
+                    row_base,
+                    col,
+                    x,
+                    row_y_recording,
+                    max_rows,
+                )
+            }
+        }
     }
 }
 
@@ -2632,6 +2697,45 @@ impl BufferTextPreparedSourceCharAppend {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum BufferTextSourceCharOverflowAction {
+    Fits,
+    Truncate {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+    WordWrap {
+        break_candidate: WordWrapBreakCandidate,
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+    CharacterWrap {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+}
+
+impl BufferTextSourceCharOverflowAction {
+    fn for_decision(decision: BufferTextRowOverflowDecision) -> Self {
+        match decision {
+            BufferTextRowOverflowDecision::Fits => Self::Fits,
+            BufferTextRowOverflowDecision::Truncate => Self::Truncate {
+                transition: DisplayRowOverflowTransitionPlan::truncation(
+                    TextRowTransitionStatePolicy::truncation(),
+                ),
+            },
+            BufferTextRowOverflowDecision::WordWrap { break_candidate } => Self::WordWrap {
+                break_candidate,
+                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    TextRowTransitionStatePolicy::visual_wrap(),
+                ),
+            },
+            BufferTextRowOverflowDecision::CharacterWrap => Self::CharacterWrap {
+                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    TextRowTransitionStatePolicy::character_wrap(),
+                ),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceCharPreparedAppend {
     plan: BufferTextSourceCharAppendPlan,
 }
@@ -2664,6 +2768,21 @@ impl BufferTextSourceCharPreparedAppend {
             truncate_lines,
             word_wrap,
         )
+    }
+
+    pub(crate) fn overflow_action(
+        self,
+        ch: char,
+        right_edge_px: f32,
+        truncate_lines: bool,
+        word_wrap: WordWrapRenderState,
+    ) -> BufferTextSourceCharOverflowAction {
+        BufferTextSourceCharOverflowAction::for_decision(self.overflow_decision(
+            ch,
+            right_edge_px,
+            truncate_lines,
+            word_wrap,
+        ))
     }
 
     pub(crate) fn cursor_slot_width(self) -> CapturedCursorSlotWidth {
@@ -3107,6 +3226,35 @@ pub(crate) struct BufferTextSpecialSourceCharPreparedAppend {
     measured_width_px: Option<f32>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum BufferTextSpecialSourceCharOverflowAction {
+    Fits,
+    Truncate {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+    Wrap {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+}
+
+impl BufferTextSpecialSourceCharOverflowAction {
+    fn for_decision(decision: SpecialTextRowOverflowDecision) -> Self {
+        match decision {
+            SpecialTextRowOverflowDecision::Fits => Self::Fits,
+            SpecialTextRowOverflowDecision::Truncate => Self::Truncate {
+                transition: DisplayRowOverflowTransitionPlan::truncation(
+                    TextRowTransitionStatePolicy::special_truncation(),
+                ),
+            },
+            SpecialTextRowOverflowDecision::Wrap => Self::Wrap {
+                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    TextRowTransitionStatePolicy::special_visual_wrap(),
+                ),
+            },
+        }
+    }
+}
+
 impl BufferTextSpecialSourceCharPreparedAppend {
     #[cfg(test)]
     pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
@@ -3141,6 +3289,17 @@ impl BufferTextSpecialSourceCharPreparedAppend {
             self.measured_width_px()?,
             right_edge_px,
             truncate_lines,
+        ))
+    }
+
+    pub(crate) fn overflow_action(
+        &self,
+        x_px: f32,
+        right_edge_px: f32,
+        truncate_lines: bool,
+    ) -> Option<BufferTextSpecialSourceCharOverflowAction> {
+        Some(BufferTextSpecialSourceCharOverflowAction::for_decision(
+            self.overflow_decision(x_px, right_edge_px, truncate_lines)?,
         ))
     }
 

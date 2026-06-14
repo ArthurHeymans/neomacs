@@ -62,11 +62,12 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceChar, DisplayPropertyReplacementAppendResolveRequest,
-    DisplayRowLineBreakTransitionRequest, DisplayRowOverflowTransitionRequest,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
-    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextMarker,
-    SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest, render_overlay_string_batch,
+    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
+    BufferTextSpecialSourceCharOverflowAction, DisplayPropertyReplacementAppendResolveRequest,
+    DisplayRowLineBreakTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
+    SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
+    render_overlay_string_batch,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -81,10 +82,9 @@ use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayR
 #[cfg(test)]
 use crate::display_row_walk_state::WordWrapBreakCandidate;
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
-    HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
-    SpecialTextRowOverflowDecision, TextPropertyScanCheckpoints, TextRowTransitionStatePolicy,
-    TrailingWhitespaceRenderState, WordWrapRenderState,
+    ActiveDisplayPropertySpan, BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker,
+    HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
+    TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapRenderState,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos, skip_to_newline,
@@ -2694,14 +2694,14 @@ impl LayoutEngine {
             );
             let prepared_append = match prepared_append {
                 BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
-                    if let Some(overflow_decision) = special_prepared_append.overflow_decision(
+                    if let Some(overflow_action) = special_prepared_append.overflow_action(
                         x,
                         text_append_surface.full_text_right_edge(),
                         params.truncate_lines,
                     ) {
-                        match overflow_decision {
-                            SpecialTextRowOverflowDecision::Fits => {}
-                            SpecialTextRowOverflowDecision::Truncate => {
+                        match overflow_action {
+                            BufferTextSpecialSourceCharOverflowAction::Fits => {}
+                            BufferTextSpecialSourceCharOverflowAction::Truncate { transition } => {
                                 // Same byte_idx/charpos desync as the main-char
                                 // truncation path: byte_idx is past the overflowing
                                 // special char, but charpos hasn't been incremented
@@ -2712,8 +2712,8 @@ impl LayoutEngine {
                                 }
                                 x = content_x;
                                 row_extend.clear();
-                                let row_transition =
-                                    DisplayRowOverflowTransitionRequest::truncation(
+                                let row_transition = transition
+                                    .request(
                                         hit_row_range.range_to(charpos),
                                         row_geometry_defaults,
                                         text_matrix_row_base,
@@ -2739,7 +2739,7 @@ impl LayoutEngine {
                                 col = 0;
                                 prefix_request.apply_transition_prefix_action(
                                     has_prefix,
-                                    TextRowTransitionStatePolicy::special_truncation().apply(
+                                    transition.state_policy().apply(
                                         &mut line_numbers,
                                         &mut hscroll_skip,
                                         &mut word_wrap,
@@ -2748,19 +2748,18 @@ impl LayoutEngine {
                                 );
                                 continue;
                             }
-                            SpecialTextRowOverflowDecision::Wrap => {
+                            BufferTextSpecialSourceCharOverflowAction::Wrap { transition } => {
                                 x = content_x;
                                 row_extend.clear();
-                                let boundary_request =
-                                    DisplayRowOverflowTransitionRequest::visual_wrap(
-                                        hit_row_range.range_to(charpos),
-                                        row_geometry_defaults,
-                                        text_matrix_row_base,
-                                        col,
-                                        x,
-                                        row_y_positions.recording(),
-                                        max_rows,
-                                    );
+                                let boundary_request = transition.request(
+                                    hit_row_range.range_to(charpos),
+                                    row_geometry_defaults,
+                                    text_matrix_row_base,
+                                    col,
+                                    x,
+                                    row_y_positions.recording(),
+                                    max_rows,
+                                );
                                 hit_row_range.advance_to(charpos);
                                 let row_transition = boundary_request.emit(
                                     &mut row_geometry,
@@ -2777,7 +2776,7 @@ impl LayoutEngine {
                                 col = 0;
                                 prefix_request.apply_transition_prefix_action(
                                     has_prefix,
-                                    TextRowTransitionStatePolicy::special_visual_wrap().apply(
+                                    transition.state_policy().apply(
                                         &mut line_numbers,
                                         &mut hscroll_skip,
                                         &mut word_wrap,
@@ -2819,14 +2818,14 @@ impl LayoutEngine {
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
             prepared_append.update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx);
-            match prepared_append.overflow_decision(
+            match prepared_append.overflow_action(
                 ch,
                 text_append_surface.right_edge(),
                 params.truncate_lines,
                 word_wrap,
             ) {
-                BufferTextRowOverflowDecision::Fits => {}
-                BufferTextRowOverflowDecision::Truncate => {
+                BufferTextSourceCharOverflowAction::Fits => {}
+                BufferTextSourceCharOverflowAction::Truncate { transition } => {
                     // The current char has been decoded and `byte_idx` is
                     // already past it, but `charpos` is not yet incremented
                     // (that happens after the would-be push below). Account
@@ -2840,31 +2839,32 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowOverflowTransitionRequest::truncation(
-                        hit_row_range.range_to(charpos),
-                        row_geometry_defaults,
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        row_y_positions.recording(),
-                        max_rows,
-                    )
-                    .emit(
-                        &mut row_geometry,
-                        &mut row_flags,
-                        row_limit,
-                        &mut hit_rows,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                    );
+                    let row_transition = transition
+                        .request(
+                            hit_row_range.range_to(charpos),
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                            max_rows,
+                        )
+                        .emit(
+                            &mut row_geometry,
+                            &mut row_flags,
+                            row_limit,
+                            &mut hit_rows,
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                        );
                     if row_transition.is_exhausted() {
                         break;
                     }
                     col = 0;
                     prefix_request.apply_transition_prefix_action(
                         has_prefix,
-                        TextRowTransitionStatePolicy::truncation().apply(
+                        transition.state_policy().apply(
                             &mut line_numbers,
                             &mut hscroll_skip,
                             &mut word_wrap,
@@ -2873,8 +2873,9 @@ impl LayoutEngine {
                     );
                     continue;
                 }
-                BufferTextRowOverflowDecision::WordWrap {
+                BufferTextSourceCharOverflowAction::WordWrap {
                     break_candidate: wrap_break,
+                    transition,
                 } => {
                     // Word-wrap: rewind to last break point
                     output_emitter.truncate_display_points(wrap_break.display_point_count());
@@ -2891,24 +2892,25 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowOverflowTransitionRequest::visual_wrap(
-                        hit_row_range.range_to(charpos),
-                        row_geometry_defaults,
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        row_y_positions.recording(),
-                        max_rows,
-                    )
-                    .emit(
-                        &mut row_geometry,
-                        &mut row_flags,
-                        row_limit,
-                        &mut hit_rows,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                    );
+                    let row_transition = transition
+                        .request(
+                            hit_row_range.range_to(charpos),
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                            max_rows,
+                        )
+                        .emit(
+                            &mut row_geometry,
+                            &mut row_flags,
+                            row_limit,
+                            &mut hit_rows,
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                        );
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -2916,7 +2918,7 @@ impl LayoutEngine {
                     hit_row_range.advance_to(charpos);
                     prefix_request.apply_transition_prefix_action(
                         has_prefix,
-                        TextRowTransitionStatePolicy::visual_wrap().apply(
+                        transition.state_policy().apply(
                             &mut line_numbers,
                             &mut hscroll_skip,
                             &mut word_wrap,
@@ -2932,36 +2934,37 @@ impl LayoutEngine {
                     }
                     continue;
                 }
-                BufferTextRowOverflowDecision::CharacterWrap => {
+                BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
                     // Character wrap (no break point available)
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowOverflowTransitionRequest::visual_wrap(
-                        hit_row_range.range_to(charpos),
-                        row_geometry_defaults,
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        row_y_positions.recording(),
-                        max_rows,
-                    )
-                    .emit(
-                        &mut row_geometry,
-                        &mut row_flags,
-                        row_limit,
-                        &mut hit_rows,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                    );
+                    let row_transition = transition
+                        .request(
+                            hit_row_range.range_to(charpos),
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
+                            max_rows,
+                        )
+                        .emit(
+                            &mut row_geometry,
+                            &mut row_flags,
+                            row_limit,
+                            &mut hit_rows,
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                        );
                     if row_transition.is_exhausted() {
                         break;
                     }
                     col = 0;
                     prefix_request.apply_transition_prefix_action(
                         has_prefix,
-                        TextRowTransitionStatePolicy::character_wrap().apply(
+                        transition.state_policy().apply(
                             &mut line_numbers,
                             &mut hscroll_skip,
                             &mut word_wrap,

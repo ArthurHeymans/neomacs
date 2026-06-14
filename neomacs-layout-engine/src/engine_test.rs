@@ -9,7 +9,9 @@ use crate::display_row_append::{
     DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
 };
 use crate::display_row_builder::DisplayGlyphMeasurer;
-use crate::display_row_walk_state::SpecialTextRowOverflowDecision;
+use crate::display_row_walk_state::{
+    BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision,
+};
 use crate::display_source::DisplayItemSource;
 use crate::display_status_line::EchoMinibufferRowsRenderRequest;
 use crate::glyph_advance::GlyphAdvanceQuantization;
