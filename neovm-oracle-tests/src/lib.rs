@@ -1849,6 +1849,7 @@ mod divergence_net_xml_dom_mail;
 mod divergence_network_mail_web;
 mod divergence_network_tls_url;
 mod divergence_obarray_symbol_deep;
+mod divergence_org_mode;
 mod divergence_overlay_deep;
 mod divergence_overlay_face_combo;
 mod divergence_overlay_face_combo2;
