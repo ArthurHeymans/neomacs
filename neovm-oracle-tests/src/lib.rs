@@ -1844,6 +1844,7 @@ mod divergence_minibuf_completion_ring;
 mod divergence_misc_builtins;
 mod divergence_misc_remaining;
 mod divergence_minibuffer;
+mod divergence_minibuffer2;
 mod divergence_mode_line_misc;
 mod divergence_modeline_modes_deep;
 mod divergence_motion_search_deep;
