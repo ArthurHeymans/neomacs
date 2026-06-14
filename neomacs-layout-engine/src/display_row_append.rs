@@ -33,8 +33,9 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit,
-    DisplayRowTextPosition, DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowTextPosition,
+    DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row_walk_state::{HitRowRangeTracker, TextRowTransitionPrefixAction};
 use crate::display_source::{
@@ -183,6 +184,23 @@ pub(crate) struct DisplayRowBoundaryTransitionRequest<'a> {
     max_rows: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayRowOverflowTransitionKind {
+    Truncation,
+    VisualWrap,
+}
+
+pub(crate) struct DisplayRowOverflowTransitionRequest<'a> {
+    kind: DisplayRowOverflowTransitionKind,
+    hit_range: DisplayRowHitRange,
+    defaults: DisplayRowGeometryDefaults,
+    row_base: usize,
+    col: usize,
+    x: f32,
+    row_y_recording: DisplayRowYRecording<'a>,
+    max_rows: usize,
+}
+
 impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
     pub(crate) fn new(target: DisplayRowBoundaryTarget<'a>, max_rows: usize) -> Self {
         Self { target, max_rows }
@@ -205,6 +223,113 @@ impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
             geometry_transition,
             self.max_rows,
         )
+    }
+}
+
+impl<'a> DisplayRowOverflowTransitionRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn truncation(
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            kind: DisplayRowOverflowTransitionKind::Truncation,
+            hit_range,
+            defaults,
+            row_base,
+            col,
+            x,
+            row_y_recording,
+            max_rows,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn visual_wrap(
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            kind: DisplayRowOverflowTransitionKind::VisualWrap,
+            hit_range,
+            defaults,
+            row_base,
+            col,
+            x,
+            row_y_recording,
+            max_rows,
+        }
+    }
+
+    fn boundary_target(self) -> DisplayRowBoundaryTarget<'a> {
+        match self.kind {
+            DisplayRowOverflowTransitionKind::Truncation => DisplayRowBoundaryTarget::truncation(
+                self.hit_range,
+                self.defaults,
+                self.row_base,
+                self.col,
+                self.x,
+                self.row_y_recording,
+            ),
+            DisplayRowOverflowTransitionKind::VisualWrap => DisplayRowBoundaryTarget::visual_wrap(
+                self.hit_range,
+                self.defaults,
+                self.row_base,
+                self.col,
+                self.x,
+                self.row_y_recording,
+            ),
+        }
+    }
+
+    pub(crate) fn emit(
+        self,
+        row_geometry: &mut DisplayRowGeometryState,
+        row_flags: &mut DisplayRowFlags,
+        row_limit: DisplayRowLimit,
+        hit_rows: &mut Vec<HitRow>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+    ) -> TextMatrixRowTransition {
+        match self.kind {
+            DisplayRowOverflowTransitionKind::Truncation => {
+                row_geometry.mark_current_row_flag_kind(
+                    row_flags,
+                    DisplayRowFlagKind::Truncated,
+                    row_limit,
+                );
+            }
+            DisplayRowOverflowTransitionKind::VisualWrap => {
+                row_geometry.mark_current_row_flag_kind(
+                    row_flags,
+                    DisplayRowFlagKind::Continued,
+                    row_limit,
+                );
+            }
+        }
+        let kind = self.kind;
+        let max_rows = self.max_rows;
+        let transition = DisplayRowBoundaryTransitionRequest::new(self.boundary_target(), max_rows)
+            .emit(row_geometry, hit_rows, builder, output_emitter, evaluator);
+        if kind == DisplayRowOverflowTransitionKind::VisualWrap && !transition.is_exhausted() {
+            row_geometry.mark_current_row_flag_kind(
+                row_flags,
+                DisplayRowFlagKind::Continuation,
+                row_limit,
+            );
+        }
+        transition
     }
 }
 

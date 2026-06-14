@@ -59,9 +59,9 @@ use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
     DisplayPropertyReplacementAppendResolveRequest, DisplayRowBoundaryTransitionRequest,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
-    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextAppendRequest,
-    SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
+    DisplayRowOverflowTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
+    SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
     TextWindowAppendSurfaceRequest, render_overlay_string_batch,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
@@ -2694,11 +2694,6 @@ impl LayoutEngine {
                 ) {
                     SpecialTextRowOverflowDecision::Fits => {}
                     SpecialTextRowOverflowDecision::Truncate => {
-                        row_geometry.mark_current_row_flag_kind(
-                            &mut row_flags,
-                            DisplayRowFlagKind::Truncated,
-                            row_limit,
-                        );
                         // Same byte_idx/charpos desync as the main-char
                         // truncation path: byte_idx is past the overflowing
                         // control char, but charpos hasn't been incremented
@@ -2710,19 +2705,19 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend.clear();
                         // Record hit-test row (wrap/truncation break)
-                        let row_transition = DisplayRowBoundaryTransitionRequest::new(
-                            DisplayRowBoundaryTarget::truncation(
-                                hit_row_range.range_to(charpos),
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                            ),
+                        let row_transition = DisplayRowOverflowTransitionRequest::truncation(
+                            hit_row_range.range_to(charpos),
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
                             max_rows,
                         )
                         .emit(
                             &mut row_geometry,
+                            &mut row_flags,
+                            row_limit,
                             &mut hit_rows,
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -2746,28 +2741,23 @@ impl LayoutEngine {
                         continue;
                     }
                     SpecialTextRowOverflowDecision::Wrap => {
-                        row_geometry.mark_current_row_flag_kind(
-                            &mut row_flags,
-                            DisplayRowFlagKind::Continued,
-                            row_limit,
-                        );
                         x = content_x;
                         row_extend.clear();
-                        let boundary_request = DisplayRowBoundaryTransitionRequest::new(
-                            DisplayRowBoundaryTarget::visual_wrap(
-                                hit_row_range.range_to(charpos),
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                            ),
+                        let boundary_request = DisplayRowOverflowTransitionRequest::visual_wrap(
+                            hit_row_range.range_to(charpos),
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            row_y_positions.recording(),
                             max_rows,
                         );
                         // Record hit-test row (wrap/truncation break)
                         hit_row_range.advance_to(charpos);
                         let row_transition = boundary_request.emit(
                             &mut row_geometry,
+                            &mut row_flags,
+                            row_limit,
                             &mut hit_rows,
                             &mut self.matrix_builder,
                             &mut output_emitter,
@@ -2785,11 +2775,6 @@ impl LayoutEngine {
                                 &mut word_wrap,
                                 &mut trailing_whitespace,
                             ),
-                        );
-                        row_geometry.mark_current_row_flag_kind(
-                            &mut row_flags,
-                            DisplayRowFlagKind::Continuation,
-                            row_limit,
                         );
                         if !row_geometry.current_row_is_visible(row_visibility_limit) {
                             break;
@@ -2917,11 +2902,6 @@ impl LayoutEngine {
             ) {
                 BufferTextRowOverflowDecision::Fits => {}
                 BufferTextRowOverflowDecision::Truncate => {
-                    row_geometry.mark_current_row_flag_kind(
-                        &mut row_flags,
-                        DisplayRowFlagKind::Truncated,
-                        row_limit,
-                    );
                     // The current char has been decoded and `byte_idx` is
                     // already past it, but `charpos` is not yet incremented
                     // (that happens after the would-be push below). Account
@@ -2935,19 +2915,19 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowBoundaryTransitionRequest::new(
-                        DisplayRowBoundaryTarget::truncation(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                        ),
+                    let row_transition = DisplayRowOverflowTransitionRequest::truncation(
+                        hit_row_range.range_to(charpos),
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        col,
+                        x,
+                        row_y_positions.recording(),
                         max_rows,
                     )
                     .emit(
                         &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
                         &mut hit_rows,
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -2983,27 +2963,22 @@ impl LayoutEngine {
                     charpos = wrap_break.charpos();
                     col = 0;
 
-                    row_geometry.mark_current_row_flag_kind(
-                        &mut row_flags,
-                        DisplayRowFlagKind::Continued,
-                        row_limit,
-                    );
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowBoundaryTransitionRequest::new(
-                        DisplayRowBoundaryTarget::visual_wrap(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                        ),
+                    let row_transition = DisplayRowOverflowTransitionRequest::visual_wrap(
+                        hit_row_range.range_to(charpos),
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        col,
+                        x,
+                        row_y_positions.recording(),
                         max_rows,
                     )
                     .emit(
                         &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
                         &mut hit_rows,
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -3014,11 +2989,6 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_range.advance_to(charpos);
-                    row_geometry.mark_current_row_flag_kind(
-                        &mut row_flags,
-                        DisplayRowFlagKind::Continuation,
-                        row_limit,
-                    );
                     prefix_request.apply_transition_prefix_action(
                         has_prefix,
                         TextRowTransitionStatePolicy::visual_wrap().apply(
@@ -3039,27 +3009,22 @@ impl LayoutEngine {
                 }
                 BufferTextRowOverflowDecision::CharacterWrap => {
                     // Character wrap (no break point available)
-                    row_geometry.mark_current_row_flag_kind(
-                        &mut row_flags,
-                        DisplayRowFlagKind::Continued,
-                        row_limit,
-                    );
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowBoundaryTransitionRequest::new(
-                        DisplayRowBoundaryTarget::visual_wrap(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                        ),
+                    let row_transition = DisplayRowOverflowTransitionRequest::visual_wrap(
+                        hit_row_range.range_to(charpos),
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        col,
+                        x,
+                        row_y_positions.recording(),
                         max_rows,
                     )
                     .emit(
                         &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
                         &mut hit_rows,
                         &mut self.matrix_builder,
                         &mut output_emitter,
@@ -3077,11 +3042,6 @@ impl LayoutEngine {
                             &mut word_wrap,
                             &mut trailing_whitespace,
                         ),
-                    );
-                    row_geometry.mark_current_row_flag_kind(
-                        &mut row_flags,
-                        DisplayRowFlagKind::Continuation,
-                        row_limit,
                     );
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);

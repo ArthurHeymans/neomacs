@@ -22,8 +22,8 @@ use crate::display_row_builder::{
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row_geometry::{
-    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState,
-    DisplayRowHitRange, DisplayRowYPositions,
+    DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
@@ -42,6 +42,60 @@ use std::sync::{Arc, Mutex};
 
 struct RecordingAppendImageHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
+}
+
+struct RowTransitionTestContext {
+    eval: Context,
+    output_emitter: crate::window_output::WindowOutputEmitter,
+    builder: crate::matrix_builder::GlyphMatrixBuilder,
+    defaults: DisplayRowGeometryDefaults,
+    geometry: DisplayRowGeometryState,
+    row_y_positions: DisplayRowYPositions,
+    hit_rows: Vec<crate::hit_test::HitRow>,
+    row_flags: DisplayRowFlags,
+    row_limit: DisplayRowLimit,
+}
+
+impl RowTransitionTestContext {
+    fn new(frame_name: &str) -> Self {
+        let mut eval = Context::new();
+        let buf_id = eval
+            .buffer_manager()
+            .current_buffer()
+            .expect("current buffer")
+            .id();
+        let frame_id = eval
+            .frame_manager_mut()
+            .create_frame(frame_name, 320, 120, buf_id);
+        let window_id = eval
+            .frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .selected_window;
+        let mut output_emitter =
+            crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+        output_emitter.begin_update(&mut eval);
+        output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+        let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+        builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 48.0), true);
+        builder.begin_row(0, GlyphRowRole::Text);
+        let defaults = DisplayRowGeometryDefaults::new(0.0, 16.0, 12.0);
+        let geometry = defaults.initial_state();
+        let max_rows = 4;
+
+        Self {
+            eval,
+            output_emitter,
+            builder,
+            defaults,
+            geometry,
+            row_y_positions: DisplayRowYPositions::with_capacity_and_first_row(max_rows, 0.0),
+            hit_rows: Vec::new(),
+            row_flags: DisplayRowFlags::new(max_rows),
+            row_limit: DisplayRowLimit { max_rows },
+        }
+    }
 }
 
 impl DisplayHost for RecordingAppendImageHost {
@@ -169,32 +223,7 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
 
 #[test]
 fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let frame_id =
-        eval.frame_manager_mut()
-            .create_frame("boundary-transition-request", 320, 120, buf_id);
-    let window_id = eval
-        .frame_manager()
-        .get(frame_id)
-        .expect("frame")
-        .selected_window;
-    let mut output_emitter =
-        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
-    output_emitter.begin_update(&mut eval);
-    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
-
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 48.0), true);
-    builder.begin_row(0, GlyphRowRole::Text);
-    let defaults = DisplayRowGeometryDefaults::new(0.0, 16.0, 12.0);
-    let mut geometry = defaults.initial_state();
-    let mut row_y_positions = DisplayRowYPositions::with_capacity_and_first_row(4, 0.0);
-    let mut hit_rows = Vec::new();
+    let mut ctx = RowTransitionTestContext::new("boundary-transition-request");
 
     let transition = DisplayRowBoundaryTransitionRequest::new(
         DisplayRowBoundaryTarget::visual_wrap(
@@ -202,28 +231,102 @@ fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
                 charpos_start: 3,
                 charpos_end: 9,
             },
-            defaults,
+            ctx.defaults,
             0,
             6,
             48.0,
-            row_y_positions.recording(),
+            ctx.row_y_positions.recording(),
         ),
         4,
     )
     .emit(
-        &mut geometry,
-        &mut hit_rows,
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
+        &mut ctx.geometry,
+        &mut ctx.hit_rows,
+        &mut ctx.builder,
+        &mut ctx.output_emitter,
+        &mut ctx.eval,
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
-    assert_eq!(geometry.row(), 1);
-    assert_eq!(hit_rows.len(), 1);
-    assert_eq!(hit_rows[0].charpos_start, 3);
-    assert_eq!(hit_rows[0].charpos_end, 9);
-    assert_eq!(row_y_positions.recorded(), &[0.0, 16.0]);
+    assert_eq!(ctx.geometry.row(), 1);
+    assert_eq!(ctx.hit_rows.len(), 1);
+    assert_eq!(ctx.hit_rows[0].charpos_start, 3);
+    assert_eq!(ctx.hit_rows[0].charpos_end, 9);
+    assert_eq!(ctx.row_y_positions.recorded(), &[0.0, 16.0]);
+}
+
+#[test]
+fn display_row_overflow_transition_request_marks_truncated_row_and_emits_boundary() {
+    let mut ctx = RowTransitionTestContext::new("overflow-truncation-request");
+
+    let transition = DisplayRowOverflowTransitionRequest::truncation(
+        DisplayRowHitRange {
+            charpos_start: 3,
+            charpos_end: 9,
+        },
+        ctx.defaults,
+        0,
+        6,
+        48.0,
+        ctx.row_y_positions.recording(),
+        4,
+    )
+    .emit(
+        &mut ctx.geometry,
+        &mut ctx.row_flags,
+        ctx.row_limit,
+        &mut ctx.hit_rows,
+        &mut ctx.builder,
+        &mut ctx.output_emitter,
+        &mut ctx.eval,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(ctx.geometry.row(), 1);
+    assert_eq!(ctx.hit_rows.len(), 1);
+    assert_eq!(ctx.hit_rows[0].charpos_start, 3);
+    assert_eq!(ctx.hit_rows[0].charpos_end, 9);
+    assert!(ctx.row_flags.is_set(0, DisplayRowFlagKind::Truncated));
+    assert!(!ctx.row_flags.is_set(0, DisplayRowFlagKind::Continued));
+    assert!(!ctx.row_flags.is_set(1, DisplayRowFlagKind::Continuation));
+    assert_eq!(ctx.row_y_positions.recorded(), &[0.0, 16.0]);
+}
+
+#[test]
+fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boundary() {
+    let mut ctx = RowTransitionTestContext::new("overflow-visual-wrap-request");
+
+    let transition = DisplayRowOverflowTransitionRequest::visual_wrap(
+        DisplayRowHitRange {
+            charpos_start: 3,
+            charpos_end: 9,
+        },
+        ctx.defaults,
+        0,
+        6,
+        48.0,
+        ctx.row_y_positions.recording(),
+        4,
+    )
+    .emit(
+        &mut ctx.geometry,
+        &mut ctx.row_flags,
+        ctx.row_limit,
+        &mut ctx.hit_rows,
+        &mut ctx.builder,
+        &mut ctx.output_emitter,
+        &mut ctx.eval,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(ctx.geometry.row(), 1);
+    assert_eq!(ctx.hit_rows.len(), 1);
+    assert_eq!(ctx.hit_rows[0].charpos_start, 3);
+    assert_eq!(ctx.hit_rows[0].charpos_end, 9);
+    assert!(ctx.row_flags.is_set(0, DisplayRowFlagKind::Continued));
+    assert!(ctx.row_flags.is_set(1, DisplayRowFlagKind::Continuation));
+    assert!(!ctx.row_flags.is_set(0, DisplayRowFlagKind::Truncated));
+    assert_eq!(ctx.row_y_positions.recorded(), &[0.0, 16.0]);
 }
 
 fn test_active_face_state(face_id: u32, char_width: f32) -> DisplayRowActiveFaceState {
