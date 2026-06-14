@@ -2070,16 +2070,17 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         request: BufferTextSpecialSourceCharMeasureRequest,
     ) -> f32 {
-        let parts = request.into_parts();
+        let range = request.range();
+        let position = request.position();
         self.measure_item_source_range_width_or_active_face_fallback_to_text_row(
             geometry,
             builder,
             evaluator,
             font_metrics,
-            parts.range,
+            range,
             face_resolver,
-            parts.special_display.into_append_item(),
-            parts.position,
+            request.into_append_item(),
+            position,
         )
     }
 
@@ -2143,17 +2144,18 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         plan: BufferTextSpecialSourceCharAppendPlan,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let parts = plan.into_parts();
+        let range = plan.range();
+        let position = plan.position();
         self.append_item_source_range_to_text_row_and_emit(
             geometry,
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            parts.range,
+            range,
             face_resolver,
-            parts.special_display.into_append_item(),
-            parts.position,
+            plan.into_append_item(),
+            position,
         )
     }
 
@@ -2201,19 +2203,18 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         request: BufferTextSourceCharAppendRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
-        let parts = request.into_parts();
         self.resolve_source_range_advance_to_text_row(
             geometry,
             state,
             builder,
             evaluator,
             font_metrics,
-            parts.text,
-            parts.byte_idx,
-            parts.range,
+            request.text(),
+            request.byte_idx(),
+            request.range(),
             face_resolver,
-            parts.position,
-            parts.cluster,
+            request.position(),
+            request.cluster(),
         )
     }
 
@@ -2311,17 +2312,16 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         plan: BufferTextSourceCharAppendPlan,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let parts = plan.into_parts();
         self.append_resolved_source_range_to_text_row(
             geometry,
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            parts.range,
+            plan.range(),
             face_resolver,
-            parts.resolved_advance,
-            parts.position,
+            plan.resolved_advance(),
+            plan.position(),
         )
     }
 }
@@ -2903,19 +2903,17 @@ pub(crate) struct BufferTextSpecialSourceCharAppendPlan {
 }
 
 impl BufferTextSpecialSourceCharAppendPlan {
-    fn into_parts(self) -> BufferTextSpecialSourceCharAppendPlanParts {
-        BufferTextSpecialSourceCharAppendPlanParts {
-            range: self.range,
-            special_display: self.special_display,
-            position: self.position,
-        }
+    fn range(&self) -> BufferTextSourceRange {
+        self.range
     }
-}
 
-struct BufferTextSpecialSourceCharAppendPlanParts {
-    range: BufferTextSourceRange,
-    special_display: BufferTextSourceSpecialDisplay,
-    position: DisplayRowPosition,
+    fn position(&self) -> DisplayRowPosition {
+        self.position
+    }
+
+    fn into_append_item(self) -> BufferTextSourceAppendItem {
+        self.special_display.into_append_item()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2926,19 +2924,17 @@ pub(crate) struct BufferTextSpecialSourceCharMeasureRequest {
 }
 
 impl BufferTextSpecialSourceCharMeasureRequest {
-    fn into_parts(self) -> BufferTextSpecialSourceCharMeasureRequestParts {
-        BufferTextSpecialSourceCharMeasureRequestParts {
-            range: self.range,
-            special_display: self.special_display,
-            position: self.position,
-        }
+    fn range(&self) -> BufferTextSourceRange {
+        self.range
     }
-}
 
-struct BufferTextSpecialSourceCharMeasureRequestParts {
-    range: BufferTextSourceRange,
-    special_display: BufferTextSourceSpecialDisplay,
-    position: DisplayRowPosition,
+    fn position(&self) -> DisplayRowPosition {
+        self.position
+    }
+
+    fn into_append_item(self) -> BufferTextSourceAppendItem {
+        self.special_display.into_append_item()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2949,24 +2945,21 @@ struct BufferTextSourceCharAppendPlan {
 }
 
 impl BufferTextSourceCharAppendPlan {
-    fn into_parts(self) -> BufferTextSourceCharAppendPlanParts {
-        BufferTextSourceCharAppendPlanParts {
-            range: self.range,
-            resolved_advance: self.resolved_advance,
-            position: self.position,
-        }
+    fn range(self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    fn resolved_advance(self) -> ResolvedBufferTextSourceAdvance {
+        self.resolved_advance
+    }
+
+    fn position(self) -> DisplayRowPosition {
+        self.position
     }
 
     fn advance_px(self) -> f32 {
         self.resolved_advance.advance_px()
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceCharAppendPlanParts {
-    range: BufferTextSourceRange,
-    resolved_advance: ResolvedBufferTextSourceAdvance,
-    position: DisplayRowPosition,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2979,14 +2972,24 @@ struct BufferTextSourceCharAppendRequest<'text> {
 }
 
 impl<'text> BufferTextSourceCharAppendRequest<'text> {
-    fn into_parts(self) -> BufferTextSourceCharAppendRequestParts<'text> {
-        BufferTextSourceCharAppendRequestParts {
-            text: self.text,
-            byte_idx: self.byte_idx,
-            range: self.range,
-            position: self.position,
-            cluster: self.cluster,
-        }
+    fn text(self) -> &'text [u8] {
+        self.text
+    }
+
+    fn byte_idx(self) -> usize {
+        self.byte_idx
+    }
+
+    fn range(self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    fn position(self) -> DisplayRowPosition {
+        self.position
+    }
+
+    fn cluster(self) -> BufferTextSourceClusterState {
+        self.cluster
     }
 
     fn append_plan(
@@ -2999,15 +3002,6 @@ impl<'text> BufferTextSourceCharAppendRequest<'text> {
             position: self.position,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceCharAppendRequestParts<'text> {
-    text: &'text [u8],
-    byte_idx: usize,
-    range: BufferTextSourceRange,
-    position: DisplayRowPosition,
-    cluster: BufferTextSourceClusterState,
 }
 
 impl BufferTextSourceSpecialDisplay {
