@@ -1282,8 +1282,10 @@ impl<'a> DisplayRowLispStringRenderRequest<'a> {
         DisplayRowLispStringSourceSessionRequest,
     ) {
         let plan = self.row_request.into_render_plan();
-        let session_request =
-            DisplayRowLispStringSourceSessionRequest::new(self.value, plan.base_face_id);
+        let session_request = DisplayRowLispStringSourceSessionRequest::for_base_face_id(
+            self.value,
+            plan.base_face_id,
+        );
         (plan, session_request)
     }
 
@@ -1432,17 +1434,30 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
 }
 
 impl DisplayRowLispStringSourceSessionRequest {
-    pub(crate) fn new(value: Value, base_face_id: u32) -> Self {
+    fn for_base_face_id(value: Value, base_face_id: u32) -> Self {
         Self {
             source_id: DisplayRowLispStringSourceId::ROOT,
             value,
             base_face_id,
         }
     }
+
+    pub(crate) fn from_base_face(
+        value: Value,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face: &ResolvedFace,
+    ) -> Self {
+        let base_face_id = if base_face.face_id != 0 {
+            base_face.face_id
+        } else {
+            face_ids.allocate()
+        };
+        Self::for_base_face_id(value, base_face_id)
+    }
 }
 
 impl<'a> DisplayRowLispStringSourceSessionRowRequest<'a> {
-    pub(crate) fn new(row_request: DisplayRowSourceRenderRequest<'a>) -> Self {
+    fn new(row_request: DisplayRowSourceRenderRequest<'a>) -> Self {
         Self { row_request }
     }
 
@@ -1454,6 +1469,7 @@ impl<'a> DisplayRowLispStringSourceSessionRowRequest<'a> {
 pub(crate) struct DisplayRowLispStringSourceSession {
     source: LispStringSourceCursor,
     state: DisplayRowSourceState,
+    base_face_id: u32,
 }
 
 impl DisplayRowLispStringSourceSession {
@@ -1466,7 +1482,18 @@ impl DisplayRowLispStringSourceSession {
         Some(Self {
             source,
             state: DisplayRowSourceState::default(),
+            base_face_id: request.base_face_id,
         })
+    }
+
+    pub(crate) fn row_request<'face>(
+        &self,
+        policy: DisplayRowSourceRequestPolicy,
+        base_face: &'face ResolvedFace,
+    ) -> DisplayRowLispStringSourceSessionRowRequest<'face> {
+        DisplayRowLispStringSourceSessionRowRequest::new(
+            policy.source_request_for_base_face_id(self.base_face_id, base_face),
+        )
     }
 
     pub(crate) fn render_next_row_with_context(

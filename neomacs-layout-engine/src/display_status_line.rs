@@ -19,11 +19,10 @@ use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmi
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
-    DisplayRowLispStringSourceSessionRequest, DisplayRowLispStringSourceSessionRowRequest,
-    DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceRequestPolicy, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind, install_measured_frame_chrome_row, install_measured_window_display_row,
-    install_rendered_display_row,
+    DisplayRowLispStringSourceSessionRequest, DisplayRowOwner, DisplayRowRenderContext,
+    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRequestPolicy, FrameChromeKind,
+    MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, install_measured_frame_chrome_row,
+    install_measured_window_display_row, install_rendered_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -744,13 +743,11 @@ impl LayoutEngine {
         };
         let matrix_cols = (text_width / char_w.max(1.0)).ceil().max(1.0) as usize;
         let special_col = matrix_cols.saturating_sub(1);
-        let base_face_id = if base_face.face_id != 0 {
-            base_face.face_id
-        } else {
-            face_ids.allocate()
-        };
-        let session_request =
-            DisplayRowLispStringSourceSessionRequest::new(echo_message, base_face_id);
+        let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
+            echo_message,
+            face_ids,
+            &base_face,
+        );
         let Some(mut source_session) = DisplayRowLispStringSourceSession::new(session_request)
         else {
             return empty_minibuffer_echo_row(y, ascent, row_height);
@@ -762,17 +759,18 @@ impl LayoutEngine {
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
         while rows.len() < max_rows {
-            let row_request = DisplayRowSourceRequestPolicy::new(
-                y + rows.len() as f32 * row_height,
-                wrap_width,
-                row_height,
-                char_w,
-                ascent,
-                DisplayTabPolicy::every(8),
-                GlyphRowRole::Minibuffer,
-            )
-            .source_request_for_base_face_id(base_face_id, &base_face);
-            let request = DisplayRowLispStringSourceSessionRowRequest::new(row_request);
+            let request = source_session.row_request(
+                DisplayRowSourceRequestPolicy::new(
+                    y + rows.len() as f32 * row_height,
+                    wrap_width,
+                    row_height,
+                    char_w,
+                    ascent,
+                    DisplayTabPolicy::every(8),
+                    GlyphRowRole::Minibuffer,
+                ),
+                &base_face,
+            );
             let Some(result) = source_session.render_next_row_with_context(
                 &mut renderer,
                 request,

@@ -695,57 +695,53 @@ fn lisp_string_source_session_renders_rows_from_typed_row_requests() {
     let mut base_face = resolver.default_face().clone();
     base_face.font_char_width = 8.0;
     base_face.font_ascent = 12.0;
-    let base_face_id = 7;
     let mut face_ids = FrameFaceIdAllocator::new(8);
-    let mut session = DisplayRowLispStringSourceSession::new(
-        DisplayRowLispStringSourceSessionRequest::new(Value::string("ABCD"), base_face_id),
-    )
-    .expect("lisp string source session");
+    let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
+        Value::string("ABCD"),
+        &mut face_ids,
+        &base_face,
+    );
+    let mut session = DisplayRowLispStringSourceSession::new(session_request)
+        .expect("lisp string source session");
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
-    let first_row_request = display_row_request_for_face(
-        DisplayRowGeometry {
-            y: 0.0,
-            width: 16.0,
-            height: 16.0,
-            char_width: 8.0,
-            ascent: 12.0,
-            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-        },
-        base_face_id,
+    let first_row_request = session.row_request(
+        DisplayRowSourceRequestPolicy::from_display_row_geometry(
+            DisplayRowGeometry {
+                y: 0.0,
+                width: 16.0,
+                height: 16.0,
+                char_width: 8.0,
+                ascent: 12.0,
+                tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+            },
+            GlyphRowRole::Minibuffer,
+        ),
         &base_face,
-        GlyphRowRole::Minibuffer,
     );
     let first = session
-        .render_next_row_with_context(
-            &mut renderer,
-            DisplayRowLispStringSourceSessionRowRequest::new(first_row_request),
-            &mut context,
-        )
+        .render_next_row_with_context(&mut renderer, first_row_request, &mut context)
         .expect("first session row");
 
     assert_eq!(first.stop, DisplayRowRenderStop::Clipped);
     assert_eq!(row_text_expanding_stretches(&first.rendered.row), "AB");
 
-    let second_row_request = display_row_request_for_face(
-        DisplayRowGeometry {
-            y: 16.0,
-            width: 16.0,
-            height: 16.0,
-            char_width: 8.0,
-            ascent: 12.0,
-            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-        },
-        base_face_id,
+    let second_row_request = session.row_request(
+        DisplayRowSourceRequestPolicy::from_display_row_geometry(
+            DisplayRowGeometry {
+                y: 16.0,
+                width: 16.0,
+                height: 16.0,
+                char_width: 8.0,
+                ascent: 12.0,
+                tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+            },
+            GlyphRowRole::Minibuffer,
+        ),
         &base_face,
-        GlyphRowRole::Minibuffer,
     );
     let second = session
-        .render_next_row_with_context(
-            &mut renderer,
-            DisplayRowLispStringSourceSessionRowRequest::new(second_row_request),
-            &mut context,
-        )
+        .render_next_row_with_context(&mut renderer, second_row_request, &mut context)
         .expect("second session row");
 
     assert_eq!(second.stop, DisplayRowRenderStop::SourceExhausted);
