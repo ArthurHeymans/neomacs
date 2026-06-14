@@ -912,6 +912,60 @@ fn buffer_text_line_break_source_action_builds_row_end_cursor_info() {
 }
 
 #[test]
+fn buffer_text_truncation_skip_action_consumes_decoded_char_and_reaches_newline() {
+    let text = b"abc\nnext";
+    let mut byte_idx = 1;
+    let mut charpos = 0;
+
+    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+        text,
+        &mut byte_idx,
+        &mut charpos,
+    );
+
+    assert!(action.reached_line_break());
+    assert_eq!(action.charpos(), 4);
+    assert_eq!(byte_idx, 4);
+    assert_eq!(charpos, 4);
+}
+
+#[test]
+fn buffer_text_truncation_skip_action_consumes_to_text_end_without_newline() {
+    let text = b"abc";
+    let mut byte_idx = 1;
+    let mut charpos = 0;
+
+    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+        text,
+        &mut byte_idx,
+        &mut charpos,
+    );
+
+    assert!(!action.reached_line_break());
+    assert_eq!(action.charpos(), 3);
+    assert_eq!(byte_idx, 3);
+    assert_eq!(charpos, 3);
+}
+
+#[test]
+fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
+    let text = "a界b\n".as_bytes();
+    let mut byte_idx = "a".len();
+    let mut charpos = 0;
+
+    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+        text,
+        &mut byte_idx,
+        &mut charpos,
+    );
+
+    assert!(action.reached_line_break());
+    assert_eq!(action.charpos(), 4);
+    assert_eq!(byte_idx, text.len());
+    assert_eq!(charpos, 4);
+}
+
+#[test]
 fn display_row_transition_prefix_context_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;

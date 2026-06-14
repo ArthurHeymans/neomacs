@@ -40,7 +40,7 @@ use crate::display_row_walk_state::{
     HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
     TextPropertyScanCheckpoints, TextRowTransitionPrefixAction, TextRowTransitionStatePolicy,
     TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
-    skip_text_to_charpos,
+    skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -4465,6 +4465,36 @@ impl BufferTextLineBreakSourceAction {
                 false,
             ),
         )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextTruncationSkipAction {
+    charpos: i64,
+    reached_line_break: bool,
+}
+
+impl BufferTextTruncationSkipAction {
+    pub(crate) fn consume_decoded_char_and_rest_of_line(
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+    ) -> Self {
+        *charpos += 1;
+        let reached_line_break = skip_to_newline(text, byte_idx, charpos);
+        Self {
+            charpos: *charpos,
+            reached_line_break,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn charpos(self) -> i64 {
+        self.charpos
+    }
+
+    pub(crate) fn reached_line_break(self) -> bool {
+        self.reached_line_break
     }
 }
 

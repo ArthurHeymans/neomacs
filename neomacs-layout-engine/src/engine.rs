@@ -64,10 +64,10 @@ use crate::display_row_append::{
     BufferSyntheticTextRenderContext, BufferTextLineBreakSourceAction,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceChar, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
-    DisplayRowTextWindowTransitionContext, DisplayRowTransitionPrefixContext, SyntheticTextMarker,
-    TextWindowAppendSurfaceRequest,
+    BufferTextSpecialSourceCharOverflowAction, BufferTextTruncationSkipAction,
+    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
+    DisplayRowTransitionPrefixContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -87,7 +87,7 @@ use crate::display_row_walk_state::{
     TrailingWhitespaceRenderState, WordWrapRenderState,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
-    skip_text_to_charpos, skip_to_newline,
+    skip_text_to_charpos,
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -2608,12 +2608,13 @@ impl LayoutEngine {
                         match overflow_action {
                             BufferTextSpecialSourceCharOverflowAction::Fits => {}
                             BufferTextSpecialSourceCharOverflowAction::Truncate { transition } => {
-                                // Same byte_idx/charpos desync as the main-char
-                                // truncation path: byte_idx is past the overflowing
-                                // special char, but charpos hasn't been incremented
-                                // for it yet. Compensate before skipping.
-                                charpos += 1;
-                                if skip_to_newline(text, &mut byte_idx, &mut charpos) {
+                                let truncation_skip =
+                                    BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+                                        text,
+                                        &mut byte_idx,
+                                        &mut charpos,
+                                    );
+                                if truncation_skip.reached_line_break() {
                                     line_numbers.advance_line();
                                 }
                                 x = content_x;
@@ -2733,14 +2734,13 @@ impl LayoutEngine {
             ) {
                 BufferTextSourceCharOverflowAction::Fits => {}
                 BufferTextSourceCharOverflowAction::Truncate { transition } => {
-                    // The current char has been decoded and `byte_idx` is
-                    // already past it, but `charpos` is not yet incremented
-                    // (that happens after the would-be push below). Account
-                    // for the consumed-but-uncounted char here so
-                    // `skip_to_newline` starts from the right offset.
-                    charpos += 1;
-                    // Skip remaining chars until newline
-                    if skip_to_newline(text, &mut byte_idx, &mut charpos) {
+                    let truncation_skip =
+                        BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+                            text,
+                            &mut byte_idx,
+                            &mut charpos,
+                        );
+                    if truncation_skip.reached_line_break() {
                         line_numbers.advance_line();
                     }
                     x = content_x;
