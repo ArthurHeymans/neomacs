@@ -773,6 +773,73 @@ fn buffer_invisible_text_scan_context_reports_ellipsis_policy() {
 }
 
 #[test]
+fn buffer_selective_display_context_skips_carriage_return_tail_to_newline() {
+    let text = b"a\rb\nc";
+    let context = BufferSelectiveDisplayContext::new(text, 1, 8);
+    let mut byte_idx = 2;
+    let mut charpos = 1;
+
+    assert!(context.hides_carriage_return_tail('\r'));
+    let action = context.skip_rest_of_line_after_carriage_return(&mut byte_idx, &mut charpos);
+
+    assert_eq!(
+        action,
+        BufferSelectiveDisplayLineTailAction::LineBreak { charpos: 4 }
+    );
+    assert!(action.is_line_break());
+    assert_eq!(action.charpos(), Some(4));
+    assert_eq!(byte_idx, 4);
+    assert_eq!(charpos, 4);
+}
+
+#[test]
+fn buffer_selective_display_context_reports_exhausted_carriage_return_tail() {
+    let text = b"a\rhidden";
+    let context = BufferSelectiveDisplayContext::new(text, 1, 8);
+    let mut byte_idx = 2;
+    let mut charpos = 1;
+
+    let action = context.skip_rest_of_line_after_carriage_return(&mut byte_idx, &mut charpos);
+
+    assert_eq!(action, BufferSelectiveDisplayLineTailAction::Exhausted);
+    assert!(!action.is_line_break());
+    assert_eq!(action.charpos(), None);
+    assert_eq!(byte_idx, text.len());
+    assert_eq!(charpos, 8);
+}
+
+#[test]
+fn buffer_selective_display_context_skips_hidden_indented_lines() {
+    let text = b"  hidden\n\talso\n visible\n";
+    let context = BufferSelectiveDisplayContext::new(text, 1, 4);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+
+    assert!(context.hides_indented_lines_after_line_break(byte_idx));
+    let hidden_lines =
+        context.skip_hidden_indented_lines_after_line_break(&mut byte_idx, &mut charpos);
+
+    assert_eq!(hidden_lines.hidden_line_count(), 2);
+    assert_eq!(byte_idx, b"  hidden\n\talso\n".len());
+    assert_eq!(charpos, b"  hidden\n\talso\n".len() as i64);
+}
+
+#[test]
+fn buffer_selective_display_context_keeps_visible_indented_line() {
+    let text = b" visible\n";
+    let context = BufferSelectiveDisplayContext::new(text, 1, 4);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+
+    let hidden_lines =
+        context.skip_hidden_indented_lines_after_line_break(&mut byte_idx, &mut charpos);
+
+    assert_eq!(hidden_lines.hidden_line_count(), 0);
+    assert_eq!(byte_idx, 0);
+    assert_eq!(charpos, 0);
+}
+
+#[test]
 fn display_row_transition_prefix_context_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;

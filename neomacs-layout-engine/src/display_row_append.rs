@@ -4264,6 +4264,148 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferSelectiveDisplayLineTailAction {
+    Exhausted,
+    LineBreak { charpos: i64 },
+}
+
+impl BufferSelectiveDisplayLineTailAction {
+    pub(crate) fn is_line_break(self) -> bool {
+        matches!(self, Self::LineBreak { .. })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn charpos(self) -> Option<i64> {
+        match self {
+            Self::LineBreak { charpos } => Some(charpos),
+            Self::Exhausted => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferSelectiveDisplayHiddenLines {
+    hidden_line_count: usize,
+}
+
+impl BufferSelectiveDisplayHiddenLines {
+    fn new(hidden_line_count: usize) -> Self {
+        Self { hidden_line_count }
+    }
+
+    pub(crate) fn hidden_line_count(self) -> usize {
+        self.hidden_line_count
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferSelectiveDisplayContext<'a> {
+    text: &'a [u8],
+    selective_display: i32,
+    tab_width: i32,
+}
+
+impl<'a> BufferSelectiveDisplayContext<'a> {
+    pub(crate) fn new(text: &'a [u8], selective_display: i32, tab_width: i32) -> Self {
+        Self {
+            text,
+            selective_display,
+            tab_width: tab_width.max(1),
+        }
+    }
+
+    pub(crate) fn hides_carriage_return_tail(self, ch: char) -> bool {
+        self.selective_display > 0 && ch == '\r'
+    }
+
+    pub(crate) fn hides_indented_lines_after_line_break(self, byte_idx: usize) -> bool {
+        self.selective_display > 0
+            && self.selective_display < i32::MAX
+            && byte_idx < self.text.len()
+    }
+
+    pub(crate) fn skip_rest_of_line_after_carriage_return(
+        self,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+    ) -> BufferSelectiveDisplayLineTailAction {
+        *charpos += 1;
+        while *byte_idx < self.text.len() {
+            let (skip_ch, skip_len) = decode_utf8(&self.text[*byte_idx..]);
+            if skip_len == 0 {
+                break;
+            }
+            *byte_idx += skip_len;
+            *charpos += 1;
+            if skip_ch == '\n' {
+                return BufferSelectiveDisplayLineTailAction::LineBreak { charpos: *charpos };
+            }
+        }
+
+        BufferSelectiveDisplayLineTailAction::Exhausted
+    }
+
+    pub(crate) fn skip_hidden_indented_lines_after_line_break(
+        self,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+    ) -> BufferSelectiveDisplayHiddenLines {
+        let mut hidden_line_count = 0;
+        while *byte_idx < self.text.len() {
+            let Some(indent) = self.indentation_columns_at(*byte_idx) else {
+                break;
+            };
+            if indent <= self.selective_display {
+                break;
+            }
+
+            if self.skip_line(byte_idx, charpos) {
+                hidden_line_count += 1;
+            }
+        }
+
+        BufferSelectiveDisplayHiddenLines::new(hidden_line_count)
+    }
+
+    fn indentation_columns_at(self, mut byte_idx: usize) -> Option<i32> {
+        if byte_idx >= self.text.len() {
+            return None;
+        }
+
+        let mut indent = 0i32;
+        while byte_idx < self.text.len() {
+            match self.text[byte_idx] {
+                b' ' => {
+                    indent += 1;
+                    byte_idx += 1;
+                }
+                b'\t' => {
+                    indent = ((indent / self.tab_width) + 1) * self.tab_width;
+                    byte_idx += 1;
+                }
+                _ => break,
+            }
+        }
+        Some(indent)
+    }
+
+    fn skip_line(self, byte_idx: &mut usize, charpos: &mut i64) -> bool {
+        while *byte_idx < self.text.len() {
+            let (skip_ch, skip_len) = decode_utf8(&self.text[*byte_idx..]);
+            if skip_len == 0 {
+                break;
+            }
+            *byte_idx += skip_len;
+            *charpos += 1;
+            if skip_ch == '\n' {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSpecialSourceCharRequest {
     range: BufferTextSourceRange,

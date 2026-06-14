@@ -17,7 +17,6 @@ use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
 use super::types::*;
-use super::unicode::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
@@ -61,13 +60,13 @@ use crate::display_row_append::{
     BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextRenderContext,
     BufferHscrollSkipAction, BufferHscrollSkipSourceChar, BufferInvisibleTextScanAction,
     BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
-    BufferOverlayStringRenderContext, BufferSyntheticTextRenderContext,
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
-    DisplayRowTextWindowTransitionContext, DisplayRowTransitionPrefixContext, SyntheticTextMarker,
-    TextWindowAppendSurfaceRequest,
+    BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
+    BufferSyntheticTextRenderContext, BufferTextPreparedSourceCharAppend,
+    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
+    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
+    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
+    DisplayRowTransitionPrefixContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2394,7 +2393,9 @@ impl LayoutEngine {
             };
 
             // Selective display: \r hides rest of line until \n
-            if selective_display > 0 && ch == '\r' {
+            let selective_display_context =
+                BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
+            if selective_display_context.hides_carriage_return_tail(ch) {
                 if let Some(position) = synthetic_text_context!(raise_span.value_or(0.0))
                     .render_active_marker_to_text_row(
                         &mut self.matrix_builder,
@@ -2411,54 +2412,49 @@ impl LayoutEngine {
                     col = position.col;
                 }
                 // Skip remaining chars until newline
-                charpos += 1;
-                while byte_idx < text.len() {
-                    let (skip_ch, skip_len) = decode_utf8(&text[byte_idx..]);
-                    byte_idx += skip_len;
-                    charpos += 1;
-                    if skip_ch == '\n' {
-                        // Advance to next row (same as newline handler)
-                        x = content_x;
-                        row_extend.clear();
-                        box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
-                        let line_break_transition =
-                            DisplayRowLineBreakTransitionPlan::hidden_line_break();
-                        let row_transition = DisplayRowTextWindowEmitContext::new(
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            &mut row_y_positions,
-                            max_rows,
-                            &mut row_geometry,
-                            &mut row_flags,
-                            row_limit,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                        )
-                        .emit_line_break(
-                            line_break_transition,
-                            hit_row_range.range_to(charpos),
-                            DisplayRowPosition { x_px: x, col },
-                            0.0,
-                        );
-                        if row_transition.is_exhausted() {
-                            break;
-                        }
-                        charpos = sync_charpos_from_byte_idx(byte_idx);
-                        hit_row_range.advance_to(charpos);
-                        let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
-                            &mut prefix_request,
-                            has_prefix,
-                            &mut line_numbers,
-                            &mut hscroll_skip,
-                            &mut word_wrap,
-                            &mut trailing_whitespace,
-                        );
-                        line_break_transition
-                            .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
+                let selective_tail_action = selective_display_context
+                    .skip_rest_of_line_after_carriage_return(&mut byte_idx, &mut charpos);
+                if selective_tail_action.is_line_break() {
+                    // Advance to next row (same as newline handler)
+                    x = content_x;
+                    row_extend.clear();
+                    box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
+                    let line_break_transition =
+                        DisplayRowLineBreakTransitionPlan::hidden_line_break();
+                    let row_transition = DisplayRowTextWindowEmitContext::new(
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        &mut row_y_positions,
+                        max_rows,
+                        &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
+                        &mut hit_rows,
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                    )
+                    .emit_line_break(
+                        line_break_transition,
+                        hit_row_range.range_to(charpos),
+                        DisplayRowPosition { x_px: x, col },
+                        0.0,
+                    );
+                    if row_transition.is_exhausted() {
                         break;
                     }
+                    charpos = sync_charpos_from_byte_idx(byte_idx);
+                    hit_row_range.advance_to(charpos);
+                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                        &mut prefix_request,
+                        has_prefix,
+                        &mut line_numbers,
+                        &mut hscroll_skip,
+                        &mut word_wrap,
+                        &mut trailing_whitespace,
+                    );
+                    line_break_transition
+                        .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
                 }
                 continue;
             }
@@ -2564,41 +2560,13 @@ impl LayoutEngine {
                 line_break_transition
                     .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
                 // Selective display: skip lines indented beyond threshold
-                if selective_display > 0 && selective_display < i32::MAX && byte_idx < text.len() {
-                    loop {
-                        if byte_idx >= text.len() {
-                            break;
-                        }
-                        // Peek at indentation of next line
-                        let mut indent = 0i32;
-                        let mut peek = byte_idx;
-                        while peek < text.len() {
-                            let b = text[peek];
-                            if b == b' ' {
-                                indent += 1;
-                                peek += 1;
-                            } else if b == b'\t' {
-                                let tab_w = params.tab_width.max(1) as i32;
-                                indent = ((indent / tab_w) + 1) * tab_w;
-                                peek += 1;
-                            } else {
-                                break;
-                            }
-                        }
-                        if indent > selective_display {
-                            // Skip this hidden line
-                            while byte_idx < text.len() {
-                                let (skip_ch, skip_len) = decode_utf8(&text[byte_idx..]);
-                                byte_idx += skip_len;
-                                charpos += 1;
-                                if skip_ch == '\n' {
-                                    line_numbers.advance_hidden_line();
-                                    break;
-                                }
-                            }
-                        } else {
-                            break; // Next line is visible
-                        }
+                let selective_display_context =
+                    BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
+                if selective_display_context.hides_indented_lines_after_line_break(byte_idx) {
+                    let hidden_lines = selective_display_context
+                        .skip_hidden_indented_lines_after_line_break(&mut byte_idx, &mut charpos);
+                    for _ in 0..hidden_lines.hidden_line_count() {
+                        line_numbers.advance_hidden_line();
                     }
                 }
                 continue;
