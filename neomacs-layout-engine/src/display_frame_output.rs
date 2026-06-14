@@ -3,11 +3,12 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::frame_glyphs::{
-    FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo,
+    FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    WindowTransitionKind,
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WindowFrameMetadata {
@@ -183,6 +184,214 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
             delta,
         });
     }
+}
+
+pub(crate) struct FrameLineAnimationHintsRenderRequest<'a> {
+    prev_window_infos: &'a HashMap<i64, WindowInfo>,
+    curr_window_infos: &'a HashMap<i64, WindowInfo>,
+}
+
+impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
+    pub(crate) fn new(
+        prev_window_infos: &'a HashMap<i64, WindowInfo>,
+        curr_window_infos: &'a HashMap<i64, WindowInfo>,
+    ) -> Self {
+        Self {
+            prev_window_infos,
+            curr_window_infos,
+        }
+    }
+
+    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+        for (window_id, curr) in self.curr_window_infos {
+            if curr.is_minibuffer {
+                continue;
+            }
+            let Some(prev) = self.prev_window_infos.get(window_id) else {
+                continue;
+            };
+            if prev.buffer_id == 0 || curr.buffer_id == 0 {
+                continue;
+            }
+            if prev.buffer_id != curr.buffer_id
+                || prev.window_start != curr.window_start
+                || prev.buffer_size == curr.buffer_size
+            {
+                continue;
+            }
+
+            if let Some(edit_y) = find_window_cursor_y_in_builder(builder, curr) {
+                let offset = if curr.buffer_size > prev.buffer_size {
+                    -curr.char_height
+                } else {
+                    curr.char_height
+                };
+                builder.push_effect_hint(WindowEffectHint::LineAnimation {
+                    window_id: curr.window_id,
+                    bounds: curr.bounds,
+                    edit_y: edit_y + curr.char_height,
+                    offset,
+                });
+            }
+        }
+    }
+}
+
+pub(crate) struct FrameWindowSwitchHintRenderRequest<'a> {
+    prev_selected_window_id: &'a mut i64,
+}
+
+impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
+    pub(crate) fn new(prev_selected_window_id: &'a mut i64) -> Self {
+        Self {
+            prev_selected_window_id,
+        }
+    }
+
+    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+        let new_selected = builder
+            .window_infos()
+            .iter()
+            .find(|info| info.selected && !info.is_minibuffer)
+            .map(|info| (info.window_id, info.bounds));
+        if let Some((window_id, bounds)) = new_selected {
+            if *self.prev_selected_window_id != 0 && *self.prev_selected_window_id != window_id {
+                builder.push_effect_hint(WindowEffectHint::WindowSwitchFade { window_id, bounds });
+            }
+            *self.prev_selected_window_id = window_id;
+        }
+    }
+}
+
+pub(crate) struct FrameThemeTransitionHintRenderRequest<'a> {
+    prev_background: &'a mut Option<(f32, f32, f32, f32)>,
+    frame_width: f32,
+    frame_height: f32,
+}
+
+impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
+    pub(crate) fn new(
+        prev_background: &'a mut Option<(f32, f32, f32, f32)>,
+        frame_width: f32,
+        frame_height: f32,
+    ) -> Self {
+        Self {
+            prev_background,
+            frame_width,
+            frame_height,
+        }
+    }
+
+    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+        let bg = builder.background_color();
+        let new_bg = (bg.r, bg.g, bg.b, bg.a);
+        if let Some(old_bg) = *self.prev_background
+            && color_changed_for_theme_transition(old_bg, new_bg)
+        {
+            let full_h = frame_content_height_before_minibuffer(builder, self.frame_height);
+            builder.push_effect_hint(WindowEffectHint::ThemeTransition {
+                bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
+            });
+        }
+        *self.prev_background = Some(new_bg);
+    }
+}
+
+pub(crate) struct FrameTopologyTransitionHintRenderRequest<'a> {
+    prev_window_infos: &'a HashMap<i64, WindowInfo>,
+    curr_window_infos: &'a HashMap<i64, WindowInfo>,
+    frame_width: f32,
+    frame_height: f32,
+}
+
+impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
+    pub(crate) fn new(
+        prev_window_infos: &'a HashMap<i64, WindowInfo>,
+        curr_window_infos: &'a HashMap<i64, WindowInfo>,
+        frame_width: f32,
+        frame_height: f32,
+    ) -> Self {
+        Self {
+            prev_window_infos,
+            curr_window_infos,
+            frame_width,
+            frame_height,
+        }
+    }
+
+    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+        if self.prev_window_infos.is_empty() {
+            return;
+        }
+
+        let prev_non_mini = non_minibuffer_window_ids(self.prev_window_infos);
+        let curr_non_mini = non_minibuffer_window_ids(self.curr_window_infos);
+
+        if prev_non_mini.is_empty()
+            || curr_non_mini.is_empty()
+            || prev_non_mini == curr_non_mini
+            || builder.transition_hints().iter().any(|hint| {
+                hint.window_id == 0 && matches!(hint.kind, WindowTransitionKind::Crossfade)
+            })
+        {
+            return;
+        }
+
+        let full_h = frame_content_height_before_minibuffer(builder, self.frame_height);
+        builder.push_transition_hint(WindowTransitionHint {
+            window_id: 0,
+            bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
+            kind: WindowTransitionKind::Crossfade,
+            effect: None,
+            easing: None,
+        });
+    }
+}
+
+fn find_window_cursor_y_in_builder(builder: &GlyphMatrixBuilder, info: &WindowInfo) -> Option<f32> {
+    let in_window = |x: f32, y: f32, hollow: bool| -> bool {
+        !hollow
+            && x >= info.bounds.x
+            && x < info.bounds.x + info.bounds.width
+            && y >= info.bounds.y
+            && y < info.bounds.y + info.bounds.height
+    };
+    if let Some(phys) = builder.phys_cursor()
+        && in_window(phys.x, phys.y, phys.style.is_hollow())
+    {
+        return Some(phys.y);
+    }
+    for cursor in builder.cursors() {
+        if in_window(cursor.x, cursor.y, cursor.style.is_hollow()) {
+            return Some(cursor.y);
+        }
+    }
+    None
+}
+
+fn color_changed_for_theme_transition(
+    old_bg: (f32, f32, f32, f32),
+    new_bg: (f32, f32, f32, f32),
+) -> bool {
+    (new_bg.0 - old_bg.0).abs() > 0.02
+        || (new_bg.1 - old_bg.1).abs() > 0.02
+        || (new_bg.2 - old_bg.2).abs() > 0.02
+}
+
+fn frame_content_height_before_minibuffer(builder: &GlyphMatrixBuilder, frame_height: f32) -> f32 {
+    builder
+        .window_infos()
+        .iter()
+        .find(|w| w.is_minibuffer)
+        .map_or(frame_height, |w| w.bounds.y)
+}
+
+fn non_minibuffer_window_ids(window_infos: &HashMap<i64, WindowInfo>) -> HashSet<i64> {
+    window_infos
+        .iter()
+        .filter(|(_, info)| !info.is_minibuffer)
+        .map(|(window_id, _)| *window_id)
+        .collect()
 }
 
 pub(crate) struct WindowFrameDecorationsRenderRequest<'a> {

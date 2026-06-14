@@ -32,6 +32,8 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
+    FrameLineAnimationHintsRenderRequest, FrameThemeTransitionHintRenderRequest,
+    FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
     WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
@@ -83,11 +85,11 @@ use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
-use neomacs_display_protocol::frame_glyphs::{
-    GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint, WindowTransitionKind,
-};
+use neomacs_display_protocol::frame_glyphs::{GlyphRowRole, WindowInfo};
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::Color;
+#[cfg(test)]
+use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 
@@ -261,161 +263,6 @@ impl LayoutEngine {
 
     pub fn set_font_sizing(&mut self, font_sizing: FontSizing) {
         self.font_sizing = font_sizing;
-    }
-
-    fn find_window_cursor_y_in_builder(
-        builder: &crate::matrix_builder::GlyphMatrixBuilder,
-        info: &WindowInfo,
-    ) -> Option<f32> {
-        let in_window = |x: f32, y: f32, hollow: bool| -> bool {
-            !hollow
-                && x >= info.bounds.x
-                && x < info.bounds.x + info.bounds.width
-                && y >= info.bounds.y
-                && y < info.bounds.y + info.bounds.height
-        };
-        // The selected window's cursor lives in the phys cursor, not the
-        // per-window CursorItem list (which now holds only non-selected windows).
-        if let Some(phys) = builder.phys_cursor()
-            && in_window(phys.x, phys.y, phys.style.is_hollow())
-        {
-            return Some(phys.y);
-        }
-        for cursor in builder.cursors() {
-            if in_window(cursor.x, cursor.y, cursor.style.is_hollow()) {
-                return Some(cursor.y);
-            }
-        }
-        None
-    }
-
-    fn add_line_animation_hints(
-        &mut self,
-        curr_window_infos: &std::collections::HashMap<i64, WindowInfo>,
-    ) {
-        for (window_id, curr) in curr_window_infos {
-            if curr.is_minibuffer {
-                continue;
-            }
-            let Some(prev) = self.prev_window_infos.get(window_id) else {
-                continue;
-            };
-            if prev.buffer_id == 0 || curr.buffer_id == 0 {
-                continue;
-            }
-            if prev.buffer_id == curr.buffer_id
-                && prev.window_start == curr.window_start
-                && prev.buffer_size != curr.buffer_size
-            {
-                if let Some(edit_y) =
-                    Self::find_window_cursor_y_in_builder(&self.matrix_builder, curr)
-                {
-                    let offset = if curr.buffer_size > prev.buffer_size {
-                        -curr.char_height
-                    } else {
-                        curr.char_height
-                    };
-                    let hint = WindowEffectHint::LineAnimation {
-                        window_id: curr.window_id,
-                        bounds: curr.bounds,
-                        edit_y: edit_y + curr.char_height,
-                        offset,
-                    };
-                    self.matrix_builder.push_effect_hint(hint);
-                }
-            }
-        }
-    }
-
-    fn update_window_switch_hint(&mut self) {
-        let new_selected = self
-            .matrix_builder
-            .window_infos()
-            .iter()
-            .find(|info| info.selected && !info.is_minibuffer)
-            .map(|info| (info.window_id, info.bounds));
-        if let Some((window_id, bounds)) = new_selected {
-            if self.prev_selected_window_id != 0 && self.prev_selected_window_id != window_id {
-                let hint = WindowEffectHint::WindowSwitchFade { window_id, bounds };
-                self.matrix_builder.push_effect_hint(hint);
-            }
-            self.prev_selected_window_id = window_id;
-        }
-    }
-
-    fn update_theme_transition_hint(&mut self, frame_width: f32, frame_height: f32) {
-        let bg = self.matrix_builder.background_color();
-        let new_bg = (bg.r, bg.g, bg.b, bg.a);
-        if let Some(old_bg) = self.prev_background {
-            let dr = (new_bg.0 - old_bg.0).abs();
-            let dg = (new_bg.1 - old_bg.1).abs();
-            let db = (new_bg.2 - old_bg.2).abs();
-            if dr > 0.02 || dg > 0.02 || db > 0.02 {
-                let full_h = self
-                    .matrix_builder
-                    .window_infos()
-                    .iter()
-                    .find(|w| w.is_minibuffer)
-                    .map_or(frame_height, |w| w.bounds.y);
-                let hint = WindowEffectHint::ThemeTransition {
-                    bounds: Rect::new(0.0, 0.0, frame_width, full_h),
-                };
-                self.matrix_builder.push_effect_hint(hint);
-            }
-        }
-        self.prev_background = Some(new_bg);
-    }
-
-    fn maybe_add_topology_transition_hint(
-        &mut self,
-        frame_width: f32,
-        frame_height: f32,
-        curr_window_infos: &std::collections::HashMap<i64, WindowInfo>,
-    ) {
-        if self.prev_window_infos.is_empty() {
-            return;
-        }
-
-        let prev_non_mini: std::collections::HashSet<i64> = self
-            .prev_window_infos
-            .iter()
-            .filter(|(_, info)| !info.is_minibuffer)
-            .map(|(window_id, _)| *window_id)
-            .collect();
-        let curr_non_mini: std::collections::HashSet<i64> = curr_window_infos
-            .iter()
-            .filter(|(_, info)| !info.is_minibuffer)
-            .map(|(window_id, _)| *window_id)
-            .collect();
-
-        if prev_non_mini.is_empty() || curr_non_mini.is_empty() || prev_non_mini == curr_non_mini {
-            return;
-        }
-
-        if self
-            .matrix_builder
-            .transition_hints()
-            .iter()
-            .any(|hint| hint.window_id == 0 && matches!(hint.kind, WindowTransitionKind::Crossfade))
-        {
-            return;
-        }
-
-        let full_h = self
-            .matrix_builder
-            .window_infos()
-            .iter()
-            .find(|w| w.is_minibuffer)
-            .map_or(frame_height, |w| w.bounds.y);
-
-        let hint = WindowTransitionHint {
-            window_id: 0,
-            bounds: Rect::new(0.0, 0.0, frame_width, full_h),
-            kind: WindowTransitionKind::Crossfade,
-            effect: None,
-            easing: None,
-        };
-        self.matrix_builder.push_transition_hint(hint);
     }
 
     /// Perform layout for a frame using neovm-core data (Rust-authoritative path).
@@ -778,14 +625,23 @@ impl LayoutEngine {
                 }
             }
 
-            self.add_line_animation_hints(&curr_window_infos);
-            self.update_window_switch_hint();
-            self.update_theme_transition_hint(frame_params.width, frame_params.height);
-            self.maybe_add_topology_transition_hint(
+            FrameLineAnimationHintsRenderRequest::new(&self.prev_window_infos, &curr_window_infos)
+                .render_and_apply(&mut self.matrix_builder);
+            FrameWindowSwitchHintRenderRequest::new(&mut self.prev_selected_window_id)
+                .render_and_apply(&mut self.matrix_builder);
+            FrameThemeTransitionHintRenderRequest::new(
+                &mut self.prev_background,
                 frame_params.width,
                 frame_params.height,
+            )
+            .render_and_apply(&mut self.matrix_builder);
+            FrameTopologyTransitionHintRenderRequest::new(
+                &self.prev_window_infos,
                 &curr_window_infos,
-            );
+                frame_params.width,
+                frame_params.height,
+            )
+            .render_and_apply(&mut self.matrix_builder);
 
             break (frame_params, curr_window_infos);
         };

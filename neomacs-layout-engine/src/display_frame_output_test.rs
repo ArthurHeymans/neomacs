@@ -1,8 +1,10 @@
 use super::*;
 use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::cursor::CursorBarWidth;
-use neomacs_display_protocol::frame_glyphs::{CursorKind, WindowInfo};
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::frame_glyphs::{
+    CursorKind, CursorStyle, DisplaySlotId, WindowEffectHint, WindowInfo, WindowTransitionKind,
+};
+use neomacs_display_protocol::types::{Color, Rect};
 
 fn window_params() -> WindowParams {
     WindowParams {
@@ -161,6 +163,116 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(curr_infos.len(), 1);
     assert_eq!(state.effect_hints.len(), 4);
+}
+
+#[test]
+fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
+    let params = window_params();
+    let mut prev = window_info(&params);
+    prev.buffer_size = 200;
+    let mut curr = window_info(&params);
+    curr.buffer_size = 210;
+    let mut prev_infos = std::collections::HashMap::new();
+    prev_infos.insert(prev.window_id, prev);
+    let mut curr_infos = std::collections::HashMap::new();
+    curr_infos.insert(curr.window_id, curr);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.push_cursor(
+        params.window_id,
+        DisplaySlotId {
+            window_id: params.window_id,
+            row: 1,
+            col: 2,
+        },
+        24.0,
+        48.0,
+        8.0,
+        16.0,
+        CursorStyle::FilledBox,
+        Color::WHITE,
+    );
+
+    FrameLineAnimationHintsRenderRequest::new(&prev_infos, &curr_infos)
+        .render_and_apply(&mut builder);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(state.effect_hints.len(), 1);
+    assert!(matches!(
+        state.effect_hints[0],
+        WindowEffectHint::LineAnimation {
+            window_id: 41,
+            edit_y,
+            offset: -16.0,
+            ..
+        } if (edit_y - 64.0).abs() < f32::EPSILON
+    ));
+}
+
+#[test]
+fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
+    let params = window_params();
+    let info = window_info(&params);
+    let mut prev_selected = 7;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.push_window_info(info);
+
+    FrameWindowSwitchHintRenderRequest::new(&mut prev_selected).render_and_apply(&mut builder);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(prev_selected, 41);
+    assert!(matches!(
+        state.effect_hints.as_slice(),
+        [WindowEffectHint::WindowSwitchFade { window_id: 41, .. }]
+    ));
+}
+
+#[test]
+fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
+    let params = window_params();
+    let info = window_info(&params);
+    let mut mini = info.clone();
+    mini.window_id = 99;
+    mini.is_minibuffer = true;
+    mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
+    let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.set_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
+    builder.push_window_info(info);
+    builder.push_window_info(mini);
+
+    FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
+        .render_and_apply(&mut builder);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(prev_background, Some((0.2, 0.0, 0.0, 1.0)));
+    assert!(matches!(
+        state.effect_hints.as_slice(),
+        [WindowEffectHint::ThemeTransition { bounds }] if bounds.height == 96.0
+    ));
+}
+
+#[test]
+fn frame_topology_transition_request_emits_frame_crossfade() {
+    let params = window_params();
+    let prev = window_info(&params);
+    let mut curr = prev.clone();
+    curr.window_id = 42;
+    let mut prev_infos = std::collections::HashMap::new();
+    prev_infos.insert(prev.window_id, prev);
+    let mut curr_infos = std::collections::HashMap::new();
+    curr_infos.insert(curr.window_id, curr);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+
+    FrameTopologyTransitionHintRenderRequest::new(&prev_infos, &curr_infos, 180.0, 140.0)
+        .render_and_apply(&mut builder);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(state.transition_hints.len(), 1);
+    assert_eq!(state.transition_hints[0].window_id, 0);
+    assert_eq!(
+        state.transition_hints[0].kind,
+        WindowTransitionKind::Crossfade
+    );
 }
 
 #[test]
