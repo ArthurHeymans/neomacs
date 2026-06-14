@@ -63,7 +63,7 @@ use crate::display_source_resolver::{
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
-use crate::hit_test::HitRow;
+use crate::hit_test::{HitRow, WindowHitData};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{
     FaceResolver, LayoutBufferView, OverlayDisplayString, ResolvedFace, RustBufferAccess,
@@ -76,11 +76,11 @@ use crate::window_output::TextRowOutput;
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBodyOutputInstall,
     TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, current_text_window_cluster_tail,
-    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
-    finish_pending_text_window_row, install_text_window_body_output,
-    mark_current_text_row_truncated_left,
+    TextWindowRightEdgeMarkers, WindowOutputEmitter, close_text_window_output,
+    current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
+    finish_and_end_text_matrix_row_output, finish_pending_text_window_row,
+    install_text_window_body_output, mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -88,7 +88,7 @@ use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRan
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
-use neovm_core::window::DisplayRowSnapshot;
+use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct LispStringSourceId(u64);
@@ -672,6 +672,28 @@ pub(crate) struct BufferTextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBuff
     text_area_top: i64,
     text_area_bottom: i64,
     buf_access: &'a RustBufferAccess<'buf, B>,
+}
+
+pub(crate) struct BufferTextWindowFinishRequest {
+    window_id: i64,
+    content_x: f32,
+    char_w: f32,
+    text_area_left_offset: i64,
+    mode_line_height: i64,
+    header_line_height: i64,
+    tab_line_height: i64,
+}
+
+pub(crate) struct BufferTextWindowFinishState<'a> {
+    pub(crate) builder: &'a mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: WindowOutputEmitter,
+    pub(crate) evaluator: &'a mut Context,
+    pub(crate) hit_rows: Vec<HitRow>,
+}
+
+pub(crate) struct BufferTextWindowFinishOutput {
+    pub(crate) hit_data: WindowHitData,
+    pub(crate) snapshot: WindowDisplaySnapshot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -6307,6 +6329,50 @@ impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, '
             point_row_window_start,
             point_line_window_start,
         }
+    }
+}
+
+impl BufferTextWindowFinishRequest {
+    pub(crate) fn new(
+        window_id: i64,
+        content_x: f32,
+        char_w: f32,
+        text_area_left_offset: i64,
+        mode_line_height: i64,
+        header_line_height: i64,
+        tab_line_height: i64,
+    ) -> Self {
+        Self {
+            window_id,
+            content_x,
+            char_w,
+            text_area_left_offset,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        }
+    }
+
+    pub(crate) fn finish_and_snapshot(
+        self,
+        state: BufferTextWindowFinishState<'_>,
+    ) -> BufferTextWindowFinishOutput {
+        close_text_window_output(state.builder);
+        let hit_data = WindowHitData {
+            window_id: self.window_id,
+            content_x: self.content_x,
+            char_w: self.char_w,
+            rows: state.hit_rows,
+        };
+        let snapshot = state.output_emitter.finish_snapshot(
+            state.evaluator,
+            self.text_area_left_offset,
+            self.mode_line_height,
+            self.header_line_height,
+            self.tab_line_height,
+        );
+
+        BufferTextWindowFinishOutput { hit_data, snapshot }
     }
 }
 

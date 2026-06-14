@@ -5871,6 +5871,58 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
 }
 
 #[test]
+fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifacts() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("finish-request", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(41, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
+    let output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 10.0, 5.0);
+    output_emitter.begin_update(&mut eval);
+    let hit_rows = vec![crate::hit_test::HitRow {
+        y_start: 2.0,
+        y_end: 18.0,
+        charpos_start: 3,
+        charpos_end: 9,
+    }];
+
+    let finished = BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5)
+        .finish_and_snapshot(BufferTextWindowFinishState {
+            builder: &mut builder,
+            output_emitter,
+            evaluator: &mut eval,
+            hit_rows,
+        });
+
+    assert_eq!(finished.hit_data.window_id, 41);
+    assert_eq!(finished.hit_data.content_x, 12.0);
+    assert_eq!(finished.hit_data.char_w, 8.0);
+    assert_eq!(finished.hit_data.rows.len(), 1);
+    assert_eq!(finished.hit_data.rows[0].charpos_start, 3);
+    assert_eq!(finished.snapshot.text_area_left_offset, 2);
+    assert_eq!(finished.snapshot.mode_line_height, 11);
+    assert_eq!(finished.snapshot.header_line_height, 7);
+    assert_eq!(finished.snapshot.tab_line_height, 5);
+
+    let state = builder.finish(5, 1, 8.0, 16.0);
+    assert_eq!(state.window_matrices.len(), 1);
+    assert_eq!(state.window_matrices[0].window_id, 41);
+}
+
+#[test]
 fn buffer_text_window_visibility_retry_request_scrolls_down_from_visible_rows() {
     let mut eval = Context::new();
     let buf_id = eval

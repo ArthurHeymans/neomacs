@@ -20,8 +20,7 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
     TextWindowBegin, TextWindowCursorEffects, TextWindowRightBorder, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, install_last_window_right_border,
-    install_text_window_cursor_effects,
+    begin_text_window_output, install_last_window_right_border, install_text_window_cursor_effects,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -56,9 +55,10 @@ use crate::display_row_append::{
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
     BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowBodyInstallState, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryRequest,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, TextWindowAppendSurfaceRequest,
+    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
+    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2573,24 +2573,23 @@ impl LayoutEngine {
             },
         );
 
-        close_text_window_output(&mut self.matrix_builder);
-
-        // Store hit-test data for this window
-        self.hit_data.push(WindowHitData {
-            window_id: params.window_id,
+        let finished_window = BufferTextWindowFinishRequest::new(
+            params.window_id,
             content_x,
             char_w,
-            rows: hit_rows,
-        });
-
-        let snapshot = output_emitter.finish_snapshot(
-            evaluator,
             (text_area_left - params.bounds.x).round() as i64,
             mode_line_height.round() as i64,
             header_line_height.round() as i64,
             tab_line_height.round() as i64,
-        );
-        self.display_snapshots.push(snapshot);
+        )
+        .finish_and_snapshot(BufferTextWindowFinishState {
+            builder: &mut self.matrix_builder,
+            output_emitter,
+            evaluator,
+            hit_rows,
+        });
+        self.hit_data.push(finished_window.hit_data);
+        self.display_snapshots.push(finished_window.snapshot);
 
         // Persist the face-id counter back to the frame-wide
         // slot so the NEXT window in this frame starts allocating
