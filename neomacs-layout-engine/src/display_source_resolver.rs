@@ -5,7 +5,9 @@ use crate::display_item::{DisplayItem, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::DisplayMediaReplacementProperty;
+use crate::display_row::insert_resolved_display_row_face;
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
 use neovm_core::emacs_core::Value;
@@ -254,6 +256,37 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
         face_id,
         pending_face,
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn resolve_and_install_display_string_base_face<B: LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &FaceResolver,
+    origin: DisplayOrigin,
+    policy: BaseFacePolicy,
+    active_base_face: Option<ActiveDisplayStringBaseFace<'_>>,
+    default_install_policy: DisplayDefaultFaceInstallPolicy,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut GlyphMatrixBuilder,
+) -> DisplayStringBaseFace {
+    let base_face = resolve_display_string_base_face(
+        buffer,
+        face_resolver,
+        origin,
+        policy,
+        active_base_face,
+        default_install_policy,
+        face_ids,
+    );
+    if let Some(pending_face) = base_face.pending_face() {
+        insert_resolved_display_row_face(
+            builder,
+            pending_face.face_id,
+            &pending_face.resolved,
+            None,
+        );
+    }
+    base_face
 }
 
 #[derive(Clone, Debug)]

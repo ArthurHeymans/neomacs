@@ -1,3 +1,7 @@
+use crate::display_cursor::{
+    CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
+    CapturedCursorVisualState, CursorCaptureState,
+};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
@@ -7,7 +11,6 @@ use crate::display_item::{
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayMediaReplacementProperty, DisplayPropertyClassification};
-#[cfg(test)]
 use crate::display_row::DisplayRowRenderStop;
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
@@ -26,10 +29,14 @@ use crate::display_row::{
     render_single_display_item_source_append_request_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
-    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement,
-    DisplayRowPosition, DisplayTabPolicy,
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
+    DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
 };
-use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_geometry::{
+    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit,
+    DisplayRowYPositions, DisplayRowYRecording,
+};
+use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
     DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
@@ -37,21 +44,28 @@ use crate::display_source::{
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
-    DisplayStringBaseFace, ResolvedDisplayReplacement, resolve_display_replacement,
+    DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace, ResolvedDisplayReplacement,
+    resolve_and_install_display_string_base_face, resolve_display_replacement,
 };
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
+use crate::hit_test::HitRow;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, OverlayDisplayString, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
-use crate::window_output::WindowOutputEmitter;
+use crate::window_output::{
+    WindowOutputEmitter, emit_text_matrix_row_transition, finish_and_end_text_matrix_row_output,
+};
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
+
+const LISP_STRING_SOURCE_OVERLAY_STRING: u64 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ResolvedBufferTextSourceAdvance {
@@ -578,6 +592,345 @@ impl<'a> OverlayStringRenderBatchSource<'a> {
     ) -> OverlayStringRenderSource {
         OverlayStringRenderSource::new(overlay_string, self.anchor_charpos, self.kind)
     }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct OverlayStringRenderRowContext<'a> {
+    append_surface: &'a DisplayRowAppendSurface,
+    face_char_w: f32,
+    char_h: f32,
+    default_row_ascent: f32,
+    text_y: f32,
+    row_base: usize,
+    max_rows: usize,
+}
+
+impl<'a> OverlayStringRenderRowContext<'a> {
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face_state: &DisplayRowActiveFaceState,
+        char_h: f32,
+        default_row_ascent: f32,
+        text_y: f32,
+        row_base: usize,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            append_surface,
+            face_char_w: active_face_state.metrics().char_width,
+            char_h,
+            default_row_ascent,
+            text_y,
+            row_base,
+            max_rows,
+        }
+    }
+
+    fn content_x(self) -> f32 {
+        self.append_surface.content_x()
+    }
+
+    fn right_edge(self) -> f32 {
+        self.append_surface.right_edge()
+    }
+
+    fn geometry_defaults(self) -> DisplayRowGeometryDefaults {
+        DisplayRowGeometryDefaults::new(self.text_y, self.char_h, self.default_row_ascent)
+    }
+
+    fn row_limit(self) -> DisplayRowLimit {
+        DisplayRowLimit {
+            max_rows: self.max_rows,
+        }
+    }
+
+    fn cursor_visual_state(self, base_face: &ResolvedFace) -> CapturedCursorVisualState {
+        CapturedCursorVisualState {
+            face_width: self.face_char_w,
+            face_height: self.char_h,
+            face_ascent: self.default_row_ascent,
+            background: neomacs_display_protocol::types::Color::from_pixel(base_face.bg),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_overlay_string_batch<B: LayoutBufferView>(
+    evaluator: &mut Context,
+    output_emitter: &mut WindowOutputEmitter,
+    buffer: &B,
+    source_batch: OverlayStringRenderBatchSource<'_>,
+    font_metrics: &mut Option<FontMetricsService>,
+    face_resolver: &FaceResolver,
+    x: &mut f32,
+    col: &mut usize,
+    geometry: &mut DisplayRowGeometryState,
+    cursor_info: &mut CursorCaptureState,
+    hit_rows: &mut Vec<HitRow>,
+    hit_row_range: &mut HitRowRangeTracker,
+    row_y_positions: &mut DisplayRowYPositions,
+    row_context: OverlayStringRenderRowContext<'_>,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut GlyphMatrixBuilder,
+) {
+    if source_batch.is_empty() {
+        return;
+    }
+    for overlay_string in source_batch.overlay_strings() {
+        render_overlay_string(
+            evaluator,
+            output_emitter,
+            buffer,
+            source_batch.source_for(*overlay_string),
+            font_metrics,
+            face_resolver,
+            x,
+            col,
+            geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            row_context,
+            face_ids,
+            builder,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_overlay_string<B: LayoutBufferView>(
+    evaluator: &mut Context,
+    output_emitter: &mut WindowOutputEmitter,
+    buffer: &B,
+    source_request: OverlayStringRenderSource,
+    font_metrics: &mut Option<FontMetricsService>,
+    face_resolver: &FaceResolver,
+    x: &mut f32,
+    col: &mut usize,
+    geometry: &mut DisplayRowGeometryState,
+    cursor_info: &mut CursorCaptureState,
+    hit_rows: &mut Vec<HitRow>,
+    hit_row_range: &mut HitRowRangeTracker,
+    row_y_positions: &mut DisplayRowYPositions,
+    row_context: OverlayStringRenderRowContext<'_>,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut GlyphMatrixBuilder,
+) {
+    let anchor_charpos = source_request.anchor_i64();
+    let text_value = source_request.value();
+    if text_value.as_lisp_string().is_none() {
+        return;
+    }
+    let text_props = get_string_text_properties_table_for_value(text_value);
+    let base_face = resolve_and_install_display_string_base_face(
+        buffer,
+        face_resolver,
+        source_request.origin(),
+        source_request.base_face_policy(),
+        None,
+        DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
+        face_ids,
+        builder,
+    );
+    let content_x = row_context.content_x();
+    let max_x = row_context.right_edge();
+    let row_geometry_defaults = row_context.geometry_defaults();
+    let row_limit = row_context.row_limit();
+
+    macro_rules! finish_overlay_string_row {
+        () => {{
+            let geometry_transition = geometry.finish_boundary_and_record_hit(
+                DisplayRowBoundaryTarget::line_break(
+                    hit_row_range.range_to(anchor_charpos),
+                    row_geometry_defaults,
+                    row_context.row_base,
+                    0,
+                    content_x,
+                    0.0,
+                    DisplayRowYRecording::None,
+                ),
+                hit_rows,
+            );
+            hit_row_range.advance_to(anchor_charpos);
+            if !geometry.is_within_row_limit(row_limit) {
+                finish_and_end_text_matrix_row_output(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    geometry_transition.finished_row,
+                );
+                false
+            } else {
+                geometry.record_current_row_y(row_y_positions);
+                *x = content_x;
+                *col = 0;
+                emit_text_matrix_row_transition(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    geometry_transition,
+                );
+                true
+            }
+        }};
+    }
+
+    let append_request = LispStringSourceAppendRequest::new(
+        DisplayRowPosition {
+            x_px: *x,
+            col: *col,
+        },
+        LISP_STRING_SOURCE_OVERLAY_STRING,
+        text_value,
+    );
+    let Some(mut source_context) = LispStringSourceRowAppendSession::new(
+        append_request,
+        base_face.face_id(),
+        base_face.face(),
+        row_context.append_surface,
+        0.0,
+        row_context.char_h,
+        row_context.default_row_ascent,
+        row_context.face_char_w,
+        row_context.char_h,
+    ) else {
+        return;
+    };
+
+    while geometry.is_within_row_limit(row_limit) {
+        if *x >= max_x {
+            break;
+        }
+
+        let Some(outcome) = source_context.render_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            geometry,
+            DisplayRowPosition {
+                x_px: *x,
+                col: *col,
+            },
+        ) else {
+            break;
+        };
+        let stop = outcome.stop();
+        outcome.include_vertical_metrics(geometry);
+        let overlay_cursor_visual_state = row_context.cursor_visual_state(base_face.face());
+        for slot in outcome.source_slots() {
+            capture_overlay_string_cursor_at_slot(
+                text_props.as_ref(),
+                slot,
+                cursor_info,
+                geometry.y(),
+                geometry.row(),
+                overlay_cursor_visual_state,
+            );
+        }
+        let end = outcome.end_position();
+        *x = end.x_px;
+        *col = end.col;
+
+        if stop == DisplayRowRenderStop::RowBreak {
+            if !finish_overlay_string_row!() {
+                break;
+            }
+            continue;
+        }
+        match stop {
+            DisplayRowRenderStop::SourceExhausted => break,
+            DisplayRowRenderStop::Clipped => {
+                if source_context.discard_pending_until_row_break() {
+                    if !finish_overlay_string_row!() {
+                        break;
+                    }
+                    continue;
+                }
+                break;
+            }
+            DisplayRowRenderStop::RowBreak => unreachable!("row break handled above"),
+        }
+    }
+}
+
+fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) -> Option<usize> {
+    match source {
+        crate::display_item::DisplaySourcePosition::LispString {
+            source_id,
+            char_index,
+            ..
+        } if source_id.get() == LISP_STRING_SOURCE_OVERLAY_STRING => Some(*char_index),
+        _ => None,
+    }
+}
+
+fn capture_overlay_string_cursor_at_slot(
+    text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
+    slot: &DisplayRowGlyphSlot,
+    cursor_info: &mut CursorCaptureState,
+    y: f32,
+    matrix_row: usize,
+    visual_state: CapturedCursorVisualState,
+) {
+    let Some(char_idx) = root_lisp_position_char(&slot.source) else {
+        return;
+    };
+    capture_overlay_string_cursor(
+        text_props,
+        char_idx,
+        cursor_info,
+        slot.x_px,
+        y,
+        slot.col,
+        matrix_row,
+        visual_state,
+        CapturedCursorSlotWidth::Explicit(slot.width_px),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn capture_overlay_string_cursor(
+    text_props: Option<&neovm_core::buffer::text_props::TextPropertyTable>,
+    char_idx: usize,
+    cursor_info: &mut CursorCaptureState,
+    x: f32,
+    y: f32,
+    col: usize,
+    matrix_row: usize,
+    visual_state: CapturedCursorVisualState,
+    slot_width: CapturedCursorSlotWidth,
+) {
+    if cursor_info.is_captured() {
+        return;
+    }
+    let Some(props) = text_props else {
+        return;
+    };
+    let Some(cursor_prop) =
+        props.get_property_at_char_pos(CharPos0::new(char_idx), Value::symbol("cursor"))
+    else {
+        return;
+    };
+    if cursor_prop.is_nil() {
+        return;
+    }
+
+    cursor_info.capture_once(CapturedCursorInfo::from_visual_state(
+        visual_state,
+        CapturedCursorPlacement {
+            x,
+            y,
+            byte_idx: 0,
+            col,
+            matrix_row,
+            slot_width,
+            stretch_like: false,
+        },
+    ));
 }
 
 pub(crate) struct LispStringSourceRowAppendContext<'a> {
