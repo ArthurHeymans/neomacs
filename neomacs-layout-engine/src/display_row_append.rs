@@ -1959,6 +1959,101 @@ impl SyntheticTextSource {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct SyntheticTextAppendRequest<'face> {
+    position: DisplayRowPosition,
+    source: SyntheticTextSource,
+    face: SyntheticTextAppendFace<'face>,
+}
+
+#[derive(Clone, Debug)]
+enum SyntheticTextAppendFace<'face> {
+    ActiveFace,
+    TextRowMetrics {
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        height_px: f32,
+        ascent_px: f32,
+        char_width_px: f32,
+    },
+}
+
+impl<'face> SyntheticTextAppendRequest<'face> {
+    #[cfg(test)]
+    pub(crate) fn active_source(position: DisplayRowPosition, source: SyntheticTextSource) -> Self {
+        Self {
+            position,
+            source,
+            face: SyntheticTextAppendFace::ActiveFace,
+        }
+    }
+
+    pub(crate) fn active_marker(position: DisplayRowPosition, marker: SyntheticTextMarker) -> Self {
+        Self {
+            position,
+            source: SyntheticTextSource::marker(marker),
+            face: SyntheticTextAppendFace::ActiveFace,
+        }
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn text_row_metrics_source(
+        position: DisplayRowPosition,
+        source: SyntheticTextSource,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        height_px: f32,
+        ascent_px: f32,
+        char_width_px: f32,
+    ) -> Self {
+        Self {
+            position,
+            source,
+            face: SyntheticTextAppendFace::TextRowMetrics {
+                face_id,
+                base_face,
+                height_px,
+                ascent_px,
+                char_width_px,
+            },
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn text_row_metrics_marker(
+        position: DisplayRowPosition,
+        marker: SyntheticTextMarker,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        height_px: f32,
+        ascent_px: f32,
+        char_width_px: f32,
+    ) -> Self {
+        Self {
+            position,
+            source: SyntheticTextSource::marker(marker),
+            face: SyntheticTextAppendFace::TextRowMetrics {
+                face_id,
+                base_face,
+                height_px,
+                ascent_px,
+                char_width_px,
+            },
+        }
+    }
+
+    fn into_parts(
+        self,
+    ) -> (
+        DisplayRowPosition,
+        SyntheticTextSource,
+        SyntheticTextAppendFace<'face>,
+    ) {
+        (self.position, self.source, self.face)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct SyntheticTextAppendContext<'a> {
     face_id: u32,
@@ -2065,14 +2160,14 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         )
     }
 
-    fn text_row(
+    fn text_row<'face>(
         self,
         face_id: u32,
-        base_face: &'a ResolvedFace,
+        base_face: &'face ResolvedFace,
         height_px: f32,
         ascent_px: f32,
         char_width_px: f32,
-    ) -> SyntheticTextAppendContext<'a> {
+    ) -> SyntheticTextAppendContext<'face> {
         SyntheticTextAppendContext::new(
             face_id,
             base_face,
@@ -2082,109 +2177,48 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_active_face_to_text_row_and_emit(
+    pub(crate) fn append_request_to_text_row_and_emit<'face>(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
-        source: SyntheticTextSource,
+        request: SyntheticTextAppendRequest<'face>,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let active_face = self.active_face_context.active_face;
-        self.active_face(active_face.face_id(), active_face.resolved_face())
-            .append_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                position,
-                source,
-            )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_active_face_marker_to_text_row_and_emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
-        marker: SyntheticTextMarker,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.append_active_face_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            position,
-            SyntheticTextSource::marker(marker),
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_text_row_metrics_to_text_row_and_emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
-        source: SyntheticTextSource,
-        face_id: u32,
-        base_face: &'a ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.text_row(face_id, base_face, height_px, ascent_px, char_width_px)
-            .append_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                position,
-                source,
-            )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_text_row_metrics_marker_to_text_row_and_emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
-        marker: SyntheticTextMarker,
-        face_id: u32,
-        base_face: &'a ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.append_text_row_metrics_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            position,
-            SyntheticTextSource::marker(marker),
-            face_id,
-            base_face,
-            height_px,
-            ascent_px,
-            char_width_px,
-        )
+        let (position, source, face) = request.into_parts();
+        match face {
+            SyntheticTextAppendFace::ActiveFace => {
+                let active_face = self.active_face_context.active_face;
+                self.active_face(active_face.face_id(), active_face.resolved_face())
+                    .append_to_text_row_and_emit(
+                        builder,
+                        output_emitter,
+                        evaluator,
+                        font_metrics,
+                        face_resolver,
+                        position,
+                        source,
+                    )
+            }
+            SyntheticTextAppendFace::TextRowMetrics {
+                face_id,
+                base_face,
+                height_px,
+                ascent_px,
+                char_width_px,
+            } => self
+                .text_row(face_id, base_face, height_px, ascent_px, char_width_px)
+                .append_to_text_row_and_emit(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    font_metrics,
+                    face_resolver,
+                    position,
+                    source,
+                ),
+        }
     }
 }
 
@@ -2231,7 +2265,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_active_marker_to_text_row(
+    pub(crate) fn render_request_to_text_row<'face>(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
@@ -2239,50 +2273,36 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
         geometry: &'a DisplayRowGeometryState,
-        position: DisplayRowPosition,
-        marker: SyntheticTextMarker,
+        request: SyntheticTextAppendRequest<'face>,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         self.row_context(geometry)
-            .append_active_face_marker_to_text_row_and_emit(
+            .append_request_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
                 face_resolver,
-                position,
-                marker,
+                request,
             )
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_hscroll_truncation_marker_to_text_row(
+    pub(crate) fn hscroll_truncation_request(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &'a FaceResolver,
-        geometry: &'a DisplayRowGeometryState,
         content_x: f32,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.row_context(geometry)
-            .append_text_row_metrics_marker_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                DisplayRowPosition {
-                    x_px: content_x,
-                    col: 0,
-                },
-                SyntheticTextMarker::HscrollTruncation,
-                BasicFaceId::Default.into(),
-                face_resolver.default_face(),
-                self.default_row_height,
-                self.default_row_ascent,
-                self.default_char_width,
-            )
+    ) -> SyntheticTextAppendRequest<'a> {
+        SyntheticTextAppendRequest::text_row_metrics_marker(
+            DisplayRowPosition {
+                x_px: content_x,
+                col: 0,
+            },
+            SyntheticTextMarker::HscrollTruncation,
+            BasicFaceId::Default.into(),
+            face_resolver.default_face(),
+            self.default_row_height,
+            self.default_row_ascent,
+            self.default_char_width,
+        )
     }
 }
 

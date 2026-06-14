@@ -944,14 +944,16 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let append_context =
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
     let (progress, end) = append_context
-        .append_active_face_to_text_row_and_emit(
+        .append_request_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-            SyntheticTextSource::new(99, "..."),
+            SyntheticTextAppendRequest::active_source(
+                DisplayRowPosition { x_px: 0.0, col: 0 },
+                SyntheticTextSource::new(99, "..."),
+            ),
         )
         .expect("synthetic text progress");
 
@@ -4598,19 +4600,21 @@ fn synthetic_text_append_context_uses_source_append_request() {
     let append_context =
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0);
     let (_progress, end) = append_context
-        .append_text_row_metrics_to_text_row_and_emit(
+        .append_request_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-            SyntheticTextSource::new(9, "x"),
-            7,
-            base_face,
-            16.0,
-            12.0,
-            8.0,
+            SyntheticTextAppendRequest::text_row_metrics_source(
+                DisplayRowPosition { x_px: 0.0, col: 0 },
+                SyntheticTextSource::new(9, "x"),
+                7,
+                base_face,
+                16.0,
+                12.0,
+                8.0,
+            ),
         )
         .expect("append progress");
 
