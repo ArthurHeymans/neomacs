@@ -2309,6 +2309,108 @@ fn buffer_text_special_wrap_source_action_applies_transition_state() {
 }
 
 #[test]
+fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append() {
+    let mut context = RowTransitionTestContext::new("special-overflow-wrap-request");
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let prepared_append = BufferTextSpecialSourceCharPreparedAppend {
+        kind: BufferTextSourceSpecialDisplayKind::Control,
+        append_plan: BufferTextSpecialSourceCharAppendPlan {
+            source_item: BufferTextSourceItemRequest::new(
+                BufferTextSourceRange::single_char(CharPos0::new(21)),
+                BufferTextSourceAppendItem::ControlChar { ch: '\n' },
+            ),
+            position: DisplayRowPosition {
+                x_px: 80.0,
+                col: 10,
+            },
+        },
+        measured_width_px: Some(8.0),
+    };
+    let text = b"a";
+    let mut byte_idx = 0;
+    let mut charpos = 21;
+    let mut col = 10;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        context.geometry.current_row_marker(),
+        (Color::from_pixel(0x445566), 21),
+    );
+    let mut x = 80.0;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(6);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let row_limit = context.row_limit;
+
+    let outcome = BufferTextSpecialOverflowRenderRequest::new(
+        &prepared_append,
+        text,
+        0,
+        x,
+        80.0,
+        false,
+        DisplayRowVisibilityLimit {
+            max_rows: 4,
+            bottom_y: 64.0,
+        },
+        0.0,
+        false,
+        context.defaults,
+        0,
+        4,
+        row_limit,
+    )
+    .render_if_needed_and_apply(
+        &snapshot,
+        BufferTextSpecialOverflowRenderState {
+            byte_idx: &mut byte_idx,
+            charpos: &mut charpos,
+            col: &mut col,
+            output_emitter: &mut context.output_emitter,
+            row_extend: &mut row_extend,
+            x: &mut x,
+            line_numbers: &mut line_numbers,
+            row_geometry: &mut context.geometry,
+            row_flags: &mut context.row_flags,
+            hit_rows: &mut context.hit_rows,
+            hit_row_range: &mut hit_row_range,
+            builder: &mut context.builder,
+            evaluator: &mut context.eval,
+            prefix_request: &mut prefix_request,
+            hscroll_skip: &mut hscroll_skip,
+            word_wrap: &mut word_wrap,
+            trailing_whitespace: &mut trailing_whitespace,
+            row_y_positions: &mut context.row_y_positions,
+        },
+    );
+
+    assert_eq!(
+        outcome,
+        BufferTextSpecialOverflowRenderOutcome::AppendPrepared(
+            DisplayRowTransitionContinuation::Continue
+        )
+    );
+    assert_eq!(byte_idx, 0);
+    assert_eq!(charpos, 21);
+    assert_eq!(hit_row_range.start(), 21);
+    assert_eq!(x, 0.0);
+    assert_eq!(col, 0);
+    assert_eq!(row_extend.value_on(&context.geometry), None);
+}
+
+#[test]
 fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
     let action = BufferTextCharacterWrapSourceAction::new(13, 21);
     let mut byte_idx = 17;

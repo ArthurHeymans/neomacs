@@ -62,11 +62,11 @@ use crate::display_row_append::{
     BufferTextLineBreakRenderState, BufferTextOverflowRenderRequest, BufferTextOverflowRenderState,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
-    BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
-    BufferTextSpecialSourceCharRenderState, BufferTextSpecialWrapSourceAction,
-    BufferTextTruncationSkipAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
-    OverlayStringRenderState, TextWindowAppendSurfaceRequest,
+    BufferTextSourceCharRenderState, BufferTextSpecialOverflowRenderRequest,
+    BufferTextSpecialOverflowRenderState, BufferTextSpecialSourceCharRenderState,
+    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState, OverlayStringRenderState,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2379,115 +2379,49 @@ impl LayoutEngine {
                 );
             let prepared_append = match prepared_append {
                 BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
-                    if let Some(overflow_action) = special_prepared_append.overflow_action(
+                    let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
+                        &special_prepared_append,
+                        text,
+                        text_start_byte,
                         x,
                         text_append_surface.full_text_right_edge(),
                         params.truncate_lines,
-                    ) {
-                        match overflow_action {
-                            BufferTextSpecialSourceCharOverflowAction::Fits => {}
-                            BufferTextSpecialSourceCharOverflowAction::Truncate { transition } => {
-                                let truncation_skip =
-                                    BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
-                                        text,
-                                        &mut byte_idx,
-                                        &mut charpos,
-                                    );
-                                truncation_skip.apply_before_row_transition(
-                                    &mut line_numbers,
-                                    &mut row_extend,
-                                    &mut x,
-                                    content_x,
-                                );
-                                let row_transition = DisplayRowTextWindowEmitContext::new(
-                                    row_geometry_defaults,
-                                    text_matrix_row_base,
-                                    &mut row_y_positions,
-                                    max_rows,
-                                    &mut row_geometry,
-                                    &mut row_flags,
-                                    row_limit,
-                                    &mut hit_rows,
-                                    &mut self.matrix_builder,
-                                    &mut output_emitter,
-                                    evaluator,
-                                )
-                                .emit_overflow_then_row_start(
-                                    transition,
-                                    hit_row_range.range_to(charpos),
-                                    DisplayRowPosition { x_px: x, col },
-                                    DisplayRowTransitionRenderState::new(
-                                        &mut prefix_request,
-                                        has_prefix,
-                                        &mut line_numbers,
-                                        &mut hscroll_skip,
-                                        &mut word_wrap,
-                                        &mut trailing_whitespace,
-                                    ),
-                                    &mut col,
-                                );
-                                if truncation_skip
-                                    .sync_after_row_transition_if_visible(
-                                        row_transition,
-                                        sync_charpos_from_byte_idx(byte_idx),
-                                        &mut charpos,
-                                        &mut hit_row_range,
-                                    )
-                                    .should_break()
-                                {
-                                    break;
-                                }
-                                continue;
-                            }
-                            BufferTextSpecialSourceCharOverflowAction::Wrap { transition } => {
-                                let special_wrap_action =
-                                    BufferTextSpecialWrapSourceAction::new(charpos);
-                                special_wrap_action.apply_before_row_transition(
-                                    &mut row_extend,
-                                    &mut x,
-                                    content_x,
-                                );
-                                let hit_range =
-                                    special_wrap_action.hit_range_and_advance(&mut hit_row_range);
-                                let row_transition = DisplayRowTextWindowEmitContext::new(
-                                    row_geometry_defaults,
-                                    text_matrix_row_base,
-                                    &mut row_y_positions,
-                                    max_rows,
-                                    &mut row_geometry,
-                                    &mut row_flags,
-                                    row_limit,
-                                    &mut hit_rows,
-                                    &mut self.matrix_builder,
-                                    &mut output_emitter,
-                                    evaluator,
-                                )
-                                .emit_overflow_then_row_start(
-                                    transition,
-                                    hit_range,
-                                    DisplayRowPosition { x_px: x, col },
-                                    DisplayRowTransitionRenderState::new(
-                                        &mut prefix_request,
-                                        has_prefix,
-                                        &mut line_numbers,
-                                        &mut hscroll_skip,
-                                        &mut word_wrap,
-                                        &mut trailing_whitespace,
-                                    ),
-                                    &mut col,
-                                );
-                                if special_wrap_action
-                                    .transition_continuation(
-                                        row_transition,
-                                        &row_geometry,
-                                        row_visibility_limit,
-                                    )
-                                    .should_break()
-                                {
-                                    break;
-                                }
-                            }
-                        }
+                        row_visibility_limit,
+                        content_x,
+                        has_prefix,
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        max_rows,
+                        row_limit,
+                    )
+                    .render_if_needed_and_apply(
+                        buffer,
+                        BufferTextSpecialOverflowRenderState {
+                            byte_idx: &mut byte_idx,
+                            charpos: &mut charpos,
+                            col: &mut col,
+                            output_emitter: &mut output_emitter,
+                            row_extend: &mut row_extend,
+                            x: &mut x,
+                            line_numbers: &mut line_numbers,
+                            row_geometry: &mut row_geometry,
+                            row_flags: &mut row_flags,
+                            hit_rows: &mut hit_rows,
+                            hit_row_range: &mut hit_row_range,
+                            builder: &mut self.matrix_builder,
+                            evaluator,
+                            prefix_request: &mut prefix_request,
+                            hscroll_skip: &mut hscroll_skip,
+                            word_wrap: &mut word_wrap,
+                            trailing_whitespace: &mut trailing_whitespace,
+                            row_y_positions: &mut row_y_positions,
+                        },
+                    );
+                    if special_overflow_outcome.should_break() {
+                        break;
+                    }
+                    if special_overflow_outcome.should_continue_buffer_walk() {
+                        continue;
                     }
 
                     if special_prepared_append
