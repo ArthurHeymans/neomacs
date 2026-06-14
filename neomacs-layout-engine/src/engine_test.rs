@@ -1,12 +1,13 @@
 use super::*;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
-use crate::display_origin::DisplayOrigin;
+use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append::{
     DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
+    OverlayStringRenderBatchSource,
 };
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_row_walk_state::{

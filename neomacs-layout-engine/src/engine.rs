@@ -52,7 +52,6 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_origin::OverlayStringKind;
 use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
@@ -61,13 +60,12 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, DisplayPropertyReplacementAppendResolveRequest,
-    DisplayRowLineBreakTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
+    BufferOverlayStringRenderContext, BufferTextPreparedSourceCharAppend,
+    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
+    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
     SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
-    render_overlay_string_batch,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -1992,6 +1990,22 @@ impl LayoutEngine {
             };
         }
 
+        macro_rules! overlay_string_context {
+            () => {
+                BufferOverlayStringRenderContext::for_text_row(
+                    has_overlays,
+                    params.window_id as u64,
+                    &text_append_surface,
+                    &active_face_state,
+                    char_h,
+                    default_face_ascent,
+                    text_y,
+                    text_matrix_row_base,
+                    max_rows,
+                )
+            };
+        }
+
         // --- GlyphMatrix builder: begin window and first row ---
         let matrix_rows = text_matrix_row_base + text_matrix_rows + bottom_chrome_rows;
         let matrix_cols = cols.max(1);
@@ -2152,47 +2166,23 @@ impl LayoutEngine {
                     // Check for overlay strings at invisible region boundary.
                     // Packages like org-mode use overlay after-strings at invisible
                     // boundaries to show fold indicators (e.g. "[N lines]").
-                    if has_overlays {
-                        let invis_text_props =
-                            super::neovm_bridge::RustTextPropAccess::new_for_window(
-                                buffer,
-                                params.window_id as u64,
-                            );
-                        let (_before_strings, after_strings) =
-                            invis_text_props.overlay_strings_at(charpos);
-                        if !after_strings.is_empty() {
-                            render_overlay_string_batch(
-                                evaluator,
-                                &mut output_emitter,
-                                buffer,
-                                OverlayStringRenderBatchSource::new(
-                                    &after_strings,
-                                    CharPos0::new(charpos as usize),
-                                    OverlayStringKind::After,
-                                ),
-                                &mut self.font_metrics,
-                                face_resolver,
-                                &mut x,
-                                &mut col,
-                                &mut row_geometry,
-                                &mut cursor_info,
-                                &mut hit_rows,
-                                &mut hit_row_range,
-                                &mut row_y_positions,
-                                OverlayStringRenderRowContext::new(
-                                    &text_append_surface,
-                                    &active_face_state,
-                                    char_h,
-                                    default_face_ascent,
-                                    text_y,
-                                    text_matrix_row_base,
-                                    max_rows,
-                                ),
-                                &mut face_ids,
-                                &mut self.matrix_builder,
-                            );
-                        }
-                    }
+                    overlay_string_context!().render_after_at(
+                        evaluator,
+                        &mut output_emitter,
+                        buffer,
+                        charpos,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        &mut x,
+                        &mut col,
+                        &mut row_geometry,
+                        &mut cursor_info,
+                        &mut hit_rows,
+                        &mut hit_row_range,
+                        &mut row_y_positions,
+                        &mut face_ids,
+                        &mut self.matrix_builder,
+                    );
                     continue;
                 }
                 text_property_checkpoints.record_invisible_next(next_visible);
@@ -3002,45 +2992,23 @@ impl LayoutEngine {
             }
 
             // --- Overlay before-strings ---
-            if has_overlays {
-                let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
-                    buffer,
-                    params.window_id as u64,
-                );
-                let (before_strings, _) = text_props.overlay_strings_at(charpos);
-                if !before_strings.is_empty() {
-                    render_overlay_string_batch(
-                        evaluator,
-                        &mut output_emitter,
-                        buffer,
-                        OverlayStringRenderBatchSource::new(
-                            &before_strings,
-                            CharPos0::new(charpos as usize),
-                            OverlayStringKind::Before,
-                        ),
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &mut x,
-                        &mut col,
-                        &mut row_geometry,
-                        &mut cursor_info,
-                        &mut hit_rows,
-                        &mut hit_row_range,
-                        &mut row_y_positions,
-                        OverlayStringRenderRowContext::new(
-                            &text_append_surface,
-                            &active_face_state,
-                            char_h,
-                            default_face_ascent,
-                            text_y,
-                            text_matrix_row_base,
-                            max_rows,
-                        ),
-                        &mut face_ids,
-                        &mut self.matrix_builder,
-                    );
-                }
-            }
+            overlay_string_context!().render_before_at(
+                evaluator,
+                &mut output_emitter,
+                buffer,
+                charpos,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut x,
+                &mut col,
+                &mut row_geometry,
+                &mut cursor_info,
+                &mut hit_rows,
+                &mut hit_row_range,
+                &mut row_y_positions,
+                &mut face_ids,
+                &mut self.matrix_builder,
+            );
 
             let appended = prepared_append.append_to_text_row(
                 &buffer_row_append_context,
@@ -3061,45 +3029,23 @@ impl LayoutEngine {
             word_wrap.allow_after_current_char(ch);
 
             // --- Overlay after-strings ---
-            if has_overlays {
-                let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
-                    buffer,
-                    params.window_id as u64,
-                );
-                let (_, after_strings) = text_props.overlay_strings_at(charpos);
-                if !after_strings.is_empty() {
-                    render_overlay_string_batch(
-                        evaluator,
-                        &mut output_emitter,
-                        buffer,
-                        OverlayStringRenderBatchSource::new(
-                            &after_strings,
-                            CharPos0::new(charpos as usize),
-                            OverlayStringKind::After,
-                        ),
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &mut x,
-                        &mut col,
-                        &mut row_geometry,
-                        &mut cursor_info,
-                        &mut hit_rows,
-                        &mut hit_row_range,
-                        &mut row_y_positions,
-                        OverlayStringRenderRowContext::new(
-                            &text_append_surface,
-                            &active_face_state,
-                            char_h,
-                            default_face_ascent,
-                            text_y,
-                            text_matrix_row_base,
-                            max_rows,
-                        ),
-                        &mut face_ids,
-                        &mut self.matrix_builder,
-                    );
-                }
-            }
+            overlay_string_context!().render_after_at(
+                evaluator,
+                &mut output_emitter,
+                buffer,
+                charpos,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut x,
+                &mut col,
+                &mut row_geometry,
+                &mut cursor_info,
+                &mut hit_rows,
+                &mut hit_row_range,
+                &mut row_y_positions,
+                &mut face_ids,
+                &mut self.matrix_builder,
+            );
 
             prepared_append.track_trailing_whitespace_rendered_char(
                 &mut trailing_whitespace,
@@ -3144,20 +3090,11 @@ impl LayoutEngine {
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position
         if has_overlays && row_geometry.is_within_row_limit(row_limit) {
-            let text_props = super::neovm_bridge::RustTextPropAccess::new_for_window(
-                buffer,
-                params.window_id as u64,
-            );
-            let (before_strings, after_strings) = text_props.overlay_strings_at(charpos);
-            render_overlay_string_batch(
+            overlay_string_context!().render_both_at(
                 evaluator,
                 &mut output_emitter,
                 buffer,
-                OverlayStringRenderBatchSource::new(
-                    &before_strings,
-                    CharPos0::new(charpos as usize),
-                    OverlayStringKind::Before,
-                ),
+                charpos,
                 &mut self.font_metrics,
                 face_resolver,
                 &mut x,
@@ -3167,45 +3104,6 @@ impl LayoutEngine {
                 &mut hit_rows,
                 &mut hit_row_range,
                 &mut row_y_positions,
-                OverlayStringRenderRowContext::new(
-                    &text_append_surface,
-                    &active_face_state,
-                    char_h,
-                    default_face_ascent,
-                    text_y,
-                    text_matrix_row_base,
-                    max_rows,
-                ),
-                &mut face_ids,
-                &mut self.matrix_builder,
-            );
-            render_overlay_string_batch(
-                evaluator,
-                &mut output_emitter,
-                buffer,
-                OverlayStringRenderBatchSource::new(
-                    &after_strings,
-                    CharPos0::new(charpos as usize),
-                    OverlayStringKind::After,
-                ),
-                &mut self.font_metrics,
-                face_resolver,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                OverlayStringRenderRowContext::new(
-                    &text_append_surface,
-                    &active_face_state,
-                    char_h,
-                    default_face_ascent,
-                    text_y,
-                    text_matrix_row_base,
-                    max_rows,
-                ),
                 &mut face_ids,
                 &mut self.matrix_builder,
             );
