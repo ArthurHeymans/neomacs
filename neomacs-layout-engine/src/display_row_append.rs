@@ -1312,7 +1312,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn resolve_source_char_advance_request_to_text_row(
+    fn resolve_source_char_append_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         resolver: &mut BufferTextSourceAdvanceResolver,
@@ -1320,7 +1320,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        request: BufferTextSourceCharAdvanceRequest<'_>,
+        request: BufferTextSourceCharAppendRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
         let parts = request.into_parts();
         self.resolve_source_range_advance_to_text_row(
@@ -1339,7 +1339,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_source_char_advance_request_to_append_request(
+    pub(crate) fn prepare_source_char_append_plan(
         &self,
         geometry: &DisplayRowGeometryState,
         resolver: &mut BufferTextSourceAdvanceResolver,
@@ -1347,9 +1347,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        request: BufferTextSourceCharAdvanceRequest<'_>,
-    ) -> BufferTextResolvedSourceCharAppendRequest {
-        let resolved_advance = self.resolve_source_char_advance_request_to_text_row(
+        request: BufferTextSourceCharAppendRequest<'_>,
+    ) -> BufferTextSourceCharAppendPlan {
+        let resolved_advance = self.resolve_source_char_append_request_to_text_row(
             geometry,
             resolver,
             builder,
@@ -1358,7 +1358,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             face_resolver,
             request,
         );
-        request.resolved_append_request(resolved_advance)
+        request.append_plan(resolved_advance)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1393,7 +1393,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_resolved_source_char_request_to_text_row(
+    pub(crate) fn append_source_char_plan_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -1401,9 +1401,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        request: BufferTextResolvedSourceCharAppendRequest,
+        plan: BufferTextSourceCharAppendPlan,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let parts = request.into_parts();
+        let parts = plan.into_parts();
         self.append_resolved_source_range_to_text_row(
             geometry,
             builder,
@@ -1774,14 +1774,14 @@ impl BufferTextSourceChar {
             .map(|display| self.special_request_for_display(display))
     }
 
-    pub(crate) fn advance_request_at<'text>(
+    pub(crate) fn append_request_at<'text>(
         &self,
         text: &'text [u8],
         byte_idx: usize,
         position: DisplayRowPosition,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourceCharAdvanceRequest<'text> {
-        BufferTextSourceCharAdvanceRequest {
+    ) -> BufferTextSourceCharAppendRequest<'text> {
+        BufferTextSourceCharAppendRequest {
             text,
             byte_idx,
             range: self.range(),
@@ -1878,15 +1878,15 @@ struct BufferTextSpecialSourceCharMeasureRequestParts {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextResolvedSourceCharAppendRequest {
+pub(crate) struct BufferTextSourceCharAppendPlan {
     range: BufferTextSourceRange,
     resolved_advance: ResolvedBufferTextSourceAdvance,
     position: DisplayRowPosition,
 }
 
-impl BufferTextResolvedSourceCharAppendRequest {
-    fn into_parts(self) -> BufferTextResolvedSourceCharAppendRequestParts {
-        BufferTextResolvedSourceCharAppendRequestParts {
+impl BufferTextSourceCharAppendPlan {
+    fn into_parts(self) -> BufferTextSourceCharAppendPlanParts {
+        BufferTextSourceCharAppendPlanParts {
             range: self.range,
             resolved_advance: self.resolved_advance,
             position: self.position,
@@ -1899,14 +1899,14 @@ impl BufferTextResolvedSourceCharAppendRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextResolvedSourceCharAppendRequestParts {
+struct BufferTextSourceCharAppendPlanParts {
     range: BufferTextSourceRange,
     resolved_advance: ResolvedBufferTextSourceAdvance,
     position: DisplayRowPosition,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceCharAdvanceRequest<'text> {
+pub(crate) struct BufferTextSourceCharAppendRequest<'text> {
     text: &'text [u8],
     byte_idx: usize,
     range: BufferTextSourceRange,
@@ -1914,9 +1914,9 @@ pub(crate) struct BufferTextSourceCharAdvanceRequest<'text> {
     cluster: BufferTextSourceClusterState,
 }
 
-impl<'text> BufferTextSourceCharAdvanceRequest<'text> {
-    fn into_parts(self) -> BufferTextSourceCharAdvanceRequestParts<'text> {
-        BufferTextSourceCharAdvanceRequestParts {
+impl<'text> BufferTextSourceCharAppendRequest<'text> {
+    fn into_parts(self) -> BufferTextSourceCharAppendRequestParts<'text> {
+        BufferTextSourceCharAppendRequestParts {
             text: self.text,
             byte_idx: self.byte_idx,
             range: self.range,
@@ -1925,11 +1925,11 @@ impl<'text> BufferTextSourceCharAdvanceRequest<'text> {
         }
     }
 
-    fn resolved_append_request(
+    fn append_plan(
         self,
         resolved_advance: ResolvedBufferTextSourceAdvance,
-    ) -> BufferTextResolvedSourceCharAppendRequest {
-        BufferTextResolvedSourceCharAppendRequest {
+    ) -> BufferTextSourceCharAppendPlan {
+        BufferTextSourceCharAppendPlan {
             range: self.range,
             resolved_advance,
             position: self.position,
@@ -1938,7 +1938,7 @@ impl<'text> BufferTextSourceCharAdvanceRequest<'text> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceCharAdvanceRequestParts<'text> {
+struct BufferTextSourceCharAppendRequestParts<'text> {
     text: &'text [u8],
     byte_idx: usize,
     range: BufferTextSourceRange,

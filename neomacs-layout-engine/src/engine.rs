@@ -5253,23 +5253,22 @@ impl LayoutEngine {
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            let advance_request = buffer_source_char.advance_request_at(
+            let append_request = buffer_source_char.append_request_at(
                 &text,
                 ch_start_byte_idx,
                 append_position,
                 cluster_tail,
             );
-            let append_request = buffer_row_append_context
-                .resolve_source_char_advance_request_to_append_request(
-                    &append_geometry,
-                    &mut buffer_text_advance,
-                    &mut self.matrix_builder,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    advance_request,
-                );
-            let advance = append_request.advance_px();
+            let append_plan = buffer_row_append_context.prepare_source_char_append_plan(
+                &append_geometry,
+                &mut buffer_text_advance,
+                &mut self.matrix_builder,
+                evaluator,
+                &mut self.font_metrics,
+                face_resolver,
+                append_request,
+            );
+            let advance = append_plan.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > text_append_surface.right_edge() {
                 flush_run(&self.run_buf, ligatures);
@@ -5519,16 +5518,15 @@ impl LayoutEngine {
             if ch != '\t' {
                 self.run_buf.push(ch, advance);
             }
-            let appended = buffer_row_append_context
-                .append_resolved_source_char_request_to_text_row(
-                    &append_geometry,
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    append_request,
-                );
+            let appended = buffer_row_append_context.append_source_char_plan_to_text_row(
+                &append_geometry,
+                &mut self.matrix_builder,
+                &mut output_emitter,
+                evaluator,
+                &mut self.font_metrics,
+                face_resolver,
+                append_plan,
+            );
             let Some((_progress, position)) = appended else {
                 break;
             };
