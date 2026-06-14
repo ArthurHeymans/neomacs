@@ -7,7 +7,7 @@
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
-    EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
+    EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
     InactiveMinibufferDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope,
     WindowChromeDisplayRowRequest, WindowChromeDisplayText, build_tab_bar_display,
     eval_status_line_format_value, max_mini_window_lines, message_truncate_lines,
@@ -3926,15 +3926,17 @@ impl LayoutEngine {
             face_resolver,
             evaluator.display_host.as_deref(),
             &mut face_ids,
-            row_index,
-            tab_bar_y,
-            width,
-            tab_bar_height,
-            frame_params.char_width,
-            tab_bar_ascent,
-            frame_params.char_height,
-            &tab_bar_face,
-            tab_bar.text,
+            FrameTabBarDisplayRowRequest {
+                row_index,
+                y: tab_bar_y,
+                width,
+                height: tab_bar_height,
+                char_width: frame_params.char_width,
+                ascent: tab_bar_ascent,
+                row_height: frame_params.char_height,
+                base_face: &tab_bar_face,
+                text: tab_bar.text,
+            },
         ) else {
             return None;
         };

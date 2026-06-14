@@ -67,6 +67,45 @@ pub(crate) enum FrameTabBarDisplayRowRender {
     Measured(MeasuredDisplayRow),
 }
 
+pub(crate) struct FrameTabBarDisplayRowRequest<'face> {
+    pub(crate) row_index: u32,
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) row_height: f32,
+    pub(crate) base_face: &'face ResolvedFace,
+    pub(crate) text: Value,
+}
+
+impl<'face> FrameTabBarDisplayRowRequest<'face> {
+    fn render_request(
+        &self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayRowLispStringRenderRequest<'face> {
+        let row_request = DisplayRowSourceRequestPolicy::new(
+            self.y,
+            self.width,
+            self.row_height,
+            self.char_width,
+            self.ascent,
+            DisplayTabPolicy::every(8),
+            GlyphRowRole::TabBar,
+        );
+        DisplayRowLispStringRenderRequest::from_base_face_policy(
+            row_request,
+            face_ids,
+            self.base_face,
+            self.text,
+        )
+    }
+
+    fn bounds(&self) -> Rect {
+        Rect::new(0.0, self.y, self.width, self.height)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct WindowChromeDisplayText {
     value: Value,
@@ -96,6 +135,47 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) text: WindowChromeDisplayText,
 }
 
+struct WindowChromeDisplayRowRenderParts<'face> {
+    output: ChromeRowOutput,
+    owner: DisplayRowOwner,
+    matrix_row: u32,
+    bounds: Rect,
+    render_request: DisplayRowLispStringRenderRequest<'face>,
+}
+
+impl<'face> WindowChromeDisplayRowRequest<'face> {
+    fn into_render_parts(
+        self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> WindowChromeDisplayRowRenderParts<'face> {
+        let row_request = DisplayRowSourceRequestPolicy::new(
+            self.bounds.y,
+            self.bounds.width,
+            self.bounds.height,
+            self.char_width,
+            self.ascent,
+            self.tab_policy,
+            window_chrome_glyph_row_role(self.kind),
+        )
+        .with_symbol_values(self.symbol_values);
+        WindowChromeDisplayRowRenderParts {
+            output: self.output,
+            owner: DisplayRowOwner::WindowChrome {
+                window_id: self.window_id,
+                kind: self.kind,
+            },
+            matrix_row: self.matrix_row.min(u32::MAX as usize) as u32,
+            bounds: self.bounds,
+            render_request: DisplayRowLispStringRenderRequest::from_base_face_policy(
+                row_request,
+                face_ids,
+                self.base_face,
+                self.text.value(),
+            ),
+        }
+    }
+}
+
 pub(crate) struct InactiveMinibufferDisplayRowRequest<'face> {
     pub(crate) window_id: u64,
     pub(crate) window_bounds: Rect,
@@ -106,6 +186,29 @@ pub(crate) struct InactiveMinibufferDisplayRowRequest<'face> {
     pub(crate) char_width: f32,
     pub(crate) ascent: f32,
     pub(crate) base_face: &'face ResolvedFace,
+}
+
+impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
+    fn render_request(
+        &self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayRowLispStringRenderRequest<'face> {
+        let row_request = DisplayRowSourceRequestPolicy::new(
+            self.window_bounds.y,
+            self.text_width,
+            self.row_height,
+            self.char_width,
+            self.ascent,
+            DisplayTabPolicy::every(8),
+            GlyphRowRole::Minibuffer,
+        );
+        DisplayRowLispStringRenderRequest::from_base_face_policy(
+            row_request,
+            face_ids,
+            self.base_face,
+            Value::string(""),
+        )
+    }
 }
 
 pub(crate) struct EchoMinibufferDisplayRowsRequest<'face> {
@@ -532,48 +635,34 @@ impl LayoutEngine {
         face_ids: &mut FrameFaceIdAllocator,
         request: WindowChromeDisplayRowRequest<'_>,
     ) -> Option<MeasuredDisplayRow> {
-        let output = request.output;
-        let owner = DisplayRowOwner::WindowChrome {
-            window_id: request.window_id,
-            kind: request.kind,
-        };
-        let row_request = DisplayRowSourceRequestPolicy::new(
-            request.bounds.y,
-            request.bounds.width,
-            request.bounds.height,
-            request.char_width,
-            request.ascent,
-            request.tab_policy,
-            window_chrome_glyph_row_role(request.kind),
-        )
-        .with_symbol_values(request.symbol_values);
-        let render_request = DisplayRowLispStringRenderRequest::from_base_face_policy(
-            row_request,
-            face_ids,
-            request.base_face,
-            request.text.value(),
-        );
+        let parts = request.into_render_parts(face_ids);
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
-        output_emitter.begin_chrome_progress(evaluator, output);
+        output_emitter.begin_chrome_progress(evaluator, parts.output);
         let mut render_context = DisplayRowRenderContext::new(
             face_resolver,
             evaluator.display_host.as_deref(),
             face_ids,
         );
         let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
-        let rendered_row = render_request.render_with_context(&mut renderer, &mut render_context);
+        let rendered_row = parts
+            .render_request
+            .render_with_context(&mut renderer, &mut render_context);
         let measured_row = rendered_row.map(|rendered| {
             MeasuredDisplayRow::new(
-                owner,
-                request.matrix_row.min(u32::MAX as usize) as u32,
-                request.bounds,
+                parts.owner,
+                parts.matrix_row,
+                parts.bounds,
                 rendered,
                 DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
             )
         });
         if let Some(ref measured_row) = measured_row {
             install_measured_window_display_row(&mut builder, measured_row);
-            output_emitter.emit_chrome_progress(evaluator, output, measured_row.output_progress());
+            output_emitter.emit_chrome_progress(
+                evaluator,
+                parts.output,
+                measured_row.output_progress(),
+            );
         }
         self.matrix_builder = builder;
         if let Some(ref measured_row) = measured_row {
@@ -587,31 +676,9 @@ impl LayoutEngine {
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
         face_ids: &mut FrameFaceIdAllocator,
-        row_index: u32,
-        y: f32,
-        width: f32,
-        height: f32,
-        char_width: f32,
-        ascent: f32,
-        row_height: f32,
-        tab_bar_face: &ResolvedFace,
-        rendered_text: Value,
+        request: FrameTabBarDisplayRowRequest<'_>,
     ) -> Option<FrameTabBarDisplayRowRender> {
-        let row_request = DisplayRowSourceRequestPolicy::new(
-            y,
-            width,
-            row_height,
-            char_width,
-            ascent,
-            DisplayTabPolicy::every(8),
-            GlyphRowRole::TabBar,
-        );
-        let render_request = DisplayRowLispStringRenderRequest::from_base_face_policy(
-            row_request,
-            face_ids,
-            tab_bar_face,
-            rendered_text,
-        );
+        let render_request = request.render_request(face_ids);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
@@ -623,8 +690,8 @@ impl LayoutEngine {
             DisplayRowOwner::FrameChrome {
                 kind: FrameChromeKind::TabBar,
             },
-            row_index,
-            Rect::new(0.0, y, width, height),
+            request.row_index,
+            request.bounds(),
             rendered,
             DisplayRowBoundsPolicy::MeasureContent,
         );
@@ -654,21 +721,7 @@ impl LayoutEngine {
             request.text_bounds,
             request.selected,
         );
-        let row_request = DisplayRowSourceRequestPolicy::new(
-            request.window_bounds.y,
-            request.text_width,
-            request.row_height,
-            request.char_width,
-            request.ascent,
-            DisplayTabPolicy::every(8),
-            GlyphRowRole::Minibuffer,
-        );
-        let render_request = DisplayRowLispStringRenderRequest::from_base_face_policy(
-            row_request,
-            face_ids,
-            request.base_face,
-            Value::string(""),
-        );
+        let render_request = request.render_request(face_ids);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
