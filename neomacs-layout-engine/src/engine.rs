@@ -57,9 +57,9 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextRenderContext,
-    BufferHscrollSkipAction, BufferHscrollSkipSourceChar, BufferInvisibleTextScanAction,
-    BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
+    BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextModifierAction,
+    BufferDisplayPropertyTextRenderContext, BufferHscrollSkipAction, BufferHscrollSkipSourceChar,
+    BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
     BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
@@ -2274,9 +2274,12 @@ impl LayoutEngine {
 
             // --- Display property check ---
             // Only call check_display_prop at property change boundaries for efficiency
-            if height_span.clear_if_expired(charpos, window_start) {
-                face_scan.invalidate();
-            }
+            BufferDisplayPropertyTextModifierAction::clear_expired_height_span(
+                &mut height_span,
+                &mut face_scan,
+                charpos,
+                window_start,
+            );
             resolve_current_face_state!();
             match BufferDisplayPropertyTextRenderContext::new(
                 buf_id,
@@ -2331,12 +2334,10 @@ impl LayoutEngine {
                     continue;
                 }
                 BufferDisplayPropertyTextAppendAction::Modifiers(modifiers) => {
-                    if let Some(raise_offset_px) = modifiers.raise_offset_px() {
-                        raise_span.set(raise_offset_px, modifiers.next_change());
-                    }
-                    if let Some(factor) = modifiers.height_factor() {
-                        height_span.set(factor, modifiers.next_change());
-                        face_scan.invalidate();
+                    if modifiers
+                        .apply_to_walk_state(&mut raise_span, &mut height_span, &mut face_scan)
+                        .height_face_changed()
+                    {
                         resolve_current_face_state!();
                     }
                 }
@@ -2829,7 +2830,11 @@ impl LayoutEngine {
             }
 
             // Reset raise offset when past the raise region
-            raise_span.clear_if_expired(charpos, window_start);
+            BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(
+                &mut raise_span,
+                charpos,
+                window_start,
+            );
 
             prepared_append.capture_cursor_info_for_main_char_if_point(
                 &mut cursor_info,

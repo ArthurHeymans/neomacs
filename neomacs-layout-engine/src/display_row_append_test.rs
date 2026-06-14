@@ -28,7 +28,8 @@ use crate::display_row_geometry::{
     DisplayRowYPositions,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, FaceScanCheckpoint, WordWrapBreakCandidate, WordWrapRenderState,
+    ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
+    WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
@@ -5073,6 +5074,45 @@ fn buffer_display_property_render_context_returns_modifier_action_from_checkpoin
         _ => panic!("expected modifier action"),
     }
     assert_eq!(checkpoints.display_next(), 1);
+}
+
+#[test]
+fn buffer_display_property_text_modifier_action_applies_walk_state() {
+    let action = BufferDisplayPropertyTextModifierAction::new_for_test(Some(-4.0), Some(1.5), 11);
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    let mut height_span = ActiveDisplayPropertySpan::inactive();
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+
+    let outcome = action.apply_to_walk_state(&mut raise_span, &mut height_span, &mut face_scan);
+
+    assert!(outcome.height_face_changed());
+    assert_eq!(raise_span.value(), Some(-4.0));
+    assert_eq!(height_span.value(), Some(1.5));
+    assert!(face_scan.should_resolve_at(0));
+}
+
+#[test]
+fn buffer_display_property_text_modifier_action_clears_expired_spans() {
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    raise_span.set(-3.0, 7);
+    let mut height_span = ActiveDisplayPropertySpan::inactive();
+    height_span.set(1.25, 9);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+
+    BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(&mut raise_span, 7, 1);
+    let outcome = BufferDisplayPropertyTextModifierAction::clear_expired_height_span(
+        &mut height_span,
+        &mut face_scan,
+        9,
+        1,
+    );
+
+    assert!(outcome.height_face_changed());
+    assert_eq!(raise_span.value(), None);
+    assert_eq!(height_span.value(), None);
+    assert!(face_scan.should_resolve_at(0));
 }
 
 #[test]

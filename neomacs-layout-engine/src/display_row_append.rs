@@ -36,11 +36,11 @@ use crate::display_row_geometry::{
     DisplayRowTextPosition, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row_walk_state::{
-    BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
-    TextPropertyScanCheckpoints, TextRowTransitionPrefixAction, TextRowTransitionStatePolicy,
-    TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
-    skip_text_to_charpos, skip_to_newline,
+    ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
+    HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
+    SpecialTextRowOverflowDecision, TextPropertyScanCheckpoints, TextRowTransitionPrefixAction,
+    TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapBreakCandidate,
+    WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -6208,6 +6208,23 @@ pub(crate) struct BufferDisplayPropertyTextModifierAction {
     next_change: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferDisplayPropertyTextModifierStateOutcome {
+    height_face_changed: bool,
+}
+
+impl BufferDisplayPropertyTextModifierStateOutcome {
+    fn new(height_face_changed: bool) -> Self {
+        Self {
+            height_face_changed,
+        }
+    }
+
+    pub(crate) fn height_face_changed(self) -> bool {
+        self.height_face_changed
+    }
+}
+
 impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -6434,6 +6451,40 @@ impl BufferDisplayPropertyTextReplacementOutcome {
 }
 
 impl BufferDisplayPropertyTextModifierAction {
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        raise_offset_px: Option<f32>,
+        height_factor: Option<f32>,
+        next_change: i64,
+    ) -> Self {
+        Self {
+            raise_offset_px,
+            height_factor,
+            next_change,
+        }
+    }
+
+    pub(crate) fn clear_expired_raise_span(
+        raise_span: &mut ActiveDisplayPropertySpan<f32>,
+        charpos: i64,
+        inactive_end_charpos: i64,
+    ) {
+        let _ = raise_span.clear_if_expired(charpos, inactive_end_charpos);
+    }
+
+    pub(crate) fn clear_expired_height_span(
+        height_span: &mut ActiveDisplayPropertySpan<f32>,
+        face_scan: &mut FaceScanCheckpoint,
+        charpos: i64,
+        inactive_end_charpos: i64,
+    ) -> BufferDisplayPropertyTextModifierStateOutcome {
+        let height_face_changed = height_span.clear_if_expired(charpos, inactive_end_charpos);
+        if height_face_changed {
+            face_scan.invalidate();
+        }
+        BufferDisplayPropertyTextModifierStateOutcome::new(height_face_changed)
+    }
+
     fn for_display_property(
         display_property: &DisplayPropertyClassification,
         row_height: f32,
@@ -6454,14 +6505,36 @@ impl BufferDisplayPropertyTextModifierAction {
         })
     }
 
+    pub(crate) fn apply_to_walk_state(
+        self,
+        raise_span: &mut ActiveDisplayPropertySpan<f32>,
+        height_span: &mut ActiveDisplayPropertySpan<f32>,
+        face_scan: &mut FaceScanCheckpoint,
+    ) -> BufferDisplayPropertyTextModifierStateOutcome {
+        if let Some(raise_offset_px) = self.raise_offset_px {
+            raise_span.set(raise_offset_px, self.next_change);
+        }
+        let height_face_changed = if let Some(factor) = self.height_factor {
+            height_span.set(factor, self.next_change);
+            face_scan.invalidate();
+            true
+        } else {
+            false
+        };
+        BufferDisplayPropertyTextModifierStateOutcome::new(height_face_changed)
+    }
+
+    #[cfg(test)]
     pub(crate) fn raise_offset_px(self) -> Option<f32> {
         self.raise_offset_px
     }
 
+    #[cfg(test)]
     pub(crate) fn height_factor(self) -> Option<f32> {
         self.height_factor
     }
 
+    #[cfg(test)]
     pub(crate) fn next_change(self) -> i64 {
         self.next_change
     }
