@@ -22,15 +22,14 @@ use super::unicode::*;
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
     ChromeRowOutput, TextWindowBegin, TextWindowCursor, TextWindowCursorEffects,
-    TextWindowDecorativeCursor, TextWindowDisplayRange, TextWindowLineNumberMargin,
-    TextWindowRightBorder, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
-    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    current_text_window_cluster_tail, emit_text_window_line_number_margin,
-    finish_text_matrix_row_output, finish_text_window_output_rows,
+    TextWindowDecorativeCursor, TextWindowLineNumberMargin, TextWindowOutputInstall,
+    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightBorder,
+    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
+    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
+    emit_text_window_line_number_margin, finish_pending_text_window_row,
     install_last_window_right_border, install_text_window_cursor_effects,
-    install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
-    publish_text_window_cursor, publish_text_window_decorative_cursor,
-    record_text_window_display_range,
+    install_text_window_output, mark_current_text_row_truncated_left, publish_text_window_cursor,
+    publish_text_window_decorative_cursor, record_text_window_redisplay_positions,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -3264,20 +3263,21 @@ impl LayoutEngine {
             }
         }
 
-        let has_pending_row_output = output_emitter.current_row_has_output();
-        if row_geometry.is_within_row_limit(row_limit)
-            && hit_row_range.should_finish_current_row(charpos, has_pending_row_output)
-        {
-            let row_y_start = row_geometry.current_row_y(&row_y_positions, text_y, char_h);
-            let row_cursor = row_geometry.with_row_y(row_y_start).cursor();
-            hit_rows.push(row_cursor.hit_row(hit_row_range.start(), charpos));
-            finish_text_matrix_row_output(
-                &mut self.matrix_builder,
-                &mut output_emitter,
-                evaluator,
-                row_cursor.finish_current_row(),
-            );
-        }
+        finish_pending_text_window_row(
+            &mut self.matrix_builder,
+            &mut output_emitter,
+            evaluator,
+            TextWindowPendingRowFinish {
+                row_geometry: &row_geometry,
+                row_limit,
+                row_y_positions: &row_y_positions,
+                text_y,
+                char_height: char_h,
+                charpos,
+                hit_row_range: &mut hit_row_range,
+                hit_rows: &mut hit_rows,
+            },
+        );
 
         for spec in &params.visual_cursors {
             let Some(style) = cursor_style_for_visual(spec) else {
@@ -3430,40 +3430,22 @@ impl LayoutEngine {
             return;
         }
 
-        let window_start_lisp = layout_i64_char_pos_to_lisp_char_pos(window_start);
-        // Use the last row that actually has a buffer position, not
-        // just the last row.  Empty trailing rows (e.g. the blank
-        // line after a buffer ending with `\n`) have
-        // end_buffer_pos = None.  Using `.last()` hit that None and
-        // fell back to 1, making the %p mode-line construct show
-        // "Top" instead of "All" for short buffers.
-        let window_end_lisp = output_emitter
-            .rows()
-            .iter()
-            .rev()
-            .find_map(|row| row.end_buffer_pos)
-            .map(|pos| layout_i64_char_pos_to_lisp_char_pos(pos.as_i64()))
-            .unwrap_or_else(|| LispCharPos1::from_one_based_usize(1));
-        let window_end_byte = EmacsBytePos::new(text_start_byte.saturating_add(byte_idx));
-        let window_end_vpos = output_emitter
-            .rows()
-            .last()
-            .map(|row| row.row.max(0) as usize)
-            .unwrap_or(0);
-
-        record_text_window_display_range(
+        let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
+            &output_emitter,
+            window_start,
+            text_start_byte,
+            byte_idx,
+        );
+        record_text_window_redisplay_positions(
             &mut self.matrix_builder,
-            TextWindowDisplayRange {
-                window_id: params.window_id as u64,
-                window_start: window_start_lisp,
-                window_end: window_end_lisp,
-            },
+            params.window_id as u64,
+            redisplay_positions,
         );
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
-            window_start_lisp.as_i64(),
-            window_end_lisp.as_i64()
+            redisplay_positions.window_start.as_i64(),
+            redisplay_positions.window_end.as_i64()
         );
 
         // GNU status-line percent specs read the live window state from the
@@ -3474,35 +3456,33 @@ impl LayoutEngine {
         evaluator.publish_redisplay_window_positions(
             frame_id,
             neovm_core::window::WindowId(params.window_id as u64),
-            window_start_lisp,
+            redisplay_positions.window_start,
             LispCharPos1::from_one_based_usize(accessible_end_lisp_char),
             EmacsBytePos::new(accessible_end_emacs_byte),
-            window_end_lisp,
-            window_end_byte,
-            window_end_vpos,
+            redisplay_positions.window_end,
+            redisplay_positions.window_end_byte,
+            redisplay_positions.window_end_vpos,
         );
 
         // --- GlyphMatrix builder: finalize text rows, then emit chrome rows
         // into their real glyph-matrix slots before closing the window. ---
-        finish_text_window_output_rows(&mut self.matrix_builder, &output_emitter);
-        if reserve_right_special_col {
-            let marker_column = if reserve_right_border_col {
+        let right_edge_markers = reserve_right_special_col.then(|| TextWindowRightEdgeMarkers {
+            text_matrix_row_base,
+            matrix_cols,
+            column: if reserve_right_border_col {
                 TextWindowRightEdgeMarkerColumn::BeforeRightBorder
             } else {
                 TextWindowRightEdgeMarkerColumn::LastColumn
-            };
-            install_text_window_right_edge_markers(
-                &mut self.matrix_builder,
-                TextWindowRightEdgeMarkers {
-                    text_matrix_row_base,
-                    matrix_cols,
-                    column: marker_column,
-                    row_flags: &row_flags,
-                    face_id: 0,
-                    char_width: char_w,
-                },
-            );
-        }
+            },
+            row_flags: &row_flags,
+            face_id: 0,
+            char_width: char_w,
+        });
+        install_text_window_output(
+            &mut self.matrix_builder,
+            &output_emitter,
+            TextWindowOutputInstall { right_edge_markers },
+        );
 
         let mut status_line_symbol_values = std::collections::HashMap::new();
         if let Some(buffer) = evaluator

@@ -11,6 +11,9 @@ use super::TextWindowCursorEffects;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
 use super::TextWindowLineNumberMargin;
+use super::TextWindowOutputInstall;
+use super::TextWindowPendingRowFinish;
+use super::TextWindowRedisplayPositions;
 use super::TextWindowRightBorder;
 use super::TextWindowRightEdgeMarkerColumn;
 use super::TextWindowRightEdgeMarkers;
@@ -21,9 +24,11 @@ use super::emit_text_matrix_row_transition;
 use super::emit_text_matrix_row_transition_with_limit;
 use super::emit_text_window_line_number_margin;
 use super::finish_and_end_text_matrix_row_output;
+use super::finish_pending_text_window_row;
 use super::finish_text_matrix_row_output;
 use super::install_last_window_right_border;
 use super::install_text_window_cursor_effects;
+use super::install_text_window_output;
 use super::install_text_window_right_edge_markers;
 use super::mark_current_text_row_truncated_left;
 use super::publish_text_window_cursor;
@@ -33,7 +38,11 @@ use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
 };
-use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
+use crate::display_row_geometry::{
+    DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit,
+    DisplayRowYPositions,
+};
+use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_status_line::DisplayRowOutputProgress;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -570,6 +579,85 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
 }
 
 #[test]
+fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-redisplay-positions",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+
+    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).begin(TextMatrixRowBegin {
+        matrix_row: 0,
+        row: 0,
+        col: 0,
+        y: 0.0,
+        x: 0.0,
+    });
+    emitter.note_display_buffer_pos(LispCharPos1::new(7));
+    finish_text_matrix_row_output(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextMatrixRowMetrics {
+            y: 0.0,
+            height: 16.0,
+            ascent: 12.0,
+        },
+    );
+    builder.end_row();
+
+    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).begin(TextMatrixRowBegin {
+        matrix_row: 1,
+        row: 1,
+        col: 0,
+        y: 16.0,
+        x: 0.0,
+    });
+    finish_text_matrix_row_output(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextMatrixRowMetrics {
+            y: 16.0,
+            height: 16.0,
+            ascent: 12.0,
+        },
+    );
+
+    let positions = TextWindowRedisplayPositions::from_output_rows(&emitter, 3, 100, 4);
+
+    assert_eq!(positions.window_start, LispCharPos1::new(4));
+    assert_eq!(positions.window_end, LispCharPos1::new(8));
+    assert_eq!(positions.window_end_byte, EmacsBytePos::new(104));
+    assert_eq!(positions.window_end_vpos, 1);
+    assert_eq!(
+        positions.display_range(41),
+        TextWindowDisplayRange {
+            window_id: 41,
+            window_start: LispCharPos1::new(4),
+            window_end: LispCharPos1::new(8),
+        }
+    );
+}
+
+#[test]
 fn close_text_window_output_closes_active_matrix_window() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
@@ -868,6 +956,66 @@ fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
 }
 
 #[test]
+fn finish_pending_text_window_row_records_hit_and_row_metrics() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-pending-text-row", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 20.0), true);
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).begin(TextMatrixRowBegin {
+        matrix_row: 0,
+        row: 0,
+        col: 0,
+        y: 4.0,
+        x: 0.0,
+    });
+
+    let row_geometry = DisplayRowGeometryState::new(0, 4.0, 0.0, 18.0, 13.0);
+    let row_y_positions = DisplayRowYPositions::with_first_row(4.0, 18.0);
+    let mut hit_row_range = HitRowRangeTracker::new(2);
+    let mut hit_rows = Vec::new();
+
+    let finished = finish_pending_text_window_row(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextWindowPendingRowFinish {
+            row_geometry: &row_geometry,
+            row_limit: DisplayRowLimit { max_rows: 1 },
+            row_y_positions: &row_y_positions,
+            text_y: 4.0,
+            char_height: 18.0,
+            charpos: 5,
+            hit_row_range: &mut hit_row_range,
+            hit_rows: &mut hit_rows,
+        },
+    );
+
+    assert!(finished);
+    assert_eq!(hit_rows.len(), 1);
+    assert_eq!(hit_rows[0].charpos_start, 2);
+    assert_eq!(hit_rows[0].charpos_end, 5);
+    assert_eq!(emitter.rows().len(), 1);
+    assert_eq!(emitter.row_metrics()[0].pixel_y, 4.0);
+    assert_eq!(emitter.row_metrics()[0].height, 18.0);
+    assert_eq!(emitter.row_metrics()[0].ascent, 13.0);
+}
+
+#[test]
 fn text_window_right_edge_markers_use_row_flags() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
@@ -905,6 +1053,75 @@ fn text_window_right_edge_markers_use_row_flags() {
     assert_char_glyph(&row1[3], '\\', 9);
     assert_eq!(row2.len(), 1);
     assert_char_glyph(&row2[0], 'x', 7);
+}
+
+#[test]
+fn install_text_window_output_installs_row_metrics_and_markers() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-install-text-window",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).begin(TextMatrixRowBegin {
+        matrix_row: 0,
+        row: 0,
+        col: 0,
+        y: 2.0,
+        x: 0.0,
+    });
+    write_char_to_current_row(&mut builder, 'x', 7, 0);
+    finish_text_matrix_row_output(
+        &mut builder,
+        &mut emitter,
+        &mut eval,
+        TextMatrixRowMetrics {
+            y: 2.0,
+            height: 20.0,
+            ascent: 15.0,
+        },
+    );
+
+    let mut row_flags = DisplayRowFlags::new(1);
+    row_flags.mark(0, DisplayRowFlagKind::Truncated);
+    install_text_window_output(
+        &mut builder,
+        &emitter,
+        TextWindowOutputInstall {
+            right_edge_markers: Some(TextWindowRightEdgeMarkers {
+                text_matrix_row_base: 0,
+                matrix_cols: 5,
+                column: TextWindowRightEdgeMarkerColumn::LastColumn,
+                row_flags: &row_flags,
+                face_id: 9,
+                char_width: 8.0,
+            }),
+        },
+    );
+
+    builder.end_window();
+    let state = builder.finish(5, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+
+    assert_eq!(row.height_px, 20.0);
+    assert_eq!(row.ascent_px, 15.0);
+    assert_char_glyph(&row.glyphs[GlyphArea::Text.index()][4], '$', 9);
 }
 
 #[test]

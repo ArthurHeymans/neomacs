@@ -19,7 +19,12 @@ use crate::display_row_builder::{
     pop_display_row_trailing_text_char, push_display_row_text_glyph,
     trim_display_row_text_to_total_glyph_count,
 };
-use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
+use crate::display_row_geometry::{
+    DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit,
+    DisplayRowYPositions,
+};
+use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::hit_test::HitRow;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
@@ -27,7 +32,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::LispCharPos1;
+use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
@@ -176,6 +181,29 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) row_flags: &'a DisplayRowFlags,
     pub(crate) face_id: u32,
     pub(crate) char_width: f32,
+}
+
+pub(crate) struct TextWindowPendingRowFinish<'a> {
+    pub(crate) row_geometry: &'a DisplayRowGeometryState,
+    pub(crate) row_limit: DisplayRowLimit,
+    pub(crate) row_y_positions: &'a DisplayRowYPositions,
+    pub(crate) text_y: f32,
+    pub(crate) char_height: f32,
+    pub(crate) charpos: i64,
+    pub(crate) hit_row_range: &'a mut HitRowRangeTracker,
+    pub(crate) hit_rows: &'a mut Vec<HitRow>,
+}
+
+pub(crate) struct TextWindowOutputInstall<'a> {
+    pub(crate) right_edge_markers: Option<TextWindowRightEdgeMarkers<'a>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextWindowRedisplayPositions {
+    pub(crate) window_start: LispCharPos1,
+    pub(crate) window_end: LispCharPos1,
+    pub(crate) window_end_byte: EmacsBytePos,
+    pub(crate) window_end_vpos: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -386,6 +414,52 @@ pub(crate) fn record_text_window_display_range(
     }
 }
 
+impl TextWindowRedisplayPositions {
+    pub(crate) fn from_output_rows(
+        output_emitter: &WindowOutputEmitter,
+        window_start: i64,
+        text_start_byte: usize,
+        byte_idx: usize,
+    ) -> Self {
+        let window_start = layout_i64_char_pos_to_lisp_char_pos(window_start);
+        let window_end = output_emitter
+            .rows()
+            .iter()
+            .rev()
+            .find_map(|row| row.end_buffer_pos)
+            .map(|pos| layout_i64_char_pos_to_lisp_char_pos(pos.as_i64()))
+            .unwrap_or_else(|| LispCharPos1::from_one_based_usize(1));
+        let window_end_vpos = output_emitter
+            .rows()
+            .last()
+            .map(|row| row.row.max(0) as usize)
+            .unwrap_or(0);
+
+        Self {
+            window_start,
+            window_end,
+            window_end_byte: EmacsBytePos::new(text_start_byte.saturating_add(byte_idx)),
+            window_end_vpos,
+        }
+    }
+
+    pub(crate) fn display_range(self, window_id: u64) -> TextWindowDisplayRange {
+        TextWindowDisplayRange {
+            window_id,
+            window_start: self.window_start,
+            window_end: self.window_end,
+        }
+    }
+}
+
+pub(crate) fn record_text_window_redisplay_positions(
+    builder: &mut GlyphMatrixBuilder,
+    window_id: u64,
+    positions: TextWindowRedisplayPositions,
+) {
+    record_text_window_display_range(builder, positions.display_range(window_id));
+}
+
 pub(crate) fn close_text_window_output(builder: &mut GlyphMatrixBuilder) {
     builder.end_window();
 }
@@ -397,6 +471,39 @@ pub(crate) fn finish_text_matrix_row_output(
     metrics: TextMatrixRowMetrics,
 ) {
     TextMatrixRowOutput::new(builder, output_emitter, evaluator).finish(metrics);
+}
+
+pub(crate) fn finish_pending_text_window_row(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    request: TextWindowPendingRowFinish<'_>,
+) -> bool {
+    let has_pending_row_output = output_emitter.current_row_has_output();
+    if !request.row_geometry.is_within_row_limit(request.row_limit)
+        || !request
+            .hit_row_range
+            .should_finish_current_row(request.charpos, has_pending_row_output)
+    {
+        return false;
+    }
+
+    let row_y_start = request.row_geometry.current_row_y(
+        request.row_y_positions,
+        request.text_y,
+        request.char_height,
+    );
+    let row_cursor = request.row_geometry.with_row_y(row_y_start).cursor();
+    request
+        .hit_rows
+        .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
+    finish_text_matrix_row_output(
+        builder,
+        output_emitter,
+        evaluator,
+        row_cursor.finish_current_row(),
+    );
+    true
 }
 
 pub(crate) fn finish_and_end_text_matrix_row_output(
@@ -757,6 +864,17 @@ pub(crate) fn finish_text_window_output_rows(
         builder.set_row_metrics(metric.row, metric.pixel_y, metric.height, metric.ascent);
     }
     builder.end_row();
+}
+
+pub(crate) fn install_text_window_output(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &WindowOutputEmitter,
+    request: TextWindowOutputInstall<'_>,
+) {
+    finish_text_window_output_rows(builder, output_emitter);
+    if let Some(markers) = request.right_edge_markers {
+        install_text_window_right_edge_markers(builder, markers);
+    }
 }
 
 pub(crate) fn install_text_window_right_edge_markers(
