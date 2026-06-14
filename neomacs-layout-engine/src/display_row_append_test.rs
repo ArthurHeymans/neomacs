@@ -2167,19 +2167,22 @@ fn buffer_text_source_append_context_appends_source_char() {
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
     let mut append_state = BufferTextRowAppendState::default();
-    let prepared_append = append_context.prepare_source_char_at(
-        &geometry,
-        &mut append_state,
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
-        &source_char,
-        b"a",
-        0,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        None,
-    );
+    let prepared_append = append_context
+        .prepare_source_char_at(
+            &geometry,
+            &mut append_state,
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            &source_char,
+            b"a",
+            0,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            None,
+        )
+        .into_text()
+        .expect("ordinary buffer char should prepare text append");
     assert_eq!(
         prepared_append.cursor_slot_width(),
         CapturedCursorSlotWidth::Explicit(8.0)

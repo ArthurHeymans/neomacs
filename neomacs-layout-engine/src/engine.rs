@@ -61,12 +61,13 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
-    BufferTextSourceSpecialDisplayKind, DisplayPropertyReplacementAppendResolveRequest,
-    DisplayRowLineBreakTransitionRequest, DisplayRowOverflowTransitionRequest,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
-    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextMarker,
-    SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest, render_overlay_string_batch,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextSourceChar, BufferTextSourceSpecialDisplayKind,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
+    DisplayRowOverflowTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
+    SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
+    render_overlay_string_batch,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2676,152 +2677,9 @@ impl LayoutEngine {
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
-
-            if let Some(special_source_request) = buffer_source_char.special_request(cluster_tail) {
-                let special_prepared_append = buffer_row_append_context
-                    .prepare_special_source_char_at(
-                        &row_geometry,
-                        &mut self.matrix_builder,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        special_source_request,
-                        DisplayRowPosition { x_px: x, col },
-                    );
-                if let Some(overflow_decision) = special_prepared_append.overflow_decision(
-                    x,
-                    text_append_surface.full_text_right_edge(),
-                    params.truncate_lines,
-                ) {
-                    match overflow_decision {
-                        SpecialTextRowOverflowDecision::Fits => {}
-                        SpecialTextRowOverflowDecision::Truncate => {
-                            // Same byte_idx/charpos desync as the main-char
-                            // truncation path: byte_idx is past the overflowing
-                            // special char, but charpos hasn't been incremented
-                            // for it yet. Compensate before skipping.
-                            charpos += 1;
-                            if skip_to_newline(text, &mut byte_idx, &mut charpos) {
-                                line_numbers.advance_line();
-                            }
-                            x = content_x;
-                            row_extend.clear();
-                            let row_transition = DisplayRowOverflowTransitionRequest::truncation(
-                                hit_row_range.range_to(charpos),
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                                max_rows,
-                            )
-                            .emit(
-                                &mut row_geometry,
-                                &mut row_flags,
-                                row_limit,
-                                &mut hit_rows,
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                            );
-                            if row_transition.is_exhausted() {
-                                break;
-                            }
-                            charpos = sync_charpos_from_byte_idx(byte_idx);
-                            hit_row_range.advance_to(charpos);
-                            col = 0;
-                            prefix_request.apply_transition_prefix_action(
-                                has_prefix,
-                                TextRowTransitionStatePolicy::special_truncation().apply(
-                                    &mut line_numbers,
-                                    &mut hscroll_skip,
-                                    &mut word_wrap,
-                                    &mut trailing_whitespace,
-                                ),
-                            );
-                            continue;
-                        }
-                        SpecialTextRowOverflowDecision::Wrap => {
-                            x = content_x;
-                            row_extend.clear();
-                            let boundary_request = DisplayRowOverflowTransitionRequest::visual_wrap(
-                                hit_row_range.range_to(charpos),
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                row_y_positions.recording(),
-                                max_rows,
-                            );
-                            hit_row_range.advance_to(charpos);
-                            let row_transition = boundary_request.emit(
-                                &mut row_geometry,
-                                &mut row_flags,
-                                row_limit,
-                                &mut hit_rows,
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                            );
-                            if row_transition.is_exhausted() {
-                                break;
-                            }
-                            col = 0;
-                            prefix_request.apply_transition_prefix_action(
-                                has_prefix,
-                                TextRowTransitionStatePolicy::special_visual_wrap().apply(
-                                    &mut line_numbers,
-                                    &mut hscroll_skip,
-                                    &mut word_wrap,
-                                    &mut trailing_whitespace,
-                                ),
-                            );
-                            if !row_geometry.current_row_is_visible(row_visibility_limit) {
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                match special_prepared_append.kind() {
-                    BufferTextSourceSpecialDisplayKind::Control if params.escape_glyph_fg != 0 => {
-                        let _ = face_ids.allocate();
-                    }
-                    BufferTextSourceSpecialDisplayKind::Nobreak if params.nobreak_char_fg != 0 => {
-                        let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
-                        let _ = face_ids.allocate();
-                    }
-                    _ => {}
-                }
-                let should_invalidate_face = special_prepared_append
-                    .kind()
-                    .invalidates_face_after_append();
-                if let Some((_progress, position)) = special_prepared_append.append_to_text_row(
-                    &buffer_row_append_context,
-                    &row_geometry,
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                ) {
-                    x = position.x_px;
-                    col = position.col;
-                }
-                charpos += 1;
-                word_wrap.disallow_after_current_char();
-                if should_invalidate_face {
-                    face_scan.invalidate();
-                }
-                continue;
-            }
-
             let append_position = DisplayRowPosition { x_px: x, col };
             let append_geometry = row_geometry;
 
-            // Check for line wrap / truncation. Use the same append renderer
-            // that materializes buffer text where builder semantics differ
-            // from a simple per-face ASCII advance.
             let prepared_append = buffer_row_append_context.prepare_source_char_at(
                 &append_geometry,
                 &mut buffer_text_append_state,
@@ -2835,6 +2693,147 @@ impl LayoutEngine {
                 append_position,
                 cluster_tail,
             );
+            let prepared_append = match prepared_append {
+                BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
+                    if let Some(overflow_decision) = special_prepared_append.overflow_decision(
+                        x,
+                        text_append_surface.full_text_right_edge(),
+                        params.truncate_lines,
+                    ) {
+                        match overflow_decision {
+                            SpecialTextRowOverflowDecision::Fits => {}
+                            SpecialTextRowOverflowDecision::Truncate => {
+                                // Same byte_idx/charpos desync as the main-char
+                                // truncation path: byte_idx is past the overflowing
+                                // special char, but charpos hasn't been incremented
+                                // for it yet. Compensate before skipping.
+                                charpos += 1;
+                                if skip_to_newline(text, &mut byte_idx, &mut charpos) {
+                                    line_numbers.advance_line();
+                                }
+                                x = content_x;
+                                row_extend.clear();
+                                let row_transition =
+                                    DisplayRowOverflowTransitionRequest::truncation(
+                                        hit_row_range.range_to(charpos),
+                                        row_geometry_defaults,
+                                        text_matrix_row_base,
+                                        col,
+                                        x,
+                                        row_y_positions.recording(),
+                                        max_rows,
+                                    )
+                                    .emit(
+                                        &mut row_geometry,
+                                        &mut row_flags,
+                                        row_limit,
+                                        &mut hit_rows,
+                                        &mut self.matrix_builder,
+                                        &mut output_emitter,
+                                        evaluator,
+                                    );
+                                if row_transition.is_exhausted() {
+                                    break;
+                                }
+                                charpos = sync_charpos_from_byte_idx(byte_idx);
+                                hit_row_range.advance_to(charpos);
+                                col = 0;
+                                prefix_request.apply_transition_prefix_action(
+                                    has_prefix,
+                                    TextRowTransitionStatePolicy::special_truncation().apply(
+                                        &mut line_numbers,
+                                        &mut hscroll_skip,
+                                        &mut word_wrap,
+                                        &mut trailing_whitespace,
+                                    ),
+                                );
+                                continue;
+                            }
+                            SpecialTextRowOverflowDecision::Wrap => {
+                                x = content_x;
+                                row_extend.clear();
+                                let boundary_request =
+                                    DisplayRowOverflowTransitionRequest::visual_wrap(
+                                        hit_row_range.range_to(charpos),
+                                        row_geometry_defaults,
+                                        text_matrix_row_base,
+                                        col,
+                                        x,
+                                        row_y_positions.recording(),
+                                        max_rows,
+                                    );
+                                hit_row_range.advance_to(charpos);
+                                let row_transition = boundary_request.emit(
+                                    &mut row_geometry,
+                                    &mut row_flags,
+                                    row_limit,
+                                    &mut hit_rows,
+                                    &mut self.matrix_builder,
+                                    &mut output_emitter,
+                                    evaluator,
+                                );
+                                if row_transition.is_exhausted() {
+                                    break;
+                                }
+                                col = 0;
+                                prefix_request.apply_transition_prefix_action(
+                                    has_prefix,
+                                    TextRowTransitionStatePolicy::special_visual_wrap().apply(
+                                        &mut line_numbers,
+                                        &mut hscroll_skip,
+                                        &mut word_wrap,
+                                        &mut trailing_whitespace,
+                                    ),
+                                );
+                                if !row_geometry.current_row_is_visible(row_visibility_limit) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    match special_prepared_append.kind() {
+                        BufferTextSourceSpecialDisplayKind::Control
+                            if params.escape_glyph_fg != 0 =>
+                        {
+                            let _ = face_ids.allocate();
+                        }
+                        BufferTextSourceSpecialDisplayKind::Nobreak
+                            if params.nobreak_char_fg != 0 =>
+                        {
+                            let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
+                            let _ = face_ids.allocate();
+                        }
+                        _ => {}
+                    }
+                    let should_invalidate_face = special_prepared_append
+                        .kind()
+                        .invalidates_face_after_append();
+                    if let Some((_progress, position)) = special_prepared_append.append_to_text_row(
+                        &buffer_row_append_context,
+                        &row_geometry,
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        &mut self.font_metrics,
+                        face_resolver,
+                    ) {
+                        x = position.x_px;
+                        col = position.col;
+                    }
+                    charpos += 1;
+                    word_wrap.disallow_after_current_char();
+                    if should_invalidate_face {
+                        face_scan.invalidate();
+                    }
+                    continue;
+                }
+                BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
+            };
+
+            // Check for line wrap / truncation. Use the same append renderer
+            // that materializes buffer text where builder semantics differ
+            // from a simple per-face ASCII advance.
             prepared_append.update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx);
             match prepared_append.overflow_decision(
                 ch,

@@ -2486,7 +2486,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prepare_source_char_at(
+    fn prepare_text_source_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut BufferTextRowAppendState,
@@ -2512,6 +2512,49 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
                 request,
             ),
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare_source_char_at(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        state: &mut BufferTextRowAppendState,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        source_char: &BufferTextSourceChar,
+        text: &[u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        cluster_tail: Option<(char, bool)>,
+    ) -> BufferTextPreparedSourceCharAppend {
+        if let Some(request) = source_char.special_request(cluster_tail) {
+            return BufferTextPreparedSourceCharAppend::Special(
+                self.prepare_special_source_char_at(
+                    geometry,
+                    builder,
+                    evaluator,
+                    font_metrics,
+                    face_resolver,
+                    request,
+                    position,
+                ),
+            );
+        }
+        BufferTextPreparedSourceCharAppend::Text(self.prepare_text_source_char_at(
+            geometry,
+            state,
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            source_char,
+            text,
+            byte_idx,
+            position,
+            cluster_tail,
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2569,6 +2612,22 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             plan.source_text(),
             plan.position(),
         )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferTextPreparedSourceCharAppend {
+    Special(BufferTextSpecialSourceCharPreparedAppend),
+    Text(BufferTextSourceCharPreparedAppend),
+}
+
+impl BufferTextPreparedSourceCharAppend {
+    #[cfg(test)]
+    pub(crate) fn into_text(self) -> Option<BufferTextSourceCharPreparedAppend> {
+        match self {
+            Self::Text(prepared_append) => Some(prepared_append),
+            Self::Special(_) => None,
+        }
     }
 }
 
