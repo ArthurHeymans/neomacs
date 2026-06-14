@@ -1275,6 +1275,18 @@ impl<'a> DisplayRowLispStringRenderRequest<'a> {
         Self { row_request, value }
     }
 
+    pub(crate) fn from_base_face_policy(
+        policy: DisplayRowSourceRequestPolicy,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face: &'a ResolvedFace,
+        value: Value,
+    ) -> Self {
+        Self::new(
+            policy.source_request_from_base_face(face_ids, base_face),
+            value,
+        )
+    }
+
     fn into_render_parts(
         self,
     ) -> (
