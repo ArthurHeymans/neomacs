@@ -4287,14 +4287,14 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
 
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
-    let end = append_context.append_string_source_request_to_text_row(
+    let end = request.render_to_text_row_and_emit(
         &mut builder,
         &mut output_emitter,
         &mut eval,
         &mut font_metrics,
         &face_resolver,
         &mut face_ids,
-        request,
+        &append_context,
         &mut measurer,
     );
 

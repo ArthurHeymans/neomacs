@@ -4430,6 +4430,45 @@ impl DisplayReplacementStringSourceAppendRequest {
             string_source,
         ))
     }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        append_context: &DisplayReplacementAppendContext<'_>,
+        item_policy: &mut impl DisplayRowRenderPolicy,
+    ) -> DisplayRowPosition {
+        let position = self.position();
+        let Some(source) = self.into_source(append_context.face_id) else {
+            return position;
+        };
+        let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
+        let Some(outcome) = DisplayRowSourceAppendOperation::new(
+            append_context.base_face,
+            append_context.face_id,
+            append_context.frame.clone(),
+            position,
+            DisplayRowAppendKind::DisplayReplacementString,
+        )
+        .render_source_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            source,
+            face_resolver,
+            face_ids,
+            &mut render_policy,
+        ) else {
+            return position;
+        };
+        outcome.end_position()
+    }
 }
 
 #[derive(Clone)]
@@ -4478,17 +4517,23 @@ impl DisplayReplacementStringAppendRequest {
             debug_assert!(false, "display string replacement missing base face");
             return position;
         };
-        replacement_append_context.append_full_text_width_string_item_to_text_row(
+        let source_request = self
+            .item
+            .source_append_request(replacement_append_context.replacement_source, position);
+        let mut item_policy = self.item.string_item_measurer();
+        let append_context = replacement_append_context.full_text_width_active_face(
+            replacement_base_face.face_id(),
+            replacement_base_face.face(),
+        );
+        source_request.render_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            self.item,
             face_resolver,
             face_ids,
-            replacement_base_face.face_id(),
-            replacement_base_face.face(),
-            position,
+            &append_context,
+            &mut item_policy,
         )
     }
 }
@@ -6065,33 +6110,6 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_full_text_width_string_item_to_text_row(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        item: DisplayReplacementStringAppendItem,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        face_id: u32,
-        base_face: &'a ResolvedFace,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        self.full_text_width_active_face(face_id, base_face)
-            .append_string_item_to_text_row(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                item,
-                face_resolver,
-                face_ids,
-                position,
-            )
-    }
-
-    #[allow(clippy::too_many_arguments)]
     fn append_item_request_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
@@ -6185,131 +6203,6 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             &mut render_policy,
         )
     }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_string_item_to_text_row(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        item: DisplayReplacementStringAppendItem,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        let request = item.source_append_request(self.replacement_source, position);
-        let mut item_policy = item.string_item_measurer();
-        self.append_string_source_request_to_text_row(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            face_ids,
-            request,
-            &mut item_policy,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn append_string_source_request_to_text_row(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        request: DisplayReplacementStringSourceAppendRequest,
-        item_policy: &mut impl DisplayRowRenderPolicy,
-    ) -> DisplayRowPosition {
-        append_display_replacement_string_request_to_text_row(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            request,
-            face_resolver,
-            self.base_face,
-            self.face_id,
-            face_ids,
-            self.frame.clone(),
-            item_policy,
-        )
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    source: S,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    fallback_face_id: u32,
-    face_ids: &mut FrameFaceIdAllocator,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-    item_policy: &mut impl DisplayRowRenderPolicy,
-) -> DisplayRowPosition {
-    let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
-    let Some(outcome) = DisplayRowSourceAppendOperation::new(
-        base_face,
-        fallback_face_id,
-        frame,
-        position,
-        DisplayRowAppendKind::DisplayReplacementString,
-    )
-    .render_source_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        source,
-        face_resolver,
-        face_ids,
-        &mut render_policy,
-    ) else {
-        return position;
-    };
-    outcome.end_position()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_display_replacement_string_request_to_text_row(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    request: DisplayReplacementStringSourceAppendRequest,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    fallback_face_id: u32,
-    face_ids: &mut FrameFaceIdAllocator,
-    frame: DisplayRowAppendFrame,
-    item_policy: &mut impl DisplayRowRenderPolicy,
-) -> DisplayRowPosition {
-    let position = request.position();
-    let Some(source) = request.into_source(fallback_face_id) else {
-        return position;
-    };
-    append_display_replacement_string_source_to_text_row(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        source,
-        face_resolver,
-        base_face,
-        fallback_face_id,
-        face_ids,
-        frame,
-        position,
-        item_policy,
-    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
