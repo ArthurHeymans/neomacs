@@ -1,3 +1,4 @@
+use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append::DisplayPropertyReplacementCursorPolicy;
 use crate::display_row_geometry::DisplayRowTextPosition;
@@ -5,7 +6,8 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::{
-    RowMetricsSnapshot, TextWindowCursor, WindowOutputEmitter, publish_text_window_cursor,
+    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, WindowOutputEmitter,
+    publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::types::Color;
@@ -658,6 +660,103 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         }
 
         CapturedTextWindowCursorPublishOutcome::Published
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct VisualTextWindowCursorPublishSummary {
+    pub(crate) requested: usize,
+    pub(crate) no_cursor: usize,
+    pub(crate) missing_point: usize,
+    pub(crate) clipped: usize,
+    pub(crate) published: usize,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct VisualTextWindowCursorPublishContext<'a> {
+    params: &'a WindowParams,
+    text_area_left: f32,
+    window_top: f32,
+    text_y: f32,
+    text_height: f32,
+    char_w: f32,
+}
+
+impl<'a> VisualTextWindowCursorPublishContext<'a> {
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        text_area_left: f32,
+        window_top: f32,
+        text_y: f32,
+        text_height: f32,
+        char_w: f32,
+    ) -> Self {
+        Self {
+            params,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            char_w,
+        }
+    }
+
+    pub(crate) fn publish_visual_cursors(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &WindowOutputEmitter,
+    ) -> VisualTextWindowCursorPublishSummary {
+        let mut summary = VisualTextWindowCursorPublishSummary::default();
+
+        for spec in &self.params.visual_cursors {
+            summary.requested += 1;
+            let Some(style) = cursor_style_for_visual(spec) else {
+                summary.no_cursor += 1;
+                continue;
+            };
+            let Some(point) = output_emitter
+                .point_for_lisp_buffer_pos(layout_i64_char_pos_to_lisp_char_pos(spec.charpos))
+            else {
+                summary.missing_point += 1;
+                continue;
+            };
+            let source = visual_cursor_source_from_point(
+                point,
+                spec.id as i64,
+                self.text_area_left,
+                self.window_top,
+            );
+            let resolved_cursor = resolve_cursor_geometry(
+                style,
+                source,
+                self.params.x_stretch_cursor,
+                self.char_w,
+                Color::from_pixel(spec.color),
+            );
+            if resolved_cursor.y < self.text_y
+                || resolved_cursor.y + resolved_cursor.height > self.text_y + self.text_height
+            {
+                summary.clipped += 1;
+                continue;
+            }
+            publish_text_window_decorative_cursor(
+                builder,
+                TextWindowDecorativeCursor {
+                    window_id: resolved_cursor.window_id(),
+                    slot_id: resolved_cursor.slot_id,
+                    x: resolved_cursor.x,
+                    y: resolved_cursor.y,
+                    width: resolved_cursor.width,
+                    height: resolved_cursor.height,
+                    style: resolved_cursor.style,
+                    color: resolved_cursor.color,
+                    effects: spec.effects.clone(),
+                },
+            );
+            summary.published += 1;
+        }
+
+        summary
     }
 }
 

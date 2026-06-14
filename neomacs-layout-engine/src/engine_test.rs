@@ -1,7 +1,8 @@
 use super::*;
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
-    CursorGeometryContext, CursorGeometrySource, cursor_style_for_window,
+    CursorGeometryContext, CursorGeometrySource, VisualTextWindowCursorPublishContext,
+    VisualTextWindowCursorPublishSummary, cursor_style_for_window,
 };
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
@@ -24,9 +25,10 @@ use crate::display_status_line::EchoMinibufferRowsRenderRequest;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
+use crate::types::VisualCursorSpec;
 use crate::window_output::WindowOutputEmitter;
 use neomacs_display_protocol::cursor::CursorBarWidth;
-use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
+use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
@@ -1206,6 +1208,67 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
     assert_eq!(phys.charpos, 4);
     assert_eq!(phys.width, 8.0);
     assert_eq!(phys.height, 16.0);
+}
+
+#[test]
+fn visual_text_window_cursor_publish_context_publishes_decorative_cursor_from_display_point() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("visual-cursor-publish-context", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 10.0, 20.0);
+    output_emitter.push_display_point(LispCharPos1::ONE, 34.0, 52.0, 11.0, 17.0, 2, 4);
+
+    let mut params = test_window_params();
+    params.x_stretch_cursor = false;
+    params.visual_cursors = vec![VisualCursorSpec {
+        id: -42,
+        charpos: 0,
+        cursor_kind: CursorKind::Bar,
+        cursor_bar_width: CursorBarWidth::new(3),
+        color: 0x00112233,
+        effects: None,
+    }];
+    let mut builder = GlyphMatrixBuilder::new();
+
+    let summary = VisualTextWindowCursorPublishContext::new(&params, 10.0, 20.0, 20.0, 80.0, 8.0)
+        .publish_visual_cursors(&mut builder, &output_emitter);
+
+    assert_eq!(
+        summary,
+        VisualTextWindowCursorPublishSummary {
+            requested: 1,
+            published: 1,
+            ..Default::default()
+        }
+    );
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert_eq!(state.cursors.len(), 1);
+    let cursor = &state.cursors[0];
+    assert_eq!(cursor.window_id, -42);
+    assert_eq!(
+        cursor.slot_id,
+        DisplaySlotId {
+            window_id: -42,
+            row: 2,
+            col: 4,
+        }
+    );
+    assert_eq!(cursor.x, 34.0);
+    assert_eq!(cursor.y, 52.0);
+    assert_eq!(cursor.width, 3.0);
+    assert_eq!(cursor.height, 17.0);
+    assert_eq!(cursor.color, Color::from_pixel(0x00112233));
 }
 
 fn test_window_params() -> WindowParams {

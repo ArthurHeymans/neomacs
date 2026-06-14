@@ -20,14 +20,13 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    ChromeRowOutput, TextWindowBegin, TextWindowCursorEffects, TextWindowDecorativeCursor,
-    TextWindowLineNumberMargin, TextWindowOutputInstall, TextWindowPendingRowFinish,
-    TextWindowRedisplayPositions, TextWindowRightBorder, TextWindowRightEdgeMarkerColumn,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
-    close_text_window_output, emit_text_window_line_number_margin, finish_pending_text_window_row,
+    ChromeRowOutput, TextWindowBegin, TextWindowCursorEffects, TextWindowLineNumberMargin,
+    TextWindowOutputInstall, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightBorder, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    emit_text_window_line_number_margin, finish_pending_text_window_row,
     install_last_window_right_border, install_text_window_cursor_effects,
-    install_text_window_output, publish_text_window_decorative_cursor,
-    record_text_window_redisplay_positions,
+    install_text_window_output, record_text_window_redisplay_positions,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -39,8 +38,8 @@ use crate::display_cursor::resolve_cursor_vertical_metrics;
 #[cfg(test)]
 use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth};
 use crate::display_cursor::{
-    CapturedTextWindowCursorPublishContext, CursorCaptureState, cursor_style_for_visual,
-    resolve_cursor_geometry, visual_cursor_source_from_point,
+    CapturedTextWindowCursorPublishContext, CursorCaptureState,
+    VisualTextWindowCursorPublishContext,
 };
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
@@ -3069,44 +3068,15 @@ impl LayoutEngine {
             },
         );
 
-        for spec in &params.visual_cursors {
-            let Some(style) = cursor_style_for_visual(spec) else {
-                continue;
-            };
-            let Some(point) = output_emitter
-                .point_for_lisp_buffer_pos(layout_i64_char_pos_to_lisp_char_pos(spec.charpos))
-            else {
-                continue;
-            };
-            let source =
-                visual_cursor_source_from_point(point, spec.id as i64, text_area_left, window_top);
-            let resolved_cursor = resolve_cursor_geometry(
-                style,
-                source,
-                params.x_stretch_cursor,
-                char_w,
-                Color::from_pixel(spec.color),
-            );
-            if resolved_cursor.y < text_y
-                || resolved_cursor.y + resolved_cursor.height > text_y + text_height
-            {
-                continue;
-            }
-            publish_text_window_decorative_cursor(
-                &mut self.matrix_builder,
-                TextWindowDecorativeCursor {
-                    window_id: resolved_cursor.window_id(),
-                    slot_id: resolved_cursor.slot_id,
-                    x: resolved_cursor.x,
-                    y: resolved_cursor.y,
-                    width: resolved_cursor.width,
-                    height: resolved_cursor.height,
-                    style: resolved_cursor.style,
-                    color: resolved_cursor.color,
-                    effects: spec.effects.clone(),
-                },
-            );
-        }
+        VisualTextWindowCursorPublishContext::new(
+            params,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            char_w,
+        )
+        .publish_visual_cursors(&mut self.matrix_builder, &output_emitter);
 
         // GNU redisplay keeps iterating until point visibility converges or no
         // further progress can be made.  Advance by actual rendered row spans
