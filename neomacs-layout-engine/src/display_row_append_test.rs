@@ -42,6 +42,20 @@ use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
 use std::sync::{Arc, Mutex};
 
+fn write_char_to_current_row_with_width(
+    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+    pixel_width: f32,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
+        })
+        .expect("current row");
+}
+
 struct RecordingAppendImageHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
 }
@@ -927,7 +941,7 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char_with_pixel_width('e', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
@@ -997,7 +1011,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char_with_pixel_width('e', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let request = frame.source_append_request(
@@ -1148,8 +1162,8 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char_with_pixel_width('X', 7, 0, 8.0);
-    builder.push_char_with_pixel_width('Y', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'X', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'Y', 7, 0, 8.0);
 
     let end = append_rendered_display_row_fragment_to_text_row_and_emit(
         &mut builder,
@@ -2230,7 +2244,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char_with_pixel_width('x', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
     let source_range = BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2));
@@ -2375,7 +2389,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char_with_pixel_width('e', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let append_context =

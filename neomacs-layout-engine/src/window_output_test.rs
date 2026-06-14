@@ -48,6 +48,65 @@ fn assert_char_glyph(glyph: &Glyph, ch: char, face_id: u32) {
     assert_eq!(glyph.face_id, face_id);
 }
 
+fn write_char_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, 0.0);
+        })
+        .expect("current row");
+}
+
+fn write_wide_char_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_wide_char_to_row(row, ch, face_id, charpos, 0.0);
+        })
+        .expect("current row");
+}
+
+fn write_cluster_continuation_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_cluster_continuation_to_row(row, ch, face_id, charpos);
+        })
+        .expect("current row");
+}
+
+fn write_left_margin_char_to_current_row(builder: &mut GlyphMatrixBuilder, ch: char, face_id: u32) {
+    builder
+        .with_current_row_mut(|row| {
+            row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::char(ch, face_id, 0));
+        })
+        .expect("current row");
+}
+
+fn write_left_margin_stretch_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    width_cols: u16,
+    face_id: u32,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::stretch(width_cols, face_id));
+        })
+        .expect("current row");
+}
+
 fn window_info(window_id: i64) -> WindowInfo {
     WindowInfo {
         window_id,
@@ -568,9 +627,9 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(window_id.0, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_left_margin_char('1', 7);
-    builder.push_left_margin_stretch(1, 7);
-    builder.push_char('H', 3, 100);
+    write_left_margin_char_to_current_row(&mut builder, '1', 7);
+    write_left_margin_stretch_to_current_row(&mut builder, 1, 7);
+    write_char_to_current_row(&mut builder, 'H', 3, 100);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
     publish_text_window_cursor(
@@ -675,13 +734,13 @@ fn current_text_window_cluster_tail_reports_live_text_row_tail() {
 
     assert_eq!(current_text_window_cluster_tail(&builder), None);
 
-    builder.push_wide_char('\u{1F1EF}', 3, 100);
+    write_wide_char_to_current_row(&mut builder, '\u{1F1EF}', 3, 100);
     assert_eq!(
         current_text_window_cluster_tail(&builder),
         Some(('\u{1F1EF}', true))
     );
 
-    builder.push_cluster_continuation('\u{1F1F5}', 3, 101);
+    write_cluster_continuation_to_current_row(&mut builder, '\u{1F1F5}', 3, 101);
     assert_eq!(
         current_text_window_cluster_tail(&builder),
         Some(('\u{1F1F5}', false))
@@ -808,7 +867,7 @@ fn text_window_right_edge_markers_use_row_flags() {
     builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
     for row in 0..3 {
         builder.begin_row(row, GlyphRowRole::Text);
-        builder.push_char('x', 7, row);
+        write_char_to_current_row(&mut builder, 'x', 7, row);
         builder.end_row();
     }
 

@@ -4,6 +4,97 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::types::Rect;
 
+fn write_char_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+) {
+    write_char_to_current_row_with_width(builder, ch, face_id, charpos, 0.0);
+}
+
+fn write_char_to_current_row_with_width(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+    pixel_width: f32,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
+        })
+        .expect("current row");
+}
+
+fn write_wide_char_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_wide_char_to_row(row, ch, face_id, charpos, 0.0);
+        })
+        .expect("current row");
+}
+
+fn write_cluster_continuation_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_cluster_continuation_to_row(row, ch, face_id, charpos);
+        })
+        .expect("current row");
+}
+
+fn write_run_member_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+    pixel_width: f32,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_run_member_to_row(row, ch, face_id, charpos, pixel_width);
+        })
+        .expect("current row");
+}
+
+fn write_stretch_to_current_row(builder: &mut GlyphMatrixBuilder, width_cols: u16, face_id: u32) {
+    builder
+        .with_current_row_mut(|row| {
+            crate::glyph_row_writer::push_stretch_to_row(row, width_cols, face_id, 0.0, 0.0, 0.0);
+        })
+        .expect("current row");
+}
+
+fn write_left_margin_char_to_current_row(builder: &mut GlyphMatrixBuilder, ch: char, face_id: u32) {
+    builder
+        .with_current_row_mut(|row| {
+            row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::char(ch, face_id, 0));
+        })
+        .expect("current row");
+}
+
+fn write_left_margin_stretch_to_current_row(
+    builder: &mut GlyphMatrixBuilder,
+    width_cols: u16,
+    face_id: u32,
+) {
+    builder
+        .with_current_row_mut(|row| {
+            row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::stretch(width_cols, face_id));
+        })
+        .expect("current row");
+}
+
 #[test]
 fn builder_starts_empty() {
     let builder = GlyphMatrixBuilder::new();
@@ -27,8 +118,8 @@ fn builder_tracks_single_window_single_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 24, 80, Rect::new(0.0, 0.0, 640.0, 384.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('H', 0, 0);
-    builder.push_char('i', 0, 1);
+    write_char_to_current_row(&mut builder, 'H', 0, 0);
+    write_char_to_current_row(&mut builder, 'i', 0, 1);
     builder.end_row();
     builder.end_window();
 
@@ -55,12 +146,12 @@ fn builder_tracks_multiple_rows() {
     builder.begin_window(1, 3, 10, Rect::new(0.0, 0.0, 80.0, 48.0), true);
 
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('a', 0, 0);
+    write_char_to_current_row(&mut builder, 'a', 0, 0);
     builder.end_row();
 
     builder.begin_row(1, GlyphRowRole::Text);
-    builder.push_char('b', 0, 5);
-    builder.push_char('c', 0, 6);
+    write_char_to_current_row(&mut builder, 'b', 0, 5);
+    write_char_to_current_row(&mut builder, 'c', 0, 6);
     builder.end_row();
 
     builder.end_window();
@@ -78,7 +169,7 @@ fn builder_stores_row_metrics_window_relative() {
     builder.begin_window(1, 2, 10, Rect::new(5.0, 20.0, 80.0, 40.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     builder.set_current_row_metrics(26.0, 18.0, 13.0);
-    builder.push_char('x', 0, 0);
+    write_char_to_current_row(&mut builder, 'x', 0, 0);
     builder.end_row();
     builder.end_window();
 
@@ -94,8 +185,8 @@ fn builder_tracks_wide_chars() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 5, 20, Rect::new(0.0, 0.0, 160.0, 80.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_wide_char('\u{4e16}', 0, 0);
-    builder.push_char('x', 0, 3);
+    write_wide_char_to_current_row(&mut builder, '\u{4e16}', 0, 0);
+    write_char_to_current_row(&mut builder, 'x', 0, 3);
     builder.end_row();
     builder.end_window();
 
@@ -114,9 +205,9 @@ fn builder_handles_stretch_glyphs() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 5, 20, Rect::new(0.0, 0.0, 160.0, 80.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('a', 0, 0);
-    builder.push_stretch(4, 0);
-    builder.push_char('b', 0, 5);
+    write_char_to_current_row(&mut builder, 'a', 0, 0);
+    write_stretch_to_current_row(&mut builder, 4, 0);
+    write_char_to_current_row(&mut builder, 'b', 0, 5);
     builder.end_row();
     builder.end_window();
 
@@ -131,7 +222,7 @@ fn builder_computes_row_hashes_on_finish() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('x', 0, 0);
+    write_char_to_current_row(&mut builder, 'x', 0, 0);
     builder.end_row();
     builder.end_window();
 
@@ -145,7 +236,7 @@ fn builder_resets_on_new_frame() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('x', 0, 0);
+    write_char_to_current_row(&mut builder, 'x', 0, 0);
     builder.end_row();
     builder.end_window();
 
@@ -160,7 +251,7 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('a', 0, 0);
+    write_char_to_current_row(&mut builder, 'a', 0, 0);
     builder.end_row();
 
     // Status-line row is added to the current window BEFORE closing.
@@ -224,11 +315,11 @@ fn builder_left_margin_chars() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_left_margin_stretch(2, 1);
-    builder.push_left_margin_char('4', 1);
-    builder.push_left_margin_char('2', 1);
-    builder.push_char('H', 0, 0);
-    builder.push_char('i', 0, 1);
+    write_left_margin_stretch_to_current_row(&mut builder, 2, 1);
+    write_left_margin_char_to_current_row(&mut builder, '4', 1);
+    write_left_margin_char_to_current_row(&mut builder, '2', 1);
+    write_char_to_current_row(&mut builder, 'H', 0, 0);
+    write_char_to_current_row(&mut builder, 'i', 0, 1);
     builder.end_row();
     builder.end_window();
 
@@ -253,10 +344,10 @@ fn builder_set_cursor_at_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('a', 0, 0);
+    write_char_to_current_row(&mut builder, 'a', 0, 0);
     builder.end_row();
     builder.begin_row(1, GlyphRowRole::Text);
-    builder.push_char('b', 0, 5);
+    write_char_to_current_row(&mut builder, 'b', 0, 5);
     builder.end_row();
 
     // Set cursor on row 1, column 0
@@ -276,7 +367,7 @@ fn builder_preserves_phys_cursor() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('a', 0, 0);
+    write_char_to_current_row(&mut builder, 'a', 0, 0);
     builder.end_row();
     builder.set_phys_cursor(PhysCursor {
         window_id: 1,
@@ -318,7 +409,7 @@ fn builder_preserves_high_window_id_phys_cursor() {
         true,
     );
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('M', 0, 0);
+    write_char_to_current_row(&mut builder, 'M', 0, 0);
     builder.end_row();
     builder.set_phys_cursor(PhysCursor {
         window_id: high_window_id as i64,
@@ -353,8 +444,8 @@ fn builder_reorders_simple_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('א', 0, 0);
-    builder.push_char('ב', 0, 1);
+    write_char_to_current_row(&mut builder, 'א', 0, 0);
+    write_char_to_current_row(&mut builder, 'ב', 0, 1);
     builder.end_row();
     builder.end_window();
 
@@ -372,9 +463,9 @@ fn builder_keeps_stretch_fixed_while_reordering_rtl_chars() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('א', 0, 0);
-    builder.push_stretch(3, 0);
-    builder.push_char('ב', 0, 1);
+    write_char_to_current_row(&mut builder, 'א', 0, 0);
+    write_stretch_to_current_row(&mut builder, 3, 0);
+    write_char_to_current_row(&mut builder, 'ב', 0, 1);
     builder.end_row();
     builder.end_window();
 
@@ -394,8 +485,8 @@ fn builder_reorders_wide_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_wide_char('א', 0, 0);
-    builder.push_char('ב', 0, 1);
+    write_wide_char_to_current_row(&mut builder, 'א', 0, 0);
+    write_char_to_current_row(&mut builder, 'ב', 0, 1);
     builder.end_row();
     builder.end_window();
 
@@ -416,9 +507,9 @@ fn builder_reorders_wide_rtl_row_across_stretch() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_wide_char('א', 0, 0);
-    builder.push_stretch(2, 0);
-    builder.push_char('ב', 0, 1);
+    write_wide_char_to_current_row(&mut builder, 'א', 0, 0);
+    write_stretch_to_current_row(&mut builder, 2, 0);
+    write_char_to_current_row(&mut builder, 'ב', 0, 1);
     builder.end_row();
     builder.end_window();
 
@@ -441,8 +532,8 @@ fn builder_remaps_phys_cursor_to_visual_bidi_column() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('א', 0, 0);
-    builder.push_char('ב', 0, 1);
+    write_char_to_current_row(&mut builder, 'א', 0, 0);
+    write_char_to_current_row(&mut builder, 'ב', 0, 1);
     builder.end_row();
     builder.set_phys_cursor(PhysCursor {
         window_id: 1,
@@ -495,15 +586,15 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
     builder.begin_row(0, GlyphRowRole::Text);
     // Line-number gutter "12 ": two digits + a one-cell trailing stretch ->
     // three materialize columns (cols 0, 1, 2).
-    builder.push_left_margin_char('1', 1);
-    builder.push_left_margin_char('2', 1);
-    builder.push_left_margin_stretch(1, 1);
+    write_left_margin_char_to_current_row(&mut builder, '1', 1);
+    write_left_margin_char_to_current_row(&mut builder, '2', 1);
+    write_left_margin_stretch_to_current_row(&mut builder, 1, 1);
     // Buffer text "Hello" at char positions 100..=104 (materialize cols 3..=7).
-    builder.push_char('H', 0, 100);
-    builder.push_char('e', 0, 101);
-    builder.push_char('l', 0, 102);
-    builder.push_char('l', 0, 103);
-    builder.push_char('o', 0, 104);
+    write_char_to_current_row(&mut builder, 'H', 0, 100);
+    write_char_to_current_row(&mut builder, 'e', 0, 101);
+    write_char_to_current_row(&mut builder, 'l', 0, 102);
+    write_char_to_current_row(&mut builder, 'l', 0, 103);
+    write_char_to_current_row(&mut builder, 'o', 0, 104);
     builder.end_row();
 
     // Point sits on the first 'l' (charpos 102). The engine's capture passes the
@@ -577,15 +668,15 @@ fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     // Three-column line-number gutter (cols 0, 1, 2).
-    builder.push_left_margin_char('1', 1);
-    builder.push_left_margin_char(' ', 1);
-    builder.push_left_margin_stretch(1, 1);
+    write_left_margin_char_to_current_row(&mut builder, '1', 1);
+    write_left_margin_char_to_current_row(&mut builder, ' ', 1);
+    write_left_margin_stretch_to_current_row(&mut builder, 1, 1);
     // Visible title text "Doom" begins at charpos 9: charpos 0..=8 is the hidden
     // "#+title: " prefix that produced no glyphs. 'D' is at materialize col 3.
-    builder.push_char('D', 0, 9);
-    builder.push_char('o', 0, 10);
-    builder.push_char('o', 0, 11);
-    builder.push_char('m', 0, 12);
+    write_char_to_current_row(&mut builder, 'D', 0, 9);
+    write_char_to_current_row(&mut builder, 'o', 0, 10);
+    write_char_to_current_row(&mut builder, 'o', 0, 11);
+    write_char_to_current_row(&mut builder, 'm', 0, 12);
     builder.end_row();
 
     // Point at the hidden line start (charpos 0); the capture passes column 0.
@@ -645,12 +736,12 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_left_margin_char('1', 1);
-    builder.push_left_margin_char('2', 1);
-    builder.push_left_margin_stretch(1, 1); // three-column line-number gutter
-    builder.push_char('H', 0, 100);
-    builder.push_char('e', 0, 101);
-    builder.push_char('l', 0, 102);
+    write_left_margin_char_to_current_row(&mut builder, '1', 1);
+    write_left_margin_char_to_current_row(&mut builder, '2', 1);
+    write_left_margin_stretch_to_current_row(&mut builder, 1, 1); // three-column line-number gutter
+    write_char_to_current_row(&mut builder, 'H', 0, 100);
+    write_char_to_current_row(&mut builder, 'e', 0, 101);
+    write_char_to_current_row(&mut builder, 'l', 0, 102);
     builder.end_row();
 
     // The captured (pre-resolution) slot is the Text-area index, column 2.
@@ -710,12 +801,12 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_left_margin_char('1', 1);
-    builder.push_left_margin_char('2', 1);
-    builder.push_left_margin_stretch(1, 1); // three-column line-number gutter
-    builder.push_char('H', 0, 100);
-    builder.push_char('e', 0, 101);
-    builder.push_char('l', 0, 102);
+    write_left_margin_char_to_current_row(&mut builder, '1', 1);
+    write_left_margin_char_to_current_row(&mut builder, '2', 1);
+    write_left_margin_stretch_to_current_row(&mut builder, 1, 1); // three-column line-number gutter
+    write_char_to_current_row(&mut builder, 'H', 0, 100);
+    write_char_to_current_row(&mut builder, 'e', 0, 101);
+    write_char_to_current_row(&mut builder, 'l', 0, 102);
     builder.end_row();
 
     // Matching window/row, point on 'l': 3 gutter columns + Text index 2 = 5.
@@ -745,9 +836,9 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_left_margin_stretch(2, 1); // leading "  " before the digit
-    builder.push_left_margin_char('2', 1);
-    builder.push_left_margin_stretch(1, 1); // trailing one-column pad
+    write_left_margin_stretch_to_current_row(&mut builder, 2, 1); // leading "  " before the digit
+    write_left_margin_char_to_current_row(&mut builder, '2', 1);
+    write_left_margin_stretch_to_current_row(&mut builder, 1, 1); // trailing one-column pad
     // No push_char: the Text area is empty, as on a blank buffer line.
     builder.end_row();
 
@@ -758,11 +849,11 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
     // A non-empty row whose point is past the last glyph (end of line) lands in
     // the same end-of-row cell rather than reverting to None.
     builder.begin_row(1, GlyphRowRole::Text);
-    builder.push_left_margin_stretch(2, 1);
-    builder.push_left_margin_char('3', 1);
-    builder.push_left_margin_stretch(1, 1);
-    builder.push_char('H', 0, 40);
-    builder.push_char('i', 0, 41);
+    write_left_margin_stretch_to_current_row(&mut builder, 2, 1);
+    write_left_margin_char_to_current_row(&mut builder, '3', 1);
+    write_left_margin_stretch_to_current_row(&mut builder, 1, 1);
+    write_char_to_current_row(&mut builder, 'H', 0, 40);
+    write_char_to_current_row(&mut builder, 'i', 0, 41);
     builder.end_row();
     // Point at charpos 99 is past 'H'(40) and 'i'(41): 4 gutter + 2 text = col 6.
     assert_eq!(builder.resolve_cursor_visual_col(1, 1, 99), Some(6));
@@ -836,7 +927,7 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
     // its mode-line row.
     builder.begin_window(1, 12, 80, Rect::new(0.0, 0.0, 640.0, 192.0), true);
     builder.begin_row(11, GlyphRowRole::ModeLine);
-    builder.push_char('-', 10, 0);
+    write_char_to_current_row(&mut builder, '-', 10, 0);
     builder.end_row();
     builder.end_window();
 
@@ -846,7 +937,7 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
     // per-window `let` binding that reset to 1 for every window.
     builder.begin_window(3, 12, 80, Rect::new(0.0, 192.0, 640.0, 192.0), false);
     builder.begin_row(11, GlyphRowRole::ModeLine);
-    builder.push_char('-', 11, 0);
+    write_char_to_current_row(&mut builder, '-', 11, 0);
     builder.end_row();
     builder.end_window();
 
@@ -913,12 +1004,12 @@ fn overwrite_last_window_right_border_pads_and_replaces_text() {
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "0123456789".chars() {
-        builder.push_char(ch, 0, 0);
+        write_char_to_current_row(&mut builder, ch, 0, 0);
     }
     builder.end_row();
     builder.begin_row(1, GlyphRowRole::Text);
     for ch in "abcde".chars() {
-        builder.push_char(ch, 0, 0);
+        write_char_to_current_row(&mut builder, ch, 0, 0);
     }
     builder.end_row();
     builder.end_window();
@@ -996,11 +1087,11 @@ fn overwrite_last_window_right_border_paints_blank_rows() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.push_char('A', 0, 0);
+    write_char_to_current_row(&mut builder, 'A', 0, 0);
     builder.end_row();
     // Row 1 is never begun, stays disabled.
     builder.begin_row(2, GlyphRowRole::Text);
-    builder.push_char('Z', 0, 0);
+    write_char_to_current_row(&mut builder, 'Z', 0, 0);
     builder.end_row();
     builder.end_window();
 
@@ -1045,11 +1136,11 @@ fn overwrite_current_window_row_last_glyph_marks_truncated_row() {
     builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "ABCDE".chars() {
-        builder.push_char(ch, 0, 0);
+        write_char_to_current_row(&mut builder, ch, 0, 0);
     }
     builder.end_row();
     builder.begin_row(1, GlyphRowRole::Text);
-    builder.push_char('X', 0, 0);
+    write_char_to_current_row(&mut builder, 'X', 0, 0);
     builder.end_row();
 
     builder.overwrite_current_window_row_last_glyph(0, '$', 13);
@@ -1084,7 +1175,7 @@ fn overwrite_last_window_right_border_preserves_truncation_marker() {
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "ABCD$".chars() {
-        builder.push_char(ch, 0, 0);
+        write_char_to_current_row(&mut builder, ch, 0, 0);
     }
     builder.end_row();
     builder.end_window();
@@ -1134,9 +1225,9 @@ fn cluster_tail_is_none_at_row_start() {
 #[test]
 fn cluster_continuation_merges_combining_mark() {
     let mut builder = cluster_builder();
-    builder.push_char('e', 0, 0);
+    write_char_to_current_row(&mut builder, 'e', 0, 0);
     // Combining acute accent (U+0301) is a cluster extender.
-    builder.push_cluster_continuation('\u{0301}', 0, 1);
+    write_cluster_continuation_to_current_row(&mut builder, '\u{0301}', 0, 1);
     let area = finish_text_area(builder);
     assert_eq!(
         area[0].glyph_type,
@@ -1151,9 +1242,9 @@ fn cluster_continuation_merges_combining_mark() {
 fn cluster_continuation_merges_zwj_emoji_sequence() {
     let mut builder = cluster_builder();
     // 👨 base, then ZWJ 👩 ZWJ 👧 as continuations (family emoji).
-    builder.push_wide_char('\u{1F468}', 0, 0);
+    write_wide_char_to_current_row(&mut builder, '\u{1F468}', 0, 0);
     for (i, ch) in "\u{200D}\u{1F469}\u{200D}\u{1F467}".chars().enumerate() {
-        builder.push_cluster_continuation(ch, 0, i + 1);
+        write_cluster_continuation_to_current_row(&mut builder, ch, 0, i + 1);
     }
     let area = finish_text_area(builder);
     assert_eq!(
@@ -1171,9 +1262,9 @@ fn cluster_continuation_merges_zwj_emoji_sequence() {
 fn cluster_tail_detects_lone_regional_indicator_then_pairs_flag() {
     let mut builder = cluster_builder();
     // Regional indicators J (U+1F1EF) + P (U+1F1F5) => 🇯🇵 flag.
-    builder.push_wide_char('\u{1F1EF}', 0, 0);
+    write_wide_char_to_current_row(&mut builder, '\u{1F1EF}', 0, 0);
     assert_eq!(builder.last_text_cluster_tail(), Some(('\u{1F1EF}', true)));
-    builder.push_cluster_continuation('\u{1F1F5}', 0, 1);
+    write_cluster_continuation_to_current_row(&mut builder, '\u{1F1F5}', 0, 1);
     // After pairing, the tail is a Composite — no longer a lone RI, so a
     // third regional indicator would start a fresh flag.
     assert_eq!(builder.last_text_cluster_tail(), Some(('\u{1F1F5}', false)));
@@ -1191,7 +1282,7 @@ fn cluster_tail_detects_lone_regional_indicator_then_pairs_flag() {
 fn cluster_continuation_without_base_falls_back_to_standalone() {
     let mut builder = cluster_builder();
     // Stray ZWJ at row start: no base to merge into.
-    builder.push_cluster_continuation('\u{200D}', 0, 0);
+    write_cluster_continuation_to_current_row(&mut builder, '\u{200D}', 0, 0);
     let area = finish_text_area(builder);
     assert_eq!(area[0].glyph_type, GlyphType::Char { ch: '\u{200D}' });
 }
@@ -1211,11 +1302,11 @@ fn engine_style_loop_clusters_zwj_family_emoji() {
         let tail = builder.last_text_cluster_tail();
         let is_cont = crate::composition::continues_cluster(ch, tail);
         if is_cont {
-            builder.push_cluster_continuation(ch, 0, i);
+            write_cluster_continuation_to_current_row(&mut builder, ch, 0, i);
         } else if crate::composition::base_width_cols(ch) == 2 {
-            builder.push_wide_char(ch, 0, i);
+            write_wide_char_to_current_row(&mut builder, ch, 0, i);
         } else {
-            builder.push_char(ch, 0, i);
+            write_char_to_current_row(&mut builder, ch, 0, i);
         }
     }
     let area = finish_text_area(builder);
@@ -1242,9 +1333,9 @@ fn engine_style_loop_clusters_zwj_family_emoji() {
 fn complex_run_grows_into_one_composite_with_per_char_padding() {
     let mut builder = cluster_builder();
     // Arabic run: ا (U+0627) ل (U+0644) م (U+0645) => "الم".
-    builder.push_char('\u{0627}', 0, 10);
-    builder.push_run_member('\u{0644}', 0, 11, 8.0);
-    builder.push_run_member('\u{0645}', 0, 12, 8.0);
+    write_char_to_current_row(&mut builder, '\u{0627}', 0, 10);
+    write_run_member_to_current_row(&mut builder, '\u{0644}', 0, 11, 8.0);
+    write_run_member_to_current_row(&mut builder, '\u{0645}', 0, 12, 8.0);
     let area = finish_text_area(builder);
     // One composed cell holding the whole run + 2 padding cells = 3 columns,
     // so the renderer shapes (joins) the run as a unit.
