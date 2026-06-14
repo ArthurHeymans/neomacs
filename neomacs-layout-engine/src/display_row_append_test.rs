@@ -1240,6 +1240,46 @@ fn buffer_selective_display_context_skips_hidden_indented_lines() {
 }
 
 #[test]
+fn buffer_selective_display_context_applies_hidden_indented_lines_after_line_break() {
+    let text = b"  hidden\n\talso\n visible\n";
+    let context = BufferSelectiveDisplayContext::new(text, 1, 4);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+    let mut line_numbers = LineNumberRenderState::new(true, 7, 9);
+
+    let hidden_lines = context.apply_hidden_indented_lines_after_line_break(
+        &mut byte_idx,
+        &mut charpos,
+        &mut line_numbers,
+    );
+
+    assert_eq!(hidden_lines.hidden_line_count(), 2);
+    assert_eq!(byte_idx, b"  hidden\n\talso\n".len());
+    assert_eq!(charpos, b"  hidden\n\talso\n".len() as i64);
+    assert_eq!(line_numbers.current_line(), 9);
+}
+
+#[test]
+fn buffer_selective_display_context_apply_hidden_indented_lines_noops_when_disabled() {
+    let text = b"  visible\n";
+    let context = BufferSelectiveDisplayContext::new(text, 0, 4);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+    let mut line_numbers = LineNumberRenderState::new(true, 7, 9);
+
+    let hidden_lines = context.apply_hidden_indented_lines_after_line_break(
+        &mut byte_idx,
+        &mut charpos,
+        &mut line_numbers,
+    );
+
+    assert_eq!(hidden_lines.hidden_line_count(), 0);
+    assert_eq!(line_numbers.current_line(), 7);
+    assert_eq!(byte_idx, 0);
+    assert_eq!(charpos, 0);
+}
+
+#[test]
 fn buffer_selective_display_context_keeps_visible_indented_line() {
     let text = b" visible\n";
     let context = BufferSelectiveDisplayContext::new(text, 1, 4);

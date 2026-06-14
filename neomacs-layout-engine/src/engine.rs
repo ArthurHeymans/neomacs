@@ -2467,11 +2467,11 @@ impl LayoutEngine {
                 // Selective display: skip lines indented beyond threshold
                 let selective_display_context =
                     BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
-                if selective_display_context.hides_indented_lines_after_line_break(byte_idx) {
-                    let hidden_lines = selective_display_context
-                        .skip_hidden_indented_lines_after_line_break(&mut byte_idx, &mut charpos);
-                    hidden_lines.apply_to_line_numbers(&mut line_numbers);
-                }
+                selective_display_context.apply_hidden_indented_lines_after_line_break(
+                    &mut byte_idx,
+                    &mut charpos,
+                    &mut line_numbers,
+                );
                 continue;
             }
 

@@ -4913,6 +4913,20 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
         BufferSelectiveDisplayHiddenLines::new(hidden_line_count)
     }
 
+    pub(crate) fn apply_hidden_indented_lines_after_line_break(
+        self,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        line_numbers: &mut LineNumberRenderState,
+    ) -> BufferSelectiveDisplayHiddenLines {
+        if !self.hides_indented_lines_after_line_break(*byte_idx) {
+            return BufferSelectiveDisplayHiddenLines::new(0);
+        }
+        let hidden_lines = self.skip_hidden_indented_lines_after_line_break(byte_idx, charpos);
+        hidden_lines.apply_to_line_numbers(line_numbers);
+        hidden_lines
+    }
+
     fn indentation_columns_at(self, mut byte_idx: usize) -> Option<i32> {
         if byte_idx >= self.text.len() {
             return None;
