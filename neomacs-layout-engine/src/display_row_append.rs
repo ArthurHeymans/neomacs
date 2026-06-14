@@ -268,6 +268,10 @@ pub(crate) struct DisplayRowTransitionRequestContext<'a> {
     max_rows: usize,
 }
 
+pub(crate) struct DisplayRowTextWindowTransitionContext<'a> {
+    request_context: DisplayRowTransitionRequestContext<'a>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowLineBreakTransitionPlan {
     state_policy: TextRowTransitionStatePolicy,
@@ -367,6 +371,84 @@ impl<'a> DisplayRowTransitionRequestContext<'a> {
             position,
             self.row_y_recording,
             self.max_rows,
+        )
+    }
+}
+
+impl<'a> DisplayRowTextWindowTransitionContext<'a> {
+    pub(crate) fn new(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            request_context: DisplayRowTransitionRequestContext::new(
+                defaults,
+                row_base,
+                row_y_positions.recording(),
+                max_rows,
+            ),
+        }
+    }
+
+    pub(crate) fn line_break(
+        self,
+        plan: DisplayRowLineBreakTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+        line_spacing: f32,
+    ) -> DisplayRowLineBreakTransitionRequest<'a> {
+        self.request_context
+            .line_break(plan, hit_range, position, line_spacing)
+    }
+
+    pub(crate) fn emit_line_break(
+        self,
+        plan: DisplayRowLineBreakTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+        line_spacing: f32,
+        row_geometry: &mut DisplayRowGeometryState,
+        hit_rows: &mut Vec<HitRow>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+    ) -> TextMatrixRowTransition {
+        self.line_break(plan, hit_range, position, line_spacing)
+            .emit(row_geometry, hit_rows, builder, output_emitter, evaluator)
+    }
+
+    pub(crate) fn overflow(
+        self,
+        plan: DisplayRowOverflowTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+    ) -> DisplayRowOverflowTransitionRequest<'a> {
+        self.request_context.overflow(plan, hit_range, position)
+    }
+
+    pub(crate) fn emit_overflow(
+        self,
+        plan: DisplayRowOverflowTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+        row_geometry: &mut DisplayRowGeometryState,
+        row_flags: &mut DisplayRowFlags,
+        row_limit: DisplayRowLimit,
+        hit_rows: &mut Vec<HitRow>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+    ) -> TextMatrixRowTransition {
+        self.overflow(plan, hit_range, position).emit(
+            row_geometry,
+            row_flags,
+            row_limit,
+            hit_rows,
+            builder,
+            output_emitter,
+            evaluator,
         )
     }
 }

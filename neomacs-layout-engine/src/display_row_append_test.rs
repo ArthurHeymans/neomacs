@@ -387,6 +387,88 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
 }
 
 #[test]
+fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
+    let mut line_ctx = RowTransitionTestContext::new("text-window-transition-line-break");
+
+    let transition = DisplayRowTextWindowTransitionContext::new(
+        line_ctx.defaults,
+        0,
+        &mut line_ctx.row_y_positions,
+        4,
+    )
+    .emit_line_break(
+        DisplayRowLineBreakTransitionPlan::line_break(),
+        DisplayRowHitRange {
+            charpos_start: 1,
+            charpos_end: 5,
+        },
+        DisplayRowPosition { x_px: 32.0, col: 4 },
+        2.0,
+        &mut line_ctx.geometry,
+        &mut line_ctx.hit_rows,
+        &mut line_ctx.builder,
+        &mut line_ctx.output_emitter,
+        &mut line_ctx.eval,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(line_ctx.geometry.row(), 1);
+    assert_eq!(line_ctx.hit_rows.len(), 1);
+    assert_eq!(line_ctx.hit_rows[0].charpos_start, 1);
+    assert_eq!(line_ctx.hit_rows[0].charpos_end, 5);
+    assert_eq!(line_ctx.row_y_positions.recorded(), &[0.0, 18.0]);
+
+    let mut overflow_ctx = RowTransitionTestContext::new("text-window-transition-overflow");
+    let BufferTextSourceCharOverflowAction::CharacterWrap { transition } =
+        BufferTextSourceCharOverflowAction::for_decision(
+            BufferTextRowOverflowDecision::CharacterWrap,
+        )
+    else {
+        panic!("expected character wrap transition");
+    };
+
+    let row_limit = overflow_ctx.row_limit;
+    let transition = DisplayRowTextWindowTransitionContext::new(
+        overflow_ctx.defaults,
+        0,
+        &mut overflow_ctx.row_y_positions,
+        4,
+    )
+    .emit_overflow(
+        transition,
+        DisplayRowHitRange {
+            charpos_start: 2,
+            charpos_end: 8,
+        },
+        DisplayRowPosition { x_px: 64.0, col: 8 },
+        &mut overflow_ctx.geometry,
+        &mut overflow_ctx.row_flags,
+        row_limit,
+        &mut overflow_ctx.hit_rows,
+        &mut overflow_ctx.builder,
+        &mut overflow_ctx.output_emitter,
+        &mut overflow_ctx.eval,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(overflow_ctx.geometry.row(), 1);
+    assert_eq!(overflow_ctx.hit_rows.len(), 1);
+    assert_eq!(overflow_ctx.hit_rows[0].charpos_start, 2);
+    assert_eq!(overflow_ctx.hit_rows[0].charpos_end, 8);
+    assert!(
+        overflow_ctx
+            .row_flags
+            .is_set(0, DisplayRowFlagKind::Continued)
+    );
+    assert!(
+        overflow_ctx
+            .row_flags
+            .is_set(1, DisplayRowFlagKind::Continuation)
+    );
+    assert_eq!(overflow_ctx.row_y_positions.recorded(), &[0.0, 16.0]);
+}
+
+#[test]
 fn display_row_overflow_transition_request_marks_truncated_row_and_emits_boundary() {
     let mut ctx = RowTransitionTestContext::new("overflow-truncation-request");
 
