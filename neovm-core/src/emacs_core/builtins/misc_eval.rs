@@ -2242,39 +2242,13 @@ pub(crate) fn finish_terpri_in_eval(eval: &mut super::eval::Context, args: &[Val
     Ok(Value::T)
 }
 
-pub(super) fn write_char_rendered_text(char_code: i64) -> Option<String> {
-    use crate::emacs_core::emacs_char;
-    if !(0..=emacs_char::MAX_CHAR as i64).contains(&char_code) {
-        return None;
-    }
-    let code = char_code as u32;
-    // Emit the storage representation so the caller's Rust String
-    // intermediate round-trips through `decode_storage_char_codes`
-    // back to the original `code`. GNU preserves nonunicode chars
-    // (0x110000..=0x3FFFFF) and raw bytes via overlong / extended
-    // multibyte encodings (character.h:227 `CHAR_STRING`); neomacs'
-    // storage form mirrors this with PUA sentinels (U+E080..U+E0FF
-    // for raw bytes, U+E100 prefix + length + byte chars for 4-5
-    // byte extended sequences). Going through
-    // `encode_char_code_for_string_storage` keeps the full code
-    // round-trippable when the format output later becomes a
-    // `LispString` via `runtime_string_to_lisp_string`.
-    //
-    // The old `to_utf8_lossy` path replaced those codes with U+FFFD,
-    // losing the original char code — `(format "%c" #x200000)`
-    // produced the replacement character instead of the requested
-    // nonunicode char.
-    crate::emacs_core::string_escape::encode_char_code_for_string_storage(code, true)
-}
-
 /// `write-char`'s output character as canonical Emacs internal-encoding bytes
 /// (`CHAR_STRING`).  Returns `None` for codes outside `0..=MAX_CHAR`.
 ///
-/// Issue #131: unlike [`write_char_rendered_text`] (which packs the code into an
-/// in-Unicode storage string and round-trips through the sentinel decoder), this
-/// produces the disjoint extended encoding directly — eight-bit raw bytes and
-/// non-Unicode codes never collide with a real Private-Use glyph, so writing a
-/// nerd-font icon stores the glyph itself rather than a stray low byte.
+/// Issue #131: produces the disjoint extended encoding directly via `EmacsChar` —
+/// eight-bit raw bytes and non-Unicode codes never collide with a real Private-Use
+/// glyph, so writing a nerd-font icon stores the glyph itself rather than packing
+/// it into an in-Unicode storage sentinel.
 fn write_char_emacs_bytes(char_code: i64) -> Option<Vec<u8>> {
     u32::try_from(char_code)
         .ok()

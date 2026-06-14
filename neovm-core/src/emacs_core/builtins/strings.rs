@@ -929,8 +929,8 @@ pub(crate) fn builtin_format_slice(eval: &mut super::eval::Context, args: &[Valu
     builtin_format_wrapper_strict_slice(eval, args)
 }
 
-fn format_percent_s_in_state(ctx: &crate::emacs_core::eval::Context, value: &Value) -> String {
-    super::misc_eval::print_value_princ_in_state(ctx, value)
+fn format_percent_s_in_state(ctx: &crate::emacs_core::eval::Context, value: &Value) -> Vec<u8> {
+    super::misc_eval::print_value_princ_bytes(ctx, value)
 }
 
 fn format_not_enough_args_error() -> Flow {
@@ -950,7 +950,7 @@ fn format_spec_type_mismatch_error() -> Flow {
 }
 
 struct FormatCharArgument {
-    rendered: String,
+    rendered: Vec<u8>,
     force_multibyte_result: bool,
 }
 
@@ -962,12 +962,20 @@ fn format_char_argument(n: i64) -> Result<FormatCharArgument, Flow> {
         ));
     }
 
-    let rendered = write_char_rendered_text(n).ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("characterp"), Value::fixnum(n)],
-        )
-    })?;
+    // Issue #131: emit canonical Emacs internal-encoding bytes directly via
+    // EmacsChar (eight-bit / non-Unicode as their disjoint extended sequence),
+    // so a real Private-Use glyph passed to %c survives as itself. Returns the
+    // characterp error for codes outside 0..=MAX_CHAR.
+    let rendered = u32::try_from(n)
+        .ok()
+        .and_then(crate::emacs_core::emacs_char::EmacsChar::from_code)
+        .map(|c| c.to_emacs_bytes())
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("characterp"), Value::fixnum(n)],
+            )
+        })?;
     Ok(FormatCharArgument {
         rendered,
         // GNU styled_format retries with a multibyte result when %c receives
@@ -1000,11 +1008,15 @@ fn format_string_overflow_error() -> Flow {
     signal("error", vec![Value::string("Maximum string size exceeded")])
 }
 
-/// Parse a format spec from a char iterator positioned just after '%'.
-/// Returns the parsed spec and the number of characters consumed after '%'.
-fn parse_format_spec(
-    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-) -> Result<ParsedFormatSpec, Flow> {
+/// Parse a format spec from the format string's Emacs character codes, with
+/// `*pos` positioned just after '%'. Advances `*pos` past the spec and returns
+/// the parsed spec plus the number of characters consumed after '%'. All format
+/// spec syntax is ASCII, so codes are compared directly; a non-Unicode
+/// conversion code becomes U+FFFD, which falls through to the invalid-operation
+/// error (issue #131: the format string is iterated as Emacs characters, not as
+/// a storage string).
+fn parse_format_spec(codes: &[u32], pos: &mut usize) -> Result<ParsedFormatSpec, Flow> {
+    let start = *pos;
     let mut spec = FormatSpec {
         field_number: None,
         minus: false,
@@ -1016,59 +1028,46 @@ fn parse_format_spec(
         precision: None,
         conversion: '\0',
     };
-    let mut consumed_chars = 0usize;
+
+    let is_ascii_digit = |code: u32| (b'0' as u32..=b'9' as u32).contains(&code);
 
     // GNU `styled_format` first looks for [0-9]+ followed by a literal
     // '$'.  If there is no '$', the digits are left for the flag/width
     // parser, so `%05d` still means zero-padded width 5 rather than
     // field 5.
-    let mut lookahead = chars.clone();
+    let mut look = *pos;
     let mut field_digits = String::new();
-    while let Some(ch) = lookahead.peek().copied() {
-        if ch.is_ascii_digit() {
-            field_digits.push(ch);
-            lookahead.next();
-        } else {
-            break;
-        }
+    while look < codes.len() && is_ascii_digit(codes[look]) {
+        field_digits.push(codes[look] as u8 as char);
+        look += 1;
     }
-    if !field_digits.is_empty() && lookahead.peek() == Some(&'$') {
-        for _ in 0..field_digits.len() {
-            chars.next();
-            consumed_chars += 1;
-        }
-        chars.next();
-        consumed_chars += 1;
+    if !field_digits.is_empty() && codes.get(look) == Some(&('$' as u32)) {
+        *pos = look + 1;
         spec.field_number = field_digits.parse().ok();
     }
 
     // Parse flags
     loop {
-        match chars.peek() {
-            Some('-') => {
+        match codes.get(*pos).copied() {
+            Some(c) if c == '-' as u32 => {
                 spec.minus = true;
-                chars.next();
-                consumed_chars += 1;
+                *pos += 1;
             }
-            Some('+') => {
+            Some(c) if c == '+' as u32 => {
                 spec.plus = true;
-                chars.next();
-                consumed_chars += 1;
+                *pos += 1;
             }
-            Some(' ') => {
+            Some(c) if c == ' ' as u32 => {
                 spec.space = true;
-                chars.next();
-                consumed_chars += 1;
+                *pos += 1;
             }
-            Some('0') => {
+            Some(c) if c == '0' as u32 => {
                 spec.zero = true;
-                chars.next();
-                consumed_chars += 1;
+                *pos += 1;
             }
-            Some('#') => {
+            Some(c) if c == '#' as u32 => {
                 spec.sharp = true;
-                chars.next();
-                consumed_chars += 1;
+                *pos += 1;
             }
             _ => break,
         }
@@ -1084,11 +1083,10 @@ fn parse_format_spec(
 
     // Parse width
     let mut width_str = String::new();
-    while let Some(&ch) = chars.peek() {
-        if ch.is_ascii_digit() {
-            width_str.push(ch);
-            chars.next();
-            consumed_chars += 1;
+    while let Some(&code) = codes.get(*pos) {
+        if is_ascii_digit(code) {
+            width_str.push(code as u8 as char);
+            *pos += 1;
         } else {
             break;
         }
@@ -1102,15 +1100,13 @@ fn parse_format_spec(
     }
 
     // Parse precision
-    if chars.peek() == Some(&'.') {
-        chars.next();
-        consumed_chars += 1;
+    if codes.get(*pos) == Some(&('.' as u32)) {
+        *pos += 1;
         let mut prec_str = String::new();
-        while let Some(&ch) = chars.peek() {
-            if ch.is_ascii_digit() {
-                prec_str.push(ch);
-                chars.next();
-                consumed_chars += 1;
+        while let Some(&code) = codes.get(*pos) {
+            if is_ascii_digit(code) {
+                prec_str.push(code as u8 as char);
+                *pos += 1;
             } else {
                 break;
             }
@@ -1125,7 +1121,7 @@ fn parse_format_spec(
     }
 
     // Parse conversion character
-    spec.conversion = chars.next().ok_or_else(|| {
+    let conversion_code = codes.get(*pos).copied().ok_or_else(|| {
         signal(
             "error",
             vec![Value::string(
@@ -1133,7 +1129,9 @@ fn parse_format_spec(
             )],
         )
     })?;
-    consumed_chars += 1;
+    *pos += 1;
+    spec.conversion = char::from_u32(conversion_code).unwrap_or('\u{FFFD}');
+    let consumed_chars = *pos - start;
     Ok(ParsedFormatSpec {
         spec,
         consumed_chars,
@@ -1395,61 +1393,77 @@ fn format_float_spec(f: f64, spec: &FormatSpec) -> String {
 }
 
 /// Format a string (%s) with width and precision.
-fn format_string_spec(s: &str, spec: &FormatSpec) -> String {
-    format_string_spec_tracked(s, spec).0
+fn format_string_spec(data: &[u8], is_multibyte: bool, spec: &FormatSpec) -> Vec<u8> {
+    format_string_spec_tracked(data, is_multibyte, spec).0
 }
 
-/// Like `format_string_spec` but also returns the byte range in the
-/// output string that corresponds to the source argument's content
-/// (excluding padding spaces added for width alignment). Used by
-/// `do_format` to track where each `%s` argument lands so text
-/// properties can be copied from the argument to the result. Mirrors
-/// the `info[i].start` / `info[i].end` tracking in GNU's `styled_format`
-/// (editfns.c:3651-3806).
-fn format_string_spec_tracked(s: &str, spec: &FormatSpec) -> (String, usize, usize) {
+/// Like `format_string_spec` but also returns the byte range in the output bytes
+/// that corresponds to the source argument's content (excluding padding spaces
+/// added for width alignment). Used by `do_format` to track where each `%s`
+/// argument lands so text properties can be copied from the argument to the
+/// result. Mirrors the `info[i].start` / `info[i].end` tracking in GNU's
+/// `styled_format` (editfns.c:3651-3806).
+///
+/// Issue #131: `data` is the argument's Emacs internal-encoding bytes, measured
+/// with its own `is_multibyte` flag (a unibyte raw byte is one column, a
+/// multibyte eight-bit char is four, matching GNU). The returned content is
+/// canonical multibyte (unibyte content promoted), so the caller can splice it
+/// into the byte result; padding is always ASCII spaces.
+fn format_string_spec_tracked(
+    data: &[u8],
+    is_multibyte: bool,
+    spec: &FormatSpec,
+) -> (Vec<u8>, usize, usize) {
     let mut content_width = 0usize;
-    let mut truncated_end = s.len();
+    let mut truncated_end = data.len();
     let mut saw_limit = spec.precision.is_none();
     if spec.precision.is_some() || spec.width.is_some() {
         truncated_end = 0;
-        for unit in crate::emacs_core::string_escape::scan_storage_units_auto(s) {
+        let mut pos = 0usize;
+        while pos < data.len() {
+            let (code, len) = next_format_unit(data, pos, is_multibyte);
+            let display_width = format_unit_display_width(code, is_multibyte);
             if let Some(prec) = spec.precision {
-                if content_width + unit.display_width > prec {
+                if content_width + display_width > prec {
                     saw_limit = true;
                     break;
                 }
             }
-            content_width += unit.display_width;
-            truncated_end = unit.storage_end;
+            content_width += display_width;
+            pos += len;
+            truncated_end = pos;
         }
     }
     if !saw_limit {
-        truncated_end = s.len();
+        truncated_end = data.len();
     }
-    let truncated = &s[..truncated_end];
-    let content_bytes = truncated.len();
+    let truncated = &data[..truncated_end];
+    // Promote unibyte content to canonical multibyte so it can be spliced into
+    // the byte result; multibyte content is already canonical.
+    let content: Vec<u8> = if is_multibyte {
+        truncated.to_vec()
+    } else {
+        crate::emacs_core::emacs_char::str_to_multibyte(truncated)
+    };
+    let content_bytes = content.len();
     if spec.width.is_none() && spec.precision.is_none() {
-        content_width = truncated.chars().count();
+        content_width = emacs_chars_count(&content);
     }
     let w = match spec.width {
         Some(w) if w > content_width => w,
-        _ => return (truncated.to_string(), 0, content_bytes),
+        _ => return (content, 0, content_bytes),
     };
     let pad_chars = w - content_width;
-    // Padding is always ASCII spaces (or ASCII '0'/'-'/'+' for numeric
-    // zero-padding which doesn't apply to %s). Each padding char is 1
-    // byte, so padding byte count == padding char count.
+    // Padding is always ASCII spaces. Each padding char is one byte.
     if spec.minus {
         // Left-aligned: content first, then padding.
-        let mut padded = String::with_capacity(content_bytes + pad_chars);
-        padded.push_str(truncated);
-        padded.push_str(&" ".repeat(pad_chars));
+        let mut padded = content;
+        padded.resize(content_bytes + pad_chars, b' ');
         (padded, 0, content_bytes)
     } else {
         // Right-aligned (default): padding first, then content.
-        let mut padded = String::with_capacity(content_bytes + pad_chars);
-        padded.push_str(&" ".repeat(pad_chars));
-        padded.push_str(truncated);
+        let mut padded = vec![b' '; pad_chars];
+        padded.extend_from_slice(&content);
         (padded, pad_chars, pad_chars + content_bytes)
     }
 }
@@ -1493,26 +1507,31 @@ impl FormatMessageQuotingStyle {
     }
 }
 
-fn push_format_literal(
-    result: &mut String,
-    ch: char,
+/// Push one format-string literal character `code` to the byte `result`,
+/// applying `format-message` quote translation. Returns whether the pushed text
+/// is genuinely multibyte (the curve quotes), which promotes the result.
+fn push_format_literal_code(
+    result: &mut Vec<u8>,
+    code: u32,
     quoting_style: FormatMessageQuotingStyle,
 ) -> bool {
-    match (quoting_style, ch) {
-        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), '`') => {
-            result.push('‘');
+    const BACKTICK: u32 = '`' as u32;
+    const APOSTROPHE: u32 = '\'' as u32;
+    match (quoting_style, code) {
+        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), BACKTICK) => {
+            push_emacs_char(result, '‘' as u32);
             true
         }
-        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), '\'') => {
-            result.push('’');
+        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), APOSTROPHE) => {
+            push_emacs_char(result, '’' as u32);
             true
         }
-        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Straight), '`') => {
-            result.push('\'');
+        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Straight), BACKTICK) => {
+            result.push(b'\'');
             false
         }
         _ => {
-            result.push(ch);
+            push_emacs_char(result, code);
             false
         }
     }
@@ -1550,86 +1569,153 @@ pub(crate) fn value_render_pure_unicode(v: Value, depth: u32) -> bool {
     }
 }
 
-/// Assemble the final `format`/`format-message` result bytes from the storage
-/// String `s`, given the byte ranges of `s` that came from impure (eight-bit /
-/// non-Unicode) sources.
-///
-/// Pure spans are real text whose UTF-8 already IS the Emacs internal encoding,
-/// so they pass through verbatim — this is what keeps a real Private-Use glyph
-/// (a nerd-font icon) from being decoded as a raw byte (issue #131). Impure
-/// spans are genuine storage strings and go through `storage_string_to_buffer_bytes`,
-/// reproducing the previous behaviour exactly for eight-bit content. `impure_ranges`
-/// are non-overlapping and in increasing order (pushed in output order).
-fn assemble_format_result_bytes(
-    s: &str,
-    impure_ranges: &[(usize, usize)],
-    multibyte: bool,
-) -> Vec<u8> {
-    if impure_ranges.is_empty() {
-        return s.as_bytes().to_vec();
-    }
-    let mut out = Vec::with_capacity(s.len());
+/// Issue #131: `do_format` builds its result directly as canonical Emacs
+/// internal-encoding bytes (no storage-string round-trip), so these helpers walk
+/// and measure Emacs bytes the way `display_width_emacs`/`decode_units_emacs` do.
+
+/// Decode `data` (Emacs internal encoding) into its character codes.
+fn decode_emacs_codes(data: &[u8]) -> Vec<u32> {
+    let mut codes = Vec::new();
     let mut pos = 0usize;
-    for &(start, end) in impure_ranges {
-        if start > pos {
-            out.extend_from_slice(s[pos..start].as_bytes());
-        }
-        out.extend(
-            crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
-                &s[start..end],
-                multibyte,
-            ),
-        );
-        pos = end;
+    while pos < data.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&data[pos..]);
+        codes.push(code);
+        pos += len;
     }
-    if pos < s.len() {
-        out.extend_from_slice(s[pos..].as_bytes());
+    codes
+}
+
+/// Count the Emacs characters in canonical multibyte `data`.
+fn emacs_chars_count(data: &[u8]) -> usize {
+    let mut count = 0usize;
+    let mut pos = 0usize;
+    while pos < data.len() {
+        let (_code, len) = crate::emacs_core::emacs_char::string_char(&data[pos..]);
+        pos += len;
+        count += 1;
+    }
+    count
+}
+
+/// Next character unit `(code, byte_len)` at `pos`, honouring the source string's
+/// multibyteness: a unibyte string yields one raw byte per unit, a multibyte
+/// string yields one Emacs character per unit.
+fn next_format_unit(data: &[u8], pos: usize, is_multibyte: bool) -> (u32, usize) {
+    if is_multibyte {
+        crate::emacs_core::emacs_char::string_char(&data[pos..])
+    } else {
+        (data[pos] as u32, 1)
+    }
+}
+
+/// Display width of one character unit, mirroring [`display_width_emacs`].
+fn format_unit_display_width(code: u32, is_multibyte: bool) -> usize {
+    use crate::emacs_core::emacs_char;
+    if is_multibyte {
+        if emacs_char::char_byte8_p(code) {
+            4
+        } else if let Some(ch) = char::from_u32(code) {
+            crate::encoding::char_width(ch)
+        } else {
+            1
+        }
+    } else if code < 0x80 {
+        char::from_u32(code)
+            .map(crate::encoding::char_width)
+            .unwrap_or(1)
+    } else {
+        1
+    }
+}
+
+/// Push a single Emacs character `code` to `out` as canonical internal-encoding
+/// bytes (eight-bit / non-Unicode codes become their disjoint extended sequence,
+/// so a real Private-Use glyph survives instead of being mistaken for a raw byte).
+fn push_emacs_char(out: &mut Vec<u8>, code: u32) {
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+    out.extend_from_slice(&buf[..len]);
+}
+
+/// Issue #131: does the formatted result carry genuine multibyte content — a real
+/// (non eight-bit) character above ASCII? Eight-bit raw bytes alone must NOT
+/// promote the result to multibyte (mirrors the old `runtime_string_result_multibyte`
+/// sentinel exclusion); a real Latin-1/Unicode/Private-Use char must.
+fn result_bytes_imply_multibyte(data: &[u8]) -> bool {
+    let mut pos = 0usize;
+    while pos < data.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&data[pos..]);
+        pos += len;
+        if code > 0x7f && !crate::emacs_core::emacs_char::char_byte8_p(code) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Down-convert canonical multibyte Emacs bytes to unibyte raw bytes. Only valid
+/// when the content has no genuine multibyte character (ASCII + eight-bit only),
+/// which `build_format_result` guarantees before choosing a unibyte result; a
+/// stray multibyte char is preserved defensively rather than dropped.
+fn emacs_bytes_to_unibyte(data: &[u8]) -> Vec<u8> {
+    use crate::emacs_core::emacs_char;
+    let mut out = Vec::with_capacity(data.len());
+    let mut pos = 0usize;
+    while pos < data.len() {
+        let (code, len) = emacs_char::string_char(&data[pos..]);
+        pos += len;
+        if code <= 0x7f {
+            out.push(code as u8);
+        } else if emacs_char::char_byte8_p(code) {
+            out.push(emacs_char::char_to_byte8(code));
+        } else {
+            push_emacs_char(&mut out, code);
+        }
     }
     out
 }
 
 fn do_format(
     args: &[Value],
-    princ_fn: &dyn Fn(&Value) -> String,
-    prin1_fn: &dyn Fn(&Value) -> String,
+    princ_fn: &dyn Fn(&Value) -> Vec<u8>,
+    prin1_fn: &dyn Fn(&Value) -> Vec<u8>,
     quoting_style: FormatMessageQuotingStyle,
-) -> Result<
-    (
-        String,
-        Vec<FormatPropSpan>,
-        Vec<FormatSourceSpan>,
-        bool,
-        Vec<(usize, usize)>,
-    ),
-    Flow,
-> {
-    let fmt_str = expect_strict_string(&args[0])?;
-    let mut result = String::new();
+) -> Result<(Vec<u8>, Vec<FormatPropSpan>, Vec<FormatSourceSpan>, bool), Flow> {
+    // Issue #131: iterate the format string as its real Emacs characters and
+    // build the result directly as canonical Emacs internal-encoding bytes —
+    // no storage-string round-trip, so a real Private-Use glyph survives and
+    // eight-bit / non-Unicode content keeps its disjoint extended encoding.
+    let fmt_ls = args[0].as_lisp_string().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        )
+    })?;
+    let fmt_emacs = if fmt_ls.is_multibyte() {
+        fmt_ls.as_bytes().to_vec()
+    } else {
+        crate::emacs_core::emacs_char::str_to_multibyte(fmt_ls.as_bytes())
+    };
+    let fmt_codes = decode_emacs_codes(&fmt_emacs);
+
+    let mut result: Vec<u8> = Vec::new();
     let mut spans: Vec<FormatPropSpan> = Vec::new();
     let mut source_spans: Vec<FormatSourceSpan> = Vec::new();
-    // Issue #131: byte ranges of `result` that came from impure (eight-bit /
-    // non-Unicode) sources and therefore must be decoded as storage strings.
-    // Everything else is real text passed through verbatim so real PUA glyphs
-    // are not mistaken for raw-byte sentinels.
-    let mut impure_ranges: Vec<(usize, usize)> = Vec::new();
-    let fmt_pure = value_render_pure_unicode(args[0], 0);
     let mut force_multibyte_result = false;
     let mut arg_idx = 1;
-    let mut chars = fmt_str.chars().peekable();
+    let mut i = 0usize;
     let mut format_char_pos = 0usize;
     let mut result_char_pos = 0usize;
     let fmt_has_props =
         crate::emacs_core::value::get_string_text_properties_table_for_value(args[0]).is_some();
 
-    while let Some(ch) = chars.next() {
+    while i < fmt_codes.len() {
+        let code = fmt_codes[i];
         let source_start = format_char_pos;
+        i += 1;
         format_char_pos += 1;
-        if ch != '%' {
-            let lit_start = result.len();
-            force_multibyte_result |= push_format_literal(&mut result, ch, quoting_style);
-            if !fmt_pure {
-                impure_ranges.push((lit_start, result.len()));
-            }
+        if code != '%' as u32 {
+            force_multibyte_result |= push_format_literal_code(&mut result, code, quoting_style);
             source_spans.push(FormatSourceSpan {
                 source_char_start: source_start,
                 source_char_end: format_char_pos,
@@ -1640,13 +1726,13 @@ fn do_format(
             continue;
         }
 
-        let parsed = parse_format_spec(&mut chars)?;
+        let parsed = parse_format_spec(&fmt_codes, &mut i)?;
         let spec = parsed.spec;
         format_char_pos += parsed.consumed_chars;
         let spec_source_end = format_char_pos;
 
         if spec.conversion == '%' {
-            result.push('%');
+            result.push(b'%');
             source_spans.push(FormatSourceSpan {
                 source_char_start: source_start,
                 source_char_end: spec_source_end,
@@ -1662,36 +1748,38 @@ fn do_format(
             return Err(format_not_enough_args_error());
         }
 
-        // Issue #131: whether this conversion's output is real text (passes
-        // through verbatim) or a storage string that must be sentinel-decoded.
-        let mut piece_pure = true;
-        let formatted = match spec.conversion {
+        let formatted: Vec<u8> = match spec.conversion {
             's' => {
-                piece_pure = value_render_pure_unicode(args[this_arg_idx], 0);
-                let s = princ_fn(&args[this_arg_idx]);
-                // Only `%s` on a string argument preserves text
-                // properties: princ_fn on a string returns the same
-                // bytes, so we can map byte ranges in the argument to
-                // byte ranges in the formatted result. For other types
-                // princ_fn produces a fresh printed representation
-                // with no property origin. Mirrors GNU styled_format
-                // (editfns.c:3808) which sets `spec->intervals` only
-                // when `string_intervals (arg)` is non-NULL.
-                let arg_is_string = args[this_arg_idx].is_string();
+                // Only `%s` on a string argument preserves text properties: the
+                // string's own bytes land verbatim, so we can map byte ranges in
+                // the argument to byte ranges in the formatted result. For other
+                // types princ_fn produces a fresh printed representation with no
+                // property origin. Mirrors GNU styled_format (editfns.c:3808),
+                // which sets `spec->intervals` only when `string_intervals (arg)`
+                // is non-NULL. The string's content is measured with its own
+                // multibyteness (a unibyte raw byte is one column, a multibyte
+                // eight-bit char four), matching GNU's width.
+                let arg = args[this_arg_idx];
+                let arg_is_string = arg.is_string();
+                let (s, src_multibyte) = if let Some(ls) = arg.as_lisp_string() {
+                    (ls.as_bytes().to_vec(), ls.is_multibyte())
+                } else {
+                    (princ_fn(&arg), true)
+                };
                 let (formatted, content_byte_start_in_formatted, content_byte_end_in_formatted) =
-                    format_string_spec_tracked(&s, &spec);
+                    format_string_spec_tracked(&s, src_multibyte, &spec);
                 if arg_is_string && content_byte_start_in_formatted < content_byte_end_in_formatted
                 {
-                    let formatted_chars = formatted.chars().count();
+                    let formatted_chars = emacs_chars_count(&formatted);
                     let content_char_start_in_formatted =
-                        formatted[..content_byte_start_in_formatted].chars().count();
+                        emacs_chars_count(&formatted[..content_byte_start_in_formatted]);
                     let field_char_start_in_formatted = if fmt_has_props {
                         0
                     } else {
                         content_char_start_in_formatted
                     };
                     let span_char_len = formatted_chars - field_char_start_in_formatted;
-                    let arg_char_len = args[this_arg_idx]
+                    let arg_char_len = arg
                         .as_lisp_string()
                         .map(|string| string.schars())
                         .unwrap_or(0);
@@ -1707,9 +1795,8 @@ fn do_format(
                 formatted
             }
             'S' => {
-                piece_pure = value_render_pure_unicode(args[this_arg_idx], 0);
                 let s = prin1_fn(&args[this_arg_idx]);
-                format_string_spec(&s, &spec)
+                format_string_spec(&s, true, &spec)
             }
             'd' | 'i' | 'b' | 'B' | 'o' | 'x' | 'X' => {
                 let formatted = match args[this_arg_idx].kind() {
@@ -1724,22 +1811,19 @@ fn do_format(
                         return Err(format_spec_type_mismatch_error());
                     }
                 };
-                formatted
+                formatted.into_bytes()
             }
             'f' | 'e' | 'E' | 'g' | 'G' => {
                 let f = expect_number(&args[this_arg_idx])
                     .map_err(|_| format_spec_type_mismatch_error())?;
-                format_float_spec(f, &spec)
+                format_float_spec(f, &spec).into_bytes()
             }
             'c' => {
                 let n = expect_int(&args[this_arg_idx])
                     .map_err(|_| format_spec_type_mismatch_error())?;
-                // A real Unicode char renders as itself; eight-bit/non-Unicode
-                // codes render as storage sentinels that must be decoded.
-                piece_pure = u32::try_from(n).ok().and_then(char::from_u32).is_some();
                 let formatted_char = format_char_argument(n)?;
                 force_multibyte_result |= formatted_char.force_multibyte_result;
-                format_string_spec(&formatted_char.rendered, &spec)
+                format_string_spec(&formatted_char.rendered, true, &spec)
             }
             _ => {
                 return Err(signal(
@@ -1752,7 +1836,7 @@ fn do_format(
             }
         };
         arg_idx = this_arg_idx + 1;
-        let formatted_chars = formatted.chars().count();
+        let formatted_chars = emacs_chars_count(&formatted);
         if formatted_chars > 0 {
             source_spans.push(FormatSourceSpan {
                 source_char_start: source_start,
@@ -1762,42 +1846,34 @@ fn do_format(
             });
         }
         result_char_pos += formatted_chars;
-        let piece_start = result.len();
-        result.push_str(&formatted);
-        if !piece_pure {
-            impure_ranges.push((piece_start, result.len()));
-        }
+        result.extend_from_slice(&formatted);
     }
 
-    Ok((
-        result,
-        spans,
-        source_spans,
-        force_multibyte_result,
-        impure_ranges,
-    ))
+    Ok((result, spans, source_spans, force_multibyte_result))
 }
 
 fn build_format_result(
     args: &[Value],
-    s: &str,
+    bytes: Vec<u8>,
     spans: &[FormatPropSpan],
     source_spans: &[FormatSourceSpan],
     force_multibyte_result: bool,
-    impure_ranges: &[(usize, usize)],
 ) -> Value {
+    // GNU `styled_format` decides multibyteness from the format/argument strings
+    // and from %c/%S/quoting that forces it; neomacs also inspects the result for
+    // a genuine (non eight-bit) multibyte character, since %S/printer output can
+    // introduce one without a multibyte argument string. Eight-bit raw bytes do
+    // NOT promote (issue #131: a raw unibyte byte stays unibyte).
     let multibyte = force_multibyte_result
         || args.iter().any(|value| value.string_is_multibyte())
-        || runtime_string_result_multibyte(false, s);
-    // Issue #131: pure (real-text) spans of `s` are already valid Emacs internal
-    // encoding and pass through verbatim so real Private-Use glyphs survive; only
-    // impure spans are sentinel-decoded. Reproduces the old whole-string decode
-    // when every piece is impure.
-    let bytes = assemble_format_result_bytes(s, impure_ranges, multibyte);
+        || result_bytes_imply_multibyte(&bytes);
+    // `bytes` are canonical multibyte Emacs encoding. A unibyte result has no
+    // genuine multibyte character, so down-convert eight-bit chars back to raw
+    // bytes (preserving e.g. a raw unibyte payload passed through verbatim).
     let result = Value::heap_string(if multibyte {
         crate::heap_types::LispString::from_emacs_bytes(bytes)
     } else {
-        crate::heap_types::LispString::from_unibyte(bytes)
+        crate::heap_types::LispString::from_unibyte(emacs_bytes_to_unibyte(&bytes))
     });
 
     // Copy text properties from the format string first, then from each
@@ -1830,19 +1906,18 @@ pub(crate) fn builtin_format_wrapper_strict_slice(
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
         expect_min_args("format", args, 1)?;
-        let (s, spans, source_spans, force_multibyte_result, impure_ranges) = do_format(
+        let (bytes, spans, source_spans, force_multibyte_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
-            &|v| super::error::print_value_in_state(ctx, v),
+            &|v| super::error::print_value_bytes_with_eval(ctx, v),
             FormatMessageQuotingStyle::None,
         )?;
         Ok(build_format_result(
             args,
-            &s,
+            bytes,
             &spans,
             &source_spans,
             force_multibyte_result,
-            &impure_ranges,
         ))
     })
 }
@@ -1997,19 +2072,18 @@ pub(crate) fn builtin_format_message_slice(
         let quoting_style = TextQuotingStyle::from_symbol_value(quoting_style)
             .map(FormatMessageQuotingStyle::from_text_quoting_style)
             .expect("text-quoting-style builtin returns a GNU quoting style symbol");
-        let (s, spans, source_spans, force_multibyte_result, impure_ranges) = do_format(
+        let (bytes, spans, source_spans, force_multibyte_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
-            &|v| super::error::print_value_in_state(ctx, v),
+            &|v| super::error::print_value_bytes_with_eval(ctx, v),
             quoting_style,
         )?;
         Ok(build_format_result(
             args,
-            &s,
+            bytes,
             &spans,
             &source_spans,
             force_multibyte_result,
-            &impure_ranges,
         ))
     })
 }

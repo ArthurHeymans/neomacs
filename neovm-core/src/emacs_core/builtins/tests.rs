@@ -11513,6 +11513,67 @@ fn format_preserves_private_use_glyphs_issue_131() {
 }
 
 #[test]
+fn format_promotes_raw_byte_to_eight_bit_in_multibyte_result_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // GNU: (format "%c%s" #xe0a0 (unibyte-string 255)) => length 2, multibyte,
+    // aref 0 = 57504 (the Private-Use glyph), aref 1 = 4194303 (#x3FFFFF, the
+    // eight-bit char). The raw unibyte byte is promoted to an eight-bit char
+    // because the glyph forces a multibyte result — the build-the-canonical-
+    // bytes-then-down-convert path fixes the old E3FF-sentinel divergence.
+    let result = eval
+        .eval_str(
+            r#"
+            (let ((s (format "%c%s" #xe0a0 (unibyte-string 255))))
+              (list (length s) (aref s 0) (aref s 1) (multibyte-string-p s)))
+            "#,
+        )
+        .expect("format should evaluate");
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::fixnum(2),
+            Value::fixnum(0xe0a0),
+            Value::fixnum(0x3FFFFF),
+            Value::T,
+        ])
+    );
+}
+
+#[test]
+fn format_preserves_unibyte_raw_byte_payload_and_width_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // GNU: (format "%5s" (unibyte-string 200)) => a UNIBYTE string of 5 bytes,
+    // four leading ASCII spaces then the raw byte 200 (one display column, not
+    // four), and the result is NOT promoted to multibyte.
+    let result = eval
+        .eval_str(
+            r#"
+            (let ((s (format "%5s" (unibyte-string 200))))
+              (list (length s) (multibyte-string-p s) (append s nil)))
+            "#,
+        )
+        .expect("format should evaluate");
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::fixnum(5),
+            Value::NIL,
+            Value::list(vec![
+                Value::fixnum(32),
+                Value::fixnum(32),
+                Value::fixnum(32),
+                Value::fixnum(32),
+                Value::fixnum(200),
+            ]),
+        ])
+    );
+}
+
+#[test]
 fn prin1_to_string_respects_print_overrides_for_control_characters() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
