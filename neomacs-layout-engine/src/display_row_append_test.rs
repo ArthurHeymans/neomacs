@@ -6235,11 +6235,13 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
 
     let (appended, end) = append_context
         .append_source_text_request_to_text_row(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             BufferTextSourceTextRequest::new(
                 source_range,
                 ResolvedBufferTextSourceAdvance::natural(measured_width),
@@ -6294,11 +6296,13 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
         BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let (progress, end) = append_context
         .append_source_text_request_to_text_row(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
                 ResolvedBufferTextSourceAdvance::resolved(13.0),
@@ -6363,11 +6367,13 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
         BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let (progress, end) = append_context
         .append_source_text_request_to_text_row(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
                 ResolvedBufferTextSourceAdvance::natural(0.0),
@@ -6437,10 +6443,12 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
         .measure_source_request_width_to_text_row(
-            &mut builder,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceMeasureState::new(
+                &mut builder,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             source_item.clone(),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
@@ -6475,11 +6483,13 @@ fn buffer_text_item_append_context_builds_control_char_item() {
 
     let (progress, end) = append_context
         .append_source_request_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             source_item,
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
@@ -6905,11 +6915,13 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
             &geometry,
             &params,
             &mut policy_face_ids,
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
         )
         .expect("appended glyphless buffer text item fragment");
     let mut face_scan = FaceScanCheckpoint::initial();
