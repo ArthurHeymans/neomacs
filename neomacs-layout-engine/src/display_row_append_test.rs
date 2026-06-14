@@ -924,6 +924,93 @@ fn buffer_hscroll_skip_source_char_keeps_marker_pending_while_still_skipping() {
 }
 
 #[test]
+fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
+    let mut context = RowTransitionTestContext::new("hscroll-render-request-marker");
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut x = 0.0;
+    let mut col = 0;
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut cursor_info = CursorCaptureState::new();
+    let mut font_metrics = None;
+    let row_limit = context.row_limit;
+
+    let continuation = BufferHscrollSkipRenderRequest::new(
+        b"\tabc",
+        8,
+        0.0,
+        &surface,
+        &active_face,
+        12.0,
+        16.0,
+        8.0,
+        &face_resolver,
+        99,
+        false,
+        context.defaults,
+        0,
+        4,
+        row_limit,
+    )
+    .render_next_and_apply(BufferHscrollSkipRenderState {
+        byte_idx: &mut byte_idx,
+        charpos: &mut charpos,
+        hscroll_skip: &mut hscroll_skip,
+        row_extend: &mut row_extend,
+        output_emitter: &mut context.output_emitter,
+        x: &mut x,
+        col: &mut col,
+        prefix_request: &mut prefix_request,
+        line_numbers: &mut line_numbers,
+        word_wrap: &mut word_wrap,
+        trailing_whitespace: &mut trailing_whitespace,
+        row_geometry: &mut context.geometry,
+        row_flags: &mut context.row_flags,
+        hit_rows: &mut context.hit_rows,
+        hit_row_range: &mut hit_row_range,
+        cursor_info: &mut cursor_info,
+        row_y_positions: &mut context.row_y_positions,
+        builder: &mut context.builder,
+        evaluator: &mut context.eval,
+        font_metrics: &mut font_metrics,
+    });
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 1);
+    assert!(!hscroll_skip.should_skip());
+    assert_eq!(x, 8.0);
+    assert_eq!(col, 1);
+    context
+        .builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
+            assert!(row.truncated_left);
+        })
+        .expect("current row");
+}
+
+#[test]
 fn buffer_hscroll_skip_action_applies_line_break_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut context = RowTransitionTestContext::new("hscroll-line-break-state");

@@ -362,6 +362,29 @@ pub(crate) struct DisplayRowTextWindowEmitContext<'a, 'emit> {
     evaluator: &'emit mut Context,
 }
 
+pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
+    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) row_flags: &'emit mut DisplayRowFlags,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+}
+
 pub(crate) struct DisplayRowTransitionRenderState<'a> {
     prefix_request: &'a mut DisplayRowPrefixRequest,
     has_prefix: bool,
@@ -4802,6 +4825,24 @@ pub(crate) struct BufferHscrollSkipSourceChar {
     charpos: i64,
 }
 
+pub(crate) struct BufferHscrollSkipRenderRequest<'a> {
+    text: &'a [u8],
+    tab_width: i32,
+    content_x: f32,
+    append_surface: &'a DisplayRowAppendSurface,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    default_face_ascent: f32,
+    char_h: f32,
+    char_w: f32,
+    face_resolver: &'a FaceResolver,
+    point_charpos: i64,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    text_matrix_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+}
+
 impl BufferHscrollSkipSourceChar {
     fn new(ch_start_byte_idx: usize, ch: char, charpos: i64) -> Self {
         Self {
@@ -4860,6 +4901,170 @@ impl BufferHscrollSkipSourceChar {
         }
 
         if is_wide_char(self.ch) { 2 } else { 1 }
+    }
+}
+
+impl<'a> BufferHscrollSkipRenderRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'a [u8],
+        tab_width: i32,
+        content_x: f32,
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        default_face_ascent: f32,
+        char_h: f32,
+        char_w: f32,
+        face_resolver: &'a FaceResolver,
+        point_charpos: i64,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        text_matrix_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            text,
+            tab_width,
+            content_x,
+            append_surface,
+            active_face_state,
+            default_face_ascent,
+            char_h,
+            char_w,
+            face_resolver,
+            point_charpos,
+            has_prefix,
+            row_geometry_defaults,
+            text_matrix_row_base,
+            max_rows,
+            row_limit,
+        }
+    }
+
+    pub(crate) fn render_next_and_apply(
+        self,
+        state: BufferHscrollSkipRenderState<'_, '_>,
+    ) -> DisplayRowTransitionContinuation {
+        let BufferHscrollSkipRenderState {
+            byte_idx,
+            charpos,
+            hscroll_skip,
+            row_extend,
+            output_emitter,
+            x,
+            col,
+            prefix_request,
+            line_numbers,
+            word_wrap,
+            trailing_whitespace,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            cursor_info,
+            row_y_positions,
+            builder,
+            evaluator,
+            font_metrics,
+        } = state;
+
+        let Some(hscroll_action) = BufferHscrollSkipSourceChar::consume_from_text(
+            self.text,
+            byte_idx,
+            charpos,
+            hscroll_skip,
+            self.tab_width,
+        ) else {
+            return DisplayRowTransitionContinuation::Exhausted;
+        };
+
+        if hscroll_action.is_line_break() {
+            hscroll_action.apply_line_break_before_row_transition(
+                row_extend,
+                output_emitter,
+                x,
+                self.content_x,
+            );
+            let line_break_transition = DisplayRowLineBreakTransitionPlan::hscroll_line_break();
+            let hit_range = hscroll_action
+                .line_break_hit_range(hit_row_range)
+                .expect("hscroll line break hit range");
+            let row_transition = DisplayRowTextWindowEmitContext::new(
+                self.row_geometry_defaults,
+                self.text_matrix_row_base,
+                row_y_positions,
+                self.max_rows,
+                row_geometry,
+                row_flags,
+                self.row_limit,
+                hit_rows,
+                builder,
+                output_emitter,
+                evaluator,
+            )
+            .emit_line_break_then_row_start(
+                line_break_transition,
+                hit_range,
+                DisplayRowPosition {
+                    x_px: *x,
+                    col: *col,
+                },
+                0.0,
+                DisplayRowTransitionRenderState::new(
+                    prefix_request,
+                    self.has_prefix,
+                    line_numbers,
+                    hscroll_skip,
+                    word_wrap,
+                    trailing_whitespace,
+                ),
+                col,
+            );
+            return hscroll_action.apply_after_line_break_row_transition(
+                row_transition,
+                cursor_info,
+                self.active_face_state,
+                row_geometry,
+                self.point_charpos,
+                *x,
+                *col,
+                self.char_h,
+            );
+        }
+
+        let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            self.face_resolver,
+            x,
+            col,
+        );
+        hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
+            BufferSyntheticTextRenderContext::new(
+                self.append_surface,
+                self.active_face_state,
+                0.0,
+                self.char_h,
+                self.default_face_ascent,
+                self.char_w,
+            ),
+            row_geometry,
+            &mut synthetic_text_state,
+            self.face_resolver,
+            self.content_x,
+        );
+        hscroll_action.capture_text_cursor_if_point(
+            cursor_info,
+            self.active_face_state,
+            row_geometry,
+            self.point_charpos,
+            *x,
+            *col,
+        );
+        DisplayRowTransitionContinuation::Continue
     }
 }
 
