@@ -5137,6 +5137,133 @@ fn buffer_text_source_append_context_appends_source_char() {
 }
 
 #[test]
+fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk_state() {
+    let mut context = RowTransitionTestContext::new("source-char-render-request");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert("ab");
+    }
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let overlay_context =
+        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let params = test_display_space_window_params();
+    let text = b"ab";
+    let mut byte_idx = 0;
+    let decoded_source_char =
+        BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 0)
+            .expect("decoded char");
+    let mut append_state = BufferTextRowAppendState::default();
+    let mut charpos = 0;
+    let mut col = 0;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut x = 0.0;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut font_metrics = None;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+
+    let outcome = BufferTextSourceCharRenderRequest::new(
+        decoded_source_char,
+        text,
+        0,
+        buf_id,
+        &surface,
+        overlay_context,
+        &active_face,
+        &params,
+        0.0,
+        16.0,
+        99,
+        DisplayRowVisibilityLimit {
+            max_rows: 4,
+            bottom_y: 64.0,
+        },
+        0.0,
+        false,
+        context.defaults,
+        0,
+        4,
+        context.row_limit,
+    )
+    .render_and_apply(
+        &snapshot,
+        BufferTextSourceCharRenderRequestState {
+            append_state: &mut append_state,
+            byte_idx: &mut byte_idx,
+            charpos: &mut charpos,
+            col: &mut col,
+            output_emitter: &mut context.output_emitter,
+            row_extend: &mut row_extend,
+            x: &mut x,
+            line_numbers: &mut line_numbers,
+            row_geometry: &mut context.geometry,
+            row_flags: &mut context.row_flags,
+            hit_rows: &mut context.hit_rows,
+            hit_row_range: &mut hit_row_range,
+            builder: &mut context.builder,
+            evaluator: &mut context.eval,
+            prefix_request: &mut prefix_request,
+            hscroll_skip: &mut hscroll_skip,
+            word_wrap: &mut word_wrap,
+            trailing_whitespace: &mut trailing_whitespace,
+            face_scan: &mut face_scan,
+            row_y_positions: &mut context.row_y_positions,
+            font_metrics: &mut font_metrics,
+            face_resolver: &face_resolver,
+            cursor_info: &mut cursor_info,
+            face_ids: &mut face_ids,
+            raise_span: &mut raise_span,
+        },
+    );
+
+    assert_eq!(outcome, BufferTextSourceCharRenderOutcome::Rendered);
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 1);
+    assert_eq!(x, 8.0);
+    assert_eq!(col, 1);
+    context
+        .builder
+        .with_current_row_mut(|row| {
+            let text_glyphs = &row.glyphs[GlyphArea::Text as usize];
+            assert_eq!(text_glyphs.len(), 1);
+            assert!(matches!(
+                text_glyphs[0].glyph_type,
+                GlyphType::Char { ch: 'a' }
+            ));
+        })
+        .expect("current row");
+}
+
+#[test]
 fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let mut eval = Context::new();
     let buf_id = eval

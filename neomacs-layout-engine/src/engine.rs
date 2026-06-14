@@ -59,14 +59,10 @@ use crate::display_row_append::{
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
     BufferSelectiveDisplayContext, BufferSyntheticTextRenderContext,
     BufferSyntheticTextRenderState, BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest,
-    BufferTextLineBreakRenderState, BufferTextOverflowRenderRequest, BufferTextOverflowRenderState,
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
-    BufferTextSourceCharRenderState, BufferTextSpecialOverflowRenderRequest,
-    BufferTextSpecialOverflowRenderState, BufferTextSpecialSourceCharRenderState,
-    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState, OverlayStringRenderState,
-    TextWindowAppendSurfaceRequest,
+    BufferTextLineBreakRenderState, BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
+    BufferTextSourceCharRenderRequestState, DisplayRowLineBreakTransitionPlan,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
+    DisplayRowTransitionRenderState, OverlayStringRenderState, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2286,8 +2282,6 @@ impl LayoutEngine {
                 continue;
             }
 
-            decoded_source_char.record_word_wrap_candidate(&mut word_wrap, &output_emitter);
-
             if ch == '\n' {
                 if BufferTextLineBreakRenderRequest::new(
                     decoded_source_char,
@@ -2338,134 +2332,18 @@ impl LayoutEngine {
                 continue;
             }
 
-            let buffer_source_char = decoded_source_char.source_char(params.nobreak_char_display);
-            let buffer_row_append_context = BufferTextRowAppendContext::new(
-                buffer,
+            let char_render_outcome = BufferTextSourceCharRenderRequest::new(
+                decoded_source_char,
+                text,
+                text_start_byte,
                 buf_id,
                 &text_append_surface,
+                overlay_text_row_context,
                 &active_face_state,
+                params,
                 raise_span.value_or(0.0),
                 char_h,
-            );
-
-            // Grapheme-cluster continuation is decided BEFORE glyphless
-            // handling: a zero-width joiner / non-joiner / variation selector
-            // that continues an emoji composition (the ZWJs in 👨‍👩‍👧, VS-16 in
-            // ❤️ or keycaps) is a format char that glyphless classification would
-            // otherwise SKIP, splitting the composition. GNU consumes such
-            // characters into the active composition instead of drawing them
-            // glyphless. Only suppress glyphless handling when there is a
-            // preceding glyph to merge into — a standalone joiner still renders
-            // glyphless.
-            let append_position = DisplayRowPosition { x_px: x, col };
-            let append_geometry = row_geometry;
-
-            let prepared_append = buffer_row_append_context
-                .prepare_source_char_for_current_text_row(
-                    BufferTextSourceCharPreparationRequest::new(
-                        append_geometry,
-                        &buffer_source_char,
-                        text,
-                        decoded_source_char.start_byte_idx(),
-                        append_position,
-                    ),
-                    &mut BufferTextSourceCharPreparationState::new(
-                        &mut buffer_text_append_state,
-                        &mut self.matrix_builder,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                    ),
-                );
-            let prepared_append = match prepared_append {
-                BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
-                    let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
-                        &special_prepared_append,
-                        text,
-                        text_start_byte,
-                        x,
-                        text_append_surface.full_text_right_edge(),
-                        params.truncate_lines,
-                        row_visibility_limit,
-                        content_x,
-                        has_prefix,
-                        row_geometry_defaults,
-                        text_matrix_row_base,
-                        max_rows,
-                        row_limit,
-                    )
-                    .render_if_needed_and_apply(
-                        buffer,
-                        BufferTextSpecialOverflowRenderState {
-                            byte_idx: &mut byte_idx,
-                            charpos: &mut charpos,
-                            col: &mut col,
-                            output_emitter: &mut output_emitter,
-                            row_extend: &mut row_extend,
-                            x: &mut x,
-                            line_numbers: &mut line_numbers,
-                            row_geometry: &mut row_geometry,
-                            row_flags: &mut row_flags,
-                            hit_rows: &mut hit_rows,
-                            hit_row_range: &mut hit_row_range,
-                            builder: &mut self.matrix_builder,
-                            evaluator,
-                            prefix_request: &mut prefix_request,
-                            hscroll_skip: &mut hscroll_skip,
-                            word_wrap: &mut word_wrap,
-                            trailing_whitespace: &mut trailing_whitespace,
-                            row_y_positions: &mut row_y_positions,
-                        },
-                    );
-                    if special_overflow_outcome.should_break() {
-                        break;
-                    }
-                    if special_overflow_outcome.should_continue_buffer_walk() {
-                        continue;
-                    }
-
-                    if special_prepared_append
-                        .append_to_text_row_and_apply(
-                            &buffer_row_append_context,
-                            &row_geometry,
-                            params,
-                            &mut BufferTextSpecialSourceCharRenderState::new(
-                                &mut face_ids,
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                                &mut self.font_metrics,
-                                face_resolver,
-                                &mut face_scan,
-                                &mut word_wrap,
-                                &mut x,
-                                &mut col,
-                                &mut charpos,
-                            ),
-                        )
-                        .should_break()
-                    {
-                        break;
-                    }
-                    continue;
-                }
-                BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
-            };
-
-            // Check for line wrap / truncation. Use the same append renderer
-            // that materializes buffer text where builder semantics differ
-            // from a simple per-face ASCII advance.
-            prepared_append.update_cursor_info_for_main_char(
-                &mut cursor_info,
-                decoded_source_char.start_byte_idx(),
-            );
-            let overflow_outcome = BufferTextOverflowRenderRequest::new(
-                prepared_append,
-                decoded_source_char,
-                ch,
-                text_append_surface.right_edge(),
-                params.truncate_lines,
-                word_wrap,
+                point_charpos,
                 row_visibility_limit,
                 content_x,
                 has_prefix,
@@ -2474,9 +2352,10 @@ impl LayoutEngine {
                 max_rows,
                 row_limit,
             )
-            .render_if_needed_and_apply(
-                text,
-                BufferTextOverflowRenderState {
+            .render_and_apply(
+                buffer,
+                BufferTextSourceCharRenderRequestState {
+                    append_state: &mut buffer_text_append_state,
                     byte_idx: &mut byte_idx,
                     charpos: &mut charpos,
                     col: &mut col,
@@ -2496,102 +2375,19 @@ impl LayoutEngine {
                     trailing_whitespace: &mut trailing_whitespace,
                     face_scan: &mut face_scan,
                     row_y_positions: &mut row_y_positions,
+                    font_metrics: &mut self.font_metrics,
+                    face_resolver,
+                    cursor_info: &mut cursor_info,
+                    face_ids: &mut face_ids,
+                    raise_span: &mut raise_span,
                 },
             );
-            if overflow_outcome.should_break() {
+            if char_render_outcome.should_break() {
                 break;
             }
-            if overflow_outcome.should_continue_buffer_walk() {
+            if char_render_outcome.should_continue_buffer_walk() {
                 continue;
             }
-
-            // Reset raise offset when past the raise region
-            BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(
-                &mut raise_span,
-                charpos,
-                window_start,
-            );
-
-            prepared_append.capture_cursor_info_for_main_char_if_point(
-                &mut cursor_info,
-                &active_face_state,
-                &row_geometry,
-                x,
-                decoded_source_char.start_byte_idx(),
-                col,
-                ch == '\t',
-                charpos,
-                point_charpos,
-            );
-
-            // --- Overlay before-strings ---
-            let mut overlay_state = OverlayStringRenderState::new(
-                evaluator,
-                &mut output_emitter,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
-            );
-            overlay_text_row_context.render_before_at(
-                buffer,
-                charpos,
-                &active_face_state,
-                &mut overlay_state,
-            );
-
-            if prepared_append
-                .append_to_text_row_and_apply(
-                    &buffer_row_append_context,
-                    &append_geometry,
-                    ch,
-                    &mut BufferTextSourceCharRenderState::new(
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &mut trailing_whitespace,
-                        &mut word_wrap,
-                        &mut x,
-                        &mut col,
-                        &mut charpos,
-                    ),
-                )
-                .should_break()
-            {
-                break;
-            }
-
-            // --- Overlay after-strings ---
-            let mut overlay_state = OverlayStringRenderState::new(
-                evaluator,
-                &mut output_emitter,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
-            );
-            overlay_text_row_context.render_after_at(
-                buffer,
-                charpos,
-                &active_face_state,
-                &mut overlay_state,
-            );
         }
 
         let end_of_buffer_tail = BufferEndOfBufferTailAction::new(
