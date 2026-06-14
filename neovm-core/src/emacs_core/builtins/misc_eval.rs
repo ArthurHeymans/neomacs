@@ -2104,13 +2104,10 @@ pub(super) fn write_char_rendered_text(char_code: i64) -> Option<String> {
 /// non-Unicode codes never collide with a real Private-Use glyph, so writing a
 /// nerd-font icon stores the glyph itself rather than a stray low byte.
 fn write_char_emacs_bytes(char_code: i64) -> Option<Vec<u8>> {
-    use crate::emacs_core::emacs_char;
-    if !(0..=emacs_char::MAX_CHAR as i64).contains(&char_code) {
-        return None;
-    }
-    let mut buf = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
-    let len = emacs_char::char_string(char_code as u32, &mut buf);
-    Some(buf[..len].to_vec())
+    u32::try_from(char_code)
+        .ok()
+        .and_then(crate::emacs_core::emacs_char::EmacsChar::from_code)
+        .map(|c| c.to_emacs_bytes())
 }
 
 pub(crate) fn builtin_write_char(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {

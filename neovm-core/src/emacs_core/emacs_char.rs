@@ -53,6 +53,108 @@ pub const MIN_MULTIBYTE_LEADING_CODE: u8 = 0xC0;
 /// Note: this must be updated if `MAX_CHAR` is ever increased.
 pub const MAX_MULTIBYTE_LEADING_CODE: u8 = 0xF8;
 
+/// A validated Emacs character code in the 22-bit range `0..=MAX_CHAR`.
+///
+/// Issue #131: the historical bug class was treating an Emacs character code as
+/// a Rust [`char`] (e.g. `char::from_u32(code)`) or packing it into a Rust
+/// `String`. That silently succeeds for codes in the in-Unicode Private-Use
+/// area — colliding a real nerd-font glyph with an eight-bit raw byte — and
+/// fails outright for eight-bit (`0x3FFF80..`) and non-Unicode (`>0x10FFFF`)
+/// codes, which are NOT Unicode scalar values.
+///
+/// `EmacsChar` makes that mistake un-writable: it is a distinct type from both
+/// `char` and a bare `u32`, and the only conversions to/from a Rust `char` or a
+/// raw byte are the explicit, correct ones below. The canonical serialisation
+/// is the internal multibyte byte form via [`EmacsChar::char_string`] /
+/// [`EmacsChar::to_emacs_bytes`] (GNU `CHAR_STRING`), never an in-Unicode
+/// sentinel.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct EmacsChar(u32);
+
+impl EmacsChar {
+    /// Largest valid code (`MAX_CHAR`, 22-bit).
+    pub const MAX: u32 = MAX_CHAR;
+
+    /// Wrap a code, returning `None` if it exceeds `MAX_CHAR`.
+    #[inline]
+    pub fn from_code(code: u32) -> Option<Self> {
+        (code <= MAX_CHAR).then_some(Self(code))
+    }
+
+    /// Wrap a code without range checking (debug-asserts validity).
+    #[inline]
+    pub fn from_code_unchecked(code: u32) -> Self {
+        debug_assert!(code <= MAX_CHAR, "EmacsChar out of range: {code:#x}");
+        Self(code)
+    }
+
+    /// The eight-bit raw-byte character for `byte` (`BYTE8_TO_CHAR`).
+    #[inline]
+    pub fn from_byte8(byte: u8) -> Self {
+        Self(byte8_to_char(byte))
+    }
+
+    /// A unibyte byte made multibyte: ASCII stays itself, high bytes become
+    /// eight-bit raw-byte characters (`UNIBYTE_TO_CHAR`).
+    #[inline]
+    pub fn from_unibyte_byte(byte: u8) -> Self {
+        Self(unibyte_to_char(byte))
+    }
+
+    /// A Rust scalar value as an Emacs character (always in range).
+    #[inline]
+    pub fn from_char(c: char) -> Self {
+        Self(c as u32)
+    }
+
+    /// The raw 22-bit code.
+    #[inline]
+    pub fn code(self) -> u32 {
+        self.0
+    }
+
+    /// Whether this is a Unicode scalar value (representable as a Rust `char`).
+    /// False for eight-bit raw bytes and non-Unicode codes.
+    #[inline]
+    pub fn is_unicode_scalar(self) -> bool {
+        char::from_u32(self.0).is_some()
+    }
+
+    /// Whether this is an eight-bit raw-byte character (`CHAR_BYTE8_P`).
+    #[inline]
+    pub fn is_byte8(self) -> bool {
+        self.0 > MAX_5_BYTE_CHAR
+    }
+
+    /// The underlying byte for an eight-bit (or ASCII) character, else `None`
+    /// (`CHAR_TO_BYTE_SAFE`).
+    #[inline]
+    pub fn to_byte8(self) -> Option<u8> {
+        char_to_byte_safe(self.0)
+    }
+
+    /// As a Rust `char`, or `None` for eight-bit/non-Unicode codes.
+    #[inline]
+    pub fn as_rust_char(self) -> Option<char> {
+        char::from_u32(self.0)
+    }
+
+    /// Encode into `buf` in the canonical internal multibyte form
+    /// (`CHAR_STRING`); returns the number of bytes written.
+    #[inline]
+    pub fn char_string(self, buf: &mut [u8]) -> usize {
+        char_string(self.0, buf)
+    }
+
+    /// The canonical internal multibyte bytes for this character.
+    #[inline]
+    pub fn to_emacs_bytes(self) -> Vec<u8> {
+        let mut buf = [0u8; MAX_MULTIBYTE_LENGTH];
+        let len = char_string(self.0, &mut buf);
+        buf[..len].to_vec()
+    }
+}
+
 /// Start of the raw-byte character range.
 const BYTE8_OFFSET: u32 = 0x3F_FF00;
 

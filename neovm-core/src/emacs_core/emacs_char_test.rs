@@ -746,3 +746,54 @@ fn blankp_only_zs() {
     assert!(!blankp(UnicodeCategory::LineSeparator as i64));
     assert!(!blankp(UnicodeCategory::Control as i64));
 }
+
+// -----------------------------------------------------------------------
+// EmacsChar newtype (issue #131): make the "char code as Rust char / PUA
+// sentinel" mistake un-writable.
+// -----------------------------------------------------------------------
+#[test]
+fn emacs_char_classifies_unicode_eight_bit_and_nonunicode() {
+    // A real Private-Use glyph (nerd-font icon) is a Unicode scalar value.
+    let glyph = EmacsChar::from_code(0xE0A0).unwrap();
+    assert!(glyph.is_unicode_scalar());
+    assert!(!glyph.is_byte8());
+    assert_eq!(glyph.as_rust_char(), Some('\u{E0A0}'));
+    assert_eq!(glyph.to_byte8(), None);
+    // Its canonical bytes are real extended UTF-8, never an in-Unicode sentinel.
+    assert_eq!(glyph.to_emacs_bytes(), vec![0xEE, 0x82, 0xA0]);
+
+    // An eight-bit raw byte is disjoint from Unicode.
+    let raw = EmacsChar::from_byte8(0xA0);
+    assert_eq!(raw.code(), 0x3FFFA0);
+    assert!(!raw.is_unicode_scalar());
+    assert!(raw.is_byte8());
+    assert_eq!(raw.as_rust_char(), None);
+    assert_eq!(raw.to_byte8(), Some(0xA0));
+
+    // The glyph and the raw byte are distinct EmacsChars (the old storage
+    // string collapsed both onto U+E0A0).
+    assert_ne!(glyph, raw);
+
+    // A non-Unicode code (> 0x10FFFF, below the eight-bit range) is neither.
+    let nonuni = EmacsChar::from_code(0x110000).unwrap();
+    assert!(!nonuni.is_unicode_scalar());
+    assert!(!nonuni.is_byte8());
+    assert_eq!(nonuni.to_byte8(), None);
+}
+
+#[test]
+fn emacs_char_range_and_unibyte_promotion() {
+    assert!(EmacsChar::from_code(MAX_CHAR).is_some());
+    assert!(EmacsChar::from_code(MAX_CHAR + 1).is_none());
+    // ASCII unibyte byte stays itself; a high byte promotes to eight-bit.
+    assert_eq!(EmacsChar::from_unibyte_byte(0x41).code(), 0x41);
+    assert_eq!(EmacsChar::from_unibyte_byte(0xFF).code(), 0x3FFFFF);
+    // char_string round-trips through string_char for every kind.
+    for code in [0x41u32, 0xE0A0, 0x10FFFF, 0x110000, 0x3FFFA0, MAX_CHAR] {
+        let ec = EmacsChar::from_code(code).unwrap();
+        let bytes = ec.to_emacs_bytes();
+        let (decoded, len) = string_char(&bytes);
+        assert_eq!(len, bytes.len());
+        assert_eq!(decoded, code, "round-trip {code:#x}");
+    }
+}
