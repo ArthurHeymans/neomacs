@@ -556,6 +556,63 @@ fn current_buffer_snapshot(eval: &Context, buf_id: BufferId) -> LayoutBufferSnap
 }
 
 #[test]
+fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("\tA");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+
+    let tab_request = buffer_text_source_range_append_request(
+        BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+        buf_id,
+        &snapshot,
+        7,
+    )
+    .expect("tab append request");
+    assert_eq!(tab_request.append_kind(), DisplayRowAppendKind::Tab);
+    let tab_item = tab_request.into_item();
+    assert_eq!(tab_item.face, RenderFaceRef::FaceId(7));
+    assert_eq!(
+        tab_item.span.start,
+        DisplaySourcePosition::buffer(buf_id, CharPos0::new(0), EmacsBytePos::new(0))
+    );
+    assert!(matches!(
+        &tab_item.kind,
+        DisplayItemKind::TextRun(run) if run.text.as_ref() == "\t"
+    ));
+
+    let mapped_request = buffer_display_item_source_range_append_request(
+        BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
+        buf_id,
+        &snapshot,
+        9,
+        BufferTextSourceAppendItem::SourceMappedText { text: "x".into() },
+    )
+    .expect("mapped append request");
+    assert_eq!(
+        mapped_request.append_kind(),
+        DisplayRowAppendKind::SourceMappedText
+    );
+    let mapped_item = mapped_request.into_item();
+    assert_eq!(mapped_item.face, RenderFaceRef::FaceId(9));
+    assert_eq!(
+        mapped_item.span.start,
+        DisplaySourcePosition::buffer(buf_id, CharPos0::new(1), EmacsBytePos::new(1))
+    );
+    assert!(matches!(
+        &mapped_item.kind,
+        DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "x"
+    ));
+}
+
+#[test]
 fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let mut eval = Context::new();
     let buf_id = eval
