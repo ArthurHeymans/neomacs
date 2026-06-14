@@ -492,6 +492,12 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert_eq!(state.point_line(), 9);
     assert!(!state.is_current_line());
     assert_eq!(state.display_number(3, false, 0), 2);
+    let request = state
+        .margin_render_request(3, false, 0, 0, 4)
+        .expect("line number request");
+    assert_eq!(request.text(), "2");
+    assert_eq!(request.cols(), 4);
+    assert_eq!(request.face().face_name(), "line-number");
 
     state.consume_render_request();
 
@@ -504,6 +510,12 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert_eq!(state.current_line(), 9);
     assert!(state.is_current_line());
     assert_eq!(state.display_number(3, true, 10), 19);
+    let request = state
+        .margin_render_request(3, true, 10, 3, 5)
+        .expect("current line request");
+    assert_eq!(request.text(), "19");
+    assert_eq!(request.cols(), 5);
+    assert_eq!(request.face().face_name(), "line-number-current-line");
 
     state.consume_render_request();
     state.advance_hidden_line();
@@ -511,6 +523,12 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(!state.should_render());
     assert_eq!(state.current_line(), 10);
     assert!(!LineNumberRenderState::new(false, 7, 9).should_render());
+
+    let major_tick = LineNumberRenderState::new(true, 12, 9)
+        .margin_render_request(1, false, 0, 4, 3)
+        .expect("major tick line number request");
+    assert_eq!(major_tick.text(), "12");
+    assert_eq!(major_tick.face().face_name(), "line-number-major-tick");
 }
 
 #[test]

@@ -39,6 +39,44 @@ pub(crate) struct LineNumberRenderState {
     render_pending: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LineNumberMarginFace {
+    Normal,
+    CurrentLine,
+    MajorTick,
+}
+
+impl LineNumberMarginFace {
+    pub(crate) fn face_name(self) -> &'static str {
+        match self {
+            Self::Normal => "line-number",
+            Self::CurrentLine => "line-number-current-line",
+            Self::MajorTick => "line-number-major-tick",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct LineNumberMarginRenderRequest {
+    display_number: i64,
+    cols: i32,
+    face: LineNumberMarginFace,
+}
+
+impl LineNumberMarginRenderRequest {
+    pub(crate) fn text(self) -> String {
+        format!("{}", self.display_number)
+    }
+
+    pub(crate) fn cols(self) -> i32 {
+        self.cols
+    }
+
+    pub(crate) fn face(self) -> LineNumberMarginFace {
+        self.face
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct FaceScanCheckpoint {
     next_check: usize,
@@ -228,6 +266,7 @@ impl LineNumberRenderState {
         self.current_line += 1;
     }
 
+    #[cfg(test)]
     pub(crate) fn current_line(self) -> i64 {
         self.current_line
     }
@@ -252,6 +291,32 @@ impl LineNumberRenderState {
             }
             _ => (self.current_line + offset).abs(),
         }
+    }
+
+    pub(crate) fn margin_render_request(
+        self,
+        mode: u8,
+        current_absolute: bool,
+        offset: i64,
+        major_tick: i32,
+        cols: i32,
+    ) -> Option<LineNumberMarginRenderRequest> {
+        if !self.should_render() {
+            return None;
+        }
+
+        let face = if self.is_current_line() {
+            LineNumberMarginFace::CurrentLine
+        } else if major_tick > 0 && self.current_line % i64::from(major_tick) == 0 {
+            LineNumberMarginFace::MajorTick
+        } else {
+            LineNumberMarginFace::Normal
+        };
+        Some(LineNumberMarginRenderRequest {
+            display_number: self.display_number(mode, current_absolute, offset),
+            cols,
+            face,
+        })
     }
 }
 

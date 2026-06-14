@@ -224,6 +224,18 @@ fn test_append_frame_at(
 }
 
 #[test]
+fn text_window_append_surface_request_reserves_right_columns() {
+    let tab_stops = vec![4, 12];
+    let surface =
+        TextWindowAppendSurfaceRequest::new(20.0, 200.0, 16.0, true, true, 8.0, 6, &tab_stops)
+            .into_surface();
+
+    assert_eq!(surface.content_x(), 20.0);
+    assert_eq!(surface.right_edge(), 188.0);
+    assert_eq!(surface.full_text_right_edge(), 204.0);
+}
+
+#[test]
 fn fallback_buffer_text_source_natural_advance_uses_frame_tab_policy() {
     let active_face = test_active_face_state(7, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(4));

@@ -4414,6 +4414,77 @@ impl DisplayRowAppendArea {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowAppendSurfaceRequest<'a> {
+    content_x: f32,
+    text_width: f32,
+    line_number_width: f32,
+    reserve_right_border_col: bool,
+    reserve_right_special_col: bool,
+    char_width: f32,
+    tab_width: i32,
+    tab_stop_list: &'a [i32],
+}
+
+impl<'a> TextWindowAppendSurfaceRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        content_x: f32,
+        text_width: f32,
+        line_number_width: f32,
+        reserve_right_border_col: bool,
+        reserve_right_special_col: bool,
+        char_width: f32,
+        tab_width: i32,
+        tab_stop_list: &'a [i32],
+    ) -> Self {
+        Self {
+            content_x,
+            text_width,
+            line_number_width,
+            reserve_right_border_col,
+            reserve_right_special_col,
+            char_width,
+            tab_width,
+            tab_stop_list,
+        }
+    }
+
+    fn reserved_width(self) -> f32 {
+        let right_border = if self.reserve_right_border_col {
+            self.char_width
+        } else {
+            0.0
+        };
+        let right_special = if self.reserve_right_special_col {
+            self.char_width
+        } else {
+            0.0
+        };
+        right_border + right_special
+    }
+
+    fn append_width(self) -> f32 {
+        (self.text_width - self.line_number_width - self.reserved_width()).max(self.char_width)
+    }
+
+    pub(crate) fn into_surface(self) -> DisplayRowAppendSurface {
+        DisplayRowAppendSurface::new(
+            DisplayRowAppendArea::new(
+                self.content_x,
+                self.append_width(),
+                self.text_width,
+                self.line_number_width,
+            ),
+            DisplayTabPolicy::from_tab_width_and_stops(
+                self.content_x,
+                self.tab_width,
+                self.tab_stop_list,
+            ),
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendSurface {
     area: DisplayRowAppendArea,

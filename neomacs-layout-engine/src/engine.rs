@@ -58,12 +58,12 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayRowAppendArea, DisplayRowAppendSurface,
-    DisplayRowPrefixRequest, LispStringRowAppendContext, LispStringSourceAppendRequest,
-    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextAppendRequest,
-    SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext, render_overlay_string_batch,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayRowPrefixRequest,
+    LispStringRowAppendContext, LispStringSourceAppendRequest, OverlayStringRenderBatchSource,
+    OverlayStringRenderRowContext, SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest,
+    SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest, render_overlay_string_batch,
 };
-use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
@@ -135,17 +135,6 @@ fn cursor_width_for_style(
 ) -> f32 {
     CursorSlotWidthRequest::from_window_params(style, text, byte_idx, col, params)
         .width_px(face_char_w)
-}
-
-fn text_display_tab_policy(
-    content_x: f32,
-    params: &WindowParams,
-) -> crate::display_row_builder::DisplayTabPolicy {
-    crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
-        content_x,
-        params.tab_width,
-        &params.tab_stop_list,
-    )
 }
 
 /// The main Rust layout engine.
@@ -1839,27 +1828,19 @@ impl LayoutEngine {
         let mut prefix_request =
             DisplayRowPrefixRequest::initial(has_prefix, line_prefix_value.is_some());
 
-        let reserve_right_border_width = if reserve_right_border_col {
-            char_w
-        } else {
-            0.0
-        };
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
-        let reserve_right_special_width = if reserve_right_special_col {
-            char_w
-        } else {
-            0.0
-        };
-        let avail_width = (text_width
-            - lnum_pixel_width
-            - reserve_right_border_width
-            - reserve_right_special_width)
-            .max(char_w);
-        let text_append_surface = DisplayRowAppendSurface::new(
-            DisplayRowAppendArea::new(content_x, avail_width, text_width, lnum_pixel_width),
-            text_display_tab_policy(content_x, params),
-        );
+        let text_append_surface = TextWindowAppendSurfaceRequest::new(
+            content_x,
+            text_width,
+            lnum_pixel_width,
+            reserve_right_border_col,
+            reserve_right_special_col,
+            char_w,
+            params.tab_width,
+            &params.tab_stop_list,
+        )
+        .into_surface();
 
         // Variable-height row tracking
         let row_geometry_defaults =
@@ -2030,25 +2011,16 @@ impl LayoutEngine {
         let row_limit = DisplayRowLimit { max_rows };
 
         while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
-            // Render line number at start of each visual line
-            if line_numbers.should_render() {
-                let display_num =
-                    line_numbers.display_number(lnum_mode, lnum_current_absolute, lnum_offset);
-
-                // Resolve line number face
-                let is_current = line_numbers.is_current_line();
-                let lnum_face = if is_current {
-                    face_resolver.resolve_named_face("line-number-current-line")
-                } else if lnum_major_tick > 0
-                    && line_numbers.current_line() % lnum_major_tick as i64 == 0
-                {
-                    face_resolver.resolve_named_face("line-number-major-tick")
-                } else {
-                    face_resolver.resolve_named_face("line-number")
-                };
+            if let Some(line_number_request) = line_numbers.margin_render_request(
+                lnum_mode,
+                lnum_current_absolute,
+                lnum_offset,
+                lnum_major_tick,
+                lnum_cols,
+            ) {
+                let lnum_face =
+                    face_resolver.resolve_named_face(line_number_request.face().face_name());
                 let _lnum_bg = Color::from_pixel(lnum_face.bg);
-                // Realize and register the line-number face so the renderer
-                // uses the same family/weight/slant the layout chose.
                 let lnum_face_id = face_ids.allocate();
                 insert_resolved_display_row_face(
                     &mut self.matrix_builder,
@@ -2057,18 +2029,15 @@ impl LayoutEngine {
                     None,
                 );
 
-                // Format number right-aligned
-                let num_str = format!("{}", display_num);
+                let num_str = line_number_request.text();
                 emit_text_window_line_number_margin(
                     &mut self.matrix_builder,
                     TextWindowLineNumberMargin {
                         text: &num_str,
-                        cols: lnum_cols,
+                        cols: line_number_request.cols(),
                         face_id: lnum_face_id,
                     },
                 );
-
-                // Force face resolution to re-apply text face after line number face
                 face_scan.invalidate();
 
                 line_numbers.consume_render_request();
@@ -3750,6 +3719,11 @@ impl LayoutEngine {
                 status_line_symbol_values.insert("header-line-indent-width".to_string(), value);
             }
         }
+        let chrome_tab_policy = DisplayTabPolicy::from_tab_width_and_stops(
+            0.0,
+            params.tab_width,
+            &params.tab_stop_list,
+        );
 
         // Tab-line: evaluate format-mode-line with tab-line-format
         if params.tab_line_height > 0.0 {
@@ -3790,7 +3764,7 @@ impl LayoutEngine {
                     bounds: Rect::new(params.bounds.x, tl_y, params.bounds.width, tab_line_height),
                     char_width: char_w,
                     ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
+                    tab_policy: chrome_tab_policy.clone(),
                     base_face: tl_face,
                     symbol_values: status_line_symbol_values.clone(),
                     text: WindowChromeDisplayText::new(tab_text, params.selected),
@@ -3843,7 +3817,7 @@ impl LayoutEngine {
                     ),
                     char_width: char_w,
                     ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
+                    tab_policy: chrome_tab_policy.clone(),
                     base_face: hl_face,
                     symbol_values: status_line_symbol_values.clone(),
                     text: WindowChromeDisplayText::new(header_text, params.selected),
@@ -3906,7 +3880,7 @@ impl LayoutEngine {
                     bounds: Rect::new(params.bounds.x, ml_y, params.bounds.width, mode_line_height),
                     char_width: char_w,
                     ascent: font_ascent,
-                    tab_policy: text_display_tab_policy(0.0, params),
+                    tab_policy: chrome_tab_policy,
                     base_face: ml_face,
                     symbol_values: status_line_symbol_values.clone(),
                     text: WindowChromeDisplayText::new(mode_text, params.selected),
