@@ -1167,6 +1167,130 @@ fn synthetic_text_marker_names_source_ids_and_text() {
 }
 
 #[test]
+fn buffer_synthetic_text_render_context_renders_active_marker() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-synthetic-active-marker", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+
+    let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
+        .render_active_marker_to_text_row(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            &geometry,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            SyntheticTextMarker::InvisibleEllipsis,
+        )
+        .expect("active marker end position");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 3);
+            assert!(text.iter().all(|glyph| glyph.face_id == 7));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-synthetic-hscroll-marker", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+
+    let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
+        .render_hscroll_truncation_marker_to_text_row(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            &geometry,
+            0.0,
+        )
+        .expect("hscroll marker end position");
+
+    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
+            assert_eq!(text[0].face_id, 0);
+        })
+        .expect("current row");
+}
+
+#[test]
 fn display_row_prefix_source_builds_append_request_with_prefix_source_id() {
     let _eval = Context::new();
     let value = Value::string("=>");

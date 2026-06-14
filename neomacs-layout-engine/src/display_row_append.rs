@@ -2541,6 +2541,30 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             )
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_active_marker_to_text_row(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        geometry: &'a DisplayRowGeometryState,
+        position: DisplayRowPosition,
+        marker: SyntheticTextMarker,
+    ) -> Option<DisplayRowPosition> {
+        self.render_request_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            geometry,
+            SyntheticTextAppendRequest::active_marker(position, marker),
+        )
+        .map(|(_progress, position)| position)
+    }
+
     pub(crate) fn hscroll_truncation_request(
         self,
         face_resolver: &'a FaceResolver,
@@ -2558,6 +2582,30 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             self.default_row_ascent,
             self.default_char_width,
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_hscroll_truncation_marker_to_text_row(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+        geometry: &'a DisplayRowGeometryState,
+        content_x: f32,
+    ) -> Option<DisplayRowPosition> {
+        let request = self.hscroll_truncation_request(face_resolver, content_x);
+        self.render_request_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            geometry,
+            request,
+        )
+        .map(|(_progress, position)| position)
     }
 }
 

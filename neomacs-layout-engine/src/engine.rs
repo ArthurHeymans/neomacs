@@ -65,8 +65,7 @@ use crate::display_row_append::{
     BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
     DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
-    DisplayRowTransitionPrefixContext, SyntheticTextAppendRequest, SyntheticTextMarker,
-    TextWindowAppendSurfaceRequest,
+    DisplayRowTransitionPrefixContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2136,20 +2135,17 @@ impl LayoutEngine {
                     // GNU displays ellipsis only when the matching
                     // `buffer-invisibility-spec' entry requests it.
                     if invisible.ellipsis {
-                        if let Some((_progress, position)) =
-                            synthetic_text_context!(raise_span.value_or(0.0))
-                                .render_request_to_text_row(
-                                    &mut self.matrix_builder,
-                                    &mut output_emitter,
-                                    evaluator,
-                                    &mut self.font_metrics,
-                                    face_resolver,
-                                    &row_geometry,
-                                    SyntheticTextAppendRequest::active_marker(
-                                        DisplayRowPosition { x_px: x, col },
-                                        SyntheticTextMarker::InvisibleEllipsis,
-                                    ),
-                                )
+                        if let Some(position) = synthetic_text_context!(raise_span.value_or(0.0))
+                            .render_active_marker_to_text_row(
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                &mut self.font_metrics,
+                                face_resolver,
+                                &row_geometry,
+                                DisplayRowPosition { x_px: x, col },
+                                SyntheticTextMarker::InvisibleEllipsis,
+                            )
                         {
                             x = position.x_px;
                             col = position.col;
@@ -2259,18 +2255,15 @@ impl LayoutEngine {
 
                     // When hscroll is exhausted, show $ indicator at left edge
                     if !hscroll_skip.should_skip() && hscroll_skip.should_show_left_truncation() {
-                        let synthetic_text_context = synthetic_text_context!(0.0);
-                        let hscroll_request = synthetic_text_context
-                            .hscroll_truncation_request(face_resolver, content_x);
-                        if let Some((_progress, position)) = synthetic_text_context
-                            .render_request_to_text_row(
+                        if let Some(position) = synthetic_text_context!(0.0)
+                            .render_hscroll_truncation_marker_to_text_row(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
                                 face_resolver,
                                 &row_geometry,
-                                hscroll_request,
+                                content_x,
                             )
                         {
                             x = position.x_px;
@@ -2404,18 +2397,16 @@ impl LayoutEngine {
 
             // Selective display: \r hides rest of line until \n
             if selective_display > 0 && ch == '\r' {
-                if let Some((_progress, position)) =
-                    synthetic_text_context!(raise_span.value_or(0.0)).render_request_to_text_row(
+                if let Some(position) = synthetic_text_context!(raise_span.value_or(0.0))
+                    .render_active_marker_to_text_row(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
                         &row_geometry,
-                        SyntheticTextAppendRequest::active_marker(
-                            DisplayRowPosition { x_px: x, col },
-                            SyntheticTextMarker::SelectiveEllipsis,
-                        ),
+                        DisplayRowPosition { x_px: x, col },
+                        SyntheticTextMarker::SelectiveEllipsis,
                     )
                 {
                     x = position.x_px;
