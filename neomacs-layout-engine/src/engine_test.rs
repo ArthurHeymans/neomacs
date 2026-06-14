@@ -1,4 +1,8 @@
 use super::*;
+use crate::display_cursor::{
+    CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
+    CursorGeometryContext, CursorGeometrySource, cursor_style_for_window,
+};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
@@ -18,9 +22,11 @@ use crate::display_row_walk_state::{
 use crate::display_source::DisplayItemSource;
 use crate::display_status_line::EchoMinibufferRowsRenderRequest;
 use crate::glyph_advance::GlyphAdvanceQuantization;
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
+use crate::window_output::WindowOutputEmitter;
 use neomacs_display_protocol::cursor::CursorBarWidth;
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
@@ -1122,6 +1128,84 @@ fn captured_cursor_info_builds_logical_cursor_position() {
     assert_eq!(logical.y, 31);
     assert_eq!(logical.row, 9);
     assert_eq!(logical.col, 3);
+}
+
+#[test]
+fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("captured-cursor-publish-context", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 10.0, 20.0);
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(window_id.0, 1, 10, Rect::new(0.0, 0.0, 160.0, 64.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let cursor = CapturedCursorInfo::from_visual_state(
+        CapturedCursorVisualState {
+            face_width: 8.0,
+            face_height: 16.0,
+            face_ascent: 12.0,
+            background: Color::from_pixel(0x00112233),
+        },
+        CapturedCursorPlacement {
+            x: 24.0,
+            y: 20.0,
+            byte_idx: 0,
+            col: 3,
+            matrix_row: 0,
+            slot_width: CapturedCursorSlotWidth::Explicit(8.0),
+            stretch_like: false,
+        },
+    );
+    let mut params = test_window_params();
+    params.window_id = window_id.0 as i64;
+    params.selected = true;
+    params.cursor_color = 0x00ffffff;
+
+    let outcome = CapturedTextWindowCursorPublishContext::new(
+        &params, b"abc", 0, 10.0, 20.0, 20.0, 64.0, 8.0, 16.0, 4, false,
+    )
+    .publish_captured_cursor(
+        cursor,
+        &[RowMetricsSnapshot {
+            row: 0,
+            pixel_y: 20.0,
+            height: 16.0,
+            ascent: 12.0,
+        }],
+        RowMetricsSnapshot {
+            row: 0,
+            pixel_y: 20.0,
+            height: 16.0,
+            ascent: 12.0,
+        },
+        &mut builder,
+        &mut output_emitter,
+    );
+
+    assert_eq!(outcome, CapturedTextWindowCursorPublishOutcome::Published);
+    let phys = builder.phys_cursor().expect("selected phys cursor");
+    assert_eq!(
+        phys.slot_id,
+        DisplaySlotId {
+            window_id: window_id.0 as i64,
+            row: 0,
+            col: 0,
+        }
+    );
+    assert_eq!(phys.charpos, 4);
+    assert_eq!(phys.width, 8.0);
+    assert_eq!(phys.height, 16.0);
 }
 
 fn test_window_params() -> WindowParams {

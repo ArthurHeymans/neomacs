@@ -20,14 +20,14 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    ChromeRowOutput, TextWindowBegin, TextWindowCursor, TextWindowCursorEffects,
-    TextWindowDecorativeCursor, TextWindowLineNumberMargin, TextWindowOutputInstall,
-    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightBorder,
-    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, emit_text_window_line_number_margin,
-    finish_pending_text_window_row, install_last_window_right_border,
-    install_text_window_cursor_effects, install_text_window_output, publish_text_window_cursor,
-    publish_text_window_decorative_cursor, record_text_window_redisplay_positions,
+    ChromeRowOutput, TextWindowBegin, TextWindowCursorEffects, TextWindowDecorativeCursor,
+    TextWindowLineNumberMargin, TextWindowOutputInstall, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightBorder, TextWindowRightEdgeMarkerColumn,
+    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
+    close_text_window_output, emit_text_window_line_number_margin, finish_pending_text_window_row,
+    install_last_window_right_border, install_text_window_cursor_effects,
+    install_text_window_output, publish_text_window_decorative_cursor,
+    record_text_window_redisplay_positions,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -39,9 +39,8 @@ use crate::display_cursor::resolve_cursor_vertical_metrics;
 #[cfg(test)]
 use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth};
 use crate::display_cursor::{
-    CursorCaptureState, CursorGeometryContext, CursorGeometrySource, cursor_style_for_visual,
-    cursor_style_for_window, resolve_cursor_geometry, row_metrics_for_cursor,
-    visual_cursor_source_from_point,
+    CapturedTextWindowCursorPublishContext, CursorCaptureState, cursor_style_for_visual,
+    resolve_cursor_geometry, visual_cursor_source_from_point,
 };
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
@@ -96,8 +95,6 @@ use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
-#[cfg(test)]
-use neomacs_display_protocol::frame_glyphs::DisplaySlotId;
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
     WindowTransitionKind,
@@ -3025,70 +3022,27 @@ impl LayoutEngine {
 
         if point_charpos >= window_start && (point_charpos <= charpos || point_is_visible_eob) {
             if let Some(cursor) = cursor_info.captured() {
-                let row_metric = row_metrics_for_cursor(
-                    output_emitter.row_metrics(),
-                    text_matrix_row_base + cursor.matrix_row,
-                    row_geometry.row_metrics_snapshot(text_matrix_row_base),
-                );
-                output_emitter.set_logical_cursor(cursor.logical_cursor_position(
-                    row_metric,
+                let cursor_row_metrics = output_emitter.row_metrics().to_vec();
+                CapturedTextWindowCursorPublishContext::new(
+                    params,
+                    text,
                     text_matrix_row_base,
                     text_area_left,
                     window_top,
-                ));
-                if let Some(style) = cursor_style_for_window(params) {
-                    let source = CursorGeometrySource::from_captured_cursor(
-                        &cursor,
-                        row_metric,
-                        CursorGeometryContext {
-                            window_id: params.window_id,
-                            slot_width: cursor.resolved_slot_width(style, text, params),
-                            default_line_height: char_h,
-                            ends_at_visible_eob: point_is_visible_eob,
-                        },
-                    );
-                    let resolved_cursor = resolve_cursor_geometry(
-                        style,
-                        source,
-                        params.x_stretch_cursor,
-                        char_w,
-                        Color::from_pixel(params.cursor_color),
-                    );
-                    if resolved_cursor.y >= text_y
-                        && resolved_cursor.y + resolved_cursor.height <= text_y + text_height
-                    {
-                        publish_text_window_cursor(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            TextWindowCursor {
-                                selected: params.selected,
-                                window_id: resolved_cursor.window_id(),
-                                charpos: point_charpos.max(0) as usize,
-                                slot_id: resolved_cursor.slot_id,
-                                x: resolved_cursor.x,
-                                y: resolved_cursor.y,
-                                width: resolved_cursor.width,
-                                height: resolved_cursor.height,
-                                ascent: resolved_cursor.ascent,
-                                style: resolved_cursor.style,
-                                color: resolved_cursor.color,
-                                cursor_fg: resolved_cursor.cursor_fg,
-                                text_area_left,
-                                window_top,
-                            },
-                        );
-
-                        if point_is_visible_eob {
-                            tracing::debug!(
-                                "layout_window_rust: emitting EOB cursor at x={:.1} y={:.1} w={:.1} h={:.1}",
-                                resolved_cursor.x,
-                                resolved_cursor.y,
-                                resolved_cursor.width,
-                                resolved_cursor.height
-                            );
-                        }
-                    }
-                }
+                    text_y,
+                    text_height,
+                    char_w,
+                    char_h,
+                    point_charpos,
+                    point_is_visible_eob,
+                )
+                .publish_captured_cursor(
+                    cursor,
+                    &cursor_row_metrics,
+                    row_geometry.row_metrics_snapshot(text_matrix_row_base),
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                );
             } else {
                 tracing::debug!(
                     "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",

@@ -1,9 +1,12 @@
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append::DisplayPropertyReplacementCursorPolicy;
 use crate::display_row_geometry::DisplayRowTextPosition;
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
-use crate::window_output::RowMetricsSnapshot;
+use crate::window_output::{
+    RowMetricsSnapshot, TextWindowCursor, WindowOutputEmitter, publish_text_window_cursor,
+};
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::types::Color;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
@@ -523,6 +526,139 @@ pub(crate) fn visual_cursor_source_from_point(
             window_top,
         },
     )
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CapturedTextWindowCursorPublishOutcome {
+    NoWindowCursor,
+    Clipped,
+    Published,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct CapturedTextWindowCursorPublishContext<'a> {
+    params: &'a WindowParams,
+    text: &'a [u8],
+    text_matrix_row_base: usize,
+    text_area_left: f32,
+    window_top: f32,
+    text_y: f32,
+    text_height: f32,
+    char_w: f32,
+    char_h: f32,
+    point_charpos: i64,
+    ends_at_visible_eob: bool,
+}
+
+impl<'a> CapturedTextWindowCursorPublishContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        text: &'a [u8],
+        text_matrix_row_base: usize,
+        text_area_left: f32,
+        window_top: f32,
+        text_y: f32,
+        text_height: f32,
+        char_w: f32,
+        char_h: f32,
+        point_charpos: i64,
+        ends_at_visible_eob: bool,
+    ) -> Self {
+        Self {
+            params,
+            text,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            char_w,
+            char_h,
+            point_charpos,
+            ends_at_visible_eob,
+        }
+    }
+
+    pub(crate) fn publish_captured_cursor(
+        self,
+        cursor: CapturedCursorInfo,
+        row_metrics: &[RowMetricsSnapshot],
+        fallback_row_metric: RowMetricsSnapshot,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+    ) -> CapturedTextWindowCursorPublishOutcome {
+        let row_metric = row_metrics_for_cursor(
+            row_metrics,
+            self.text_matrix_row_base + cursor.matrix_row,
+            fallback_row_metric,
+        );
+        output_emitter.set_logical_cursor(cursor.logical_cursor_position(
+            row_metric,
+            self.text_matrix_row_base,
+            self.text_area_left,
+            self.window_top,
+        ));
+
+        let Some(style) = cursor_style_for_window(self.params) else {
+            return CapturedTextWindowCursorPublishOutcome::NoWindowCursor;
+        };
+        let source = CursorGeometrySource::from_captured_cursor(
+            &cursor,
+            row_metric,
+            CursorGeometryContext {
+                window_id: self.params.window_id,
+                slot_width: cursor.resolved_slot_width(style, self.text, self.params),
+                default_line_height: self.char_h,
+                ends_at_visible_eob: self.ends_at_visible_eob,
+            },
+        );
+        let resolved_cursor = resolve_cursor_geometry(
+            style,
+            source,
+            self.params.x_stretch_cursor,
+            self.char_w,
+            Color::from_pixel(self.params.cursor_color),
+        );
+        if resolved_cursor.y < self.text_y
+            || resolved_cursor.y + resolved_cursor.height > self.text_y + self.text_height
+        {
+            return CapturedTextWindowCursorPublishOutcome::Clipped;
+        }
+
+        publish_text_window_cursor(
+            builder,
+            output_emitter,
+            TextWindowCursor {
+                selected: self.params.selected,
+                window_id: resolved_cursor.window_id(),
+                charpos: self.point_charpos.max(0) as usize,
+                slot_id: resolved_cursor.slot_id,
+                x: resolved_cursor.x,
+                y: resolved_cursor.y,
+                width: resolved_cursor.width,
+                height: resolved_cursor.height,
+                ascent: resolved_cursor.ascent,
+                style: resolved_cursor.style,
+                color: resolved_cursor.color,
+                cursor_fg: resolved_cursor.cursor_fg,
+                text_area_left: self.text_area_left,
+                window_top: self.window_top,
+            },
+        );
+
+        if self.ends_at_visible_eob {
+            tracing::debug!(
+                "layout_window_rust: emitting EOB cursor at x={:.1} y={:.1} w={:.1} h={:.1}",
+                resolved_cursor.x,
+                resolved_cursor.y,
+                resolved_cursor.width,
+                resolved_cursor.height
+            );
+        }
+
+        CapturedTextWindowCursorPublishOutcome::Published
+    }
 }
 
 #[inline]
