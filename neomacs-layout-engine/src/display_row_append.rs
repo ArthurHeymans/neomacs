@@ -4888,6 +4888,41 @@ impl BufferTextWordWrapSourceAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSpecialWrapSourceAction {
+    charpos: i64,
+}
+
+impl BufferTextSpecialWrapSourceAction {
+    pub(crate) fn new(charpos: i64) -> Self {
+        Self { charpos }
+    }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn hit_range_and_advance(
+        self,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) -> DisplayRowHitRange {
+        let hit_range = hit_row_range.range_to(self.charpos);
+        hit_row_range.advance_to(self.charpos);
+        hit_range
+    }
+
+    #[cfg(test)]
+    pub(crate) fn charpos(self) -> i64 {
+        self.charpos
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextCharacterWrapSourceAction {
     ch_start_byte_idx: usize,
     ch_start_charpos: i64,

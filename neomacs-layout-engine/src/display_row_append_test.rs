@@ -1417,6 +1417,31 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
 }
 
 #[test]
+fn buffer_text_special_wrap_source_action_applies_transition_state() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferTextSpecialWrapSourceAction::new(21);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        geometry.current_row_marker(),
+        (Color::from_pixel(0x445566), 21),
+    );
+    let mut x = 88.0;
+
+    action.apply_before_row_transition(&mut row_extend, &mut x, 3.0);
+
+    assert_eq!(action.charpos(), 21);
+    assert_eq!(x, 3.0);
+    assert_eq!(row_extend.value_on(&geometry), None);
+
+    let mut hit_row_range = HitRowRangeTracker::new(6);
+    let hit_range = action.hit_range_and_advance(&mut hit_row_range);
+
+    assert_eq!(hit_range.charpos_start, 6);
+    assert_eq!(hit_range.charpos_end, 21);
+    assert_eq!(hit_row_range.start(), 21);
+}
+
+#[test]
 fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
     let action = BufferTextCharacterWrapSourceAction::new(13, 21);
     let mut byte_idx = 17;

@@ -65,10 +65,11 @@ use crate::display_row_append::{
     BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
     BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
     BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, BufferTextTruncationSkipAction,
-    BufferTextWordWrapSourceAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
-    SyntheticTextMarker, TextWindowAppendSurfaceRequest,
+    BufferTextSpecialSourceCharOverflowAction, BufferTextSpecialWrapSourceAction,
+    BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
+    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState, SyntheticTextMarker,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2587,10 +2588,15 @@ impl LayoutEngine {
                                 continue;
                             }
                             BufferTextSpecialSourceCharOverflowAction::Wrap { transition } => {
-                                x = content_x;
-                                row_extend.clear();
-                                let hit_range = hit_row_range.range_to(charpos);
-                                hit_row_range.advance_to(charpos);
+                                let special_wrap_action =
+                                    BufferTextSpecialWrapSourceAction::new(charpos);
+                                special_wrap_action.apply_before_row_transition(
+                                    &mut row_extend,
+                                    &mut x,
+                                    content_x,
+                                );
+                                let hit_range =
+                                    special_wrap_action.hit_range_and_advance(&mut hit_row_range);
                                 let row_transition = DisplayRowTextWindowEmitContext::new(
                                     row_geometry_defaults,
                                     text_matrix_row_base,
