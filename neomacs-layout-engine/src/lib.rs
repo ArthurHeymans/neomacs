@@ -10,6 +10,7 @@ pub mod bidi;
 pub mod bidi_layout;
 pub mod composition;
 pub(crate) mod coords;
+pub(crate) mod display_cursor;
 pub(crate) mod display_face_id;
 pub(crate) mod display_face_layout;
 pub(crate) mod display_face_policy;

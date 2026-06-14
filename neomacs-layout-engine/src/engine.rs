@@ -27,6 +27,9 @@ use super::window_output::{
     record_text_window_display_range,
 };
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+#[cfg(test)]
+use crate::display_cursor::CursorSlotWidthPolicy;
+use crate::display_cursor::CursorSlotWidthRequest;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
@@ -1582,27 +1585,6 @@ fn minibuffer_echo_message_for_window(
 }
 
 #[inline]
-fn next_tab_stop_col(current_col: usize, tab_width: i32, tab_stop_list: &[i32]) -> usize {
-    if !tab_stop_list.is_empty() {
-        if let Some(&stop) = tab_stop_list
-            .iter()
-            .find(|&&stop| (stop as usize) > current_col)
-        {
-            return stop as usize;
-        }
-        let last = *tab_stop_list.last().unwrap() as usize;
-        let tab_w = tab_width.max(1) as usize;
-        if current_col >= last {
-            return last + ((current_col - last) / tab_w + 1) * tab_w;
-        }
-        return last;
-    }
-
-    let tab_w = tab_width.max(1) as usize;
-    ((current_col / tab_w) + 1) * tab_w
-}
-
-#[inline]
 fn is_word_wrap_whitespace(ch: char) -> bool {
     matches!(ch, ' ' | '\t')
 }
@@ -1622,97 +1604,6 @@ fn char_can_wrap_after_basic(ch: char) -> bool {
 fn cursor_point_columns(text: &[u8], byte_idx: usize, col: i32, params: &WindowParams) -> usize {
     CursorSlotWidthRequest::from_window_params(CursorStyle::FilledBox, text, byte_idx, col, params)
         .point_columns()
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum CursorSlotWidthPolicy {
-    ExplicitPixels(f32),
-    GlyphColumns(usize),
-    TabClamp { frame_char_width: f32 },
-}
-
-struct CursorSlotWidthRequest<'a> {
-    style: CursorStyle,
-    text: &'a [u8],
-    byte_idx: usize,
-    col: i32,
-    tab_width: i32,
-    tab_stop_list: &'a [i32],
-    x_stretch_cursor: bool,
-    frame_char_width: f32,
-}
-
-impl<'a> CursorSlotWidthRequest<'a> {
-    fn from_window_params(
-        style: CursorStyle,
-        text: &'a [u8],
-        byte_idx: usize,
-        col: i32,
-        params: &'a WindowParams,
-    ) -> Self {
-        Self {
-            style,
-            text,
-            byte_idx,
-            col,
-            tab_width: params.tab_width,
-            tab_stop_list: &params.tab_stop_list,
-            x_stretch_cursor: params.x_stretch_cursor,
-            frame_char_width: params.char_width,
-        }
-    }
-
-    fn point_columns(&self) -> usize {
-        if self.byte_idx >= self.text.len() {
-            return 1;
-        }
-
-        let (ch, _) = decode_utf8(&self.text[self.byte_idx..]);
-        match ch {
-            '\t' => {
-                let col_usize = self.col.max(0) as usize;
-                let next_tab = next_tab_stop_col(col_usize, self.tab_width, self.tab_stop_list)
-                    .max(col_usize + 1);
-                next_tab - col_usize
-            }
-            '\n' | '\r' => 1,
-            _ if is_cluster_extender(ch) => 0,
-            _ if is_wide_char(ch) => 2,
-            _ => 1,
-        }
-    }
-
-    fn width_policy(&self) -> CursorSlotWidthPolicy {
-        match self.style {
-            CursorStyle::Bar(width) => CursorSlotWidthPolicy::ExplicitPixels(width),
-            CursorStyle::Hbar(_) => CursorSlotWidthPolicy::GlyphColumns(self.point_columns()),
-            CursorStyle::FilledBox | CursorStyle::Hollow => {
-                if !self.x_stretch_cursor && self.byte_idx < self.text.len() {
-                    let (ch, _) = decode_utf8(&self.text[self.byte_idx..]);
-                    if ch == '\t' {
-                        return CursorSlotWidthPolicy::TabClamp {
-                            frame_char_width: self.frame_char_width,
-                        };
-                    }
-                }
-                CursorSlotWidthPolicy::GlyphColumns(self.point_columns())
-            }
-        }
-    }
-
-    fn width_px(&self, face_char_w: f32) -> f32 {
-        self.width_policy().width_px(face_char_w)
-    }
-}
-
-impl CursorSlotWidthPolicy {
-    fn width_px(self, face_char_w: f32) -> f32 {
-        match self {
-            Self::ExplicitPixels(width) => width,
-            Self::GlyphColumns(columns) => columns as f32 * face_char_w,
-            Self::TabClamp { frame_char_width } => frame_char_width.max(1.0),
-        }
-    }
 }
 
 #[cfg(test)]
