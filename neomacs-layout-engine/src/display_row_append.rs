@@ -61,7 +61,7 @@ use crate::neovm_bridge::{
     FaceResolver, LayoutBufferView, OverlayDisplayString, ResolvedFace, RustTextPropAccess,
 };
 use crate::types::WindowParams;
-use crate::unicode::decode_utf8;
+use crate::unicode::{decode_utf8, is_wide_char};
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
@@ -4026,6 +4026,116 @@ impl BufferTextSourceChar {
             position,
             cluster: self.cluster_state(tail),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferHscrollSkipAction {
+    LineBreak {
+        ch_start_byte_idx: usize,
+        charpos: i64,
+    },
+    Text {
+        ch_start_byte_idx: usize,
+        charpos: i64,
+        show_left_truncation: bool,
+    },
+}
+
+impl BufferHscrollSkipAction {
+    pub(crate) fn ch_start_byte_idx(self) -> usize {
+        match self {
+            Self::LineBreak {
+                ch_start_byte_idx, ..
+            }
+            | Self::Text {
+                ch_start_byte_idx, ..
+            } => ch_start_byte_idx,
+        }
+    }
+
+    pub(crate) fn charpos(self) -> i64 {
+        match self {
+            Self::LineBreak { charpos, .. } | Self::Text { charpos, .. } => charpos,
+        }
+    }
+
+    pub(crate) fn should_show_left_truncation(self) -> bool {
+        matches!(
+            self,
+            Self::Text {
+                show_left_truncation: true,
+                ..
+            }
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferHscrollSkipSourceChar {
+    ch_start_byte_idx: usize,
+    ch: char,
+    charpos: i64,
+}
+
+impl BufferHscrollSkipSourceChar {
+    fn new(ch_start_byte_idx: usize, ch: char, charpos: i64) -> Self {
+        Self {
+            ch_start_byte_idx,
+            ch,
+            charpos,
+        }
+    }
+
+    pub(crate) fn consume_from_text(
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        hscroll_skip: &mut HorizontalScrollSkipState,
+        tab_width: i32,
+    ) -> Option<BufferHscrollSkipAction> {
+        if *byte_idx >= text.len() {
+            return None;
+        }
+
+        let ch_start_byte_idx = *byte_idx;
+        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
+        *byte_idx += ch_len;
+        *charpos += 1;
+
+        Some(
+            Self::new(ch_start_byte_idx, ch, *charpos).consume_for_hscroll(hscroll_skip, tab_width),
+        )
+    }
+
+    fn consume_for_hscroll(
+        self,
+        hscroll_skip: &mut HorizontalScrollSkipState,
+        tab_width: i32,
+    ) -> BufferHscrollSkipAction {
+        if self.ch == '\n' {
+            return BufferHscrollSkipAction::LineBreak {
+                ch_start_byte_idx: self.ch_start_byte_idx,
+                charpos: self.charpos,
+            };
+        }
+
+        hscroll_skip.consume_columns(self.column_width(tab_width, hscroll_skip.consumed_columns()));
+        BufferHscrollSkipAction::Text {
+            ch_start_byte_idx: self.ch_start_byte_idx,
+            charpos: self.charpos,
+            show_left_truncation: !hscroll_skip.should_skip()
+                && hscroll_skip.should_show_left_truncation(),
+        }
+    }
+
+    fn column_width(self, tab_width: i32, consumed_columns: i32) -> i32 {
+        if self.ch == '\t' {
+            let tab_width = tab_width.max(1);
+            return ((consumed_columns / tab_width + 1) * tab_width) - consumed_columns;
+        }
+
+        if is_wide_char(self.ch) { 2 } else { 1 }
     }
 }
 

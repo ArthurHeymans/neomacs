@@ -59,13 +59,14 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextRenderContext,
-    BufferLinePrefixRenderContext, BufferOverlayStringRenderContext,
-    BufferSyntheticTextRenderContext, BufferTextPreparedSourceCharAppend,
-    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
-    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
-    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
-    DisplayRowTransitionPrefixContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
+    BufferHscrollSkipAction, BufferHscrollSkipSourceChar, BufferLinePrefixRenderContext,
+    BufferOverlayStringRenderContext, BufferSyntheticTextRenderContext,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
+    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
+    DisplayRowTextWindowTransitionContext, DisplayRowTransitionPrefixContext, SyntheticTextMarker,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2179,22 +2180,29 @@ impl LayoutEngine {
 
             // Handle hscroll: skip columns consumed by horizontal scroll
             if hscroll_skip.should_skip() {
-                let ch_start_byte_idx = byte_idx;
-                let (ch, ch_len) = decode_utf8(&text[byte_idx..]);
-                byte_idx += ch_len;
-                charpos += 1;
+                let Some(hscroll_action) = BufferHscrollSkipSourceChar::consume_from_text(
+                    text,
+                    &mut byte_idx,
+                    &mut charpos,
+                    &mut hscroll_skip,
+                    params.tab_width,
+                ) else {
+                    break;
+                };
+                let ch_start_byte_idx = hscroll_action.ch_start_byte_idx();
 
-                if ch == '\n' {
+                if matches!(hscroll_action, BufferHscrollSkipAction::LineBreak { .. }) {
                     x = content_x;
                     // Record newline position on the row (see main \n handler).
-                    output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
+                    output_emitter
+                        .note_display_buffer_pos(LispCharPos1::new(hscroll_action.charpos()));
                     row_extend.clear();
 
                     let line_break_transition =
                         DisplayRowLineBreakTransitionPlan::hscroll_line_break();
-                    let hit_range = hit_row_range.range_to(charpos);
+                    let hit_range = hit_row_range.range_to(hscroll_action.charpos());
                     // Record hit-test row (hscroll newline)
-                    hit_row_range.advance_to(charpos);
+                    hit_row_range.advance_to(hscroll_action.charpos());
                     let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
                         text_matrix_row_base,
@@ -2227,7 +2235,7 @@ impl LayoutEngine {
                     );
                     line_break_transition
                         .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
-                    if cursor_info.is_missing() && point_charpos == charpos {
+                    if cursor_info.is_missing() && point_charpos == hscroll_action.charpos() {
                         capture_cursor_info(
                             &mut cursor_info,
                             CapturedCursorInfo::line_break_from_active_face_state(
@@ -2242,19 +2250,8 @@ impl LayoutEngine {
                         );
                     }
                 } else {
-                    let ch_cols: i32 = if ch == '\t' {
-                        let tab_w = params.tab_width.max(1) as i32;
-                        let consumed = hscroll_skip.consumed_columns();
-                        ((consumed / tab_w + 1) * tab_w) - consumed
-                    } else if is_wide_char(ch) {
-                        2
-                    } else {
-                        1
-                    };
-                    hscroll_skip.consume_columns(ch_cols);
-
                     // When hscroll is exhausted, show $ indicator at left edge
-                    if !hscroll_skip.should_skip() && hscroll_skip.should_show_left_truncation() {
+                    if hscroll_action.should_show_left_truncation() {
                         if let Some(position) = synthetic_text_context!(0.0)
                             .render_hscroll_truncation_marker_to_text_row(
                                 &mut self.matrix_builder,
@@ -2271,7 +2268,7 @@ impl LayoutEngine {
                         }
                         mark_current_text_row_truncated_left(&mut self.matrix_builder);
                     }
-                    if cursor_info.is_missing() && point_charpos == charpos {
+                    if cursor_info.is_missing() && point_charpos == hscroll_action.charpos() {
                         capture_cursor_info(
                             &mut cursor_info,
                             CapturedCursorInfo::from_active_face_state(

@@ -516,6 +516,117 @@ fn display_row_transition_prefix_context_applies_row_start_line_break_policy() {
 }
 
 #[test]
+fn buffer_hscroll_skip_source_char_preserves_line_break_action() {
+    let mut byte_idx = 0;
+    let mut charpos = 10;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+
+    let action = BufferHscrollSkipSourceChar::consume_from_text(
+        b"\nnext",
+        &mut byte_idx,
+        &mut charpos,
+        &mut hscroll_skip,
+        8,
+    )
+    .expect("hscroll skip action");
+
+    assert_eq!(
+        action,
+        BufferHscrollSkipAction::LineBreak {
+            ch_start_byte_idx: 0,
+            charpos: 11
+        }
+    );
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 11);
+    assert!(hscroll_skip.should_skip());
+}
+
+#[test]
+fn buffer_hscroll_skip_source_char_consumes_tab_to_next_stop() {
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+
+    let action = BufferHscrollSkipSourceChar::consume_from_text(
+        b"\tabc",
+        &mut byte_idx,
+        &mut charpos,
+        &mut hscroll_skip,
+        8,
+    )
+    .expect("hscroll skip action");
+
+    assert_eq!(
+        action,
+        BufferHscrollSkipAction::Text {
+            ch_start_byte_idx: 0,
+            charpos: 1,
+            show_left_truncation: true
+        }
+    );
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 1);
+    assert!(!hscroll_skip.should_skip());
+}
+
+#[test]
+fn buffer_hscroll_skip_source_char_consumes_wide_char_columns() {
+    let mut byte_idx = 0;
+    let mut charpos = 3;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 2);
+
+    let action = BufferHscrollSkipSourceChar::consume_from_text(
+        "界x".as_bytes(),
+        &mut byte_idx,
+        &mut charpos,
+        &mut hscroll_skip,
+        8,
+    )
+    .expect("hscroll skip action");
+
+    assert_eq!(
+        action,
+        BufferHscrollSkipAction::Text {
+            ch_start_byte_idx: 0,
+            charpos: 4,
+            show_left_truncation: true
+        }
+    );
+    assert_eq!(byte_idx, "界".len());
+    assert_eq!(charpos, 4);
+    assert!(!hscroll_skip.should_skip());
+}
+
+#[test]
+fn buffer_hscroll_skip_source_char_keeps_marker_pending_while_still_skipping() {
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 3);
+
+    let action = BufferHscrollSkipSourceChar::consume_from_text(
+        b"abc",
+        &mut byte_idx,
+        &mut charpos,
+        &mut hscroll_skip,
+        8,
+    )
+    .expect("hscroll skip action");
+
+    assert_eq!(
+        action,
+        BufferHscrollSkipAction::Text {
+            ch_start_byte_idx: 0,
+            charpos: 1,
+            show_left_truncation: false
+        }
+    );
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 1);
+    assert!(hscroll_skip.should_skip());
+}
+
+#[test]
 fn display_row_transition_prefix_context_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
