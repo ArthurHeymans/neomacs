@@ -4620,6 +4620,66 @@ impl BufferEndOfBufferCursorAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferEndOfBufferTailAction {
+    cursor: BufferEndOfBufferCursorAction,
+    has_overlays: bool,
+}
+
+impl BufferEndOfBufferTailAction {
+    pub(crate) fn new(
+        byte_idx: usize,
+        charpos: i64,
+        accessible_end: i64,
+        point_charpos: i64,
+        has_overlays: bool,
+    ) -> Self {
+        Self {
+            cursor: BufferEndOfBufferCursorAction::new(
+                byte_idx,
+                charpos,
+                accessible_end,
+                point_charpos,
+            ),
+            has_overlays,
+        }
+    }
+
+    pub(crate) fn point_is_visible_eob(self) -> bool {
+        self.cursor.point_is_visible_eob()
+    }
+
+    pub(crate) fn capture_cursor_if_point(
+        self,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        x: f32,
+        col: usize,
+    ) {
+        self.cursor
+            .capture_cursor_if_point(target, active_face_state, row_geometry, x, col);
+    }
+
+    pub(crate) fn should_render_overlay_strings(
+        self,
+        row_geometry: &DisplayRowGeometryState,
+        row_limit: DisplayRowLimit,
+    ) -> bool {
+        self.has_overlays && row_geometry.is_within_row_limit(row_limit)
+    }
+
+    pub(crate) fn render_overlay_strings_at_eob<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        render_context: BufferOverlayStringTextRowRenderContext<'_>,
+        active_face_state: &DisplayRowActiveFaceState,
+        state: &mut OverlayStringRenderState<'_>,
+    ) {
+        render_context.render_both_at(buffer, self.cursor.charpos, active_face_state, state);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferHscrollSkipSourceChar {
     ch_start_byte_idx: usize,
     ch: char,

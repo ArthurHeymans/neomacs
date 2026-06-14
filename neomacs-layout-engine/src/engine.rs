@@ -58,7 +58,7 @@ use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferCurrentFaceResolutionState,
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
-    BufferEndOfBufferCursorAction, BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState,
+    BufferEndOfBufferTailAction, BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState,
     BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayContext,
     BufferSyntheticTextRenderContext, BufferSyntheticTextRenderState,
@@ -2894,9 +2894,21 @@ impl LayoutEngine {
             );
         }
 
-        let point_is_visible_eob = point_charpos == accessible_end && charpos == accessible_end;
-        BufferEndOfBufferCursorAction::new(byte_idx, charpos, accessible_end, point_charpos)
-            .capture_cursor_if_point(&mut cursor_info, &active_face_state, &row_geometry, x, col);
+        let end_of_buffer_tail = BufferEndOfBufferTailAction::new(
+            byte_idx,
+            charpos,
+            accessible_end,
+            point_charpos,
+            has_overlays,
+        );
+        let point_is_visible_eob = end_of_buffer_tail.point_is_visible_eob();
+        end_of_buffer_tail.capture_cursor_if_point(
+            &mut cursor_info,
+            &active_face_state,
+            &row_geometry,
+            x,
+            col,
+        );
 
         // Close any remaining box face region at end of text
         if box_face.is_active() {
@@ -2904,7 +2916,7 @@ impl LayoutEngine {
         }
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position
-        if has_overlays && row_geometry.is_within_row_limit(row_limit) {
+        if end_of_buffer_tail.should_render_overlay_strings(&row_geometry, row_limit) {
             let mut overlay_state = OverlayStringRenderState::new(
                 evaluator,
                 &mut output_emitter,
@@ -2920,9 +2932,9 @@ impl LayoutEngine {
                 &mut face_ids,
                 &mut self.matrix_builder,
             );
-            overlay_text_row_context.render_both_at(
+            end_of_buffer_tail.render_overlay_strings_at_eob(
                 buffer,
-                charpos,
+                overlay_text_row_context,
                 &active_face_state,
                 &mut overlay_state,
             );
