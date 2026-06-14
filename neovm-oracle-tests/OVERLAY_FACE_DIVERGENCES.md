@@ -13,6 +13,46 @@ cargo nextest run -p neovm-oracle-tests \
 
 Authoritative result: **1699 tests, 1428 pass, 271 divergences.** (Target was 200.)
 
+## Complex combo tests (+12 divergences, 82 tests)
+
+Files `divergence_overlay_face_combo{,2,3,4}.rs` combine several features at
+once (overlay + text-property precedence, before/after-string + editing,
+invisible/intangible/field + navigation, modification-hooks + undo,
+read-only enforcement across many modifying ops, combined overlay+text-property
+char-property resolution, face merging, syntax-table override, point hooks).
+82 combo tests, 12 divergences:
+
+### Theme 6 — read-only text property NOT enforced (9 manifestations)
+Neomacs blocks `delete-char`/`delete-region` and the `buffer-read-only`
+variable, but does NOT block these in-place modifiers on a `read-only`
+text-property region (GNU raises `text-read-only`, Neomacs mutates):
+`insert` (combo/combo2), `upcase-region`, `downcase-region`,
+`capitalize-region`, `replace-string`, `subst-char-in-region`,
+`self-insert-command`, and the non-nil read-only value form.
+=> `div_combo_ro_*` and `div_combo_read_only_*` tests.
+
+### Theme 7 — text-property plist ordering differs
+`propertize` / `put-text-property` store text properties in a different plist
+order than GNU (e.g. NEO `(mouse-face highlight face bold)` vs GNU
+`(face bold mouse-face highlight)`). Round-trip is `equal`, but the printed
+plist order diverges. `div_combo_propertize_string_prin1_read_roundtrip`,
+`div_combo_propertize_property_order_preserved`, `div_combo_put_text_property_appends_order`.
+
+### Minor
+`div_combo_field_property_line_beginning`: type-error message differs
+(`integer-or-marker-p` vs `integerp`). `div_combo_compose_region_then_overlay_face`:
+find-composition returns nil (Theme from UTF-8 index, composition).
+
+Coverage (combo tests that PASS): combined overlay+text-property
+get-char-property precedence, next/previous-char-property-change,
+char-property-range-p, add-face-text-property merging, syntax-table override
+of forward-sexp/forward-word, point-entered/point-left hooks, line-prefix/
+wrap-prefix + fill, window-specific overlays, keymap text-property/overlay,
+buffer-display-table, overlay survives undo, evaporate under delete, overlay
+moves with insert, insert between adjacent overlays, substring/concat
+property preservation, buffer-substring-with-properties, invisible
+buffer-substring/kill-line/fill.
+
 ## Themes
 
 ### Theme 1 — Face IDs offset from GNU (~144 faces)
@@ -49,3 +89,4 @@ Neomacs — `(car (overlay-lists))` returns 0 vs GNU's correct count.
 Hand-crafted: `divergence_overlay_props.rs`, `divergence_faces.rs`.
 Generated matrices: `divergence_face_{attributes,documentation,fg,height,id,
 bg,weight,slant,underline}_matrix.rs`.
+Complex combos: `divergence_overlay_face_combo{,2,3,4}.rs`.
