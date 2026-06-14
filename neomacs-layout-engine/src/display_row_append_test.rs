@@ -750,6 +750,88 @@ fn buffer_hscroll_skip_source_char_keeps_marker_pending_while_still_skipping() {
 }
 
 #[test]
+fn buffer_hscroll_skip_action_applies_line_break_transition_state() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut context = RowTransitionTestContext::new("hscroll-line-break-state");
+    let action = BufferHscrollSkipAction::LineBreak {
+        ch_start_byte_idx: 3,
+        charpos: 12,
+    };
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        geometry.current_row_marker(),
+        (Color::from_pixel(0x112233), 17),
+    );
+    let mut x = 80.0;
+
+    action.apply_line_break_before_row_transition(
+        &mut row_extend,
+        &mut context.output_emitter,
+        &mut x,
+        4.0,
+    );
+
+    assert_eq!(x, 4.0);
+    assert_eq!(row_extend.value_on(&geometry), None);
+
+    let mut hit_row_range = HitRowRangeTracker::new(7);
+    let hit_range = action
+        .line_break_hit_range(&mut hit_row_range)
+        .expect("line break hit range");
+
+    assert_eq!(hit_range.charpos_start, 7);
+    assert_eq!(hit_range.charpos_end, 12);
+    assert_eq!(hit_row_range.start(), 12);
+}
+
+#[test]
+fn buffer_hscroll_skip_action_captures_line_break_cursor() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferHscrollSkipAction::LineBreak {
+        ch_start_byte_idx: 3,
+        charpos: 12,
+    };
+    let mut cursor = CursorCaptureState::new();
+
+    action.capture_line_break_cursor_if_point(
+        &mut cursor,
+        &active_face,
+        &geometry,
+        12,
+        32.0,
+        4,
+        16.0,
+    );
+
+    let captured = cursor.as_ref().expect("cursor captured");
+    assert_eq!(captured.x, 32.0);
+    assert_eq!(captured.byte_idx, 3);
+    assert_eq!(captured.col, 4);
+    assert_eq!(captured.slot_width, Some(8.0));
+}
+
+#[test]
+fn buffer_hscroll_skip_action_captures_text_cursor() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferHscrollSkipAction::Text {
+        ch_start_byte_idx: 5,
+        charpos: 9,
+        show_left_truncation: false,
+    };
+    let mut cursor = CursorCaptureState::new();
+
+    action.capture_text_cursor_if_point(&mut cursor, &active_face, &geometry, 9, 24.0, 3);
+
+    let captured = cursor.as_ref().expect("cursor captured");
+    assert_eq!(captured.x, 24.0);
+    assert_eq!(captured.byte_idx, 5);
+    assert_eq!(captured.col, 3);
+    assert_eq!(captured.slot_width, Some(8.0));
+}
+
+#[test]
 fn buffer_invisible_text_scan_context_skips_when_checkpoint_not_reached() {
     let buffer_text = b"visible";
     let mut checkpoints = TextPropertyScanCheckpoints::new(5);
@@ -1139,6 +1221,36 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
     assert_eq!(row_extend.value_on(&geometry), None);
     assert_eq!(box_face.row(), geometry.current_row_marker());
     assert_eq!(box_face.start_x(), Some(2.0));
+}
+
+#[test]
+fn buffer_text_line_break_source_action_syncs_after_transition() {
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(3);
+
+    BufferTextLineBreakSourceAction::sync_after_row_transition(
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+    );
+
+    assert_eq!(charpos, 14);
+    assert_eq!(hit_row_range.start(), 14);
+}
+
+#[test]
+fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_transition() {
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(3);
+
+    BufferSelectiveDisplayLineTailAction::sync_after_hidden_line_break_transition(
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+    );
+
+    assert_eq!(charpos, 14);
+    assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]

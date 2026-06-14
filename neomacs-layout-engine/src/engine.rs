@@ -58,17 +58,17 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextModifierAction,
-    BufferDisplayPropertyTextRenderContext, BufferHscrollSkipAction, BufferHscrollSkipSourceChar,
+    BufferDisplayPropertyTextRenderContext, BufferHscrollSkipSourceChar,
     BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
-    BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
-    BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
-    BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
-    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState, SyntheticTextMarker,
-    TextWindowAppendSurfaceRequest,
+    BufferSelectiveDisplayLineTailAction, BufferSyntheticTextRenderContext,
+    BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
+    BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
+    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceCharOverflowAction,
+    BufferTextSpecialSourceCharOverflowAction, BufferTextTruncationSkipAction,
+    BufferTextWordWrapSourceAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
+    DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
+    SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2176,20 +2176,18 @@ impl LayoutEngine {
                 ) else {
                     break;
                 };
-                let ch_start_byte_idx = hscroll_action.ch_start_byte_idx();
-
-                if matches!(hscroll_action, BufferHscrollSkipAction::LineBreak { .. }) {
-                    x = content_x;
-                    // Record newline position on the row (see main \n handler).
-                    output_emitter
-                        .note_display_buffer_pos(LispCharPos1::new(hscroll_action.charpos()));
-                    row_extend.clear();
-
+                if hscroll_action.is_line_break() {
+                    hscroll_action.apply_line_break_before_row_transition(
+                        &mut row_extend,
+                        &mut output_emitter,
+                        &mut x,
+                        content_x,
+                    );
                     let line_break_transition =
                         DisplayRowLineBreakTransitionPlan::hscroll_line_break();
-                    let hit_range = hit_row_range.range_to(hscroll_action.charpos());
-                    // Record hit-test row (hscroll newline)
-                    hit_row_range.advance_to(hscroll_action.charpos());
+                    let hit_range = hscroll_action
+                        .line_break_hit_range(&mut hit_row_range)
+                        .expect("hscroll line break hit range");
                     let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
                         text_matrix_row_base,
@@ -2221,20 +2219,15 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    if cursor_info.is_missing() && point_charpos == hscroll_action.charpos() {
-                        capture_cursor_info(
-                            &mut cursor_info,
-                            CapturedCursorInfo::line_break_from_active_face_state(
-                                &active_face_state,
-                                CapturedCursorPlacement::from_row_text_position(
-                                    row_geometry.text_position(x, ch_start_byte_idx, col),
-                                    CapturedCursorSlotWidth::FaceChar,
-                                    false,
-                                ),
-                                char_h,
-                            ),
-                        );
-                    }
+                    hscroll_action.capture_line_break_cursor_if_point(
+                        &mut cursor_info,
+                        &active_face_state,
+                        &row_geometry,
+                        point_charpos,
+                        x,
+                        col,
+                        char_h,
+                    );
                 } else {
                     // When hscroll is exhausted, show $ indicator at left edge
                     if hscroll_action.should_show_left_truncation() {
@@ -2254,19 +2247,14 @@ impl LayoutEngine {
                         }
                         mark_current_text_row_truncated_left(&mut self.matrix_builder);
                     }
-                    if cursor_info.is_missing() && point_charpos == hscroll_action.charpos() {
-                        capture_cursor_info(
-                            &mut cursor_info,
-                            CapturedCursorInfo::from_active_face_state(
-                                &active_face_state,
-                                CapturedCursorPlacement::from_row_text_position(
-                                    row_geometry.text_position(x, ch_start_byte_idx, col),
-                                    CapturedCursorSlotWidth::FaceChar,
-                                    false,
-                                ),
-                            ),
-                        );
-                    }
+                    hscroll_action.capture_text_cursor_if_point(
+                        &mut cursor_info,
+                        &active_face_state,
+                        &row_geometry,
+                        point_charpos,
+                        x,
+                        col,
+                    );
                 }
                 continue;
             }
@@ -2410,8 +2398,11 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    charpos = sync_charpos_from_byte_idx(byte_idx);
-                    hit_row_range.advance_to(charpos);
+                    BufferSelectiveDisplayLineTailAction::sync_after_hidden_line_break_transition(
+                        sync_charpos_from_byte_idx(byte_idx),
+                        &mut charpos,
+                        &mut hit_row_range,
+                    );
                 }
                 continue;
             }
@@ -2479,8 +2470,11 @@ impl LayoutEngine {
                 if row_transition.is_exhausted() {
                     break;
                 }
-                charpos = sync_charpos_from_byte_idx(byte_idx);
-                hit_row_range.advance_to(charpos);
+                BufferTextLineBreakSourceAction::sync_after_row_transition(
+                    sync_charpos_from_byte_idx(byte_idx),
+                    &mut charpos,
+                    &mut hit_row_range,
+                );
                 line_break_action.apply_after_row_transition(
                     &row_geometry,
                     &mut box_face,

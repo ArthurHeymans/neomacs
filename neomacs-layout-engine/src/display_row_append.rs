@@ -4179,6 +4179,10 @@ pub(crate) enum BufferHscrollSkipAction {
 }
 
 impl BufferHscrollSkipAction {
+    pub(crate) fn is_line_break(self) -> bool {
+        matches!(self, Self::LineBreak { .. })
+    }
+
     pub(crate) fn ch_start_byte_idx(self) -> usize {
         match self {
             Self::LineBreak {
@@ -4204,6 +4208,84 @@ impl BufferHscrollSkipAction {
                 ..
             }
         )
+    }
+
+    pub(crate) fn apply_line_break_before_row_transition(
+        self,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        output_emitter: &mut WindowOutputEmitter,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        if self.is_line_break() {
+            *x = content_x;
+            output_emitter.note_display_buffer_pos(LispCharPos1::new(self.charpos()));
+            row_extend.clear();
+        }
+    }
+
+    pub(crate) fn line_break_hit_range(
+        self,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) -> Option<DisplayRowHitRange> {
+        if !self.is_line_break() {
+            return None;
+        }
+        let hit_range = hit_row_range.range_to(self.charpos());
+        hit_row_range.advance_to(self.charpos());
+        Some(hit_range)
+    }
+
+    pub(crate) fn capture_line_break_cursor_if_point(
+        self,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+        x: f32,
+        col: usize,
+        char_h: f32,
+    ) {
+        if !target.is_missing() || point_charpos != self.charpos() {
+            return;
+        }
+        capture_cursor_info(
+            target,
+            CapturedCursorInfo::line_break_from_active_face_state(
+                active_face_state,
+                CapturedCursorPlacement::from_row_text_position(
+                    row_geometry.text_position(x, self.ch_start_byte_idx(), col),
+                    CapturedCursorSlotWidth::FaceChar,
+                    false,
+                ),
+                char_h,
+            ),
+        );
+    }
+
+    pub(crate) fn capture_text_cursor_if_point(
+        self,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+        x: f32,
+        col: usize,
+    ) {
+        if !target.is_missing() || point_charpos != self.charpos() {
+            return;
+        }
+        capture_cursor_info(
+            target,
+            CapturedCursorInfo::from_active_face_state(
+                active_face_state,
+                CapturedCursorPlacement::from_row_text_position(
+                    row_geometry.text_position(x, self.ch_start_byte_idx(), col),
+                    CapturedCursorSlotWidth::FaceChar,
+                    false,
+                ),
+            ),
+        );
     }
 }
 
@@ -4423,6 +4505,15 @@ impl BufferSelectiveDisplayLineTailAction {
             row_extend.clear();
             box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
         }
+    }
+
+    pub(crate) fn sync_after_hidden_line_break_transition(
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) {
+        *charpos = synced_charpos;
+        hit_row_range.advance_to(*charpos);
     }
 
     #[cfg(test)]
@@ -4648,6 +4739,15 @@ impl BufferTextLineBreakSourceAction {
         content_x: f32,
     ) {
         box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
+    }
+
+    pub(crate) fn sync_after_row_transition(
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) {
+        *charpos = synced_charpos;
+        hit_row_range.advance_to(*charpos);
     }
 
     pub(crate) fn cursor_info(
