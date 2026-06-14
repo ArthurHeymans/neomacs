@@ -1304,7 +1304,7 @@ fn lone_rtl_run_stays_in_place_in_ltr_paragraph() {
         }
     }
     let before = render_row_text(&row);
-    GlyphMatrixBuilder::reorder_row_bidi(&mut row, None);
+    crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
     let after = render_row_text(&row);
     // First strong char is L, so this is not a reversed (right-aligned) row.
     assert!(!row.reversed_p);
@@ -1341,7 +1341,7 @@ fn rtl_paragraph_row_is_marked_reversed() {
         text.push(Glyph::padding_for(0, 1));
         text.push(Glyph::padding_for(0, 2));
     }
-    GlyphMatrixBuilder::reorder_row_bidi(&mut row, None);
+    crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
     assert!(row.reversed_p);
     // The reorder itself does not insert filler glyphs; the right-edge offset
     // happens at materialization time.
@@ -1359,7 +1359,7 @@ fn ltr_paragraph_row_is_not_marked_reversed() {
             text.push(Glyph::char(ch, 0, 0).with_pixel_width(16.0));
         }
     }
-    GlyphMatrixBuilder::reorder_row_bidi(&mut row, None);
+    crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
     assert!(!row.reversed_p);
 }
 

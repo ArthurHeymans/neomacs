@@ -2677,7 +2677,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     });
     let base_face_id = request.base_face_id();
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    GlyphMatrixBuilder::push_char_to_row(&mut row, 'e', base_face_id, 0, 8.0);
+    crate::glyph_row_writer::push_char_to_row(&mut row, 'e', base_face_id, 0, 8.0);
     let mut source = crate::display_source::LispStringSourceCursor::new(
         1,
         Value::string("\u{301}"),

@@ -438,17 +438,6 @@ impl GlyphMatrixBuilder {
     }
 
     #[cfg(test)]
-    pub(crate) fn push_char_to_row(
-        row: &mut GlyphRow,
-        ch: char,
-        face_id: u32,
-        charpos: usize,
-        pixel_width: f32,
-    ) {
-        crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
-    }
-
-    #[cfg(test)]
     pub(crate) fn push_char_with_pixel_width(
         &mut self,
         ch: char,
@@ -458,7 +447,7 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                Self::push_char_to_row(
+                crate::glyph_row_writer::push_char_to_row(
                     &mut matrix.rows[self.current_row],
                     ch,
                     face_id,
@@ -475,17 +464,6 @@ impl GlyphMatrixBuilder {
     }
 
     #[cfg(test)]
-    pub(crate) fn push_wide_char_to_row(
-        row: &mut GlyphRow,
-        ch: char,
-        face_id: u32,
-        charpos: usize,
-        pixel_width: f32,
-    ) {
-        crate::glyph_row_writer::push_wide_char_to_row(row, ch, face_id, charpos, pixel_width);
-    }
-
-    #[cfg(test)]
     pub(crate) fn push_wide_char_with_pixel_width(
         &mut self,
         ch: char,
@@ -495,7 +473,7 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                Self::push_wide_char_to_row(
+                crate::glyph_row_writer::push_wide_char_to_row(
                     &mut matrix.rows[self.current_row],
                     ch,
                     face_id,
@@ -506,29 +484,11 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    /// Append a grapheme-cluster continuation character — a ZWJ-joined
-    /// emoji, the second regional indicator of a flag, a combining mark,
-    /// a variation selector, etc. — to the last emitted text glyph,
-    /// upgrading it to a `Composite` so the renderer shapes the whole
-    /// cluster as one unit. Falls back to a standalone glyph when there
-    /// is no mergeable base (e.g. a stray ZWJ at the start of a row).
-    ///
-    /// Mirrors GNU's automatic composition, which collapses a grapheme
-    /// cluster into a single `COMPOSITE_GLYPH` (see `src/composite.c` and
-    /// `produce_composite_glyph` in `src/term.c`).
-    pub(crate) fn push_cluster_continuation_to_row(
-        row: &mut GlyphRow,
-        ch: char,
-        face_id: u32,
-        charpos: usize,
-    ) {
-        crate::glyph_row_writer::push_cluster_continuation_to_row(row, ch, face_id, charpos);
-    }
-
+    #[cfg(test)]
     pub fn push_cluster_continuation(&mut self, ch: char, face_id: u32, charpos: usize) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                Self::push_cluster_continuation_to_row(
+                crate::glyph_row_writer::push_cluster_continuation_to_row(
                     &mut matrix.rows[self.current_row],
                     ch,
                     face_id,
@@ -557,17 +517,6 @@ impl GlyphMatrixBuilder {
     /// each character keeps a distinct buffer position. Falls back to a
     /// standalone glyph when there is no base to merge into (run start).
     #[cfg(test)]
-    pub(crate) fn push_run_member_to_row(
-        row: &mut GlyphRow,
-        ch: char,
-        face_id: u32,
-        charpos: usize,
-        pixel_width: f32,
-    ) {
-        crate::glyph_row_writer::push_run_member_to_row(row, ch, face_id, charpos, pixel_width);
-    }
-
-    #[cfg(test)]
     pub(crate) fn push_run_member(
         &mut self,
         ch: char,
@@ -577,7 +526,7 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                Self::push_run_member_to_row(
+                crate::glyph_row_writer::push_run_member_to_row(
                     &mut matrix.rows[self.current_row],
                     ch,
                     face_id,
@@ -591,25 +540,6 @@ impl GlyphMatrixBuilder {
     #[cfg(test)]
     pub(crate) fn push_stretch(&mut self, width_cols: u16, face_id: u32) {
         self.push_stretch_with_pixel_width(width_cols, face_id, 0.0);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn push_stretch_to_row(
-        row: &mut GlyphRow,
-        width_cols: u16,
-        face_id: u32,
-        pixel_width: f32,
-        pixel_height: f32,
-        pixel_ascent: f32,
-    ) {
-        crate::glyph_row_writer::push_stretch_to_row(
-            row,
-            width_cols,
-            face_id,
-            pixel_width,
-            pixel_height,
-            pixel_ascent,
-        );
     }
 
     #[cfg(test)]
@@ -633,7 +563,7 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                Self::push_stretch_to_row(
+                crate::glyph_row_writer::push_stretch_to_row(
                     &mut matrix.rows[self.current_row],
                     width_cols,
                     face_id,
@@ -1345,15 +1275,6 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    /// Normalize a standalone row built outside the window-matrix walker.
-    ///
-    /// Used for frame-level chrome rows such as the tab bar, which are
-    /// produced before any leaf window exists but still need the same bidi
-    /// reordering and row bookkeeping as status-line rows.
-    pub fn normalize_external_row(row: &mut GlyphRow) {
-        crate::glyph_row_writer::normalize_external_row(row);
-    }
-
     /// Patch the last-closed window matrix so its rightmost
     /// column shows a vertical-border glyph on every enabled row.
     ///
@@ -1531,14 +1452,6 @@ impl GlyphMatrixBuilder {
         state.frame_pixel_width = frame_pixel_width;
         state.frame_pixel_height = frame_pixel_height;
         state
-    }
-
-    #[cfg(test)]
-    pub(crate) fn reorder_row_bidi(
-        row: &mut GlyphRow,
-        phys_cursor_col: Option<u16>,
-    ) -> Option<u16> {
-        crate::glyph_row_writer::reorder_row_bidi(row, phys_cursor_col)
     }
 
     fn reorder_current_row_bidi(&mut self) {

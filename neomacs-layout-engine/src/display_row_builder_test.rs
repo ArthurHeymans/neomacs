@@ -648,7 +648,7 @@ fn display_row_builder_emits_tab_as_stretch_to_next_tab_stop() {
 fn display_row_writer_appends_items_to_existing_row_tab_context() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     row.enabled = true;
-    crate::matrix_builder::GlyphMatrixBuilder::push_char_to_row(&mut row, 'x', 2, 0, 8.0);
+    crate::glyph_row_writer::push_char_to_row(&mut row, 'x', 2, 0, 8.0);
 
     let row_layout = layout();
     let mut writer = DisplayRowWriter::new(&row_layout, &mut row);
@@ -664,7 +664,7 @@ fn display_row_writer_consumes_display_item_source() {
     let _eval = Context::new();
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     row.enabled = true;
-    crate::matrix_builder::GlyphMatrixBuilder::push_char_to_row(&mut row, 'x', 2, 0, 8.0);
+    crate::glyph_row_writer::push_char_to_row(&mut row, 'x', 2, 0, 8.0);
     let mut source =
         LispStringSourceCursor::new(1, Value::string("a\tb"), RenderFaceRef::FaceId(2))
             .expect("source");
