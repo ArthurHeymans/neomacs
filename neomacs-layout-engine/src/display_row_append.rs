@@ -409,6 +409,98 @@ impl<'a> LispStringSourceAppendSession<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayRowPrefixRequest {
+    None,
+    Line,
+    Wrap,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayRowPrefixKind {
+    Line,
+    Wrap,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct DisplayRowPrefixSource {
+    value: Value,
+    anchor_charpos: CharPos0,
+    kind: DisplayRowPrefixKind,
+}
+
+impl DisplayRowPrefixRequest {
+    pub(crate) fn initial(has_prefix: bool, has_line_prefix: bool) -> Self {
+        if has_prefix && has_line_prefix {
+            Self::Line
+        } else {
+            Self::None
+        }
+    }
+
+    pub(crate) fn request_line(&mut self) {
+        *self = Self::Line;
+    }
+
+    pub(crate) fn request_wrap(&mut self) {
+        *self = Self::Wrap;
+    }
+
+    pub(crate) fn clear(&mut self) {
+        *self = Self::None;
+    }
+
+    pub(crate) fn is_requested(self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    pub(crate) fn uses_line_prefix(self) -> bool {
+        matches!(self, Self::Line)
+    }
+
+    pub(crate) fn uses_wrap_prefix(self) -> bool {
+        matches!(self, Self::Wrap)
+    }
+
+    pub(crate) fn source_for_value(
+        self,
+        value: Value,
+        anchor_charpos: CharPos0,
+    ) -> Option<DisplayRowPrefixSource> {
+        let kind = match self {
+            Self::Line => DisplayRowPrefixKind::Line,
+            Self::Wrap => DisplayRowPrefixKind::Wrap,
+            Self::None => return None,
+        };
+        Some(DisplayRowPrefixSource {
+            value,
+            anchor_charpos,
+            kind,
+        })
+    }
+}
+
+impl DisplayRowPrefixSource {
+    pub(crate) fn value(self) -> Value {
+        self.value
+    }
+
+    pub(crate) fn origin(self) -> DisplayOrigin {
+        match self.kind {
+            DisplayRowPrefixKind::Line => DisplayOrigin::LinePrefix {
+                anchor_charpos: self.anchor_charpos,
+            },
+            DisplayRowPrefixKind::Wrap => DisplayOrigin::WrapPrefix {
+                anchor_charpos: self.anchor_charpos,
+            },
+        }
+    }
+
+    pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
+        BaseFacePolicy::DefaultFace
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct OverlayStringRenderSource {
     string: Value,

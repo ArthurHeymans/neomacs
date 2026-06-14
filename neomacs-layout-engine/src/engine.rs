@@ -40,8 +40,8 @@ use crate::display_row::{
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
     DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
-    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
-    LispStringSourceAppendRequest, LispStringSourceRowAppendSession,
+    DisplayRowAppendArea, DisplayRowAppendSurface, DisplayRowPrefixRequest,
+    LispStringRowAppendContext, LispStringSourceAppendRequest, LispStringSourceRowAppendSession,
     OverlayStringRenderBatchSource, OverlayStringRenderSource, SyntheticTextAppendRequest,
     SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
@@ -449,26 +449,6 @@ struct HitRowRangeTracker {
 struct TextPropertyScanCheckpoints {
     invisible_next: i64,
     display_next: i64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DisplayRowPrefixRequest {
-    None,
-    Line,
-    Wrap,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DisplayRowPrefixKind {
-    Line,
-    Wrap,
-}
-
-#[derive(Clone, Copy)]
-struct DisplayRowPrefixSource {
-    value: Value,
-    anchor_charpos: CharPos0,
-    kind: DisplayRowPrefixKind,
 }
 
 impl CursorGeometrySource {
@@ -997,78 +977,6 @@ impl TextPropertyScanCheckpoints {
 
     fn display_next(self) -> i64 {
         self.display_next
-    }
-}
-
-impl DisplayRowPrefixRequest {
-    fn initial(has_prefix: bool, has_line_prefix: bool) -> Self {
-        if has_prefix && has_line_prefix {
-            Self::Line
-        } else {
-            Self::None
-        }
-    }
-
-    fn request_line(&mut self) {
-        *self = Self::Line;
-    }
-
-    fn request_wrap(&mut self) {
-        *self = Self::Wrap;
-    }
-
-    fn clear(&mut self) {
-        *self = Self::None;
-    }
-
-    fn is_requested(self) -> bool {
-        !matches!(self, Self::None)
-    }
-
-    fn uses_line_prefix(self) -> bool {
-        matches!(self, Self::Line)
-    }
-
-    fn uses_wrap_prefix(self) -> bool {
-        matches!(self, Self::Wrap)
-    }
-
-    fn source_for_value(
-        self,
-        value: Value,
-        anchor_charpos: CharPos0,
-    ) -> Option<DisplayRowPrefixSource> {
-        let kind = match self {
-            Self::Line => DisplayRowPrefixKind::Line,
-            Self::Wrap => DisplayRowPrefixKind::Wrap,
-            Self::None => return None,
-        };
-        Some(DisplayRowPrefixSource {
-            value,
-            anchor_charpos,
-            kind,
-        })
-    }
-}
-
-impl DisplayRowPrefixSource {
-    fn value(self) -> Value {
-        self.value
-    }
-
-    fn origin(self) -> DisplayOrigin {
-        match self.kind {
-            DisplayRowPrefixKind::Line => DisplayOrigin::LinePrefix {
-                anchor_charpos: self.anchor_charpos,
-            },
-            DisplayRowPrefixKind::Wrap => DisplayOrigin::WrapPrefix {
-                anchor_charpos: self.anchor_charpos,
-            },
-        }
-    }
-
-    fn base_face_policy(self) -> BaseFacePolicy {
-        BaseFacePolicy::DefaultFace
     }
 }
 
