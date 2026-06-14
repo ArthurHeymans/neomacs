@@ -23,10 +23,6 @@ use crate::display_row::{
     DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState, DisplaySourceAppendMeasurement,
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
     append_single_display_item_fragment_to_text_row_and_emit,
-    measure_single_display_item_source_append_request_against_current_text_row,
-    render_natural_display_source_append_request_into_current_text_row_and_emit,
-    render_owned_display_source_append_request_into_current_text_row_and_emit,
-    render_single_display_item_source_append_request_into_current_text_row_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
@@ -516,7 +512,7 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
         base_face,
         DisplayRowAppendKind::SourceText,
     );
-    render_natural_display_source_append_request_into_current_text_row_and_emit(
+    request.render_natural_display_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -525,7 +521,6 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
         source_state,
         face_resolver,
         face_ids,
-        request,
     )
 }
 
@@ -1752,7 +1747,7 @@ pub(crate) fn append_lisp_string_to_text_row(
     );
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
-    let Some(outcome) = render_natural_display_source_append_request_into_current_text_row_and_emit(
+    let Some(outcome) = request.render_natural_display_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1761,7 +1756,6 @@ pub(crate) fn append_lisp_string_to_text_row(
         &mut source_state,
         face_resolver,
         face_ids,
-        request,
     ) else {
         return position;
     };
@@ -1854,7 +1848,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
         DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
-    let outcome = render_single_display_item_source_append_request_into_current_text_row_and_emit(
+    let outcome = request.render_single_display_item_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1862,7 +1856,6 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
         item,
         face_resolver,
         &mut face_ids,
-        request,
         &mut render_policy,
     )?;
     Some(outcome.into_append_progress_and_position(position))
@@ -2389,14 +2382,13 @@ fn measure_buffer_text_source_range_append_progress_to_text_row<B: LayoutBufferV
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy =
         DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
-    let outcome = measure_single_display_item_source_append_request_against_current_text_row(
+    let outcome = request.measure_single_display_item_against_current_text_row(
         builder,
         evaluator,
         font_metrics,
         item,
         face_resolver,
         &mut face_ids,
-        request,
         &mut render_policy,
     )?;
     Some(outcome.into_append_progress(position))
@@ -2592,7 +2584,7 @@ fn append_buffer_display_item_source_range_to_text_row_and_emit<B: LayoutBufferV
     let request = frame.source_append_request(position, face_id, base_face, append_kind);
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let outcome = render_single_display_item_source_append_request_into_current_text_row_and_emit(
+    let outcome = request.render_single_display_item_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -2600,7 +2592,6 @@ fn append_buffer_display_item_source_range_to_text_row_and_emit<B: LayoutBufferV
         item,
         face_resolver,
         &mut face_ids,
-        request,
         &mut render_policy,
     )?;
     Some(outcome.into_append_progress_and_position(position))
@@ -2630,14 +2621,13 @@ fn measure_buffer_display_item_source_range_append_progress_to_text_row<
         .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
     let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    let outcome = measure_single_display_item_source_append_request_against_current_text_row(
+    let outcome = request.measure_single_display_item_against_current_text_row(
         builder,
         evaluator,
         font_metrics,
         item,
         face_resolver,
         &mut face_ids,
-        request,
         &mut render_policy,
     )?;
     Some(outcome.into_append_progress(position))
@@ -4829,7 +4819,7 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
         DisplayRowAppendKind::DisplayReplacementString,
     );
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
-    let Some(outcome) = render_owned_display_source_append_request_into_current_text_row_and_emit(
+    let Some(outcome) = request.render_owned_display_source_into_current_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -4837,7 +4827,6 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
         source,
         face_resolver,
         face_ids,
-        request,
         &mut render_policy,
     ) else {
         return position;

@@ -926,18 +926,18 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         DisplayRowAppendKind::SourceText,
     );
 
-    let outcome = render_natural_display_source_append_request_into_current_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &mut source,
-        &mut source_state,
-        &face_resolver,
-        &mut face_ids,
-        request,
-    )
-    .expect("current-row fragment outcome");
+    let outcome = request
+        .render_natural_display_source_into_current_text_row_and_emit(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &mut source,
+            &mut source_state,
+            &face_resolver,
+            &mut face_ids,
+        )
+        .expect("current-row fragment outcome");
 
     assert_eq!(
         outcome.end_position(),
