@@ -4683,6 +4683,26 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
 }
 
 #[test]
+fn buffer_display_property_replacement_outcome_skips_covered_buffer_text() {
+    let outcome = BufferDisplayPropertyTextReplacementOutcome {
+        replacement: DisplayPropertyReplacementAppendOutcome {
+            start_position: DisplayRowPosition { x_px: 4.0, col: 1 },
+            end_position: DisplayRowPosition { x_px: 12.0, col: 2 },
+            cursor_policy: DisplayPropertyReplacementCursorPolicy::FaceChar,
+        },
+        skip_to: 4,
+    };
+    let mut byte_idx = "a".len();
+    let mut charpos = 1;
+
+    outcome.skip_covered_buffer_text("a界b\n".as_bytes(), &mut byte_idx, &mut charpos);
+
+    assert_eq!(byte_idx, "a界b\n".len());
+    assert_eq!(charpos, 4);
+    assert_eq!(outcome.skip_to(), 4);
+}
+
+#[test]
 fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let mut eval = Context::new();
     let buf_id = eval

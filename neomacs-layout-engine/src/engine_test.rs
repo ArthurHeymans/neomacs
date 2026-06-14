@@ -13,6 +13,7 @@ use crate::display_row_append::{
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
+    skip_text_to_charpos,
 };
 use crate::display_source::DisplayItemSource;
 use crate::display_status_line::EchoMinibufferRowsRenderRequest;

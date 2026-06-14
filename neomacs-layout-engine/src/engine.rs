@@ -87,7 +87,6 @@ use crate::display_row_walk_state::{
     TrailingWhitespaceRenderState, WordWrapRenderState,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
-    skip_text_to_charpos,
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -2341,12 +2340,7 @@ impl LayoutEngine {
                     col = position.col;
 
                     // Skip covered buffer text
-                    skip_text_to_charpos(
-                        text,
-                        &mut byte_idx,
-                        &mut charpos,
-                        replacement_outcome.skip_to(),
-                    );
+                    replacement_outcome.skip_covered_buffer_text(text, &mut byte_idx, &mut charpos);
                     continue;
                 }
                 BufferDisplayPropertyTextAppendAction::Modifiers(modifiers) => {

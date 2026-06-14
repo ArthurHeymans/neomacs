@@ -6185,6 +6185,16 @@ impl BufferDisplayPropertyTextReplacementOutcome {
         self.replacement.end_position()
     }
 
+    pub(crate) fn skip_covered_buffer_text(
+        self,
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+    ) {
+        skip_text_to_charpos(text, byte_idx, charpos, self.skip_to);
+    }
+
+    #[cfg(test)]
     pub(crate) fn skip_to(self) -> i64 {
         self.skip_to
     }
