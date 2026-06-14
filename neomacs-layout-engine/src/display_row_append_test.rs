@@ -3211,14 +3211,18 @@ fn buffer_text_source_append_context_appends_source_char() {
         )
         .expect("appended buffer fragment");
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    let mut charpos = 4;
     let mut end_x = 0.0;
     let mut end_col = 0;
-    append_outcome.apply_to_text_row_state(
+    append_outcome.apply_rendered_char_to_walk_state(
         &mut trailing_whitespace,
+        &mut word_wrap,
         ' ',
         &geometry,
         &mut end_x,
         &mut end_col,
+        &mut charpos,
     );
     assert_eq!(
         trailing_whitespace
@@ -3228,6 +3232,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     );
     assert_eq!(end_x, 8.0);
     assert_eq!(end_col, 1);
+    assert_eq!(charpos, 5);
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];
@@ -3877,14 +3882,23 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         .expect("appended source-mapped buffer text item fragment");
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
+    let mut word_wrap = WordWrapRenderState::new(true);
+    let mut charpos = 8;
     let mut end_x = 0.0;
     let mut end_col = 0;
-    append_outcome.apply_to_text_row_state(&mut face_scan, &mut end_x, &mut end_col);
+    append_outcome.apply_rendered_special_char_to_walk_state(
+        &mut face_scan,
+        &mut word_wrap,
+        &mut end_x,
+        &mut end_col,
+        &mut charpos,
+    );
     assert!(face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 31);
 
     assert_eq!(end_x, 16.0);
     assert_eq!(end_col, 2);
+    assert_eq!(charpos, 9);
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];

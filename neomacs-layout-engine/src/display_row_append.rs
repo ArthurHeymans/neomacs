@@ -3720,6 +3720,21 @@ impl BufferTextSourceCharAppendOutcome {
         *x = self.position.x_px;
         *col = self.position.col;
     }
+
+    pub(crate) fn apply_rendered_char_to_walk_state(
+        &self,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        word_wrap: &mut WordWrapRenderState,
+        ch: char,
+        geometry: &DisplayRowGeometryState,
+        x: &mut f32,
+        col: &mut usize,
+        charpos: &mut i64,
+    ) {
+        self.apply_to_text_row_state(trailing_whitespace, ch, geometry, x, col);
+        *charpos += 1;
+        word_wrap.allow_after_current_char(ch);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4788,6 +4803,19 @@ impl BufferTextSpecialSourceCharAppendOutcome {
         }
         *x = self.position.x_px;
         *col = self.position.col;
+    }
+
+    pub(crate) fn apply_rendered_special_char_to_walk_state(
+        &self,
+        face_scan: &mut FaceScanCheckpoint,
+        word_wrap: &mut WordWrapRenderState,
+        x: &mut f32,
+        col: &mut usize,
+        charpos: &mut i64,
+    ) {
+        self.apply_to_text_row_state(face_scan, x, col);
+        *charpos += 1;
+        word_wrap.disallow_after_current_char();
     }
 }
 

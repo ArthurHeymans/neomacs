@@ -2708,10 +2708,14 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                         face_resolver,
                     ) {
-                        append_outcome.apply_to_text_row_state(&mut face_scan, &mut x, &mut col);
+                        append_outcome.apply_rendered_special_char_to_walk_state(
+                            &mut face_scan,
+                            &mut word_wrap,
+                            &mut x,
+                            &mut col,
+                            &mut charpos,
+                        );
                     }
-                    charpos += 1;
-                    word_wrap.disallow_after_current_char();
                     continue;
                 }
                 BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
@@ -2920,15 +2924,15 @@ impl LayoutEngine {
             let Some(append_outcome) = appended else {
                 break;
             };
-            append_outcome.apply_to_text_row_state(
+            append_outcome.apply_rendered_char_to_walk_state(
                 &mut trailing_whitespace,
+                &mut word_wrap,
                 ch,
                 &row_geometry,
                 &mut x,
                 &mut col,
+                &mut charpos,
             );
-            charpos += 1;
-            word_wrap.allow_after_current_char(ch);
 
             // --- Overlay after-strings ---
             overlay_string_context!().render_after_at(
