@@ -1850,6 +1850,7 @@ mod divergence_overlay_face_combo;
 mod divergence_overlay_face_combo2;
 mod divergence_overlay_face_combo3;
 mod divergence_overlay_face_combo4;
+mod divergence_overlay_face_combo5;
 mod divergence_overlay_operations;
 mod divergence_overlay_props;
 mod divergence_package_dired_elp;

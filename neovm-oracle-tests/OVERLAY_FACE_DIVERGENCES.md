@@ -13,14 +13,15 @@ cargo nextest run -p neovm-oracle-tests \
 
 Authoritative result: **1699 tests, 1428 pass, 271 divergences.** (Target was 200.)
 
-## Complex combo tests (+12 divergences, 82 tests)
+## Complex combo tests (+13 divergences, 101 tests)
 
-Files `divergence_overlay_face_combo{,2,3,4}.rs` combine several features at
+Files `divergence_overlay_face_combo{,2,3,4,5}.rs` combine several features at
 once (overlay + text-property precedence, before/after-string + editing,
 invisible/intangible/field + navigation, modification-hooks + undo,
 read-only enforcement across many modifying ops, combined overlay+text-property
-char-property resolution, face merging, syntax-table override, point hooks).
-82 combo tests, 12 divergences:
+char-property resolution, face merging, syntax-table override, point hooks,
+font-lock fontification, marker↔overlay coupling, undo of props/overlays,
+button.el, narrowing+marker+overlay). 101 combo tests, 13 divergences:
 
 ### Theme 6 — read-only text property NOT enforced (9 manifestations)
 Neomacs blocks `delete-char`/`delete-region` and the `buffer-read-only`
@@ -51,7 +52,11 @@ wrap-prefix + fill, window-specific overlays, keymap text-property/overlay,
 buffer-display-table, overlay survives undo, evaporate under delete, overlay
 moves with insert, insert between adjacent overlays, substring/concat
 property preservation, buffer-substring-with-properties, invisible
-buffer-substring/kill-line/fill.
+buffer-substring/kill-line/fill. **Batch 5 additionally confirms font-lock
+fontification (emacs-lisp-mode defun/defvar/string/comment), marker↔overlay
+position coupling under insert/deletion/move, undo of text-properties and
+overlay creation, button.el (make-text-button/insert-button/make-button), and
+narrowing+marker+overlay combos all work.**
 
 ## Themes
 
@@ -89,4 +94,4 @@ Neomacs — `(car (overlay-lists))` returns 0 vs GNU's correct count.
 Hand-crafted: `divergence_overlay_props.rs`, `divergence_faces.rs`.
 Generated matrices: `divergence_face_{attributes,documentation,fg,height,id,
 bg,weight,slant,underline}_matrix.rs`.
-Complex combos: `divergence_overlay_face_combo{,2,3,4}.rs`.
+Complex combos: `divergence_overlay_face_combo{,2,3,4,5}.rs`.
