@@ -19,7 +19,29 @@ cargo nextest run -p neovm-oracle-tests -E 'test(/div_utf8/)' --no-fail-fast
 GNU Emacs is expected on `PATH` (or `NEOVM_FORCE_ORACLE_PATH=/path/to/emacs`);
 the Neomacs binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH=...`).
 
-Scope at time of writing: **255 tests, 187 pass, 68 divergences.**
+Scope at time of writing: **964 tests, 413 pass, 551 divergences.**
+
+## Exhaustive per-element matrices (bulk of the count)
+
+Beyond the hand-written theme tests above, the bulk of the 551 divergences come
+from generated matrices — one focused `#[test]` per element of an enumerable
+set, each surfacing its own divergence. These pin the *exact* scope of the
+confirmed root-cause bugs:
+
+- **eight-bit charset matrix** (`eightbit_charset_matrix.rs`, bytes 128–255):
+  `char-charset` of every raw byte → `unicode` (NEO) vs `eight-bit` (GNU).
+  ~128 divergences — exhausts Theme 1.
+- **eight-bit string-bytes matrix** (`eightbit_bytes_matrix.rs`, bytes 128–255):
+  `string-bytes` of decoding each invalid byte → 3 (NEO) vs 2 (GNU) bytes.
+  ~128 divergences — exhausts Theme 2.
+- **coding-system registry matrix** (`coding_registry_matrix.rs`, all 125 GNU
+  coding systems): decode a sample per coding. ~109 unsupported → U+FFFD.
+  Exhausts Theme 9 (decode side).
+- **coding-system encode matrix** (`coding_encode_matrix.rs`, all 125 coding
+  systems): encode `café世界` per coding. ~112 unsupported → nil. Theme 9
+  (encode side).
+- **charset-chars matrix** (`charset_chars_matrix.rs`, all ~202 charsets):
+  `charset-chars` per charset. Only 6 diverge (mostly works) — extends Theme 10.
 
 Root cause theme: **Neomacs uses a UTF-8-internal string model**, diverging
 from GNU's eight-bit-charset model. Almost every divergence traces back to
@@ -150,7 +172,9 @@ of normal multibyte.
 ## Files
 `divergence_utf8_{bidi_compose_misc, bidi_deep, buffer_charset_props,
 buffer_io, buffer_multibyte_toggle, buffer_region_ops, char_ops_regex,
-char_properties, char_tables, charset_coding_infra, charset_conv_deep,
-coding, coding_deep, compose_bidi_syntax, digest_print, fill_case_category,
+char_properties, char_tables, charset_chars_matrix, charset_coding_infra,
+charset_conv_deep, coding, coding_deep, coding_encode_matrix,
+coding_registry_matrix, compose_bidi_syntax, digest_print,
+eightbit_bytes_matrix, eightbit_charset_matrix, fill_case_category,
 legacy_codings, more_codings, print_escape, string_compare_format,
 string_primitives, syntax_display, unicode_property_matrix}.rs`
