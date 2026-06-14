@@ -22,8 +22,8 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowLoopRequestContext, BufferTextWindowLoopRunState, BufferTextWindowOutputSetup,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
+    BufferTextWindowLoopRenderState, BufferTextWindowLoopRequestContext,
+    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
     BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
     BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
     BufferTextWindowWalkSetupRequest,
@@ -1239,7 +1239,7 @@ impl LayoutEngine {
             evaluator,
         });
 
-        BufferTextWindowLoopRunState::new(
+        BufferTextWindowLoopRenderState::new(
             &mut buffer_text_append_state,
             &mut text_property_checkpoints,
             &mut byte_idx,
