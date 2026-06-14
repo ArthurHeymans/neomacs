@@ -20,8 +20,12 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
+use crate::display_buffer_text_walk::{
+    BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
+};
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
+#[cfg(test)]
 use crate::display_cursor::CursorCaptureState;
 #[cfg(test)]
 use crate::display_cursor::CursorSlotWidthPolicy;
@@ -46,6 +50,8 @@ use crate::display_row::{
     DisplayRowMeasurementPolicy, insert_resolved_display_row_face,
 };
 #[cfg(test)]
+use crate::display_row_append::DisplayRowPrefixRequest;
+#[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
@@ -56,32 +62,28 @@ use crate::display_row_append::{
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
-    BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
-    BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
+    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
+    BufferTextWindowBeginRequest, BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
     BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
     BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    TextWindowAppendSurfaceRequest,
+    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixValues,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
     display_row_text_glyph_count, new_display_row,
 };
-use crate::display_row_geometry::{
-    DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowLimit,
-    DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
-};
+use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowLimit, DisplayRowVisibilityLimit};
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
 use crate::display_row_walk_state::WordWrapBreakCandidate;
+#[cfg(test)]
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
-    TrailingWhitespaceRenderState, WordWrapRenderState,
+    ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
+    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
+use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
@@ -1167,97 +1169,66 @@ impl LayoutEngine {
         };
         let mut line_numbers = LineNumberRenderState::new(lnum_enabled, current_line, point_line);
 
-        // Simple monospace text layout
-        let mut x = content_x;
-        let mut col = 0usize;
-        let mut byte_idx = 0usize;
-        let mut charpos = window_start;
-        let mut text_property_checkpoints = TextPropertyScanCheckpoints::new(window_start);
-
-        // Display :raise property: vertical Y offset for glyphs
-        let mut raise_span = ActiveDisplayPropertySpan::inactive();
-
-        // Display :height property: font scale factor applied as a real face
-        // transformation, matching GNU `face_with_height`.
-        let mut height_span = ActiveDisplayPropertySpan::inactive();
-
-        // Fringe state tracking
-        let left_fringe_x = params.text_bounds.x - params.left_fringe_width;
-        let right_fringe_x = params.text_bounds.x + params.text_bounds.width;
-        let mut row_flags = DisplayRowFlags::new(max_rows);
-
-        let mut hscroll_skip =
-            HorizontalScrollSkipState::new(params.truncate_lines, params.hscroll);
-
-        // Word-wrap break tracking
-        let mut word_wrap = WordWrapRenderState::new(params.word_wrap);
-
-        let mut prefix_request =
-            DisplayRowPrefixRequest::initial(has_prefix, prefix_values.has_line_default_prefix());
-
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
-        let text_append_surface = TextWindowAppendSurfaceRequest::new(
+        let BufferTextWindowWalkSetup {
+            mut x,
+            mut col,
+            mut byte_idx,
+            mut charpos,
+            text_area_left,
+            window_top,
+            mut text_property_checkpoints,
+            mut raise_span,
+            mut height_span,
+            mut row_flags,
+            mut hscroll_skip,
+            mut word_wrap,
+            mut prefix_request,
+            text_append_surface,
+            row_geometry_defaults,
+            mut row_geometry,
+            mut row_y_positions,
+            mut trailing_whitespace,
+            mut buffer_text_append_state,
+            mut row_extend,
+            mut box_face,
+            mut cursor_info,
+            mut hit_rows,
+            mut hit_row_range,
+        } = BufferTextWindowWalkSetupRequest::new(
+            window_start,
             content_x,
+            text_x,
             text_width,
+            text_y,
+            params.bounds.y,
             lnum_pixel_width,
+            max_rows,
+            char_w,
+            char_h,
+            default_face_ascent,
+            params.truncate_lines,
+            params.hscroll,
+            params.word_wrap,
+            has_prefix,
+            prefix_values.has_line_default_prefix(),
             reserve_right_border_col,
             reserve_right_special_col,
-            char_w,
             params.tab_width,
             &params.tab_stop_list,
-        )
-        .into_surface();
-
-        // Variable-height row tracking
-        let row_geometry_defaults =
-            DisplayRowGeometryDefaults::new(text_y, char_h, default_face_ascent);
-        let mut row_geometry = row_geometry_defaults.initial_state();
-        let mut row_y_positions =
-            DisplayRowYPositions::with_capacity_and_first_row(max_rows, text_y);
-        let mut trailing_whitespace = TrailingWhitespaceRenderState::new(
             params.show_trailing_whitespace,
             params.trailing_ws_bg,
-        );
-        // Exact joined-form advances for the current contextual-shaping run,
-        // shaped once via shape_run and keyed by absolute byte offset (robust
-        // to wrap re-processing). Empty/unused for non-complex text.
-        let mut buffer_text_append_state = BufferTextRowAppendState::default();
+        )
+        .into_setup();
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
 
-        // Face :extend tracking — extends face background to end of line
-        let mut row_extend = DisplayRowScopedValue::inactive();
+        // Fringe state tracking
+        let left_fringe_x = params.text_bounds.x - params.left_fringe_width;
+        let right_fringe_x = params.text_bounds.x + params.text_bounds.width;
 
-        // Box face tracking: track active :box face regions
-        let mut box_face = BoxFaceRowState::inactive();
-
-        // Cursor metrics captured during the main layout loop.
-        let mut cursor_info = CursorCaptureState::new();
-
-        // Hit-test data for this window
-        let mut hit_rows: Vec<HitRow> = Vec::new();
-        let mut hit_row_range = HitRowRangeTracker::new(window_start);
-        let text_area_left = text_x;
-        let window_top = params.bounds.y;
-
-        // Margin state tracking
-        let has_margins = params.left_margin_width > 0.0 || params.right_margin_width > 0.0;
-
-        // Clear margin backgrounds with default face background so they don't
-        // show visual artifacts.  Default Emacs layout (fringes-outside-margins
-        // nil): | LEFT_MARGIN | LEFT_FRINGE | TEXT_AREA | RIGHT_FRINGE | RIGHT_MARGIN |
-        // So left margin is outermost (before fringe), right margin is outermost
-        // (after fringe).
-        if has_margins {
-            if params.left_margin_width > 0.0 {
-                let _margin_x = text_x - params.left_fringe_width - params.left_margin_width;
-            }
-            if params.right_margin_width > 0.0 {
-                let _margin_x = text_x + text_width + params.right_fringe_width;
-            }
-        }
         let face_resolution_context = BufferCurrentFaceResolutionContext::new(
             buffer,
             face_resolver,
