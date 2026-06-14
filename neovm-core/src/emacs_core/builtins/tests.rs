@@ -11446,6 +11446,52 @@ fn princ_to_buffer_preserves_private_use_glyphs_issue_131() {
 }
 
 #[test]
+fn princ_to_function_preserves_private_use_glyph_codes_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // GNU `(let (out) (princ (char-to-string #xe0a0) (lambda (c) ...))
+    //       (nreverse out))` => (57504): princ to a function emits the real
+    // character code, and a Private-Use glyph must survive as itself rather
+    // than collapsing to a raw-byte sentinel. (`push` is a subr.el macro that
+    // is not bootstrapped in a bare test context, so build the list with the
+    // primitive `setq`/`cons`.)
+    let glyph = eval
+        .eval_str(
+            r#"
+            (let ((out nil))
+              (princ (char-to-string #xe0a0) (lambda (c) (setq out (cons c out))))
+              (nreverse out))
+            "#,
+        )
+        .expect("princ to a function should emit the real glyph code");
+    assert_eq!(glyph, Value::list(vec![Value::fixnum(0xe0a0)]));
+
+    // princ of a list recurses with princ semantics (no string quoting) and
+    // emits each Emacs character code in turn: "(foo <glyph>)".
+    let list = eval
+        .eval_str(
+            r#"
+            (let ((out nil))
+              (princ (list 'foo (char-to-string #xe0a0))
+                     (lambda (c) (setq out (cons c out))))
+              (nreverse out))
+            "#,
+        )
+        .expect("princ of a list to a function should preserve glyph codes");
+    assert_eq!(
+        list,
+        Value::list(
+            "(foo "
+                .chars()
+                .map(|c| Value::fixnum(c as i64))
+                .chain([Value::fixnum(0xe0a0), Value::fixnum(')' as i64)])
+                .collect()
+        )
+    );
+}
+
+#[test]
 fn format_preserves_private_use_glyphs_issue_131() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

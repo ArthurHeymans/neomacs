@@ -1461,6 +1461,24 @@ pub(crate) fn dispatch_print_callback_chars(
     Ok(())
 }
 
+/// Issue #131: byte-faithful sibling of [`dispatch_print_callback_chars`]. Walks
+/// canonical Emacs internal-encoding bytes one character at a time (so eight-bit
+/// raw bytes and non-Unicode codes surface as their real character codes, not as
+/// in-Unicode storage sentinels) and invokes the callback with each code. Used by
+/// `princ` when the print target is a function.
+pub(crate) fn dispatch_print_callback_emacs_chars(
+    bytes: &[u8],
+    mut emit_char: impl FnMut(Value) -> Result<(), Flow>,
+) -> Result<(), Flow> {
+    let mut pos = 0usize;
+    while pos < bytes.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+        emit_char(Value::fixnum(code as i64))?;
+        pos += len;
+    }
+    Ok(())
+}
+
 fn write_print_output(
     eval: &mut super::eval::Context,
     printcharfun: Option<&Value>,
@@ -1736,6 +1754,166 @@ pub(crate) fn print_value_princ_in_state(
     }
 }
 
+/// Issue #131: byte-faithful sibling of [`print_value_princ_in_state`]. Renders
+/// the `princ` form as canonical Emacs internal-encoding bytes — a string emits
+/// its bytes verbatim (a real Private-Use glyph survives instead of being decoded
+/// as a raw byte), symbol/buffer names emit their name bytes, and cons / vector /
+/// record recurse with `princ` semantics. Opaque handles fall back to the byte
+/// `prin1` sink. This replaces `print_value_princ_in_state` for the `princ`
+/// builtins, retiring their storage-string round-trip.
+pub(crate) fn print_value_princ_bytes(
+    ctx: &crate::emacs_core::eval::Context,
+    value: &Value,
+) -> Vec<u8> {
+    let print_quoted = ctx
+        .obarray
+        .symbol_value("print-quoted")
+        .map_or(true, |v| v.is_truthy());
+    let prin1_bytes = |v: &Value| {
+        super::error::print_value_bytes_in_state(
+            &ctx.obarray,
+            &ctx.buffers,
+            &ctx.frames,
+            &ctx.threads,
+            v,
+        )
+    };
+    if super::terminal::pure::print_terminal_handle(value).is_some()
+        || ctx.threads.thread_id_from_handle(value).is_some()
+        || ctx.threads.mutex_id_from_handle(value).is_some()
+        || ctx
+            .threads
+            .condition_variable_id_from_handle(value)
+            .is_some()
+    {
+        return prin1_bytes(value);
+    }
+    match value.kind() {
+        ValueKind::String => value
+            .as_lisp_string()
+            .map(|ls| {
+                if ls.is_multibyte() {
+                    // Already canonical Emacs internal encoding — a real
+                    // Private-Use glyph survives verbatim (issue #131).
+                    ls.as_bytes().to_vec()
+                } else {
+                    // A unibyte string's raw bytes are not a valid multibyte
+                    // sequence; promote high bytes to eight-bit characters so
+                    // the canonical-bytes consumer gets well-formed Emacs bytes.
+                    crate::emacs_core::emacs_char::str_to_multibyte(ls.as_bytes())
+                }
+            })
+            .unwrap_or_default(),
+        ValueKind::Symbol(id) => resolve_sym(id).as_bytes().to_vec(),
+        ValueKind::Veclike(VecLikeType::Buffer) => {
+            let id = value.as_buffer_id().unwrap();
+            if let Some(buf) = ctx.buffers.get(id) {
+                return buf.name_runtime_string_owned().into_bytes();
+            }
+            if ctx.buffers.dead_buffer_last_name_value(id).is_some() {
+                return b"#<killed buffer>".to_vec();
+            }
+            prin1_bytes(value)
+        }
+        ValueKind::Cons => {
+            if let Some(shorthand) =
+                print_value_princ_bytes_list_shorthand(value, print_quoted, &|item| {
+                    print_value_princ_bytes(ctx, item)
+                })
+            {
+                return shorthand;
+            }
+            let mut out = vec![b'('];
+            let mut cursor = *value;
+            let mut first = true;
+            loop {
+                match cursor.kind() {
+                    ValueKind::Cons => {
+                        if !first {
+                            out.push(b' ');
+                        }
+                        let pair_car = cursor.cons_car();
+                        let pair_cdr = cursor.cons_cdr();
+                        out.extend_from_slice(&print_value_princ_bytes(ctx, &pair_car));
+                        cursor = pair_cdr;
+                        first = false;
+                    }
+                    ValueKind::Nil => break,
+                    _other => {
+                        if !first {
+                            out.extend_from_slice(b" . ");
+                        }
+                        out.extend_from_slice(&print_value_princ_bytes(ctx, &cursor));
+                        break;
+                    }
+                }
+            }
+            out.push(b')');
+            out
+        }
+        ValueKind::Veclike(VecLikeType::Vector) => {
+            if super::chartable::bool_vector_length(value).is_some() {
+                return prin1_bytes(value);
+            }
+            let items = value.as_vector_data().unwrap().clone();
+            let mut out = vec![b'['];
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(b' ');
+                }
+                out.extend_from_slice(&print_value_princ_bytes(ctx, item));
+            }
+            out.push(b']');
+            out
+        }
+        ValueKind::Veclike(VecLikeType::Record) => {
+            let items = value.as_record_data().unwrap().clone();
+            let mut out = b"#s(".to_vec();
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(b' ');
+                }
+                out.extend_from_slice(&print_value_princ_bytes(ctx, item));
+            }
+            out.push(b')');
+            out
+        }
+        _other => prin1_bytes(value),
+    }
+}
+
+/// Byte-faithful sibling of [`print_value_princ_list_shorthand`].
+fn print_value_princ_bytes_list_shorthand(
+    value: &Value,
+    print_quoted: bool,
+    render: &dyn Fn(&Value) -> Vec<u8>,
+) -> Option<Vec<u8>> {
+    if !print_quoted {
+        return None;
+    }
+
+    let items = super::value::list_to_vec(value)?;
+    if items.len() != 2 {
+        return None;
+    }
+
+    let head = match items[0].kind() {
+        ValueKind::Symbol(id) => resolve_sym(id),
+        _ => return None,
+    };
+    let prefix: &[u8] = match head {
+        "quote" => b"'",
+        "function" => b"#'",
+        "`" => b"`",
+        "," => b",",
+        ",@" => b",@",
+        _ => return None,
+    };
+    let mut out = prefix.to_vec();
+    out.extend_from_slice(&render(&items[1]));
+    Some(out)
+}
+
 pub(super) fn print_value_princ_eval(eval: &super::eval::Context, value: &Value) -> String {
     print_value_princ_in_state(eval, value)
 }
@@ -1930,11 +2108,11 @@ pub(crate) fn builtin_princ(eval: &mut super::eval::Context, args: Vec<Value>) -
         return builtin_princ_impl(eval, args);
     }
 
-    let text = print_value_princ_in_state(eval, &args[0]);
+    let bytes = print_value_princ_bytes(eval, &args[0]);
     let roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(target);
     let princ_result =
-        dispatch_print_callback_chars(&text, |ch| eval.apply(target, vec![ch]).map(|_| ()));
+        dispatch_print_callback_emacs_chars(&bytes, |ch| eval.apply(target, vec![ch]).map(|_| ()));
     eval.restore_specpdl_roots(roots);
     princ_result?;
     Ok(args[0])
@@ -1945,18 +2123,12 @@ pub(crate) fn builtin_princ_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("princ", &args, 1)?;
-    let text = print_value_princ_in_state(ctx, &args[0]);
-    // Issue #131: when the printed value contains only real Unicode characters
-    // (the common case, including nerd-font glyphs), its `princ` text is real
-    // Emacs bytes and must be inserted verbatim, not decoded through the
-    // storage-string sink that would mistake a Private-Use glyph for a raw byte.
-    // Values carrying genuine eight-bit/non-Unicode content keep the storage
-    // path, where those sentinels decode correctly.
-    if super::strings::value_render_pure_unicode(args[0], 0) {
-        write_print_bytes_from_ctx(ctx, args.get(1), text.as_bytes())?;
-    } else {
-        write_print_output_from_ctx(ctx, args.get(1), &text)?;
-    }
+    // Issue #131: emit canonical Emacs bytes directly. A real Private-Use glyph
+    // is inserted as itself, while genuine eight-bit / non-Unicode content is
+    // carried as its disjoint extended encoding — neither is ever mistaken for
+    // the other, retiring the storage-string sink princ used to fall back to.
+    let bytes = print_value_princ_bytes(ctx, &args[0]);
+    write_print_bytes_from_ctx(ctx, args.get(1), &bytes)?;
     Ok(args[0])
 }
 

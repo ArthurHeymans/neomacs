@@ -5766,8 +5766,8 @@ impl<'a> Vm<'a> {
         if crate::emacs_core::builtins::print_target_is_direct(target) {
             return crate::emacs_core::builtins::builtin_princ_impl(&mut *self.ctx, args.to_vec());
         }
-        let text = crate::emacs_core::builtins::print_value_princ_in_state(&*self.ctx, &args[0]);
-        crate::emacs_core::builtins::dispatch_print_callback_chars(&text, |ch| {
+        let bytes = crate::emacs_core::builtins::print_value_princ_bytes(&*self.ctx, &args[0]);
+        crate::emacs_core::builtins::dispatch_print_callback_emacs_chars(&bytes, |ch| {
             self.call_function_with_roots(target, &[ch]).map(|_| ())
         })?;
         Ok(args[0])
