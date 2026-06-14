@@ -33,7 +33,6 @@ use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphTy
 use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
-use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
     ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
@@ -42,6 +41,7 @@ use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
+use neovm_core::emacs_core::{Context, Value};
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorSnapshot, WindowVisibleBufferSpan,

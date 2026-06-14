@@ -94,6 +94,14 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
 }
 
 #[test]
+fn window_chrome_target_cols_reserves_right_border_column() {
+    assert_eq!(window_chrome_target_cols(80.0, 8.0, false), 10);
+    assert_eq!(window_chrome_target_cols(80.0, 8.0, true), 9);
+    assert_eq!(window_chrome_target_cols(3.0, 8.0, true), 1);
+    assert_eq!(window_chrome_target_cols(80.0, 0.0, false), 80);
+}
+
+#[test]
 fn echo_minibuffer_source_row_request_builds_session_row_request() {
     let _eval = Context::new();
     let mut base_face = ResolvedFace::default();
