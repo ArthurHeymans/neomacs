@@ -61,15 +61,14 @@ use crate::display_row_append::{
     BufferDisplayPropertyTextRenderContext, BufferHscrollSkipSourceChar,
     BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
-    BufferSelectiveDisplayLineTailAction, BufferSyntheticTextRenderContext,
-    BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
-    BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
-    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, BufferTextSpecialWrapSourceAction,
-    BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
-    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState, SyntheticTextMarker,
-    TextWindowAppendSurfaceRequest,
+    BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
+    BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
+    BufferTextSpecialWrapSourceAction, BufferTextTruncationSkipAction,
+    BufferTextWordWrapSourceAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
+    DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
+    SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2217,18 +2216,21 @@ impl LayoutEngine {
                         ),
                         &mut col,
                     );
-                    if row_transition.is_exhausted() {
+                    if hscroll_action
+                        .apply_after_line_break_row_transition(
+                            row_transition,
+                            &mut cursor_info,
+                            &active_face_state,
+                            &row_geometry,
+                            point_charpos,
+                            x,
+                            col,
+                            char_h,
+                        )
+                        .should_break()
+                    {
                         break;
                     }
-                    hscroll_action.capture_line_break_cursor_if_point(
-                        &mut cursor_info,
-                        &active_face_state,
-                        &row_geometry,
-                        point_charpos,
-                        x,
-                        col,
-                        char_h,
-                    );
                 } else {
                     // When hscroll is exhausted, show $ indicator at left edge
                     if hscroll_action.should_show_left_truncation() {
@@ -2396,14 +2398,17 @@ impl LayoutEngine {
                         ),
                         &mut col,
                     );
-                    if row_transition.is_exhausted() {
+                    if selective_tail_action
+                        .apply_after_hidden_line_break_transition(
+                            row_transition,
+                            sync_charpos_from_byte_idx(byte_idx),
+                            &mut charpos,
+                            &mut hit_row_range,
+                        )
+                        .should_break()
+                    {
                         break;
                     }
-                    BufferSelectiveDisplayLineTailAction::sync_after_hidden_line_break_transition(
-                        sync_charpos_from_byte_idx(byte_idx),
-                        &mut charpos,
-                        &mut hit_row_range,
-                    );
                 }
                 continue;
             }
@@ -2468,19 +2473,20 @@ impl LayoutEngine {
                     ),
                     &mut col,
                 );
-                if row_transition.is_exhausted() {
+                if line_break_action
+                    .apply_after_line_break_row_transition(
+                        row_transition,
+                        sync_charpos_from_byte_idx(byte_idx),
+                        &mut charpos,
+                        &mut hit_row_range,
+                        &row_geometry,
+                        &mut box_face,
+                        content_x,
+                    )
+                    .should_break()
+                {
                     break;
                 }
-                BufferTextLineBreakSourceAction::sync_after_row_transition(
-                    sync_charpos_from_byte_idx(byte_idx),
-                    &mut charpos,
-                    &mut hit_row_range,
-                );
-                line_break_action.apply_after_row_transition(
-                    &row_geometry,
-                    &mut box_face,
-                    content_x,
-                );
                 // Selective display: skip lines indented beyond threshold
                 let selective_display_context =
                     BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
@@ -2577,14 +2583,17 @@ impl LayoutEngine {
                                     ),
                                     &mut col,
                                 );
-                                if row_transition.is_exhausted() {
+                                if truncation_skip
+                                    .sync_after_row_transition_if_visible(
+                                        row_transition,
+                                        sync_charpos_from_byte_idx(byte_idx),
+                                        &mut charpos,
+                                        &mut hit_row_range,
+                                    )
+                                    .should_break()
+                                {
                                     break;
                                 }
-                                BufferTextTruncationSkipAction::sync_after_row_transition(
-                                    sync_charpos_from_byte_idx(byte_idx),
-                                    &mut charpos,
-                                    &mut hit_row_range,
-                                );
                                 continue;
                             }
                             BufferTextSpecialSourceCharOverflowAction::Wrap { transition } => {
@@ -2717,7 +2726,10 @@ impl LayoutEngine {
                         ),
                         &mut col,
                     );
-                    if row_transition.is_exhausted() {
+                    if truncation_skip
+                        .transition_continuation(row_transition)
+                        .should_break()
+                    {
                         break;
                     }
                     continue;

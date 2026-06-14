@@ -812,6 +812,56 @@ fn buffer_hscroll_skip_action_captures_line_break_cursor() {
 }
 
 #[test]
+fn buffer_hscroll_skip_action_applies_after_line_break_transition() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferHscrollSkipAction::LineBreak {
+        ch_start_byte_idx: 3,
+        charpos: 12,
+    };
+    let mut cursor = CursorCaptureState::new();
+
+    let continuation = action.apply_after_line_break_row_transition(
+        TextMatrixRowTransition::BeganNextRow,
+        &mut cursor,
+        &active_face,
+        &geometry,
+        12,
+        32.0,
+        4,
+        16.0,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
+    assert!(cursor.as_ref().is_some());
+}
+
+#[test]
+fn buffer_hscroll_skip_action_skips_after_state_when_transition_exhausted() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferHscrollSkipAction::LineBreak {
+        ch_start_byte_idx: 3,
+        charpos: 12,
+    };
+    let mut cursor = CursorCaptureState::new();
+
+    let continuation = action.apply_after_line_break_row_transition(
+        TextMatrixRowTransition::ExhaustedRows,
+        &mut cursor,
+        &active_face,
+        &geometry,
+        12,
+        32.0,
+        4,
+        16.0,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
+    assert!(cursor.as_ref().is_none());
+}
+
+#[test]
 fn buffer_hscroll_skip_action_captures_text_cursor() {
     let active_face = test_active_face_state(9, 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
@@ -1239,6 +1289,70 @@ fn buffer_text_line_break_source_action_syncs_after_transition() {
 }
 
 #[test]
+fn buffer_text_line_break_source_action_applies_after_transition() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let mut box_face = BoxFaceRowState::inactive();
+    box_face.activate(geometry.current_row_marker(), 8.0);
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(3);
+
+    let continuation = action.apply_after_line_break_row_transition(
+        TextMatrixRowTransition::BeganNextRow,
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+        &geometry,
+        &mut box_face,
+        2.0,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
+    assert_eq!(charpos, 14);
+    assert_eq!(hit_row_range.start(), 14);
+    assert_eq!(box_face.row(), geometry.current_row_marker());
+    assert_eq!(box_face.start_x(), Some(2.0));
+}
+
+#[test]
+fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhausted() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(3);
+
+    let continuation = action.apply_after_line_break_row_transition(
+        TextMatrixRowTransition::ExhaustedRows,
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+        &geometry,
+        &mut box_face,
+        2.0,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
+    assert_eq!(charpos, 9);
+    assert_eq!(hit_row_range.start(), 3);
+    assert_eq!(box_face.start_x(), None);
+}
+
+#[test]
 fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_transition() {
     let mut charpos = 9;
     let mut hit_row_range = HitRowRangeTracker::new(3);
@@ -1251,6 +1365,42 @@ fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_trans
 
     assert_eq!(charpos, 14);
     assert_eq!(hit_row_range.start(), 14);
+}
+
+#[test]
+fn buffer_selective_display_line_tail_action_applies_after_hidden_line_break_transition() {
+    let action = BufferSelectiveDisplayLineTailAction::LineBreak { charpos: 12 };
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(3);
+
+    let continuation = action.apply_after_hidden_line_break_transition(
+        TextMatrixRowTransition::BeganNextRow,
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
+    assert_eq!(charpos, 14);
+    assert_eq!(hit_row_range.start(), 14);
+}
+
+#[test]
+fn buffer_selective_display_line_tail_action_skips_after_state_when_transition_exhausted() {
+    let action = BufferSelectiveDisplayLineTailAction::LineBreak { charpos: 12 };
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(3);
+
+    let continuation = action.apply_after_hidden_line_break_transition(
+        TextMatrixRowTransition::ExhaustedRows,
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
+    assert_eq!(charpos, 9);
+    assert_eq!(hit_row_range.start(), 3);
 }
 
 #[test]
@@ -1342,6 +1492,65 @@ fn buffer_text_truncation_skip_action_syncs_after_transition() {
 
     assert_eq!(charpos, 14);
     assert_eq!(hit_row_range.start(), 14);
+}
+
+#[test]
+fn buffer_text_truncation_skip_action_reports_transition_continuation() {
+    let action = BufferTextTruncationSkipAction {
+        charpos: 12,
+        reached_line_break: false,
+    };
+
+    assert_eq!(
+        action.transition_continuation(TextMatrixRowTransition::BeganNextRow),
+        DisplayRowTransitionContinuation::Continue
+    );
+    assert_eq!(
+        action.transition_continuation(TextMatrixRowTransition::ExhaustedRows),
+        DisplayRowTransitionContinuation::Exhausted
+    );
+}
+
+#[test]
+fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
+    let action = BufferTextTruncationSkipAction {
+        charpos: 12,
+        reached_line_break: true,
+    };
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(2);
+
+    let continuation = action.sync_after_row_transition_if_visible(
+        TextMatrixRowTransition::BeganNextRow,
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
+    assert_eq!(charpos, 14);
+    assert_eq!(hit_row_range.start(), 14);
+}
+
+#[test]
+fn buffer_text_truncation_skip_action_skips_sync_when_transition_exhausted() {
+    let action = BufferTextTruncationSkipAction {
+        charpos: 12,
+        reached_line_break: true,
+    };
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(2);
+
+    let continuation = action.sync_after_row_transition_if_visible(
+        TextMatrixRowTransition::ExhaustedRows,
+        14,
+        &mut charpos,
+        &mut hit_row_range,
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
+    assert_eq!(charpos, 9);
+    assert_eq!(hit_row_range.start(), 2);
 }
 
 #[test]

@@ -4290,6 +4290,32 @@ impl BufferHscrollSkipAction {
         );
     }
 
+    pub(crate) fn apply_after_line_break_row_transition(
+        self,
+        row_transition: TextMatrixRowTransition,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+        x: f32,
+        col: usize,
+        char_h: f32,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        self.capture_line_break_cursor_if_point(
+            target,
+            active_face_state,
+            row_geometry,
+            point_charpos,
+            x,
+            col,
+            char_h,
+        );
+        DisplayRowTransitionContinuation::Continue
+    }
+
     pub(crate) fn capture_text_cursor_if_point(
         self,
         target: &mut CursorCaptureState,
@@ -4543,6 +4569,20 @@ impl BufferSelectiveDisplayLineTailAction {
         hit_row_range.advance_to(*charpos);
     }
 
+    pub(crate) fn apply_after_hidden_line_break_transition(
+        self,
+        row_transition: TextMatrixRowTransition,
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        Self::sync_after_hidden_line_break_transition(synced_charpos, charpos, hit_row_range);
+        DisplayRowTransitionContinuation::Continue
+    }
+
     #[cfg(test)]
     pub(crate) fn charpos(self) -> Option<i64> {
         match self {
@@ -4768,6 +4808,24 @@ impl BufferTextLineBreakSourceAction {
         box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
     }
 
+    pub(crate) fn apply_after_line_break_row_transition(
+        self,
+        row_transition: TextMatrixRowTransition,
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        row_geometry: &DisplayRowGeometryState,
+        box_face: &mut BoxFaceRowState,
+        content_x: f32,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        Self::sync_after_row_transition(synced_charpos, charpos, hit_row_range);
+        self.apply_after_row_transition(row_geometry, box_face, content_x);
+        DisplayRowTransitionContinuation::Continue
+    }
+
     pub(crate) fn sync_after_row_transition(
         synced_charpos: i64,
         charpos: &mut i64,
@@ -4845,6 +4903,31 @@ impl BufferTextTruncationSkipAction {
     ) {
         *charpos = synced_charpos;
         hit_row_range.advance_to(*charpos);
+    }
+
+    pub(crate) fn transition_continuation(
+        self,
+        row_transition: TextMatrixRowTransition,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            DisplayRowTransitionContinuation::Exhausted
+        } else {
+            DisplayRowTransitionContinuation::Continue
+        }
+    }
+
+    pub(crate) fn sync_after_row_transition_if_visible(
+        self,
+        row_transition: TextMatrixRowTransition,
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        Self::sync_after_row_transition(synced_charpos, charpos, hit_row_range);
+        DisplayRowTransitionContinuation::Continue
     }
 }
 
