@@ -2887,6 +2887,40 @@ pub(crate) struct DisplayRowRenderer<'metrics> {
     font_metrics: &'metrics mut Option<FontMetricsService>,
 }
 
+pub(crate) struct DisplayRowRenderExecutor<'metrics, 'context, 'ids> {
+    renderer: DisplayRowRenderer<'metrics>,
+    context: DisplayRowRenderContext<'context, 'ids>,
+}
+
+impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids> {
+    pub(crate) fn new(
+        font_metrics: &'metrics mut Option<FontMetricsService>,
+        face_resolver: &'context FaceResolver,
+        display_host: Option<&'context dyn DisplayHost>,
+        face_ids: &'ids mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            renderer: DisplayRowRenderer::new(font_metrics),
+            context: DisplayRowRenderContext::new(face_resolver, display_host, face_ids),
+        }
+    }
+
+    pub(crate) fn render_lisp_string_request(
+        &mut self,
+        request: DisplayRowLispStringRenderRequest<'_>,
+    ) -> Option<RenderedDisplayRow> {
+        request.render_with_context(&mut self.renderer, &mut self.context)
+    }
+
+    pub(crate) fn render_lisp_string_session_row(
+        &mut self,
+        session: &mut DisplayRowLispStringSourceSession,
+        request: DisplayRowLispStringSourceSessionRowRequest<'_>,
+    ) -> Option<DisplayRowRenderResult> {
+        session.render_next_row_with_context(&mut self.renderer, request, &mut self.context)
+    }
+}
+
 impl<'metrics> DisplayRowRenderer<'metrics> {
     pub(crate) fn new(font_metrics: &'metrics mut Option<FontMetricsService>) -> Self {
         Self { font_metrics }

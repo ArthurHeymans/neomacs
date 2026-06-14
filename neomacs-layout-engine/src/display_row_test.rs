@@ -2514,6 +2514,78 @@ fn display_row_lisp_string_render_request_uses_render_context() {
 }
 
 #[test]
+fn display_row_render_executor_renders_lisp_string_request() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let base_face = resolver.default_face().clone();
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let request = display_row_request_from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut face_ids,
+        &base_face,
+        GlyphRowRole::TabBar,
+        std::collections::HashMap::new(),
+    );
+    let mut executor =
+        DisplayRowRenderExecutor::new(&mut font_metrics, &resolver, None, &mut face_ids);
+
+    let rendered = executor
+        .render_lisp_string_request(DisplayRowLispStringRenderRequest::new(
+            request,
+            Value::string("exec"),
+        ))
+        .expect("executor rendered lisp string row");
+
+    assert_eq!(rendered.row.role, GlyphRowRole::TabBar);
+    assert_eq!(row_text_expanding_stretches(&rendered.row), "exec");
+}
+
+#[test]
+fn display_row_render_executor_renders_lisp_string_session_rows() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
+        Value::string("one\ntwo"),
+        &mut face_ids,
+        resolver.default_face(),
+    );
+    let mut session =
+        DisplayRowLispStringSourceSession::new(session_request).expect("lisp string session");
+    let row_policy = DisplayRowSourceRequestPolicy::new(
+        0.0,
+        240.0,
+        16.0,
+        8.0,
+        12.0,
+        crate::display_row_builder::DisplayTabPolicy::every(8),
+        GlyphRowRole::Minibuffer,
+    );
+    let row_request = session.row_request(row_policy, resolver.default_face());
+    let mut executor =
+        DisplayRowRenderExecutor::new(&mut font_metrics, &resolver, None, &mut face_ids);
+
+    let result = executor
+        .render_lisp_string_session_row(&mut session, row_request)
+        .expect("executor rendered session row");
+
+    assert_eq!(result.stop, DisplayRowRenderStop::RowBreak);
+    assert_eq!(result.rendered.row.role, GlyphRowRole::Minibuffer);
+    assert_eq!(row_text_expanding_stretches(&result.rendered.row), "one");
+}
+
+#[test]
 fn display_row_tab_line_wide_char_uses_shared_wide_glyph() {
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("A中B"), GlyphRowRole::TabLine);

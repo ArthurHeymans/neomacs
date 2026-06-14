@@ -23,9 +23,9 @@ use crate::display_item::{
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
     DisplayRowLispStringSourceSessionRequest, DisplayRowLispStringSourceSessionRowRequest,
-    DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
-    DisplayRowSourceRequestPolicy, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind, install_measured_frame_chrome_row, install_measured_window_display_row,
+    DisplayRowOwner, DisplayRowRenderExecutor, DisplayRowRenderStop, DisplayRowSourceRequestPolicy,
+    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
+    install_measured_frame_chrome_row, install_measured_window_display_row,
     install_rendered_display_row,
 };
 pub(crate) use crate::display_row::{
@@ -954,15 +954,13 @@ impl LayoutEngine {
         let parts = request.into_render_parts(face_ids);
         let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
         output_emitter.begin_chrome_progress(evaluator, parts.output);
-        let mut render_context = DisplayRowRenderContext::new(
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut self.font_metrics,
             face_resolver,
             evaluator.display_host.as_deref(),
             face_ids,
         );
-        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
-        let rendered_row = parts
-            .render_request
-            .render_with_context(&mut renderer, &mut render_context);
+        let rendered_row = render_executor.render_lisp_string_request(parts.render_request);
         let measured_row = rendered_row.map(|rendered| {
             MeasuredDisplayRow::new(
                 parts.owner,
@@ -1152,10 +1150,13 @@ impl LayoutEngine {
         request: FrameTabBarDisplayRowRequest<'_>,
     ) -> Option<FrameTabBarDisplayRowRender> {
         let render_request = request.render_request(face_ids);
-        let mut render_context =
-            DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
-        let rendered = render_request.render_with_context(&mut renderer, &mut render_context)?;
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut self.font_metrics,
+            face_resolver,
+            display_host,
+            face_ids,
+        );
+        let rendered = render_executor.render_lisp_string_request(render_request)?;
         if display_row_text_is_empty(&rendered.row) {
             return Some(FrameTabBarDisplayRowRender::Empty);
         }
@@ -1195,11 +1196,14 @@ impl LayoutEngine {
             request.selected,
         );
         let render_request = request.render_request(face_ids);
-        let mut render_context =
-            DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
-        let rendered = render_request
-            .render_with_context(&mut renderer, &mut render_context)
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut self.font_metrics,
+            face_resolver,
+            display_host,
+            face_ids,
+        );
+        let rendered = render_executor
+            .render_lisp_string_request(render_request)
             .expect("empty Lisp string should render an inactive minibuffer row");
         install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
         self.matrix_builder.end_window();
@@ -1270,9 +1274,12 @@ impl LayoutEngine {
         else {
             return empty_minibuffer_echo_row(request.y, request.ascent, request.row_height);
         };
-        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
-        let mut render_context =
-            DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut self.font_metrics,
+            face_resolver,
+            display_host,
+            face_ids,
+        );
 
         let mut rows = Vec::new();
         let max_rows = request.max_rows();
@@ -1280,11 +1287,9 @@ impl LayoutEngine {
             let row_request = request
                 .source_row_request(rows.len(), wrap_width)
                 .source_session_row_request(&source_session);
-            let Some(result) = source_session.render_next_row_with_context(
-                &mut renderer,
-                row_request,
-                &mut render_context,
-            ) else {
+            let Some(result) =
+                render_executor.render_lisp_string_session_row(&mut source_session, row_request)
+            else {
                 break;
             };
             let stop = result.stop;
