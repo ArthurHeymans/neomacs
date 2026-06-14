@@ -21,7 +21,8 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest, BufferTextWindowWalkSetup,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -63,17 +64,17 @@ use crate::display_row_append::{
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
     BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
-    BufferTextWindowBeginRequest, BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixValues,
+    BufferTextWindowBeginState, BufferTextWindowBodyInstallState,
+    BufferTextWindowCursorEffectsRequest, BufferTextWindowFinishRequest,
+    BufferTextWindowFinishState, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryRequest,
+    DisplayRowPrefixValues,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
     display_row_text_glyph_count, new_display_row,
 };
-use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowLimit, DisplayRowVisibilityLimit};
+use crate::display_row_geometry::DisplayRowFlagKind;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
@@ -1171,6 +1172,52 @@ impl LayoutEngine {
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
+        let walk_setup = BufferTextWindowWalkSetupRequest::new(
+            window_start,
+            content_x,
+            text_x,
+            text_width,
+            text_y,
+            params.bounds.y,
+            lnum_pixel_width,
+            max_rows,
+            char_w,
+            char_h,
+            default_face_ascent,
+            params.truncate_lines,
+            params.hscroll,
+            params.word_wrap,
+            has_prefix,
+            prefix_values.has_line_default_prefix(),
+            reserve_right_border_col,
+            reserve_right_special_col,
+            params.tab_width,
+            &params.tab_stop_list,
+            params.show_trailing_whitespace,
+            params.trailing_ws_bg,
+        )
+        .into_setup();
+        let BufferTextWindowOutputSetup {
+            begin_request,
+            row_visibility_limit,
+            row_limit,
+            body_install_context,
+            retry_bounds,
+        } = BufferTextWindowOutputSetupRequest::new(
+            frame_id,
+            window_id,
+            params.window_id as u64,
+            text_matrix_row_base,
+            text_matrix_rows,
+            bottom_chrome_rows,
+            cols,
+            params.bounds,
+            params.text_bounds,
+            params.selected,
+            text_y,
+            text_height,
+        )
+        .into_setup(max_rows, &walk_setup);
         let BufferTextWindowWalkSetup {
             mut x,
             mut col,
@@ -1196,31 +1243,7 @@ impl LayoutEngine {
             mut cursor_info,
             mut hit_rows,
             mut hit_row_range,
-        } = BufferTextWindowWalkSetupRequest::new(
-            window_start,
-            content_x,
-            text_x,
-            text_width,
-            text_y,
-            params.bounds.y,
-            lnum_pixel_width,
-            max_rows,
-            char_w,
-            char_h,
-            default_face_ascent,
-            params.truncate_lines,
-            params.hscroll,
-            params.word_wrap,
-            has_prefix,
-            prefix_values.has_line_default_prefix(),
-            reserve_right_border_col,
-            reserve_right_special_col,
-            params.tab_width,
-            &params.tab_stop_list,
-            params.show_trailing_whitespace,
-            params.trailing_ws_bg,
-        )
-        .into_setup();
+        } = walk_setup;
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
@@ -1254,33 +1277,10 @@ impl LayoutEngine {
             max_rows,
         );
 
-        // --- GlyphMatrix builder: begin window and first row ---
-        let matrix_rows = text_matrix_row_base + text_matrix_rows + bottom_chrome_rows;
-        let matrix_cols = cols.max(1);
-        let mut output_emitter = BufferTextWindowBeginRequest::new(
-            frame_id,
-            window_id,
-            text_matrix_row_base,
-            text_area_left,
-            window_top,
-            params.window_id as u64,
-            matrix_rows,
-            matrix_cols,
-            params.bounds,
-            params.text_bounds,
-            params.selected,
-            row_geometry.text_matrix_row_begin(text_matrix_row_base, col, x),
-        )
-        .begin_and_apply(BufferTextWindowBeginState {
+        let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState {
             builder: &mut self.matrix_builder,
             evaluator,
         });
-
-        let row_visibility_limit = DisplayRowVisibilityLimit {
-            max_rows,
-            bottom_y: text_y + text_height,
-        };
-        let row_limit = DisplayRowLimit { max_rows };
 
         while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
             BufferLineNumberMarginRenderRequest::new(
@@ -1775,8 +1775,6 @@ impl LayoutEngine {
         // from this pass rather than rescanning by logical newlines, since
         // wrapped and variable-height lines are exactly where newline-based
         // retry selection goes wrong.
-        let text_area_top = (text_y - window_top).round() as i64;
-        let text_area_bottom = (text_y + text_height - window_top).round() as i64;
         let retry_outcome = BufferTextWindowVisibilityRetryRequest::new(
             output_emitter.rows(),
             window_start,
@@ -1786,8 +1784,8 @@ impl LayoutEngine {
             charpos,
             point_is_visible_eob,
             params.is_minibuffer,
-            text_area_top,
-            text_area_bottom,
+            retry_bounds.text_area_top,
+            retry_bounds.text_area_bottom,
             &buf_access,
         )
         .decide();
@@ -1805,8 +1803,8 @@ impl LayoutEngine {
             tracing::debug!(
                 "layout_window_rust: point={} row partially visible within {}..{}, new_window_start={:?}",
                 point_charpos,
-                text_area_top,
-                text_area_bottom,
+                retry_bounds.text_area_top,
+                retry_bounds.text_area_bottom,
                 retry_outcome.point_row_window_start()
             );
         }
@@ -1856,23 +1854,20 @@ impl LayoutEngine {
             return;
         }
 
-        let redisplay_positions = BufferTextWindowBodyInstallRequest::new(
-            params.window_id as u64,
-            window_start,
-            text_start_byte,
-            byte_idx,
-            reserve_right_special_col,
-            reserve_right_border_col,
-            text_matrix_row_base,
-            matrix_cols,
-            &row_flags,
-            0,
-            char_w,
-        )
-        .install_and_apply(BufferTextWindowBodyInstallState {
-            builder: &mut self.matrix_builder,
-            output_emitter: &output_emitter,
-        });
+        let redisplay_positions = body_install_context
+            .request(
+                window_start,
+                text_start_byte,
+                byte_idx,
+                reserve_right_special_col,
+                reserve_right_border_col,
+                &row_flags,
+                char_w,
+            )
+            .install_and_apply(BufferTextWindowBodyInstallState {
+                builder: &mut self.matrix_builder,
+                output_emitter: &output_emitter,
+            });
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",

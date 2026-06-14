@@ -1,17 +1,19 @@
 use crate::display_cursor::CursorCaptureState;
 use crate::display_row_append::{
-    BufferTextRowAppendState, DisplayRowPrefixRequest, TextWindowAppendSurfaceRequest,
+    BufferTextRowAppendState, BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRequest,
+    DisplayRowPrefixRequest, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_geometry::{
-    DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowScopedValue,
-    DisplayRowYPositions,
+    DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit,
+    DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::hit_test::HitRow;
-use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::{Color, Rect};
+use neovm_core::window::{FrameId, WindowId};
 
 pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
     window_start: i64,
@@ -63,6 +65,42 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) cursor_info: CursorCaptureState,
     pub(crate) hit_rows: Vec<HitRow>,
     pub(crate) hit_row_range: HitRowRangeTracker,
+}
+
+pub(crate) struct BufferTextWindowOutputSetupRequest {
+    frame_id: FrameId,
+    window_id: WindowId,
+    matrix_window_id: u64,
+    text_matrix_row_base: usize,
+    text_matrix_rows: usize,
+    bottom_chrome_rows: usize,
+    cols: usize,
+    bounds: Rect,
+    text_bounds: Rect,
+    selected: bool,
+    text_y: f32,
+    text_height: f32,
+}
+
+pub(crate) struct BufferTextWindowOutputSetup {
+    pub(crate) begin_request: BufferTextWindowBeginRequest,
+    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
+    pub(crate) row_limit: DisplayRowLimit,
+    pub(crate) body_install_context: BufferTextWindowBodyInstallContext,
+    pub(crate) retry_bounds: BufferTextWindowRetryBounds,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextWindowBodyInstallContext {
+    matrix_window_id: u64,
+    text_matrix_row_base: usize,
+    matrix_cols: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowRetryBounds {
+    pub(crate) text_area_top: i64,
+    pub(crate) text_area_bottom: i64,
 }
 
 impl<'a> BufferTextWindowWalkSetupRequest<'a> {
@@ -169,6 +207,114 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             hit_rows: Vec::new(),
             hit_row_range: HitRowRangeTracker::new(self.window_start),
         }
+    }
+}
+
+impl BufferTextWindowOutputSetupRequest {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        frame_id: FrameId,
+        window_id: WindowId,
+        matrix_window_id: u64,
+        text_matrix_row_base: usize,
+        text_matrix_rows: usize,
+        bottom_chrome_rows: usize,
+        cols: usize,
+        bounds: Rect,
+        text_bounds: Rect,
+        selected: bool,
+        text_y: f32,
+        text_height: f32,
+    ) -> Self {
+        Self {
+            frame_id,
+            window_id,
+            matrix_window_id,
+            text_matrix_row_base,
+            text_matrix_rows,
+            bottom_chrome_rows,
+            cols,
+            bounds,
+            text_bounds,
+            selected,
+            text_y,
+            text_height,
+        }
+    }
+
+    pub(crate) fn into_setup(
+        self,
+        max_rows: usize,
+        walk_setup: &BufferTextWindowWalkSetup,
+    ) -> BufferTextWindowOutputSetup {
+        let matrix_cols = self.cols.max(1);
+        BufferTextWindowOutputSetup {
+            begin_request: BufferTextWindowBeginRequest::new(
+                self.frame_id,
+                self.window_id,
+                self.text_matrix_row_base,
+                walk_setup.text_area_left,
+                walk_setup.window_top,
+                self.matrix_window_id,
+                self.text_matrix_row_base + self.text_matrix_rows + self.bottom_chrome_rows,
+                matrix_cols,
+                self.bounds,
+                self.text_bounds,
+                self.selected,
+                walk_setup.row_geometry.text_matrix_row_begin(
+                    self.text_matrix_row_base,
+                    walk_setup.col,
+                    walk_setup.x,
+                ),
+            ),
+            row_visibility_limit: DisplayRowVisibilityLimit {
+                max_rows,
+                bottom_y: self.text_y + self.text_height,
+            },
+            row_limit: DisplayRowLimit { max_rows },
+            body_install_context: BufferTextWindowBodyInstallContext {
+                matrix_window_id: self.matrix_window_id,
+                text_matrix_row_base: self.text_matrix_row_base,
+                matrix_cols,
+            },
+            retry_bounds: BufferTextWindowRetryBounds {
+                text_area_top: (self.text_y - walk_setup.window_top).round() as i64,
+                text_area_bottom: (self.text_y + self.text_height - walk_setup.window_top).round()
+                    as i64,
+            },
+        }
+    }
+}
+
+impl BufferTextWindowBodyInstallContext {
+    pub(crate) fn request(
+        self,
+        window_start: i64,
+        text_start_byte: usize,
+        byte_idx: usize,
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        row_flags: &DisplayRowFlags,
+        char_width: f32,
+    ) -> BufferTextWindowBodyInstallRequest<'_> {
+        BufferTextWindowBodyInstallRequest::new(
+            self.matrix_window_id,
+            window_start,
+            text_start_byte,
+            byte_idx,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            self.text_matrix_row_base,
+            self.matrix_cols,
+            row_flags,
+            0,
+            char_width,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn matrix_cols(self) -> usize {
+        self.matrix_cols
     }
 }
 

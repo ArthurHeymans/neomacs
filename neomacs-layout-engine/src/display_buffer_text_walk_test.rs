@@ -1,4 +1,6 @@
 use super::*;
+use neomacs_display_protocol::types::Rect;
+use neovm_core::window::{FrameId, WindowId};
 
 fn setup_request() -> BufferTextWindowWalkSetupRequest<'static> {
     BufferTextWindowWalkSetupRequest::new(
@@ -55,4 +57,31 @@ fn walk_setup_applies_hscroll_prefix_and_reserved_surface_policy() {
     assert_eq!(setup.text_append_surface.content_x(), 24.0);
     assert_eq!(setup.text_append_surface.right_edge(), 164.0);
     assert!(setup.trailing_whitespace.background().is_some());
+}
+
+#[test]
+fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
+    let walk_setup = setup_request().into_setup();
+    let output_setup = BufferTextWindowOutputSetupRequest::new(
+        FrameId(3),
+        WindowId(9),
+        99,
+        2,
+        6,
+        1,
+        0,
+        Rect::new(0.0, 8.0, 240.0, 120.0),
+        Rect::new(16.0, 32.0, 160.0, 80.0),
+        true,
+        32.0,
+        48.0,
+    )
+    .into_setup(5, &walk_setup);
+
+    assert_eq!(output_setup.row_visibility_limit.max_rows, 5);
+    assert_eq!(output_setup.row_visibility_limit.bottom_y, 80.0);
+    assert_eq!(output_setup.row_limit.max_rows, 5);
+    assert_eq!(output_setup.body_install_context.matrix_cols(), 1);
+    assert_eq!(output_setup.retry_bounds.text_area_top, 24);
+    assert_eq!(output_setup.retry_bounds.text_area_bottom, 72);
 }
