@@ -923,6 +923,14 @@ impl super::eval::Context {
             return WaitBlockStrategy::ProcessOutput;
         }
 
+        // Pure timeout wait (no input/process interest). Prefer a poller wait
+        // (wakeable by a process event or notify, and timeout-bounded) over a
+        // blind `std::thread::sleep`; fall back to sleeping only when no poller
+        // exists (e.g. headless/batch where poller creation failed).
+        if self.processes.has_wait_input_wakeup_backend() {
+            return WaitBlockStrategy::BackendProcesses;
+        }
+
         WaitBlockStrategy::Sleep
     }
 
