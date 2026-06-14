@@ -256,6 +256,39 @@ fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
 }
 
 #[test]
+fn display_row_line_break_transition_request_records_hit_spacing_and_emits_next_row() {
+    let mut ctx = RowTransitionTestContext::new("line-break-transition-request");
+
+    let transition = DisplayRowLineBreakTransitionRequest::new(
+        DisplayRowHitRange {
+            charpos_start: 3,
+            charpos_end: 9,
+        },
+        ctx.defaults,
+        0,
+        6,
+        48.0,
+        4.0,
+        ctx.row_y_positions.recording(),
+        4,
+    )
+    .emit(
+        &mut ctx.geometry,
+        &mut ctx.hit_rows,
+        &mut ctx.builder,
+        &mut ctx.output_emitter,
+        &mut ctx.eval,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(ctx.geometry.row(), 1);
+    assert_eq!(ctx.hit_rows.len(), 1);
+    assert_eq!(ctx.hit_rows[0].charpos_start, 3);
+    assert_eq!(ctx.hit_rows[0].charpos_end, 9);
+    assert_eq!(ctx.row_y_positions.recorded(), &[0.0, 20.0]);
+}
+
+#[test]
 fn display_row_overflow_transition_request_marks_truncated_row_and_emits_boundary() {
     let mut ctx = RowTransitionTestContext::new("overflow-truncation-request");
 

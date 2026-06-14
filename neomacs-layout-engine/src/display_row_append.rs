@@ -60,8 +60,9 @@ use crate::unicode::decode_utf8;
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
-    TextMatrixRowTransition, WindowOutputEmitter, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
+    TextMatrixRowGeometryTransition, TextMatrixRowTransition, WindowOutputEmitter,
+    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
+    finish_and_end_text_matrix_row_output,
 };
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -184,6 +185,17 @@ pub(crate) struct DisplayRowBoundaryTransitionRequest<'a> {
     max_rows: usize,
 }
 
+pub(crate) struct DisplayRowLineBreakTransitionRequest<'a> {
+    hit_range: DisplayRowHitRange,
+    defaults: DisplayRowGeometryDefaults,
+    row_base: usize,
+    col: usize,
+    x: f32,
+    line_spacing: f32,
+    row_y_recording: DisplayRowYRecording<'a>,
+    max_rows: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayRowOverflowTransitionKind {
     Truncation,
@@ -222,6 +234,69 @@ impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
             evaluator,
             geometry_transition,
             self.max_rows,
+        )
+    }
+}
+
+impl<'a> DisplayRowLineBreakTransitionRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        line_spacing: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            hit_range,
+            defaults,
+            row_base,
+            col,
+            x,
+            line_spacing,
+            row_y_recording,
+            max_rows,
+        }
+    }
+
+    fn boundary_target(self) -> DisplayRowBoundaryTarget<'a> {
+        DisplayRowBoundaryTarget::line_break(
+            self.hit_range,
+            self.defaults,
+            self.row_base,
+            self.col,
+            self.x,
+            self.line_spacing,
+            self.row_y_recording,
+        )
+    }
+
+    pub(crate) fn finish_geometry(
+        self,
+        row_geometry: &mut DisplayRowGeometryState,
+        hit_rows: &mut Vec<HitRow>,
+    ) -> TextMatrixRowGeometryTransition {
+        row_geometry.finish_boundary_and_record_hit(self.boundary_target(), hit_rows)
+    }
+
+    pub(crate) fn emit(
+        self,
+        row_geometry: &mut DisplayRowGeometryState,
+        hit_rows: &mut Vec<HitRow>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+    ) -> TextMatrixRowTransition {
+        let max_rows = self.max_rows;
+        DisplayRowBoundaryTransitionRequest::new(self.boundary_target(), max_rows).emit(
+            row_geometry,
+            hit_rows,
+            builder,
+            output_emitter,
+            evaluator,
         )
     }
 }
@@ -1005,18 +1080,17 @@ fn render_overlay_string<B: LayoutBufferView>(
 
     macro_rules! finish_overlay_string_row {
         () => {{
-            let geometry_transition = geometry.finish_boundary_and_record_hit(
-                DisplayRowBoundaryTarget::line_break(
-                    hit_row_range.range_to(anchor_charpos),
-                    row_geometry_defaults,
-                    row_context.row_base,
-                    0,
-                    content_x,
-                    0.0,
-                    DisplayRowYRecording::None,
-                ),
-                hit_rows,
-            );
+            let geometry_transition = DisplayRowLineBreakTransitionRequest::new(
+                hit_row_range.range_to(anchor_charpos),
+                row_geometry_defaults,
+                row_context.row_base,
+                0,
+                content_x,
+                0.0,
+                DisplayRowYRecording::None,
+                row_context.max_rows,
+            )
+            .finish_geometry(geometry, hit_rows);
             hit_row_range.advance_to(anchor_charpos);
             if !geometry.is_within_row_limit(row_limit) {
                 finish_and_end_text_matrix_row_output(

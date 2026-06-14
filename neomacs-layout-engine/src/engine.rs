@@ -58,7 +58,7 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayRowBoundaryTransitionRequest,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
     DisplayRowOverflowTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
     SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
@@ -66,8 +66,8 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{
-    DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
-    DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
+    DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowLimit,
+    DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
@@ -2203,16 +2203,14 @@ impl LayoutEngine {
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                     row_extend.clear();
 
-                    let boundary_request = DisplayRowBoundaryTransitionRequest::new(
-                        DisplayRowBoundaryTarget::line_break(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            0.0,
-                            row_y_positions.recording(),
-                        ),
+                    let boundary_request = DisplayRowLineBreakTransitionRequest::new(
+                        hit_row_range.range_to(charpos),
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        col,
+                        x,
+                        0.0,
+                        row_y_positions.recording(),
                         max_rows,
                     );
                     // Record hit-test row (hscroll newline)
@@ -2478,16 +2476,14 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend.clear();
                         box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
-                        let row_transition = DisplayRowBoundaryTransitionRequest::new(
-                            DisplayRowBoundaryTarget::line_break(
-                                hit_row_range.range_to(charpos),
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                0.0,
-                                row_y_positions.recording(),
-                            ),
+                        let row_transition = DisplayRowLineBreakTransitionRequest::new(
+                            hit_row_range.range_to(charpos),
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            col,
+                            x,
+                            0.0,
+                            row_y_positions.recording(),
                             max_rows,
                         )
                         .emit(
@@ -2582,16 +2578,14 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                let row_transition = DisplayRowBoundaryTransitionRequest::new(
-                    DisplayRowBoundaryTarget::line_break(
-                        hit_row_range.range_to(charpos),
-                        row_geometry_defaults,
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        line_spacing,
-                        row_y_positions.recording(),
-                    ),
+                let row_transition = DisplayRowLineBreakTransitionRequest::new(
+                    hit_row_range.range_to(charpos),
+                    row_geometry_defaults,
+                    text_matrix_row_base,
+                    col,
+                    x,
+                    line_spacing,
+                    row_y_positions.recording(),
                     max_rows,
                 )
                 .emit(
