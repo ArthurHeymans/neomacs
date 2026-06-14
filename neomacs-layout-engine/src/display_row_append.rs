@@ -75,14 +75,16 @@ use crate::unicode::{decode_utf8, is_wide_char};
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
     TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBegin,
-    TextWindowBodyOutputInstall, TextWindowLineNumberMargin, TextWindowPendingRowFinish,
-    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
-    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
-    finish_pending_text_window_row, install_text_window_body_output,
+    TextWindowBodyOutputInstall, TextWindowCursorEffects, TextWindowLineNumberMargin,
+    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
+    finish_and_end_text_matrix_row_output, finish_pending_text_window_row,
+    install_text_window_body_output, install_text_window_cursor_effects,
     mark_current_text_row_truncated_left,
 };
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
@@ -632,6 +634,11 @@ pub(crate) struct BufferTextWindowBeginRequest {
 pub(crate) struct BufferTextWindowBeginState<'a> {
     pub(crate) builder: &'a mut GlyphMatrixBuilder,
     pub(crate) evaluator: &'a mut Context,
+}
+
+pub(crate) struct BufferTextWindowCursorEffectsRequest {
+    window_id: i64,
+    effects: Option<EffectsConfig>,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
@@ -4472,6 +4479,26 @@ impl BufferTextWindowBeginRequest {
             },
         );
         output_emitter
+    }
+}
+
+impl BufferTextWindowCursorEffectsRequest {
+    pub(crate) fn new(window_id: i64, effects: Option<EffectsConfig>) -> Self {
+        Self { window_id, effects }
+    }
+
+    pub(crate) fn install_and_apply(self, builder: &mut GlyphMatrixBuilder) -> bool {
+        let Some(effects) = self.effects else {
+            return false;
+        };
+        install_text_window_cursor_effects(
+            builder,
+            TextWindowCursorEffects {
+                window_id: self.window_id,
+                effects,
+            },
+        );
+        true
     }
 }
 

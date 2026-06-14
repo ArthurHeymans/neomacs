@@ -18,10 +18,7 @@ use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
-use super::window_output::{
-    TextWindowCursorEffects, TextWindowRightBorder, install_last_window_right_border,
-    install_text_window_cursor_effects,
-};
+use super::window_output::{TextWindowRightBorder, install_last_window_right_border};
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -56,7 +53,8 @@ use crate::display_row_append::{
     BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
     BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
     BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     TextWindowAppendSurfaceRequest,
@@ -1351,15 +1349,8 @@ impl LayoutEngine {
         let accessible_end_emacs_byte = buffer.accessible_end_emacs_byte_pos().get();
 
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
-        if let Some(effects) = params.cursor_effects.clone() {
-            install_text_window_cursor_effects(
-                &mut self.matrix_builder,
-                TextWindowCursorEffects {
-                    window_id: params.window_id,
-                    effects,
-                },
-            );
-        }
+        BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
+            .install_and_apply(&mut self.matrix_builder);
 
         let char_w = params.char_width;
         let char_h = params.char_height;

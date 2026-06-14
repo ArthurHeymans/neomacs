@@ -36,6 +36,7 @@ use crate::neovm_bridge::{
     FaceResolver, LayoutBufferSnapshot, OverlayDisplayString, RustBufferAccess,
 };
 use crate::window_output::TextMatrixRowTransition;
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
@@ -5937,6 +5938,31 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
     assert_eq!(window.matrix.rows[2].pixel_y, 4.0);
     assert_eq!(window.matrix.rows[2].height_px, 17.0);
     assert_eq!(window.matrix.rows[2].ascent_px, 12.0);
+}
+
+#[test]
+fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let effects = EffectsConfig::default();
+
+    let installed = BufferTextWindowCursorEffectsRequest::new(42, Some(effects.clone()))
+        .install_and_apply(&mut builder);
+
+    assert!(installed);
+    let state = builder.finish(1, 1, 8.0, 16.0);
+    assert_eq!(state.cursor_effects_by_window.get(&42), Some(&effects));
+}
+
+#[test]
+fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+
+    let installed =
+        BufferTextWindowCursorEffectsRequest::new(42, None).install_and_apply(&mut builder);
+
+    assert!(!installed);
+    let state = builder.finish(1, 1, 8.0, 16.0);
+    assert!(!state.cursor_effects_by_window.contains_key(&42));
 }
 
 #[test]
