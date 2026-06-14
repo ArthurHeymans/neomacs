@@ -568,7 +568,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let mut resolver = BufferTextSourceAdvanceResolver::default();
+    let mut append_state = BufferTextRowAppendState::default();
     let append_context = BufferTextSourceRangeAppendContext::new(
         &snapshot,
         buf_id,
@@ -578,7 +578,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     );
 
     let resolved = append_context.resolve_source_range_advance_to_text_row(
-        &mut resolver,
+        &mut append_state,
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -613,7 +613,7 @@ fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let mut resolver = BufferTextSourceAdvanceResolver::default();
+    let mut append_state = BufferTextRowAppendState::default();
     let append_context = BufferTextSourceRangeAppendContext::new(
         &snapshot,
         buf_id,
@@ -623,7 +623,7 @@ fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
     );
 
     let resolved = append_context.resolve_source_range_advance_to_text_row(
-        &mut resolver,
+        &mut append_state,
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -661,7 +661,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let mut resolver = BufferTextSourceAdvanceResolver::default();
+    let mut append_state = BufferTextRowAppendState::default();
     let append_context = BufferTextSourceRangeAppendContext::new(
         &snapshot,
         buf_id,
@@ -671,7 +671,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     );
 
     let resolved = append_context.resolve_source_range_advance_to_text_row(
-        &mut resolver,
+        &mut append_state,
         &mut builder,
         &mut eval,
         &mut font_metrics,
@@ -2063,10 +2063,10 @@ fn buffer_text_source_append_context_appends_source_char() {
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
-    let mut advance_resolver = BufferTextSourceAdvanceResolver::default();
+    let mut append_state = BufferTextRowAppendState::default();
     let prepared_append = append_context.prepare_source_char_at(
         &geometry,
-        &mut advance_resolver,
+        &mut append_state,
         &mut builder,
         &mut eval,
         &mut font_metrics,

@@ -57,7 +57,7 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
+    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
     DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
     DisplayRowOverflowTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
@@ -1852,7 +1852,7 @@ impl LayoutEngine {
         // Exact joined-form advances for the current contextual-shaping run,
         // shaped once via shape_run and keyed by absolute byte offset (robust
         // to wrap re-processing). Empty/unused for non-complex text.
-        let mut buffer_text_advance = BufferTextSourceAdvanceResolver::default();
+        let mut buffer_text_append_state = BufferTextRowAppendState::default();
 
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
@@ -2873,7 +2873,7 @@ impl LayoutEngine {
             // from a simple per-face ASCII advance.
             let prepared_append = buffer_row_append_context.prepare_source_char_at(
                 &append_geometry,
-                &mut buffer_text_advance,
+                &mut buffer_text_append_state,
                 &mut self.matrix_builder,
                 evaluator,
                 &mut self.font_metrics,

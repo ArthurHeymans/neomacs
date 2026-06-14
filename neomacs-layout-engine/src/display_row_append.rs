@@ -68,7 +68,7 @@ use neovm_core::emacs_core::{Context, Value};
 const LISP_STRING_SOURCE_OVERLAY_STRING: u64 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ResolvedBufferTextSourceAdvance {
+struct ResolvedBufferTextSourceAdvance {
     advance_px: f32,
     append_measurement: DisplaySourceAppendMeasurement,
 }
@@ -88,7 +88,7 @@ impl ResolvedBufferTextSourceAdvance {
         }
     }
 
-    pub(crate) fn advance_px(self) -> f32 {
+    fn advance_px(self) -> f32 {
         self.advance_px
     }
 
@@ -98,8 +98,19 @@ impl ResolvedBufferTextSourceAdvance {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct BufferTextSourceAdvanceResolver {
+struct BufferTextSourceAdvanceResolver {
     complex_run: ComplexTextRunAdvanceResolver,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct BufferTextRowAppendState {
+    advance_resolver: BufferTextSourceAdvanceResolver,
+}
+
+impl BufferTextRowAppendState {
+    fn advance_resolver(&mut self) -> &mut BufferTextSourceAdvanceResolver {
+        &mut self.advance_resolver
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1862,7 +1873,7 @@ fn append_resolved_buffer_text_source_range_to_text_row<B: LayoutBufferView + ?S
 }
 
 #[cfg(test)]
-pub(crate) struct BufferTextSourceRangeAppendContext<'a, B: LayoutBufferView + ?Sized> {
+struct BufferTextSourceRangeAppendContext<'a, B: LayoutBufferView + ?Sized> {
     buffer: &'a B,
     buffer_id: BufferId,
     face_id: u32,
@@ -1872,7 +1883,7 @@ pub(crate) struct BufferTextSourceRangeAppendContext<'a, B: LayoutBufferView + ?
 
 #[cfg(test)]
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B> {
-    pub(crate) fn new(
+    fn new(
         buffer: &'a B,
         buffer_id: BufferId,
         face_id: u32,
@@ -1890,9 +1901,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(test)]
-    pub(crate) fn resolve_source_range_advance_to_text_row(
+    fn resolve_source_range_advance_to_text_row(
         &self,
-        resolver: &mut BufferTextSourceAdvanceResolver,
+        state: &mut BufferTextRowAppendState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
@@ -1904,7 +1915,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         position: DisplayRowPosition,
         cluster: BufferTextSourceClusterState,
     ) -> ResolvedBufferTextSourceAdvance {
-        resolver.resolve_source_range_to_text_row(
+        state.advance_resolver().resolve_source_range_to_text_row(
             builder,
             evaluator,
             font_metrics,
@@ -1923,7 +1934,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(test)]
-    pub(crate) fn append_resolved_source_range_to_text_row(
+    fn append_resolved_source_range_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
@@ -1952,7 +1963,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
     }
 
     #[cfg(test)]
-    pub(crate) fn measure_source_range_natural_advance_to_text_row(
+    fn measure_source_range_natural_advance_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
@@ -2163,7 +2174,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn resolve_source_range_advance_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
-        resolver: &mut BufferTextSourceAdvanceResolver,
+        state: &mut BufferTextRowAppendState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
@@ -2175,7 +2186,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         cluster: BufferTextSourceClusterState,
     ) -> ResolvedBufferTextSourceAdvance {
         let frame = self.active_face_context(geometry).active_face_frame();
-        resolver.resolve_source_range_to_text_row(
+        state.advance_resolver().resolve_source_range_to_text_row(
             builder,
             evaluator,
             font_metrics,
@@ -2196,7 +2207,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn resolve_source_char_append_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
-        resolver: &mut BufferTextSourceAdvanceResolver,
+        state: &mut BufferTextRowAppendState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
@@ -2206,7 +2217,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let parts = request.into_parts();
         self.resolve_source_range_advance_to_text_row(
             geometry,
-            resolver,
+            state,
             builder,
             evaluator,
             font_metrics,
@@ -2223,7 +2234,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn prepare_source_char_append_plan(
         &self,
         geometry: &DisplayRowGeometryState,
-        resolver: &mut BufferTextSourceAdvanceResolver,
+        state: &mut BufferTextRowAppendState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
@@ -2232,7 +2243,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> BufferTextSourceCharAppendPlan {
         let resolved_advance = self.resolve_source_char_append_request_to_text_row(
             geometry,
-            resolver,
+            state,
             builder,
             evaluator,
             font_metrics,
@@ -2246,7 +2257,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     pub(crate) fn prepare_source_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
-        resolver: &mut BufferTextSourceAdvanceResolver,
+        state: &mut BufferTextRowAppendState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
@@ -2261,7 +2272,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         BufferTextSourceCharPreparedAppend {
             plan: self.prepare_source_char_append_plan(
                 geometry,
-                resolver,
+                state,
                 builder,
                 evaluator,
                 font_metrics,
