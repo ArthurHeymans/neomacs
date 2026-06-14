@@ -3,12 +3,14 @@ use crate::display_row::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy}
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
     BufferEndOfBufferTailRenderRequest, BufferHscrollSkipRenderRequest,
-    BufferInvisibleTextRenderRequest, BufferOverlayStringTextRowRenderContext,
-    BufferSelectiveDisplayTailRenderRequest, BufferTextDecodedSourceChar,
-    BufferTextLineBreakRenderRequest, BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
-    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowFinishRequest, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowVisibilityRetryRequest, DisplayRowAppendSurface, DisplayRowPrefixRequest,
+    BufferInvisibleTextRenderRequest, BufferLineNumberMarginRenderRequest,
+    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
+    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayTailRenderRequest,
+    BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextRowAppendState,
+    BufferTextSourceCharRenderRequest, BufferTextWindowBeginRequest,
+    BufferTextWindowBodyInstallRequest, BufferTextWindowFinishRequest,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowVisibilityRetryRequest,
+    DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -113,6 +115,18 @@ pub(crate) struct BufferTextWindowBodyInstallContext {
 pub(crate) struct BufferTextWindowRetryBounds {
     pub(crate) text_area_top: i64,
     pub(crate) text_area_bottom: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextWindowRowPreludeRequestContext {
+    line_number_mode: u8,
+    line_number_current_absolute: bool,
+    line_number_offset: i64,
+    line_number_major_tick: i32,
+    line_number_cols: i32,
+    prefix_values: DisplayRowPrefixValues,
+    char_width: f32,
+    char_height: f32,
 }
 
 pub(crate) struct BufferTextWindowTailRequestContext<'a> {
@@ -445,6 +459,76 @@ impl BufferTextWindowBodyInstallContext {
     #[cfg(test)]
     pub(crate) fn matrix_cols(self) -> usize {
         self.matrix_cols
+    }
+}
+
+impl BufferTextWindowRowPreludeRequestContext {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        line_number_mode: u8,
+        line_number_current_absolute: bool,
+        line_number_offset: i64,
+        line_number_major_tick: i32,
+        line_number_cols: i32,
+        prefix_values: DisplayRowPrefixValues,
+        char_width: f32,
+        char_height: f32,
+    ) -> Self {
+        Self {
+            line_number_mode,
+            line_number_current_absolute,
+            line_number_offset,
+            line_number_major_tick,
+            line_number_cols,
+            prefix_values,
+            char_width,
+            char_height,
+        }
+    }
+
+    pub(crate) fn line_number_margin_request(self) -> BufferLineNumberMarginRenderRequest {
+        BufferLineNumberMarginRenderRequest::new(
+            self.line_number_mode,
+            self.line_number_current_absolute,
+            self.line_number_offset,
+            self.line_number_major_tick,
+            self.line_number_cols,
+        )
+    }
+
+    pub(crate) fn line_prefix_request<'a>(
+        self,
+        append_surface: &'a DisplayRowAppendSurface,
+        row_geometry: &'a DisplayRowGeometryState,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        position: DisplayRowPosition,
+    ) -> BufferLinePrefixRenderRequest<'a> {
+        BufferLinePrefixRenderRequest::new(
+            BufferLinePrefixRenderContext::new(
+                self.prefix_values,
+                append_surface,
+                row_geometry,
+                active_face_state,
+                glyph_y_offset,
+                self.char_height,
+            ),
+            position,
+        )
+    }
+
+    pub(crate) fn char_width(self) -> f32 {
+        self.char_width
+    }
+
+    #[cfg(test)]
+    pub(crate) fn line_number_mode(self) -> u8 {
+        self.line_number_mode
+    }
+
+    #[cfg(test)]
+    pub(crate) fn prefix_values(self) -> DisplayRowPrefixValues {
+        self.prefix_values
     }
 }
 

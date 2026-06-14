@@ -193,6 +193,18 @@ fn loop_request_context_carries_buffer_and_window_policy() {
 }
 
 #[test]
+fn row_prelude_request_context_carries_margin_and_prefix_policy() {
+    let prefix_values =
+        crate::display_row_append::DisplayRowPrefixValues::default_values(None, None);
+    let context =
+        BufferTextWindowRowPreludeRequestContext::new(2, true, 3, 4, 5, prefix_values, 8.0, 16.0);
+
+    assert_eq!(context.line_number_mode(), 2);
+    assert_eq!(context.prefix_values(), prefix_values);
+    assert_eq!(context.char_width(), 8.0);
+}
+
+#[test]
 fn tail_decoration_request_reports_rows_considered_for_decorations() {
     let mut setup = setup_request().into_setup();
     setup.row_geometry = DisplayRowGeometryState::new(2, 64.0, 0.0, 16.0, 11.0);

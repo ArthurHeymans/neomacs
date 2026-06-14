@@ -23,9 +23,9 @@ use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
-    BufferTextWindowRenderContextsRequest, BufferTextWindowTailDecorationState,
-    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRenderContextsRequest, BufferTextWindowRowPreludeRequestContext,
+    BufferTextWindowTailDecorationState, BufferTextWindowTailRequestContext,
+    BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -60,12 +60,11 @@ use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailRenderState,
     BufferHscrollSkipRenderState, BufferInvisibleTextRenderRequestState,
-    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
-    BufferLinePrefixRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferTextDecodedSourceChar, BufferTextLineBreakRenderState,
-    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginState,
-    BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
-    BufferTextWindowFinishState, BufferTextWindowTailFinalizeState, DisplayRowPrefixValues,
+    BufferSelectiveDisplayTailRenderState, BufferTextDecodedSourceChar,
+    BufferTextLineBreakRenderState, BufferTextSourceCharRenderRequestState,
+    BufferTextWindowBeginState, BufferTextWindowBodyInstallState,
+    BufferTextWindowCursorEffectsRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeState, DisplayRowPrefixValues,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -1277,6 +1276,16 @@ impl LayoutEngine {
             max_rows,
             row_limit,
         );
+        let row_prelude_request_context = BufferTextWindowRowPreludeRequestContext::new(
+            lnum_mode,
+            lnum_current_absolute,
+            lnum_offset,
+            lnum_major_tick,
+            lnum_cols,
+            prefix_values,
+            char_w,
+            char_h,
+        );
         let tail_request_context = BufferTextWindowTailRequestContext::new(
             params,
             window_start,
@@ -1311,47 +1320,39 @@ impl LayoutEngine {
         });
 
         while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
-            BufferLineNumberMarginRenderRequest::new(
-                lnum_mode,
-                lnum_current_absolute,
-                lnum_offset,
-                lnum_major_tick,
-                lnum_cols,
-            )
-            .render_pending(
-                &mut line_numbers,
-                face_resolver,
-                &mut face_ids,
-                &mut self.matrix_builder,
-                &row_geometry,
-                &mut face_scan,
-                char_w,
-            );
+            row_prelude_request_context
+                .line_number_margin_request()
+                .render_pending(
+                    &mut line_numbers,
+                    face_resolver,
+                    &mut face_ids,
+                    &mut self.matrix_builder,
+                    &row_geometry,
+                    &mut face_scan,
+                    row_prelude_request_context.char_width(),
+                );
 
-            BufferLinePrefixRenderRequest::new(
-                BufferLinePrefixRenderContext::new(
-                    prefix_values,
+            row_prelude_request_context
+                .line_prefix_request(
                     &text_append_surface,
                     &row_geometry,
                     &active_face_state,
                     raise_span.value_or(0.0),
-                    char_h,
-                ),
-                DisplayRowPosition { x_px: x, col },
-            )
-            .render_requested_to_text_row_and_apply(
-                &mut prefix_request,
-                evaluator,
-                &mut output_emitter,
-                buffer,
-                charpos,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut face_ids,
-                &mut self.matrix_builder,
-                &mut x,
-                &mut col,
-            );
+                    DisplayRowPosition { x_px: x, col },
+                )
+                .render_requested_to_text_row_and_apply(
+                    &mut prefix_request,
+                    evaluator,
+                    &mut output_emitter,
+                    buffer,
+                    charpos,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut face_ids,
+                    &mut self.matrix_builder,
+                    &mut x,
+                    &mut col,
+                );
 
             // --- Invisible text check ---
             if loop_request_context
