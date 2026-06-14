@@ -2234,14 +2234,13 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    prefix_request.apply_transition_prefix_action(
+                    line_break_transition.apply_prefix_action(
+                        &mut prefix_request,
                         has_prefix,
-                        line_break_transition.state_policy().apply(
-                            &mut line_numbers,
-                            &mut hscroll_skip,
-                            &mut word_wrap,
-                            &mut trailing_whitespace,
-                        ),
+                        &mut line_numbers,
+                        &mut hscroll_skip,
+                        &mut word_wrap,
+                        &mut trailing_whitespace,
                     );
                     if cursor_info.is_missing() && point_charpos == charpos {
                         capture_cursor_info(
@@ -2481,14 +2480,13 @@ impl LayoutEngine {
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_range.advance_to(charpos);
                         col = 0;
-                        prefix_request.apply_transition_prefix_action(
+                        line_break_transition.apply_prefix_action(
+                            &mut prefix_request,
                             has_prefix,
-                            line_break_transition.state_policy().apply(
-                                &mut line_numbers,
-                                &mut hscroll_skip,
-                                &mut word_wrap,
-                                &mut trailing_whitespace,
-                            ),
+                            &mut line_numbers,
+                            &mut hscroll_skip,
+                            &mut word_wrap,
+                            &mut trailing_whitespace,
                         );
                         break;
                     }
@@ -2586,14 +2584,13 @@ impl LayoutEngine {
                 hit_row_range.advance_to(charpos);
                 box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
                 col = 0;
-                prefix_request.apply_transition_prefix_action(
+                line_break_transition.apply_prefix_action(
+                    &mut prefix_request,
                     has_prefix,
-                    line_break_transition.state_policy().apply(
-                        &mut line_numbers,
-                        &mut hscroll_skip,
-                        &mut word_wrap,
-                        &mut trailing_whitespace,
-                    ),
+                    &mut line_numbers,
+                    &mut hscroll_skip,
+                    &mut word_wrap,
+                    &mut trailing_whitespace,
                 );
                 // Selective display: skip lines indented beyond threshold
                 if selective_display > 0 && selective_display < i32::MAX && byte_idx < text.len() {
@@ -2721,14 +2718,13 @@ impl LayoutEngine {
                                 charpos = sync_charpos_from_byte_idx(byte_idx);
                                 hit_row_range.advance_to(charpos);
                                 col = 0;
-                                prefix_request.apply_transition_prefix_action(
+                                transition.apply_prefix_action(
+                                    &mut prefix_request,
                                     has_prefix,
-                                    transition.state_policy().apply(
-                                        &mut line_numbers,
-                                        &mut hscroll_skip,
-                                        &mut word_wrap,
-                                        &mut trailing_whitespace,
-                                    ),
+                                    &mut line_numbers,
+                                    &mut hscroll_skip,
+                                    &mut word_wrap,
+                                    &mut trailing_whitespace,
                                 );
                                 continue;
                             }
@@ -2758,14 +2754,13 @@ impl LayoutEngine {
                                     break;
                                 }
                                 col = 0;
-                                prefix_request.apply_transition_prefix_action(
+                                transition.apply_prefix_action(
+                                    &mut prefix_request,
                                     has_prefix,
-                                    transition.state_policy().apply(
-                                        &mut line_numbers,
-                                        &mut hscroll_skip,
-                                        &mut word_wrap,
-                                        &mut trailing_whitespace,
-                                    ),
+                                    &mut line_numbers,
+                                    &mut hscroll_skip,
+                                    &mut word_wrap,
+                                    &mut trailing_whitespace,
                                 );
                                 if !row_geometry.current_row_is_visible(row_visibility_limit) {
                                     break;
@@ -2846,14 +2841,13 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    prefix_request.apply_transition_prefix_action(
+                    transition.apply_prefix_action(
+                        &mut prefix_request,
                         has_prefix,
-                        transition.state_policy().apply(
-                            &mut line_numbers,
-                            &mut hscroll_skip,
-                            &mut word_wrap,
-                            &mut trailing_whitespace,
-                        ),
+                        &mut line_numbers,
+                        &mut hscroll_skip,
+                        &mut word_wrap,
+                        &mut trailing_whitespace,
                     );
                     continue;
                 }
@@ -2900,14 +2894,13 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_range.advance_to(charpos);
-                    prefix_request.apply_transition_prefix_action(
+                    transition.apply_prefix_action(
+                        &mut prefix_request,
                         has_prefix,
-                        transition.state_policy().apply(
-                            &mut line_numbers,
-                            &mut hscroll_skip,
-                            &mut word_wrap,
-                            &mut trailing_whitespace,
-                        ),
+                        &mut line_numbers,
+                        &mut hscroll_skip,
+                        &mut word_wrap,
+                        &mut trailing_whitespace,
                     );
 
                     // Force face re-check since we rewound
@@ -2946,14 +2939,13 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    prefix_request.apply_transition_prefix_action(
+                    transition.apply_prefix_action(
+                        &mut prefix_request,
                         has_prefix,
-                        transition.state_policy().apply(
-                            &mut line_numbers,
-                            &mut hscroll_skip,
-                            &mut word_wrap,
-                            &mut trailing_whitespace,
-                        ),
+                        &mut line_numbers,
+                        &mut hscroll_skip,
+                        &mut word_wrap,
+                        &mut trailing_whitespace,
                     );
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);

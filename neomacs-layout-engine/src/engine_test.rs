@@ -166,19 +166,17 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
         },
     );
 
-    let prefix = DisplayRowLineBreakTransitionPlan::hidden_line_break()
-        .state_policy()
-        .apply(
-            &mut line_numbers,
-            &mut hscroll,
-            &mut word_wrap,
-            &mut trailing,
-        );
-
-    assert_eq!(
-        prefix,
-        crate::display_row_walk_state::TextRowTransitionPrefixAction::Line
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    DisplayRowLineBreakTransitionPlan::hidden_line_break().apply_prefix_action(
+        &mut prefix_request,
+        true,
+        &mut line_numbers,
+        &mut hscroll,
+        &mut word_wrap,
+        &mut trailing,
     );
+
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::Line);
     assert_eq!(line_numbers.current_line(), 4);
     assert_eq!(hscroll.consumed_columns(), 0);
     assert!(!word_wrap.candidate().is_available());
