@@ -320,8 +320,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
             charpos_start: 3,
             charpos_end: 9,
         },
-        6,
-        48.0,
+        DisplayRowPosition { x_px: 48.0, col: 6 },
         4.0,
     )
     .emit(
@@ -360,8 +359,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
             charpos_start: 4,
             charpos_end: 10,
         },
-        7,
-        56.0,
+        DisplayRowPosition { x_px: 56.0, col: 7 },
     )
     .emit(
         &mut wrap_ctx.geometry,

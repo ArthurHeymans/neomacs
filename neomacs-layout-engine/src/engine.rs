@@ -2220,8 +2220,7 @@ impl LayoutEngine {
                     .line_break(
                         line_break_transition,
                         hit_row_range.range_to(charpos),
-                        col,
-                        x,
+                        DisplayRowPosition { x_px: x, col },
                         0.0,
                     );
                     // Record hit-test row (hscroll newline)
@@ -2468,8 +2467,7 @@ impl LayoutEngine {
                         .line_break(
                             line_break_transition,
                             hit_row_range.range_to(charpos),
-                            col,
-                            x,
+                            DisplayRowPosition { x_px: x, col },
                             0.0,
                         )
                         .emit(
@@ -2573,8 +2571,7 @@ impl LayoutEngine {
                 .line_break(
                     line_break_transition,
                     hit_row_range.range_to(charpos),
-                    col,
-                    x,
+                    DisplayRowPosition { x_px: x, col },
                     line_spacing,
                 )
                 .emit(
@@ -2706,7 +2703,11 @@ impl LayoutEngine {
                                     row_y_positions.recording(),
                                     max_rows,
                                 )
-                                .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                                .overflow(
+                                    transition,
+                                    hit_row_range.range_to(charpos),
+                                    DisplayRowPosition { x_px: x, col },
+                                )
                                 .emit(
                                     &mut row_geometry,
                                     &mut row_flags,
@@ -2744,8 +2745,7 @@ impl LayoutEngine {
                                 .overflow(
                                     transition,
                                     hit_row_range.range_to(charpos),
-                                    col,
-                                    x,
+                                    DisplayRowPosition { x_px: x, col },
                                 );
                                 hit_row_range.advance_to(charpos);
                                 let row_transition = boundary_request.emit(
@@ -2831,7 +2831,11 @@ impl LayoutEngine {
                         row_y_positions.recording(),
                         max_rows,
                     )
-                    .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                    .overflow(
+                        transition,
+                        hit_row_range.range_to(charpos),
+                        DisplayRowPosition { x_px: x, col },
+                    )
                     .emit(
                         &mut row_geometry,
                         &mut row_flags,
@@ -2880,7 +2884,11 @@ impl LayoutEngine {
                         row_y_positions.recording(),
                         max_rows,
                     )
-                    .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                    .overflow(
+                        transition,
+                        hit_row_range.range_to(charpos),
+                        DisplayRowPosition { x_px: x, col },
+                    )
                     .emit(
                         &mut row_geometry,
                         &mut row_flags,
@@ -2923,7 +2931,11 @@ impl LayoutEngine {
                         row_y_positions.recording(),
                         max_rows,
                     )
-                    .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                    .overflow(
+                        transition,
+                        hit_row_range.range_to(charpos),
+                        DisplayRowPosition { x_px: x, col },
+                    )
                     .emit(
                         &mut row_geometry,
                         &mut row_flags,
