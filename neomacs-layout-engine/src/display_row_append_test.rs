@@ -13,10 +13,10 @@ use crate::display_property::{
     classify_display_property,
 };
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
-    DisplayRowItemSourceRenderRequest, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
-    DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderer,
-    DisplayRowSourceRequestPolicy, DisplayRowSourceState,
+    DisplayRowActiveFaceState, DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics,
+    DisplayRowGeometry, DisplayRowItemSourceRenderRequest, DisplayRowMeasuredFaceMetrics,
+    DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderPolicy,
+    DisplayRowRenderer, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
@@ -4111,14 +4111,16 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
 
     let outcome = request
         .render_natural_display_source_into_current_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
+            &mut DisplayRowCurrentTextRenderState {
+                builder: &mut builder,
+                output_emitter: &mut output_emitter,
+                evaluator: &mut eval,
+                font_metrics: &mut font_metrics,
+                face_resolver: &face_resolver,
+                face_ids: &mut face_ids,
+            },
             &mut source,
             &mut source_state,
-            &face_resolver,
-            &mut face_ids,
         )
         .expect("current-row fragment outcome");
 

@@ -1807,6 +1807,23 @@ pub(crate) struct DisplayRowSourceAppendRequest<'face> {
     base_face_id: u32,
 }
 
+pub(crate) struct DisplayRowCurrentTextRenderState<'face, 'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+pub(crate) struct DisplayRowCurrentTextMeasureState<'face, 'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowSourceAppendRequestPolicy {
     matrix_row: usize,
@@ -1914,158 +1931,110 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         self
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_display_source_into_current_text_row_and_emit<
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     >(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let Self {
             request, output, ..
         } = self;
         render_display_item_source_into_current_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
+            state,
             source,
             source_state,
-            face_resolver,
-            face_ids,
             request,
             output,
             render_policy,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_natural_display_source_into_current_text_row_and_emit<
         S: DisplayItemSource,
     >(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         self.render_display_source_into_current_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
+            state,
             source,
             source_state,
-            face_resolver,
-            face_ids,
             &mut render_policy,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_owned_display_source_into_current_text_row_and_emit<
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     >(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
         mut source: S,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let mut source_state = DisplayRowSourceState::default();
         self.render_display_source_into_current_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
+            state,
             &mut source,
             &mut source_state,
-            face_resolver,
-            face_ids,
             render_policy,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_single_display_item_into_current_text_row_and_emit<
         P: DisplayRowRenderPolicy,
     >(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
         item: DisplayItem,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.render_owned_display_source_into_current_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
+            state,
             SingleDisplayItemSource::new(item),
-            face_resolver,
-            face_ids,
             render_policy,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn measure_display_source_against_current_text_row<
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     >(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let Self { request, .. } = self;
-        let mut renderer = DisplayRowRenderer::new(font_metrics);
-        let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
-            let mut scratch_row = row.clone();
-            let mut context = DisplayRowRenderContext::new(
-                face_resolver,
-                evaluator.display_host.as_deref(),
-                face_ids,
-            );
-            let result = DisplayRowItemSourceRenderRequest::new(request)
-                .render_fragment_step_into_row_with_policy(
-                    &mut renderer,
-                    &mut scratch_row,
-                    source,
-                    source_state,
-                    &mut context,
-                    render_policy,
-                )?;
-            Some((result, scratch_row.height_px, scratch_row.ascent_px))
-        })??;
+        let mut renderer = DisplayRowRenderer::new(state.font_metrics);
+        let (result, row_height_px, row_ascent_px) =
+            state.builder.with_current_row_mut(|row| {
+                let mut scratch_row = row.clone();
+                let mut context = DisplayRowRenderContext::new(
+                    state.face_resolver,
+                    state.evaluator.display_host.as_deref(),
+                    state.face_ids,
+                );
+                let result = DisplayRowItemSourceRenderRequest::new(request)
+                    .render_fragment_step_into_row_with_policy(
+                        &mut renderer,
+                        &mut scratch_row,
+                        source,
+                        source_state,
+                        &mut context,
+                        render_policy,
+                    )?;
+                Some((result, scratch_row.height_px, scratch_row.ascent_px))
+            })??;
         let end = display_row_output_end_position(result.progress);
         let source_slots = result.source_slots;
         Some(CurrentTextRowRenderOutcome {
@@ -2077,53 +2046,35 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn measure_owned_display_source_against_current_text_row<
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     >(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
         mut source: S,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let mut source_state = DisplayRowSourceState::default();
         self.measure_display_source_against_current_text_row(
-            builder,
-            evaluator,
-            font_metrics,
+            state,
             &mut source,
             &mut source_state,
-            face_resolver,
-            face_ids,
             render_policy,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn measure_single_display_item_against_current_text_row<
         P: DisplayRowRenderPolicy,
     >(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
         item: DisplayItem,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.measure_owned_display_source_against_current_text_row(
-            builder,
-            evaluator,
-            font_metrics,
+            state,
             SingleDisplayItemSource::new(item),
-            face_resolver,
-            face_ids,
             render_policy,
         )
     }
@@ -2307,30 +2258,24 @@ fn display_row_append_progress_from_render_result(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 fn render_display_item_source_into_current_text_row_and_emit<
     S: DisplayItemSource,
     P: DisplayRowRenderPolicy,
 >(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
+    state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
     source: &mut S,
     source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
     request: DisplayRowSourceRenderRequest<'_>,
     output: TextRowOutput,
     render_policy: &mut P,
 ) -> Option<CurrentTextRowRenderOutcome> {
     let role = request.role();
-    let mut renderer = DisplayRowRenderer::new(font_metrics);
-    let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
+    let mut renderer = DisplayRowRenderer::new(state.font_metrics);
+    let (result, row_height_px, row_ascent_px) = state.builder.with_current_row_mut(|row| {
         let mut context = DisplayRowRenderContext::new(
-            face_resolver,
-            evaluator.display_host.as_deref(),
-            face_ids,
+            state.face_resolver,
+            state.evaluator.display_host.as_deref(),
+            state.face_ids,
         );
         let result = DisplayRowItemSourceRenderRequest::new(request)
             .render_fragment_step_into_row_with_policy(
@@ -2345,15 +2290,17 @@ fn render_display_item_source_into_current_text_row_and_emit<
     })??;
     let end = display_row_output_end_position(result.progress);
     install_rendered_display_row_fragment_assets(
-        builder,
+        state.builder,
         role,
         output.row,
         &result.faces,
         &result.media,
     );
-    merge_display_row_source_slot_bounds_to_current_row(builder, &result.source_slots);
+    merge_display_row_source_slot_bounds_to_current_row(state.builder, &result.source_slots);
     let source_slots = result.source_slots;
-    output_emitter.emit_text_source_slots(evaluator, output, &source_slots, end);
+    state
+        .output_emitter
+        .emit_text_source_slots(state.evaluator, output, &source_slots, end);
     Some(CurrentTextRowRenderOutcome {
         stop: result.stop,
         source_slots,

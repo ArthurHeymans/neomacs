@@ -24,10 +24,11 @@ use crate::display_row::RenderedDisplayRow;
 use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplayRowFallbackMetrics, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
-    DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
-    DisplayRowRenderPolicy, DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy,
-    DisplayRowSourceState, DisplaySourceAppendMeasurement, DisplaySourceAppendRenderPolicy,
+    DisplayRowCurrentTextMeasureState, DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics,
+    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
+    DisplayRowRenderBounds, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
+    DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState,
+    DisplaySourceAppendMeasurement, DisplaySourceAppendRenderPolicy,
     NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face};
@@ -3390,13 +3391,15 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         let position = self.position;
         let request = self.request();
         let outcome = request.render_single_display_item_into_current_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
+            &mut DisplayRowCurrentTextRenderState {
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                face_ids: &mut face_ids,
+            },
             self.append_item.into_item(),
-            face_resolver,
-            &mut face_ids,
             render_policy,
         )?;
         Some(outcome.into_append_progress_and_position(position))
@@ -3417,12 +3420,14 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
             .request()
             .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
         let outcome = request.measure_single_display_item_against_current_text_row(
-            builder,
-            evaluator,
-            font_metrics,
+            &mut DisplayRowCurrentTextMeasureState {
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                face_ids: &mut face_ids,
+            },
             self.append_item.into_item(),
-            face_resolver,
-            &mut face_ids,
             render_policy,
         )?;
         Some(outcome.into_append_progress(position))
@@ -3487,13 +3492,15 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
         let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
         let start = request.start_position();
         let outcome = request.render_single_display_item_into_current_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
+            &mut DisplayRowCurrentTextRenderState {
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                face_ids: &mut face_ids,
+            },
             item,
-            face_resolver,
-            &mut face_ids,
             render_policy,
         )?;
         Some(outcome.into_append_progress_and_position(start))
@@ -3548,13 +3555,15 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.request()
             .render_owned_display_source_into_current_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
+                &mut DisplayRowCurrentTextRenderState {
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    font_metrics,
+                    face_resolver,
+                    face_ids,
+                },
                 source,
-                face_resolver,
-                face_ids,
                 render_policy,
             )
     }
@@ -3573,14 +3582,16 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.request()
             .render_natural_display_source_into_current_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
+                &mut DisplayRowCurrentTextRenderState {
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    font_metrics,
+                    face_resolver,
+                    face_ids,
+                },
                 source,
                 source_state,
-                face_resolver,
-                face_ids,
             )
     }
 }
