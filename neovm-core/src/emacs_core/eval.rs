@@ -7802,6 +7802,24 @@ impl Context {
         self.append_current_message_runtime_text(text);
     }
 
+    /// Emacs-bytes echo-area sibling of [`Self::append_echo_area_print_runtime_text`].
+    /// Used by the byte-faithful print sink (`prin1`/`print`/`write-char`) so a
+    /// real Private-Use glyph in the printer output is not reinterpreted as a
+    /// raw byte by the storage-string echo path (issue #131).
+    pub(crate) fn append_echo_area_print_lisp_string(
+        &mut self,
+        text: &crate::heap_types::LispString,
+    ) {
+        if !self.noninteractive() {
+            self.ensure_echo_area_buffers();
+        }
+        if !self.message_buf_print {
+            self.current_message = None;
+            self.message_buf_print = true;
+        }
+        self.append_current_message_lisp_string(text);
+    }
+
     pub(crate) fn discard_current_message_without_clear_hook(&mut self) {
         self.message_buf_print = false;
         if self.current_message.take().is_some() {

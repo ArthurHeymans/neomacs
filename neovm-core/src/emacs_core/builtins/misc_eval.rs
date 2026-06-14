@@ -1316,6 +1316,136 @@ fn write_print_output_to_target(
     }
 }
 
+/// Emacs-bytes print sink — the byte-faithful sibling of
+/// [`write_print_output_to_target`].
+///
+/// Issue #131: `prin1`/`print`/`write-char` produce their output in the
+/// canonical Emacs internal encoding (`CHAR_STRING`), where eight-bit raw bytes
+/// (0x3FFF80..) and non-Unicode codes (>0x10FFFF) are *disjoint* extended
+/// sequences — never an in-Unicode Private-Use sentinel.  Inserting those bytes
+/// straight through the `LispString`/`insert_lisp_string` path keeps a real PUA
+/// glyph (e.g. a nerd-font icon U+E0A0 → \xee\x82\xa0) distinct from a raw byte
+/// 0xA0, which the legacy storage-string sink (`write_print_output_to_target`,
+/// still used by `princ`/`terpri`) cannot disambiguate.  `from_emacs_bytes`
+/// preserves the byte sequence verbatim, so `bytes.len()` is exactly the number
+/// of bytes inserted.
+fn write_print_bytes_to_target(
+    ctx: &mut crate::emacs_core::eval::Context,
+    target: Value,
+    bytes: &[u8],
+) -> Result<(), Flow> {
+    match target.kind() {
+        ValueKind::T | ValueKind::Nil => {
+            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
+            ctx.append_echo_area_print_lisp_string(&ls);
+            Ok(())
+        }
+        ValueKind::Veclike(VecLikeType::Buffer) => {
+            let id = target.as_buffer_id().unwrap();
+            if ctx.buffers.get(id).is_none() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Output buffer no longer exists")],
+                ));
+            }
+            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
+            let _ = ctx.buffers.insert_lisp_string_into_buffer(id, &ls);
+            Ok(())
+        }
+        ValueKind::String => {
+            let name = runtime_string_value(target);
+            let Some(id) = ctx.buffers.find_buffer_by_name(&name) else {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(format!("No buffer named {name}"))],
+                ));
+            };
+            if ctx.buffers.get(id).is_none() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Output buffer no longer exists")],
+                ));
+            }
+            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
+            let _ = ctx.buffers.insert_lisp_string_into_buffer(id, &ls);
+            Ok(())
+        }
+        _other if super::marker::is_marker(&target) => {
+            let Some((Some(buffer_id), _, _)) = super::marker::marker_logical_fields(&target)
+            else {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Marker does not point anywhere")],
+                ));
+            };
+            let marker_pos =
+                super::marker::marker_position_as_int_with_buffers(&ctx.buffers, &target)?;
+            let Some(buffer) = ctx.buffers.get(buffer_id) else {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Output buffer no longer exists")],
+                ));
+            };
+            let min_pos = buffer.point_min_lisp_char_pos().as_i64();
+            let max_pos = buffer.point_max_lisp_char_pos().as_i64();
+            if marker_pos < min_pos || marker_pos > max_pos {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(
+                        "Marker is outside the accessible part of the buffer",
+                    )],
+                ));
+            }
+            let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(marker_pos));
+            let saved_current = ctx.buffers.current_buffer_id();
+            let saved_point = saved_current
+                .and_then(|id| ctx.buffers.get(id).map(|buf| buf.point_emacs_byte_pos()));
+
+            ctx.buffers.switch_current(buffer_id);
+            let _ = ctx
+                .buffers
+                .goto_buffer_emacs_byte_pos(buffer_id, marker_byte);
+            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
+            let _ = ctx.buffers.insert_lisp_string_into_buffer(buffer_id, &ls);
+
+            let new_marker_pos = ctx
+                .buffers
+                .get(buffer_id)
+                .map(|buf| buf.point_lisp_char_pos().as_i64())
+                .ok_or_else(|| {
+                    signal(
+                        "error",
+                        vec![Value::string("Output buffer no longer exists")],
+                    )
+                })?;
+            let _ = super::marker::builtin_set_marker_in_buffers(
+                &mut ctx.buffers,
+                vec![
+                    target,
+                    Value::fixnum(new_marker_pos),
+                    Value::make_buffer(buffer_id),
+                ],
+            )?;
+
+            if let Some(saved_id) = saved_current {
+                ctx.buffers.switch_current(saved_id);
+                if let Some(old_point) = saved_point {
+                    let restore_point = if saved_id == buffer_id && old_point >= marker_byte {
+                        old_point.add_len(EmacsByteLen::new(bytes.len()))
+                    } else {
+                        old_point
+                    };
+                    let _ = ctx
+                        .buffers
+                        .goto_buffer_emacs_byte_pos(saved_id, restore_point);
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
 pub(crate) fn print_target_is_direct(target: Value) -> bool {
     (target.is_t() || target.is_nil() || target.is_buffer() || target.is_string())
         || super::marker::is_marker(&target)
@@ -1361,6 +1491,25 @@ fn write_print_output_from_ctx(
         return Ok(());
     }
     write_print_output_to_target(ctx, target, text)
+}
+
+/// Emacs-bytes variant of [`write_print_output_from_ctx`] used by
+/// `prin1`/`print`/`write-char`, whose output is already canonical Emacs
+/// internal encoding (see [`write_print_bytes_to_target`]).
+fn write_print_bytes_from_ctx(
+    ctx: &mut crate::emacs_core::eval::Context,
+    printcharfun: Option<&Value>,
+    bytes: &[u8],
+) -> Result<(), Flow> {
+    let target = resolve_print_target_in_state(ctx, printcharfun);
+    // GNU print.c: in batch mode, printcharfun=t writes to stdout.
+    if ctx.noninteractive() && (target.is_t() || target.is_nil()) {
+        use std::io::Write;
+        let _ = std::io::stdout().write_all(bytes);
+        let _ = std::io::stdout().flush();
+        return Ok(());
+    }
+    write_print_bytes_to_target(ctx, target, bytes)
 }
 
 fn write_terpri_output(eval: &mut super::eval::Context, target: Value) -> Result<(), Flow> {
@@ -1825,8 +1974,10 @@ pub(crate) fn builtin_prin1_impl(
 ) -> EvalResult {
     expect_min_args("prin1", &args, 1)?;
     let options = print_options_from_overrides(ctx, args.get(2))?;
-    let text = super::error::print_value_in_state_with_options(ctx, &args[0], options);
-    write_print_output_from_ctx(ctx, args.get(1), &text)?;
+    // Issue #131: emit canonical Emacs bytes so a real Private-Use glyph in the
+    // printed output is inserted as itself, not decoded as a raw byte.
+    let bytes = super::error::print_value_bytes_in_state_with_options(ctx, &args[0], options);
+    write_print_bytes_from_ctx(ctx, args.get(1), &bytes)?;
     Ok(args[0])
 }
 
@@ -1873,11 +2024,12 @@ pub(crate) fn builtin_print_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("print", &args, 1)?;
-    let mut text = String::new();
-    text.push('\n');
-    text.push_str(&super::error::print_value_in_state(ctx, &args[0]));
-    text.push('\n');
-    write_print_output_from_ctx(ctx, args.get(1), &text)?;
+    // Issue #131: emit canonical Emacs bytes (see `builtin_prin1_impl`).
+    let mut bytes = Vec::new();
+    bytes.push(b'\n');
+    bytes.extend_from_slice(&super::error::print_value_bytes_with_eval(ctx, &args[0]));
+    bytes.push(b'\n');
+    write_print_bytes_from_ctx(ctx, args.get(1), &bytes)?;
     Ok(args[0])
 }
 
@@ -1933,6 +2085,24 @@ pub(super) fn write_char_rendered_text(char_code: i64) -> Option<String> {
     crate::emacs_core::string_escape::encode_char_code_for_string_storage(code, true)
 }
 
+/// `write-char`'s output character as canonical Emacs internal-encoding bytes
+/// (`CHAR_STRING`).  Returns `None` for codes outside `0..=MAX_CHAR`.
+///
+/// Issue #131: unlike [`write_char_rendered_text`] (which packs the code into an
+/// in-Unicode storage string and round-trips through the sentinel decoder), this
+/// produces the disjoint extended encoding directly — eight-bit raw bytes and
+/// non-Unicode codes never collide with a real Private-Use glyph, so writing a
+/// nerd-font icon stores the glyph itself rather than a stray low byte.
+fn write_char_emacs_bytes(char_code: i64) -> Option<Vec<u8>> {
+    use crate::emacs_core::emacs_char;
+    if !(0..=emacs_char::MAX_CHAR as i64).contains(&char_code) {
+        return None;
+    }
+    let mut buf = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
+    let len = emacs_char::char_string(char_code as u32, &mut buf);
+    Some(buf[..len].to_vec())
+}
+
 pub(crate) fn builtin_write_char(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = builtin_write_char_impl(eval, args.clone())? {
         return Ok(result);
@@ -1951,7 +2121,7 @@ pub(crate) fn finish_write_char_in_eval(
     match target.kind() {
         ValueKind::T | ValueKind::Nil => {}
         ValueKind::Veclike(VecLikeType::Buffer) => {
-            if let Some(text) = write_char_rendered_text(char_code) {
+            if let Some(bytes) = write_char_emacs_bytes(char_code) {
                 let id = target.as_buffer_id().unwrap();
                 if eval.buffers.get(id).is_none() {
                     return Err(signal(
@@ -1959,11 +2129,12 @@ pub(crate) fn finish_write_char_in_eval(
                         vec![Value::string("Output buffer no longer exists")],
                     ));
                 }
-                let _ = eval.buffers.insert_into_buffer(id, &text);
+                let ls = crate::heap_types::LispString::from_emacs_bytes(bytes);
+                let _ = eval.buffers.insert_lisp_string_into_buffer(id, &ls);
             }
         }
         ValueKind::String => {
-            if let Some(text) = write_char_rendered_text(char_code) {
+            if let Some(bytes) = write_char_emacs_bytes(char_code) {
                 let name = runtime_string_value(target);
                 let Some(id) = eval.buffers.find_buffer_by_name(&name) else {
                     return Err(signal(
@@ -1977,7 +2148,8 @@ pub(crate) fn finish_write_char_in_eval(
                         vec![Value::string("Output buffer no longer exists")],
                     ));
                 }
-                let _ = eval.buffers.insert_into_buffer(id, &text);
+                let ls = crate::heap_types::LispString::from_emacs_bytes(bytes);
+                let _ = eval.buffers.insert_lisp_string_into_buffer(id, &ls);
             }
         }
         other => {
@@ -2001,8 +2173,8 @@ pub(crate) fn builtin_write_char_impl(
     let target = resolve_print_target_in_state(ctx, args.get(1));
 
     if print_target_is_direct(target) {
-        if let Some(text) = write_char_rendered_text(char_code) {
-            write_print_output_from_ctx(ctx, args.get(1), &text)?;
+        if let Some(bytes) = write_char_emacs_bytes(char_code) {
+            write_print_bytes_from_ctx(ctx, args.get(1), &bytes)?;
         }
         return Ok(Some(Value::fixnum(char_code)));
     }

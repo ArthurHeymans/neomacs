@@ -11308,6 +11308,79 @@ fn prin1_runtime_path_detects_string_cycles_through_text_properties() {
     );
 }
 
+/// Issue #131: printing a real Private-Use-Area glyph (a nerd-font icon) into a
+/// buffer must store the glyph's real code point, never reinterpret it as an
+/// eight-bit raw byte or a unibyte byte through the legacy "storage string"
+/// decode. This was the byte-compile showstopper for the two in-Unicode
+/// sentinel collision ranges: U+E080..E0FF (raw-byte sentinel) and
+/// U+E380..E3FF (unibyte sentinel). E.g. byte-compiling a buffer containing
+/// U+E0A0 must write the real char (\xee\x82\xa0), not byte 0xA0.
+#[test]
+fn prin1_to_buffer_preserves_private_use_glyphs_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (mapcar (lambda (cp)
+                      (erase-buffer)
+                      (prin1 (char-to-string cp) (current-buffer))
+                      ;; The buffer now holds `"' GLYPH `"'; char-after 2 is
+                      ;; the glyph itself.
+                      (char-after 2))
+                    '(#xe080 #xe0a0 #xe0ff #xe380 #xe3a0 #xe3ff))
+            "#,
+        )
+        .expect("prin1 to a buffer should preserve real PUA glyphs");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::fixnum(0xe080),
+            Value::fixnum(0xe0a0),
+            Value::fixnum(0xe0ff),
+            Value::fixnum(0xe380),
+            Value::fixnum(0xe3a0),
+            Value::fixnum(0xe3ff),
+        ])
+    );
+}
+
+/// Issue #131: `write-char` of a real Private-Use-Area glyph into a buffer must
+/// store the glyph's code point, not a stray raw byte. `write-char` builds the
+/// character's canonical Emacs bytes (`CHAR_STRING`) directly, so eight-bit and
+/// non-Unicode codes stay disjoint from real glyphs.
+#[test]
+fn write_char_to_buffer_preserves_private_use_glyphs_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (mapcar (lambda (cp)
+                      (erase-buffer)
+                      (write-char cp (current-buffer))
+                      (char-after 1))
+                    '(#xe080 #xe0a0 #xe0ff #xe380 #xe3a0 #xe3ff))
+            "#,
+        )
+        .expect("write-char to a buffer should preserve real PUA glyphs");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::fixnum(0xe080),
+            Value::fixnum(0xe0a0),
+            Value::fixnum(0xe0ff),
+            Value::fixnum(0xe380),
+            Value::fixnum(0xe3a0),
+            Value::fixnum(0xe3ff),
+        ])
+    );
+}
+
 #[test]
 fn prin1_to_string_respects_print_overrides_for_control_characters() {
     crate::test_utils::init_test_tracing();

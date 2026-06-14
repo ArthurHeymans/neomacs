@@ -738,6 +738,25 @@ pub(crate) fn print_value_bytes_in_state(
     )
 }
 
+/// Byte-producing sibling of [`print_value_in_state_with_options`].  Renders a
+/// value as canonical Emacs internal-encoding bytes (eight-bit/non-Unicode as
+/// disjoint extended sequences), the form `prin1`/`print` feed straight to the
+/// byte print sink (issue #131).
+pub(crate) fn print_value_bytes_in_state_with_options(
+    ctx: &crate::emacs_core::eval::Context,
+    value: &Value,
+    options: PrintOptions,
+) -> Vec<u8> {
+    format_value_bytes_in_state_with_options(
+        &ctx.obarray,
+        &ctx.buffers,
+        &ctx.frames,
+        &ctx.threads,
+        value,
+        options,
+    )
+}
+
 pub(crate) fn format_value_bytes_in_state_with_options(
     obarray: &super::symbol::Obarray,
     buffers: &crate::buffer::BufferManager,
