@@ -2273,14 +2273,16 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         .expect("current row");
 
     let (appended, end) = append_context
-        .append_resolved_source_range_to_text_row(
+        .append_source_text_request_to_text_row(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            source_range,
             &face_resolver,
-            ResolvedBufferTextSourceAdvance::natural(measured_width),
+            BufferTextSourceTextRequest::new(
+                source_range,
+                ResolvedBufferTextSourceAdvance::natural(measured_width),
+            ),
             position,
         )
         .expect("appended buffer fragment");
@@ -2330,14 +2332,16 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
     let append_context =
         BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let (progress, end) = append_context
-        .append_resolved_source_range_to_text_row(
+        .append_source_text_request_to_text_row(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
             &face_resolver,
-            ResolvedBufferTextSourceAdvance::resolved(13.0),
+            BufferTextSourceTextRequest::new(
+                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+                ResolvedBufferTextSourceAdvance::resolved(13.0),
+            ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended resolved buffer fragment");
@@ -2397,14 +2401,16 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     let append_context =
         BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let (progress, end) = append_context
-        .append_resolved_source_range_to_text_row(
+        .append_source_text_request_to_text_row(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
-            BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
             &face_resolver,
-            ResolvedBufferTextSourceAdvance::natural(0.0),
+            BufferTextSourceTextRequest::new(
+                BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
+                ResolvedBufferTextSourceAdvance::natural(0.0),
+            ),
             DisplayRowPosition { x_px: 8.0, col: 1 },
         )
         .expect("appended combining buffer char");

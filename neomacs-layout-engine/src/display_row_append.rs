@@ -118,6 +118,36 @@ impl ResolvedBufferTextSourceAdvance {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BufferTextSourceTextRequest {
+    range: BufferTextSourceRange,
+    resolved_advance: ResolvedBufferTextSourceAdvance,
+}
+
+impl BufferTextSourceTextRequest {
+    fn new(
+        range: BufferTextSourceRange,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+    ) -> Self {
+        Self {
+            range,
+            resolved_advance,
+        }
+    }
+
+    fn range(self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    fn append_measurement(self) -> DisplaySourceAppendMeasurement {
+        self.resolved_advance.append_measurement()
+    }
+
+    fn advance_px(self) -> f32 {
+        self.resolved_advance.advance_px()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 struct BufferTextSourceAdvanceResolver {
     complex_run: ComplexTextRunAdvanceResolver,
@@ -1827,6 +1857,26 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         Some(Self::new(append_item, base_face, face_id, frame, position))
     }
 
+    fn for_buffer_text_request<B: LayoutBufferView + ?Sized>(
+        source_text: BufferTextSourceTextRequest,
+        buffer_id: BufferId,
+        buffer: &B,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> Option<Self> {
+        Self::for_buffer_text_range(
+            source_text.range(),
+            buffer_id,
+            buffer,
+            face_id,
+            base_face,
+            frame,
+            position,
+        )
+    }
+
     fn for_display_item_request<B: LayoutBufferView + ?Sized>(
         source_item: BufferTextSourceItemRequest,
         buffer_id: BufferId,
@@ -2157,19 +2207,18 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(test)]
-    fn append_resolved_source_range_to_text_row(
+    fn append_source_text_request_to_text_row(
         &self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
+        source_text: BufferTextSourceTextRequest,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
-            range,
+        let operation = BufferTextSourceAppendOperation::for_buffer_text_request(
+            source_text,
             self.buffer_id,
             self.buffer,
             self.face_id,
@@ -2178,7 +2227,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
             position,
         )?;
         let mut render_policy =
-            DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
+            DisplaySourceAppendRenderPolicy::new(source_text.append_measurement());
         operation.render_to_text_row_and_emit(
             builder,
             output_emitter,
@@ -2503,21 +2552,20 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn append_resolved_source_range_to_text_row(
+    fn append_source_text_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
+        source_text: BufferTextSourceTextRequest,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
-            range,
+        let operation = BufferTextSourceAppendOperation::for_buffer_text_request(
+            source_text,
             self.buffer_id,
             self.buffer,
             self.active_face.face_id(),
@@ -2526,7 +2574,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             position,
         )?;
         let mut render_policy =
-            DisplaySourceAppendRenderPolicy::new(resolved_advance.append_measurement());
+            DisplaySourceAppendRenderPolicy::new(source_text.append_measurement());
         operation.render_to_text_row_and_emit(
             builder,
             output_emitter,
@@ -2548,15 +2596,14 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         plan: BufferTextSourceCharAppendPlan,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.append_resolved_source_range_to_text_row(
+        self.append_source_text_request_to_text_row(
             geometry,
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            plan.range(),
             face_resolver,
-            plan.resolved_advance(),
+            plan.source_text(),
             plan.position(),
         )
     }
@@ -3096,18 +3143,13 @@ impl BufferTextSpecialSourceCharMeasureRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct BufferTextSourceCharAppendPlan {
-    range: BufferTextSourceRange,
-    resolved_advance: ResolvedBufferTextSourceAdvance,
+    source_text: BufferTextSourceTextRequest,
     position: DisplayRowPosition,
 }
 
 impl BufferTextSourceCharAppendPlan {
-    fn range(self) -> BufferTextSourceRange {
-        self.range
-    }
-
-    fn resolved_advance(self) -> ResolvedBufferTextSourceAdvance {
-        self.resolved_advance
+    fn source_text(self) -> BufferTextSourceTextRequest {
+        self.source_text
     }
 
     fn position(self) -> DisplayRowPosition {
@@ -3115,7 +3157,7 @@ impl BufferTextSourceCharAppendPlan {
     }
 
     fn advance_px(self) -> f32 {
-        self.resolved_advance.advance_px()
+        self.source_text.advance_px()
     }
 }
 
@@ -3154,8 +3196,7 @@ impl<'text> BufferTextSourceCharAppendRequest<'text> {
         resolved_advance: ResolvedBufferTextSourceAdvance,
     ) -> BufferTextSourceCharAppendPlan {
         BufferTextSourceCharAppendPlan {
-            range: self.range,
-            resolved_advance,
+            source_text: BufferTextSourceTextRequest::new(self.range, resolved_advance),
             position: self.position,
         }
     }
