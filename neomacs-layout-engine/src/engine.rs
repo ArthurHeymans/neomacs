@@ -52,15 +52,15 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
-    BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailAction,
-    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderRequest,
-    BufferInvisibleTextRenderRequestState, BufferLineNumberMarginRenderRequest,
-    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
-    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayTailRenderRequest,
-    BufferSelectiveDisplayTailRenderState, BufferTextDecodedSourceChar,
-    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
-    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, OverlayStringRenderState,
+    BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailRenderRequest,
+    BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
+    BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
+    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
+    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
+    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
+    BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
+    BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
+    BufferTextSourceCharRenderRequestState, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
@@ -2286,50 +2286,39 @@ impl LayoutEngine {
             }
         }
 
-        let end_of_buffer_tail = BufferEndOfBufferTailAction::new(
+        let end_of_buffer_tail = BufferEndOfBufferTailRenderRequest::new(
             byte_idx,
             charpos,
             accessible_end,
             point_charpos,
             has_overlays,
+            overlay_text_row_context,
+            &active_face_state,
+            row_limit,
+        )
+        .render_and_apply(
+            buffer,
+            BufferEndOfBufferTailRenderState {
+                output_emitter: &mut output_emitter,
+                x: &mut x,
+                col: &mut col,
+                row_geometry: &mut row_geometry,
+                cursor_info: &mut cursor_info,
+                hit_rows: &mut hit_rows,
+                hit_row_range: &mut hit_row_range,
+                row_y_positions: &mut row_y_positions,
+                face_ids: &mut face_ids,
+                builder: &mut self.matrix_builder,
+                evaluator,
+                font_metrics: &mut self.font_metrics,
+                face_resolver,
+            },
         );
         let point_is_visible_eob = end_of_buffer_tail.point_is_visible_eob();
-        end_of_buffer_tail.capture_cursor_if_point(
-            &mut cursor_info,
-            &active_face_state,
-            &row_geometry,
-            x,
-            col,
-        );
 
         // Close any remaining box face region at end of text
         if box_face.is_active() {
             let _ = (box_face.start_x(), box_face.row()); // suppress unused warnings
-        }
-
-        // EOB overlay strings: check for overlay strings at the end-of-buffer position
-        if end_of_buffer_tail.should_render_overlay_strings(&row_geometry, row_limit) {
-            let mut overlay_state = OverlayStringRenderState::new(
-                evaluator,
-                &mut output_emitter,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
-            );
-            end_of_buffer_tail.render_overlay_strings_at_eob(
-                buffer,
-                overlay_text_row_context,
-                &active_face_state,
-                &mut overlay_state,
-            );
         }
 
         // Face :extend at end-of-buffer: fill remaining empty rows

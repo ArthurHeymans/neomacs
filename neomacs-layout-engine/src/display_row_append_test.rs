@@ -5598,6 +5598,107 @@ fn buffer_end_of_buffer_tail_action_reports_cursor_and_overlay_state() {
 }
 
 #[test]
+fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay() {
+    let mut context = RowTransitionTestContext::new("eob-tail-render-request");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert("abc");
+        let eob = buffer.point_max_emacs_byte_pos().get();
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: eob,
+            end: eob,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        let _ = buffer.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("Z"),
+        );
+    }
+
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let overlay_context =
+        BufferOverlayStringTextRowRenderContext::new(true, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let mut x = 24.0;
+    let mut col = 3;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut font_metrics = None;
+
+    let outcome = BufferEndOfBufferTailRenderRequest::new(
+        3,
+        3,
+        3,
+        3,
+        true,
+        overlay_context,
+        &active_face,
+        context.row_limit,
+    )
+    .render_and_apply(
+        &snapshot,
+        BufferEndOfBufferTailRenderState {
+            output_emitter: &mut context.output_emitter,
+            x: &mut x,
+            col: &mut col,
+            row_geometry: &mut context.geometry,
+            cursor_info: &mut cursor_info,
+            hit_rows: &mut context.hit_rows,
+            hit_row_range: &mut hit_row_range,
+            row_y_positions: &mut context.row_y_positions,
+            face_ids: &mut face_ids,
+            builder: &mut context.builder,
+            evaluator: &mut context.eval,
+            font_metrics: &mut font_metrics,
+            face_resolver: &face_resolver,
+        },
+    );
+
+    assert!(outcome.point_is_visible_eob());
+    let captured = cursor_info.captured().expect("EOB cursor captured");
+    assert_eq!(captured.x, 24.0);
+    assert_eq!(captured.col, 3);
+    assert_eq!(x, 32.0);
+    assert_eq!(col, 4);
+    context
+        .builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: 'Z' }));
+        })
+        .expect("current row");
+}
+
+#[test]
 fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating_row() {
     let mut eval = Context::new();
     let buf_id = eval

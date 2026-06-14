@@ -576,6 +576,33 @@ pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
     pub(crate) face_resolver: &'a FaceResolver,
 }
 
+pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
+    byte_idx: usize,
+    charpos: i64,
+    accessible_end: i64,
+    point_charpos: i64,
+    has_overlays: bool,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    row_limit: DisplayRowLimit,
+}
+
+pub(crate) struct BufferEndOfBufferTailRenderState<'a, 'emit> {
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) row_y_positions: &'emit mut DisplayRowYPositions,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'a FaceResolver,
+}
+
 pub(crate) struct DisplayRowTransitionRenderState<'a> {
     prefix_request: &'a mut DisplayRowPrefixRequest,
     has_prefix: bool,
@@ -4102,6 +4129,11 @@ pub(crate) enum BufferInvisibleTextRenderOutcome {
     ContinueBufferWalk,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferEndOfBufferTailRenderOutcome {
+    point_is_visible_eob: bool,
+}
+
 pub(crate) struct BufferTextSourceCharRenderState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
@@ -4218,6 +4250,12 @@ impl BufferSelectiveDisplayTailRenderOutcome {
 impl BufferInvisibleTextRenderOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         matches!(self, Self::ContinueBufferWalk)
+    }
+}
+
+impl BufferEndOfBufferTailRenderOutcome {
+    pub(crate) fn point_is_visible_eob(self) -> bool {
+        self.point_is_visible_eob
     }
 }
 
@@ -5811,6 +5849,91 @@ impl BufferEndOfBufferTailAction {
         state: &mut OverlayStringRenderState<'_>,
     ) {
         render_context.render_both_at(buffer, self.cursor.charpos, active_face_state, state);
+    }
+}
+
+impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        byte_idx: usize,
+        charpos: i64,
+        accessible_end: i64,
+        point_charpos: i64,
+        has_overlays: bool,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            byte_idx,
+            charpos,
+            accessible_end,
+            point_charpos,
+            has_overlays,
+            overlay_context,
+            active_face_state,
+            row_limit,
+        }
+    }
+
+    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: BufferEndOfBufferTailRenderState<'_, '_>,
+    ) -> BufferEndOfBufferTailRenderOutcome {
+        let BufferEndOfBufferTailRenderState {
+            output_emitter,
+            x,
+            col,
+            row_geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+        } = state;
+
+        let tail = BufferEndOfBufferTailAction::new(
+            self.byte_idx,
+            self.charpos,
+            self.accessible_end,
+            self.point_charpos,
+            self.has_overlays,
+        );
+        let point_is_visible_eob = tail.point_is_visible_eob();
+        tail.capture_cursor_if_point(cursor_info, self.active_face_state, row_geometry, *x, *col);
+
+        if tail.should_render_overlay_strings(row_geometry, self.row_limit) {
+            let mut overlay_state = OverlayStringRenderState::new(
+                evaluator,
+                output_emitter,
+                font_metrics,
+                face_resolver,
+                x,
+                col,
+                row_geometry,
+                cursor_info,
+                hit_rows,
+                hit_row_range,
+                row_y_positions,
+                face_ids,
+                builder,
+            );
+            tail.render_overlay_strings_at_eob(
+                buffer,
+                self.overlay_context,
+                self.active_face_state,
+                &mut overlay_state,
+            );
+        }
+
+        BufferEndOfBufferTailRenderOutcome {
+            point_is_visible_eob,
+        }
     }
 }
 
