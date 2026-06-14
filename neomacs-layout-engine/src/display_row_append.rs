@@ -36,10 +36,10 @@ use crate::display_row_geometry::{
     DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, HitRowRangeTracker, HorizontalScrollSkipState,
-    LineNumberRenderState, SpecialTextRowOverflowDecision, TextRowTransitionPrefixAction,
-    TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapBreakCandidate,
-    WordWrapRenderState,
+    BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
+    HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
+    TextRowTransitionPrefixAction, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
+    WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -3929,8 +3929,10 @@ impl BufferTextSpecialSourceCharAppendOutcome {
         (self.progress, self.position)
     }
 
-    pub(crate) fn invalidates_face_after_append(&self) -> bool {
-        self.append_policy.invalidates_face_after_append()
+    pub(crate) fn apply_face_scan_policy(&self, face_scan: &mut FaceScanCheckpoint) {
+        if self.append_policy.invalidates_face_after_append() {
+            face_scan.invalidate();
+        }
     }
 }
 

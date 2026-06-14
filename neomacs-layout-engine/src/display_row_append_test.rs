@@ -25,7 +25,9 @@ use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_walk_state::{BufferTextRowOverflowDecision, WordWrapRenderState};
+use crate::display_row_walk_state::{
+    BufferTextRowOverflowDecision, FaceScanCheckpoint, WordWrapRenderState,
+};
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use crate::window_output::TextMatrixRowTransition;
@@ -2979,7 +2981,10 @@ fn buffer_text_item_append_context_builds_mapped_item() {
             &face_resolver,
         )
         .expect("appended source-mapped buffer text item fragment");
-    assert!(append_outcome.invalidates_face_after_append());
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+    append_outcome.apply_face_scan_policy(&mut face_scan);
+    assert!(face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 31);
     let (_progress, end) = append_outcome.into_progress_and_position();
 
@@ -3075,7 +3080,10 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
             &face_resolver,
         )
         .expect("appended glyphless buffer text item fragment");
-    assert!(!append_outcome.invalidates_face_after_append());
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+    append_outcome.apply_face_scan_policy(&mut face_scan);
+    assert!(!face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 30);
     let (_progress, end) = append_outcome.into_progress_and_position();
 

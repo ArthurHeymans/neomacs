@@ -2794,14 +2794,10 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                         face_resolver,
                     ) {
-                        let invalidates_face_after_append =
-                            append_outcome.invalidates_face_after_append();
+                        append_outcome.apply_face_scan_policy(&mut face_scan);
                         let (_progress, position) = append_outcome.into_progress_and_position();
                         x = position.x_px;
                         col = position.col;
-                        if invalidates_face_after_append {
-                            face_scan.invalidate();
-                        }
                     }
                     charpos += 1;
                     word_wrap.disallow_after_current_char();
