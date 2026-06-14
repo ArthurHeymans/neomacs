@@ -2364,7 +2364,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prepare_special_source_char_layout_plan(
+    pub(crate) fn prepare_special_source_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -2373,17 +2373,18 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         face_resolver: &FaceResolver,
         request: BufferTextSpecialSourceCharRequest,
         position: DisplayRowPosition,
-    ) -> BufferTextSpecialSourceCharLayoutPlan {
-        let measured_width_px = self
-            .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
+    ) -> BufferTextSpecialSourceCharPreparedAppend {
+        let measured_width_px = request.requires_overflow_measurement().then(|| {
+            self.measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
                 geometry,
                 builder,
                 evaluator,
                 font_metrics,
                 face_resolver,
                 request.measure_at(position),
-            );
-        request.layout_plan(measured_width_px)
+            )
+        });
+        request.prepared_append_at(position, measured_width_px)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2892,6 +2893,7 @@ impl BufferTextSourceChar {
         BufferTextSpecialSourceCharRequest::new(self, display)
     }
 
+    #[cfg(test)]
     pub(crate) fn control_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
         self.precluster_special_display()
             .filter(|display| display.is_control())
@@ -2899,6 +2901,7 @@ impl BufferTextSourceChar {
             .map(|display| self.special_request_for_display(display))
     }
 
+    #[cfg(test)]
     pub(crate) fn nobreak_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
         self.precluster_special_display()
             .filter(|display| display.is_nobreak())
@@ -2923,6 +2926,16 @@ impl BufferTextSourceChar {
     ) -> Option<BufferTextSpecialSourceCharRequest> {
         self.cluster_special_display(tail)
             .map(|display| self.special_request_for_display(display))
+    }
+
+    pub(crate) fn special_request(
+        &self,
+        tail: Option<(char, bool)>,
+    ) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.precluster_special_display()
+            .cloned()
+            .map(|display| self.special_request_for_display(display))
+            .or_else(|| self.cluster_special_request(tail))
     }
 
     fn advance_request_at<'text>(
@@ -2969,32 +2982,22 @@ impl BufferTextSpecialSourceCharRequest {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_to_text_row_at<B: LayoutBufferView + ?Sized>(
-        &self,
-        context: &BufferTextRowAppendContext<'_, '_, B>,
-        geometry: &DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        context.append_special_source_char_plan_to_text_row_and_emit(
-            geometry,
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            self.append_plan_at(position),
-        )
+    pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
+        self.special_display.kind()
     }
 
-    fn layout_plan(self, measured_width_px: f32) -> BufferTextSpecialSourceCharLayoutPlan {
-        BufferTextSpecialSourceCharLayoutPlan {
-            source_request: self,
+    fn requires_overflow_measurement(&self) -> bool {
+        self.special_display.is_control()
+    }
+
+    fn prepared_append_at(
+        self,
+        position: DisplayRowPosition,
+        measured_width_px: Option<f32>,
+    ) -> BufferTextSpecialSourceCharPreparedAppend {
+        BufferTextSpecialSourceCharPreparedAppend {
+            kind: self.kind(),
+            append_plan: self.append_plan_at(position),
             measured_width_px,
         }
     }
@@ -3017,14 +3020,32 @@ impl BufferTextSpecialSourceCharRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharLayoutPlan {
-    source_request: BufferTextSpecialSourceCharRequest,
-    measured_width_px: f32,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceSpecialDisplayKind {
+    Control,
+    Nobreak,
+    Glyphless,
 }
 
-impl BufferTextSpecialSourceCharLayoutPlan {
-    fn measured_width_px(&self) -> f32 {
+impl BufferTextSourceSpecialDisplayKind {
+    pub(crate) fn invalidates_face_after_append(self) -> bool {
+        matches!(self, Self::Control | Self::Nobreak)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSpecialSourceCharPreparedAppend {
+    kind: BufferTextSourceSpecialDisplayKind,
+    append_plan: BufferTextSpecialSourceCharAppendPlan,
+    measured_width_px: Option<f32>,
+}
+
+impl BufferTextSpecialSourceCharPreparedAppend {
+    pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
+        self.kind
+    }
+
+    fn measured_width_px(&self) -> Option<f32> {
         self.measured_width_px
     }
 
@@ -3033,18 +3054,18 @@ impl BufferTextSpecialSourceCharLayoutPlan {
         x_px: f32,
         right_edge_px: f32,
         truncate_lines: bool,
-    ) -> SpecialTextRowOverflowDecision {
-        SpecialTextRowOverflowDecision::for_width(
+    ) -> Option<SpecialTextRowOverflowDecision> {
+        Some(SpecialTextRowOverflowDecision::for_width(
             x_px,
-            self.measured_width_px(),
+            self.measured_width_px()?,
             right_edge_px,
             truncate_lines,
-        )
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_to_text_row_at<B: LayoutBufferView + ?Sized>(
-        &self,
+    pub(crate) fn append_to_text_row<B: LayoutBufferView + ?Sized>(
+        self,
         context: &BufferTextRowAppendContext<'_, '_, B>,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -3052,17 +3073,15 @@ impl BufferTextSpecialSourceCharLayoutPlan {
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.source_request.append_to_text_row_at(
-            context,
+        context.append_special_source_char_plan_to_text_row_and_emit(
             geometry,
             builder,
             output_emitter,
             evaluator,
             font_metrics,
             face_resolver,
-            position,
+            self.append_plan,
         )
     }
 }
@@ -3186,8 +3205,17 @@ impl BufferTextSourceSpecialDisplay {
         matches!(self, Self::Control(_))
     }
 
+    #[cfg(test)]
     fn is_nobreak(&self) -> bool {
         matches!(self, Self::Nobreak(_))
+    }
+
+    fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
+        match self {
+            Self::Control(_) => BufferTextSourceSpecialDisplayKind::Control,
+            Self::Nobreak(_) => BufferTextSourceSpecialDisplayKind::Nobreak,
+            Self::Glyphless(_) => BufferTextSourceSpecialDisplayKind::Glyphless,
+        }
     }
 
     fn is_control_char(ch: char) -> bool {

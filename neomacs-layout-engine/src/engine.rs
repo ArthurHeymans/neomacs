@@ -62,11 +62,11 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
-    DisplayRowOverflowTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
-    SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
-    render_overlay_string_batch,
+    BufferTextSourceSpecialDisplayKind, DisplayPropertyReplacementAppendResolveRequest,
+    DisplayRowLineBreakTransitionRequest, DisplayRowOverflowTransitionRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
+    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextMarker,
+    SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest, render_overlay_string_batch,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2666,160 +2666,6 @@ impl LayoutEngine {
                 char_h,
             );
 
-            // Control characters: render as ^X notation
-            if let Some(special_source_request) = buffer_source_char.control_special_request() {
-                let special_layout_plan = buffer_row_append_context
-                    .prepare_special_source_char_layout_plan(
-                        &row_geometry,
-                        &mut self.matrix_builder,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        special_source_request,
-                        DisplayRowPosition { x_px: x, col },
-                    );
-                match special_layout_plan.overflow_decision(
-                    x,
-                    text_append_surface.full_text_right_edge(),
-                    params.truncate_lines,
-                ) {
-                    SpecialTextRowOverflowDecision::Fits => {}
-                    SpecialTextRowOverflowDecision::Truncate => {
-                        // Same byte_idx/charpos desync as the main-char
-                        // truncation path: byte_idx is past the overflowing
-                        // control char, but charpos hasn't been incremented
-                        // for it yet. Compensate before skipping.
-                        charpos += 1;
-                        if skip_to_newline(text, &mut byte_idx, &mut charpos) {
-                            line_numbers.advance_line();
-                        }
-                        x = content_x;
-                        row_extend.clear();
-                        // Record hit-test row (wrap/truncation break)
-                        let row_transition = DisplayRowOverflowTransitionRequest::truncation(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                            max_rows,
-                        )
-                        .emit(
-                            &mut row_geometry,
-                            &mut row_flags,
-                            row_limit,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                        );
-                        if row_transition.is_exhausted() {
-                            break;
-                        }
-                        charpos = sync_charpos_from_byte_idx(byte_idx);
-                        hit_row_range.advance_to(charpos);
-                        col = 0;
-                        prefix_request.apply_transition_prefix_action(
-                            has_prefix,
-                            TextRowTransitionStatePolicy::special_truncation().apply(
-                                &mut line_numbers,
-                                &mut hscroll_skip,
-                                &mut word_wrap,
-                                &mut trailing_whitespace,
-                            ),
-                        );
-                        continue;
-                    }
-                    SpecialTextRowOverflowDecision::Wrap => {
-                        x = content_x;
-                        row_extend.clear();
-                        let boundary_request = DisplayRowOverflowTransitionRequest::visual_wrap(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                            max_rows,
-                        );
-                        // Record hit-test row (wrap/truncation break)
-                        hit_row_range.advance_to(charpos);
-                        let row_transition = boundary_request.emit(
-                            &mut row_geometry,
-                            &mut row_flags,
-                            row_limit,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                        );
-                        if row_transition.is_exhausted() {
-                            break;
-                        }
-                        col = 0;
-                        prefix_request.apply_transition_prefix_action(
-                            has_prefix,
-                            TextRowTransitionStatePolicy::special_visual_wrap().apply(
-                                &mut line_numbers,
-                                &mut hscroll_skip,
-                                &mut word_wrap,
-                                &mut trailing_whitespace,
-                            ),
-                        );
-                        if !row_geometry.current_row_is_visible(row_visibility_limit) {
-                            break;
-                        }
-                    }
-                }
-
-                // Render ^X with escape-glyph face color
-                if params.escape_glyph_fg != 0 {
-                    let _ = face_ids.allocate();
-                }
-                if let Some((_progress, position)) = special_layout_plan.append_to_text_row_at(
-                    &buffer_row_append_context,
-                    &row_geometry,
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    DisplayRowPosition { x_px: x, col },
-                ) {
-                    x = position.x_px;
-                    col = position.col;
-                }
-                charpos += 1;
-                word_wrap.disallow_after_current_char();
-                face_scan.invalidate(); // force face re-check to restore text face
-                continue;
-            }
-
-            // Nobreak character display (U+00A0 non-breaking space, U+00AD soft hyphen)
-            if let Some(special_source_request) = buffer_source_char.nobreak_special_request() {
-                if params.nobreak_char_fg != 0 {
-                    let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
-                    let _ = face_ids.allocate();
-                }
-                if let Some((_progress, position)) = special_source_request.append_to_text_row_at(
-                    &buffer_row_append_context,
-                    &row_geometry,
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    DisplayRowPosition { x_px: x, col },
-                ) {
-                    x = position.x_px;
-                    col = position.col;
-                }
-                charpos += 1;
-                word_wrap.disallow_after_current_char();
-                face_scan.invalidate();
-                continue;
-            }
             // Grapheme-cluster continuation is decided BEFORE glyphless
             // handling: a zero-width joiner / non-joiner / variation selector
             // that continues an emoji composition (the ZWJs in 👨‍👩‍👧, VS-16 in
@@ -2831,11 +2677,126 @@ impl LayoutEngine {
             // glyphless.
             let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
 
-            // Glyphless character detection (C1 controls, format chars, etc.)
-            if let Some(special_source_request) =
-                buffer_source_char.cluster_special_request(cluster_tail)
-            {
-                if let Some((_progress, position)) = special_source_request.append_to_text_row_at(
+            if let Some(special_source_request) = buffer_source_char.special_request(cluster_tail) {
+                let special_prepared_append = buffer_row_append_context
+                    .prepare_special_source_char_at(
+                        &row_geometry,
+                        &mut self.matrix_builder,
+                        evaluator,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        special_source_request,
+                        DisplayRowPosition { x_px: x, col },
+                    );
+                if let Some(overflow_decision) = special_prepared_append.overflow_decision(
+                    x,
+                    text_append_surface.full_text_right_edge(),
+                    params.truncate_lines,
+                ) {
+                    match overflow_decision {
+                        SpecialTextRowOverflowDecision::Fits => {}
+                        SpecialTextRowOverflowDecision::Truncate => {
+                            // Same byte_idx/charpos desync as the main-char
+                            // truncation path: byte_idx is past the overflowing
+                            // special char, but charpos hasn't been incremented
+                            // for it yet. Compensate before skipping.
+                            charpos += 1;
+                            if skip_to_newline(text, &mut byte_idx, &mut charpos) {
+                                line_numbers.advance_line();
+                            }
+                            x = content_x;
+                            row_extend.clear();
+                            let row_transition = DisplayRowOverflowTransitionRequest::truncation(
+                                hit_row_range.range_to(charpos),
+                                row_geometry_defaults,
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                row_y_positions.recording(),
+                                max_rows,
+                            )
+                            .emit(
+                                &mut row_geometry,
+                                &mut row_flags,
+                                row_limit,
+                                &mut hit_rows,
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                            );
+                            if row_transition.is_exhausted() {
+                                break;
+                            }
+                            charpos = sync_charpos_from_byte_idx(byte_idx);
+                            hit_row_range.advance_to(charpos);
+                            col = 0;
+                            prefix_request.apply_transition_prefix_action(
+                                has_prefix,
+                                TextRowTransitionStatePolicy::special_truncation().apply(
+                                    &mut line_numbers,
+                                    &mut hscroll_skip,
+                                    &mut word_wrap,
+                                    &mut trailing_whitespace,
+                                ),
+                            );
+                            continue;
+                        }
+                        SpecialTextRowOverflowDecision::Wrap => {
+                            x = content_x;
+                            row_extend.clear();
+                            let boundary_request = DisplayRowOverflowTransitionRequest::visual_wrap(
+                                hit_row_range.range_to(charpos),
+                                row_geometry_defaults,
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                row_y_positions.recording(),
+                                max_rows,
+                            );
+                            hit_row_range.advance_to(charpos);
+                            let row_transition = boundary_request.emit(
+                                &mut row_geometry,
+                                &mut row_flags,
+                                row_limit,
+                                &mut hit_rows,
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                            );
+                            if row_transition.is_exhausted() {
+                                break;
+                            }
+                            col = 0;
+                            prefix_request.apply_transition_prefix_action(
+                                has_prefix,
+                                TextRowTransitionStatePolicy::special_visual_wrap().apply(
+                                    &mut line_numbers,
+                                    &mut hscroll_skip,
+                                    &mut word_wrap,
+                                    &mut trailing_whitespace,
+                                ),
+                            );
+                            if !row_geometry.current_row_is_visible(row_visibility_limit) {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                match special_prepared_append.kind() {
+                    BufferTextSourceSpecialDisplayKind::Control if params.escape_glyph_fg != 0 => {
+                        let _ = face_ids.allocate();
+                    }
+                    BufferTextSourceSpecialDisplayKind::Nobreak if params.nobreak_char_fg != 0 => {
+                        let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
+                        let _ = face_ids.allocate();
+                    }
+                    _ => {}
+                }
+                let should_invalidate_face = special_prepared_append
+                    .kind()
+                    .invalidates_face_after_append();
+                if let Some((_progress, position)) = special_prepared_append.append_to_text_row(
                     &buffer_row_append_context,
                     &row_geometry,
                     &mut self.matrix_builder,
@@ -2843,13 +2804,15 @@ impl LayoutEngine {
                     evaluator,
                     &mut self.font_metrics,
                     face_resolver,
-                    DisplayRowPosition { x_px: x, col },
                 ) {
                     x = position.x_px;
                     col = position.col;
                 }
                 charpos += 1;
                 word_wrap.disallow_after_current_char();
+                if should_invalidate_face {
+                    face_scan.invalidate();
+                }
                 continue;
             }
 
