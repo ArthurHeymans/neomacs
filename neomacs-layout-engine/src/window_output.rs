@@ -183,6 +183,31 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) char_width: f32,
 }
 
+impl<'a> TextWindowRightEdgeMarkers<'a> {
+    pub(crate) fn for_reserved_special_column(
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        text_matrix_row_base: usize,
+        matrix_cols: usize,
+        row_flags: &'a DisplayRowFlags,
+        face_id: u32,
+        char_width: f32,
+    ) -> Option<Self> {
+        reserve_right_special_col.then_some(Self {
+            text_matrix_row_base,
+            matrix_cols,
+            column: if reserve_right_border_col {
+                TextWindowRightEdgeMarkerColumn::BeforeRightBorder
+            } else {
+                TextWindowRightEdgeMarkerColumn::LastColumn
+            },
+            row_flags,
+            face_id,
+            char_width,
+        })
+    }
+}
+
 pub(crate) struct TextWindowPendingRowFinish<'a> {
     pub(crate) row_geometry: &'a DisplayRowGeometryState,
     pub(crate) row_limit: DisplayRowLimit,
@@ -195,6 +220,14 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
 }
 
 pub(crate) struct TextWindowOutputInstall<'a> {
+    pub(crate) right_edge_markers: Option<TextWindowRightEdgeMarkers<'a>>,
+}
+
+pub(crate) struct TextWindowBodyOutputInstall<'a> {
+    pub(crate) window_id: u64,
+    pub(crate) window_start: i64,
+    pub(crate) text_start_byte: usize,
+    pub(crate) byte_idx: usize,
     pub(crate) right_edge_markers: Option<TextWindowRightEdgeMarkers<'a>>,
 }
 
@@ -875,6 +908,28 @@ pub(crate) fn install_text_window_output(
     if let Some(markers) = request.right_edge_markers {
         install_text_window_right_edge_markers(builder, markers);
     }
+}
+
+pub(crate) fn install_text_window_body_output(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &WindowOutputEmitter,
+    request: TextWindowBodyOutputInstall<'_>,
+) -> TextWindowRedisplayPositions {
+    let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
+        output_emitter,
+        request.window_start,
+        request.text_start_byte,
+        request.byte_idx,
+    );
+    record_text_window_redisplay_positions(builder, request.window_id, redisplay_positions);
+    install_text_window_output(
+        builder,
+        output_emitter,
+        TextWindowOutputInstall {
+            right_edge_markers: request.right_edge_markers,
+        },
+    );
+    redisplay_positions
 }
 
 pub(crate) fn install_text_window_right_edge_markers(

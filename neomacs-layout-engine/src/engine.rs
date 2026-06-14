@@ -20,13 +20,12 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    ChromeRowOutput, TextWindowBegin, TextWindowCursorEffects, TextWindowLineNumberMargin,
-    TextWindowOutputInstall, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightBorder, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
-    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    emit_text_window_line_number_margin, finish_pending_text_window_row,
-    install_last_window_right_border, install_text_window_cursor_effects,
-    install_text_window_output, record_text_window_redisplay_positions,
+    ChromeRowOutput, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
+    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRightBorder,
+    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
+    close_text_window_output, emit_text_window_line_number_margin, finish_pending_text_window_row,
+    install_last_window_right_border, install_text_window_body_output,
+    install_text_window_cursor_effects,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -3190,16 +3189,25 @@ impl LayoutEngine {
             return;
         }
 
-        let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
-            &output_emitter,
-            window_start,
-            text_start_byte,
-            byte_idx,
+        let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
+            reserve_right_special_col,
+            reserve_right_border_col,
+            text_matrix_row_base,
+            matrix_cols,
+            &row_flags,
+            0,
+            char_w,
         );
-        record_text_window_redisplay_positions(
+        let redisplay_positions = install_text_window_body_output(
             &mut self.matrix_builder,
-            params.window_id as u64,
-            redisplay_positions,
+            &output_emitter,
+            TextWindowBodyOutputInstall {
+                window_id: params.window_id as u64,
+                window_start,
+                text_start_byte,
+                byte_idx,
+                right_edge_markers,
+            },
         );
 
         tracing::debug!(
@@ -3222,26 +3230,6 @@ impl LayoutEngine {
             redisplay_positions.window_end,
             redisplay_positions.window_end_byte,
             redisplay_positions.window_end_vpos,
-        );
-
-        // --- GlyphMatrix builder: finalize text rows, then emit chrome rows
-        // into their real glyph-matrix slots before closing the window. ---
-        let right_edge_markers = reserve_right_special_col.then(|| TextWindowRightEdgeMarkers {
-            text_matrix_row_base,
-            matrix_cols,
-            column: if reserve_right_border_col {
-                TextWindowRightEdgeMarkerColumn::BeforeRightBorder
-            } else {
-                TextWindowRightEdgeMarkerColumn::LastColumn
-            },
-            row_flags: &row_flags,
-            face_id: 0,
-            char_width: char_w,
-        });
-        install_text_window_output(
-            &mut self.matrix_builder,
-            &output_emitter,
-            TextWindowOutputInstall { right_edge_markers },
         );
 
         let mut status_line_symbol_values = std::collections::HashMap::new();
