@@ -272,6 +272,20 @@ pub(crate) struct DisplayRowTextWindowTransitionContext<'a> {
     request_context: DisplayRowTransitionRequestContext<'a>,
 }
 
+pub(crate) struct DisplayRowTextWindowOverflowEmitContext<'a, 'emit> {
+    defaults: DisplayRowGeometryDefaults,
+    row_base: usize,
+    row_y_positions: &'a mut DisplayRowYPositions,
+    max_rows: usize,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    row_limit: DisplayRowLimit,
+    hit_rows: &'emit mut Vec<HitRow>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    output_emitter: &'emit mut WindowOutputEmitter,
+    evaluator: &'emit mut Context,
+}
+
 pub(crate) struct DisplayRowTransitionPrefixContext<'a> {
     prefix_request: &'a mut DisplayRowPrefixRequest,
     has_prefix: bool,
@@ -458,6 +472,63 @@ impl<'a> DisplayRowTextWindowTransitionContext<'a> {
             builder,
             output_emitter,
             evaluator,
+        )
+    }
+}
+
+impl<'a, 'emit> DisplayRowTextWindowOverflowEmitContext<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        max_rows: usize,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        row_limit: DisplayRowLimit,
+        hit_rows: &'emit mut Vec<HitRow>,
+        builder: &'emit mut GlyphMatrixBuilder,
+        output_emitter: &'emit mut WindowOutputEmitter,
+        evaluator: &'emit mut Context,
+    ) -> Self {
+        Self {
+            defaults,
+            row_base,
+            row_y_positions,
+            max_rows,
+            row_geometry,
+            row_flags,
+            row_limit,
+            hit_rows,
+            builder,
+            output_emitter,
+            evaluator,
+        }
+    }
+
+    pub(crate) fn emit(
+        self,
+        plan: DisplayRowOverflowTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+    ) -> TextMatrixRowTransition {
+        DisplayRowTextWindowTransitionContext::new(
+            self.defaults,
+            self.row_base,
+            self.row_y_positions,
+            self.max_rows,
+        )
+        .emit_overflow(
+            plan,
+            hit_range,
+            position,
+            self.row_geometry,
+            self.row_flags,
+            self.row_limit,
+            self.hit_rows,
+            self.builder,
+            self.output_emitter,
+            self.evaluator,
         )
     }
 }
