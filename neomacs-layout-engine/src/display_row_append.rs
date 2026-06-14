@@ -288,7 +288,7 @@ pub(crate) struct DisplayRowTextWindowEmitContext<'a, 'emit> {
     evaluator: &'emit mut Context,
 }
 
-pub(crate) struct DisplayRowTransitionPrefixContext<'a> {
+pub(crate) struct DisplayRowTransitionRenderState<'a> {
     prefix_request: &'a mut DisplayRowPrefixRequest,
     has_prefix: bool,
     line_numbers: &'a mut LineNumberRenderState,
@@ -561,7 +561,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
     }
 }
 
-impl<'a> DisplayRowTransitionPrefixContext<'a> {
+impl<'a> DisplayRowTransitionRenderState<'a> {
     pub(crate) fn new(
         prefix_request: &'a mut DisplayRowPrefixRequest,
         has_prefix: bool,
@@ -590,6 +590,26 @@ impl<'a> DisplayRowTransitionPrefixContext<'a> {
         self.prefix_request
             .apply_transition_prefix_action(self.has_prefix, prefix_action);
     }
+
+    pub(crate) fn apply_line_break_row_start(
+        self,
+        plan: DisplayRowLineBreakTransitionPlan,
+        col: &mut usize,
+    ) {
+        plan.apply_row_start_prefix_state(col, self);
+    }
+
+    pub(crate) fn apply_overflow_prefix(self, plan: DisplayRowOverflowTransitionPlan) {
+        plan.apply_prefix_state(self);
+    }
+
+    pub(crate) fn apply_overflow_row_start(
+        self,
+        plan: DisplayRowOverflowTransitionPlan,
+        col: &mut usize,
+    ) {
+        plan.apply_row_start_prefix_state(col, self);
+    }
 }
 
 impl DisplayRowLineBreakTransitionPlan {
@@ -609,17 +629,17 @@ impl DisplayRowLineBreakTransitionPlan {
         Self::new(TextRowTransitionStatePolicy::line_break())
     }
 
-    pub(crate) fn apply_prefix_action(self, context: &mut DisplayRowTransitionPrefixContext<'_>) {
-        context.apply_state_policy(self.state_policy);
+    pub(crate) fn apply_prefix_state(self, mut state: DisplayRowTransitionRenderState<'_>) {
+        state.apply_state_policy(self.state_policy);
     }
 
-    pub(crate) fn apply_row_start_prefix_action(
+    pub(crate) fn apply_row_start_prefix_state(
         self,
         col: &mut usize,
-        context: &mut DisplayRowTransitionPrefixContext<'_>,
+        state: DisplayRowTransitionRenderState<'_>,
     ) {
         *col = 0;
-        self.apply_prefix_action(context);
+        self.apply_prefix_state(state);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -725,17 +745,17 @@ impl DisplayRowOverflowTransitionPlan {
         Self::new(DisplayRowOverflowTransitionKind::VisualWrap, state_policy)
     }
 
-    pub(crate) fn apply_prefix_action(self, context: &mut DisplayRowTransitionPrefixContext<'_>) {
-        context.apply_state_policy(self.state_policy);
+    pub(crate) fn apply_prefix_state(self, mut state: DisplayRowTransitionRenderState<'_>) {
+        state.apply_state_policy(self.state_policy);
     }
 
-    pub(crate) fn apply_row_start_prefix_action(
+    pub(crate) fn apply_row_start_prefix_state(
         self,
         col: &mut usize,
-        context: &mut DisplayRowTransitionPrefixContext<'_>,
+        state: DisplayRowTransitionRenderState<'_>,
     ) {
         *col = 0;
-        self.apply_prefix_action(context);
+        self.apply_prefix_state(state);
     }
 
     #[allow(clippy::too_many_arguments)]

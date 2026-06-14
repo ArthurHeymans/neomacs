@@ -68,7 +68,7 @@ use crate::display_row_append::{
     BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
     DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
-    DisplayRowTransitionPrefixContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
+    DisplayRowTransitionRenderState, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2212,16 +2212,15 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                    DisplayRowTransitionRenderState::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
                         &mut hscroll_skip,
                         &mut word_wrap,
                         &mut trailing_whitespace,
-                    );
-                    line_break_transition
-                        .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
+                    )
+                    .apply_line_break_row_start(line_break_transition, &mut col);
                     if cursor_info.is_missing() && point_charpos == hscroll_action.charpos() {
                         capture_cursor_info(
                             &mut cursor_info,
@@ -2404,16 +2403,15 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_range.advance_to(charpos);
-                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                    DisplayRowTransitionRenderState::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
                         &mut hscroll_skip,
                         &mut word_wrap,
                         &mut trailing_whitespace,
-                    );
-                    line_break_transition
-                        .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
+                    )
+                    .apply_line_break_row_start(line_break_transition, &mut col);
                 }
                 continue;
             }
@@ -2479,16 +2477,15 @@ impl LayoutEngine {
                     &mut box_face,
                     content_x,
                 );
-                let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                DisplayRowTransitionRenderState::new(
                     &mut prefix_request,
                     has_prefix,
                     &mut line_numbers,
                     &mut hscroll_skip,
                     &mut word_wrap,
                     &mut trailing_whitespace,
-                );
-                line_break_transition
-                    .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
+                )
+                .apply_line_break_row_start(line_break_transition, &mut col);
                 // Selective display: skip lines indented beyond threshold
                 let selective_display_context =
                     BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
@@ -2584,18 +2581,15 @@ impl LayoutEngine {
                                     &mut charpos,
                                     &mut hit_row_range,
                                 );
-                                let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                                DisplayRowTransitionRenderState::new(
                                     &mut prefix_request,
                                     has_prefix,
                                     &mut line_numbers,
                                     &mut hscroll_skip,
                                     &mut word_wrap,
                                     &mut trailing_whitespace,
-                                );
-                                transition.apply_row_start_prefix_action(
-                                    &mut col,
-                                    &mut transition_prefix,
-                                );
+                                )
+                                .apply_overflow_row_start(transition, &mut col);
                                 continue;
                             }
                             BufferTextSpecialSourceCharOverflowAction::Wrap { transition } => {
@@ -2625,18 +2619,15 @@ impl LayoutEngine {
                                 if row_transition.is_exhausted() {
                                     break;
                                 }
-                                let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                                DisplayRowTransitionRenderState::new(
                                     &mut prefix_request,
                                     has_prefix,
                                     &mut line_numbers,
                                     &mut hscroll_skip,
                                     &mut word_wrap,
                                     &mut trailing_whitespace,
-                                );
-                                transition.apply_row_start_prefix_action(
-                                    &mut col,
-                                    &mut transition_prefix,
-                                );
+                                )
+                                .apply_overflow_row_start(transition, &mut col);
                                 if !row_geometry.current_row_is_visible(row_visibility_limit) {
                                     break;
                                 }
@@ -2717,15 +2708,15 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                    DisplayRowTransitionRenderState::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
                         &mut hscroll_skip,
                         &mut word_wrap,
                         &mut trailing_whitespace,
-                    );
-                    transition.apply_row_start_prefix_action(&mut col, &mut transition_prefix);
+                    )
+                    .apply_overflow_row_start(transition, &mut col);
                     continue;
                 }
                 BufferTextSourceCharOverflowAction::WordWrap {
@@ -2769,15 +2760,15 @@ impl LayoutEngine {
                         &mut hit_row_range,
                         &mut face_scan,
                     );
-                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                    DisplayRowTransitionRenderState::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
                         &mut hscroll_skip,
                         &mut word_wrap,
                         &mut trailing_whitespace,
-                    );
-                    transition.apply_prefix_action(&mut transition_prefix);
+                    )
+                    .apply_overflow_prefix(transition);
 
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
@@ -2815,15 +2806,15 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
+                    DisplayRowTransitionRenderState::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
                         &mut hscroll_skip,
                         &mut word_wrap,
                         &mut trailing_whitespace,
-                    );
-                    transition.apply_row_start_prefix_action(&mut col, &mut transition_prefix);
+                    )
+                    .apply_overflow_row_start(transition, &mut col);
                     character_wrap_action.apply_after_row_transition(
                         &mut byte_idx,
                         &mut charpos,

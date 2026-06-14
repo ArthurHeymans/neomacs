@@ -475,7 +475,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
 }
 
 #[test]
-fn display_row_transition_prefix_context_applies_row_start_line_break_policy() {
+fn display_row_transition_render_state_applies_row_start_line_break_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
@@ -494,16 +494,18 @@ fn display_row_transition_prefix_context_applies_row_start_line_break_policy() {
     trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(8.0));
     let mut col = 7;
 
-    let mut context = DisplayRowTransitionPrefixContext::new(
+    DisplayRowTransitionRenderState::new(
         &mut prefix_request,
         true,
         &mut line_numbers,
         &mut hscroll_skip,
         &mut word_wrap,
         &mut trailing_whitespace,
+    )
+    .apply_line_break_row_start(
+        DisplayRowLineBreakTransitionPlan::hidden_line_break(),
+        &mut col,
     );
-    DisplayRowLineBreakTransitionPlan::hidden_line_break()
-        .apply_row_start_prefix_action(&mut col, &mut context);
 
     assert_eq!(col, 0);
     assert_eq!(prefix_request, DisplayRowPrefixRequest::Line);
@@ -1246,7 +1248,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
 }
 
 #[test]
-fn display_row_transition_prefix_context_applies_overflow_wrap_policy() {
+fn display_row_transition_render_state_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
@@ -1272,15 +1274,15 @@ fn display_row_transition_prefix_context_applies_overflow_wrap_policy() {
         panic!("expected word wrap transition");
     };
 
-    let mut context = DisplayRowTransitionPrefixContext::new(
+    DisplayRowTransitionRenderState::new(
         &mut prefix_request,
         true,
         &mut line_numbers,
         &mut hscroll_skip,
         &mut word_wrap,
         &mut trailing_whitespace,
-    );
-    transition.apply_prefix_action(&mut context);
+    )
+    .apply_overflow_prefix(transition);
 
     assert_eq!(col, 7);
     assert_eq!(prefix_request, DisplayRowPrefixRequest::Wrap);
