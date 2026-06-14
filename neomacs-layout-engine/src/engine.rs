@@ -21,9 +21,9 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
-    BufferTextWindowRenderContextsRequest, BufferTextWindowRowPreludeRequestContext,
+    BufferTextWindowLocalDisplayPolicy, BufferTextWindowLoopRequestContext,
+    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
     BufferTextWindowTailDecorationState, BufferTextWindowTailRequestContext,
     BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
 };
@@ -56,6 +56,8 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
 #[cfg(test)]
+use crate::display_row_append::DisplayRowPrefixValues;
+#[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailRenderState,
@@ -64,7 +66,7 @@ use crate::display_row_append::{
     BufferTextLineBreakRenderState, BufferTextSourceCharRenderRequestState,
     BufferTextWindowBeginState, BufferTextWindowBodyInstallState,
     BufferTextWindowCursorEffectsRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeState, DisplayRowPrefixValues,
+    BufferTextWindowTailFinalizeState,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -72,14 +74,15 @@ use crate::display_row_builder::{
 };
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
+use crate::display_row_walk_state::FaceScanCheckpoint;
 #[cfg(test)]
 use crate::display_row_walk_state::WordWrapBreakCandidate;
 #[cfg(test)]
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
-    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
+    LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
+    WordWrapRenderState,
 };
-use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
@@ -840,29 +843,8 @@ impl LayoutEngine {
             evaluator.current_message_value(),
         );
 
-        // Line number configuration from buffer-local variables
-        let lnum_mode = super::neovm_bridge::buffer_display_line_numbers_mode(buffer).engine_code();
-        let lnum_enabled = lnum_mode > 0;
-        let lnum_offset =
-            super::neovm_bridge::buffer_local_int(buffer, "display-line-numbers-offset", 0);
-        let lnum_major_tick =
-            super::neovm_bridge::buffer_local_int(buffer, "display-line-numbers-major-tick", 0)
-                as i32;
-        let _lnum_minor_tick =
-            super::neovm_bridge::buffer_local_int(buffer, "display-line-numbers-minor-tick", 0)
-                as i32;
-        let lnum_current_absolute =
-            super::neovm_bridge::buffer_local_bool(buffer, "display-line-numbers-current-absolute");
-        let lnum_widen =
-            super::neovm_bridge::buffer_local_bool(buffer, "display-line-numbers-widen");
-        let lnum_min_width =
-            super::neovm_bridge::buffer_local_int(buffer, "display-line-numbers-width", 0) as i32;
-
-        let prefix_values = DisplayRowPrefixValues::default_values(
-            super::neovm_bridge::buffer_local_value(buffer, "line-prefix"),
-            super::neovm_bridge::buffer_local_value(buffer, "wrap-prefix"),
-        );
-        let has_prefix = prefix_values.has_default_prefix();
+        let local_display_policy = BufferTextWindowLocalDisplayPolicy::from_buffer(buffer);
+        let has_prefix = local_display_policy.has_prefix();
 
         // Use face_resolver's default face for this window.
         // Chrome row reservation must use the same realized face metrics as
@@ -953,15 +935,7 @@ impl LayoutEngine {
         // wide enough for the largest line number that can appear in the
         // current window, so a tiny buffer in a tall window still gets the
         // same two-digit gutter GNU displays for visible rows 1..N.
-        let lnum_cols = if lnum_enabled {
-            let total_lines = buf_access.count_lines(0, buf_access.zv()) + 1;
-            let visible_lines = max_rows.max(1) as i64;
-            let digit_count = total_lines.max(visible_lines).max(1).to_string().len() as i32;
-            let min = lnum_min_width.max(1);
-            digit_count.max(min) + 2
-        } else {
-            0
-        };
+        let lnum_cols = local_display_policy.line_number_columns(&buf_access, max_rows);
         let lnum_pixel_width = lnum_cols as f32 * char_w;
 
         // The minibuffer must always render at least 1 row.  Its pixel
@@ -1133,21 +1107,8 @@ impl LayoutEngine {
             return;
         }
 
-        // Line number state
-        let window_start_byte = buf_access.charpos_to_bytepos(window_start);
-        let begin_byte = if lnum_widen { 0 } else { buf_access.begv() };
-        let current_line: i64 = if lnum_enabled {
-            buf_access.count_lines(begin_byte, window_start_byte) + 1
-        } else {
-            1
-        };
-        let point_line: i64 = if lnum_enabled && lnum_mode >= 2 {
-            let pt_byte = buf_access.charpos_to_bytepos(point_charpos);
-            buf_access.count_lines(begin_byte, pt_byte) + 1
-        } else {
-            0
-        };
-        let mut line_numbers = LineNumberRenderState::new(lnum_enabled, current_line, point_line);
+        let mut line_numbers =
+            local_display_policy.initial_line_numbers(&buf_access, window_start, point_charpos);
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
@@ -1167,7 +1128,7 @@ impl LayoutEngine {
             params.hscroll,
             params.word_wrap,
             has_prefix,
-            prefix_values.has_line_default_prefix(),
+            local_display_policy.has_line_default_prefix(),
             reserve_right_border_col,
             reserve_right_special_col,
             params.tab_width,
@@ -1264,16 +1225,8 @@ impl LayoutEngine {
             max_rows,
             row_limit,
         );
-        let row_prelude_request_context = BufferTextWindowRowPreludeRequestContext::new(
-            lnum_mode,
-            lnum_current_absolute,
-            lnum_offset,
-            lnum_major_tick,
-            lnum_cols,
-            prefix_values,
-            char_w,
-            char_h,
-        );
+        let row_prelude_request_context =
+            local_display_policy.row_prelude_context(lnum_cols, char_w, char_h);
         let tail_request_context = BufferTextWindowTailRequestContext::new(
             params,
             window_start,

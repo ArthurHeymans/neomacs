@@ -20,10 +20,14 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
-    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
+    LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
+    WordWrapRenderState,
 };
 use crate::hit_test::HitRow;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
+use crate::neovm_bridge::{
+    FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess,
+    buffer_display_line_numbers_mode, buffer_local_bool, buffer_local_int, buffer_local_value,
+};
 use crate::types::WindowParams;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
@@ -115,6 +119,17 @@ pub(crate) struct BufferTextWindowBodyInstallContext {
 pub(crate) struct BufferTextWindowRetryBounds {
     pub(crate) text_area_top: i64,
     pub(crate) text_area_bottom: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextWindowLocalDisplayPolicy {
+    line_number_mode: u8,
+    line_number_offset: i64,
+    line_number_major_tick: i32,
+    line_number_current_absolute: bool,
+    line_number_widen: bool,
+    line_number_min_width: i32,
+    prefix_values: DisplayRowPrefixValues,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -459,6 +474,116 @@ impl BufferTextWindowBodyInstallContext {
     #[cfg(test)]
     pub(crate) fn matrix_cols(self) -> usize {
         self.matrix_cols
+    }
+}
+
+impl BufferTextWindowLocalDisplayPolicy {
+    pub(crate) fn from_buffer(buffer: &impl LayoutBufferView) -> Self {
+        Self {
+            line_number_mode: buffer_display_line_numbers_mode(buffer).engine_code(),
+            line_number_offset: buffer_local_int(buffer, "display-line-numbers-offset", 0),
+            line_number_major_tick: buffer_local_int(buffer, "display-line-numbers-major-tick", 0)
+                as i32,
+            line_number_current_absolute: buffer_local_bool(
+                buffer,
+                "display-line-numbers-current-absolute",
+            ),
+            line_number_widen: buffer_local_bool(buffer, "display-line-numbers-widen"),
+            line_number_min_width: buffer_local_int(buffer, "display-line-numbers-width", 0) as i32,
+            prefix_values: DisplayRowPrefixValues::default_values(
+                buffer_local_value(buffer, "line-prefix"),
+                buffer_local_value(buffer, "wrap-prefix"),
+            ),
+        }
+    }
+
+    pub(crate) fn line_number_columns<B: LayoutBufferView>(
+        self,
+        access: &RustBufferAccess<'_, B>,
+        max_rows: usize,
+    ) -> i32 {
+        if !self.line_numbers_enabled() {
+            return 0;
+        }
+        let total_lines = access.count_lines(0, access.zv()) + 1;
+        let visible_lines = max_rows.max(1) as i64;
+        let digit_count = total_lines.max(visible_lines).max(1).to_string().len() as i32;
+        let min = self.line_number_min_width.max(1);
+        digit_count.max(min) + 2
+    }
+
+    pub(crate) fn initial_line_numbers<B: LayoutBufferView>(
+        self,
+        access: &RustBufferAccess<'_, B>,
+        window_start: i64,
+        point_charpos: i64,
+    ) -> LineNumberRenderState {
+        let window_start_byte = access.charpos_to_bytepos(window_start);
+        let begin_byte = if self.line_number_widen {
+            0
+        } else {
+            access.begv()
+        };
+        let current_line = if self.line_numbers_enabled() {
+            access.count_lines(begin_byte, window_start_byte) + 1
+        } else {
+            1
+        };
+        let point_line = if self.line_numbers_enabled() && self.line_number_mode >= 2 {
+            let pt_byte = access.charpos_to_bytepos(point_charpos);
+            access.count_lines(begin_byte, pt_byte) + 1
+        } else {
+            0
+        };
+        LineNumberRenderState::new(self.line_numbers_enabled(), current_line, point_line)
+    }
+
+    pub(crate) fn row_prelude_context(
+        self,
+        line_number_cols: i32,
+        char_width: f32,
+        char_height: f32,
+    ) -> BufferTextWindowRowPreludeRequestContext {
+        BufferTextWindowRowPreludeRequestContext::new(
+            self.line_number_mode,
+            self.line_number_current_absolute,
+            self.line_number_offset,
+            self.line_number_major_tick,
+            line_number_cols,
+            self.prefix_values,
+            char_width,
+            char_height,
+        )
+    }
+
+    pub(crate) fn has_prefix(self) -> bool {
+        self.prefix_values.has_default_prefix()
+    }
+
+    pub(crate) fn has_line_default_prefix(self) -> bool {
+        self.prefix_values.has_line_default_prefix()
+    }
+
+    fn line_numbers_enabled(self) -> bool {
+        self.line_number_mode > 0
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_parts(
+        line_number_mode: u8,
+        line_number_widen: bool,
+        line_number_min_width: i32,
+        prefix_values: DisplayRowPrefixValues,
+    ) -> Self {
+        Self {
+            line_number_mode,
+            line_number_offset: 0,
+            line_number_major_tick: 0,
+            line_number_current_absolute: false,
+            line_number_widen,
+            line_number_min_width,
+            prefix_values,
+        }
     }
 }
 
