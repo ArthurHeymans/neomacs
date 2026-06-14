@@ -185,39 +185,6 @@ impl<'row> LispStringRowAppendContext<'row> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_active_face_source_to_text_row_and_emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        source: &mut LispStringSourceCursor,
-        source_state: &mut DisplayRowSourceState,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        base_face_id: u32,
-        base_face: &'row ResolvedFace,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        let frame = self.active_face_context.active_face_frame();
-        let mut source_context =
-            LispStringSourceAppendContext::new(source, source_state, base_face_id, base_face);
-        source_context
-            .render_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                face_ids,
-                frame,
-                position,
-            )
-            .map(|outcome| outcome.end_position())
-            .unwrap_or(position)
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_active_face_source_request_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
@@ -230,28 +197,26 @@ impl<'row> LispStringRowAppendContext<'row> {
         base_face: &'row ResolvedFace,
         request: LispStringSourceAppendRequest,
     ) -> DisplayRowPosition {
-        let parts = request.into_parts();
-        let Some(mut source) = LispStringSourceCursor::new(
-            parts.source_id,
-            parts.value,
-            RenderFaceRef::FaceId(base_face_id),
-        ) else {
-            return parts.position;
+        let position = request.position();
+        let Some(mut source_session) =
+            LispStringSourceAppendSession::new(request, base_face_id, base_face)
+        else {
+            return position;
         };
-        let mut source_state = DisplayRowSourceState::default();
-        self.render_active_face_source_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            &mut source,
-            &mut source_state,
-            face_resolver,
-            face_ids,
-            base_face_id,
-            base_face,
-            parts.position,
-        )
+        let frame = self.active_face_context.active_face_frame();
+        source_session
+            .render_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                face_ids,
+                frame,
+                position,
+            )
+            .map(|outcome| outcome.end_position())
+            .unwrap_or(position)
     }
 }
 
@@ -363,6 +328,10 @@ impl LispStringSourceAppendRequest {
             value: self.value,
         }
     }
+
+    fn position(self) -> DisplayRowPosition {
+        self.position
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -370,6 +339,72 @@ struct LispStringSourceAppendRequestParts {
     position: DisplayRowPosition,
     source_id: u64,
     value: Value,
+}
+
+pub(crate) struct LispStringSourceAppendSession<'a> {
+    source: LispStringSourceCursor,
+    source_state: DisplayRowSourceState,
+    base_face_id: u32,
+    base_face: &'a ResolvedFace,
+}
+
+impl<'a> LispStringSourceAppendSession<'a> {
+    fn new(
+        request: LispStringSourceAppendRequest,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+    ) -> Option<Self> {
+        let parts = request.into_parts();
+        let source = LispStringSourceCursor::new(
+            parts.source_id,
+            parts.value,
+            RenderFaceRef::FaceId(base_face_id),
+        )?;
+        Some(Self {
+            source,
+            source_state: DisplayRowSourceState::default(),
+            base_face_id,
+            base_face,
+        })
+    }
+
+    fn append_context(&mut self) -> LispStringSourceAppendContext<'_> {
+        LispStringSourceAppendContext::new(
+            &mut self.source,
+            &mut self.source_state,
+            self.base_face_id,
+            self.base_face,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_to_text_row_and_emit(
+        &mut self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        self.append_context().render_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            frame,
+            position,
+        )
+    }
+
+    fn discard_pending_until_row_break(&mut self) -> bool {
+        self.source_state.discard_pending_item();
+        self.source.discard_until_row_break()
+    }
 }
 
 pub(crate) struct LispStringSourceRowAppendContext<'a> {
@@ -417,10 +452,7 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
 }
 
 pub(crate) struct LispStringSourceRowAppendSession<'a> {
-    source: LispStringSourceCursor,
-    source_state: DisplayRowSourceState,
-    base_face_id: u32,
-    base_face: &'a ResolvedFace,
+    source_session: LispStringSourceAppendSession<'a>,
     append_surface: &'a DisplayRowAppendSurface,
     glyph_y_offset: f32,
     metrics: DisplayRowAppendMetrics,
@@ -439,17 +471,9 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
         char_width: f32,
         default_row_height: f32,
     ) -> Option<Self> {
-        let parts = request.into_parts();
-        let source = LispStringSourceCursor::new(
-            parts.source_id,
-            parts.value,
-            RenderFaceRef::FaceId(base_face_id),
-        )?;
+        let source_session = LispStringSourceAppendSession::new(request, base_face_id, base_face)?;
         Some(Self {
-            source,
-            source_state: DisplayRowSourceState::default(),
-            base_face_id,
-            base_face,
+            source_session,
             append_surface,
             glyph_y_offset,
             metrics: DisplayRowAppendMetrics::text_row(
@@ -463,12 +487,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
 
     fn append_context(&mut self) -> LispStringSourceRowAppendContext<'_> {
         LispStringSourceRowAppendContext {
-            source_context: LispStringSourceAppendContext::new(
-                &mut self.source,
-                &mut self.source_state,
-                self.base_face_id,
-                self.base_face,
-            ),
+            source_context: self.source_session.append_context(),
             append_surface: self.append_surface,
             glyph_y_offset: self.glyph_y_offset,
             metrics: self.metrics,
@@ -500,8 +519,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
     }
 
     pub(crate) fn discard_pending_until_row_break(&mut self) -> bool {
-        self.source_state.discard_pending_item();
-        self.source.discard_until_row_break()
+        self.source_session.discard_pending_until_row_break()
     }
 }
 
