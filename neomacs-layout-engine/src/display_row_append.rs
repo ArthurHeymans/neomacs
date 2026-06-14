@@ -76,13 +76,13 @@ use crate::window_output::TextRowOutput;
 use crate::window_output::{
     TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBegin,
     TextWindowBodyOutputInstall, TextWindowCursorEffects, TextWindowLineNumberMargin,
-    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
-    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightBorder,
+    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
+    close_text_window_output, current_text_window_cluster_tail, emit_text_matrix_row_transition,
     emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
     finish_and_end_text_matrix_row_output, finish_pending_text_window_row,
-    install_text_window_body_output, install_text_window_cursor_effects,
-    mark_current_text_row_truncated_left,
+    install_last_window_right_border, install_text_window_body_output,
+    install_text_window_cursor_effects, mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -639,6 +639,12 @@ pub(crate) struct BufferTextWindowBeginState<'a> {
 pub(crate) struct BufferTextWindowCursorEffectsRequest {
     window_id: i64,
     effects: Option<EffectsConfig>,
+}
+
+pub(crate) struct BufferTextWindowTerminalRightBorderRequest {
+    ch: char,
+    face_name: &'static str,
+    char_width: f32,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
@@ -4499,6 +4505,35 @@ impl BufferTextWindowCursorEffectsRequest {
             },
         );
         true
+    }
+}
+
+impl BufferTextWindowTerminalRightBorderRequest {
+    pub(crate) fn new(char_width: f32) -> Self {
+        Self {
+            ch: '|',
+            face_name: "vertical-border",
+            char_width,
+        }
+    }
+
+    pub(crate) fn install_and_apply(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        face_resolver: &FaceResolver,
+    ) -> u32 {
+        let border_face = face_resolver.resolve_named_face(self.face_name);
+        let border_face_id = border_face.face_id;
+        insert_resolved_display_row_face(builder, border_face_id, &border_face, None);
+        install_last_window_right_border(
+            builder,
+            TextWindowRightBorder {
+                ch: self.ch,
+                face_id: border_face_id,
+                char_width: self.char_width,
+            },
+        );
+        border_face_id
     }
 }
 

@@ -5966,6 +5966,33 @@ fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
 }
 
 #[test]
+fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for ch in "abcd".chars() {
+        write_char_to_current_row_with_width(&mut builder, ch, 0, 0, 8.0);
+    }
+    builder.end_row();
+    builder.end_window();
+
+    let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0)
+        .install_and_apply(&mut builder, &face_resolver);
+
+    let state = builder.finish(5, 1, 8.0, 16.0);
+    assert!(state.faces.contains_key(&face_id));
+    let row = &state.window_matrices[0].matrix.rows[0];
+    let text = &row.glyphs[GlyphArea::Text.index()];
+    let right = &row.glyphs[GlyphArea::RightMargin.index()];
+    assert_eq!(text.len(), 4);
+    assert_eq!(right.len(), 1);
+    assert_eq!(right[0].glyph_type, GlyphType::Char { ch: '|' });
+    assert_eq!(right[0].face_id, face_id);
+}
+
+#[test]
 fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifacts() {
     let mut eval = Context::new();
     let buf_id = eval

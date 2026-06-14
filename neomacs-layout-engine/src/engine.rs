@@ -18,7 +18,6 @@ use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
-use super::window_output::{TextWindowRightBorder, install_last_window_right_border};
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -56,8 +55,8 @@ use crate::display_row_append::{
     BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
     BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    TextWindowAppendSurfaceRequest,
+    BufferTextWindowTerminalRightBorderRequest, BufferTextWindowVisibilityRetryRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -1018,23 +1017,8 @@ impl LayoutEngine {
                         );
                     } else {
                         // Mirrors GNU `src/dispnew.c::build_frame_matrix_from_leaf_window`.
-                        let border_face = face_resolver.resolve_named_face("vertical-border");
-                        let border_face_id = border_face.face_id;
-                        let realized_face =
-                            crate::display_status_line::DisplayRowFace::from_resolved(
-                                border_face_id,
-                                &border_face,
-                            );
-                        self.matrix_builder
-                            .insert_face(border_face_id, realized_face.render_face());
-                        install_last_window_right_border(
-                            &mut self.matrix_builder,
-                            TextWindowRightBorder {
-                                ch: '|',
-                                face_id: border_face_id,
-                                char_width: frame_params.char_width,
-                            },
-                        );
+                        BufferTextWindowTerminalRightBorderRequest::new(frame_params.char_width)
+                            .install_and_apply(&mut self.matrix_builder, &face_resolver);
                     }
                 }
 
