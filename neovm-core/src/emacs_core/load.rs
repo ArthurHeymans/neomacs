@@ -135,12 +135,25 @@ fn bootstrap_prefers_ldefs_boot() -> bool {
 /// `decode-coding-string`, so the reader sees storage sentinels for every
 /// non-Unicode Emacs character instead of source-load-specific rewrites.
 pub(crate) fn decode_emacs_utf8_source(bytes: &[u8]) -> String {
-    let coding = match detect_source_eol(bytes) {
+    crate::encoding::decode_bytes(bytes, source_emacs_coding(bytes))
+}
+
+/// EOL-aware coding-system name for an Emacs-extended UTF-8 source file.
+fn source_emacs_coding(bytes: &[u8]) -> &'static str {
+    match detect_source_eol(bytes) {
         SourceEol::Unix => "utf-8-emacs-unix",
         SourceEol::Dos => "utf-8-emacs-dos",
         SourceEol::Mac => "utf-8-emacs-mac",
-    };
-    crate::encoding::decode_bytes(bytes, coding)
+    }
+}
+
+/// Decode Emacs-extended UTF-8 source straight to a faithful `LispString`
+/// (Emacs internal bytes) — issue #131. Non-Unicode source character literals
+/// (e.g. `?\xF6\xA0\x87\x8A` -> 0x1A01CA) keep their real codes as extended
+/// Emacs bytes instead of the in-Unicode storage sentinels, and the reader's
+/// LispString source mode reads them directly. No storage-string round-trip.
+pub(crate) fn decode_emacs_utf8_source_lisp(bytes: &[u8]) -> LispString {
+    crate::encoding::decode_bytes_to_lisp_string(bytes, source_emacs_coding(bytes))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1968,60 +1981,53 @@ fn load_file_body(
 
     // For .elc: skip the ;ELC magic header and detect lexical-binding from raw bytes.
     // For .el: decode Emacs-extended UTF-8.
-    let (content, source_multibyte) = if is_elc {
-        (skip_elc_header(&raw_bytes), false)
+    // GNU lread.c readevalloop order: specbind lexenv [with_load_context] ->
+    // readevalloop -> unbind_to -> do-after-load-evaluation.
+    //
+    // .elc reads via the &str reader. .el decodes straight to a faithful
+    // Emacs-bytes LispString and reads via the LispString reader, so source
+    // characters — including non-Unicode literals — keep their real codes and
+    // never round-trip through the in-Unicode storage-string form (issue #131).
+    let result = if is_elc {
+        let content = skip_elc_header(&raw_bytes);
+        let lexical_binding = elc_has_lexical_binding(&raw_bytes);
+        with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
+            streaming_readevalloop(eval, path, &hist_file_name, &content, false, None, None)
+        })
     } else {
-        // GNU `Fload` (`src/lread.c`) lets the coding system swallow
-        // a leading UTF-8 BOM (U+FEFF). NeoVM's reader does not, so
-        // strip it here before the streaming reader sees the source —
-        // otherwise the BOM is parsed as a one-character symbol and
-        // signals `void-variable`.
-        let decoded = decode_emacs_utf8_source(&raw_bytes);
-        (
-            match decoded.strip_prefix('\u{feff}') {
-                Some(rest) => rest.to_string(),
-                None => decoded,
-            },
-            true,
-        )
-    };
-
-    // Detect lexical-binding.
-    let lexical_binding = if is_elc {
-        elc_has_lexical_binding(&raw_bytes)
-    } else {
-        source_lexical_binding_for_load(eval, &content, Some(Value::heap_string(found.clone())))?
-    };
-
-    // --- Shared context setup via with_load_context ---
-    // Matches GNU lread.c:
-    // 1. specbind lexenv to (t) [with_load_context]
-    // 2. readevalloop [streaming_readevalloop]
-    // 3. unbind_to [with_load_context returns]
-    // 4. do-after-load-evaluation [record_load_history]
-    let shorthands = if is_elc {
-        None
-    } else {
-        source_read_symbol_shorthands(&content, source_multibyte, &eval.obarray)?
-    };
-
-    let result = with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
-        let macroexpand_fn = if is_elc {
-            None
-        } else {
-            get_eager_macroexpand_fn(eval)
-        };
-
-        streaming_readevalloop(
+        // GNU `Fload` (`src/lread.c`) lets the coding system swallow a leading
+        // UTF-8 BOM (U+FEFF); NeoVM's reader does not, so strip it from the raw
+        // bytes before decoding (otherwise the reader reads it as a one-character
+        // symbol and signals `void-variable`).
+        let src_bytes = raw_bytes
+            .strip_prefix(&[0xEF, 0xBB, 0xBF])
+            .unwrap_or(raw_bytes.as_slice());
+        let content = decode_emacs_utf8_source_lisp(src_bytes);
+        let lexical_binding = source_lexical_binding_for_lisp_source(
             eval,
-            path,
-            &hist_file_name,
             &content,
-            source_multibyte,
-            shorthands.as_ref(),
-            macroexpand_fn,
-        )
-    });
+            Some(Value::heap_string(found.clone())),
+        )?;
+        let shorthands = match source_read_symbol_shorthands_text(
+            &crate::emacs_core::emacs_char::to_utf8_lossy(content.as_bytes()),
+        ) {
+            Some(text) => {
+                read_symbol_shorthands_value_text(&text, content.is_multibyte(), &eval.obarray)?
+            }
+            None => None,
+        };
+        with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
+            let macroexpand_fn = get_eager_macroexpand_fn(eval);
+            streaming_readevalloop_lisp_source(
+                eval,
+                path,
+                &hist_file_name,
+                &content,
+                shorthands.as_ref(),
+                macroexpand_fn,
+            )
+        })
+    };
     // GNU lread.c:1533-1541: `build_load_history` runs inside
     // `readevalloop`, before `unbind_to`, while the after-load hooks
     // run after the load context is unwound. Keep the latter order so
