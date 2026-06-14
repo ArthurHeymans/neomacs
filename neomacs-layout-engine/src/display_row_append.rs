@@ -69,8 +69,9 @@ use crate::unicode::{decode_utf8, is_wide_char};
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowTransition, WindowOutputEmitter,
-    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    finish_and_end_text_matrix_row_output, mark_current_text_row_truncated_left,
+    current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
+    mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -3426,6 +3427,27 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         ))
     }
 
+    pub(crate) fn prepare_source_char_for_current_text_row(
+        &self,
+        request: BufferTextSourceCharPreparationRequest<'_>,
+        state: &mut BufferTextSourceCharPreparationState<'_>,
+    ) -> BufferTextPreparedSourceCharAppend {
+        let cluster_tail = current_text_window_cluster_tail(state.builder);
+        self.prepare_source_char_at(
+            &request.geometry,
+            state.append_state,
+            state.builder,
+            state.evaluator,
+            state.font_metrics,
+            state.face_resolver,
+            request.source_char,
+            request.text,
+            request.byte_idx,
+            request.position,
+            cluster_tail,
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn append_source_text_request_to_text_row(
         &self,
@@ -3481,6 +3503,59 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             plan.source_text(),
             plan.position(),
         )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextSourceCharPreparationRequest<'a> {
+    geometry: DisplayRowGeometryState,
+    source_char: &'a BufferTextSourceChar,
+    text: &'a [u8],
+    byte_idx: usize,
+    position: DisplayRowPosition,
+}
+
+impl<'a> BufferTextSourceCharPreparationRequest<'a> {
+    pub(crate) fn new(
+        geometry: DisplayRowGeometryState,
+        source_char: &'a BufferTextSourceChar,
+        text: &'a [u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            geometry,
+            source_char,
+            text,
+            byte_idx,
+            position,
+        }
+    }
+}
+
+pub(crate) struct BufferTextSourceCharPreparationState<'a> {
+    append_state: &'a mut BufferTextRowAppendState,
+    builder: &'a mut GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+}
+
+impl<'a> BufferTextSourceCharPreparationState<'a> {
+    pub(crate) fn new(
+        append_state: &'a mut BufferTextRowAppendState,
+        builder: &'a mut GlyphMatrixBuilder,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+    ) -> Self {
+        Self {
+            append_state,
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+        }
     }
 }
 

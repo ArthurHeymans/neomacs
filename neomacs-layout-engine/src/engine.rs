@@ -24,11 +24,10 @@ use super::window_output::{
     TextWindowDecorativeCursor, TextWindowLineNumberMargin, TextWindowOutputInstall,
     TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightBorder,
     TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
-    emit_text_window_line_number_margin, finish_pending_text_window_row,
-    install_last_window_right_border, install_text_window_cursor_effects,
-    install_text_window_output, publish_text_window_cursor, publish_text_window_decorative_cursor,
-    record_text_window_redisplay_positions,
+    begin_text_window_output, close_text_window_output, emit_text_window_line_number_margin,
+    finish_pending_text_window_row, install_last_window_right_border,
+    install_text_window_cursor_effects, install_text_window_output, publish_text_window_cursor,
+    publish_text_window_decorative_cursor, record_text_window_redisplay_positions,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -66,6 +65,7 @@ use crate::display_row_append::{
     BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
     BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
     BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceCharOverflowAction,
+    BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
     BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
     BufferTextSpecialSourceCharRenderState, BufferTextSpecialWrapSourceAction,
     BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
@@ -2467,23 +2467,26 @@ impl LayoutEngine {
             // glyphless. Only suppress glyphless handling when there is a
             // preceding glyph to merge into — a standalone joiner still renders
             // glyphless.
-            let cluster_tail = current_text_window_cluster_tail(&self.matrix_builder);
             let append_position = DisplayRowPosition { x_px: x, col };
             let append_geometry = row_geometry;
 
-            let prepared_append = buffer_row_append_context.prepare_source_char_at(
-                &append_geometry,
-                &mut buffer_text_append_state,
-                &mut self.matrix_builder,
-                evaluator,
-                &mut self.font_metrics,
-                face_resolver,
-                &buffer_source_char,
-                &text,
-                decoded_source_char.start_byte_idx(),
-                append_position,
-                cluster_tail,
-            );
+            let prepared_append = buffer_row_append_context
+                .prepare_source_char_for_current_text_row(
+                    BufferTextSourceCharPreparationRequest::new(
+                        append_geometry,
+                        &buffer_source_char,
+                        text,
+                        decoded_source_char.start_byte_idx(),
+                        append_position,
+                    ),
+                    &mut BufferTextSourceCharPreparationState::new(
+                        &mut buffer_text_append_state,
+                        &mut self.matrix_builder,
+                        evaluator,
+                        &mut self.font_metrics,
+                        face_resolver,
+                    ),
+                );
             let prepared_append = match prepared_append {
                 BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
                     if let Some(overflow_action) = special_prepared_append.overflow_action(

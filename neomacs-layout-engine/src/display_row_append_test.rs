@@ -4582,6 +4582,70 @@ fn buffer_text_source_append_context_appends_source_char() {
 }
 
 #[test]
+fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("ab");
+    }
+    let snapshot = {
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        LayoutBufferSnapshot::from_buffer(buffer)
+    };
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let append_context =
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
+    let mut append_state = BufferTextRowAppendState::default();
+
+    let prepared_append = append_context
+        .prepare_source_char_for_current_text_row(
+            BufferTextSourceCharPreparationRequest::new(
+                geometry,
+                &source_char,
+                b"a",
+                0,
+                DisplayRowPosition { x_px: 0.0, col: 0 },
+            ),
+            &mut BufferTextSourceCharPreparationState::new(
+                &mut append_state,
+                &mut builder,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
+        )
+        .into_text()
+        .expect("ordinary buffer char should prepare text append");
+
+    assert_eq!(
+        prepared_append.overflow_decision('a', 80.0, false, WordWrapRenderState::new(false)),
+        BufferTextRowOverflowDecision::Fits
+    );
+}
+
+#[test]
 fn buffer_end_of_buffer_cursor_action_captures_visible_eob_cursor() {
     let active_face = test_active_face_state(9, 8.0);
     let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
