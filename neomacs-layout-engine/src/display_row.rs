@@ -1804,11 +1804,6 @@ pub(crate) struct DisplayRowSourceAppendRequest<'face> {
     base_face_id: u32,
 }
 
-struct DisplayRowSourceAppendRenderParts<'face> {
-    request: DisplayRowSourceRenderRequest<'face>,
-    output: TextRowOutput,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowSourceAppendRequestPolicy {
     matrix_row: usize,
@@ -1886,13 +1881,6 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         self.base_face_id
     }
 
-    fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
-        DisplayRowSourceAppendRenderParts {
-            request: self.request,
-            output: self.output,
-        }
-    }
-
     #[cfg(test)]
     pub(crate) fn render_bounds(&self) -> DisplayRowRenderBounds {
         self.request.render_bounds()
@@ -1939,7 +1927,9 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        let parts = self.into_render_parts();
+        let Self {
+            request, output, ..
+        } = self;
         render_display_item_source_into_current_text_row_and_emit(
             builder,
             output_emitter,
@@ -1949,8 +1939,8 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             source_state,
             face_resolver,
             face_ids,
-            parts.request,
-            parts.output,
+            request,
+            output,
             render_policy,
         )
     }
@@ -2053,7 +2043,7 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         face_ids: &mut FrameFaceIdAllocator,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        let parts = self.into_render_parts();
+        let Self { request, .. } = self;
         let mut renderer = DisplayRowRenderer::new(font_metrics);
         let (result, row_height_px, row_ascent_px) = builder.with_current_row_mut(|row| {
             let mut scratch_row = row.clone();
@@ -2062,7 +2052,7 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
                 evaluator.display_host.as_deref(),
                 face_ids,
             );
-            let result = DisplayRowItemSourceRenderRequest::new(parts.request)
+            let result = DisplayRowItemSourceRenderRequest::new(request)
                 .render_fragment_step_into_row_with_policy(
                     &mut renderer,
                     &mut scratch_row,
