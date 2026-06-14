@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::WindowParams;
+use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::{CursorKind, WindowInfo};
 use neomacs_display_protocol::types::Rect;
@@ -64,6 +64,28 @@ fn window_params() -> WindowParams {
     }
 }
 
+fn frame_params() -> FrameParams {
+    FrameParams {
+        width: 180.0,
+        height: 140.0,
+        menu_bar_height: 0.0,
+        tool_bar_height: 0.0,
+        compact_bar_height: 0.0,
+        tab_bar_height: 0.0,
+        char_width: 8.0,
+        char_height: 16.0,
+        font_pixel_size: 14.0,
+        window_system: true,
+        background: 0x101010,
+        vertical_border_fg: 0x202020,
+        right_divider_width: 6,
+        bottom_divider_width: 5,
+        divider_fg: 0x303030,
+        divider_first_fg: 0x404040,
+        divider_last_fg: 0x505050,
+    }
+}
+
 fn window_info(params: &WindowParams) -> WindowInfo {
     WindowInfo {
         window_id: params.window_id,
@@ -81,6 +103,87 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         buffer_file_name: String::new(),
         modified: false,
     }
+}
+
+#[test]
+fn window_frame_geometry_reserves_terminal_border_column() {
+    let params = window_params();
+    let mut frame = frame_params();
+    frame.window_system = false;
+    frame.right_divider_width = 0;
+
+    let geometry = WindowFrameGeometryRequest::new(&params, &frame, 200.0).resolve();
+
+    assert_eq!(geometry.right_edge, 130.0);
+    assert_eq!(geometry.bottom_edge, 120.0);
+    assert!(!geometry.is_rightmost);
+    assert!(!geometry.is_bottommost);
+    assert!(geometry.reserve_terminal_right_border_col);
+}
+
+#[test]
+fn window_frame_info_request_emits_background_and_window_info() {
+    let params = window_params();
+    let metadata = WindowFrameMetadata {
+        buffer_file_name: "notes.org".to_string(),
+        modified: true,
+    };
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+
+    WindowFrameInfoRenderRequest::new(&params, metadata).render_and_apply(&mut builder);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(state.backgrounds.len(), 1);
+    assert_eq!(state.backgrounds[0].bounds, params.bounds);
+    assert_eq!(state.backgrounds[0].color.r, 0.0);
+    assert_eq!(state.window_infos.len(), 1);
+    assert_eq!(state.window_infos[0].window_id, params.window_id);
+    assert_eq!(state.window_infos[0].buffer_file_name, "notes.org");
+    assert!(state.window_infos[0].modified);
+}
+
+#[test]
+fn window_frame_info_effects_request_emits_scroll_effect_hints() {
+    let params = window_params();
+    let mut prev = window_info(&params);
+    prev.window_start = 11;
+    prev.window_end = 81;
+    let curr = window_info(&params);
+    let mut prev_infos = std::collections::HashMap::new();
+    prev_infos.insert(prev.window_id, prev);
+    let mut curr_infos = std::collections::HashMap::new();
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.push_window_info(curr);
+
+    WindowFrameInfoEffectsRenderRequest::new(&prev_infos)
+        .render_latest_and_apply(&mut builder, &mut curr_infos);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(curr_infos.len(), 1);
+    assert_eq!(state.effect_hints.len(), 4);
+}
+
+#[test]
+fn window_divider_request_splits_wide_vertical_divider() {
+    let frame = frame_params();
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+
+    WindowDividerRectsRenderRequest::new(
+        41,
+        118.0,
+        20.0,
+        6.0,
+        80.0,
+        WindowDividerOrientation::Vertical,
+        &frame,
+    )
+    .render_and_apply(&mut builder);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(state.borders.len(), 3);
+    assert_eq!(state.borders[0].width, 1.0);
+    assert_eq!(state.borders[1].width, 4.0);
+    assert_eq!(state.borders[2].width, 1.0);
 }
 
 #[test]

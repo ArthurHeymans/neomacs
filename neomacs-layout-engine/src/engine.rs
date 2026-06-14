@@ -31,7 +31,10 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_frame_output::WindowScrollBarsRenderRequest;
+use crate::display_frame_output::{
+    WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
+    WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
+};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -56,8 +59,8 @@ use crate::display_row_append::{
     BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
     BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowTerminalRightBorderRequest, BufferTextWindowVisibilityRetryRequest,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, TextWindowAppendSurfaceRequest,
+    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -81,8 +84,7 @@ use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 use neomacs_display_protocol::frame_glyphs::{
-    FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
-    WindowTransitionKind,
+    GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint, WindowTransitionKind,
 };
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
@@ -259,149 +261,6 @@ impl LayoutEngine {
 
     pub fn set_font_sizing(&mut self, font_sizing: FontSizing) {
         self.font_sizing = font_sizing;
-    }
-
-    fn record_transition_hint_from_latest_window_info(
-        &mut self,
-        curr_window_infos: &mut std::collections::HashMap<i64, WindowInfo>,
-    ) {
-        if let Some(curr) = self.matrix_builder.window_infos().last().cloned() {
-            if let Some(prev) = self.prev_window_infos.get(&curr.window_id) {
-                if let Some(hint) = FrameGlyphBuffer::derive_transition_hint(prev, &curr) {
-                    self.matrix_builder.push_transition_hint(hint);
-                }
-            }
-            curr_window_infos.insert(curr.window_id, curr);
-        }
-    }
-
-    fn record_effect_hints_from_latest_window_info(&mut self) {
-        let Some(curr) = self.matrix_builder.window_infos().last().cloned() else {
-            return;
-        };
-        if curr.is_minibuffer {
-            return;
-        }
-
-        let Some(prev) = self.prev_window_infos.get(&curr.window_id) else {
-            return;
-        };
-        if prev.buffer_id == 0 || curr.buffer_id == 0 {
-            return;
-        }
-
-        if prev.buffer_id != curr.buffer_id {
-            let hint = WindowEffectHint::TextFadeIn {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-            };
-            self.matrix_builder.push_effect_hint(hint);
-            return;
-        }
-
-        if prev.window_start != curr.window_start {
-            let direction = if curr.window_start > prev.window_start {
-                1
-            } else {
-                -1
-            };
-            let delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
-            let h1 = WindowEffectHint::TextFadeIn {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-            };
-            self.matrix_builder.push_effect_hint(h1);
-            let h2 = WindowEffectHint::ScrollLineSpacing {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                direction,
-            };
-            self.matrix_builder.push_effect_hint(h2);
-            let h3 = WindowEffectHint::ScrollMomentum {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                direction,
-            };
-            self.matrix_builder.push_effect_hint(h3);
-            let h4 = WindowEffectHint::ScrollVelocityFade {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                delta,
-            };
-            self.matrix_builder.push_effect_hint(h4);
-        }
-    }
-
-    /// Compute and emit scroll bar glyphs for a window.
-    ///
-    /// Mirrors GNU `set_vertical_scroll_bar` (xdisp.c:20109) and the
-    /// GTK/wgpu scroll bar rendering path.  The thumb position and size
-    /// are proportional to the visible region within the accessible buffer.
-    fn emit_window_scroll_bars(&mut self, params: &WindowParams) {
-        let Some(info) = self
-            .matrix_builder
-            .window_infos()
-            .iter()
-            .rev()
-            .find(|info| info.window_id == params.window_id)
-            .cloned()
-        else {
-            return;
-        };
-        WindowScrollBarsRenderRequest::new(params, &info)
-            .render_and_apply(&mut self.matrix_builder);
-    }
-
-    fn push_window_divider_rects(
-        &mut self,
-        window_id: i64,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        vertical: bool,
-        frame_params: &FrameParams,
-    ) {
-        if width <= 0.0 || height <= 0.0 {
-            return;
-        }
-
-        let inner = Color::from_pixel(frame_params.divider_fg);
-        if (if vertical { width } else { height }) < 3.0 {
-            self.matrix_builder
-                .push_border(window_id, x, y, width, height, inner);
-            return;
-        }
-
-        let first = Color::from_pixel(frame_params.divider_first_fg);
-        let last = Color::from_pixel(frame_params.divider_last_fg);
-        if vertical {
-            self.matrix_builder
-                .push_border(window_id, x, y, 1.0, height, first);
-            self.matrix_builder.push_border(
-                window_id,
-                x + 1.0,
-                y,
-                (width - 2.0).max(0.0),
-                height,
-                inner,
-            );
-            self.matrix_builder
-                .push_border(window_id, x + width - 1.0, y, 1.0, height, last);
-        } else {
-            self.matrix_builder
-                .push_border(window_id, x, y, width, 1.0, first);
-            self.matrix_builder.push_border(
-                window_id,
-                x,
-                y + 1.0,
-                width,
-                (height - 2.0).max(0.0),
-                inner,
-            );
-            self.matrix_builder
-                .push_border(window_id, x, y + height - 1.0, width, 1.0, last);
-        }
     }
 
     fn find_window_cursor_y_in_builder(
@@ -776,60 +635,23 @@ impl LayoutEngine {
                     params.selected,
                     params.mode_line_height,
                 );
-                // Add window background
-                self.matrix_builder
-                    .push_background(params.bounds, Color::from_pixel(params.default_bg));
-
-                // Add window info for animation detection
-                let buffer_file_name = {
+                let window_geometry =
+                    WindowFrameGeometryRequest::new(params, &frame_params, main_area_bottom)
+                        .resolve();
+                let metadata = {
                     let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
-                    evaluator
-                        .buffer_manager()
-                        .get(buf_id)
-                        .and_then(|b| b.file_name_runtime_string_owned())
-                        .unwrap_or_default()
+                    let buffer = evaluator.buffer_manager().get(buf_id);
+                    WindowFrameMetadata {
+                        buffer_file_name: buffer
+                            .and_then(|b| b.file_name_runtime_string_owned())
+                            .unwrap_or_default(),
+                        modified: buffer.map(|b| b.is_modified()).unwrap_or(false),
+                    }
                 };
-                let modified = {
-                    let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
-                    evaluator
-                        .buffer_manager()
-                        .get(buf_id)
-                        .map(|b| b.is_modified())
-                        .unwrap_or(false)
-                };
-                let window_info = neomacs_display_protocol::frame_glyphs::WindowInfo {
-                    window_id: params.window_id,
-                    buffer_id: params.buffer_id,
-                    window_start: params.window_start,
-                    window_end: 0, // filled after layout
-                    buffer_size: params.buffer_size,
-                    bounds: Rect::new(
-                        params.bounds.x,
-                        params.bounds.y,
-                        params.bounds.width,
-                        params.bounds.height,
-                    ),
-                    mode_line_height: params.mode_line_height,
-                    header_line_height: params.header_line_height,
-                    tab_line_height: params.tab_line_height,
-                    selected: params.selected,
-                    is_minibuffer: params.is_minibuffer,
-                    char_height: params.char_height,
-                    buffer_file_name,
-                    modified,
-                };
-                self.matrix_builder.push_window_info(window_info);
-                self.record_transition_hint_from_latest_window_info(&mut curr_window_infos);
-                self.record_effect_hints_from_latest_window_info();
-
-                let right_edge = params.bounds.x + params.bounds.width;
-                let bottom_edge = params.bounds.y + params.bounds.height;
-                let is_rightmost = right_edge >= frame_params.width - 1.0;
-                let is_bottommost = params.is_minibuffer || bottom_edge >= main_area_bottom - 1.0;
-                let reserve_right_border_col = !frame_params.window_system
-                    && frame_params.right_divider_width == 0
-                    && !is_rightmost
-                    && !params.is_minibuffer;
+                WindowFrameInfoRenderRequest::new(params, metadata)
+                    .render_and_apply(&mut self.matrix_builder);
+                WindowFrameInfoEffectsRenderRequest::new(&self.prev_window_infos)
+                    .render_latest_and_apply(&mut self.matrix_builder, &mut curr_window_infos);
 
                 // Simplified layout for this window (no face resolution, no overlays)
                 self.layout_window_rust(
@@ -838,73 +660,26 @@ impl LayoutEngine {
                     params,
                     &frame_params,
                     &face_resolver,
-                    reserve_right_border_col,
+                    window_geometry.reserve_terminal_right_border_col,
                     MAX_WINDOW_VISIBILITY_RETRIES,
                 );
 
-                // Emit scroll bar glyphs for this window.
-                self.emit_window_scroll_bars(params);
-
-                // Draw window dividers
-                if !params.is_minibuffer && frame_params.right_divider_width > 0 && !is_rightmost {
-                    let dw = frame_params.right_divider_width as f32;
-                    let x0 = right_edge - dw;
-                    let y0 = params.bounds.y;
-                    let h = params.bounds.height
-                        - if frame_params.bottom_divider_width > 0 && !is_bottommost {
-                            frame_params.bottom_divider_width as f32
-                        } else {
-                            0.0
-                        };
-                    self.push_window_divider_rects(
-                        params.window_id,
-                        x0,
-                        y0,
-                        dw,
-                        h.max(0.0),
-                        true,
-                        &frame_params,
-                    );
-                } else if !params.is_minibuffer && !is_rightmost {
-                    if frame_params.window_system {
-                        // GNU GUI draws a one-pixel vertical border when
-                        // `right-divider-width' is zero.  The literal `|'
-                        // replacement belongs to terminal frame matrices.
-                        self.matrix_builder.push_border(
-                            params.window_id,
-                            right_edge - 1.0,
-                            params.bounds.y,
-                            1.0,
-                            params.bounds.height.max(0.0),
-                            Color::from_pixel(frame_params.vertical_border_fg),
-                        );
-                    } else {
-                        // Mirrors GNU `src/dispnew.c::build_frame_matrix_from_leaf_window`.
-                        BufferTextWindowTerminalRightBorderRequest::new(frame_params.char_width)
-                            .install_and_apply(&mut self.matrix_builder, &face_resolver);
-                    }
-                }
-
-                if !params.is_minibuffer && frame_params.bottom_divider_width > 0 && !is_bottommost
+                if let Some(info) = self
+                    .matrix_builder
+                    .window_infos()
+                    .iter()
+                    .rev()
+                    .find(|info| info.window_id == params.window_id)
+                    .cloned()
                 {
-                    let dw = frame_params.bottom_divider_width as f32;
-                    let x0 = params.bounds.x;
-                    let y0 = bottom_edge - dw;
-                    let w = params.bounds.width
-                        - if frame_params.right_divider_width > 0 && !is_rightmost {
-                            frame_params.right_divider_width as f32
-                        } else {
-                            0.0
-                        };
-                    self.push_window_divider_rects(
-                        params.window_id,
-                        x0,
-                        y0,
-                        w.max(0.0),
-                        dw,
-                        false,
+                    WindowFrameDecorationsRenderRequest::new(
+                        params,
                         &frame_params,
-                    );
+                        window_geometry,
+                        &info,
+                        &face_resolver,
+                    )
+                    .render_and_apply(&mut self.matrix_builder);
                 }
             }
 
