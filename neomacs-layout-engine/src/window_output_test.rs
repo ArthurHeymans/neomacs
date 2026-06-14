@@ -590,6 +590,10 @@ fn emit_text_window_line_number_margin_right_aligns_text_and_trailing_separator(
             text: "42",
             cols: 4,
             face_id: 7,
+            row_y: 0.0,
+            row_height: 16.0,
+            row_ascent: 12.0,
+            char_width: 8.0,
         },
     );
 

@@ -2034,6 +2034,10 @@ impl LayoutEngine {
                         text: &num_str,
                         cols: line_number_request.cols(),
                         face_id: lnum_face_id,
+                        row_y: row_geometry.y(),
+                        row_height: row_geometry.height(),
+                        row_ascent: row_geometry.ascent(),
+                        char_width: char_w,
                     },
                 );
                 face_scan.invalidate();
@@ -3939,13 +3943,19 @@ fn mock_display_row_from_line(
     fill_to_cols: Option<(usize, u32)>,
 ) -> neomacs_display_protocol::glyph_matrix::GlyphRow {
     use super::mock_frame::MockDisplayProperty;
-    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
+    use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 
     let layout = mock_display_row_layout(role, pixel_y, width_px, char_w, char_h, ascent);
     let mut row = GlyphRow::new(role);
     if let Some(left_margin) = left_margin {
-        row.glyphs[GlyphArea::LeftMargin.index()]
-            .extend(left_margin.chars().map(|ch| Glyph::char(ch, 2, 0)));
+        let mut writer = DisplayRowWriter::for_area(&layout, &mut row, GlyphArea::LeftMargin);
+        let mut margin_source_offset = 0usize;
+        push_mock_display_text(
+            &mut writer,
+            left_margin.to_owned(),
+            2,
+            &mut margin_source_offset,
+        );
     }
     let mut writer = DisplayRowWriter::new(&layout, &mut row);
     let mut source_offset = 0usize;

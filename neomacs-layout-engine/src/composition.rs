@@ -13,7 +13,7 @@
 //! glyph-id gstring arrive in a later phase.
 
 use crate::unicode::{is_cluster_extender, is_regional_indicator, is_wide_char};
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 
 /// Display columns occupied by a base character before clustering.
 ///
@@ -53,6 +53,10 @@ pub(crate) fn continues_cluster(ch: char, tail: Option<(char, bool)>) -> bool {
 /// next source character continues a grapheme cluster or contextual run.
 pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {
     let area = &row.glyphs[GlyphArea::Text.index()];
+    last_text_cluster_tail_in_glyphs(area)
+}
+
+pub(crate) fn last_text_cluster_tail_in_glyphs(area: &[Glyph]) -> Option<(char, bool)> {
     let glyph = area.iter().rev().find(|g| !g.padding)?;
     match &glyph.glyph_type {
         GlyphType::Char { ch } => Some((*ch, is_regional_indicator(*ch as u32))),

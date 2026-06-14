@@ -1,5 +1,5 @@
 use crate::composition::{
-    base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_row,
+    base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
 };
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
@@ -58,11 +58,6 @@ struct DisplayRowTextCharState {
 }
 
 impl DisplayRowTextCharState {
-    fn for_row(ch: char, row: &GlyphRow) -> Self {
-        let tail = last_text_cluster_tail_in_row(row);
-        Self::for_tail(ch, tail)
-    }
-
     fn for_tail(ch: char, tail: Option<(char, bool)>) -> Self {
         let kind = if ch == '\t' {
             DisplayRowTextCharKind::Tab
@@ -407,6 +402,7 @@ pub(crate) struct DisplayRowWriter<'layout, 'row, 'measurer> {
     layout: &'layout DisplayRowLayout,
     row: &'row mut GlyphRow,
     glyph_measurer: Option<&'measurer mut dyn DisplayGlyphMeasurer>,
+    area_index: usize,
 }
 
 pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
@@ -780,6 +776,14 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
 
 impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     pub(crate) fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
+        Self::for_area(layout, row, GlyphArea::Text)
+    }
+
+    pub(crate) fn for_area(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        area: GlyphArea,
+    ) -> Self {
         row.enabled = true;
         row.role = layout.role;
         row.mode_line = matches!(layout.role, GlyphRowRole::ModeLine);
@@ -790,6 +794,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             layout,
             row,
             glyph_measurer: None,
+            area_index: area.index(),
         }
     }
 
@@ -797,6 +802,15 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
         glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
+    ) -> Self {
+        Self::with_glyph_measurer_for_area(layout, row, glyph_measurer, GlyphArea::Text)
+    }
+
+    fn with_glyph_measurer_for_area(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
+        area: GlyphArea,
     ) -> Self {
         row.enabled = true;
         row.role = layout.role;
@@ -808,14 +822,15 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             layout,
             row,
             glyph_measurer: Some(glyph_measurer),
+            area_index: area.index(),
         }
     }
 
     pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
         let item_layout = item.layout;
         let face_id = self.face_id(item.face);
-        let text_area = GlyphArea::Text.index();
-        let before_len = self.row.glyphs[text_area].len();
+        let area_index = self.area_index;
+        let before_len = self.row.glyphs[area_index].len();
         match item.kind {
             DisplayItemKind::TextRun(run) => {
                 self.push_text_item(
@@ -849,7 +864,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
         self.apply_item_layout_since(before_len, item_layout);
         DisplayRowWriteMetrics::from_glyphs(
-            &self.row.glyphs[text_area][before_len..],
+            &self.row.glyphs[area_index][before_len..],
             self.layout.char_width_px,
         )
     }
@@ -957,8 +972,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 self.push_tab_at_position(face_id, position);
             }
             DisplayRowTextCharKind::ClusterContinuation => {
-                glyph_row_writer::push_cluster_continuation_to_row(
+                glyph_row_writer::push_cluster_continuation_to_area(
                     &mut self.row,
+                    self.area_index,
                     ch,
                     face_id,
                     charpos,
@@ -973,8 +989,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     byte_offset,
                     measurement,
                 );
-                glyph_row_writer::push_run_member_to_row(
+                glyph_row_writer::push_run_member_to_area(
                     &mut self.row,
+                    self.area_index,
                     ch,
                     face_id,
                     charpos,
@@ -990,8 +1007,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     byte_offset,
                     measurement,
                 );
-                glyph_row_writer::push_wide_char_to_row(
+                glyph_row_writer::push_wide_char_to_area(
                     &mut self.row,
+                    self.area_index,
                     ch,
                     face_id,
                     charpos,
@@ -1007,7 +1025,14 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     byte_offset,
                     measurement,
                 );
-                glyph_row_writer::push_char_to_row(&mut self.row, ch, face_id, charpos, advance);
+                glyph_row_writer::push_char_to_area(
+                    &mut self.row,
+                    self.area_index,
+                    ch,
+                    face_id,
+                    charpos,
+                    advance,
+                );
             }
         }
     }
@@ -1017,8 +1042,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         if vertical_offset_px == 0.0 {
             return;
         }
-        let text_area = GlyphArea::Text.index();
-        for glyph in &mut self.row.glyphs[text_area][before_len..] {
+        for glyph in &mut self.row.glyphs[self.area_index][before_len..] {
             glyph.vertical_offset_px = vertical_offset_px;
         }
     }
@@ -1052,7 +1076,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {
-        DisplayRowTextCharState::for_row(ch, self.row)
+        DisplayRowTextCharState::for_tail(
+            ch,
+            last_text_cluster_tail_in_glyphs(&self.row.glyphs[self.area_index]),
+        )
     }
 
     fn text_run_measurement(&mut self, text: &str, face_id: u32) -> DisplayTextRunMeasurement {
@@ -1070,8 +1097,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .tab_policy
             .advance_from(position, self.layout.char_width_px);
         let width_cols = advance.width_cols.min(usize::from(u16::MAX)) as u16;
-        glyph_row_writer::push_stretch_to_row(
+        glyph_row_writer::push_stretch_to_area(
             &mut self.row,
+            self.area_index,
             width_cols,
             face_id,
             advance.pixel_width,
@@ -1088,7 +1116,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn current_text_cols(&self) -> u16 {
-        self.row.glyphs[GlyphArea::Text.index()]
+        self.row.glyphs[self.area_index]
             .iter()
             .filter(|glyph| !glyph.padding)
             .map(|glyph| match glyph.glyph_type {
@@ -1123,8 +1151,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .and_then(|length| self.length_pixels(length, self.layout.ascent_px))
             .unwrap_or(0.0);
 
-        glyph_row_writer::push_stretch_to_row(
+        glyph_row_writer::push_stretch_to_area(
             &mut self.row,
+            self.area_index,
             width_cols,
             face_id,
             pixel_width,
@@ -1135,7 +1164,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn promote_row_metrics_for_explicit_stretch(&mut self) {
-        let Some(glyph) = self.row.glyphs[GlyphArea::Text.index()].last() else {
+        let Some(glyph) = self.row.glyphs[self.area_index].last() else {
             return;
         };
         if glyph.pixel_height <= 0.0 {
@@ -1173,8 +1202,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             vertical_offset_px: 0.0,
             padding: false,
         };
-        self.row.glyphs[GlyphArea::Text.index()].push(glyph);
-        self.row.displays_text = true;
+        self.row.glyphs[self.area_index].push(glyph);
+        if self.area_index == GlyphArea::Text.index() {
+            self.row.displays_text = true;
+        }
     }
 
     fn glyphless_pixel_width(&self, glyphless: &DisplayGlyphless) -> Option<f32> {
@@ -1217,7 +1248,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn current_text_width_px(&self) -> f32 {
-        self.row.glyphs[GlyphArea::Text.index()]
+        self.row.glyphs[self.area_index]
             .iter()
             .map(|glyph| match glyph.glyph_type {
                 GlyphType::Stretch { width_cols } => {

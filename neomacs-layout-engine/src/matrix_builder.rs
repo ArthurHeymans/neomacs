@@ -390,14 +390,6 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub(crate) fn install_current_row_left_margin_glyphs(&mut self, glyphs: Vec<Glyph>) {
-        if let Some(ref mut matrix) = self.current_matrix
-            && self.current_row < matrix.rows.len()
-        {
-            matrix.rows[self.current_row].glyphs[GlyphArea::LeftMargin.index()] = glyphs;
-        }
-    }
-
     pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {
         crate::composition::last_text_cluster_tail_in_row(row)
     }

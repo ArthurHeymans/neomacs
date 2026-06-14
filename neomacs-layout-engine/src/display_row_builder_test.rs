@@ -660,6 +660,26 @@ fn display_row_writer_appends_items_to_existing_row_tab_context() {
 }
 
 #[test]
+fn display_row_writer_can_append_items_to_left_margin_area() {
+    let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer = DisplayRowWriter::for_area(&row_layout, &mut row, GlyphArea::LeftMargin);
+
+    let stretch_metrics = writer.push_item(stretch_item(DisplayLength::Pixels(8.0)));
+    let text_metrics = writer.push_item(text_item("12"));
+
+    let margin = &row.glyphs[GlyphArea::LeftMargin.index()];
+    assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
+    assert!(!row.displays_text);
+    assert_eq!(stretch_metrics.width_cols, 1);
+    assert_eq!(text_metrics.width_cols, 2);
+    assert_eq!(margin.len(), 3);
+    assert_eq!(margin[0].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    assert_eq!(margin[1].glyph_type, GlyphType::Char { ch: '1' });
+    assert_eq!(margin[2].glyph_type, GlyphType::Char { ch: '2' });
+}
+
+#[test]
 fn display_row_writer_consumes_display_item_source() {
     let _eval = Context::new();
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);

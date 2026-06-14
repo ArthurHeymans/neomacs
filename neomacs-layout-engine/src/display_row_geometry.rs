@@ -451,6 +451,14 @@ impl DisplayRowGeometryState {
         self.y
     }
 
+    pub(crate) fn height(&self) -> f32 {
+        self.height
+    }
+
+    pub(crate) fn ascent(&self) -> f32 {
+        self.ascent
+    }
+
     pub(crate) fn with_row_y(mut self, y: f32) -> Self {
         self.y = y;
         self

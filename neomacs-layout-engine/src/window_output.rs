@@ -7,17 +7,22 @@
 
 use super::display_status_line::DisplayRowOutputProgress;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
-use crate::display_item::DisplaySourcePosition;
+use crate::display_item::{
+    DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
+};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
-use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
+use crate::display_row_builder::{
+    DisplayRowGlyphSlot, DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
+};
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::glyph_matrix::Glyph;
+use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
@@ -25,6 +30,9 @@ use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot,
 };
+use std::collections::HashMap;
+
+const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
@@ -164,11 +172,15 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) face_id: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowLineNumberMargin<'a> {
     pub(crate) text: &'a str,
     pub(crate) cols: i32,
     pub(crate) face_id: u32,
+    pub(crate) row_y: f32,
+    pub(crate) row_height: f32,
+    pub(crate) row_ascent: f32,
+    pub(crate) char_width: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -409,20 +421,87 @@ pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuil
     });
 }
 
+fn line_number_margin_layout(request: &TextWindowLineNumberMargin<'_>) -> DisplayRowLayout {
+    let char_width = request.char_width.max(1.0);
+    DisplayRowLayout {
+        role: GlyphRowRole::Text,
+        y_px: request.row_y,
+        width_px: (request.cols.max(1) as f32 + 1.0) * char_width,
+        height_px: request.row_height.max(1.0),
+        ascent_px: request.row_ascent.max(0.0).min(request.row_height.max(1.0)),
+        char_width_px: char_width,
+        tab_policy: DisplayTabPolicy::every(8),
+        base_face: RenderFaceRef::FaceId(request.face_id),
+        symbol_values: HashMap::new(),
+    }
+}
+
+fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -> DisplayItem {
+    let end_offset = start_offset.saturating_add(text.chars().count());
+    DisplayItem::new(
+        SourceSpan::synthetic(LINE_NUMBER_MARGIN_SOURCE_ID, start_offset, end_offset),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(text.to_owned())),
+    )
+}
+
+fn line_number_margin_stretch_item(
+    cols: u16,
+    face_id: u32,
+    char_width: f32,
+    start_offset: usize,
+) -> DisplayItem {
+    DisplayItem::new(
+        SourceSpan::synthetic(
+            LINE_NUMBER_MARGIN_SOURCE_ID,
+            start_offset,
+            start_offset.saturating_add(usize::from(cols)),
+        ),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(
+                f32::from(cols) * char_width.max(1.0),
+            )),
+            height: None,
+            ascent: None,
+        }),
+    )
+}
+
 pub(crate) fn emit_text_window_line_number_margin(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowLineNumberMargin<'_>,
 ) {
-    let mut glyphs = Vec::new();
-    let padding = (request.cols - 1) - request.text.chars().count() as i32;
-    if padding > 0 {
-        glyphs.push(Glyph::stretch(padding as u16, request.face_id));
-    }
-    for ch in request.text.chars() {
-        glyphs.push(Glyph::char(ch, request.face_id, 0));
-    }
-    glyphs.push(Glyph::stretch(1, request.face_id));
-    builder.install_current_row_left_margin_glyphs(glyphs);
+    let layout = line_number_margin_layout(&request);
+    builder.with_current_row_mut(|row| {
+        let mut writer = DisplayRowWriter::for_area(&layout, row, GlyphArea::LeftMargin);
+        let mut source_offset = 0usize;
+        let padding = (request.cols - 1) - request.text.chars().count() as i32;
+        if padding > 0 {
+            let cols = padding.min(i32::from(u16::MAX)) as u16;
+            writer.push_item(line_number_margin_stretch_item(
+                cols,
+                request.face_id,
+                request.char_width,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(usize::from(cols));
+        }
+        if !request.text.is_empty() {
+            writer.push_item(line_number_margin_text_item(
+                request.text,
+                request.face_id,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(request.text.chars().count());
+        }
+        writer.push_item(line_number_margin_stretch_item(
+            1,
+            request.face_id,
+            request.char_width,
+            source_offset,
+        ));
+    });
 }
 
 pub(crate) fn publish_text_window_cursor(

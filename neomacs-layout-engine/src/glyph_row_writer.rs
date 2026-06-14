@@ -201,6 +201,13 @@ fn is_run_member_padding(glyph: &Glyph) -> bool {
         }
 }
 
+fn mark_displays_text_if_text_area(row: &mut GlyphRow, area_index: usize) {
+    if area_index == GlyphArea::Text.index() {
+        row.displays_text = true;
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn push_char_to_row(
     row: &mut GlyphRow,
     ch: char,
@@ -208,14 +215,33 @@ pub(crate) fn push_char_to_row(
     charpos: usize,
     pixel_width: f32,
 ) {
-    let area = &mut row.glyphs[GlyphArea::Text.index()];
+    push_char_to_area(
+        row,
+        GlyphArea::Text.index(),
+        ch,
+        face_id,
+        charpos,
+        pixel_width,
+    );
+}
+
+pub(crate) fn push_char_to_area(
+    row: &mut GlyphRow,
+    area_index: usize,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+    pixel_width: f32,
+) {
+    let area = &mut row.glyphs[area_index];
     if crate::unicode::is_cluster_extender(ch) && merge_extender_into_last_glyph(area, ch) {
         return;
     }
     area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
-    row.displays_text = true;
+    mark_displays_text_if_text_area(row, area_index);
 }
 
+#[cfg(test)]
 pub(crate) fn push_wide_char_to_row(
     row: &mut GlyphRow,
     ch: char,
@@ -223,7 +249,25 @@ pub(crate) fn push_wide_char_to_row(
     charpos: usize,
     pixel_width: f32,
 ) {
-    let area = &mut row.glyphs[GlyphArea::Text.index()];
+    push_wide_char_to_area(
+        row,
+        GlyphArea::Text.index(),
+        ch,
+        face_id,
+        charpos,
+        pixel_width,
+    );
+}
+
+pub(crate) fn push_wide_char_to_area(
+    row: &mut GlyphRow,
+    area_index: usize,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+    pixel_width: f32,
+) {
+    let area = &mut row.glyphs[area_index];
     if crate::unicode::is_cluster_extender(ch) && merge_extender_into_last_glyph(area, ch) {
         return;
     }
@@ -236,7 +280,7 @@ pub(crate) fn push_wide_char_to_row(
     };
     area.push(glyph);
     area.push(Glyph::padding_for(face_id, charpos));
-    row.displays_text = true;
+    mark_displays_text_if_text_area(row, area_index);
 }
 
 /// Append a grapheme-cluster continuation character — a ZWJ-joined emoji, the
@@ -244,13 +288,24 @@ pub(crate) fn push_wide_char_to_row(
 /// etc. — to the last emitted text glyph, upgrading it to a `Composite` so the
 /// renderer shapes the whole cluster as one unit. Falls back to a standalone
 /// glyph when there is no mergeable base.
+#[cfg(test)]
 pub(crate) fn push_cluster_continuation_to_row(
     row: &mut GlyphRow,
     ch: char,
     face_id: u32,
     charpos: usize,
 ) {
-    let area = &mut row.glyphs[GlyphArea::Text.index()];
+    push_cluster_continuation_to_area(row, GlyphArea::Text.index(), ch, face_id, charpos);
+}
+
+pub(crate) fn push_cluster_continuation_to_area(
+    row: &mut GlyphRow,
+    area_index: usize,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+) {
+    let area = &mut row.glyphs[area_index];
     if let Some(last) = area.last_mut()
         && is_run_member_padding(last)
     {
@@ -260,12 +315,13 @@ pub(crate) fn push_cluster_continuation_to_row(
         return;
     }
     area.push(Glyph::char(ch, face_id, charpos));
-    row.displays_text = true;
+    mark_displays_text_if_text_area(row, area_index);
 }
 
 /// Grow a contextual-shaping run by appending `ch` to the last text glyph's
 /// composed cluster and pushing a padding cell carrying `ch`'s own buffer
 /// position.
+#[cfg(test)]
 pub(crate) fn push_run_member_to_row(
     row: &mut GlyphRow,
     ch: char,
@@ -273,7 +329,25 @@ pub(crate) fn push_run_member_to_row(
     charpos: usize,
     pixel_width: f32,
 ) {
-    let area = &mut row.glyphs[GlyphArea::Text.index()];
+    push_run_member_to_area(
+        row,
+        GlyphArea::Text.index(),
+        ch,
+        face_id,
+        charpos,
+        pixel_width,
+    );
+}
+
+pub(crate) fn push_run_member_to_area(
+    row: &mut GlyphRow,
+    area_index: usize,
+    ch: char,
+    face_id: u32,
+    charpos: usize,
+    pixel_width: f32,
+) {
+    let area = &mut row.glyphs[area_index];
     if merge_extender_into_last_glyph(area, ch) {
         let member_width = if pixel_width.is_finite() && pixel_width > 0.0 {
             pixel_width
@@ -290,11 +364,32 @@ pub(crate) fn push_run_member_to_row(
         return;
     }
     area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
-    row.displays_text = true;
+    mark_displays_text_if_text_area(row, area_index);
 }
 
+#[cfg(test)]
 pub(crate) fn push_stretch_to_row(
     row: &mut GlyphRow,
+    width_cols: u16,
+    face_id: u32,
+    pixel_width: f32,
+    pixel_height: f32,
+    pixel_ascent: f32,
+) {
+    push_stretch_to_area(
+        row,
+        GlyphArea::Text.index(),
+        width_cols,
+        face_id,
+        pixel_width,
+        pixel_height,
+        pixel_ascent,
+    );
+}
+
+pub(crate) fn push_stretch_to_area(
+    row: &mut GlyphRow,
+    area_index: usize,
     width_cols: u16,
     face_id: u32,
     pixel_width: f32,
@@ -306,8 +401,8 @@ pub(crate) fn push_stretch_to_row(
         pixel_height,
         pixel_ascent,
     );
-    row.glyphs[GlyphArea::Text.index()].push(glyph);
-    row.displays_text = true;
+    row.glyphs[area_index].push(glyph);
+    mark_displays_text_if_text_area(row, area_index);
 }
 
 /// Normalize a standalone row built outside the window-matrix walker.
