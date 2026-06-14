@@ -5,7 +5,7 @@ use crate::display_item::{
     DisplaySourceMappedText, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
     SourceSpan, glyphless_method_for_char,
 };
-use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{DisplayMediaReplacementProperty, DisplayPropertyClassification};
 #[cfg(test)]
 use crate::display_row::DisplayRowRenderStop;
@@ -43,7 +43,7 @@ use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, OverlayDisplayString, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 #[cfg(test)]
@@ -406,6 +406,85 @@ impl<'a> LispStringSourceAppendSession<'a> {
     fn discard_pending_until_row_break(&mut self) -> bool {
         self.source_state.discard_pending_item();
         self.source.discard_until_row_break()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct OverlayStringRenderSource {
+    string: Value,
+    overlay_id: Value,
+    anchor_charpos: CharPos0,
+    kind: OverlayStringKind,
+}
+
+impl OverlayStringRenderSource {
+    pub(crate) fn new(
+        overlay_string: OverlayDisplayString,
+        anchor_charpos: CharPos0,
+        kind: OverlayStringKind,
+    ) -> Self {
+        Self {
+            string: overlay_string.string,
+            overlay_id: overlay_string.overlay_id,
+            anchor_charpos,
+            kind,
+        }
+    }
+
+    pub(crate) fn anchor_i64(self) -> i64 {
+        self.anchor_charpos.get() as i64
+    }
+
+    pub(crate) fn value(self) -> Value {
+        self.string
+    }
+
+    pub(crate) fn origin(self) -> DisplayOrigin {
+        DisplayOrigin::OverlayString {
+            overlay_id: self.overlay_id,
+            anchor_charpos: self.anchor_charpos,
+            kind: self.kind,
+        }
+    }
+
+    pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
+        BaseFacePolicy::OverlayStringAtAnchor
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct OverlayStringRenderBatchSource<'a> {
+    overlay_strings: &'a [OverlayDisplayString],
+    anchor_charpos: CharPos0,
+    kind: OverlayStringKind,
+}
+
+impl<'a> OverlayStringRenderBatchSource<'a> {
+    pub(crate) fn new(
+        overlay_strings: &'a [OverlayDisplayString],
+        anchor_charpos: CharPos0,
+        kind: OverlayStringKind,
+    ) -> Self {
+        Self {
+            overlay_strings,
+            anchor_charpos,
+            kind,
+        }
+    }
+
+    pub(crate) fn is_empty(self) -> bool {
+        self.overlay_strings.is_empty()
+    }
+
+    pub(crate) fn overlay_strings(self) -> &'a [OverlayDisplayString] {
+        self.overlay_strings
+    }
+
+    pub(crate) fn source_for(
+        self,
+        overlay_string: OverlayDisplayString,
+    ) -> OverlayStringRenderSource {
+        OverlayStringRenderSource::new(overlay_string, self.anchor_charpos, self.kind)
     }
 }
 

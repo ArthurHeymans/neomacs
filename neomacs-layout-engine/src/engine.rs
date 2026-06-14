@@ -41,7 +41,8 @@ use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
     DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
     DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
-    LispStringSourceAppendRequest, LispStringSourceRowAppendSession, SyntheticTextAppendRequest,
+    LispStringSourceAppendRequest, LispStringSourceRowAppendSession,
+    OverlayStringRenderBatchSource, OverlayStringRenderSource, SyntheticTextAppendRequest,
     SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
@@ -2007,81 +2008,6 @@ impl<'a> OverlayStringRenderRowContext<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
-struct OverlayStringRenderSource {
-    string: Value,
-    overlay_id: Value,
-    anchor_charpos: CharPos0,
-    kind: OverlayStringKind,
-}
-
-impl OverlayStringRenderSource {
-    fn new(
-        overlay_string: super::neovm_bridge::OverlayDisplayString,
-        anchor_charpos: CharPos0,
-        kind: OverlayStringKind,
-    ) -> Self {
-        Self {
-            string: overlay_string.string,
-            overlay_id: overlay_string.overlay_id,
-            anchor_charpos,
-            kind,
-        }
-    }
-
-    fn anchor_i64(self) -> i64 {
-        self.anchor_charpos.get() as i64
-    }
-
-    fn value(self) -> Value {
-        self.string
-    }
-
-    fn origin(self) -> DisplayOrigin {
-        DisplayOrigin::OverlayString {
-            overlay_id: self.overlay_id,
-            anchor_charpos: self.anchor_charpos,
-            kind: self.kind,
-        }
-    }
-
-    fn base_face_policy(self) -> BaseFacePolicy {
-        BaseFacePolicy::OverlayStringAtAnchor
-    }
-}
-
-#[derive(Clone, Copy)]
-struct OverlayStringRenderBatchSource<'a> {
-    overlay_strings: &'a [super::neovm_bridge::OverlayDisplayString],
-    anchor_charpos: CharPos0,
-    kind: OverlayStringKind,
-}
-
-impl<'a> OverlayStringRenderBatchSource<'a> {
-    fn new(
-        overlay_strings: &'a [super::neovm_bridge::OverlayDisplayString],
-        anchor_charpos: CharPos0,
-        kind: OverlayStringKind,
-    ) -> Self {
-        Self {
-            overlay_strings,
-            anchor_charpos,
-            kind,
-        }
-    }
-
-    fn is_empty(self) -> bool {
-        self.overlay_strings.is_empty()
-    }
-
-    fn source_for(
-        self,
-        overlay_string: super::neovm_bridge::OverlayDisplayString,
-    ) -> OverlayStringRenderSource {
-        OverlayStringRenderSource::new(overlay_string, self.anchor_charpos, self.kind)
-    }
-}
-
 /// Render overlay string bytes into the layout.
 ///
 /// On `\n`: ends the current glyph row, advances `row`/`y`, begins a new row,
@@ -2266,7 +2192,7 @@ fn render_overlay_string_batch<B: super::neovm_bridge::LayoutBufferView>(
     if source_batch.is_empty() {
         return;
     }
-    for overlay_string in source_batch.overlay_strings {
+    for overlay_string in source_batch.overlay_strings() {
         render_overlay_string(
             evaluator,
             output_emitter,
