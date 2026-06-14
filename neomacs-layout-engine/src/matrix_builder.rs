@@ -352,20 +352,6 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    /// Install a complete set of text-area glyphs into the currently open row.
-    ///
-    /// Used by walkers that render directly into the active window matrix
-    /// instead of appending a post-window chrome row.
-    pub fn install_current_row_glyphs(&mut self, glyphs: Vec<Glyph>) {
-        if let Some(ref mut matrix) = self.current_matrix {
-            if self.current_row < matrix.rows.len() {
-                let row = &mut matrix.rows[self.current_row];
-                row.displays_text = !glyphs.is_empty();
-                row.glyphs[GlyphArea::Text.index()] = glyphs;
-            }
-        }
-    }
-
     pub(crate) fn with_current_row_mut<R>(
         &mut self,
         f: impl FnOnce(&mut GlyphRow) -> R,

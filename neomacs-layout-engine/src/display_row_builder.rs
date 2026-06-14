@@ -434,13 +434,13 @@ impl DisplayRowAppendCursor {
     }
 
     #[cfg(test)]
-    pub(crate) fn append_item_to_current_matrix_row(
+    pub(crate) fn append_item_to_current_text_row(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
         layout: &DisplayRowLayout,
         item: DisplayItem,
     ) -> Option<DisplayRowAppendProgress> {
-        let progress = append_display_item_to_current_matrix_row(
+        let progress = append_display_item_to_current_text_row(
             builder,
             layout,
             item,
@@ -451,14 +451,14 @@ impl DisplayRowAppendCursor {
         Some(progress)
     }
 
-    pub(crate) fn append_measured_item_to_current_matrix_row(
+    pub(crate) fn append_measured_item_to_current_text_row(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
         layout: &DisplayRowLayout,
         item: DisplayItem,
         glyph_measurer: &mut dyn DisplayGlyphMeasurer,
     ) -> Option<DisplayRowAppendProgress> {
-        let progress = append_measured_display_item_to_current_matrix_row(
+        let progress = append_measured_display_item_to_current_text_row(
             builder,
             layout,
             item,
@@ -472,7 +472,7 @@ impl DisplayRowAppendCursor {
 }
 
 #[cfg(test)]
-pub(crate) fn append_display_item_to_current_matrix_row(
+pub(crate) fn append_display_item_to_current_text_row(
     builder: &mut GlyphMatrixBuilder,
     layout: &DisplayRowLayout,
     item: DisplayItem,
@@ -486,7 +486,7 @@ pub(crate) fn append_display_item_to_current_matrix_row(
 }
 
 #[cfg(test)]
-pub(crate) fn append_measured_display_item_to_current_matrix_row(
+pub(crate) fn append_measured_display_item_to_current_text_row(
     builder: &mut GlyphMatrixBuilder,
     layout: &DisplayRowLayout,
     item: DisplayItem,

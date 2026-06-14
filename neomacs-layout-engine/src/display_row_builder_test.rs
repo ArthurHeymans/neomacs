@@ -286,13 +286,13 @@ fn display_row_progress_writer_reports_control_char_as_single_source_slot() {
 }
 
 #[test]
-fn append_display_item_to_current_matrix_row_returns_progress_and_updates_row() {
+fn append_display_item_to_current_text_row_returns_progress_and_updates_row() {
     let row_layout = layout();
     let mut matrix = GlyphMatrixBuilder::new();
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
-    let progress = append_display_item_to_current_matrix_row(
+    let progress = append_display_item_to_current_text_row(
         &mut matrix,
         &row_layout,
         text_item("ab"),
@@ -312,7 +312,7 @@ fn append_display_item_to_current_matrix_row_returns_progress_and_updates_row() 
 }
 
 #[test]
-fn append_measured_display_item_to_current_matrix_row_uses_glyph_measurer() {
+fn append_measured_display_item_to_current_text_row_uses_glyph_measurer() {
     struct TestMeasurer;
 
     impl DisplayGlyphMeasurer for TestMeasurer {
@@ -337,7 +337,7 @@ fn append_measured_display_item_to_current_matrix_row_uses_glyph_measurer() {
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
-    let progress = append_measured_display_item_to_current_matrix_row(
+    let progress = append_measured_display_item_to_current_text_row(
         &mut matrix,
         &row_layout,
         text_item("mi"),
@@ -366,7 +366,7 @@ fn display_row_append_cursor_updates_position_after_append() {
 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 80.0);
     let progress = cursor
-        .append_item_to_current_matrix_row(&mut matrix, &row_layout, text_item("ab"))
+        .append_item_to_current_text_row(&mut matrix, &row_layout, text_item("ab"))
         .expect("append progress");
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 8.0, col: 1 });
@@ -388,7 +388,7 @@ fn display_row_append_cursor_updates_position_to_clipped_end() {
 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 16.0);
     let progress = cursor
-        .append_item_to_current_matrix_row(&mut matrix, &row_layout, text_item("ab"))
+        .append_item_to_current_text_row(&mut matrix, &row_layout, text_item("ab"))
         .expect("append progress");
 
     assert_eq!(progress.status, DisplayRowAppendStatus::Clipped);
@@ -413,7 +413,7 @@ fn display_row_append_cursor_uses_glyph_measurer() {
 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 80.0);
     let progress = cursor
-        .append_measured_item_to_current_matrix_row(
+        .append_measured_item_to_current_text_row(
             &mut matrix,
             &row_layout,
             text_item("mi"),
@@ -446,7 +446,7 @@ fn display_row_append_cursor_appends_explicit_source_item() {
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 8.0, col: 1 }, 80.0);
     let item = source.next_item(&mut context).expect("source item");
     let progress = cursor
-        .append_item_to_current_matrix_row(&mut matrix, &row_layout, item)
+        .append_item_to_current_text_row(&mut matrix, &row_layout, item)
         .expect("append progress");
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 8.0, col: 1 });
@@ -476,7 +476,7 @@ fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 80.0);
     let item = source.next_item(&mut context).expect("source item");
     let progress = cursor
-        .append_measured_item_to_current_matrix_row(&mut matrix, &row_layout, item, &mut measurer)
+        .append_measured_item_to_current_text_row(&mut matrix, &row_layout, item, &mut measurer)
         .expect("append progress");
 
     assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
