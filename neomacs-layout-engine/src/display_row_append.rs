@@ -3458,22 +3458,20 @@ pub(crate) struct BufferTextSourceCharAppendOutcome {
 }
 
 impl BufferTextSourceCharAppendOutcome {
-    pub(crate) fn into_progress_and_position(
-        self,
-    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
-        (self.progress, self.position)
-    }
-
-    pub(crate) fn track_trailing_whitespace_rendered_char(
+    pub(crate) fn apply_to_text_row_state(
         &self,
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
         ch: char,
         geometry: &DisplayRowGeometryState,
+        x: &mut f32,
+        col: &mut usize,
     ) {
         trailing_whitespace.track_rendered_char(
             ch,
             geometry.start_marker_at_x(self.position.x_px - self.advance_px),
         );
+        *x = self.position.x_px;
+        *col = self.position.col;
     }
 }
 
@@ -4005,16 +4003,17 @@ pub(crate) struct BufferTextSpecialSourceCharAppendOutcome {
 }
 
 impl BufferTextSpecialSourceCharAppendOutcome {
-    pub(crate) fn into_progress_and_position(
-        self,
-    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
-        (self.progress, self.position)
-    }
-
-    pub(crate) fn apply_face_scan_policy(&self, face_scan: &mut FaceScanCheckpoint) {
+    pub(crate) fn apply_to_text_row_state(
+        &self,
+        face_scan: &mut FaceScanCheckpoint,
+        x: &mut f32,
+        col: &mut usize,
+    ) {
         if self.append_policy.invalidates_face_after_append() {
             face_scan.invalidate();
         }
+        *x = self.position.x_px;
+        *col = self.position.col;
     }
 }
 

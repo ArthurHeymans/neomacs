@@ -2402,10 +2402,14 @@ fn buffer_text_source_append_context_appends_source_char() {
         )
         .expect("appended buffer fragment");
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
-    append_outcome.track_trailing_whitespace_rendered_char(
+    let mut end_x = 0.0;
+    let mut end_col = 0;
+    append_outcome.apply_to_text_row_state(
         &mut trailing_whitespace,
         ' ',
         &geometry,
+        &mut end_x,
+        &mut end_col,
     );
     assert_eq!(
         trailing_whitespace
@@ -2413,9 +2417,8 @@ fn buffer_text_source_append_context_appends_source_char() {
             .map(|(_color, x)| x),
         Some(0.0)
     );
-    let (_progress, end) = append_outcome.into_progress_and_position();
-
-    assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(end_x, 8.0);
+    assert_eq!(end_col, 1);
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];
@@ -3065,12 +3068,14 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         .expect("appended source-mapped buffer text item fragment");
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
-    append_outcome.apply_face_scan_policy(&mut face_scan);
+    let mut end_x = 0.0;
+    let mut end_col = 0;
+    append_outcome.apply_to_text_row_state(&mut face_scan, &mut end_x, &mut end_col);
     assert!(face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 31);
-    let (_progress, end) = append_outcome.into_progress_and_position();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    assert_eq!(end_x, 16.0);
+    assert_eq!(end_col, 2);
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];
@@ -3164,12 +3169,14 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         .expect("appended glyphless buffer text item fragment");
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
-    append_outcome.apply_face_scan_policy(&mut face_scan);
+    let mut end_x = 0.0;
+    let mut end_col = 0;
+    append_outcome.apply_to_text_row_state(&mut face_scan, &mut end_x, &mut end_col);
     assert!(!face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 30);
-    let (_progress, end) = append_outcome.into_progress_and_position();
 
-    assert_eq!(end, DisplayRowPosition { x_px: 48.0, col: 6 });
+    assert_eq!(end_x, 48.0);
+    assert_eq!(end_col, 6);
     builder
         .with_current_row_mut(|row| {
             let text = &row.glyphs[1];

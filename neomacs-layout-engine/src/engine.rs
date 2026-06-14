@@ -2788,10 +2788,7 @@ impl LayoutEngine {
                         &mut self.font_metrics,
                         face_resolver,
                     ) {
-                        append_outcome.apply_face_scan_policy(&mut face_scan);
-                        let (_progress, position) = append_outcome.into_progress_and_position();
-                        x = position.x_px;
-                        col = position.col;
+                        append_outcome.apply_to_text_row_state(&mut face_scan, &mut x, &mut col);
                     }
                     charpos += 1;
                     word_wrap.disallow_after_current_char();
@@ -3009,15 +3006,13 @@ impl LayoutEngine {
             let Some(append_outcome) = appended else {
                 break;
             };
-            append_outcome.track_trailing_whitespace_rendered_char(
+            append_outcome.apply_to_text_row_state(
                 &mut trailing_whitespace,
                 ch,
                 &row_geometry,
+                &mut x,
+                &mut col,
             );
-            let (_progress, position) = append_outcome.into_progress_and_position();
-
-            x = position.x_px;
-            col = position.col;
             charpos += 1;
             word_wrap.allow_after_current_char(ch);
 
