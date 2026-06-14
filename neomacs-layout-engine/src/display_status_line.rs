@@ -17,6 +17,9 @@ use super::engine::LayoutEngine;
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_item::{
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
+};
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
     DisplayRowLispStringSourceSessionRequest, DisplayRowLispStringSourceSessionRowRequest,
@@ -28,12 +31,12 @@ use crate::display_row::{
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
-use crate::display_row_builder::DisplayTabPolicy;
+use crate::display_row_builder::{DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy};
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Context;
@@ -61,6 +64,41 @@ fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<Render
         faces: Vec::new(),
         media: Vec::new(),
     }]
+}
+
+fn append_synthetic_minibuffer_text(
+    row: &mut GlyphRow,
+    text: impl Into<String>,
+    face_id: u32,
+    y: f32,
+    width: f32,
+    char_width: f32,
+    ascent: f32,
+    row_height: f32,
+    source_offset: usize,
+) {
+    let text = text.into();
+    let char_len = text.chars().count();
+    if char_len == 0 {
+        return;
+    }
+    let layout = DisplayRowLayout {
+        role: GlyphRowRole::Minibuffer,
+        y_px: y,
+        width_px: width.max(1.0),
+        height_px: row_height.max(1.0),
+        ascent_px: ascent.max(0.0).min(row_height.max(1.0)),
+        char_width_px: char_width.max(1.0),
+        tab_policy: DisplayTabPolicy::every(8),
+        base_face: RenderFaceRef::FaceId(face_id),
+        symbol_values: std::collections::HashMap::new(),
+    };
+    let item = DisplayItem::new(
+        SourceSpan::synthetic(0, source_offset, source_offset + char_len),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+    );
+    DisplayRowWriter::new(&layout, row).push_item(item);
 }
 
 pub(crate) enum FrameTabBarDisplayRowRender {
@@ -1061,13 +1099,30 @@ impl LayoutEngine {
             rendered.row.mode_line = false;
             if request.reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
                 let ch = if request.truncate_lines { '$' } else { '\\' };
-                while rendered.row.glyphs[1].len() < special_col {
-                    rendered.row.glyphs[1].push(
-                        Glyph::char(' ', special_face_id, 0).with_pixel_width(char_width.max(1.0)),
+                let current_cols = rendered.row.glyphs[GlyphArea::Text.index()].len();
+                if current_cols < special_col {
+                    append_synthetic_minibuffer_text(
+                        &mut rendered.row,
+                        " ".repeat(special_col - current_cols),
+                        special_face_id,
+                        rendered.progress.y,
+                        request.text_width,
+                        char_width,
+                        request.ascent,
+                        request.row_height,
+                        current_cols,
                     );
                 }
-                rendered.row.glyphs[1].push(
-                    Glyph::char(ch, special_face_id, 0).with_pixel_width(char_width.max(1.0)),
+                append_synthetic_minibuffer_text(
+                    &mut rendered.row,
+                    ch.to_string(),
+                    special_face_id,
+                    rendered.progress.y,
+                    request.text_width,
+                    char_width,
+                    request.ascent,
+                    request.row_height,
+                    special_col,
                 );
                 rendered.progress.end_x = request.text_width.max(0.0);
                 rendered.progress.end_col = matrix_cols as i64;

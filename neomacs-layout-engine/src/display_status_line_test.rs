@@ -1,5 +1,20 @@
 use super::*;
 
+fn row_text(row: &GlyphRow) -> String {
+    row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter_map(|glyph| match &glyph.glyph_type {
+            neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(*ch),
+            neomacs_display_protocol::glyph_matrix::GlyphType::Composite { text } => {
+                text.chars().next()
+            }
+            neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { .. }
+            | neomacs_display_protocol::glyph_matrix::GlyphType::Glyphless { .. }
+            | neomacs_display_protocol::glyph_matrix::GlyphType::Image { .. } => None,
+        })
+        .collect()
+}
+
 #[test]
 fn display_row_height_for_face_uses_realized_line_height_and_box() {
     let mut engine = LayoutEngine::new();
@@ -101,6 +116,45 @@ fn echo_minibuffer_source_row_request_builds_session_row_request() {
     assert_eq!(request.geometry().height, 16.0);
     assert_eq!(request.geometry().char_width, 8.0);
     assert_eq!(request.geometry().ascent, 12.0);
+}
+
+#[test]
+fn echo_minibuffer_clipped_row_appends_reserved_marker_through_text_row() {
+    let _eval = Context::new();
+    let table = neovm_core::face::FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    base_face.font_line_height = 16.0;
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+
+    let rows = engine.render_minibuffer_echo_rows(
+        &resolver,
+        None,
+        &mut face_ids,
+        EchoMinibufferRowsRenderRequest {
+            y: 0.0,
+            text_width: 24.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            row_height: 16.0,
+            base_face: &base_face,
+            message: Value::string("ABCD"),
+            max_rows: 1,
+            truncate_lines: false,
+            reserve_right_special_col: true,
+        },
+    );
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(row_text(&rows[0].row), "AB\\");
+    assert_eq!(rows[0].progress.end_col, 3);
+    assert_eq!(
+        rows[0].row.glyphs[GlyphArea::Text.index()][2].pixel_width,
+        8.0
+    );
 }
 
 #[test]
