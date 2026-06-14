@@ -1807,6 +1807,7 @@ mod divergence_audit_regex;
 mod divergence_audit_quotes_casefold;
 mod divergence_audit_advice_hooks;
 mod divergence_audit_bytecode;
+mod divergence_audit_generators;
 mod divergence_completion;
 mod divergence_completion_case;
 mod divergence_face_attributes_matrix;
