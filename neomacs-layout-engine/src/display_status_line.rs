@@ -19,10 +19,11 @@ use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmi
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
-    DisplayRowLispStringSourceSessionRequest, DisplayRowOwner, DisplayRowRenderContext,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRequestPolicy, FrameChromeKind,
-    MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, install_measured_frame_chrome_row,
-    install_measured_window_display_row, install_rendered_display_row,
+    DisplayRowLispStringSourceSessionRequest, DisplayRowLispStringSourceSessionRowRequest,
+    DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
+    DisplayRowSourceRequestPolicy, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
+    WindowChromeKind, install_measured_frame_chrome_row, install_measured_window_display_row,
+    install_rendered_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -761,7 +762,7 @@ impl LayoutEngine {
         let mut rows = Vec::new();
         let max_rows = max_rows.max(1);
         while rows.len() < max_rows {
-            let request = DisplayRowSourceRequestPolicy::new(
+            let row_request = DisplayRowSourceRequestPolicy::new(
                 y + rows.len() as f32 * row_height,
                 wrap_width,
                 row_height,
@@ -771,6 +772,7 @@ impl LayoutEngine {
                 GlyphRowRole::Minibuffer,
             )
             .source_request_for_base_face_id(base_face_id, &base_face);
+            let request = DisplayRowLispStringSourceSessionRowRequest::new(row_request);
             let Some(result) = source_session.render_next_row_with_context(
                 &mut renderer,
                 request,

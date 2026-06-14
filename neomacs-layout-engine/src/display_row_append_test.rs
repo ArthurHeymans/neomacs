@@ -13,9 +13,9 @@ use crate::display_property::{
 };
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowGeometry,
-    DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState,
+    DisplayRowItemSourceRenderRequest, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
+    DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderer,
+    DisplayRowSourceRequestPolicy, DisplayRowSourceState,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
@@ -1032,30 +1032,32 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         );
         let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
         let mut source_state = DisplayRowSourceState::default();
-        renderer
-            .render_display_item_source_row_fragment_step_from_request_with_display_host(
-                DisplayRowSourceRequestPolicy::new(
-                    0.0,
-                    160.0,
-                    16.0,
-                    8.0,
-                    12.0,
-                    DisplayTabPolicy::every(8),
-                    GlyphRowRole::Text,
-                )
-                .source_request_for_base_face_id(7, &base_face)
-                .with_render_bounds(DisplayRowRenderBounds {
-                    start: DisplayRowPosition { x_px: 16.0, col: 2 },
-                    max_x_px: 160.0,
-                }),
-                &mut source,
-                &mut source_state,
-                &face_resolver,
-                None,
-                &mut face_ids,
+        DisplayRowItemSourceRenderRequest::new(
+            DisplayRowSourceRequestPolicy::new(
+                0.0,
+                160.0,
+                16.0,
+                8.0,
+                12.0,
+                DisplayTabPolicy::every(8),
+                GlyphRowRole::Text,
             )
-            .expect("rendered source")
-            .rendered
+            .source_request_for_base_face_id(7, &base_face)
+            .with_render_bounds(DisplayRowRenderBounds {
+                start: DisplayRowPosition { x_px: 16.0, col: 2 },
+                max_x_px: 160.0,
+            }),
+        )
+        .render_fragment_step_with_display_host(
+            &mut renderer,
+            &mut source,
+            &mut source_state,
+            &face_resolver,
+            None,
+            &mut face_ids,
+        )
+        .expect("rendered source")
+        .rendered
     };
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);

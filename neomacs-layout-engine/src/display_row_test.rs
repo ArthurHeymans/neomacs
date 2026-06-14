@@ -686,6 +686,73 @@ fn display_row_renderer_clips_from_render_bounds_start() {
 }
 
 #[test]
+fn lisp_string_source_session_renders_rows_from_typed_row_requests() {
+    let _eval = Context::new();
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut base_face = resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let base_face_id = 7;
+    let mut face_ids = FrameFaceIdAllocator::new(8);
+    let mut session = DisplayRowLispStringSourceSession::new(
+        DisplayRowLispStringSourceSessionRequest::new(1, Value::string("ABCD"), base_face_id),
+    )
+    .expect("lisp string source session");
+    let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
+
+    let first_row_request = display_row_request_for_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 16.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        base_face_id,
+        &base_face,
+        GlyphRowRole::Minibuffer,
+    );
+    let first = session
+        .render_next_row_with_context(
+            &mut renderer,
+            DisplayRowLispStringSourceSessionRowRequest::new(first_row_request),
+            &mut context,
+        )
+        .expect("first session row");
+
+    assert_eq!(first.stop, DisplayRowRenderStop::Clipped);
+    assert_eq!(row_text_expanding_stretches(&first.rendered.row), "AB");
+
+    let second_row_request = display_row_request_for_face(
+        DisplayRowGeometry {
+            y: 16.0,
+            width: 16.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        base_face_id,
+        &base_face,
+        GlyphRowRole::Minibuffer,
+    );
+    let second = session
+        .render_next_row_with_context(
+            &mut renderer,
+            DisplayRowLispStringSourceSessionRowRequest::new(second_row_request),
+            &mut context,
+        )
+        .expect("second session row");
+
+    assert_eq!(second.stop, DisplayRowRenderStop::SourceExhausted);
+    assert_eq!(row_text_expanding_stretches(&second.rendered.row), "CD");
+}
+
+#[test]
 fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     let _eval = Context::new();
     let mut font_metrics = None;
@@ -768,46 +835,36 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     let mut state = DisplayRowSourceState::default();
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
-    let first = renderer
-        .render_display_item_source_row_step_from_request_with_context(
-            display_row_request_for_face(
-                DisplayRowGeometry {
-                    y: 0.0,
-                    width: 16.0,
-                    height: 16.0,
-                    char_width: 8.0,
-                    ascent: 12.0,
-                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-                },
-                base_face_id,
-                &test_base_face,
-                GlyphRowRole::Text,
-            ),
-            &mut source,
-            &mut state,
-            &mut context,
-        )
-        .expect("first row");
-    let second = renderer
-        .render_display_item_source_row_step_from_request_with_context(
-            display_row_request_for_face(
-                DisplayRowGeometry {
-                    y: 16.0,
-                    width: 16.0,
-                    height: 16.0,
-                    char_width: 8.0,
-                    ascent: 12.0,
-                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-                },
-                base_face_id,
-                &test_base_face,
-                GlyphRowRole::Text,
-            ),
-            &mut source,
-            &mut state,
-            &mut context,
-        )
-        .expect("second row");
+    let first = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 16.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        base_face_id,
+        &test_base_face,
+        GlyphRowRole::Text,
+    ))
+    .render_step_with_context(&mut renderer, &mut source, &mut state, &mut context)
+    .expect("first row");
+    let second = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+        DisplayRowGeometry {
+            y: 16.0,
+            width: 16.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        base_face_id,
+        &test_base_face,
+        GlyphRowRole::Text,
+    ))
+    .render_step_with_context(&mut renderer, &mut source, &mut state, &mut context)
+    .expect("second row");
 
     assert_eq!(first.stop, DisplayRowRenderStop::Clipped);
     assert_eq!(row_text_expanding_stretches(&first.rendered.row), "AB");
@@ -872,28 +929,28 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     let mut policy = DirectTextRunPolicy;
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
-    let result = renderer
-        .render_display_item_source_row_fragment_step_from_request_into_row_with_policy(
-            display_row_request_for_face(
-                DisplayRowGeometry {
-                    y: 0.0,
-                    width: 240.0,
-                    height: 16.0,
-                    char_width: 8.0,
-                    ascent: 12.0,
-                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-                },
-                base_face_id,
-                base_face,
-                GlyphRowRole::Text,
-            ),
-            &mut row,
-            &mut source,
-            &mut state,
-            &mut context,
-            &mut policy,
-        )
-        .expect("rendered row");
+    let result = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        base_face_id,
+        base_face,
+        GlyphRowRole::Text,
+    ))
+    .render_fragment_step_into_row_with_policy(
+        &mut renderer,
+        &mut row,
+        &mut source,
+        &mut state,
+        &mut context,
+        &mut policy,
+    )
+    .expect("rendered row");
 
     assert_eq!(result.progress.end_x, 15.0);
     assert_eq!(result.progress.end_col, 3);
@@ -1080,8 +1137,8 @@ fn render_buffer_display_row_with_properties(
         request.base_face_ref(),
     );
 
-    renderer
-        .render_display_item_source_row_from_request(request, &mut source, &resolver, &mut face_ids)
+    DisplayRowItemSourceRenderRequest::new(request)
+        .render(&mut renderer, &mut source, &resolver, &mut face_ids)
         .expect("buffer display source row")
         .row
 }
@@ -1112,26 +1169,21 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         RenderFaceRef::FaceId(1),
     );
 
-    let rendered = renderer
-        .render_display_item_source_row_from_request(
-            display_row_request_for_face(
-                DisplayRowGeometry {
-                    y: 0.0,
-                    width: 240.0,
-                    height: 16.0,
-                    char_width: 8.0,
-                    ascent: 12.0,
-                    tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-                },
-                1,
-                resolver.default_face(),
-                GlyphRowRole::TabLine,
-            ),
-            &mut source,
-            &resolver,
-            &mut face_ids,
-        )
-        .expect("display source row");
+    let rendered = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        1,
+        resolver.default_face(),
+        GlyphRowRole::TabLine,
+    ))
+    .render(&mut renderer, &mut source, &resolver, &mut face_ids)
+    .expect("display source row");
 
     assert_eq!(rendered.source_slots.len(), 5);
     assert_eq!(
@@ -1663,31 +1715,25 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
         RenderFaceRef::FaceId(1),
     );
 
-    let rendered = renderer
-        .render_display_item_source_row_from_request(
-            display_row_request_for_face(
-                DisplayRowGeometry {
-                    y: 0.0,
-                    width: 240.0,
-                    height: 16.0,
-                    char_width: 8.0,
-                    ascent: 12.0,
-                    tab_policy:
-                        crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
-                            0.0,
-                            4,
-                            &[2],
-                        ),
-                },
-                1,
-                resolver.default_face(),
-                GlyphRowRole::TabLine,
+    let rendered = DisplayRowItemSourceRenderRequest::new(display_row_request_for_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 16.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::from_tab_width_and_stops(
+                0.0,
+                4,
+                &[2],
             ),
-            &mut source,
-            &resolver,
-            &mut face_ids,
-        )
-        .expect("display source row");
+        },
+        1,
+        resolver.default_face(),
+        GlyphRowRole::TabLine,
+    ))
+    .render(&mut renderer, &mut source, &resolver, &mut face_ids)
+    .expect("display source row");
 
     let glyphs = &rendered.row.glyphs[1];
     assert_eq!(glyphs[0].glyph_type, GlyphType::Stretch { width_cols: 2 });
@@ -2586,9 +2632,9 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
             .expect("lisp string source");
     let mut state = DisplayRowSourceState::default();
 
-    let fragment = renderer
-        .render_display_item_source_row_fragment_step_from_request_with_display_host(
-            request,
+    let fragment = DisplayRowItemSourceRenderRequest::new(request)
+        .render_fragment_step_with_display_host(
+            &mut renderer,
             &mut source,
             &mut state,
             &resolver,
@@ -2644,9 +2690,9 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     .expect("lisp string source");
     let mut state = DisplayRowSourceState::default();
 
-    let result = renderer
-        .render_display_item_source_row_fragment_step_from_request_into_row_with_display_host(
-            request,
+    let result = DisplayRowItemSourceRenderRequest::new(request)
+        .render_fragment_step_into_row_with_display_host(
+            &mut renderer,
             &mut row,
             &mut source,
             &mut state,
