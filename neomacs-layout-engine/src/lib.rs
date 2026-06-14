@@ -24,6 +24,7 @@ pub(crate) mod display_row;
 pub(crate) mod display_row_append;
 pub(crate) mod display_row_builder;
 pub(crate) mod display_row_geometry;
+pub(crate) mod display_row_walk_state;
 pub(crate) mod display_source;
 pub(crate) mod display_source_resolver;
 pub mod display_space;
