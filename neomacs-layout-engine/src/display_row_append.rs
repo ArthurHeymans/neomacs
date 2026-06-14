@@ -1905,6 +1905,71 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
     }
 }
 
+struct DisplayRowSingleItemAppendOperation<'face> {
+    item: DisplayItem,
+    base_face: &'face ResolvedFace,
+    fallback_face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    kind: DisplayRowAppendKind,
+}
+
+impl<'face> DisplayRowSingleItemAppendOperation<'face> {
+    fn new(
+        item: DisplayItem,
+        base_face: &'face ResolvedFace,
+        fallback_face_id: u32,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+    ) -> Self {
+        Self {
+            item,
+            base_face,
+            fallback_face_id,
+            frame,
+            position,
+            kind,
+        }
+    }
+
+    fn request_face_id(&self) -> u32 {
+        render_face_ref_id(self.item.face, self.fallback_face_id)
+    }
+
+    fn request(&self) -> DisplayRowSourceAppendRequest<'face> {
+        self.frame.source_append_request(
+            self.position,
+            self.request_face_id(),
+            self.base_face,
+            self.kind,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_to_text_row_and_emit<P: DisplayRowRenderPolicy>(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let request = self.request();
+        append_single_display_item_fragment_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            self.item,
+            face_resolver,
+            request,
+            render_policy,
+        )
+    }
+}
+
 fn buffer_text_source_range_append_request<B: LayoutBufferView + ?Sized>(
     range: BufferTextSourceRange,
     buffer_id: BufferId,
@@ -3457,6 +3522,7 @@ impl DisplayReplacementStringSourceAppendRequest {
     }
 }
 
+#[cfg(test)]
 fn append_raw_display_replacement_item_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -3469,22 +3535,21 @@ fn append_raw_display_replacement_item_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let face_id = render_face_ref_id(item.face, fallback_face_id);
-    let request = frame.source_append_request(
-        position,
-        face_id,
-        base_face,
-        DisplayRowAppendKind::DisplayReplacement,
-    );
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    append_single_display_item_fragment_to_text_row_and_emit(
+    DisplayRowSingleItemAppendOperation::new(
+        item,
+        base_face,
+        fallback_face_id,
+        frame,
+        position,
+        DisplayRowAppendKind::DisplayReplacement,
+    )
+    .render_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        item,
         face_resolver,
-        request,
         &mut render_policy,
     )
 }
@@ -4915,18 +4980,23 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         item: DisplayReplacementAppendItem,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        append_display_replacement_item_to_text_row_and_emit(
+        let item = item.into_display_item(self.replacement_source, self.face_id);
+        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+        DisplayRowSingleItemAppendOperation::new(
+            item,
+            self.base_face,
+            self.face_id,
+            self.frame.clone(),
+            position,
+            DisplayRowAppendKind::DisplayReplacement,
+        )
+        .render_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            self.replacement_source,
-            self.face_id,
-            item,
             face_resolver,
-            self.base_face,
-            self.frame.clone(),
-            position,
+            &mut render_policy,
         )
     }
 
@@ -5048,35 +5118,6 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             item_policy,
         )
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_display_replacement_item_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    replacement_source: BufferDisplayReplacementSource,
-    face_id: u32,
-    item: DisplayReplacementAppendItem,
-    face_resolver: &FaceResolver,
-    base_face: &ResolvedFace,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let item = item.into_display_item(replacement_source, face_id);
-    append_raw_display_replacement_item_to_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        item,
-        face_resolver,
-        base_face,
-        face_id,
-        frame,
-        position,
-    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5652,21 +5693,21 @@ fn append_synthetic_text_to_display_row(
     face_id: u32,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
     let item = synthetic_display_text_item(source, face_id);
-    let request = frame.source_append_request(
-        position,
-        face_id,
-        base_face,
-        DisplayRowAppendKind::SourceText,
-    );
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    append_single_display_item_fragment_to_text_row_and_emit(
+    DisplayRowSingleItemAppendOperation::new(
+        item,
+        base_face,
+        face_id,
+        frame,
+        position,
+        DisplayRowAppendKind::SourceText,
+    )
+    .render_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
-        item,
         face_resolver,
-        request,
         &mut render_policy,
     )
 }
