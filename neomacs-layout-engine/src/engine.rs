@@ -3025,6 +3025,11 @@ impl LayoutEngine {
             let Some(append_outcome) = appended else {
                 break;
             };
+            append_outcome.track_trailing_whitespace_rendered_char(
+                &mut trailing_whitespace,
+                ch,
+                &row_geometry,
+            );
             let (_progress, position) = append_outcome.into_progress_and_position();
 
             x = position.x_px;
@@ -3049,13 +3054,6 @@ impl LayoutEngine {
                 &mut row_y_positions,
                 &mut face_ids,
                 &mut self.matrix_builder,
-            );
-
-            prepared_append.track_trailing_whitespace_rendered_char(
-                &mut trailing_whitespace,
-                ch,
-                &row_geometry,
-                x,
             );
         }
 

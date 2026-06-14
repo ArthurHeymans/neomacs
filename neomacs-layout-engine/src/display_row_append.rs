@@ -3339,19 +3339,6 @@ impl BufferTextSourceCharPreparedAppend {
         )
     }
 
-    pub(crate) fn track_trailing_whitespace_rendered_char(
-        self,
-        trailing_whitespace: &mut TrailingWhitespaceRenderState,
-        ch: char,
-        geometry: &DisplayRowGeometryState,
-        current_x_px: f32,
-    ) {
-        trailing_whitespace.track_rendered_char(
-            ch,
-            geometry.start_marker_at_x(current_x_px - self.advance_px()),
-        );
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_to_text_row<B: LayoutBufferView + ?Sized>(
         self,
@@ -3363,6 +3350,7 @@ impl BufferTextSourceCharPreparedAppend {
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
     ) -> Option<BufferTextSourceCharAppendOutcome> {
+        let advance_px = self.advance_px();
         let (progress, position) = context.append_source_char_plan_to_text_row(
             geometry,
             builder,
@@ -3372,7 +3360,11 @@ impl BufferTextSourceCharPreparedAppend {
             face_resolver,
             self.plan,
         )?;
-        Some(BufferTextSourceCharAppendOutcome { progress, position })
+        Some(BufferTextSourceCharAppendOutcome {
+            progress,
+            position,
+            advance_px,
+        })
     }
 }
 
@@ -3380,6 +3372,7 @@ impl BufferTextSourceCharPreparedAppend {
 pub(crate) struct BufferTextSourceCharAppendOutcome {
     progress: DisplayRowAppendProgress,
     position: DisplayRowPosition,
+    advance_px: f32,
 }
 
 impl BufferTextSourceCharAppendOutcome {
@@ -3387,6 +3380,18 @@ impl BufferTextSourceCharAppendOutcome {
         self,
     ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
         (self.progress, self.position)
+    }
+
+    pub(crate) fn track_trailing_whitespace_rendered_char(
+        &self,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        ch: char,
+        geometry: &DisplayRowGeometryState,
+    ) {
+        trailing_whitespace.track_rendered_char(
+            ch,
+            geometry.start_marker_at_x(self.position.x_px - self.advance_px),
+        );
     }
 }
 

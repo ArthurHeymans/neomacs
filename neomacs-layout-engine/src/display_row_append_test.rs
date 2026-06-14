@@ -2317,6 +2317,18 @@ fn buffer_text_source_append_context_appends_source_char() {
             &face_resolver,
         )
         .expect("appended buffer fragment");
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    append_outcome.track_trailing_whitespace_rendered_char(
+        &mut trailing_whitespace,
+        ' ',
+        &geometry,
+    );
+    assert_eq!(
+        trailing_whitespace
+            .highlight_start_x(&geometry)
+            .map(|(_color, x)| x),
+        Some(0.0)
+    );
     let (_progress, end) = append_outcome.into_progress_and_position();
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
