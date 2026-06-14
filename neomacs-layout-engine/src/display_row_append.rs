@@ -4877,6 +4877,18 @@ impl BufferTextWordWrapSourceAction {
         face_scan.invalidate();
     }
 
+    pub(crate) fn apply_after_row_transition_and_prefix(
+        self,
+        transition: DisplayRowOverflowTransitionPlan,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+        render_state: DisplayRowTransitionRenderState<'_>,
+    ) {
+        self.apply_after_row_transition(charpos, hit_row_range, face_scan);
+        render_state.apply_overflow_prefix(transition);
+    }
+
     pub(crate) fn charpos(self) -> i64 {
         self.break_candidate.charpos()
     }

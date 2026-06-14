@@ -2754,20 +2754,20 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    word_wrap_action.apply_after_row_transition(
+                    word_wrap_action.apply_after_row_transition_and_prefix(
+                        transition,
                         &mut charpos,
                         &mut hit_row_range,
                         &mut face_scan,
+                        DisplayRowTransitionRenderState::new(
+                            &mut prefix_request,
+                            has_prefix,
+                            &mut line_numbers,
+                            &mut hscroll_skip,
+                            &mut word_wrap,
+                            &mut trailing_whitespace,
+                        ),
                     );
-                    DisplayRowTransitionRenderState::new(
-                        &mut prefix_request,
-                        has_prefix,
-                        &mut line_numbers,
-                        &mut hscroll_skip,
-                        &mut word_wrap,
-                        &mut trailing_whitespace,
-                    )
-                    .apply_overflow_prefix(transition);
 
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
