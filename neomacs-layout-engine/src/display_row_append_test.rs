@@ -475,6 +475,126 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
 }
 
 #[test]
+fn display_row_text_window_emit_context_applies_line_break_render_state_after_transition() {
+    let mut ctx = RowTransitionTestContext::new("text-window-transition-line-state");
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    hscroll_skip.consume_columns(4);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    trailing_whitespace.track_rendered_char(' ', ctx.geometry.start_marker_at_x(8.0));
+    let mut col = 6;
+
+    let row_limit = ctx.row_limit;
+    let transition = DisplayRowTextWindowEmitContext::new(
+        ctx.defaults,
+        0,
+        &mut ctx.row_y_positions,
+        4,
+        &mut ctx.geometry,
+        &mut ctx.row_flags,
+        row_limit,
+        &mut ctx.hit_rows,
+        &mut ctx.builder,
+        &mut ctx.output_emitter,
+        &mut ctx.eval,
+    )
+    .emit_line_break_then_row_start(
+        DisplayRowLineBreakTransitionPlan::hidden_line_break(),
+        DisplayRowHitRange {
+            charpos_start: 1,
+            charpos_end: 5,
+        },
+        DisplayRowPosition { x_px: 32.0, col },
+        2.0,
+        DisplayRowTransitionRenderState::new(
+            &mut prefix_request,
+            true,
+            &mut line_numbers,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+        ),
+        &mut col,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(col, 0);
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::Line);
+    assert_eq!(line_numbers.current_line(), 5);
+    assert!(hscroll_skip.should_skip());
+    assert_eq!(
+        trailing_whitespace.start_marker(),
+        DisplayRowStartMarker::Inactive
+    );
+}
+
+#[test]
+fn display_row_text_window_emit_context_applies_overflow_render_state_after_transition() {
+    let mut ctx = RowTransitionTestContext::new("text-window-transition-overflow-state");
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    trailing_whitespace.track_rendered_char(' ', ctx.geometry.start_marker_at_x(8.0));
+    let mut col = 6;
+    let BufferTextSourceCharOverflowAction::CharacterWrap { transition } =
+        BufferTextSourceCharOverflowAction::for_decision(
+            BufferTextRowOverflowDecision::CharacterWrap,
+        )
+    else {
+        panic!("expected character wrap transition");
+    };
+
+    let row_limit = ctx.row_limit;
+    let row_transition = DisplayRowTextWindowEmitContext::new(
+        ctx.defaults,
+        0,
+        &mut ctx.row_y_positions,
+        4,
+        &mut ctx.geometry,
+        &mut ctx.row_flags,
+        row_limit,
+        &mut ctx.hit_rows,
+        &mut ctx.builder,
+        &mut ctx.output_emitter,
+        &mut ctx.eval,
+    )
+    .emit_overflow_then_row_start(
+        transition,
+        DisplayRowHitRange {
+            charpos_start: 2,
+            charpos_end: 8,
+        },
+        DisplayRowPosition { x_px: 64.0, col },
+        DisplayRowTransitionRenderState::new(
+            &mut prefix_request,
+            true,
+            &mut line_numbers,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+        ),
+        &mut col,
+    );
+
+    assert_eq!(row_transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(col, 0);
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::Wrap);
+    assert_eq!(line_numbers.current_line(), 4);
+    assert!(!hscroll_skip.should_skip());
+    assert!(!word_wrap.has_candidate());
+    assert_eq!(
+        trailing_whitespace.start_marker(),
+        DisplayRowStartMarker::Inactive
+    );
+}
+
+#[test]
 fn display_row_transition_render_state_applies_row_start_line_break_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;

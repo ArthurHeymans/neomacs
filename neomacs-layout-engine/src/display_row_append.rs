@@ -534,6 +534,22 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         )
     }
 
+    pub(crate) fn emit_line_break_then_row_start(
+        self,
+        plan: DisplayRowLineBreakTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+        line_spacing: f32,
+        render_state: DisplayRowTransitionRenderState<'_>,
+        col: &mut usize,
+    ) -> TextMatrixRowTransition {
+        let transition = self.emit_line_break(plan, hit_range, position, line_spacing);
+        if !transition.is_exhausted() {
+            render_state.apply_line_break_row_start(plan, col);
+        }
+        transition
+    }
+
     pub(crate) fn emit_overflow(
         self,
         plan: DisplayRowOverflowTransitionPlan,
@@ -558,6 +574,21 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
             self.output_emitter,
             self.evaluator,
         )
+    }
+
+    pub(crate) fn emit_overflow_then_row_start(
+        self,
+        plan: DisplayRowOverflowTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+        render_state: DisplayRowTransitionRenderState<'_>,
+        col: &mut usize,
+    ) -> TextMatrixRowTransition {
+        let transition = self.emit_overflow(plan, hit_range, position);
+        if !transition.is_exhausted() {
+            render_state.apply_overflow_row_start(plan, col);
+        }
+        transition
     }
 }
 
