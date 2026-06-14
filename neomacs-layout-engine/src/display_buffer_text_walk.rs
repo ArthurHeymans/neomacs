@@ -317,6 +317,12 @@ pub(crate) struct BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
     height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextWindowLoopStepOutcome {
+    ContinueBufferWalk,
+    StopBufferWalk,
+}
+
 pub(crate) struct BufferTextWindowTailDecorationRequest<'a> {
     params: &'a WindowParams,
     content_x: f32,
@@ -1553,6 +1559,124 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
 
     pub(crate) fn hscroll_should_skip(&self) -> bool {
         self.hscroll_skip.should_skip()
+    }
+
+    pub(crate) fn render_next_step<'request, B: LayoutBufferView>(
+        &mut self,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        loop_context: BufferTextWindowLoopRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        append_surface: &'request DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome
+    where
+        'face: 'request,
+    {
+        self.render_row_prelude(
+            row_prelude_context,
+            append_surface,
+            active_face_state,
+            buffer,
+        );
+
+        if self
+            .render_invisible_text_for_context(
+                loop_context,
+                text,
+                append_surface,
+                overlay_context,
+                active_face_state,
+                buffer,
+            )
+            .should_continue_buffer_walk()
+        {
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+        }
+
+        if self.hscroll_should_skip() {
+            if self
+                .render_hscroll_skip_for_context(
+                    loop_context,
+                    text,
+                    append_surface,
+                    active_face_state,
+                )
+                .should_break()
+            {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            }
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+        }
+
+        let display_property_walk = self.render_display_property_checkpoint_for_context(
+            loop_context,
+            face_resolution_context,
+            text,
+            params,
+            append_surface,
+            active_face_state,
+        );
+        if display_property_walk.should_continue_buffer_walk() {
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+        }
+
+        let Some(decoded_source_char) = self.consume_source_char(text) else {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        };
+
+        let selective_display_outcome = self.render_selective_display_tail_for_context(
+            loop_context,
+            decoded_source_char,
+            text,
+            append_surface,
+            active_face_state,
+            buffer,
+        );
+        if selective_display_outcome.should_break() {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        }
+        if selective_display_outcome.should_continue_buffer_walk() {
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+        }
+
+        if decoded_source_char.ch() == '\n' {
+            if self
+                .render_line_break_for_context(
+                    loop_context,
+                    decoded_source_char,
+                    text,
+                    active_face_state,
+                    buffer,
+                )
+                .should_break()
+            {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            }
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+        }
+
+        let char_render_outcome = self.render_source_char_for_context(
+            loop_context,
+            decoded_source_char,
+            text,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+            buffer,
+        );
+        if char_render_outcome.should_break() {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        }
+        if char_render_outcome.should_continue_buffer_walk() {
+            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+        }
+
+        BufferTextWindowLoopStepOutcome::ContinueBufferWalk
     }
 
     pub(crate) fn render_row_prelude<B: LayoutBufferView>(

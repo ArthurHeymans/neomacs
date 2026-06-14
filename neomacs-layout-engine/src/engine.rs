@@ -23,7 +23,8 @@ use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
     BufferTextWindowLoopRenderState, BufferTextWindowLoopRequestContext,
-    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
+    BufferTextWindowLoopStepOutcome, BufferTextWindowOutputSetup,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
     BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
     BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
     BufferTextWindowWalkSetupRequest,
@@ -1270,114 +1271,21 @@ impl LayoutEngine {
                 &mut raise_span,
                 &mut height_span,
             );
-            loop_render_state.render_row_prelude(
-                row_prelude_request_context,
-                &text_append_surface,
-                &active_face_state,
-                buffer,
-            );
-
-            // --- Invisible text check ---
-            if loop_render_state
-                .render_invisible_text_for_context(
-                    loop_request_context,
-                    text,
-                    &text_append_surface,
-                    overlay_text_row_context,
-                    &active_face_state,
-                    buffer,
-                )
-                .should_continue_buffer_walk()
-            {
-                continue;
-            }
-
-            // Handle hscroll: skip columns consumed by horizontal scroll
-            if loop_render_state.hscroll_should_skip() {
-                if loop_render_state
-                    .render_hscroll_skip_for_context(
-                        loop_request_context,
-                        text,
-                        &text_append_surface,
-                        &active_face_state,
-                    )
-                    .should_break()
-                {
-                    break;
-                }
-                continue;
-            }
-
-            // --- Display property check ---
-            // Only call check_display_prop at property change boundaries for efficiency
-            let display_property_walk = loop_render_state
-                .render_display_property_checkpoint_for_context(
+            if matches!(
+                loop_render_state.render_next_step(
+                    row_prelude_request_context,
                     loop_request_context,
                     face_resolution_context.clone(),
                     text,
                     params,
                     &text_append_surface,
+                    overlay_text_row_context,
                     &mut active_face_state,
-                );
-            if display_property_walk.should_continue_buffer_walk() {
-                continue;
-            }
-
-            // Decode UTF-8 character. Keep the original byte/char position in
-            // the source object so wrap/newline/cursor paths all use the same
-            // typed buffer source coordinates.
-            let Some(decoded_source_char) = loop_render_state.consume_source_char(text) else {
-                break;
-            };
-            let ch = decoded_source_char.ch();
-
-            let selective_display_outcome = loop_render_state
-                .render_selective_display_tail_for_context(
-                    loop_request_context,
-                    decoded_source_char,
-                    text,
-                    &text_append_surface,
-                    &active_face_state,
                     buffer,
-                );
-            if selective_display_outcome.should_break() {
+                ),
+                BufferTextWindowLoopStepOutcome::StopBufferWalk
+            ) {
                 break;
-            }
-            if selective_display_outcome.should_continue_buffer_walk() {
-                continue;
-            }
-
-            if ch == '\n' {
-                if loop_render_state
-                    .render_line_break_for_context(
-                        loop_request_context,
-                        decoded_source_char,
-                        text,
-                        &active_face_state,
-                        buffer,
-                    )
-                    .should_break()
-                {
-                    break;
-                }
-                continue;
-            }
-
-            let char_render_outcome = loop_render_state.render_source_char_for_context(
-                loop_request_context,
-                decoded_source_char,
-                text,
-                &text_append_surface,
-                overlay_text_row_context,
-                &active_face_state,
-                params,
-                buffer,
-            );
-            if char_render_outcome.should_break() {
-                break;
-            }
-            if char_render_outcome.should_continue_buffer_walk() {
-                continue;
             }
         }
 
