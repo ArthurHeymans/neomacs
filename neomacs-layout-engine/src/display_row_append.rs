@@ -3090,6 +3090,14 @@ impl BufferTextSourceSpecialDisplayKind {
     pub(crate) fn invalidates_face_after_append(self) -> bool {
         matches!(self, Self::Control | Self::Nobreak)
     }
+
+    fn should_allocate_policy_face(self, params: &WindowParams) -> bool {
+        match self {
+            Self::Control => params.escape_glyph_fg != 0,
+            Self::Nobreak => params.nobreak_char_fg != 0,
+            Self::Glyphless => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3100,8 +3108,22 @@ pub(crate) struct BufferTextSpecialSourceCharPreparedAppend {
 }
 
 impl BufferTextSpecialSourceCharPreparedAppend {
+    #[cfg(test)]
     pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
         self.kind
+    }
+
+    pub(crate) fn prepare_append_policy(
+        &self,
+        params: &WindowParams,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> BufferTextSpecialSourceCharAppendPolicy {
+        if self.kind.should_allocate_policy_face(params) {
+            let _ = face_ids.allocate();
+        }
+        BufferTextSpecialSourceCharAppendPolicy {
+            invalidate_face_after_append: self.kind.invalidates_face_after_append(),
+        }
     }
 
     fn measured_width_px(&self) -> Option<f32> {
@@ -3142,6 +3164,17 @@ impl BufferTextSpecialSourceCharPreparedAppend {
             face_resolver,
             self.append_plan,
         )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSpecialSourceCharAppendPolicy {
+    invalidate_face_after_append: bool,
+}
+
+impl BufferTextSpecialSourceCharAppendPolicy {
+    pub(crate) fn invalidates_face_after_append(self) -> bool {
+        self.invalidate_face_after_append
     }
 }
 

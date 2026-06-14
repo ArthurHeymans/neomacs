@@ -2834,6 +2834,12 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         BufferTextSourceSpecialDisplayKind::Nobreak
     );
     assert_eq!(prepared_append.overflow_decision(0.0, 80.0, false), None);
+    let mut params = test_display_space_window_params();
+    params.nobreak_char_fg = 0x00ff00;
+    let mut policy_face_ids = FrameFaceIdAllocator::new(30);
+    let append_policy = prepared_append.prepare_append_policy(&params, &mut policy_face_ids);
+    assert!(append_policy.invalidates_face_after_append());
+    assert_eq!(policy_face_ids.finish(), 31);
     let (_progress, end) = prepared_append
         .append_to_text_row(
             &append_context,
@@ -2922,6 +2928,11 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         BufferTextSourceSpecialDisplayKind::Glyphless
     );
     assert_eq!(prepared_append.overflow_decision(0.0, 80.0, false), None);
+    let mut policy_face_ids = FrameFaceIdAllocator::new(30);
+    let append_policy = prepared_append
+        .prepare_append_policy(&test_display_space_window_params(), &mut policy_face_ids);
+    assert!(!append_policy.invalidates_face_after_append());
+    assert_eq!(policy_face_ids.finish(), 30);
     let (_progress, end) = prepared_append
         .append_to_text_row(
             &append_context,

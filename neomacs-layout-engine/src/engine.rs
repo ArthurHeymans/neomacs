@@ -62,12 +62,11 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceChar, BufferTextSourceSpecialDisplayKind,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
-    DisplayRowOverflowTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
-    SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
-    render_overlay_string_batch,
+    BufferTextSourceChar, DisplayPropertyReplacementAppendResolveRequest,
+    DisplayRowLineBreakTransitionRequest, DisplayRowOverflowTransitionRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
+    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextMarker,
+    SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest, render_overlay_string_batch,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2792,23 +2791,8 @@ impl LayoutEngine {
                         }
                     }
 
-                    match special_prepared_append.kind() {
-                        BufferTextSourceSpecialDisplayKind::Control
-                            if params.escape_glyph_fg != 0 =>
-                        {
-                            let _ = face_ids.allocate();
-                        }
-                        BufferTextSourceSpecialDisplayKind::Nobreak
-                            if params.nobreak_char_fg != 0 =>
-                        {
-                            let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
-                            let _ = face_ids.allocate();
-                        }
-                        _ => {}
-                    }
-                    let should_invalidate_face = special_prepared_append
-                        .kind()
-                        .invalidates_face_after_append();
+                    let append_policy =
+                        special_prepared_append.prepare_append_policy(params, &mut face_ids);
                     if let Some((_progress, position)) = special_prepared_append.append_to_text_row(
                         &buffer_row_append_context,
                         &row_geometry,
@@ -2823,7 +2807,7 @@ impl LayoutEngine {
                     }
                     charpos += 1;
                     word_wrap.disallow_after_current_char();
-                    if should_invalidate_face {
+                    if append_policy.invalidates_face_after_append() {
                         face_scan.invalidate();
                     }
                     continue;
