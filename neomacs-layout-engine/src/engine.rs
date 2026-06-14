@@ -39,11 +39,10 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendItem, DisplayPropertyReplacementAppendRequest,
     DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
-    DisplayReplacementMediaAppendResolution, DisplayRowAppendArea, DisplayRowAppendSurface,
-    LispStringRowAppendContext, LispStringSourceAppendRequest, LispStringSourceRowAppendSession,
-    SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
+    DisplayRowAppendArea, DisplayRowAppendSurface, LispStringRowAppendContext,
+    LispStringSourceAppendRequest, LispStringSourceRowAppendSession, SyntheticTextAppendRequest,
+    SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -613,107 +612,6 @@ fn display_property_replacement_cursor_info(
                 ),
             )
         }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn append_display_property_replacement_to_text_row<B: super::neovm_bridge::LayoutBufferView>(
-    buffer: &B,
-    evaluator: &mut Context,
-    output_emitter: &mut WindowOutputEmitter,
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-    font_metrics: &mut Option<FontMetricsService>,
-    face_resolver: &super::neovm_bridge::FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
-    text_append_surface: &DisplayRowAppendSurface,
-    row_geometry: &mut DisplayRowGeometryState,
-    active_face_state: &DisplayRowActiveFaceState,
-    request: DisplayPropertyReplacementAppendRequest,
-) -> DisplayRowPosition {
-    let position = request.start_position();
-    let replacement_append_context =
-        request.row_append_context(text_append_surface, row_geometry, active_face_state);
-    match request.into_item() {
-        DisplayPropertyReplacementAppendItem::String(replacement_item) => {
-            if replacement_item.is_empty() {
-                return position;
-            }
-            let replacement_base_face = display_string_base_face_for_active_row(
-                buffer,
-                face_resolver,
-                replacement_item.origin(),
-                replacement_item.base_face_policy(),
-                active_face_state,
-                face_ids,
-                builder,
-            );
-            replacement_append_context.append_full_text_width_string_item_to_text_row(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                replacement_item,
-                face_resolver,
-                face_ids,
-                replacement_base_face.face_id(),
-                replacement_base_face.face(),
-                position,
-            )
-        }
-        DisplayPropertyReplacementAppendItem::Stretch(stretch_item) => {
-            if stretch_item.width_px() <= 0.0 {
-                return position;
-            }
-            row_geometry
-                .include_glyph_vertical_metrics(stretch_item.height_px(), stretch_item.ascent_px());
-            replacement_append_context
-                .append_active_face_stretch_to_text_row_and_emit(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    font_metrics,
-                    face_resolver,
-                    stretch_item,
-                    position,
-                )
-                .map(|(_progress, position)| position)
-                .unwrap_or(position)
-        }
-        DisplayPropertyReplacementAppendItem::Media(
-            DisplayReplacementMediaAppendResolution::Media(media_item),
-        ) => {
-            if let Some((progress, appended_position)) = replacement_append_context
-                .append_display_box_media_to_text_row_and_emit(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    font_metrics,
-                    face_resolver,
-                    media_item,
-                    position,
-                )
-                && let Some((height, ascent)) = media_item.row_extents_after_append(&progress)
-            {
-                row_geometry.include_row_extents(height, ascent);
-                appended_position
-            } else {
-                position
-            }
-        }
-        DisplayPropertyReplacementAppendItem::Media(
-            DisplayReplacementMediaAppendResolution::Placeholder(placeholder_item),
-        ) => replacement_append_context
-            .append_active_face_source_mapped_text_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                placeholder_item,
-                position,
-            )
-            .map(|(_progress, position)| position)
-            .unwrap_or(position),
     }
 }
 
@@ -4773,8 +4671,22 @@ impl LayoutEngine {
                                 ),
                             );
                         }
-                        let position = append_display_property_replacement_to_text_row(
-                            buffer,
+                        let string_base_face =
+                            replacement_request
+                                .string_base_face_request()
+                                .map(|request| {
+                                    display_string_base_face_for_active_row(
+                                        buffer,
+                                        face_resolver,
+                                        request.origin(),
+                                        request.base_face_policy(),
+                                        &active_face_state,
+                                        &mut face_ids,
+                                        &mut self.matrix_builder,
+                                    )
+                                });
+                        let replacement_plan = replacement_request.into_plan(string_base_face);
+                        let position = replacement_plan.append_to_text_row(
                             evaluator,
                             &mut output_emitter,
                             &mut self.matrix_builder,
@@ -4784,7 +4696,6 @@ impl LayoutEngine {
                             &text_append_surface,
                             &mut row_geometry,
                             &active_face_state,
-                            replacement_request,
                         );
                         x = position.x_px;
                         col = position.col;

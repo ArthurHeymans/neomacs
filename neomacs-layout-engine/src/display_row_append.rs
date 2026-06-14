@@ -36,7 +36,9 @@ use crate::display_source::{
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
-use crate::display_source_resolver::{ResolvedDisplayReplacement, resolve_display_replacement};
+use crate::display_source_resolver::{
+    DisplayStringBaseFace, ResolvedDisplayReplacement, resolve_display_replacement,
+};
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
@@ -3002,8 +3004,153 @@ impl DisplayPropertyReplacementAppendRequest {
         )
     }
 
+    pub(crate) fn string_base_face_request(
+        &self,
+    ) -> Option<DisplayPropertyReplacementStringBaseFaceRequest> {
+        match &self.item {
+            DisplayPropertyReplacementAppendItem::String(item) if !item.is_empty() => {
+                Some(DisplayPropertyReplacementStringBaseFaceRequest {
+                    origin: item.origin(),
+                    base_face_policy: item.base_face_policy(),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn into_plan(
+        self,
+        string_base_face: Option<DisplayStringBaseFace>,
+    ) -> DisplayPropertyReplacementAppendPlan {
+        DisplayPropertyReplacementAppendPlan {
+            request: self,
+            string_base_face,
+        }
+    }
+
     pub(crate) fn into_item(self) -> DisplayPropertyReplacementAppendItem {
         self.item
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayPropertyReplacementStringBaseFaceRequest {
+    origin: DisplayOrigin,
+    base_face_policy: BaseFacePolicy,
+}
+
+impl DisplayPropertyReplacementStringBaseFaceRequest {
+    pub(crate) fn origin(self) -> DisplayOrigin {
+        self.origin
+    }
+
+    pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
+        self.base_face_policy
+    }
+}
+
+pub(crate) struct DisplayPropertyReplacementAppendPlan {
+    request: DisplayPropertyReplacementAppendRequest,
+    string_base_face: Option<DisplayStringBaseFace>,
+}
+
+impl DisplayPropertyReplacementAppendPlan {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_to_text_row(
+        self,
+        evaluator: &mut Context,
+        output_emitter: &mut WindowOutputEmitter,
+        builder: &mut GlyphMatrixBuilder,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        append_surface: &DisplayRowAppendSurface,
+        row_geometry: &mut DisplayRowGeometryState,
+        active_face_state: &DisplayRowActiveFaceState,
+    ) -> DisplayRowPosition {
+        let position = self.request.start_position();
+        let replacement_append_context =
+            self.request
+                .row_append_context(append_surface, row_geometry, active_face_state);
+        match self.request.into_item() {
+            DisplayPropertyReplacementAppendItem::String(replacement_item) => {
+                if replacement_item.is_empty() {
+                    return position;
+                }
+                let Some(replacement_base_face) = self.string_base_face else {
+                    debug_assert!(false, "display string replacement missing base face");
+                    return position;
+                };
+                replacement_append_context.append_full_text_width_string_item_to_text_row(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    font_metrics,
+                    replacement_item,
+                    face_resolver,
+                    face_ids,
+                    replacement_base_face.face_id(),
+                    replacement_base_face.face(),
+                    position,
+                )
+            }
+            DisplayPropertyReplacementAppendItem::Stretch(stretch_item) => {
+                if stretch_item.width_px() <= 0.0 {
+                    return position;
+                }
+                row_geometry.include_glyph_vertical_metrics(
+                    stretch_item.height_px(),
+                    stretch_item.ascent_px(),
+                );
+                replacement_append_context
+                    .append_active_face_stretch_to_text_row_and_emit(
+                        builder,
+                        output_emitter,
+                        evaluator,
+                        font_metrics,
+                        face_resolver,
+                        stretch_item,
+                        position,
+                    )
+                    .map(|(_progress, position)| position)
+                    .unwrap_or(position)
+            }
+            DisplayPropertyReplacementAppendItem::Media(
+                DisplayReplacementMediaAppendResolution::Media(media_item),
+            ) => {
+                if let Some((progress, appended_position)) = replacement_append_context
+                    .append_display_box_media_to_text_row_and_emit(
+                        builder,
+                        output_emitter,
+                        evaluator,
+                        font_metrics,
+                        face_resolver,
+                        media_item,
+                        position,
+                    )
+                    && let Some((height, ascent)) = media_item.row_extents_after_append(&progress)
+                {
+                    row_geometry.include_row_extents(height, ascent);
+                    appended_position
+                } else {
+                    position
+                }
+            }
+            DisplayPropertyReplacementAppendItem::Media(
+                DisplayReplacementMediaAppendResolution::Placeholder(placeholder_item),
+            ) => replacement_append_context
+                .append_active_face_source_mapped_text_to_text_row_and_emit(
+                    builder,
+                    output_emitter,
+                    evaluator,
+                    font_metrics,
+                    face_resolver,
+                    placeholder_item,
+                    position,
+                )
+                .map(|(_progress, position)| position)
+                .unwrap_or(position),
+        }
     }
 }
 

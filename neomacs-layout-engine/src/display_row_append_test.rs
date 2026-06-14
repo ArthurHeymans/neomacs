@@ -3231,6 +3231,7 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
         request.start_position(),
         DisplayRowPosition { x_px: 24.0, col: 4 }
     );
+    assert!(request.string_base_face_request().is_none());
     let DisplayPropertyReplacementAppendItem::Stretch(item) = request.into_item() else {
         panic!("expected stretch replacement item");
     };
@@ -3278,6 +3279,20 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
     assert_eq!(
         request.start_position(),
         DisplayRowPosition { x_px: 24.0, col: 4 }
+    );
+    let string_base_face_request = request
+        .string_base_face_request()
+        .expect("string replacement requires base face resolution");
+    assert_eq!(
+        string_base_face_request.origin(),
+        DisplayOrigin::DisplayPropertyString {
+            anchor_charpos: CharPos0::new(3),
+            source: DisplayPropertySource::TextProperty,
+        }
+    );
+    assert_eq!(
+        string_base_face_request.base_face_policy(),
+        BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
 }
 
