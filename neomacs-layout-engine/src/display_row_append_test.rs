@@ -882,6 +882,81 @@ fn buffer_hscroll_skip_action_captures_text_cursor() {
 }
 
 #[test]
+fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("hscroll-left-truncation-marker", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut x = 0.0;
+    let mut col = 0;
+    let mut render_state = BufferSyntheticTextRenderState::new(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+        &mut x,
+        &mut col,
+    );
+    let action = BufferHscrollSkipAction::Text {
+        ch_start_byte_idx: 5,
+        charpos: 9,
+        show_left_truncation: true,
+    };
+
+    action.append_left_truncation_marker_to_text_row_and_apply(
+        BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0),
+        &geometry,
+        &mut render_state,
+        &face_resolver,
+        0.0,
+    );
+
+    assert_eq!(x, 8.0);
+    assert_eq!(col, 1);
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 1);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
+            assert!(row.truncated_left);
+        })
+        .expect("current row");
+}
+
+#[test]
 fn buffer_invisible_text_scan_context_skips_when_checkpoint_not_reached() {
     let buffer_text = b"visible";
     let mut checkpoints = TextPropertyScanCheckpoints::new(5);
@@ -1310,6 +1385,48 @@ fn buffer_text_line_break_source_action_builds_row_end_cursor_info() {
     assert_eq!(cursor.col, 4);
     assert_eq!(cursor.slot_width, Some(8.0));
     assert!(!cursor.stretch_like);
+}
+
+#[test]
+fn buffer_text_line_break_source_action_captures_cursor_when_point_matches() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let mut cursor = CursorCaptureState::new();
+
+    action.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 4, 32.0, 4);
+
+    let captured = cursor.as_ref().expect("cursor captured");
+    assert_eq!(captured.x, 32.0);
+    assert_eq!(captured.byte_idx, 12);
+    assert_eq!(captured.col, 4);
+    assert_eq!(captured.slot_width, Some(8.0));
+}
+
+#[test]
+fn buffer_text_line_break_source_action_keeps_cursor_missing_when_point_differs() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let mut cursor = CursorCaptureState::new();
+
+    action.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 5, 32.0, 4);
+
+    assert!(cursor.as_ref().is_none());
 }
 
 #[test]

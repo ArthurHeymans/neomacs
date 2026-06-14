@@ -68,7 +68,7 @@ use crate::window_output::TextRowOutput;
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowTransition, WindowOutputEmitter,
     emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    finish_and_end_text_matrix_row_output,
+    finish_and_end_text_matrix_row_output, mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -2548,6 +2548,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         )
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_hscroll_truncation_marker_to_text_row(
         self,
@@ -4353,6 +4354,25 @@ impl BufferHscrollSkipAction {
             ),
         );
     }
+
+    pub(crate) fn append_left_truncation_marker_to_text_row_and_apply<'ctx>(
+        self,
+        render_context: BufferSyntheticTextRenderContext<'ctx>,
+        row_geometry: &'ctx DisplayRowGeometryState,
+        state: &mut BufferSyntheticTextRenderState<'_>,
+        face_resolver: &'ctx FaceResolver,
+        content_x: f32,
+    ) {
+        if !self.should_show_left_truncation() {
+            return;
+        }
+        state.append_hscroll_truncation_marker_to_text_row(
+            render_context,
+            row_geometry,
+            face_resolver,
+            content_x,
+        );
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4639,6 +4659,18 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
         };
         *self.x = position.x_px;
         *self.col = position.col;
+    }
+
+    pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(
+        &mut self,
+        render_context: BufferSyntheticTextRenderContext<'ctx>,
+        row_geometry: &'ctx DisplayRowGeometryState,
+        face_resolver: &'ctx FaceResolver,
+        content_x: f32,
+    ) {
+        let request = render_context.hscroll_truncation_request(face_resolver, content_x);
+        self.append_request_to_text_row(render_context, row_geometry, request);
+        mark_current_text_row_truncated_left(self.builder);
     }
 }
 
@@ -5048,6 +5080,24 @@ impl BufferTextLineBreakSourceAction {
                 false,
             ),
         )
+    }
+
+    pub(crate) fn capture_cursor_if_point(
+        self,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+        x: f32,
+        col: usize,
+    ) {
+        if !target.is_missing() || !self.point_matches(point_charpos) {
+            return;
+        }
+        capture_cursor_info(
+            target,
+            self.cursor_info(active_face_state, row_geometry, x, col),
+        );
     }
 }
 

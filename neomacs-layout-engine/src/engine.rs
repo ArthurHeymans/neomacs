@@ -27,8 +27,8 @@ use super::window_output::{
     begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
     emit_text_window_line_number_margin, finish_pending_text_window_row,
     install_last_window_right_border, install_text_window_cursor_effects,
-    install_text_window_output, mark_current_text_row_truncated_left, publish_text_window_cursor,
-    publish_text_window_decorative_cursor, record_text_window_redisplay_positions,
+    install_text_window_output, publish_text_window_cursor, publish_text_window_decorative_cursor,
+    record_text_window_redisplay_positions,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -2221,24 +2221,22 @@ impl LayoutEngine {
                         break;
                     }
                 } else {
-                    // When hscroll is exhausted, show $ indicator at left edge
-                    if hscroll_action.should_show_left_truncation() {
-                        if let Some(position) = synthetic_text_context!(0.0)
-                            .render_hscroll_truncation_marker_to_text_row(
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                                &mut self.font_metrics,
-                                face_resolver,
-                                &row_geometry,
-                                content_x,
-                            )
-                        {
-                            x = position.x_px;
-                            col = position.col;
-                        }
-                        mark_current_text_row_truncated_left(&mut self.matrix_builder);
-                    }
+                    let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        &mut x,
+                        &mut col,
+                    );
+                    hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
+                        synthetic_text_context!(0.0),
+                        &row_geometry,
+                        &mut synthetic_text_state,
+                        face_resolver,
+                        content_x,
+                    );
                     hscroll_action.capture_text_cursor_if_point(
                         &mut cursor_info,
                         &active_face_state,
@@ -2404,17 +2402,14 @@ impl LayoutEngine {
                     char_h,
                     params.extra_line_spacing,
                 );
-                if cursor_info.is_missing() && line_break_action.point_matches(point_charpos) {
-                    // GNU `set_cursor_from_row` treats the terminating
-                    // newline as an exact match for point on this row.  The
-                    // newline itself has no rendered text glyph, so the
-                    // physical cursor uses the row-end cell width instead of
-                    // waiting for the next row.
-                    capture_cursor_info(
-                        &mut cursor_info,
-                        line_break_action.cursor_info(&active_face_state, &row_geometry, x, col),
-                    );
-                }
+                line_break_action.capture_cursor_if_point(
+                    &mut cursor_info,
+                    &active_face_state,
+                    &row_geometry,
+                    point_charpos,
+                    x,
+                    col,
+                );
                 line_break_action.apply_before_row_transition(
                     &row_geometry,
                     &mut trailing_whitespace,
