@@ -35,6 +35,7 @@ use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
     display_row_text_is_empty, new_display_row,
 };
+use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::WindowParams;
 #[cfg(test)]
@@ -297,6 +298,141 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             self.reserve_right_border_col,
         )
     }
+
+    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_>) {
+        let params = self.params;
+        let mut status_line_symbol_values = std::collections::HashMap::new();
+        if let Some(buffer) = state
+            .evaluator
+            .buffer_manager()
+            .get(BufferId(params.buffer_id))
+            && let Some(value) = buffer.buffer_local_value("header-line-indent-width")
+        {
+            status_line_symbol_values.insert("header-line-indent-width".to_string(), value);
+        }
+        let chrome_tab_policy = DisplayTabPolicy::from_tab_width_and_stops(
+            0.0,
+            params.tab_width,
+            &params.tab_stop_list,
+        );
+        let target_cols = self.target_cols();
+
+        if params.tab_line_height > 0.0 {
+            let tab_line_y = params.bounds.y;
+            let tab_line_text = eval_status_line_format_value(
+                state.evaluator,
+                "tab-line-format",
+                params.window_id,
+                params.buffer_id,
+                target_cols,
+            )
+            .unwrap_or_else(|| Value::string(""));
+            state.render_display_row(WindowChromeDisplayRowRequest {
+                window_id: params.window_id as u64,
+                kind: WindowChromeKind::TabLine,
+                matrix_row: 0,
+                output: ChromeRowOutput {
+                    row: 0,
+                    y: tab_line_y,
+                },
+                bounds: Rect::new(
+                    params.bounds.x,
+                    tab_line_y,
+                    params.bounds.width,
+                    self.tab_line_height,
+                ),
+                char_width: self.char_width,
+                ascent: self.font_ascent,
+                tab_policy: chrome_tab_policy.clone(),
+                base_face: self
+                    .tab_line_face
+                    .expect("tab-line face should exist when tab-line height is positive"),
+                symbol_values: status_line_symbol_values.clone(),
+                text: WindowChromeDisplayText::new(tab_line_text, params.selected),
+            });
+        }
+
+        if params.header_line_height > 0.0 {
+            let header_line_y = params.bounds.y + self.tab_line_height;
+            let header_line_text = eval_status_line_format_value(
+                state.evaluator,
+                "header-line-format",
+                params.window_id,
+                params.buffer_id,
+                target_cols,
+            )
+            .unwrap_or_else(|| Value::string(""));
+            state.render_display_row(WindowChromeDisplayRowRequest {
+                window_id: params.window_id as u64,
+                kind: WindowChromeKind::HeaderLine,
+                matrix_row: usize::from(self.tab_line_height > 0.0),
+                output: ChromeRowOutput {
+                    row: i64::from(self.tab_line_height > 0.0),
+                    y: header_line_y,
+                },
+                bounds: Rect::new(
+                    params.bounds.x,
+                    header_line_y,
+                    params.bounds.width,
+                    self.header_line_height,
+                ),
+                char_width: self.char_width,
+                ascent: self.font_ascent,
+                tab_policy: chrome_tab_policy.clone(),
+                base_face: self
+                    .header_line_face
+                    .expect("header-line face should exist when header-line height is positive"),
+                symbol_values: status_line_symbol_values.clone(),
+                text: WindowChromeDisplayText::new(header_line_text, params.selected),
+            });
+        }
+
+        if params.mode_line_height > 0.0 {
+            let mode_line_y = params.bounds.y + params.bounds.height - self.mode_line_height;
+            let mode_line_text = {
+                let result = eval_status_line_format_value(
+                    state.evaluator,
+                    "mode-line-format",
+                    params.window_id,
+                    params.buffer_id,
+                    target_cols,
+                )
+                .unwrap_or_else(|| Value::string(format!(" {} ", self.buffer_name)));
+                tracing::debug!(
+                    "mode-line eval result: {:?} (len={})",
+                    result
+                        .as_utf8_str()
+                        .map(|s| &s[..s.len().min(120)])
+                        .unwrap_or(""),
+                    result.as_utf8_str().map(str::len).unwrap_or(0)
+                );
+                result
+            };
+            state.render_display_row(WindowChromeDisplayRowRequest {
+                window_id: params.window_id as u64,
+                kind: WindowChromeKind::ModeLine,
+                matrix_row: self.mode_line_matrix_row,
+                output: ChromeRowOutput {
+                    row: self.mode_line_matrix_row as i64,
+                    y: mode_line_y,
+                },
+                bounds: Rect::new(
+                    params.bounds.x,
+                    mode_line_y,
+                    params.bounds.width,
+                    self.mode_line_height,
+                ),
+                char_width: self.char_width,
+                ascent: self.font_ascent,
+                tab_policy: chrome_tab_policy,
+                base_face: self
+                    .mode_line_face
+                    .expect("mode-line face should exist when mode-line height is positive"),
+                symbol_values: status_line_symbol_values,
+                text: WindowChromeDisplayText::new(mode_line_text, params.selected),
+            });
+        }
+    }
 }
 
 struct WindowChromeDisplayRowRenderParts<'face> {
@@ -340,6 +476,55 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             bounds: self.bounds,
             render_request,
         }
+    }
+}
+
+pub(crate) struct WindowChromeRowsRenderState<'emit, 'face> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl WindowChromeRowsRenderState<'_, '_> {
+    fn render_display_row(
+        &mut self,
+        request: WindowChromeDisplayRowRequest<'_>,
+    ) -> Option<MeasuredDisplayRow> {
+        let parts = request.into_render_parts(&mut *self.face_ids);
+        self.output_emitter
+            .begin_chrome_progress(self.evaluator, parts.output);
+        let rendered_row = {
+            let mut render_executor = DisplayRowRenderExecutor::new(
+                &mut *self.font_metrics,
+                self.face_resolver,
+                self.evaluator.display_host.as_deref(),
+                &mut *self.face_ids,
+            );
+            render_executor.render_lisp_string_request(parts.render_request)
+        };
+        let measured_row = rendered_row.map(|rendered| {
+            MeasuredDisplayRow::new(
+                parts.owner,
+                parts.matrix_row,
+                parts.bounds,
+                rendered,
+                DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+            )
+        });
+        if let Some(ref measured_row) = measured_row {
+            install_measured_window_display_row(&mut *self.builder, measured_row);
+            self.output_emitter.emit_chrome_progress(
+                self.evaluator,
+                parts.output,
+                measured_row.output_progress(),
+            );
+            self.output_emitter
+                .finish_chrome_progress(measured_row.output_progress());
+        }
+        measured_row
     }
 }
 
@@ -941,205 +1126,6 @@ impl LayoutEngine {
             fallback_ascent,
             fallback_row_height,
         )
-    }
-
-    pub(crate) fn render_window_chrome_display_row(
-        &mut self,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        request: WindowChromeDisplayRowRequest<'_>,
-    ) -> Option<MeasuredDisplayRow> {
-        let parts = request.into_render_parts(face_ids);
-        let mut builder = std::mem::replace(&mut self.matrix_builder, GlyphMatrixBuilder::new());
-        output_emitter.begin_chrome_progress(evaluator, parts.output);
-        let mut render_executor = DisplayRowRenderExecutor::new(
-            &mut self.font_metrics,
-            face_resolver,
-            evaluator.display_host.as_deref(),
-            face_ids,
-        );
-        let rendered_row = render_executor.render_lisp_string_request(parts.render_request);
-        let measured_row = rendered_row.map(|rendered| {
-            MeasuredDisplayRow::new(
-                parts.owner,
-                parts.matrix_row,
-                parts.bounds,
-                rendered,
-                DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
-            )
-        });
-        if let Some(ref measured_row) = measured_row {
-            install_measured_window_display_row(&mut builder, measured_row);
-            output_emitter.emit_chrome_progress(
-                evaluator,
-                parts.output,
-                measured_row.output_progress(),
-            );
-        }
-        self.matrix_builder = builder;
-        if let Some(ref measured_row) = measured_row {
-            output_emitter.finish_chrome_progress(measured_row.output_progress());
-        }
-        measured_row
-    }
-
-    pub(crate) fn render_window_chrome_display_rows(
-        &mut self,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        request: WindowChromeRowsRenderRequest<'_, '_>,
-    ) {
-        let params = request.params;
-        let mut status_line_symbol_values = std::collections::HashMap::new();
-        if let Some(buffer) = evaluator.buffer_manager().get(BufferId(params.buffer_id))
-            && let Some(value) = buffer.buffer_local_value("header-line-indent-width")
-        {
-            status_line_symbol_values.insert("header-line-indent-width".to_string(), value);
-        }
-        let chrome_tab_policy = DisplayTabPolicy::from_tab_width_and_stops(
-            0.0,
-            params.tab_width,
-            &params.tab_stop_list,
-        );
-        let target_cols = request.target_cols();
-
-        if params.tab_line_height > 0.0 {
-            let tab_line_y = params.bounds.y;
-            let tab_line_text = eval_status_line_format_value(
-                evaluator,
-                "tab-line-format",
-                params.window_id,
-                params.buffer_id,
-                target_cols,
-            )
-            .unwrap_or_else(|| Value::string(""));
-            self.render_window_chrome_display_row(
-                evaluator,
-                output_emitter,
-                face_resolver,
-                face_ids,
-                WindowChromeDisplayRowRequest {
-                    window_id: params.window_id as u64,
-                    kind: WindowChromeKind::TabLine,
-                    matrix_row: 0,
-                    output: ChromeRowOutput {
-                        row: 0,
-                        y: tab_line_y,
-                    },
-                    bounds: Rect::new(
-                        params.bounds.x,
-                        tab_line_y,
-                        params.bounds.width,
-                        request.tab_line_height,
-                    ),
-                    char_width: request.char_width,
-                    ascent: request.font_ascent,
-                    tab_policy: chrome_tab_policy.clone(),
-                    base_face: request
-                        .tab_line_face
-                        .expect("tab-line face should exist when tab-line height is positive"),
-                    symbol_values: status_line_symbol_values.clone(),
-                    text: WindowChromeDisplayText::new(tab_line_text, params.selected),
-                },
-            );
-        }
-
-        if params.header_line_height > 0.0 {
-            let header_line_y = params.bounds.y + request.tab_line_height;
-            let header_line_text = eval_status_line_format_value(
-                evaluator,
-                "header-line-format",
-                params.window_id,
-                params.buffer_id,
-                target_cols,
-            )
-            .unwrap_or_else(|| Value::string(""));
-            self.render_window_chrome_display_row(
-                evaluator,
-                output_emitter,
-                face_resolver,
-                face_ids,
-                WindowChromeDisplayRowRequest {
-                    window_id: params.window_id as u64,
-                    kind: WindowChromeKind::HeaderLine,
-                    matrix_row: usize::from(request.tab_line_height > 0.0),
-                    output: ChromeRowOutput {
-                        row: i64::from(request.tab_line_height > 0.0),
-                        y: header_line_y,
-                    },
-                    bounds: Rect::new(
-                        params.bounds.x,
-                        header_line_y,
-                        params.bounds.width,
-                        request.header_line_height,
-                    ),
-                    char_width: request.char_width,
-                    ascent: request.font_ascent,
-                    tab_policy: chrome_tab_policy.clone(),
-                    base_face: request.header_line_face.expect(
-                        "header-line face should exist when header-line height is positive",
-                    ),
-                    symbol_values: status_line_symbol_values.clone(),
-                    text: WindowChromeDisplayText::new(header_line_text, params.selected),
-                },
-            );
-        }
-
-        if params.mode_line_height > 0.0 {
-            let mode_line_y = params.bounds.y + params.bounds.height - request.mode_line_height;
-            let mode_line_text = {
-                let result = eval_status_line_format_value(
-                    evaluator,
-                    "mode-line-format",
-                    params.window_id,
-                    params.buffer_id,
-                    target_cols,
-                )
-                .unwrap_or_else(|| Value::string(format!(" {} ", request.buffer_name)));
-                tracing::debug!(
-                    "mode-line eval result: {:?} (len={})",
-                    result
-                        .as_utf8_str()
-                        .map(|s| &s[..s.len().min(120)])
-                        .unwrap_or(""),
-                    result.as_utf8_str().map(str::len).unwrap_or(0)
-                );
-                result
-            };
-            self.render_window_chrome_display_row(
-                evaluator,
-                output_emitter,
-                face_resolver,
-                face_ids,
-                WindowChromeDisplayRowRequest {
-                    window_id: params.window_id as u64,
-                    kind: WindowChromeKind::ModeLine,
-                    matrix_row: request.mode_line_matrix_row,
-                    output: ChromeRowOutput {
-                        row: request.mode_line_matrix_row as i64,
-                        y: mode_line_y,
-                    },
-                    bounds: Rect::new(
-                        params.bounds.x,
-                        mode_line_y,
-                        params.bounds.width,
-                        request.mode_line_height,
-                    ),
-                    char_width: request.char_width,
-                    ascent: request.font_ascent,
-                    tab_policy: chrome_tab_policy,
-                    base_face: request
-                        .mode_line_face
-                        .expect("mode-line face should exist when mode-line height is positive"),
-                    symbol_values: status_line_symbol_values,
-                    text: WindowChromeDisplayText::new(mode_line_text, params.selected),
-                },
-            );
-        }
     }
 
     pub(crate) fn render_frame_tab_bar_display_row(

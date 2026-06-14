@@ -9,8 +9,9 @@ use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
     InactiveMinibufferDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope,
-    WindowChromeRowsRenderRequest, build_tab_bar_display, max_mini_window_lines,
-    message_truncate_lines, minibuffer_echo_message_for_window, minibuffer_resize_line_count,
+    WindowChromeRowsRenderRequest, WindowChromeRowsRenderState, build_tab_bar_display,
+    max_mini_window_lines, message_truncate_lines, minibuffer_echo_message_for_window,
+    minibuffer_resize_line_count,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -1424,26 +1425,28 @@ impl LayoutEngine {
             redisplay_positions.window_end_vpos,
         );
 
-        self.render_window_chrome_display_rows(
+        WindowChromeRowsRenderRequest {
+            params,
+            tab_line_face: tab_line_face.as_ref(),
+            header_line_face: header_line_face.as_ref(),
+            mode_line_face: mode_line_face.as_ref(),
+            tab_line_height,
+            header_line_height,
+            mode_line_height,
+            mode_line_matrix_row,
+            reserve_right_border_col,
+            char_width: char_w,
+            font_ascent,
+            buffer_name: &buffer_name,
+        }
+        .render(&mut WindowChromeRowsRenderState {
+            builder: &mut self.matrix_builder,
+            font_metrics: &mut self.font_metrics,
             evaluator,
-            &mut output_emitter,
+            output_emitter: &mut output_emitter,
             face_resolver,
-            &mut face_ids,
-            WindowChromeRowsRenderRequest {
-                params,
-                tab_line_face: tab_line_face.as_ref(),
-                header_line_face: header_line_face.as_ref(),
-                mode_line_face: mode_line_face.as_ref(),
-                tab_line_height,
-                header_line_height,
-                mode_line_height,
-                mode_line_matrix_row,
-                reserve_right_border_col,
-                char_width: char_w,
-                font_ascent,
-                buffer_name: &buffer_name,
-            },
-        );
+            face_ids: &mut face_ids,
+        });
 
         tail_request_context.finish_and_install(BufferTextWindowFinishInstallState {
             builder: &mut self.matrix_builder,
