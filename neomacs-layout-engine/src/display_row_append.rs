@@ -2504,6 +2504,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             )
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_active_marker_to_text_row(
         self,
@@ -4530,45 +4531,27 @@ impl BufferInvisibleTextSkip {
         row_geometry: &'ctx DisplayRowGeometryState,
         state: &mut BufferInvisibleTextRenderState<'_>,
     ) {
+        let position = state.synthetic_text.position();
         self.capture_cursor_if_point(
             state.cursor_info,
             render_context.active_face,
             row_geometry,
-            *state.x,
-            *state.col,
+            position.x_px,
+            position.col,
         );
 
-        let Some(request) = self.ellipsis_append_request(DisplayRowPosition {
-            x_px: *state.x,
-            col: *state.col,
-        }) else {
+        let Some(request) = self.ellipsis_append_request(position) else {
             return;
         };
-        let Some((_progress, position)) = render_context.render_request_to_text_row(
-            state.builder,
-            state.output_emitter,
-            state.evaluator,
-            state.font_metrics,
-            state.face_resolver,
-            row_geometry,
-            request,
-        ) else {
-            return;
-        };
-        *state.x = position.x_px;
-        *state.col = position.col;
+        state
+            .synthetic_text
+            .append_request_to_text_row(render_context, row_geometry, request);
     }
 }
 
 pub(crate) struct BufferInvisibleTextRenderState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    output_emitter: &'a mut WindowOutputEmitter,
-    evaluator: &'a mut Context,
-    font_metrics: &'a mut Option<FontMetricsService>,
-    face_resolver: &'a FaceResolver,
+    synthetic_text: BufferSyntheticTextRenderState<'a>,
     cursor_info: &'a mut CursorCaptureState,
-    x: &'a mut f32,
-    col: &'a mut usize,
 }
 
 impl<'a> BufferInvisibleTextRenderState<'a> {
@@ -4584,15 +4567,78 @@ impl<'a> BufferInvisibleTextRenderState<'a> {
         col: &'a mut usize,
     ) -> Self {
         Self {
+            synthetic_text: BufferSyntheticTextRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                x,
+                col,
+            ),
+            cursor_info,
+        }
+    }
+}
+
+pub(crate) struct BufferSyntheticTextRenderState<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+    x: &'a mut f32,
+    col: &'a mut usize,
+}
+
+impl<'a> BufferSyntheticTextRenderState<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+        x: &'a mut f32,
+        col: &'a mut usize,
+    ) -> Self {
+        Self {
             builder,
             output_emitter,
             evaluator,
             font_metrics,
             face_resolver,
-            cursor_info,
             x,
             col,
         }
+    }
+
+    fn position(&self) -> DisplayRowPosition {
+        DisplayRowPosition {
+            x_px: *self.x,
+            col: *self.col,
+        }
+    }
+
+    pub(crate) fn append_request_to_text_row<'ctx, 'face>(
+        &mut self,
+        render_context: BufferSyntheticTextRenderContext<'ctx>,
+        row_geometry: &'ctx DisplayRowGeometryState,
+        request: SyntheticTextAppendRequest<'face>,
+    ) {
+        let Some((_progress, position)) = render_context.render_request_to_text_row(
+            self.builder,
+            self.output_emitter,
+            self.evaluator,
+            self.font_metrics,
+            self.face_resolver,
+            row_geometry,
+            request,
+        ) else {
+            return;
+        };
+        *self.x = position.x_px;
+        *self.col = position.col;
     }
 }
 
@@ -4660,6 +4706,28 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
 pub(crate) enum BufferSelectiveDisplayLineTailAction {
     Exhausted,
     LineBreak { charpos: i64 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferSelectiveDisplayLineTailMarker;
+
+impl BufferSelectiveDisplayLineTailMarker {
+    pub(crate) fn ellipsis_append_request(
+        self,
+        position: DisplayRowPosition,
+    ) -> SyntheticTextAppendRequest<'static> {
+        SyntheticTextAppendRequest::active_marker(position, SyntheticTextMarker::SelectiveEllipsis)
+    }
+
+    pub(crate) fn append_to_text_row_and_apply<'ctx>(
+        self,
+        render_context: BufferSyntheticTextRenderContext<'ctx>,
+        row_geometry: &'ctx DisplayRowGeometryState,
+        state: &mut BufferSyntheticTextRenderState<'_>,
+    ) {
+        let request = self.ellipsis_append_request(state.position());
+        state.append_request_to_text_row(render_context, row_geometry, request);
+    }
 }
 
 impl BufferSelectiveDisplayLineTailAction {
@@ -4754,6 +4822,14 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     pub(crate) fn hides_carriage_return_tail(self, ch: char) -> bool {
         self.selective_display > 0 && ch == '\r'
+    }
+
+    pub(crate) fn carriage_return_tail_marker(
+        self,
+        ch: char,
+    ) -> Option<BufferSelectiveDisplayLineTailMarker> {
+        self.hides_carriage_return_tail(ch)
+            .then_some(BufferSelectiveDisplayLineTailMarker)
     }
 
     pub(crate) fn hides_indented_lines_after_line_break(self, byte_idx: usize) -> bool {

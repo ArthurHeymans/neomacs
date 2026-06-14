@@ -1105,6 +1105,31 @@ fn buffer_selective_display_context_skips_carriage_return_tail_to_newline() {
 }
 
 #[test]
+fn buffer_selective_display_context_reports_carriage_return_tail_marker() {
+    let context = BufferSelectiveDisplayContext::new(b"a\rb", 1, 8);
+
+    assert_eq!(
+        context.carriage_return_tail_marker('\r'),
+        Some(BufferSelectiveDisplayLineTailMarker)
+    );
+    assert_eq!(context.carriage_return_tail_marker('x'), None);
+}
+
+#[test]
+fn buffer_selective_display_line_tail_marker_builds_active_ellipsis_request() {
+    let marker = BufferSelectiveDisplayLineTailMarker;
+    let position = DisplayRowPosition { x_px: 24.0, col: 3 };
+
+    let request = marker.ellipsis_append_request(position);
+    let (request_position, source, face) = request.into_parts();
+
+    assert_eq!(request_position, position);
+    assert_eq!(source.source_id(), SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS);
+    assert_eq!(source.into_text().as_ref(), "...");
+    assert!(matches!(face, SyntheticTextAppendFace::ActiveFace));
+}
+
+#[test]
 fn buffer_selective_display_context_reports_exhausted_carriage_return_tail() {
     let text = b"a\rhidden";
     let context = BufferSelectiveDisplayContext::new(text, 1, 8);

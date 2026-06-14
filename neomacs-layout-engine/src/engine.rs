@@ -61,15 +61,16 @@ use crate::display_row_append::{
     BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState, BufferInvisibleTextScanAction,
     BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
-    BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
-    BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceCharOverflowAction, BufferTextSourceCharRenderState,
-    BufferTextSpecialSourceCharOverflowAction, BufferTextSpecialSourceCharRenderState,
-    BufferTextSpecialWrapSourceAction, BufferTextTruncationSkipAction,
-    BufferTextWordWrapSourceAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
-    OverlayStringRenderState, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
+    BufferSyntheticTextRenderContext, BufferSyntheticTextRenderState,
+    BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
+    BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
+    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceCharOverflowAction,
+    BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
+    BufferTextSpecialSourceCharRenderState, BufferTextSpecialWrapSourceAction,
+    BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
+    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState, OverlayStringRenderState,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2320,22 +2321,23 @@ impl LayoutEngine {
             // Selective display: \r hides rest of line until \n
             let selective_display_context =
                 BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
-            if selective_display_context.hides_carriage_return_tail(ch) {
-                if let Some(position) = synthetic_text_context!(raise_span.value_or(0.0))
-                    .render_active_marker_to_text_row(
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &row_geometry,
-                        DisplayRowPosition { x_px: x, col },
-                        SyntheticTextMarker::SelectiveEllipsis,
-                    )
-                {
-                    x = position.x_px;
-                    col = position.col;
-                }
+            if let Some(selective_tail_marker) =
+                selective_display_context.carriage_return_tail_marker(ch)
+            {
+                let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut x,
+                    &mut col,
+                );
+                selective_tail_marker.append_to_text_row_and_apply(
+                    synthetic_text_context!(raise_span.value_or(0.0)),
+                    &row_geometry,
+                    &mut synthetic_text_state,
+                );
                 // Skip remaining chars until newline
                 let selective_tail_action = selective_display_context
                     .skip_rest_of_line_after_carriage_return(&mut byte_idx, &mut charpos);
