@@ -538,13 +538,14 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let request = frame.source_append_request(
-        position,
-        base_face_id,
+    DisplayRowSourceAppendOperation::new(
         base_face,
+        base_face_id,
+        frame,
+        position,
         DisplayRowAppendKind::SourceText,
-    );
-    request.render_natural_display_source_into_current_text_row_and_emit(
+    )
+    .render_source_cursor_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
@@ -1967,6 +1968,91 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
             request,
             render_policy,
         )
+    }
+}
+
+struct DisplayRowSourceAppendOperation<'face> {
+    base_face: &'face ResolvedFace,
+    base_face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    kind: DisplayRowAppendKind,
+}
+
+impl<'face> DisplayRowSourceAppendOperation<'face> {
+    fn new(
+        base_face: &'face ResolvedFace,
+        base_face_id: u32,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+    ) -> Self {
+        Self {
+            base_face,
+            base_face_id,
+            frame,
+            position,
+            kind,
+        }
+    }
+
+    fn request(&self) -> DisplayRowSourceAppendRequest<'face> {
+        self.frame.source_append_request(
+            self.position,
+            self.base_face_id,
+            self.base_face,
+            self.kind,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_source_to_text_row_and_emit<S: DisplayItemSource, P: DisplayRowRenderPolicy>(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        source: S,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        self.request()
+            .render_owned_display_source_into_current_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                source,
+                face_resolver,
+                face_ids,
+                render_policy,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_source_cursor_to_text_row_and_emit<S: DisplayItemSource>(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        self.request()
+            .render_natural_display_source_into_current_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                source,
+                source_state,
+                face_resolver,
+                face_ids,
+            )
     }
 }
 
@@ -5135,14 +5221,15 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
     position: DisplayRowPosition,
     item_policy: &mut impl DisplayRowRenderPolicy,
 ) -> DisplayRowPosition {
-    let request = frame.source_append_request(
-        position,
-        fallback_face_id,
-        base_face,
-        DisplayRowAppendKind::DisplayReplacementString,
-    );
     let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
-    let Some(outcome) = request.render_owned_display_source_into_current_text_row_and_emit(
+    let Some(outcome) = DisplayRowSourceAppendOperation::new(
+        base_face,
+        fallback_face_id,
+        frame,
+        position,
+        DisplayRowAppendKind::DisplayReplacementString,
+    )
+    .render_source_to_text_row_and_emit(
         builder,
         output_emitter,
         evaluator,
