@@ -22,7 +22,6 @@ use crate::display_text_run_measurement::{
     ComplexTextRunAdvancePolicy, DisplayTextRunAdvance, DisplayTextRunMeasurement,
     DisplayTextRunMeasurementPlan,
 };
-use crate::engine::LayoutEngine;
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::glyph_row_writer;
@@ -1241,10 +1240,72 @@ pub(crate) struct DisplayRowRenderResult {
     pub(crate) stop: DisplayRowRenderStop,
 }
 
+pub(crate) struct DisplayRowLispStringRenderRequest<'a> {
+    row_request: DisplayRowSourceRenderRequest<'a>,
+    source_id: u64,
+    value: Value,
+}
+
 pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     source_id: u64,
     value: Value,
     base_face_id: u32,
+}
+
+impl<'a> DisplayRowLispStringRenderRequest<'a> {
+    pub(crate) fn new(row_request: DisplayRowSourceRenderRequest<'a>, value: Value) -> Self {
+        Self {
+            row_request,
+            source_id: 1,
+            value,
+        }
+    }
+
+    fn into_render_parts(
+        self,
+    ) -> (
+        DisplayRowRenderPlan<'a>,
+        DisplayRowLispStringSourceSessionRequest,
+    ) {
+        let plan = self.row_request.into_render_plan();
+        let session_request = DisplayRowLispStringSourceSessionRequest::new(
+            self.source_id,
+            self.value,
+            plan.base_face_id,
+        );
+        (plan, session_request)
+    }
+
+    pub(crate) fn render_with_context(
+        self,
+        renderer: &mut DisplayRowRenderer<'_>,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+    ) -> Option<RenderedDisplayRow> {
+        renderer.render_lisp_string_request_with_context(self, context)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render(
+        self,
+        renderer: &mut DisplayRowRenderer<'_>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<RenderedDisplayRow> {
+        let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
+        self.render_with_context(renderer, &mut context)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_with_display_host(
+        self,
+        renderer: &mut DisplayRowRenderer<'_>,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<RenderedDisplayRow> {
+        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
+        self.render_with_context(renderer, &mut context)
+    }
 }
 
 impl DisplayRowLispStringSourceSessionRequest {
@@ -2702,52 +2763,25 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         Self { font_metrics }
     }
 
-    #[cfg(test)]
-    pub(crate) fn render_lisp_string_source_row(
-        &mut self,
-        request: DisplayRowSourceRenderRequest<'_>,
-        rendered: Value,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
-        self.render_lisp_string_source_row_with_context(request, rendered, &mut context)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_lisp_string_source_row_with_display_host(
-        &mut self,
-        request: DisplayRowSourceRenderRequest<'_>,
-        rendered: Value,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        self.render_lisp_string_source_row_with_context(request, rendered, &mut context)
-    }
-
-    fn render_lisp_string_row_with_context(
+    fn render_lisp_string_plan_with_context(
         &mut self,
         plan: DisplayRowRenderPlan<'_>,
-        rendered: Value,
+        session_request: DisplayRowLispStringSourceSessionRequest,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
-        let base_face_id = plan.base_face_id;
-        let request = DisplayRowLispStringSourceSessionRequest::new(1, rendered, base_face_id);
-        let mut session = DisplayRowLispStringSourceSession::new(request)?;
+        let mut session = DisplayRowLispStringSourceSession::new(session_request)?;
         session
             .render_next_row_plan_with_context(self, plan, context)
             .map(|result| result.rendered)
     }
 
-    pub(crate) fn render_lisp_string_source_row_with_context(
+    fn render_lisp_string_request_with_context(
         &mut self,
-        request: DisplayRowSourceRenderRequest<'_>,
-        rendered: Value,
+        request: DisplayRowLispStringRenderRequest<'_>,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
-        self.render_lisp_string_row_with_context(request.into_render_plan(), rendered, context)
+        let (plan, session_request) = request.into_render_parts();
+        self.render_lisp_string_plan_with_context(plan, session_request, context)
     }
 
     #[cfg(test)]
@@ -3079,34 +3113,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             media,
             stop,
         })
-    }
-}
-
-impl LayoutEngine {
-    pub(crate) fn render_lisp_string_source_row_with_context(
-        &mut self,
-        request: DisplayRowSourceRenderRequest<'_>,
-        rendered: Value,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-    ) -> Option<RenderedDisplayRow> {
-        DisplayRowRenderer::new(&mut self.font_metrics)
-            .render_lisp_string_source_row_with_context(request, rendered, context)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_lisp_string_source_row(
-        &mut self,
-        request: DisplayRowSourceRenderRequest<'_>,
-        rendered: Value,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> Option<RenderedDisplayRow> {
-        DisplayRowRenderer::new(&mut self.font_metrics).render_lisp_string_source_row(
-            request,
-            rendered,
-            face_resolver,
-            face_ids,
-        )
     }
 }
 

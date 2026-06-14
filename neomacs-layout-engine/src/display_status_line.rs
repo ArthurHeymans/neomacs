@@ -18,7 +18,7 @@ use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowLispStringSourceSession,
+    DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
     DisplayRowLispStringSourceSessionRequest, DisplayRowOwner, DisplayRowRenderContext,
     DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRequestPolicy, FrameChromeKind,
     MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, install_measured_frame_chrome_row,
@@ -555,11 +555,10 @@ impl LayoutEngine {
             evaluator.display_host.as_deref(),
             face_ids,
         );
-        let rendered_row = self.render_lisp_string_source_row_with_context(
-            row_request,
-            request.text.value(),
-            &mut render_context,
-        );
+        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
+        let rendered_row =
+            DisplayRowLispStringRenderRequest::new(row_request, request.text.value())
+                .render_with_context(&mut renderer, &mut render_context);
         let measured_row = rendered_row.map(|rendered| {
             MeasuredDisplayRow::new(
                 owner,
@@ -607,11 +606,9 @@ impl LayoutEngine {
         .source_request_from_base_face(face_ids, tab_bar_face);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        let rendered = self.render_lisp_string_source_row_with_context(
-            row_request,
-            rendered_text,
-            &mut render_context,
-        )?;
+        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
+        let rendered = DisplayRowLispStringRenderRequest::new(row_request, rendered_text)
+            .render_with_context(&mut renderer, &mut render_context)?;
         if rendered.row.glyphs[GlyphArea::Text.index()].is_empty() {
             return Some(FrameTabBarDisplayRowRender::Empty);
         }
@@ -662,12 +659,9 @@ impl LayoutEngine {
         .source_request_from_base_face(face_ids, request.base_face);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
-        let rendered = self
-            .render_lisp_string_source_row_with_context(
-                row_request,
-                Value::string(""),
-                &mut render_context,
-            )
+        let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
+        let rendered = DisplayRowLispStringRenderRequest::new(row_request, Value::string(""))
+            .render_with_context(&mut renderer, &mut render_context)
             .expect("empty Lisp string should render an inactive minibuffer row");
         install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
         self.matrix_builder.end_window();
