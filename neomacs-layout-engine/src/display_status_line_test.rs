@@ -1,10 +1,11 @@
 use super::*;
+use neomacs_display_protocol::glyph_matrix::GlyphArea;
 
 fn row_text(row: &GlyphRow) -> String {
     row.glyphs[GlyphArea::Text.index()]
         .iter()
         .filter_map(|glyph| match &glyph.glyph_type {
-            neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(*ch),
+            neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(ch.to_owned()),
             neomacs_display_protocol::glyph_matrix::GlyphType::Composite { text } => {
                 text.chars().next()
             }

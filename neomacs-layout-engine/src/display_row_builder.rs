@@ -297,6 +297,28 @@ impl DisplayRowGlyphCheckpoint {
     }
 }
 
+pub(crate) fn new_display_row(layout: &DisplayRowLayout) -> GlyphRow {
+    let mut row = new_display_row_for_role(layout.role);
+    row.pixel_y = layout.y_px;
+    row.height_px = layout.height_px.max(1.0);
+    row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+    row
+}
+
+pub(crate) fn new_display_row_for_role(role: GlyphRowRole) -> GlyphRow {
+    let mut row = GlyphRow::new(role);
+    row.enabled = true;
+    row
+}
+
+pub(crate) fn display_row_text_glyph_count(row: &GlyphRow) -> usize {
+    row.glyphs[GlyphArea::Text.index()].len()
+}
+
+pub(crate) fn display_row_text_is_empty(row: &GlyphRow) -> bool {
+    display_row_text_glyph_count(row) == 0
+}
+
 pub(crate) fn display_row_total_glyph_count(row: &GlyphRow) -> usize {
     row.glyphs[GlyphArea::LeftMargin.index()].len()
         + row.glyphs[GlyphArea::Text.index()].len()
@@ -325,6 +347,61 @@ pub(crate) fn pop_display_row_trailing_text_char(row: &mut GlyphRow, ch: char) -
 
 pub(crate) fn push_display_row_text_glyph(row: &mut GlyphRow, glyph: Glyph) {
     row.glyphs[GlyphArea::Text.index()].push(glyph);
+}
+
+pub(crate) fn mark_display_row_truncated_left(row: &mut GlyphRow) {
+    row.truncated_left = true;
+}
+
+pub(crate) fn apply_display_row_source_slot_bounds(
+    row: &mut GlyphRow,
+    slots: &[DisplayRowGlyphSlot],
+) {
+    let Some((start, end)) = display_row_buffer_source_slot_bounds(slots) else {
+        return;
+    };
+    set_display_row_buffer_source_bounds(row, start, end);
+}
+
+pub(crate) fn merge_display_row_source_slot_bounds(
+    row: &mut GlyphRow,
+    slots: &[DisplayRowGlyphSlot],
+) {
+    let Some((start, end)) = display_row_buffer_source_slot_bounds(slots) else {
+        return;
+    };
+    merge_display_row_buffer_source_bounds(row, start, end);
+}
+
+fn display_row_buffer_source_slot_bounds(slots: &[DisplayRowGlyphSlot]) -> Option<(usize, usize)> {
+    slots.iter().fold(None::<(usize, usize)>, |bounds, slot| {
+        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
+            return bounds;
+        };
+        let start = char_pos.get();
+        let end = start.saturating_add(1);
+        Some(match bounds {
+            Some((old_start, old_end)) => (old_start.min(start), old_end.max(end)),
+            None => (start, end),
+        })
+    })
+}
+
+fn merge_display_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
+    if row.start_charpos == row.end_charpos {
+        set_display_row_buffer_source_bounds(row, start, end);
+        return;
+    }
+    set_display_row_buffer_source_bounds(
+        row,
+        row.start_charpos.min(start),
+        row.end_charpos.max(end),
+    );
+}
+
+fn set_display_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
+    row.start_charpos = start;
+    row.end_charpos = end;
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -535,11 +612,7 @@ pub(crate) fn append_measured_display_item_to_current_text_row(
 #[cfg(test)]
 impl DisplayRowBuilder<'_> {
     pub(crate) fn new(layout: DisplayRowLayout) -> Self {
-        let mut row = GlyphRow::new(layout.role);
-        row.enabled = true;
-        row.pixel_y = layout.y_px;
-        row.height_px = layout.height_px.max(1.0);
-        row.ascent_px = layout.ascent_px.max(0.0).min(row.height_px);
+        let row = new_display_row(&layout);
         Self {
             layout,
             row,

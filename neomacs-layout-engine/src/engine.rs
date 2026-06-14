@@ -70,6 +70,7 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
+    display_row_text_glyph_count, new_display_row,
 };
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowLimit,
@@ -99,7 +100,7 @@ use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
     WindowTransitionKind,
 };
-use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, ScrollBarItem};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
@@ -3949,12 +3950,11 @@ fn mock_display_row_from_line(
     ascent: f32,
     left_margin: Option<&str>,
     fill_to_cols: Option<(usize, u32)>,
-) -> neomacs_display_protocol::glyph_matrix::GlyphRow {
+) -> GlyphRow {
     use super::mock_frame::MockDisplayProperty;
-    use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 
     let layout = mock_display_row_layout(role, pixel_y, width_px, char_w, char_h, ascent);
-    let mut row = GlyphRow::new(role);
+    let mut row = new_display_row(&layout);
     if let Some(left_margin) = left_margin {
         let mut writer = DisplayRowWriter::for_area(&layout, &mut row, GlyphArea::LeftMargin);
         let mut margin_source_offset = 0usize;
@@ -3997,7 +3997,7 @@ fn mock_display_row_from_line(
     }
     drop(writer);
     if let Some((target_cols, face_id)) = fill_to_cols {
-        let current_cols = row.glyphs[GlyphArea::Text.index()].len();
+        let current_cols = display_row_text_glyph_count(&row);
         if current_cols < target_cols {
             let mut writer = DisplayRowWriter::new(&layout, &mut row);
             push_mock_display_text(

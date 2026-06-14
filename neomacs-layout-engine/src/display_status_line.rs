@@ -31,12 +31,15 @@ use crate::display_row::{
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
 };
-use crate::display_row_builder::{DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy};
+use crate::display_row_builder::{
+    DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
+    display_row_text_is_empty, new_display_row,
+};
 use crate::matrix_builder::GlyphMatrixBuilder;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Context;
@@ -48,10 +51,17 @@ use neovm_core::window::WindowId;
 use strum::{EnumString, IntoStaticStr};
 
 fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<RenderedDisplayRow> {
-    let mut row = GlyphRow::new(GlyphRowRole::Minibuffer);
-    row.enabled = true;
-    row.height_px = row_height.max(1.0);
-    row.ascent_px = ascent.max(0.0).min(row.height_px);
+    let row = new_display_row(&DisplayRowLayout {
+        role: GlyphRowRole::Minibuffer,
+        y_px: y,
+        width_px: 1.0,
+        height_px: row_height.max(1.0),
+        ascent_px: ascent.max(0.0).min(row_height.max(1.0)),
+        char_width_px: 1.0,
+        tab_policy: DisplayTabPolicy::every(8),
+        base_face: RenderFaceRef::FaceId(0),
+        symbol_values: std::collections::HashMap::new(),
+    });
     vec![RenderedDisplayRow {
         row,
         progress: DisplayRowOutputProgress {
@@ -957,7 +967,7 @@ impl LayoutEngine {
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
         let rendered = render_request.render_with_context(&mut renderer, &mut render_context)?;
-        if rendered.row.glyphs[GlyphArea::Text.index()].is_empty() {
+        if display_row_text_is_empty(&rendered.row) {
             return Some(FrameTabBarDisplayRowRender::Empty);
         }
         let measured = MeasuredDisplayRow::new(
@@ -1099,7 +1109,7 @@ impl LayoutEngine {
             rendered.row.mode_line = false;
             if request.reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
                 let ch = if request.truncate_lines { '$' } else { '\\' };
-                let current_cols = rendered.row.glyphs[GlyphArea::Text.index()].len();
+                let current_cols = display_row_text_glyph_count(&rendered.row);
                 if current_cols < special_col {
                     append_synthetic_minibuffer_text(
                         &mut rendered.row,

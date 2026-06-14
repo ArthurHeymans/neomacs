@@ -5,10 +5,13 @@ use crate::display_item::{
     RenderFaceRef, SourceSpan,
 };
 use crate::display_property::parse_display_length_expr;
+#[cfg(test)]
+use crate::display_row_builder::display_row_text_is_empty;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter,
-    DisplayTabPolicy,
+    DisplayTabPolicy, apply_display_row_source_slot_bounds, merge_display_row_source_slot_bounds,
+    new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor, SingleDisplayItemSource};
@@ -2431,7 +2434,7 @@ pub(crate) fn install_measured_frame_chrome_row(
         );
     }
     let mut row = measured.rendered.row.clone();
-    apply_source_slot_bounds_to_row(&mut row, &measured.rendered.source_slots);
+    apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
     row.pixel_y = measured.bounds.y;
     row.height_px = measured.row_height();
     row.ascent_px = measured.row_ascent();
@@ -2461,11 +2464,8 @@ pub(crate) fn merge_display_row_source_slot_bounds_to_current_row(
     builder: &mut GlyphMatrixBuilder,
     slots: &[DisplayRowGlyphSlot],
 ) {
-    let Some((start, end)) = buffer_source_slot_bounds(slots) else {
-        return;
-    };
     builder.with_current_row_mut(|row| {
-        merge_row_buffer_source_bounds(row, start, end);
+        merge_display_row_source_slot_bounds(row, slots);
     });
 }
 
@@ -2478,13 +2478,12 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     for face in &rendered.faces {
         builder.insert_face(face.id, face.clone());
     }
-    let source_bounds = buffer_source_slot_bounds(&rendered.source_slots);
     builder.with_current_row_mut(|row| {
         row.enabled = true;
         row.role = rendered.row.role;
         row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
         row.displays_text |=
-            rendered.row.displays_text || !rendered.row.glyphs[GlyphArea::Text.index()].is_empty();
+            rendered.row.displays_text || !display_row_text_is_empty(&rendered.row);
         row.glyphs[GlyphArea::Text.index()]
             .extend(rendered.row.glyphs[GlyphArea::Text.index()].iter().cloned());
         row.height_px = row.height_px.max(rendered.row.height_px);
@@ -2492,9 +2491,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
             .ascent_px
             .max(rendered.row.ascent_px)
             .min(row.height_px.max(1.0));
-        if let Some((start, end)) = source_bounds {
-            merge_row_buffer_source_bounds(row, start, end);
-        }
+        merge_display_row_source_slot_bounds(row, &rendered.source_slots);
     });
     for media in &rendered.media {
         media.install(builder, rendered.row.role, matrix_row);
@@ -2652,42 +2649,8 @@ impl RenderedDisplayRowMedia {
 
 fn rendered_row_with_source_bounds(rendered: &RenderedDisplayRow) -> GlyphRow {
     let mut row = rendered.row.clone();
-    apply_source_slot_bounds_to_row(&mut row, &rendered.source_slots);
+    apply_display_row_source_slot_bounds(&mut row, &rendered.source_slots);
     row
-}
-
-fn apply_source_slot_bounds_to_row(row: &mut GlyphRow, slots: &[DisplayRowGlyphSlot]) {
-    let Some((start, end)) = buffer_source_slot_bounds(slots) else {
-        return;
-    };
-    set_row_buffer_source_bounds(row, start, end);
-}
-
-fn buffer_source_slot_bounds(slots: &[DisplayRowGlyphSlot]) -> Option<(usize, usize)> {
-    slots.iter().fold(None::<(usize, usize)>, |bounds, slot| {
-        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source else {
-            return bounds;
-        };
-        let start = char_pos.get();
-        let end = start.saturating_add(1);
-        Some(match bounds {
-            Some((old_start, old_end)) => (old_start.min(start), old_end.max(end)),
-            None => (start, end),
-        })
-    })
-}
-
-fn merge_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
-    if row.start_charpos == row.end_charpos {
-        set_row_buffer_source_bounds(row, start, end);
-        return;
-    }
-    set_row_buffer_source_bounds(row, row.start_charpos.min(start), row.end_charpos.max(end));
-}
-
-fn set_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
-    row.start_charpos = start;
-    row.end_charpos = end;
 }
 
 fn display_row_output_end_position(progress: DisplayRowOutputProgress) -> DisplayRowPosition {
@@ -2971,7 +2934,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         state: &mut DisplayRowSourceState,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<DisplayRowRenderResult> {
-        let mut row = GlyphRow::new(plan.role);
+        let mut row = new_display_row_for_role(plan.role);
         let result = self.render_display_item_source_row_fragment_step_into_row_with_context(
             plan, &mut row, source, state, context,
         )?;

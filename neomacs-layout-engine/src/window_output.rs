@@ -15,7 +15,8 @@ use crate::display_item::{
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{
     DisplayRowGlyphSlot, DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
-    display_row_total_glyph_count, pop_display_row_trailing_text_char, push_display_row_text_glyph,
+    display_row_total_glyph_count, mark_display_row_truncated_left,
+    pop_display_row_trailing_text_char, push_display_row_text_glyph,
     trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
@@ -429,7 +430,7 @@ pub(crate) fn emit_text_matrix_row_transition_with_limit(
 
 pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuilder) {
     builder.with_current_row_mut(|glyph_row| {
-        glyph_row.truncated_left = true;
+        mark_display_row_truncated_left(glyph_row);
     });
 }
 
