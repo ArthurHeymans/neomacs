@@ -125,6 +125,7 @@ mod cl_defstruct_comprehensive;
 mod cl_lib_comprehensive;
 mod cl_lib_patterns;
 mod cl_lib_patterns_advanced;
+mod divergence_cl_lib_advanced;
 mod cl_loop_advanced_patterns;
 mod cl_loop_comprehensive;
 mod cl_loop_patterns;
