@@ -148,6 +148,51 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
 }
 
 #[test]
+fn loop_request_context_carries_buffer_and_window_policy() {
+    let params = window_params();
+    let walk_setup = setup_request().into_setup();
+    let output_setup = BufferTextWindowOutputSetupRequest::new(
+        FrameId(3),
+        WindowId(9),
+        99,
+        2,
+        6,
+        1,
+        20,
+        params.bounds,
+        params.text_bounds,
+        params.selected,
+        32.0,
+        48.0,
+    )
+    .into_setup(5, &walk_setup);
+    let context = BufferTextWindowLoopRequestContext::new(
+        neovm_core::buffer::BufferId(42),
+        11,
+        80,
+        17,
+        &params,
+        24.0,
+        true,
+        11.0,
+        16.0,
+        8.0,
+        output_setup.row_visibility_limit,
+        walk_setup.row_geometry_defaults,
+        2,
+        5,
+        output_setup.row_limit,
+    );
+
+    assert_eq!(context.buffer_id(), neovm_core::buffer::BufferId(42));
+    assert_eq!(context.text_start_byte(), 11);
+    assert_eq!(context.accessible_end(), 80);
+    assert_eq!(context.selective_display(), params.selective_display);
+    assert_eq!(context.tab_width(), params.tab_width);
+    assert_eq!(context.row_limit(), output_setup.row_limit);
+}
+
+#[test]
 fn tail_decoration_request_reports_rows_considered_for_decorations() {
     let mut setup = setup_request().into_setup();
     setup.row_geometry = DisplayRowGeometryState::new(2, 64.0, 0.0, 16.0, 11.0);

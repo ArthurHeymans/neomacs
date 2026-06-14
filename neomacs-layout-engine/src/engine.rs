@@ -21,10 +21,11 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
-    BufferTextWindowTailDecorationRequest, BufferTextWindowTailDecorationState,
-    BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
+    BufferTextWindowRenderContextsRequest, BufferTextWindowTailDecorationRequest,
+    BufferTextWindowTailDecorationState, BufferTextWindowWalkSetup,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -57,19 +58,16 @@ use crate::display_row_append::DisplayRowPrefixRequest;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
-    BufferEndOfBufferTailRenderRequest, BufferEndOfBufferTailRenderState,
-    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderRequest,
-    BufferInvisibleTextRenderRequestState, BufferLineNumberMarginRenderRequest,
-    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
-    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
-    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
-    BufferTextWindowBeginState, BufferTextWindowBodyInstallState,
-    BufferTextWindowCursorEffectsRequest, BufferTextWindowFinishRequest,
-    BufferTextWindowFinishState, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryRequest,
-    DisplayRowPrefixValues,
+    BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailRenderState,
+    BufferHscrollSkipRenderState, BufferInvisibleTextRenderRequestState,
+    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
+    BufferLinePrefixRenderRequest, BufferSelectiveDisplayTailRenderState,
+    BufferTextDecodedSourceChar, BufferTextLineBreakRenderState,
+    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginState,
+    BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
+    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixValues,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -863,10 +861,6 @@ impl LayoutEngine {
         let lnum_min_width =
             super::neovm_bridge::buffer_local_int(buffer, "display-line-numbers-width", 0) as i32;
 
-        // Selective display: integer N = hide lines with > N indent + CR hides rest of line;
-        // t (True) = only CR hides rest of line (mapped to i32::MAX so indent check never triggers)
-        let selective_display = super::neovm_bridge::buffer_selective_display(buffer);
-
         let prefix_values = DisplayRowPrefixValues::default_values(
             super::neovm_bridge::buffer_local_value(buffer, "line-prefix"),
             super::neovm_bridge::buffer_local_value(buffer, "wrap-prefix"),
@@ -1268,6 +1262,23 @@ impl LayoutEngine {
             max_rows,
         )
         .into_contexts();
+        let loop_request_context = BufferTextWindowLoopRequestContext::new(
+            buf_id,
+            text_start_byte,
+            accessible_end,
+            point_charpos,
+            params,
+            content_x,
+            has_prefix,
+            default_face_ascent,
+            char_h,
+            char_w,
+            row_visibility_limit,
+            row_geometry_defaults,
+            text_matrix_row_base,
+            max_rows,
+            row_limit,
+        );
 
         let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState {
             builder: &mut self.matrix_builder,
@@ -1318,86 +1329,72 @@ impl LayoutEngine {
             );
 
             // --- Invisible text check ---
-            if BufferInvisibleTextRenderRequest::new(
-                text,
-                accessible_end,
-                point_charpos,
-                &text_append_surface,
-                overlay_text_row_context,
-                &active_face_state,
-                raise_span.value_or(0.0),
-                default_face_ascent,
-                char_h,
-                char_w,
-            )
-            .render_at_checkpoint_and_apply(
-                buffer,
-                BufferInvisibleTextRenderRequestState {
-                    checkpoints: &mut text_property_checkpoints,
-                    byte_idx: &mut byte_idx,
-                    charpos: &mut charpos,
-                    output_emitter: &mut output_emitter,
-                    x: &mut x,
-                    col: &mut col,
-                    row_geometry: &mut row_geometry,
-                    cursor_info: &mut cursor_info,
-                    hit_rows: &mut hit_rows,
-                    hit_row_range: &mut hit_row_range,
-                    row_y_positions: &mut row_y_positions,
-                    face_ids: &mut face_ids,
-                    builder: &mut self.matrix_builder,
-                    evaluator,
-                    font_metrics: &mut self.font_metrics,
-                    face_resolver,
-                },
-            )
-            .should_continue_buffer_walk()
+            if loop_request_context
+                .invisible_text_request(
+                    text,
+                    &text_append_surface,
+                    overlay_text_row_context,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                )
+                .render_at_checkpoint_and_apply(
+                    buffer,
+                    BufferInvisibleTextRenderRequestState {
+                        checkpoints: &mut text_property_checkpoints,
+                        byte_idx: &mut byte_idx,
+                        charpos: &mut charpos,
+                        output_emitter: &mut output_emitter,
+                        x: &mut x,
+                        col: &mut col,
+                        row_geometry: &mut row_geometry,
+                        cursor_info: &mut cursor_info,
+                        hit_rows: &mut hit_rows,
+                        hit_row_range: &mut hit_row_range,
+                        row_y_positions: &mut row_y_positions,
+                        face_ids: &mut face_ids,
+                        builder: &mut self.matrix_builder,
+                        evaluator,
+                        font_metrics: &mut self.font_metrics,
+                        face_resolver,
+                    },
+                )
+                .should_continue_buffer_walk()
             {
                 continue;
             }
 
             // Handle hscroll: skip columns consumed by horizontal scroll
             if hscroll_skip.should_skip() {
-                if BufferHscrollSkipRenderRequest::new(
-                    text,
-                    params.tab_width,
-                    content_x,
-                    &text_append_surface,
-                    &active_face_state,
-                    default_face_ascent,
-                    char_h,
-                    char_w,
-                    face_resolver,
-                    point_charpos,
-                    has_prefix,
-                    row_geometry_defaults,
-                    text_matrix_row_base,
-                    max_rows,
-                    row_limit,
-                )
-                .render_next_and_apply(BufferHscrollSkipRenderState {
-                    byte_idx: &mut byte_idx,
-                    charpos: &mut charpos,
-                    hscroll_skip: &mut hscroll_skip,
-                    row_extend: &mut row_extend,
-                    output_emitter: &mut output_emitter,
-                    x: &mut x,
-                    col: &mut col,
-                    prefix_request: &mut prefix_request,
-                    line_numbers: &mut line_numbers,
-                    word_wrap: &mut word_wrap,
-                    trailing_whitespace: &mut trailing_whitespace,
-                    row_geometry: &mut row_geometry,
-                    row_flags: &mut row_flags,
-                    hit_rows: &mut hit_rows,
-                    hit_row_range: &mut hit_row_range,
-                    cursor_info: &mut cursor_info,
-                    row_y_positions: &mut row_y_positions,
-                    builder: &mut self.matrix_builder,
-                    evaluator,
-                    font_metrics: &mut self.font_metrics,
-                })
-                .should_break()
+                if loop_request_context
+                    .hscroll_skip_request(
+                        text,
+                        &text_append_surface,
+                        &active_face_state,
+                        face_resolver,
+                    )
+                    .render_next_and_apply(BufferHscrollSkipRenderState {
+                        byte_idx: &mut byte_idx,
+                        charpos: &mut charpos,
+                        hscroll_skip: &mut hscroll_skip,
+                        row_extend: &mut row_extend,
+                        output_emitter: &mut output_emitter,
+                        x: &mut x,
+                        col: &mut col,
+                        prefix_request: &mut prefix_request,
+                        line_numbers: &mut line_numbers,
+                        word_wrap: &mut word_wrap,
+                        trailing_whitespace: &mut trailing_whitespace,
+                        row_geometry: &mut row_geometry,
+                        row_flags: &mut row_flags,
+                        hit_rows: &mut hit_rows,
+                        hit_row_range: &mut hit_row_range,
+                        cursor_info: &mut cursor_info,
+                        row_y_positions: &mut row_y_positions,
+                        builder: &mut self.matrix_builder,
+                        evaluator,
+                        font_metrics: &mut self.font_metrics,
+                    })
+                    .should_break()
                 {
                     break;
                 }
@@ -1406,43 +1403,39 @@ impl LayoutEngine {
 
             // --- Display property check ---
             // Only call check_display_prop at property change boundaries for efficiency
-            let display_property_walk = BufferDisplayPropertyCheckpointRenderRequest::new(
-                face_resolution_context.clone(),
-                buf_id,
-                text_start_byte,
-                text,
-                x,
-                content_x,
-                params,
-                raise_span.value_or(0.0),
-                char_h,
-                DisplayRowPosition { x_px: x, col },
-                charpos,
-                byte_idx,
-                accessible_end,
-            )
-            .render_and_apply(BufferDisplayPropertyCheckpointRenderState {
-                output_emitter: &mut output_emitter,
-                builder: &mut self.matrix_builder,
-                evaluator,
-                font_metrics: &mut self.font_metrics,
-                face_ids: &mut face_ids,
-                append_surface: &text_append_surface,
-                row_geometry: &mut row_geometry,
-                checkpoints: &mut text_property_checkpoints,
-                face_scan: &mut face_scan,
-                active_face_state: &mut active_face_state,
-                row_extend: &mut row_extend,
-                box_face: &mut box_face,
-                byte_idx: &mut byte_idx,
-                charpos: &mut charpos,
-                x: &mut x,
-                col: &mut col,
-                cursor_info: &mut cursor_info,
-                raise_span: &mut raise_span,
-                height_span: &mut height_span,
-                point_charpos,
-            });
+            let display_property_walk = loop_request_context
+                .display_property_checkpoint_request(
+                    face_resolution_context.clone(),
+                    text,
+                    params,
+                    x,
+                    col,
+                    charpos,
+                    byte_idx,
+                    raise_span.value_or(0.0),
+                )
+                .render_and_apply(BufferDisplayPropertyCheckpointRenderState {
+                    output_emitter: &mut output_emitter,
+                    builder: &mut self.matrix_builder,
+                    evaluator,
+                    font_metrics: &mut self.font_metrics,
+                    face_ids: &mut face_ids,
+                    append_surface: &text_append_surface,
+                    row_geometry: &mut row_geometry,
+                    checkpoints: &mut text_property_checkpoints,
+                    face_scan: &mut face_scan,
+                    active_face_state: &mut active_face_state,
+                    row_extend: &mut row_extend,
+                    box_face: &mut box_face,
+                    byte_idx: &mut byte_idx,
+                    charpos: &mut charpos,
+                    x: &mut x,
+                    col: &mut col,
+                    cursor_info: &mut cursor_info,
+                    raise_span: &mut raise_span,
+                    height_span: &mut height_span,
+                    point_charpos,
+                });
             if display_property_walk.should_continue_buffer_walk() {
                 continue;
             }
@@ -1457,51 +1450,40 @@ impl LayoutEngine {
             };
             let ch = decoded_source_char.ch();
 
-            let selective_display_outcome = BufferSelectiveDisplayTailRenderRequest::new(
-                decoded_source_char,
-                text,
-                text_start_byte,
-                selective_display,
-                params.tab_width,
-                &text_append_surface,
-                &active_face_state,
-                raise_span.value_or(0.0),
-                default_face_ascent,
-                char_h,
-                char_w,
-                content_x,
-                has_prefix,
-                row_geometry_defaults,
-                text_matrix_row_base,
-                max_rows,
-                row_limit,
-            )
-            .render_if_needed_and_apply(
-                buffer,
-                BufferSelectiveDisplayTailRenderState {
-                    byte_idx: &mut byte_idx,
-                    charpos: &mut charpos,
-                    col: &mut col,
-                    output_emitter: &mut output_emitter,
-                    row_extend: &mut row_extend,
-                    box_face: &mut box_face,
-                    x: &mut x,
-                    line_numbers: &mut line_numbers,
-                    row_geometry: &mut row_geometry,
-                    row_flags: &mut row_flags,
-                    hit_rows: &mut hit_rows,
-                    hit_row_range: &mut hit_row_range,
-                    builder: &mut self.matrix_builder,
-                    evaluator,
-                    prefix_request: &mut prefix_request,
-                    hscroll_skip: &mut hscroll_skip,
-                    word_wrap: &mut word_wrap,
-                    trailing_whitespace: &mut trailing_whitespace,
-                    row_y_positions: &mut row_y_positions,
-                    font_metrics: &mut self.font_metrics,
-                    face_resolver,
-                },
-            );
+            let selective_display_outcome = loop_request_context
+                .selective_display_tail_request(
+                    decoded_source_char,
+                    text,
+                    &text_append_surface,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                )
+                .render_if_needed_and_apply(
+                    buffer,
+                    BufferSelectiveDisplayTailRenderState {
+                        byte_idx: &mut byte_idx,
+                        charpos: &mut charpos,
+                        col: &mut col,
+                        output_emitter: &mut output_emitter,
+                        row_extend: &mut row_extend,
+                        box_face: &mut box_face,
+                        x: &mut x,
+                        line_numbers: &mut line_numbers,
+                        row_geometry: &mut row_geometry,
+                        row_flags: &mut row_flags,
+                        hit_rows: &mut hit_rows,
+                        hit_row_range: &mut hit_row_range,
+                        builder: &mut self.matrix_builder,
+                        evaluator,
+                        prefix_request: &mut prefix_request,
+                        hscroll_skip: &mut hscroll_skip,
+                        word_wrap: &mut word_wrap,
+                        trailing_whitespace: &mut trailing_whitespace,
+                        row_y_positions: &mut row_y_positions,
+                        font_metrics: &mut self.font_metrics,
+                        face_resolver,
+                    },
+                );
             if selective_display_outcome.should_break() {
                 break;
             }
@@ -1510,105 +1492,80 @@ impl LayoutEngine {
             }
 
             if ch == '\n' {
-                if BufferTextLineBreakRenderRequest::new(
-                    decoded_source_char,
-                    text,
-                    text_start_byte,
-                    selective_display,
-                    params.tab_width,
-                    &active_face_state,
-                    point_charpos,
-                    char_h,
-                    params.extra_line_spacing,
-                    content_x,
-                    has_prefix,
-                    row_geometry_defaults,
-                    text_matrix_row_base,
-                    max_rows,
-                    row_limit,
-                )
-                .render_and_apply(
-                    buffer,
-                    BufferTextLineBreakRenderState {
-                        byte_idx: &mut byte_idx,
-                        charpos: &mut charpos,
-                        cursor_info: &mut cursor_info,
-                        row_geometry: &mut row_geometry,
-                        trailing_whitespace: &mut trailing_whitespace,
-                        row_extend: &mut row_extend,
-                        box_face: &mut box_face,
-                        output_emitter: &mut output_emitter,
-                        x: &mut x,
-                        col: &mut col,
-                        prefix_request: &mut prefix_request,
-                        line_numbers: &mut line_numbers,
-                        hscroll_skip: &mut hscroll_skip,
-                        word_wrap: &mut word_wrap,
-                        row_flags: &mut row_flags,
-                        hit_rows: &mut hit_rows,
-                        hit_row_range: &mut hit_row_range,
-                        row_y_positions: &mut row_y_positions,
-                        builder: &mut self.matrix_builder,
-                        evaluator,
-                    },
-                )
-                .should_break()
+                if loop_request_context
+                    .line_break_request(decoded_source_char, text, &active_face_state)
+                    .render_and_apply(
+                        buffer,
+                        BufferTextLineBreakRenderState {
+                            byte_idx: &mut byte_idx,
+                            charpos: &mut charpos,
+                            cursor_info: &mut cursor_info,
+                            row_geometry: &mut row_geometry,
+                            trailing_whitespace: &mut trailing_whitespace,
+                            row_extend: &mut row_extend,
+                            box_face: &mut box_face,
+                            output_emitter: &mut output_emitter,
+                            x: &mut x,
+                            col: &mut col,
+                            prefix_request: &mut prefix_request,
+                            line_numbers: &mut line_numbers,
+                            hscroll_skip: &mut hscroll_skip,
+                            word_wrap: &mut word_wrap,
+                            row_flags: &mut row_flags,
+                            hit_rows: &mut hit_rows,
+                            hit_row_range: &mut hit_row_range,
+                            row_y_positions: &mut row_y_positions,
+                            builder: &mut self.matrix_builder,
+                            evaluator,
+                        },
+                    )
+                    .should_break()
                 {
                     break;
                 }
                 continue;
             }
 
-            let char_render_outcome = BufferTextSourceCharRenderRequest::new(
-                decoded_source_char,
-                text,
-                text_start_byte,
-                buf_id,
-                &text_append_surface,
-                overlay_text_row_context,
-                &active_face_state,
-                params,
-                raise_span.value_or(0.0),
-                char_h,
-                point_charpos,
-                row_visibility_limit,
-                content_x,
-                has_prefix,
-                row_geometry_defaults,
-                text_matrix_row_base,
-                max_rows,
-                row_limit,
-            )
-            .render_and_apply(
-                buffer,
-                BufferTextSourceCharRenderRequestState {
-                    append_state: &mut buffer_text_append_state,
-                    byte_idx: &mut byte_idx,
-                    charpos: &mut charpos,
-                    col: &mut col,
-                    output_emitter: &mut output_emitter,
-                    row_extend: &mut row_extend,
-                    x: &mut x,
-                    line_numbers: &mut line_numbers,
-                    row_geometry: &mut row_geometry,
-                    row_flags: &mut row_flags,
-                    hit_rows: &mut hit_rows,
-                    hit_row_range: &mut hit_row_range,
-                    builder: &mut self.matrix_builder,
-                    evaluator,
-                    prefix_request: &mut prefix_request,
-                    hscroll_skip: &mut hscroll_skip,
-                    word_wrap: &mut word_wrap,
-                    trailing_whitespace: &mut trailing_whitespace,
-                    face_scan: &mut face_scan,
-                    row_y_positions: &mut row_y_positions,
-                    font_metrics: &mut self.font_metrics,
-                    face_resolver,
-                    cursor_info: &mut cursor_info,
-                    face_ids: &mut face_ids,
-                    raise_span: &mut raise_span,
-                },
-            );
+            let char_render_outcome = loop_request_context
+                .source_char_request(
+                    decoded_source_char,
+                    text,
+                    &text_append_surface,
+                    overlay_text_row_context,
+                    &active_face_state,
+                    params,
+                    raise_span.value_or(0.0),
+                )
+                .render_and_apply(
+                    buffer,
+                    BufferTextSourceCharRenderRequestState {
+                        append_state: &mut buffer_text_append_state,
+                        byte_idx: &mut byte_idx,
+                        charpos: &mut charpos,
+                        col: &mut col,
+                        output_emitter: &mut output_emitter,
+                        row_extend: &mut row_extend,
+                        x: &mut x,
+                        line_numbers: &mut line_numbers,
+                        row_geometry: &mut row_geometry,
+                        row_flags: &mut row_flags,
+                        hit_rows: &mut hit_rows,
+                        hit_row_range: &mut hit_row_range,
+                        builder: &mut self.matrix_builder,
+                        evaluator,
+                        prefix_request: &mut prefix_request,
+                        hscroll_skip: &mut hscroll_skip,
+                        word_wrap: &mut word_wrap,
+                        trailing_whitespace: &mut trailing_whitespace,
+                        face_scan: &mut face_scan,
+                        row_y_positions: &mut row_y_positions,
+                        font_metrics: &mut self.font_metrics,
+                        face_resolver,
+                        cursor_info: &mut cursor_info,
+                        face_ids: &mut face_ids,
+                        raise_span: &mut raise_span,
+                    },
+                );
             if char_render_outcome.should_break() {
                 break;
             }
@@ -1617,34 +1574,32 @@ impl LayoutEngine {
             }
         }
 
-        let end_of_buffer_tail = BufferEndOfBufferTailRenderRequest::new(
-            byte_idx,
-            charpos,
-            accessible_end,
-            point_charpos,
-            has_overlays,
-            overlay_text_row_context,
-            &active_face_state,
-            row_limit,
-        )
-        .render_and_apply(
-            buffer,
-            BufferEndOfBufferTailRenderState {
-                output_emitter: &mut output_emitter,
-                x: &mut x,
-                col: &mut col,
-                row_geometry: &mut row_geometry,
-                cursor_info: &mut cursor_info,
-                hit_rows: &mut hit_rows,
-                hit_row_range: &mut hit_row_range,
-                row_y_positions: &mut row_y_positions,
-                face_ids: &mut face_ids,
-                builder: &mut self.matrix_builder,
-                evaluator,
-                font_metrics: &mut self.font_metrics,
-                face_resolver,
-            },
-        );
+        let end_of_buffer_tail = loop_request_context
+            .end_of_buffer_tail_request(
+                byte_idx,
+                charpos,
+                has_overlays,
+                overlay_text_row_context,
+                &active_face_state,
+            )
+            .render_and_apply(
+                buffer,
+                BufferEndOfBufferTailRenderState {
+                    output_emitter: &mut output_emitter,
+                    x: &mut x,
+                    col: &mut col,
+                    row_geometry: &mut row_geometry,
+                    cursor_info: &mut cursor_info,
+                    hit_rows: &mut hit_rows,
+                    hit_row_range: &mut hit_row_range,
+                    row_y_positions: &mut row_y_positions,
+                    face_ids: &mut face_ids,
+                    builder: &mut self.matrix_builder,
+                    evaluator,
+                    font_metrics: &mut self.font_metrics,
+                    face_resolver,
+                },
+            );
         let point_is_visible_eob = end_of_buffer_tail.point_is_visible_eob();
 
         BufferTextWindowTailDecorationRequest::new(
