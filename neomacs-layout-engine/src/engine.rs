@@ -51,10 +51,10 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferCurrentFaceResolutionContext, BufferCurrentFaceResolutionState,
-    BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
-    BufferEndOfBufferTailAction, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
-    BufferInvisibleTextRenderState, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
+    BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
+    BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailAction,
+    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderState,
+    BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
     BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
     BufferSelectiveDisplayContext, BufferSyntheticTextRenderContext,
@@ -2105,85 +2105,43 @@ impl LayoutEngine {
 
             // --- Display property check ---
             // Only call check_display_prop at property change boundaries for efficiency
-            BufferDisplayPropertyTextModifierAction::clear_expired_height_span(
-                &mut height_span,
-                &mut face_scan,
-                charpos,
-                window_start,
-            );
-            face_resolution_context.resolve_at_checkpoint(
-                &mut BufferCurrentFaceResolutionState::new(
-                    &mut face_scan,
-                    &height_span,
-                    &mut self.font_metrics,
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                    &mut active_face_state,
-                    &mut row_geometry,
-                    &mut row_extend,
-                    &mut box_face,
-                    x,
-                ),
-                charpos,
-            );
-            let display_property_walk = BufferDisplayPropertyTextRenderContext::new(
+            let display_property_walk = BufferDisplayPropertyCheckpointRenderRequest::new(
+                face_resolution_context.clone(),
                 buf_id,
                 text_start_byte,
                 text,
-                &active_face_state,
                 x,
                 content_x,
                 params,
                 raise_span.value_or(0.0),
                 char_h,
                 DisplayRowPosition { x_px: x, col },
-            )
-            .resolve_and_append_at_checkpoint(
-                buffer,
-                evaluator,
-                &mut output_emitter,
-                &mut self.matrix_builder,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut face_ids,
-                &text_append_surface,
-                &mut row_geometry,
-                &mut text_property_checkpoints,
                 charpos,
                 byte_idx,
                 accessible_end,
             )
-            .apply_to_buffer_walk_state(
-                text,
-                &mut byte_idx,
-                &mut charpos,
-                &mut x,
-                &mut col,
-                &mut cursor_info,
-                &active_face_state,
-                &row_geometry,
+            .render_and_apply(BufferDisplayPropertyCheckpointRenderState {
+                output_emitter: &mut output_emitter,
+                builder: &mut self.matrix_builder,
+                evaluator,
+                font_metrics: &mut self.font_metrics,
+                face_ids: &mut face_ids,
+                append_surface: &text_append_surface,
+                row_geometry: &mut row_geometry,
+                checkpoints: &mut text_property_checkpoints,
+                face_scan: &mut face_scan,
+                active_face_state: &mut active_face_state,
+                row_extend: &mut row_extend,
+                box_face: &mut box_face,
+                byte_idx: &mut byte_idx,
+                charpos: &mut charpos,
+                x: &mut x,
+                col: &mut col,
+                cursor_info: &mut cursor_info,
+                raise_span: &mut raise_span,
+                height_span: &mut height_span,
                 point_charpos,
-                &mut raise_span,
-                &mut height_span,
-                &mut face_scan,
-            );
-            if display_property_walk.should_resolve_face() {
-                face_resolution_context.resolve_at_checkpoint(
-                    &mut BufferCurrentFaceResolutionState::new(
-                        &mut face_scan,
-                        &height_span,
-                        &mut self.font_metrics,
-                        &mut face_ids,
-                        &mut self.matrix_builder,
-                        &mut active_face_state,
-                        &mut row_geometry,
-                        &mut row_extend,
-                        &mut box_face,
-                        x,
-                    ),
-                    charpos,
-                );
-            }
+            });
             if display_property_walk.should_continue_buffer_walk() {
                 continue;
             }

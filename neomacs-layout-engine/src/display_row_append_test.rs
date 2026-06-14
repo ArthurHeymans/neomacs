@@ -7163,6 +7163,133 @@ fn buffer_display_property_render_context_returns_modifier_action_from_checkpoin
 }
 
 #[test]
+fn buffer_display_property_checkpoint_render_request_applies_modifier_and_resolves_face() {
+    let mut context = RowTransitionTestContext::new("display-property-checkpoint-request");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert("abc");
+        let _ = context
+            .eval
+            .buffer_manager_mut()
+            .put_buffer_text_property_in_emacs_byte_range(
+                buf_id,
+                EmacsByteRange::from_usize(0, 1),
+                Value::symbol("display"),
+                Value::list(vec![Value::keyword("height"), Value::fixnum(2)]),
+            );
+    }
+    let buffer = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let default_face = face_resolver.default_face().clone();
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let mut font_metrics = None;
+    let measured = measurement_policy.measured_face(
+        7,
+        &default_face,
+        None,
+        8.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        &mut font_metrics,
+    );
+    let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut checkpoints = TextPropertyScanCheckpoints::new(0);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+    let mut x = 0.0;
+    let mut col = 0;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    let mut height_span = ActiveDisplayPropertySpan::inactive();
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let params = test_display_space_window_params();
+
+    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
+        BufferCurrentFaceResolutionContext::new(
+            &buffer,
+            &face_resolver,
+            measurement_policy,
+            &default_face,
+            8.0,
+            12.0,
+            16.0,
+            8.0,
+            16.0,
+            12.0,
+            false,
+        ),
+        buf_id,
+        0,
+        b"abc",
+        x,
+        0.0,
+        &params,
+        0.0,
+        16.0,
+        DisplayRowPosition { x_px: x, col },
+        charpos,
+        byte_idx,
+        3,
+    )
+    .render_and_apply(BufferDisplayPropertyCheckpointRenderState {
+        output_emitter: &mut context.output_emitter,
+        builder: &mut context.builder,
+        evaluator: &mut context.eval,
+        font_metrics: &mut font_metrics,
+        face_ids: &mut face_ids,
+        append_surface: &surface,
+        row_geometry: &mut context.geometry,
+        checkpoints: &mut checkpoints,
+        face_scan: &mut face_scan,
+        active_face_state: &mut active_face,
+        row_extend: &mut row_extend,
+        box_face: &mut box_face,
+        byte_idx: &mut byte_idx,
+        charpos: &mut charpos,
+        x: &mut x,
+        col: &mut col,
+        cursor_info: &mut cursor_info,
+        raise_span: &mut raise_span,
+        height_span: &mut height_span,
+        point_charpos: 99,
+    });
+
+    assert_eq!(
+        outcome,
+        BufferDisplayPropertyTextWalkOutcome::FaceStateChanged
+    );
+    assert!(!outcome.should_continue_buffer_walk());
+    assert_eq!(height_span.value(), Some(2.0));
+    assert_eq!(active_face.face_id(), 21);
+    assert_eq!(face_ids.allocate(), 22);
+    assert_eq!(byte_idx, 0);
+    assert_eq!(charpos, 0);
+    assert_eq!(checkpoints.display_next(), 1);
+}
+
+#[test]
 fn buffer_display_property_text_modifier_action_applies_walk_state() {
     let action = BufferDisplayPropertyTextModifierAction::new_for_test(Some(-4.0), Some(1.5), 11);
     let mut raise_span = ActiveDisplayPropertySpan::inactive();

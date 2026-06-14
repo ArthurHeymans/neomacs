@@ -8819,6 +8819,45 @@ pub(crate) struct BufferDisplayPropertyTextRenderContext<'a> {
     start_position: DisplayRowPosition,
 }
 
+pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBufferView> {
+    face_resolution_context: BufferCurrentFaceResolutionContext<'a, B>,
+    buffer_id: BufferId,
+    text_start_byte: usize,
+    text: &'a [u8],
+    current_x: f32,
+    content_x: f32,
+    params: &'a WindowParams,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    start_position: DisplayRowPosition,
+    charpos: i64,
+    byte_idx: usize,
+    accessible_end: i64,
+}
+
+pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
+    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
+    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) box_face: &'emit mut BoxFaceRowState,
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+    pub(crate) height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+    pub(crate) point_charpos: i64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
     replacement: DisplayPropertyReplacementAppendOutcome,
@@ -8987,6 +9026,151 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
             append_surface,
             row_geometry,
         )
+    }
+}
+
+impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        face_resolution_context: BufferCurrentFaceResolutionContext<'a, B>,
+        buffer_id: BufferId,
+        text_start_byte: usize,
+        text: &'a [u8],
+        current_x: f32,
+        content_x: f32,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        start_position: DisplayRowPosition,
+        charpos: i64,
+        byte_idx: usize,
+        accessible_end: i64,
+    ) -> Self {
+        Self {
+            face_resolution_context,
+            buffer_id,
+            text_start_byte,
+            text,
+            current_x,
+            content_x,
+            params,
+            glyph_y_offset,
+            default_row_height,
+            start_position,
+            charpos,
+            byte_idx,
+            accessible_end,
+        }
+    }
+
+    pub(crate) fn render_and_apply(
+        self,
+        state: BufferDisplayPropertyCheckpointRenderState<'_, '_>,
+    ) -> BufferDisplayPropertyTextWalkOutcome {
+        let BufferDisplayPropertyCheckpointRenderState {
+            output_emitter,
+            builder,
+            evaluator,
+            font_metrics,
+            face_ids,
+            append_surface,
+            row_geometry,
+            checkpoints,
+            face_scan,
+            active_face_state,
+            row_extend,
+            box_face,
+            byte_idx,
+            charpos,
+            x,
+            col,
+            cursor_info,
+            raise_span,
+            height_span,
+            point_charpos,
+        } = state;
+
+        BufferDisplayPropertyTextModifierAction::clear_expired_height_span(
+            height_span,
+            face_scan,
+            self.charpos,
+            self.params.window_start,
+        );
+        self.face_resolution_context.resolve_at_checkpoint(
+            &mut BufferCurrentFaceResolutionState::new(
+                face_scan,
+                height_span,
+                font_metrics,
+                face_ids,
+                builder,
+                active_face_state,
+                row_geometry,
+                row_extend,
+                box_face,
+                *x,
+            ),
+            self.charpos,
+        );
+
+        let action = BufferDisplayPropertyTextRenderContext::new(
+            self.buffer_id,
+            self.text_start_byte,
+            self.text,
+            active_face_state,
+            self.current_x,
+            self.content_x,
+            self.params,
+            self.glyph_y_offset,
+            self.default_row_height,
+            self.start_position,
+        )
+        .resolve_and_append_at_checkpoint(
+            self.face_resolution_context.buffer,
+            evaluator,
+            output_emitter,
+            builder,
+            font_metrics,
+            self.face_resolution_context.face_resolver,
+            face_ids,
+            append_surface,
+            row_geometry,
+            checkpoints,
+            self.charpos,
+            self.byte_idx,
+            self.accessible_end,
+        );
+        let outcome = action.apply_to_buffer_walk_state(
+            self.text,
+            byte_idx,
+            charpos,
+            x,
+            col,
+            cursor_info,
+            active_face_state,
+            row_geometry,
+            point_charpos,
+            raise_span,
+            height_span,
+            face_scan,
+        );
+        if outcome.should_resolve_face() {
+            self.face_resolution_context.resolve_at_checkpoint(
+                &mut BufferCurrentFaceResolutionState::new(
+                    face_scan,
+                    height_span,
+                    font_metrics,
+                    face_ids,
+                    builder,
+                    active_face_state,
+                    row_geometry,
+                    row_extend,
+                    box_face,
+                    *x,
+                ),
+                *charpos,
+            );
+        }
+        outcome
     }
 }
 
