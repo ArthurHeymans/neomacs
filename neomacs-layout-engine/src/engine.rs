@@ -2868,22 +2868,20 @@ impl LayoutEngine {
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            let append_request = buffer_source_char.append_request_at(
-                &text,
-                ch_start_byte_idx,
-                append_position,
-                cluster_tail,
-            );
-            let append_plan = buffer_row_append_context.prepare_source_char_append_plan(
+            let prepared_append = buffer_row_append_context.prepare_source_char_at(
                 &append_geometry,
                 &mut buffer_text_advance,
                 &mut self.matrix_builder,
                 evaluator,
                 &mut self.font_metrics,
                 face_resolver,
-                append_request,
+                &buffer_source_char,
+                &text,
+                ch_start_byte_idx,
+                append_position,
+                cluster_tail,
             );
-            let advance = append_plan.advance_px();
+            let advance = prepared_append.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > text_append_surface.right_edge() {
                 if params.truncate_lines {
@@ -3109,14 +3107,14 @@ impl LayoutEngine {
                 }
             }
 
-            let appended = buffer_row_append_context.append_source_char_plan_to_text_row(
+            let appended = prepared_append.append_to_text_row(
+                &buffer_row_append_context,
                 &append_geometry,
                 &mut self.matrix_builder,
                 &mut output_emitter,
                 evaluator,
                 &mut self.font_metrics,
                 face_resolver,
-                append_plan,
             );
             let Some((_progress, position)) = appended else {
                 break;

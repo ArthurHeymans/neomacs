@@ -1983,7 +1983,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn prepare_source_char_append_plan(
+    fn prepare_source_char_append_plan(
         &self,
         geometry: &DisplayRowGeometryState,
         resolver: &mut BufferTextSourceAdvanceResolver,
@@ -2003,6 +2003,35 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             request,
         );
         request.append_plan(resolved_advance)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare_source_char_at(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        resolver: &mut BufferTextSourceAdvanceResolver,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        source_char: &BufferTextSourceChar,
+        text: &[u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        cluster_tail: Option<(char, bool)>,
+    ) -> BufferTextSourceCharPreparedAppend {
+        let request = source_char.append_request_at(text, byte_idx, position, cluster_tail);
+        BufferTextSourceCharPreparedAppend {
+            plan: self.prepare_source_char_append_plan(
+                geometry,
+                resolver,
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                request,
+            ),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2037,7 +2066,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_source_char_plan_to_text_row(
+    fn append_source_char_plan_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -2058,6 +2087,39 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             face_resolver,
             parts.resolved_advance,
             parts.position,
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceCharPreparedAppend {
+    plan: BufferTextSourceCharAppendPlan,
+}
+
+impl BufferTextSourceCharPreparedAppend {
+    pub(crate) fn advance_px(self) -> f32 {
+        self.plan.advance_px()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_to_text_row<B: LayoutBufferView + ?Sized>(
+        self,
+        context: &BufferTextRowAppendContext<'_, '_, B>,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        context.append_source_char_plan_to_text_row(
+            geometry,
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            self.plan,
         )
     }
 }
@@ -2418,7 +2480,7 @@ impl BufferTextSourceChar {
             .map(|display| self.special_request_for_display(display))
     }
 
-    pub(crate) fn append_request_at<'text>(
+    fn append_request_at<'text>(
         &self,
         text: &'text [u8],
         byte_idx: usize,
@@ -2548,7 +2610,7 @@ struct BufferTextSpecialSourceCharMeasureRequestParts {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceCharAppendPlan {
+struct BufferTextSourceCharAppendPlan {
     range: BufferTextSourceRange,
     resolved_advance: ResolvedBufferTextSourceAdvance,
     position: DisplayRowPosition,
@@ -2576,7 +2638,7 @@ struct BufferTextSourceCharAppendPlanParts {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceCharAppendRequest<'text> {
+struct BufferTextSourceCharAppendRequest<'text> {
     text: &'text [u8],
     byte_idx: usize,
     range: BufferTextSourceRange,
