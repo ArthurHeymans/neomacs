@@ -1240,9 +1240,19 @@ pub(crate) struct DisplayRowRenderResult {
     pub(crate) stop: DisplayRowRenderStop,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DisplayRowLispStringSourceId(u64);
+
+impl DisplayRowLispStringSourceId {
+    const ROOT: Self = Self(1);
+
+    fn raw(self) -> u64 {
+        self.0
+    }
+}
+
 pub(crate) struct DisplayRowLispStringRenderRequest<'a> {
     row_request: DisplayRowSourceRenderRequest<'a>,
-    source_id: u64,
     value: Value,
 }
 
@@ -1251,7 +1261,7 @@ pub(crate) struct DisplayRowItemSourceRenderRequest<'a> {
 }
 
 pub(crate) struct DisplayRowLispStringSourceSessionRequest {
-    source_id: u64,
+    source_id: DisplayRowLispStringSourceId,
     value: Value,
     base_face_id: u32,
 }
@@ -1262,11 +1272,7 @@ pub(crate) struct DisplayRowLispStringSourceSessionRowRequest<'a> {
 
 impl<'a> DisplayRowLispStringRenderRequest<'a> {
     pub(crate) fn new(row_request: DisplayRowSourceRenderRequest<'a>, value: Value) -> Self {
-        Self {
-            row_request,
-            source_id: 1,
-            value,
-        }
+        Self { row_request, value }
     }
 
     fn into_render_parts(
@@ -1276,11 +1282,8 @@ impl<'a> DisplayRowLispStringRenderRequest<'a> {
         DisplayRowLispStringSourceSessionRequest,
     ) {
         let plan = self.row_request.into_render_plan();
-        let session_request = DisplayRowLispStringSourceSessionRequest::new(
-            self.source_id,
-            self.value,
-            plan.base_face_id,
-        );
+        let session_request =
+            DisplayRowLispStringSourceSessionRequest::new(self.value, plan.base_face_id);
         (plan, session_request)
     }
 
@@ -1429,9 +1432,9 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
 }
 
 impl DisplayRowLispStringSourceSessionRequest {
-    pub(crate) fn new(source_id: u64, value: Value, base_face_id: u32) -> Self {
+    pub(crate) fn new(value: Value, base_face_id: u32) -> Self {
         Self {
-            source_id,
+            source_id: DisplayRowLispStringSourceId::ROOT,
             value,
             base_face_id,
         }
@@ -1456,7 +1459,7 @@ pub(crate) struct DisplayRowLispStringSourceSession {
 impl DisplayRowLispStringSourceSession {
     pub(crate) fn new(request: DisplayRowLispStringSourceSessionRequest) -> Option<Self> {
         let source = LispStringSourceCursor::new(
-            request.source_id,
+            request.source_id.raw(),
             request.value,
             RenderFaceRef::FaceId(request.base_face_id),
         )?;

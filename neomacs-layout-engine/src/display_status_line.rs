@@ -750,7 +750,7 @@ impl LayoutEngine {
             face_ids.allocate()
         };
         let session_request =
-            DisplayRowLispStringSourceSessionRequest::new(1, echo_message, base_face_id);
+            DisplayRowLispStringSourceSessionRequest::new(echo_message, base_face_id);
         let Some(mut source_session) = DisplayRowLispStringSourceSession::new(session_request)
         else {
             return empty_minibuffer_echo_row(y, ascent, row_height);

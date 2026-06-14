@@ -698,7 +698,7 @@ fn lisp_string_source_session_renders_rows_from_typed_row_requests() {
     let base_face_id = 7;
     let mut face_ids = FrameFaceIdAllocator::new(8);
     let mut session = DisplayRowLispStringSourceSession::new(
-        DisplayRowLispStringSourceSessionRequest::new(1, Value::string("ABCD"), base_face_id),
+        DisplayRowLispStringSourceSessionRequest::new(Value::string("ABCD"), base_face_id),
     )
     .expect("lisp string source session");
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
