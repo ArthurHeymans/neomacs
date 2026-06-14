@@ -623,24 +623,17 @@ impl LispStringSourceAppendRequest {
         }
     }
 
-    fn into_parts(self) -> LispStringSourceAppendRequestParts {
-        LispStringSourceAppendRequestParts {
-            position: self.position,
-            source_id: self.source_id,
-            value: self.value,
-        }
-    }
-
     fn position(self) -> DisplayRowPosition {
         self.position
     }
-}
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct LispStringSourceAppendRequestParts {
-    position: DisplayRowPosition,
-    source_id: LispStringSourceId,
-    value: Value,
+    fn into_source(self, base_face_id: u32) -> Option<LispStringSourceCursor> {
+        LispStringSourceCursor::new(
+            self.source_id.raw(),
+            self.value,
+            RenderFaceRef::FaceId(base_face_id),
+        )
+    }
 }
 
 pub(crate) struct LispStringSourceAppendSession<'a> {
@@ -656,12 +649,7 @@ impl<'a> LispStringSourceAppendSession<'a> {
         base_face_id: u32,
         base_face: &'a ResolvedFace,
     ) -> Option<Self> {
-        let parts = request.into_parts();
-        let source = LispStringSourceCursor::new(
-            parts.source_id.raw(),
-            parts.value,
-            RenderFaceRef::FaceId(base_face_id),
-        )?;
+        let source = request.into_source(base_face_id)?;
         Some(Self {
             source,
             source_state: DisplayRowSourceState::default(),
@@ -919,6 +907,14 @@ impl OverlayStringRenderSource {
     pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
         BaseFacePolicy::OverlayStringAtAnchor
     }
+
+    fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
+        LispStringSourceAppendRequest::new(
+            position,
+            LispStringSourceId::OVERLAY_STRING,
+            self.value(),
+        )
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1138,14 +1134,10 @@ fn render_overlay_string<B: LayoutBufferView>(
         }};
     }
 
-    let append_request = LispStringSourceAppendRequest::new(
-        DisplayRowPosition {
-            x_px: *x,
-            col: *col,
-        },
-        LispStringSourceId::OVERLAY_STRING,
-        text_value,
-    );
+    let append_request = source_request.append_request(DisplayRowPosition {
+        x_px: *x,
+        col: *col,
+    });
     let Some(mut source_context) = LispStringSourceRowAppendSession::new(
         append_request,
         base_face.face_id(),
@@ -1721,34 +1713,27 @@ pub(crate) fn append_lisp_string_to_text_row(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> DisplayRowPosition {
-    let Some(mut source) = crate::display_source::LispStringSourceCursor::new(
-        source_id,
-        text_value,
-        RenderFaceRef::FaceId(base_face_id),
-    ) else {
+    let request =
+        LispStringSourceAppendRequest::new(position, LispStringSourceId(source_id), text_value);
+    let Some(mut source_session) =
+        LispStringSourceAppendSession::new(request, base_face_id, base_face)
+    else {
         return position;
     };
-    let request = frame.source_append_request(
-        position,
-        base_face_id,
-        base_face,
-        DisplayRowAppendKind::SourceText,
-    );
-    let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
-    let Some(outcome) = request.render_natural_display_source_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        &mut font_metrics,
-        &mut source,
-        &mut source_state,
-        face_resolver,
-        face_ids,
-    ) else {
-        return position;
-    };
-    outcome.end_position()
+    source_session
+        .render_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            &mut font_metrics,
+            face_resolver,
+            face_ids,
+            frame,
+            position,
+        )
+        .map(|outcome| outcome.end_position())
+        .unwrap_or(position)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3398,8 +3383,60 @@ impl DisplayReplacementStringAppendItem {
         }
     }
 
-    fn source_append_request(&self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
-        LispStringSourceAppendRequest::new(position, self.source_id, self.value)
+    fn source_append_request(
+        &self,
+        replacement_source: BufferDisplayReplacementSource,
+        position: DisplayRowPosition,
+    ) -> DisplayReplacementStringSourceAppendRequest {
+        DisplayReplacementStringSourceAppendRequest::new(
+            position,
+            self.source_id,
+            self.value,
+            replacement_source,
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DisplayReplacementStringSourceAppendRequest {
+    position: DisplayRowPosition,
+    source_id: LispStringSourceId,
+    value: Value,
+    replacement_source: BufferDisplayReplacementSource,
+}
+
+impl DisplayReplacementStringSourceAppendRequest {
+    fn new(
+        position: DisplayRowPosition,
+        source_id: LispStringSourceId,
+        value: Value,
+        replacement_source: BufferDisplayReplacementSource,
+    ) -> Self {
+        Self {
+            position,
+            source_id,
+            value,
+            replacement_source,
+        }
+    }
+
+    fn position(self) -> DisplayRowPosition {
+        self.position
+    }
+
+    fn into_source(
+        self,
+        fallback_face_id: u32,
+    ) -> Option<BufferDisplayReplacementStringSource<LispStringSourceCursor>> {
+        let string_source = LispStringSourceCursor::new(
+            self.source_id.raw(),
+            self.value,
+            RenderFaceRef::FaceId(fallback_face_id),
+        )?;
+        Some(BufferDisplayReplacementStringSource::new(
+            self.replacement_source,
+            string_source,
+        ))
     }
 }
 
@@ -4807,7 +4844,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
-        let request = item.source_append_request(position);
+        let request = item.source_append_request(self.replacement_source, position);
         let mut item_policy = item.string_item_measurer();
         self.append_string_source_request_to_text_row(
             builder,
@@ -4830,24 +4867,20 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
-        request: LispStringSourceAppendRequest,
+        request: DisplayReplacementStringSourceAppendRequest,
         item_policy: &mut impl DisplayRowRenderPolicy,
     ) -> DisplayRowPosition {
-        let parts = request.into_parts();
-        append_display_replacement_string_value_to_text_row(
+        append_display_replacement_string_request_to_text_row(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            parts.value,
-            self.replacement_source,
-            parts.source_id.raw(),
+            request,
             face_resolver,
             self.base_face,
             self.face_id,
             face_ids,
             self.frame.clone(),
-            parts.position,
             item_policy,
         )
     }
@@ -4920,30 +4953,23 @@ fn append_display_replacement_string_source_to_text_row<S: DisplayItemSource>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn append_display_replacement_string_value_to_text_row(
+fn append_display_replacement_string_request_to_text_row(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
     font_metrics: &mut Option<FontMetricsService>,
-    text_value: Value,
-    replacement_source: BufferDisplayReplacementSource,
-    source_id: u64,
+    request: DisplayReplacementStringSourceAppendRequest,
     face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     fallback_face_id: u32,
     face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
     item_policy: &mut impl DisplayRowRenderPolicy,
 ) -> DisplayRowPosition {
-    let Some(string_source) = LispStringSourceCursor::new(
-        source_id,
-        text_value,
-        RenderFaceRef::FaceId(fallback_face_id),
-    ) else {
+    let position = request.position();
+    let Some(source) = request.into_source(fallback_face_id) else {
         return position;
     };
-    let source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
     append_display_replacement_string_source_to_text_row(
         builder,
         output_emitter,

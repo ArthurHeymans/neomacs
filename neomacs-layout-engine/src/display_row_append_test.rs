@@ -834,16 +834,11 @@ fn display_row_prefix_source_builds_append_request_with_prefix_source_id() {
         .source_for_value(value, CharPos0::new(4))
         .expect("prefix source");
 
-    let request_parts = source
-        .append_request(DisplayRowPosition { x_px: 10.0, col: 2 })
-        .into_parts();
+    let request = source.append_request(DisplayRowPosition { x_px: 10.0, col: 2 });
 
-    assert_eq!(request_parts.value, value);
-    assert_eq!(request_parts.source_id, LispStringSourceId::PREFIX);
-    assert_eq!(
-        request_parts.position,
-        DisplayRowPosition { x_px: 10.0, col: 2 }
-    );
+    assert_eq!(request.value, value);
+    assert_eq!(request.source_id, LispStringSourceId::PREFIX);
+    assert_eq!(request.position, DisplayRowPosition { x_px: 10.0, col: 2 });
 }
 
 #[test]
@@ -3171,7 +3166,12 @@ fn display_replacement_active_face_measurer_names_cursor_and_display_width_polic
 
 #[test]
 fn display_replacement_string_append_item_names_cursor_and_source_policy() {
-    let _eval = Context::new();
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
     let value = Value::string("ab");
@@ -3188,17 +3188,19 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 
     assert_eq!(item.cursor_slot_width_px(), 8.0);
     assert!(!item.is_empty());
-    let request = item.source_append_request(DisplayRowPosition { x_px: 2.0, col: 1 });
-    let request_parts = request.into_parts();
-    assert_eq!(request_parts.value, value);
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(4),
+        EmacsBytePos::new(4),
+    );
+    let request =
+        item.source_append_request(replacement_source, DisplayRowPosition { x_px: 2.0, col: 1 });
+    assert_eq!(request.value, value);
     assert_eq!(
-        request_parts.source_id,
+        request.source_id,
         LispStringSourceId::display_replacement(9)
     );
-    assert_eq!(
-        request_parts.position,
-        DisplayRowPosition { x_px: 2.0, col: 1 }
-    );
+    assert_eq!(request.position, DisplayRowPosition { x_px: 2.0, col: 1 });
     assert_eq!(
         item.origin(),
         DisplayOrigin::DisplayPropertyString {
@@ -4021,10 +4023,11 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
-    let request = LispStringSourceAppendRequest::new(
+    let request = DisplayReplacementStringSourceAppendRequest::new(
         DisplayRowPosition { x_px: 0.0, col: 0 },
         LispStringSourceId::display_replacement(1),
         value,
+        replacement_source,
     );
 
     let append_context =
