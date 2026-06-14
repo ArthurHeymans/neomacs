@@ -59,7 +59,7 @@ use crate::display_row_append::{
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
     BufferSelectiveDisplayContext, BufferSyntheticTextRenderContext,
     BufferSyntheticTextRenderState, BufferTextCharacterWrapSourceAction,
-    BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
+    BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceCharOverflowAction, BufferTextSourceCharPreparationRequest,
     BufferTextSourceCharPreparationState, BufferTextSourceCharRenderState,
@@ -2290,82 +2290,52 @@ impl LayoutEngine {
             decoded_source_char.record_word_wrap_candidate(&mut word_wrap, &output_emitter);
 
             if ch == '\n' {
-                let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
-                    buffer,
+                if BufferTextLineBreakRenderRequest::new(
                     decoded_source_char,
+                    text,
+                    text_start_byte,
+                    selective_display,
+                    params.tab_width,
+                    &active_face_state,
+                    point_charpos,
                     char_h,
                     params.extra_line_spacing,
-                );
-                line_break_action.capture_cursor_if_point(
-                    &mut cursor_info,
-                    &active_face_state,
-                    &row_geometry,
-                    point_charpos,
-                    x,
-                    col,
-                );
-                line_break_action.apply_before_row_transition(
-                    &row_geometry,
-                    &mut trailing_whitespace,
-                    &mut row_extend,
-                    &mut box_face,
-                    &mut output_emitter,
                     content_x,
-                    &mut x,
-                    &mut charpos,
-                );
-                // Record hit-test row (newline ends the row)
-                let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
-                let row_transition = DisplayRowTextWindowEmitContext::new(
+                    has_prefix,
                     row_geometry_defaults,
                     text_matrix_row_base,
-                    &mut row_y_positions,
                     max_rows,
-                    &mut row_geometry,
-                    &mut row_flags,
                     row_limit,
-                    &mut hit_rows,
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
                 )
-                .emit_line_break_then_row_start(
-                    line_break_transition,
-                    hit_row_range.range_to(charpos),
-                    DisplayRowPosition { x_px: x, col },
-                    line_break_action.line_spacing(),
-                    DisplayRowTransitionRenderState::new(
-                        &mut prefix_request,
-                        has_prefix,
-                        &mut line_numbers,
-                        &mut hscroll_skip,
-                        &mut word_wrap,
-                        &mut trailing_whitespace,
-                    ),
-                    &mut col,
-                );
-                if line_break_action
-                    .apply_after_line_break_row_transition(
-                        row_transition,
-                        sync_charpos_from_byte_idx(byte_idx),
-                        &mut charpos,
-                        &mut hit_row_range,
-                        &row_geometry,
-                        &mut box_face,
-                        content_x,
-                    )
-                    .should_break()
+                .render_and_apply(
+                    buffer,
+                    BufferTextLineBreakRenderState {
+                        byte_idx: &mut byte_idx,
+                        charpos: &mut charpos,
+                        cursor_info: &mut cursor_info,
+                        row_geometry: &mut row_geometry,
+                        trailing_whitespace: &mut trailing_whitespace,
+                        row_extend: &mut row_extend,
+                        box_face: &mut box_face,
+                        output_emitter: &mut output_emitter,
+                        x: &mut x,
+                        col: &mut col,
+                        prefix_request: &mut prefix_request,
+                        line_numbers: &mut line_numbers,
+                        hscroll_skip: &mut hscroll_skip,
+                        word_wrap: &mut word_wrap,
+                        row_flags: &mut row_flags,
+                        hit_rows: &mut hit_rows,
+                        hit_row_range: &mut hit_row_range,
+                        row_y_positions: &mut row_y_positions,
+                        builder: &mut self.matrix_builder,
+                        evaluator,
+                    },
+                )
+                .should_break()
                 {
                     break;
                 }
-                // Selective display: skip lines indented beyond threshold
-                let selective_display_context =
-                    BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
-                selective_display_context.apply_hidden_indented_lines_after_line_break(
-                    &mut byte_idx,
-                    &mut charpos,
-                    &mut line_numbers,
-                );
                 continue;
             }
 

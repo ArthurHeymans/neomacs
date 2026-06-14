@@ -1853,6 +1853,105 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
 }
 
 #[test]
+fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("\nnext");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut context = RowTransitionTestContext::new("line-break-render-request");
+    let active_face = test_active_face_state(9, 8.0);
+    let text = b"\nnext";
+    let mut byte_idx = 0;
+    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 0)
+        .expect("decoded newline");
+    let mut charpos = 0;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    trailing_whitespace.track_rendered_char(' ', context.geometry.start_marker_at_x(24.0));
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        context.geometry.current_row_marker(),
+        (Color::from_pixel(0x112233), 17),
+    );
+    let mut box_face = BoxFaceRowState::inactive();
+    box_face.activate(context.geometry.current_row_marker(), 8.0);
+    let mut x = 40.0;
+    let mut col = 5;
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut line_numbers = LineNumberRenderState::new(true, 1, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let row_limit = context.row_limit;
+
+    let continuation = BufferTextLineBreakRenderRequest::new(
+        source_char,
+        text,
+        0,
+        0,
+        8,
+        &active_face,
+        0,
+        16.0,
+        0.0,
+        0.0,
+        false,
+        context.defaults,
+        0,
+        4,
+        row_limit,
+    )
+    .render_and_apply(
+        &snapshot,
+        BufferTextLineBreakRenderState {
+            byte_idx: &mut byte_idx,
+            charpos: &mut charpos,
+            cursor_info: &mut cursor_info,
+            row_geometry: &mut context.geometry,
+            trailing_whitespace: &mut trailing_whitespace,
+            row_extend: &mut row_extend,
+            box_face: &mut box_face,
+            output_emitter: &mut context.output_emitter,
+            x: &mut x,
+            col: &mut col,
+            prefix_request: &mut prefix_request,
+            line_numbers: &mut line_numbers,
+            hscroll_skip: &mut hscroll_skip,
+            word_wrap: &mut word_wrap,
+            row_flags: &mut context.row_flags,
+            hit_rows: &mut context.hit_rows,
+            hit_row_range: &mut hit_row_range,
+            row_y_positions: &mut context.row_y_positions,
+            builder: &mut context.builder,
+            evaluator: &mut context.eval,
+        },
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 1);
+    assert_eq!(x, 0.0);
+    assert_eq!(col, 0);
+    assert_eq!(hit_row_range.start(), 1);
+    assert_eq!(context.row_y_positions.recorded(), &[0.0, 16.0]);
+    assert_eq!(
+        trailing_whitespace.highlight_start_x(&context.geometry),
+        None
+    );
+    assert_eq!(row_extend.value_on(&context.geometry), None);
+    assert_eq!(box_face.row(), context.geometry.current_row_marker());
+    assert_eq!(box_face.start_x(), Some(0.0));
+    assert!(cursor_info.as_ref().is_some());
+}
+
+#[test]
 fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_transition() {
     let mut charpos = 9;
     let mut hit_row_range = HitRowRangeTracker::new(3);

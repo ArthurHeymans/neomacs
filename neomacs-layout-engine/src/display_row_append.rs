@@ -385,6 +385,29 @@ pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
 }
 
+pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) box_face: &'emit mut BoxFaceRowState,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
+    pub(crate) row_flags: &'emit mut DisplayRowFlags,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+}
+
 pub(crate) struct DisplayRowTransitionRenderState<'a> {
     prefix_request: &'a mut DisplayRowPrefixRequest,
     has_prefix: bool,
@@ -5764,6 +5787,170 @@ pub(crate) struct BufferTextLineBreakSourceAction {
     charpos: i64,
     next_charpos: i64,
     line_spacing: f32,
+}
+
+pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
+    source_char: BufferTextDecodedSourceChar,
+    text: &'a [u8],
+    text_start_byte: usize,
+    selective_display: i32,
+    tab_width: i32,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    point_charpos: i64,
+    char_h: f32,
+    extra_line_spacing: f32,
+    content_x: f32,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    text_matrix_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+}
+
+impl<'a> BufferTextLineBreakRenderRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        source_char: BufferTextDecodedSourceChar,
+        text: &'a [u8],
+        text_start_byte: usize,
+        selective_display: i32,
+        tab_width: i32,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        point_charpos: i64,
+        char_h: f32,
+        extra_line_spacing: f32,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        text_matrix_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            source_char,
+            text,
+            text_start_byte,
+            selective_display,
+            tab_width,
+            active_face_state,
+            point_charpos,
+            char_h,
+            extra_line_spacing,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            text_matrix_row_base,
+            max_rows,
+            row_limit,
+        }
+    }
+
+    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: BufferTextLineBreakRenderState<'_, '_>,
+    ) -> DisplayRowTransitionContinuation {
+        let BufferTextLineBreakRenderState {
+            byte_idx,
+            charpos,
+            cursor_info,
+            row_geometry,
+            trailing_whitespace,
+            row_extend,
+            box_face,
+            output_emitter,
+            x,
+            col,
+            prefix_request,
+            line_numbers,
+            hscroll_skip,
+            word_wrap,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            builder,
+            evaluator,
+        } = state;
+
+        let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
+            buffer,
+            self.source_char,
+            self.char_h,
+            self.extra_line_spacing,
+        );
+        line_break_action.capture_cursor_if_point(
+            cursor_info,
+            self.active_face_state,
+            row_geometry,
+            self.point_charpos,
+            *x,
+            *col,
+        );
+        line_break_action.apply_before_row_transition(
+            row_geometry,
+            trailing_whitespace,
+            row_extend,
+            box_face,
+            output_emitter,
+            self.content_x,
+            x,
+            charpos,
+        );
+
+        let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
+        let row_transition = DisplayRowTextWindowEmitContext::new(
+            self.row_geometry_defaults,
+            self.text_matrix_row_base,
+            row_y_positions,
+            self.max_rows,
+            row_geometry,
+            row_flags,
+            self.row_limit,
+            hit_rows,
+            builder,
+            output_emitter,
+            evaluator,
+        )
+        .emit_line_break_then_row_start(
+            line_break_transition,
+            hit_row_range.range_to(*charpos),
+            DisplayRowPosition {
+                x_px: *x,
+                col: *col,
+            },
+            line_break_action.line_spacing(),
+            DisplayRowTransitionRenderState::new(
+                prefix_request,
+                self.has_prefix,
+                line_numbers,
+                hscroll_skip,
+                word_wrap,
+                trailing_whitespace,
+            ),
+            col,
+        );
+
+        let synced_charpos = buffer
+            .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(self.text_start_byte + *byte_idx))
+            .get() as i64;
+        let continuation = line_break_action.apply_after_line_break_row_transition(
+            row_transition,
+            synced_charpos,
+            charpos,
+            hit_row_range,
+            row_geometry,
+            box_face,
+            self.content_x,
+        );
+        if continuation.should_break() {
+            return continuation;
+        }
+
+        BufferSelectiveDisplayContext::new(self.text, self.selective_display, self.tab_width)
+            .apply_hidden_indented_lines_after_line_break(byte_idx, charpos, line_numbers);
+        DisplayRowTransitionContinuation::Continue
+    }
 }
 
 impl BufferTextLineBreakSourceAction {
