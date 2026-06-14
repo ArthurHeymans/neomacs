@@ -7,7 +7,8 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
-    DisplayRowLineBreakTransitionPlan, OverlayStringRenderBatchSource,
+    DisplayRowLineBreakTransitionPlan, DisplayRowTransitionPrefixContext,
+    OverlayStringRenderBatchSource,
 };
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_row_walk_state::{
@@ -168,8 +169,7 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
 
     let mut col = 8;
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    DisplayRowLineBreakTransitionPlan::hidden_line_break().apply_row_start_prefix_action(
-        &mut col,
+    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
         &mut prefix_request,
         true,
         &mut line_numbers,
@@ -177,6 +177,8 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
         &mut word_wrap,
         &mut trailing,
     );
+    DisplayRowLineBreakTransitionPlan::hidden_line_break()
+        .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
 
     assert_eq!(col, 0);
     assert_eq!(prefix_request, DisplayRowPrefixRequest::Line);

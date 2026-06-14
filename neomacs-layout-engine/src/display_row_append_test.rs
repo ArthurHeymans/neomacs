@@ -24,7 +24,8 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowYPositions,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowStartMarker,
+    DisplayRowYPositions,
 };
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, FaceScanCheckpoint, WordWrapRenderState,
@@ -467,6 +468,96 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
             .is_set(1, DisplayRowFlagKind::Continuation)
     );
     assert_eq!(overflow_ctx.row_y_positions.recorded(), &[0.0, 16.0]);
+}
+
+#[test]
+fn display_row_transition_prefix_context_applies_row_start_line_break_policy() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    hscroll_skip.consume_columns(4);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    word_wrap.record_candidate(
+        'a',
+        0,
+        4,
+        2,
+        (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
+    );
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(8.0));
+    let mut col = 7;
+
+    let mut context = DisplayRowTransitionPrefixContext::new(
+        &mut prefix_request,
+        true,
+        &mut line_numbers,
+        &mut hscroll_skip,
+        &mut word_wrap,
+        &mut trailing_whitespace,
+    );
+    DisplayRowLineBreakTransitionPlan::hidden_line_break()
+        .apply_row_start_prefix_action(&mut col, &mut context);
+
+    assert_eq!(col, 0);
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::Line);
+    assert_eq!(line_numbers.current_line(), 5);
+    assert!(hscroll_skip.should_skip());
+    assert!(!word_wrap.has_candidate());
+    assert_eq!(
+        trailing_whitespace.start_marker(),
+        DisplayRowStartMarker::Inactive
+    );
+}
+
+#[test]
+fn display_row_transition_prefix_context_applies_overflow_wrap_policy() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    word_wrap.record_candidate(
+        'a',
+        0,
+        4,
+        2,
+        (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
+    );
+    let break_candidate = word_wrap.candidate();
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(8.0));
+    let col = 7;
+    let BufferTextSourceCharOverflowAction::WordWrap { transition, .. } =
+        BufferTextSourceCharOverflowAction::for_decision(BufferTextRowOverflowDecision::WordWrap {
+            break_candidate,
+        })
+    else {
+        panic!("expected word wrap transition");
+    };
+
+    let mut context = DisplayRowTransitionPrefixContext::new(
+        &mut prefix_request,
+        true,
+        &mut line_numbers,
+        &mut hscroll_skip,
+        &mut word_wrap,
+        &mut trailing_whitespace,
+    );
+    transition.apply_prefix_action(&mut context);
+
+    assert_eq!(col, 7);
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::Wrap);
+    assert_eq!(line_numbers.current_line(), 4);
+    assert!(!hscroll_skip.should_skip());
+    assert!(!word_wrap.has_candidate());
+    assert_eq!(
+        trailing_whitespace.start_marker(),
+        DisplayRowStartMarker::Inactive
+    );
 }
 
 #[test]

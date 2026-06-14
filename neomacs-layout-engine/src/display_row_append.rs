@@ -272,6 +272,15 @@ pub(crate) struct DisplayRowTextWindowTransitionContext<'a> {
     request_context: DisplayRowTransitionRequestContext<'a>,
 }
 
+pub(crate) struct DisplayRowTransitionPrefixContext<'a> {
+    prefix_request: &'a mut DisplayRowPrefixRequest,
+    has_prefix: bool,
+    line_numbers: &'a mut LineNumberRenderState,
+    hscroll_skip: &'a mut HorizontalScrollSkipState,
+    word_wrap: &'a mut WordWrapRenderState,
+    trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowLineBreakTransitionPlan {
     state_policy: TextRowTransitionStatePolicy,
@@ -453,6 +462,37 @@ impl<'a> DisplayRowTextWindowTransitionContext<'a> {
     }
 }
 
+impl<'a> DisplayRowTransitionPrefixContext<'a> {
+    pub(crate) fn new(
+        prefix_request: &'a mut DisplayRowPrefixRequest,
+        has_prefix: bool,
+        line_numbers: &'a mut LineNumberRenderState,
+        hscroll_skip: &'a mut HorizontalScrollSkipState,
+        word_wrap: &'a mut WordWrapRenderState,
+        trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
+    ) -> Self {
+        Self {
+            prefix_request,
+            has_prefix,
+            line_numbers,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+        }
+    }
+
+    fn apply_state_policy(&mut self, policy: TextRowTransitionStatePolicy) {
+        let prefix_action = policy.apply(
+            self.line_numbers,
+            self.hscroll_skip,
+            self.word_wrap,
+            self.trailing_whitespace,
+        );
+        self.prefix_request
+            .apply_transition_prefix_action(self.has_prefix, prefix_action);
+    }
+}
+
 impl DisplayRowLineBreakTransitionPlan {
     fn new(state_policy: TextRowTransitionStatePolicy) -> Self {
         Self { state_policy }
@@ -470,43 +510,17 @@ impl DisplayRowLineBreakTransitionPlan {
         Self::new(TextRowTransitionStatePolicy::line_break())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn apply_prefix_action(
-        self,
-        prefix_request: &mut DisplayRowPrefixRequest,
-        has_prefix: bool,
-        line_numbers: &mut LineNumberRenderState,
-        hscroll_skip: &mut HorizontalScrollSkipState,
-        word_wrap: &mut WordWrapRenderState,
-        trailing_whitespace: &mut TrailingWhitespaceRenderState,
-    ) {
-        prefix_request.apply_transition_prefix_action(
-            has_prefix,
-            self.state_policy
-                .apply(line_numbers, hscroll_skip, word_wrap, trailing_whitespace),
-        );
+    pub(crate) fn apply_prefix_action(self, context: &mut DisplayRowTransitionPrefixContext<'_>) {
+        context.apply_state_policy(self.state_policy);
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn apply_row_start_prefix_action(
         self,
         col: &mut usize,
-        prefix_request: &mut DisplayRowPrefixRequest,
-        has_prefix: bool,
-        line_numbers: &mut LineNumberRenderState,
-        hscroll_skip: &mut HorizontalScrollSkipState,
-        word_wrap: &mut WordWrapRenderState,
-        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        context: &mut DisplayRowTransitionPrefixContext<'_>,
     ) {
         *col = 0;
-        self.apply_prefix_action(
-            prefix_request,
-            has_prefix,
-            line_numbers,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
-        );
+        self.apply_prefix_action(context);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -612,43 +626,17 @@ impl DisplayRowOverflowTransitionPlan {
         Self::new(DisplayRowOverflowTransitionKind::VisualWrap, state_policy)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn apply_prefix_action(
-        self,
-        prefix_request: &mut DisplayRowPrefixRequest,
-        has_prefix: bool,
-        line_numbers: &mut LineNumberRenderState,
-        hscroll_skip: &mut HorizontalScrollSkipState,
-        word_wrap: &mut WordWrapRenderState,
-        trailing_whitespace: &mut TrailingWhitespaceRenderState,
-    ) {
-        prefix_request.apply_transition_prefix_action(
-            has_prefix,
-            self.state_policy
-                .apply(line_numbers, hscroll_skip, word_wrap, trailing_whitespace),
-        );
+    pub(crate) fn apply_prefix_action(self, context: &mut DisplayRowTransitionPrefixContext<'_>) {
+        context.apply_state_policy(self.state_policy);
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn apply_row_start_prefix_action(
         self,
         col: &mut usize,
-        prefix_request: &mut DisplayRowPrefixRequest,
-        has_prefix: bool,
-        line_numbers: &mut LineNumberRenderState,
-        hscroll_skip: &mut HorizontalScrollSkipState,
-        word_wrap: &mut WordWrapRenderState,
-        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        context: &mut DisplayRowTransitionPrefixContext<'_>,
     ) {
         *col = 0;
-        self.apply_prefix_action(
-            prefix_request,
-            has_prefix,
-            line_numbers,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
-        );
+        self.apply_prefix_action(context);
     }
 
     #[allow(clippy::too_many_arguments)]

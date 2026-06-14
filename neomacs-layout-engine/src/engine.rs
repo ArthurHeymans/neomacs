@@ -65,8 +65,8 @@ use crate::display_row_append::{
     BufferTextSourceChar, BufferTextSourceCharOverflowAction,
     BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
     DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowTransitionContext,
-    LispStringRowAppendContext, SyntheticTextAppendRequest, SyntheticTextMarker,
-    TextWindowAppendSurfaceRequest,
+    DisplayRowTransitionPrefixContext, LispStringRowAppendContext, SyntheticTextAppendRequest,
+    SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2238,8 +2238,7 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    line_break_transition.apply_row_start_prefix_action(
-                        &mut col,
+                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
@@ -2247,6 +2246,8 @@ impl LayoutEngine {
                         &mut word_wrap,
                         &mut trailing_whitespace,
                     );
+                    line_break_transition
+                        .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
                     if cursor_info.is_missing() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
@@ -2487,8 +2488,7 @@ impl LayoutEngine {
                         }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_range.advance_to(charpos);
-                        line_break_transition.apply_row_start_prefix_action(
-                            &mut col,
+                        let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                             &mut prefix_request,
                             has_prefix,
                             &mut line_numbers,
@@ -2496,6 +2496,8 @@ impl LayoutEngine {
                             &mut word_wrap,
                             &mut trailing_whitespace,
                         );
+                        line_break_transition
+                            .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
                         break;
                     }
                 }
@@ -2590,8 +2592,7 @@ impl LayoutEngine {
                 charpos = sync_charpos_from_byte_idx(byte_idx);
                 hit_row_range.advance_to(charpos);
                 box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
-                line_break_transition.apply_row_start_prefix_action(
-                    &mut col,
+                let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                     &mut prefix_request,
                     has_prefix,
                     &mut line_numbers,
@@ -2599,6 +2600,8 @@ impl LayoutEngine {
                     &mut word_wrap,
                     &mut trailing_whitespace,
                 );
+                line_break_transition
+                    .apply_row_start_prefix_action(&mut col, &mut transition_prefix);
                 // Selective display: skip lines indented beyond threshold
                 if selective_display > 0 && selective_display < i32::MAX && byte_idx < text.len() {
                     loop {
@@ -2723,14 +2726,17 @@ impl LayoutEngine {
                                 }
                                 charpos = sync_charpos_from_byte_idx(byte_idx);
                                 hit_row_range.advance_to(charpos);
-                                transition.apply_row_start_prefix_action(
-                                    &mut col,
+                                let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                                     &mut prefix_request,
                                     has_prefix,
                                     &mut line_numbers,
                                     &mut hscroll_skip,
                                     &mut word_wrap,
                                     &mut trailing_whitespace,
+                                );
+                                transition.apply_row_start_prefix_action(
+                                    &mut col,
+                                    &mut transition_prefix,
                                 );
                                 continue;
                             }
@@ -2761,14 +2767,17 @@ impl LayoutEngine {
                                 if row_transition.is_exhausted() {
                                     break;
                                 }
-                                transition.apply_row_start_prefix_action(
-                                    &mut col,
+                                let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                                     &mut prefix_request,
                                     has_prefix,
                                     &mut line_numbers,
                                     &mut hscroll_skip,
                                     &mut word_wrap,
                                     &mut trailing_whitespace,
+                                );
+                                transition.apply_row_start_prefix_action(
+                                    &mut col,
+                                    &mut transition_prefix,
                                 );
                                 if !row_geometry.current_row_is_visible(row_visibility_limit) {
                                     break;
@@ -2843,8 +2852,7 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    transition.apply_row_start_prefix_action(
-                        &mut col,
+                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
@@ -2852,6 +2860,7 @@ impl LayoutEngine {
                         &mut word_wrap,
                         &mut trailing_whitespace,
                     );
+                    transition.apply_row_start_prefix_action(&mut col, &mut transition_prefix);
                     continue;
                 }
                 BufferTextSourceCharOverflowAction::WordWrap {
@@ -2896,7 +2905,7 @@ impl LayoutEngine {
                     }
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_range.advance_to(charpos);
-                    transition.apply_prefix_action(
+                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
@@ -2904,6 +2913,7 @@ impl LayoutEngine {
                         &mut word_wrap,
                         &mut trailing_whitespace,
                     );
+                    transition.apply_prefix_action(&mut transition_prefix);
 
                     // Force face re-check since we rewound
                     face_scan.invalidate();
@@ -2939,8 +2949,7 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    transition.apply_row_start_prefix_action(
-                        &mut col,
+                    let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
@@ -2948,6 +2957,7 @@ impl LayoutEngine {
                         &mut word_wrap,
                         &mut trailing_whitespace,
                     );
+                    transition.apply_row_start_prefix_action(&mut col, &mut transition_prefix);
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_range.advance_to(charpos);
