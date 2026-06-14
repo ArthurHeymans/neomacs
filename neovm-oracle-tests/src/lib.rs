@@ -1801,6 +1801,7 @@ mod divergence_casefold_matrix;
 mod divergence_audit_editfns;
 mod divergence_audit_fileio;
 mod divergence_audit_core;
+mod divergence_audit_display;
 mod divergence_audit_regex;
 mod divergence_audit_quotes_casefold;
 mod divergence_completion;

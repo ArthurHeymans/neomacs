@@ -50,6 +50,14 @@ stickiness, mark-marker relocation, `expand-file-name` (../.., //, trailing),
 `directory-files` dot handling, marker relocation over multibyte, regex
 backrefs/shy-groups/intervals/non-greedy/word-boundaries/`\ca`/`\&`/`\1`.
 
+## Theme E — display/indent column accounting ignores display constructs (6)
+- `current-column` / `move-to-column` ignore the `display` text property
+  (glyph width), `display` slice/multi-glyph, `buffer-display-table` glyph
+  replacement, and composition (multi-char → one glyph). Root: neovm-core
+  indent.rs scan_for_column vs GNU indent.c current_column_1.
+  `div_adisp_*` tests (12 tests, 6 fail). Invisible text, `display (height)`,
+  and tabs are handled correctly (controls pass).
+
 ## Files
 `divergence_audit_{casefiddle,editfns,fileio,regex,quotes_casefold}.rs`,
 `divergence_casefold_matrix.rs`.
