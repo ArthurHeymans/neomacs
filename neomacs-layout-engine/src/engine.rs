@@ -31,6 +31,7 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_frame_output::WindowScrollBarsRenderRequest;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -83,22 +84,13 @@ use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
     WindowTransitionKind,
 };
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, ScrollBarItem};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
-
-#[derive(Clone, Copy, Debug)]
-struct ScrollBarMetrics {
-    position: i64,
-    portion: i64,
-    whole: i64,
-    thumb_start: f32,
-    thumb_size: f32,
-}
 
 #[cfg(test)]
 #[inline]
@@ -352,141 +344,12 @@ impl LayoutEngine {
             .iter()
             .rev()
             .find(|info| info.window_id == params.window_id)
+            .cloned()
         else {
             return;
         };
-        let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
-        let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
-        let chrome_top = params.header_line_height + params.tab_line_height;
-        let chrome_bottom = params.mode_line_height + params.scroll_bar_pixel_height;
-
-        // --- Vertical scroll bar ---
-        if let Some(ref side) = params.vertical_scroll_bar_side {
-            let track_height = (params.bounds.height - chrome_top - chrome_bottom).max(0.0);
-            if track_height <= 0.0 {
-                return;
-            }
-            let track_width = params.scroll_bar_pixel_width;
-
-            let x = if side == "left" {
-                params.bounds.x
-            } else {
-                params.bounds.x + params.bounds.width - track_width
-            };
-            let y = params.bounds.y + chrome_top;
-
-            let accessible_start = params.accessible_start_charpos().get();
-            let accessible_end = params.accessible_end_charpos().get();
-            let metrics = Self::compute_vertical_scroll_bar_metrics(
-                info.window_start,
-                info.window_end,
-                accessible_start,
-                accessible_end,
-                track_height,
-            );
-
-            self.matrix_builder.push_scroll_bar(ScrollBarItem {
-                window_id: params.window_id,
-                row_role: GlyphRowRole::Text,
-                clip_rect: Some(params.bounds),
-                horizontal: false,
-                x,
-                y,
-                width: track_width,
-                height: track_height,
-                position: metrics.position,
-                portion: metrics.portion,
-                whole: metrics.whole,
-                thumb_start: metrics.thumb_start,
-                thumb_size: metrics.thumb_size,
-                track_color,
-                thumb_color,
-            });
-        }
-
-        // --- Horizontal scroll bar ---
-        if params.horizontal_scroll_bar {
-            let track_width = params.bounds.width;
-            let track_height = params.scroll_bar_pixel_height;
-            let x = params.bounds.x;
-            let y = params.bounds.y + params.bounds.height
-                - params.mode_line_height
-                - params.scroll_bar_pixel_height;
-
-            let hscroll_px = params.hscroll as f32 * params.char_width;
-            let visible_px = params.text_bounds.width.max(1.0);
-            let thumb_size = if track_width > 0.0 {
-                (visible_px / (visible_px + hscroll_px + track_width)) * track_width
-            } else {
-                track_width
-            }
-            .clamp(8.0, track_width);
-            let thumb_start = if track_width > 0.0 && hscroll_px + visible_px > 0.0 {
-                (hscroll_px / (hscroll_px + visible_px)) * (track_width - thumb_size)
-            } else {
-                0.0
-            };
-
-            self.matrix_builder.push_scroll_bar(ScrollBarItem {
-                window_id: params.window_id,
-                row_role: GlyphRowRole::Text,
-                clip_rect: Some(params.bounds),
-                horizontal: true,
-                x,
-                y,
-                width: track_width,
-                height: track_height,
-                position: params.hscroll as i64,
-                portion: visible_px.round().max(1.0) as i64,
-                whole: (visible_px + hscroll_px).round().max(1.0) as i64,
-                thumb_start,
-                thumb_size,
-                track_color,
-                thumb_color,
-            });
-        }
-    }
-
-    /// Compute vertical scroll bar thumb position and size.
-    ///
-    /// Mirrors GNU `set_vertical_scroll_bar` (xdisp.c:20109-20161):
-    ///   whole = ZV - BEGV
-    ///   start = window_start - BEGV
-    ///   end   = Z - window_end_pos - BEGV
-    ///   portion = end - start
-    fn compute_vertical_scroll_bar_metrics(
-        window_start: i64,
-        window_end: i64,
-        buffer_begv: i64,
-        buffer_size: i64,
-        track_height: f32,
-    ) -> ScrollBarMetrics {
-        let whole = (buffer_size - buffer_begv).max(1);
-        let position = (window_start - 1 - buffer_begv).max(0);
-        let end = if window_end > 0 {
-            (window_end - 1 - buffer_begv).max(position)
-        } else {
-            position
-        };
-        let portion = (end - position).max(1);
-        let effective_whole = whole.max(portion);
-
-        let thumb_start = (position as f32 / effective_whole as f32) * track_height;
-        let thumb_size = (portion as f32 / effective_whole as f32) * track_height;
-        // Minimum thumb height: 20px or 20% of track, whichever is smaller.
-        let min_thumb = 20.0f32.min(track_height * 0.2);
-        let thumb_size = thumb_size.max(min_thumb).min(track_height);
-        let thumb_start = thumb_start
-            .max(0.0)
-            .min((track_height - thumb_size).max(0.0));
-
-        ScrollBarMetrics {
-            position,
-            portion,
-            whole: effective_whole,
-            thumb_start,
-            thumb_size,
-        }
+        WindowScrollBarsRenderRequest::new(params, &info)
+            .render_and_apply(&mut self.matrix_builder);
     }
 
     fn push_window_divider_rects(
