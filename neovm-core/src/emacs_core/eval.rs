@@ -2035,7 +2035,10 @@ pub(crate) fn plan_require_in_state(
 
     let filename = match filename {
         Some(v) if v.is_nil() => name.clone(),
-        Some(v) if v.is_string() => runtime_string_value(v),
+        Some(v) if v.is_string() => v
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+            .unwrap_or_default(),
         Some(other) => {
             return Err(signal(
                 "wrong-type-argument",
@@ -9479,7 +9482,10 @@ impl Context {
             {
                 tracing::debug!(
                     "SETQ default-directory to MULTIBYTE string: {:?}",
-                    runtime_string_value(value),
+                    value
+                        .as_lisp_string()
+                        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+                        .unwrap_or_default(),
                 );
             }
             self.assign_with_watchers_by_id(resolved_id, value, "set")?;
@@ -14132,8 +14138,3 @@ fn value_list_to_values(list: &Value) -> LispArgVec {
 #[cfg(test)]
 #[path = "eval_test.rs"]
 mod tests;
-fn runtime_string_value(value: Value) -> String {
-    value
-        .as_runtime_string_owned()
-        .expect("ValueKind::String must carry LispString payload")
-}
