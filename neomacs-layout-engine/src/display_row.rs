@@ -1747,9 +1747,9 @@ pub(crate) struct DisplayRowSourceAppendRequest<'face> {
     base_face_id: u32,
 }
 
-pub(crate) struct DisplayRowSourceAppendRenderParts<'face> {
-    pub(crate) request: DisplayRowSourceRenderRequest<'face>,
-    pub(crate) output: TextRowOutput,
+struct DisplayRowSourceAppendRenderParts<'face> {
+    request: DisplayRowSourceRenderRequest<'face>,
+    output: TextRowOutput,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1829,11 +1829,36 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         self.base_face_id
     }
 
-    pub(crate) fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
+    fn into_render_parts(self) -> DisplayRowSourceAppendRenderParts<'face> {
         DisplayRowSourceAppendRenderParts {
             request: self.request,
             output: self.output,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_bounds(&self) -> DisplayRowRenderBounds {
+        self.request.render_bounds()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn role(&self) -> GlyphRowRole {
+        self.request.role()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn base_face_ref(&self) -> RenderFaceRef {
+        self.request.base_face_ref()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn geometry(&self) -> &DisplayRowGeometry {
+        self.request.geometry()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn output(&self) -> TextRowOutput {
+        self.output
     }
 
     pub(crate) fn with_measurement_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {

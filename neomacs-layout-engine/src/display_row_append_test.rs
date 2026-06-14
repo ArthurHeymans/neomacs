@@ -1148,16 +1148,15 @@ fn display_row_append_surface_builds_positioned_source_requests() {
         request.start_position(),
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    let parts = request.into_render_parts();
     assert_eq!(
-        parts.request.render_bounds().start,
+        request.render_bounds().start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(parts.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(parts.request.role(), GlyphRowRole::Text);
-    assert_eq!(parts.request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.render_bounds().max_x_px, 128.0);
+    assert_eq!(request.role(), GlyphRowRole::Text);
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
     assert_eq!(
-        *parts.request.geometry(),
+        *request.geometry(),
         DisplayRowGeometry {
             y: 20.0,
             width: 120.0,
@@ -1167,10 +1166,10 @@ fn display_row_append_surface_builds_positioned_source_requests() {
             tab_policy,
         }
     );
-    assert_eq!(parts.output.row, 3);
-    assert_eq!(parts.output.row_y, 20.0);
-    assert_eq!(parts.output.glyph_y, 22.0);
-    assert_eq!(parts.output.height, 16.0);
+    assert_eq!(request.output().row, 3);
+    assert_eq!(request.output().row_y, 20.0);
+    assert_eq!(request.output().glyph_y, 22.0);
+    assert_eq!(request.output().height, 16.0);
 }
 
 #[test]
@@ -1200,74 +1199,63 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let ordinary = frame
-        .source_append_request(position, 42, base_face, DisplayRowAppendKind::SourceText)
-        .into_render_parts();
+    let ordinary =
+        frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::SourceText);
     assert_eq!(
-        ordinary.request.render_bounds().start,
+        ordinary.render_bounds().start,
         DisplayRowPosition { x_px: 8.0, col: 0 }
     );
-    assert_eq!(ordinary.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(ordinary.request.geometry().char_width, 9.0);
-    assert_eq!(ordinary.output.row, 3);
-    assert_eq!(ordinary.output.row_y, 20.0);
-    assert_eq!(ordinary.output.glyph_y, 22.0);
-    assert_eq!(ordinary.output.height, 16.0);
+    assert_eq!(ordinary.render_bounds().max_x_px, 128.0);
+    assert_eq!(ordinary.geometry().char_width, 9.0);
+    assert_eq!(ordinary.output().row, 3);
+    assert_eq!(ordinary.output().row_y, 20.0);
+    assert_eq!(ordinary.output().glyph_y, 22.0);
+    assert_eq!(ordinary.output().height, 16.0);
 
-    let tab = frame
-        .source_append_request(position, 42, base_face, DisplayRowAppendKind::Tab)
-        .into_render_parts();
-    assert_eq!(tab.request.render_bounds().max_x_px, f32::INFINITY);
-    assert_eq!(tab.request.geometry().char_width, 7.0);
-    assert_eq!(tab.output.height, 14.0);
+    let tab = frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::Tab);
+    assert_eq!(tab.render_bounds().max_x_px, f32::INFINITY);
+    assert_eq!(tab.geometry().char_width, 7.0);
+    assert_eq!(tab.output().height, 14.0);
 
-    let control = frame
-        .source_append_request(position, 42, base_face, DisplayRowAppendKind::ControlChar)
-        .into_render_parts();
-    assert_eq!(control.request.render_bounds().max_x_px, 148.0);
-    assert_eq!(control.request.geometry().char_width, 9.0);
-    assert_eq!(control.output.height, 14.0);
+    let control =
+        frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::ControlChar);
+    assert_eq!(control.render_bounds().max_x_px, 148.0);
+    assert_eq!(control.geometry().char_width, 9.0);
+    assert_eq!(control.output().height, 14.0);
 
-    let mapped = frame
-        .source_append_request(
-            position,
-            42,
-            base_face,
-            DisplayRowAppendKind::SourceMappedText,
-        )
-        .into_render_parts();
-    assert_eq!(mapped.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(mapped.output.height, 14.0);
+    let mapped = frame.source_append_request(
+        position,
+        42,
+        base_face,
+        DisplayRowAppendKind::SourceMappedText,
+    );
+    assert_eq!(mapped.render_bounds().max_x_px, 128.0);
+    assert_eq!(mapped.output().height, 14.0);
 
-    let glyphless = frame
-        .source_append_request(position, 42, base_face, DisplayRowAppendKind::Glyphless)
-        .into_render_parts();
-    assert_eq!(glyphless.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(glyphless.output.height, 16.0);
+    let glyphless =
+        frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::Glyphless);
+    assert_eq!(glyphless.render_bounds().max_x_px, 128.0);
+    assert_eq!(glyphless.output().height, 16.0);
 
-    let replacement = frame
-        .source_append_request(
-            position,
-            42,
-            base_face,
-            DisplayRowAppendKind::DisplayReplacement,
-        )
-        .into_render_parts();
-    assert_eq!(replacement.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(replacement.request.geometry().char_width, 9.0);
-    assert_eq!(replacement.output.height, 16.0);
+    let replacement = frame.source_append_request(
+        position,
+        42,
+        base_face,
+        DisplayRowAppendKind::DisplayReplacement,
+    );
+    assert_eq!(replacement.render_bounds().max_x_px, 128.0);
+    assert_eq!(replacement.geometry().char_width, 9.0);
+    assert_eq!(replacement.output().height, 16.0);
 
-    let replacement_string = frame
-        .source_append_request(
-            position,
-            42,
-            base_face,
-            DisplayRowAppendKind::DisplayReplacementString,
-        )
-        .into_render_parts();
-    assert_eq!(replacement_string.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(replacement_string.request.geometry().char_width, 7.0);
-    assert_eq!(replacement_string.output.height, 16.0);
+    let replacement_string = frame.source_append_request(
+        position,
+        42,
+        base_face,
+        DisplayRowAppendKind::DisplayReplacementString,
+    );
+    assert_eq!(replacement_string.render_bounds().max_x_px, 128.0);
+    assert_eq!(replacement_string.geometry().char_width, 7.0);
+    assert_eq!(replacement_string.output().height, 16.0);
 }
 
 #[test]
@@ -1348,10 +1336,9 @@ fn display_row_append_frame_builds_positioned_source_request() {
         request.start_position(),
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    let parts = request.into_render_parts();
-    assert_eq!(parts.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(parts.request.base_face_ref(), RenderFaceRef::FaceId(42));
-    assert_eq!(parts.output.row, 3);
+    assert_eq!(request.render_bounds().max_x_px, 128.0);
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.output().row, 3);
 }
 
 #[test]
@@ -1391,10 +1378,9 @@ fn display_row_append_frame_builds_source_request_directly() {
         request.start_position(),
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    let parts = request.into_render_parts();
-    assert_eq!(parts.request.render_bounds().max_x_px, 128.0);
-    assert_eq!(parts.request.base_face_ref(), RenderFaceRef::FaceId(42));
-    assert_eq!(parts.output.row, 3);
+    assert_eq!(request.render_bounds().max_x_px, 128.0);
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.output().row, 3);
 }
 
 #[test]
@@ -1435,14 +1421,13 @@ fn display_row_source_append_request_uses_frame_policy() {
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
     assert_eq!(request.base_face_id(), 42);
-    let parts = request.into_render_parts();
     assert_eq!(
-        parts.request.render_bounds().start,
+        request.render_bounds().start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(parts.request.render_bounds().max_x_px, 148.0);
-    assert_eq!(parts.request.geometry().height, 16.0);
-    assert_eq!(parts.output.height, 14.0);
+    assert_eq!(request.render_bounds().max_x_px, 148.0);
+    assert_eq!(request.geometry().height, 16.0);
+    assert_eq!(request.output().height, 14.0);
 }
 
 #[test]
@@ -1482,15 +1467,14 @@ fn display_row_append_frame_builds_source_append_request() {
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
     assert_eq!(request.base_face_id(), 42);
-    let parts = request.into_render_parts();
     assert_eq!(
-        parts.request.render_bounds().start,
+        request.render_bounds().start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(parts.request.render_bounds().max_x_px, 148.0);
-    assert_eq!(parts.request.base_face_id(), 42);
-    assert_eq!(parts.output.row, 3);
-    assert_eq!(parts.output.height, 14.0);
+    assert_eq!(request.render_bounds().max_x_px, 148.0);
+    assert_eq!(request.base_face_id(), 42);
+    assert_eq!(request.output().row, 3);
+    assert_eq!(request.output().height, 14.0);
 }
 
 #[test]
