@@ -23,12 +23,12 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowFinishInstallState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
-    BufferTextWindowLocalDisplayPolicy, BufferTextWindowLoopRenderState,
+    BufferTextWindowBodyInstallRenderState, BufferTextWindowFinishInstallState,
+    BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
     BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopRenderState,
     BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
-    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
+    BufferTextWindowTailRequestContext, BufferTextWindowWalkRenderState,
     BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
@@ -1096,7 +1096,7 @@ impl LayoutEngine {
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
-        let walk_setup = BufferTextWindowWalkSetupRequest::new(
+        let mut walk_setup = BufferTextWindowWalkSetupRequest::new(
             window_start,
             content_x,
             text_x,
@@ -1121,6 +1121,7 @@ impl LayoutEngine {
             params.trailing_ws_bg,
         )
         .into_setup();
+        let text_append_surface = walk_setup.text_append_surface.clone();
         let BufferTextWindowOutputSetup {
             begin_request,
             row_visibility_limit,
@@ -1142,32 +1143,6 @@ impl LayoutEngine {
             text_height,
         )
         .into_setup(max_rows, &walk_setup);
-        let BufferTextWindowWalkSetup {
-            mut x,
-            mut col,
-            mut byte_idx,
-            mut charpos,
-            text_area_left,
-            window_top,
-            mut text_property_checkpoints,
-            mut raise_span,
-            mut height_span,
-            mut row_flags,
-            mut hscroll_skip,
-            mut word_wrap,
-            mut prefix_request,
-            text_append_surface,
-            row_geometry_defaults,
-            mut row_geometry,
-            mut row_y_positions,
-            mut trailing_whitespace,
-            mut buffer_text_append_state,
-            mut row_extend,
-            mut box_face,
-            mut cursor_info,
-            mut hit_rows,
-            mut hit_row_range,
-        } = walk_setup;
 
         let BufferTextWindowRenderContexts {
             has_overlays,
@@ -1204,7 +1179,7 @@ impl LayoutEngine {
             char_h,
             char_w,
             row_visibility_limit,
-            row_geometry_defaults,
+            walk_setup.row_geometry_defaults,
             text_matrix_row_base,
             max_rows,
             row_limit,
@@ -1218,8 +1193,8 @@ impl LayoutEngine {
             accessible_end,
             text_start_byte,
             text_matrix_row_base,
-            text_area_left,
-            window_top,
+            walk_setup.text_area_left,
+            walk_setup.window_top,
             text_y,
             text_height,
             content_x,
@@ -1229,7 +1204,7 @@ impl LayoutEngine {
             default_fg,
             max_rows,
             row_limit,
-            row_geometry_defaults,
+            walk_setup.row_geometry_defaults,
             retry_bounds,
             body_install_context,
             reserve_right_special_col,
@@ -1244,81 +1219,45 @@ impl LayoutEngine {
             evaluator,
         });
 
-        BufferTextWindowLoopRenderState::new(
-            &mut buffer_text_append_state,
-            &mut text_property_checkpoints,
-            &mut byte_idx,
-            &mut charpos,
-            &mut col,
-            &mut output_emitter,
-            &mut row_extend,
-            &mut box_face,
-            &mut x,
-            &mut line_numbers,
-            &mut row_geometry,
-            &mut row_flags,
-            &mut hit_rows,
-            &mut hit_row_range,
-            &mut self.matrix_builder,
-            evaluator,
-            &mut prefix_request,
-            &mut hscroll_skip,
-            &mut word_wrap,
-            &mut trailing_whitespace,
-            &mut face_scan,
-            &mut row_y_positions,
-            &mut self.font_metrics,
-            face_resolver,
-            &mut cursor_info,
-            &mut face_ids,
-            &mut raise_span,
-            &mut height_span,
-        )
-        .render_visible_steps(
+        walk_setup.render_visible_steps(
+            &mut BufferTextWindowWalkRenderState {
+                output_emitter: &mut output_emitter,
+                line_numbers: &mut line_numbers,
+                face_scan: &mut face_scan,
+                active_face_state: &mut active_face_state,
+                face_ids: &mut face_ids,
+                builder: &mut self.matrix_builder,
+                evaluator,
+                font_metrics: &mut self.font_metrics,
+                face_resolver,
+            },
             row_prelude_request_context,
             loop_request_context,
             face_resolution_context.clone(),
             text,
             params,
-            &text_append_surface,
             overlay_text_row_context,
-            &mut active_face_state,
             buffer,
         );
 
-        let post_loop_outcome = {
-            let mut post_loop_state = BufferTextWindowPostLoopState::new(
-                &mut output_emitter,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
+        let post_loop_outcome = walk_setup.render_tail_and_decide_retry(
+            &mut BufferTextWindowPostLoopRenderState {
+                output_emitter: &mut output_emitter,
+                face_ids: &mut face_ids,
+                builder: &mut self.matrix_builder,
                 evaluator,
-                &mut self.font_metrics,
+                font_metrics: &mut self.font_metrics,
                 face_resolver,
-                &row_flags,
-                &row_extend,
-                &box_face,
-            );
-            post_loop_state.render_tail_and_decide_retry(
-                loop_request_context,
-                &tail_request_context,
-                text,
-                &text_append_surface,
-                byte_idx,
-                charpos,
-                has_overlays,
-                overlay_text_row_context,
-                &active_face_state,
-                buffer,
-                &buf_access,
-            )
-        };
+            },
+            loop_request_context,
+            &tail_request_context,
+            text,
+            has_overlays,
+            overlay_text_row_context,
+            &active_face_state,
+            buffer,
+            &buf_access,
+        );
         let retry_outcome = post_loop_outcome.retry();
         let rendered_rows_len = post_loop_outcome.rendered_rows_len();
         if retry_outcome.scroll_down_window_start().is_some() {
@@ -1326,7 +1265,7 @@ impl LayoutEngine {
                 "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
                 layout_i64_char_pos_to_lisp_char_pos(point_charpos).as_i64(),
                 retry_outcome.visible_end_lisp(),
-                charpos,
+                walk_setup.charpos,
                 rendered_rows_len,
                 retry_outcome.scroll_down_window_start()
             );
@@ -1386,27 +1325,13 @@ impl LayoutEngine {
             return;
         }
 
-        let redisplay_positions = {
-            let mut post_loop_state = BufferTextWindowPostLoopState::new(
-                &mut output_emitter,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
-                evaluator,
-                &mut self.font_metrics,
-                face_resolver,
-                &row_flags,
-                &row_extend,
-                &box_face,
-            );
-            post_loop_state.install_body(&tail_request_context, byte_idx)
-        };
+        let redisplay_positions = walk_setup.install_body(
+            BufferTextWindowBodyInstallRenderState {
+                builder: &mut self.matrix_builder,
+                output_emitter: &mut output_emitter,
+            },
+            &tail_request_context,
+        );
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
@@ -1457,7 +1382,7 @@ impl LayoutEngine {
             builder: &mut self.matrix_builder,
             output_emitter,
             evaluator,
-            hit_rows,
+            hit_rows: walk_setup.hit_rows,
             hit_data: &mut self.hit_data,
             display_snapshots: &mut self.display_snapshots,
         });

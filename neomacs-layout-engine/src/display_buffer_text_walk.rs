@@ -243,6 +243,32 @@ pub(crate) struct BufferTextWindowFinishInstallState<'a> {
     pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
+pub(crate) struct BufferTextWindowWalkRenderState<'face, 'emit> {
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
+    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'face FaceResolver,
+}
+
+pub(crate) struct BufferTextWindowPostLoopRenderState<'face, 'emit> {
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'face FaceResolver,
+}
+
+pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowPostLoopRenderOutcome {
     retry: BufferTextWindowVisibilityRetryOutcome,
@@ -572,6 +598,122 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             hit_rows: Vec::new(),
             hit_row_range: HitRowRangeTracker::new(self.window_start),
         }
+    }
+}
+
+impl BufferTextWindowWalkSetup {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
+        &mut self,
+        state: &mut BufferTextWindowWalkRenderState<'_, '_>,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        loop_context: BufferTextWindowLoopRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &WindowParams,
+        overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
+        buffer: &B,
+    ) {
+        BufferTextWindowLoopRenderState::new(
+            &mut self.buffer_text_append_state,
+            &mut self.text_property_checkpoints,
+            &mut self.byte_idx,
+            &mut self.charpos,
+            &mut self.col,
+            state.output_emitter,
+            &mut self.row_extend,
+            &mut self.box_face,
+            &mut self.x,
+            state.line_numbers,
+            &mut self.row_geometry,
+            &mut self.row_flags,
+            &mut self.hit_rows,
+            &mut self.hit_row_range,
+            state.builder,
+            state.evaluator,
+            &mut self.prefix_request,
+            &mut self.hscroll_skip,
+            &mut self.word_wrap,
+            &mut self.trailing_whitespace,
+            state.face_scan,
+            &mut self.row_y_positions,
+            state.font_metrics,
+            state.face_resolver,
+            &mut self.cursor_info,
+            state.face_ids,
+            &mut self.raise_span,
+            &mut self.height_span,
+        )
+        .render_visible_steps(
+            row_prelude_context,
+            loop_context,
+            face_resolution_context,
+            text,
+            params,
+            &self.text_append_surface,
+            overlay_text_row_context,
+            state.active_face_state,
+            buffer,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
+        &mut self,
+        state: &mut BufferTextWindowPostLoopRenderState<'_, '_>,
+        loop_context: BufferTextWindowLoopRequestContext,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text: &'request [u8],
+        has_overlays: bool,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+        buf_access: &RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowPostLoopRenderOutcome {
+        BufferTextWindowPostLoopState::new(
+            state.output_emitter,
+            &mut self.x,
+            &mut self.col,
+            &mut self.row_geometry,
+            &mut self.cursor_info,
+            &mut self.hit_rows,
+            &mut self.hit_row_range,
+            &mut self.row_y_positions,
+            state.face_ids,
+            state.builder,
+            state.evaluator,
+            state.font_metrics,
+            state.face_resolver,
+            &self.row_flags,
+            &self.row_extend,
+            &self.box_face,
+        )
+        .render_tail_and_decide_retry(
+            loop_context,
+            tail_context,
+            text,
+            &self.text_append_surface,
+            self.byte_idx,
+            self.charpos,
+            has_overlays,
+            overlay_context,
+            active_face_state,
+            buffer,
+            buf_access,
+        )
+    }
+
+    pub(crate) fn install_body(
+        &mut self,
+        state: BufferTextWindowBodyInstallRenderState<'_>,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+    ) -> TextWindowRedisplayPositions {
+        tail_context
+            .body_install_request(self.byte_idx, &self.row_flags)
+            .install_and_apply(BufferTextWindowBodyInstallState {
+                builder: state.builder,
+                output_emitter: state.output_emitter,
+            })
     }
 }
 
@@ -1215,19 +1357,6 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
             retry,
             rendered_rows_len: self.rendered_rows_len(),
         }
-    }
-
-    pub(crate) fn install_body(
-        &mut self,
-        tail_context: &BufferTextWindowTailRequestContext<'_>,
-        byte_idx: usize,
-    ) -> TextWindowRedisplayPositions {
-        tail_context
-            .body_install_request(byte_idx, self.row_flags)
-            .install_and_apply(BufferTextWindowBodyInstallState {
-                builder: self.builder,
-                output_emitter: self.output_emitter,
-            })
     }
 }
 
