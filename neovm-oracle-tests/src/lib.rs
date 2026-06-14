@@ -1797,6 +1797,7 @@ mod divergence_face_documentation_matrix;
 mod divergence_face_bg_matrix;
 mod divergence_color_values_matrix;
 mod divergence_audit_casefiddle;
+mod divergence_casefold_matrix;
 mod divergence_audit_editfns;
 mod divergence_audit_fileio;
 mod divergence_audit_regex;
