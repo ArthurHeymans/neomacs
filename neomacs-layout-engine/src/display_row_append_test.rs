@@ -29,7 +29,7 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
-    HitRowRangeTracker, WordWrapBreakCandidate, WordWrapRenderState,
+    HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
@@ -1071,6 +1071,43 @@ fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
     assert_eq!(action.charpos(), 4);
     assert_eq!(byte_idx, text.len());
     assert_eq!(charpos, 4);
+}
+
+#[test]
+fn buffer_text_truncation_skip_action_applies_transition_state() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let text = b"abc\nnext";
+    let mut byte_idx = 1;
+    let mut charpos = 0;
+    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+        text,
+        &mut byte_idx,
+        &mut charpos,
+    );
+    let mut line_numbers = LineNumberRenderState::new(true, 5, 8);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        geometry.current_row_marker(),
+        (Color::from_pixel(0x112233), 17),
+    );
+    let mut x = 80.0;
+
+    action.apply_before_row_transition(&mut line_numbers, &mut row_extend, &mut x, 3.0);
+
+    assert_eq!(line_numbers.current_line(), 6);
+    assert_eq!(x, 3.0);
+    assert_eq!(row_extend.value_on(&geometry), None);
+}
+
+#[test]
+fn buffer_text_truncation_skip_action_syncs_after_transition() {
+    let mut charpos = 9;
+    let mut hit_row_range = HitRowRangeTracker::new(2);
+
+    BufferTextTruncationSkipAction::sync_after_row_transition(14, &mut charpos, &mut hit_row_range);
+
+    assert_eq!(charpos, 14);
+    assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]

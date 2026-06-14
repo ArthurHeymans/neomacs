@@ -4645,6 +4645,29 @@ impl BufferTextTruncationSkipAction {
     pub(crate) fn reached_line_break(self) -> bool {
         self.reached_line_break
     }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        line_numbers: &mut LineNumberRenderState,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        if self.reached_line_break() {
+            line_numbers.advance_line();
+        }
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn sync_after_row_transition(
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) {
+        *charpos = synced_charpos;
+        hit_row_range.advance_to(*charpos);
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

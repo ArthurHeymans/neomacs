@@ -2552,11 +2552,12 @@ impl LayoutEngine {
                                         &mut byte_idx,
                                         &mut charpos,
                                     );
-                                if truncation_skip.reached_line_break() {
-                                    line_numbers.advance_line();
-                                }
-                                x = content_x;
-                                row_extend.clear();
+                                truncation_skip.apply_before_row_transition(
+                                    &mut line_numbers,
+                                    &mut row_extend,
+                                    &mut x,
+                                    content_x,
+                                );
                                 let row_transition = DisplayRowTextWindowEmitContext::new(
                                     row_geometry_defaults,
                                     text_matrix_row_base,
@@ -2578,8 +2579,11 @@ impl LayoutEngine {
                                 if row_transition.is_exhausted() {
                                     break;
                                 }
-                                charpos = sync_charpos_from_byte_idx(byte_idx);
-                                hit_row_range.advance_to(charpos);
+                                BufferTextTruncationSkipAction::sync_after_row_transition(
+                                    sync_charpos_from_byte_idx(byte_idx),
+                                    &mut charpos,
+                                    &mut hit_row_range,
+                                );
                                 let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                                     &mut prefix_request,
                                     has_prefix,
@@ -2685,11 +2689,12 @@ impl LayoutEngine {
                             &mut byte_idx,
                             &mut charpos,
                         );
-                    if truncation_skip.reached_line_break() {
-                        line_numbers.advance_line();
-                    }
-                    x = content_x;
-                    row_extend.clear();
+                    truncation_skip.apply_before_row_transition(
+                        &mut line_numbers,
+                        &mut row_extend,
+                        &mut x,
+                        content_x,
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
