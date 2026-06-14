@@ -6590,6 +6590,13 @@ pub(crate) enum BufferDisplayPropertyTextAppendAction {
     None,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferDisplayPropertyTextWalkOutcome {
+    Continue,
+    ReplacementConsumed,
+    FaceStateChanged,
+}
+
 pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
     value: Value,
     buffer_id: BufferId,
@@ -6647,6 +6654,61 @@ impl BufferDisplayPropertyTextModifierStateOutcome {
 
     pub(crate) fn height_face_changed(self) -> bool {
         self.height_face_changed
+    }
+}
+
+impl BufferDisplayPropertyTextWalkOutcome {
+    pub(crate) fn should_continue_buffer_walk(self) -> bool {
+        matches!(self, Self::ReplacementConsumed)
+    }
+
+    pub(crate) fn should_resolve_face(self) -> bool {
+        matches!(self, Self::FaceStateChanged)
+    }
+}
+
+impl BufferDisplayPropertyTextAppendAction {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn apply_to_buffer_walk_state(
+        self,
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        x: &mut f32,
+        col: &mut usize,
+        cursor_info: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+        raise_span: &mut ActiveDisplayPropertySpan<f32>,
+        height_span: &mut ActiveDisplayPropertySpan<f32>,
+        face_scan: &mut FaceScanCheckpoint,
+    ) -> BufferDisplayPropertyTextWalkOutcome {
+        match self {
+            Self::Replacement(replacement_outcome) => {
+                replacement_outcome.capture_cursor_info_if_point(
+                    cursor_info,
+                    active_face_state,
+                    row_geometry,
+                    point_charpos,
+                    *charpos,
+                    *byte_idx,
+                );
+                replacement_outcome.apply_to_walk_state(text, byte_idx, charpos, x, col);
+                BufferDisplayPropertyTextWalkOutcome::ReplacementConsumed
+            }
+            Self::Modifiers(modifiers) => {
+                if modifiers
+                    .apply_to_walk_state(raise_span, height_span, face_scan)
+                    .height_face_changed()
+                {
+                    BufferDisplayPropertyTextWalkOutcome::FaceStateChanged
+                } else {
+                    BufferDisplayPropertyTextWalkOutcome::Continue
+                }
+            }
+            Self::None => BufferDisplayPropertyTextWalkOutcome::Continue,
+        }
     }
 }
 

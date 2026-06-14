@@ -57,10 +57,9 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextModifierAction,
-    BufferDisplayPropertyTextRenderContext, BufferHscrollSkipSourceChar,
-    BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
-    BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
+    BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
+    BufferHscrollSkipSourceChar, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
+    BufferLinePrefixRenderContext, BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
     BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
@@ -2271,7 +2270,7 @@ impl LayoutEngine {
                 window_start,
             );
             resolve_current_face_state!();
-            match BufferDisplayPropertyTextRenderContext::new(
+            let display_property_walk = BufferDisplayPropertyTextRenderContext::new(
                 buf_id,
                 text_start_byte,
                 text,
@@ -2297,34 +2296,26 @@ impl LayoutEngine {
                 charpos,
                 byte_idx,
                 accessible_end,
-            ) {
-                BufferDisplayPropertyTextAppendAction::Replacement(replacement_outcome) => {
-                    replacement_outcome.capture_cursor_info_if_point(
-                        &mut cursor_info,
-                        &active_face_state,
-                        &row_geometry,
-                        point_charpos,
-                        charpos,
-                        byte_idx,
-                    );
-                    replacement_outcome.apply_to_walk_state(
-                        text,
-                        &mut byte_idx,
-                        &mut charpos,
-                        &mut x,
-                        &mut col,
-                    );
-                    continue;
-                }
-                BufferDisplayPropertyTextAppendAction::Modifiers(modifiers) => {
-                    if modifiers
-                        .apply_to_walk_state(&mut raise_span, &mut height_span, &mut face_scan)
-                        .height_face_changed()
-                    {
-                        resolve_current_face_state!();
-                    }
-                }
-                BufferDisplayPropertyTextAppendAction::None => {}
+            )
+            .apply_to_buffer_walk_state(
+                text,
+                &mut byte_idx,
+                &mut charpos,
+                &mut x,
+                &mut col,
+                &mut cursor_info,
+                &active_face_state,
+                &row_geometry,
+                point_charpos,
+                &mut raise_span,
+                &mut height_span,
+                &mut face_scan,
+            );
+            if display_property_walk.should_resolve_face() {
+                resolve_current_face_state!();
+            }
+            if display_property_walk.should_continue_buffer_walk() {
+                continue;
             }
 
             // Decode UTF-8 character. Keep the original byte/char position in

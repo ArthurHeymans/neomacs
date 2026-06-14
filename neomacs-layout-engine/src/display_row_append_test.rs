@@ -5618,6 +5618,58 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
 }
 
 #[test]
+fn buffer_display_property_append_action_applies_replacement_walk_state() {
+    let outcome = BufferDisplayPropertyTextReplacementOutcome {
+        replacement: DisplayPropertyReplacementAppendOutcome {
+            start_position: DisplayRowPosition { x_px: 4.0, col: 1 },
+            end_position: DisplayRowPosition { x_px: 12.0, col: 2 },
+            cursor_policy: DisplayPropertyReplacementCursorPolicy::FaceChar,
+        },
+        skip_to: 4,
+    };
+    let action = BufferDisplayPropertyTextAppendAction::Replacement(outcome);
+    let active_face = test_active_face_state(7, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut cursor_info = CursorCaptureState::new();
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    let mut height_span = ActiveDisplayPropertySpan::inactive();
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let mut byte_idx = "a".len();
+    let mut charpos = 1;
+    let mut x = 4.0;
+    let mut col = 1;
+
+    let walk_outcome = action.apply_to_buffer_walk_state(
+        "a界b\n".as_bytes(),
+        &mut byte_idx,
+        &mut charpos,
+        &mut x,
+        &mut col,
+        &mut cursor_info,
+        &active_face,
+        &geometry,
+        2,
+        &mut raise_span,
+        &mut height_span,
+        &mut face_scan,
+    );
+
+    assert_eq!(
+        walk_outcome,
+        BufferDisplayPropertyTextWalkOutcome::ReplacementConsumed
+    );
+    assert!(walk_outcome.should_continue_buffer_walk());
+    assert!(!walk_outcome.should_resolve_face());
+    assert_eq!(byte_idx, "a界b\n".len());
+    assert_eq!(charpos, 4);
+    assert_eq!(x, 12.0);
+    assert_eq!(col, 2);
+    assert!(cursor_info.captured().is_some());
+    assert_eq!(raise_span.value(), None);
+    assert_eq!(height_span.value(), None);
+}
+
+#[test]
 fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -5832,6 +5884,97 @@ fn buffer_display_property_text_modifier_action_applies_walk_state() {
     assert_eq!(raise_span.value(), Some(-4.0));
     assert_eq!(height_span.value(), Some(1.5));
     assert!(face_scan.should_resolve_at(0));
+}
+
+#[test]
+fn buffer_display_property_append_action_applies_modifier_walk_state() {
+    let action = BufferDisplayPropertyTextAppendAction::Modifiers(
+        BufferDisplayPropertyTextModifierAction::new_for_test(Some(-4.0), Some(1.5), 11),
+    );
+    let active_face = test_active_face_state(7, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut cursor_info = CursorCaptureState::new();
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    let mut height_span = ActiveDisplayPropertySpan::inactive();
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+    let mut byte_idx = 1;
+    let mut charpos = 1;
+    let mut x = 4.0;
+    let mut col = 1;
+
+    let walk_outcome = action.apply_to_buffer_walk_state(
+        b"abc",
+        &mut byte_idx,
+        &mut charpos,
+        &mut x,
+        &mut col,
+        &mut cursor_info,
+        &active_face,
+        &geometry,
+        2,
+        &mut raise_span,
+        &mut height_span,
+        &mut face_scan,
+    );
+
+    assert_eq!(
+        walk_outcome,
+        BufferDisplayPropertyTextWalkOutcome::FaceStateChanged
+    );
+    assert!(!walk_outcome.should_continue_buffer_walk());
+    assert!(walk_outcome.should_resolve_face());
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 1);
+    assert_eq!(x, 4.0);
+    assert_eq!(col, 1);
+    assert!(cursor_info.captured().is_none());
+    assert_eq!(raise_span.value(), Some(-4.0));
+    assert_eq!(height_span.value(), Some(1.5));
+    assert!(face_scan.should_resolve_at(0));
+}
+
+#[test]
+fn buffer_display_property_append_action_none_keeps_walk_state() {
+    let action = BufferDisplayPropertyTextAppendAction::None;
+    let active_face = test_active_face_state(7, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut cursor_info = CursorCaptureState::new();
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    let mut height_span = ActiveDisplayPropertySpan::inactive();
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+    let mut byte_idx = 1;
+    let mut charpos = 1;
+    let mut x = 4.0;
+    let mut col = 1;
+
+    let walk_outcome = action.apply_to_buffer_walk_state(
+        b"abc",
+        &mut byte_idx,
+        &mut charpos,
+        &mut x,
+        &mut col,
+        &mut cursor_info,
+        &active_face,
+        &geometry,
+        2,
+        &mut raise_span,
+        &mut height_span,
+        &mut face_scan,
+    );
+
+    assert_eq!(walk_outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
+    assert!(!walk_outcome.should_continue_buffer_walk());
+    assert!(!walk_outcome.should_resolve_face());
+    assert_eq!(byte_idx, 1);
+    assert_eq!(charpos, 1);
+    assert_eq!(x, 4.0);
+    assert_eq!(col, 1);
+    assert!(cursor_info.captured().is_none());
+    assert_eq!(raise_span.value(), None);
+    assert_eq!(height_span.value(), None);
+    assert!(!face_scan.should_resolve_at(0));
 }
 
 #[test]
