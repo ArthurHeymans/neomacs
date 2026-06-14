@@ -48,6 +48,9 @@ use crate::display_cursor::{
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+use crate::display_item::{
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
+};
 use crate::display_origin::OverlayStringKind;
 use crate::display_property::classify_display_property;
 use crate::display_row::{
@@ -64,7 +67,9 @@ use crate::display_row_append::{
     SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
     render_overlay_string_batch,
 };
-use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_builder::{
+    DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
+};
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
@@ -3872,6 +3877,110 @@ impl LayoutEngine {
     }
 }
 
+const MOCK_DISPLAY_SOURCE_ID: u64 = 0x6d6f_636b;
+
+fn mock_display_row_layout(
+    role: GlyphRowRole,
+    pixel_y: f32,
+    width_px: f32,
+    char_w: f32,
+    char_h: f32,
+    ascent: f32,
+) -> DisplayRowLayout {
+    DisplayRowLayout {
+        role,
+        y_px: pixel_y,
+        width_px: width_px.max(1.0),
+        height_px: char_h.max(1.0),
+        ascent_px: ascent.max(0.0).min(char_h.max(1.0)),
+        char_width_px: char_w.max(1.0),
+        tab_policy: DisplayTabPolicy::every(8),
+        base_face: RenderFaceRef::FaceId(0),
+        symbol_values: std::collections::HashMap::new(),
+    }
+}
+
+fn mock_display_text_item(text: String, face_id: u32, source_offset: usize) -> DisplayItem {
+    let char_len = text.chars().count();
+    DisplayItem::new(
+        SourceSpan::synthetic(
+            MOCK_DISPLAY_SOURCE_ID,
+            source_offset,
+            source_offset.saturating_add(char_len),
+        ),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+    )
+}
+
+fn push_mock_display_text(
+    writer: &mut DisplayRowWriter<'_, '_, '_>,
+    text: String,
+    face_id: u32,
+    source_offset: &mut usize,
+) {
+    let char_len = text.chars().count();
+    if char_len == 0 {
+        return;
+    }
+    writer.push_item(mock_display_text_item(text, face_id, *source_offset));
+    *source_offset = source_offset.saturating_add(char_len);
+}
+
+fn mock_display_row_from_line(
+    role: GlyphRowRole,
+    line: &super::mock_frame::MockStyledLine,
+    pixel_y: f32,
+    width_px: f32,
+    char_w: f32,
+    char_h: f32,
+    ascent: f32,
+    left_margin: Option<&str>,
+) -> neomacs_display_protocol::glyph_matrix::GlyphRow {
+    use super::mock_frame::MockDisplayProperty;
+    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
+
+    let layout = mock_display_row_layout(role, pixel_y, width_px, char_w, char_h, ascent);
+    let mut row = GlyphRow::new(role);
+    if let Some(left_margin) = left_margin {
+        row.glyphs[GlyphArea::LeftMargin.index()]
+            .extend(left_margin.chars().map(|ch| Glyph::char(ch, 2, 0)));
+    }
+    let mut writer = DisplayRowWriter::new(&layout, &mut row);
+    let mut source_offset = 0usize;
+    for glyph in &line.glyphs {
+        match &glyph.display {
+            Some(MockDisplayProperty::Invisible) => {
+                source_offset = source_offset.saturating_add(1);
+            }
+            Some(MockDisplayProperty::Replace(text, face_id)) => {
+                push_mock_display_text(&mut writer, text.clone(), *face_id, &mut source_offset);
+            }
+            Some(MockDisplayProperty::Composition(composed)) => {
+                for composed_glyph in composed {
+                    push_mock_display_text(
+                        &mut writer,
+                        composed_glyph.ch.to_string(),
+                        composed_glyph.face_id,
+                        &mut source_offset,
+                    );
+                }
+            }
+            None => {
+                push_mock_display_text(
+                    &mut writer,
+                    glyph.ch.to_string(),
+                    glyph.face_id,
+                    &mut source_offset,
+                );
+            }
+        }
+    }
+    drop(writer);
+    crate::glyph_row_writer::normalize_external_row(&mut row);
+    row
+}
+
 impl LayoutEngine {
     pub(crate) fn display_row_char_width(
         &mut self,
@@ -3964,7 +4073,6 @@ impl LayoutEngine {
         char_h: f32,
     ) -> Vec<neomacs_display_protocol::glyph_matrix::FrameDisplayState> {
         use super::matrix_builder::GlyphMatrixBuilder;
-        use super::mock_frame::MockDisplayProperty;
         use neomacs_display_protocol::face::FaceAttributes;
         use neomacs_display_protocol::glyph_matrix::Glyph;
         use neomacs_display_protocol::types::Color;
@@ -4043,42 +4151,20 @@ impl LayoutEngine {
             );
             for (row_idx, line) in window.lines.iter().enumerate() {
                 builder.begin_row(row_idx, GlyphRowRole::Text);
-                builder.set_current_row_metrics(
-                    window.pixel_bounds.y + row_idx as f32 * char_h,
+                let row_y = window.pixel_bounds.y + row_idx as f32 * char_h;
+                let lnum = format!("{:>3} ", row_idx + 1);
+                let row = mock_display_row_from_line(
+                    GlyphRowRole::Text,
+                    line,
+                    row_y,
+                    window.pixel_bounds.width,
+                    char_w,
                     char_h,
                     ascent,
+                    Some(&lnum),
                 );
-                let lnum = format!("{:>3} ", row_idx + 1);
-                for ch in lnum.chars() {
-                    builder.push_left_margin_char(ch, 2);
-                }
-                let mut cp = 0usize;
-                for glyph in &line.glyphs {
-                    match &glyph.display {
-                        Some(MockDisplayProperty::Invisible) => {
-                            cp += 1;
-                            continue;
-                        }
-                        Some(MockDisplayProperty::Replace(text, fid)) => {
-                            for ch in text.chars() {
-                                builder.push_char(ch, *fid, cp);
-                                cp += 1;
-                            }
-                            continue;
-                        }
-                        Some(MockDisplayProperty::Composition(composed)) => {
-                            for cg in composed {
-                                builder.push_char(cg.ch, cg.face_id, cp);
-                                cp += 1;
-                            }
-                            continue;
-                        }
-                        _ => {}
-                    }
-                    builder.push_char(glyph.ch, glyph.face_id, cp);
-                    cp += 1;
-                }
-                builder.end_row();
+                builder.install_prebuilt_current_row(&row);
+                builder.end_prebuilt_row();
             }
 
             // Mode-line pinned to window bottom.
@@ -4120,17 +4206,19 @@ impl LayoutEngine {
 
             for (row_idx, line) in mini.lines.iter().enumerate() {
                 builder.begin_row(row_idx, GlyphRowRole::Minibuffer);
-                builder.set_current_row_metrics(
-                    mini.pixel_bounds.y + row_idx as f32 * char_h,
+                let row_y = mini.pixel_bounds.y + row_idx as f32 * char_h;
+                let row = mock_display_row_from_line(
+                    GlyphRowRole::Minibuffer,
+                    line,
+                    row_y,
+                    mini.pixel_bounds.width,
+                    char_w,
                     char_h,
                     ascent,
+                    None,
                 );
-                let mut cp = 0usize;
-                for glyph in &line.glyphs {
-                    builder.push_char(glyph.ch, glyph.face_id, cp);
-                    cp += 1;
-                }
-                builder.end_row();
+                builder.install_prebuilt_current_row(&row);
+                builder.end_prebuilt_row();
             }
 
             if !mini.mode_line.glyphs.is_empty() {
@@ -4196,12 +4284,18 @@ impl LayoutEngine {
             );
             for (ri, line) in cf.window.lines.iter().enumerate() {
                 cb.begin_row(ri, GlyphRowRole::Text);
-                let mut cp = 0usize;
-                for g in &line.glyphs {
-                    cb.push_char(g.ch, g.face_id, cp);
-                    cp += 1;
-                }
-                cb.end_row();
+                let row = mock_display_row_from_line(
+                    GlyphRowRole::Text,
+                    line,
+                    cf.window.pixel_bounds.y + ri as f32 * char_h,
+                    cf.window.pixel_bounds.width,
+                    char_w,
+                    char_h,
+                    ascent,
+                    None,
+                );
+                cb.install_prebuilt_current_row(&row);
+                cb.end_prebuilt_row();
             }
             cb.end_window();
             let cs = cb.finish(

@@ -422,10 +422,12 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn push_char(&mut self, ch: char, face_id: u32, charpos: usize) {
         self.push_char_with_pixel_width(ch, face_id, charpos, 0.0);
     }
 
+    #[cfg(test)]
     pub(crate) fn push_char_to_row(
         row: &mut GlyphRow,
         ch: char,
@@ -436,6 +438,7 @@ impl GlyphMatrixBuilder {
         crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
     }
 
+    #[cfg(test)]
     pub(crate) fn push_char_with_pixel_width(
         &mut self,
         ch: char,
