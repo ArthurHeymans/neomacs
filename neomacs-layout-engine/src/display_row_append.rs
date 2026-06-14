@@ -32,11 +32,11 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowTextPosition,
-    DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowScopedValue,
+    DisplayRowTextPosition, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
+    BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
     TextPropertyScanCheckpoints, TextRowTransitionPrefixAction, TextRowTransitionStatePolicy,
     TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
@@ -71,7 +71,8 @@ use crate::window_output::{
     finish_and_end_text_matrix_row_output,
 };
 use neomacs_display_protocol::face::BasicFaceId;
-use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
+use neomacs_display_protocol::types::Color;
+use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
@@ -4358,6 +4359,21 @@ impl BufferSelectiveDisplayLineTailAction {
         matches!(self, Self::LineBreak { .. })
     }
 
+    pub(crate) fn apply_hidden_line_break_row_state(
+        self,
+        row_geometry: &DisplayRowGeometryState,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &mut BoxFaceRowState,
+        content_x: f32,
+        x: &mut f32,
+    ) {
+        if self.is_line_break() {
+            *x = content_x;
+            row_extend.clear();
+            box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn charpos(self) -> Option<i64> {
         match self {
@@ -4377,8 +4393,15 @@ impl BufferSelectiveDisplayHiddenLines {
         Self { hidden_line_count }
     }
 
+    #[cfg(test)]
     pub(crate) fn hidden_line_count(self) -> usize {
         self.hidden_line_count
+    }
+
+    pub(crate) fn apply_to_line_numbers(self, line_numbers: &mut LineNumberRenderState) {
+        for _ in 0..self.hidden_line_count {
+            line_numbers.advance_hidden_line();
+        }
     }
 }
 
@@ -4546,6 +4569,34 @@ impl BufferTextLineBreakSourceAction {
 
     pub(crate) fn line_spacing(self) -> f32 {
         self.line_spacing
+    }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        row_geometry: &DisplayRowGeometryState,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &mut BoxFaceRowState,
+        output_emitter: &mut WindowOutputEmitter,
+        content_x: f32,
+        x: &mut f32,
+        charpos: &mut i64,
+    ) {
+        trailing_whitespace.reset_after_row_transition();
+        row_extend.clear();
+        box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
+        *charpos = self.next_charpos();
+        *x = content_x;
+        output_emitter.note_display_buffer_pos(LispCharPos1::new(*charpos));
+    }
+
+    pub(crate) fn apply_after_row_transition(
+        self,
+        row_geometry: &DisplayRowGeometryState,
+        box_face: &mut BoxFaceRowState,
+        content_x: f32,
+    ) {
+        box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
     }
 
     pub(crate) fn cursor_info(

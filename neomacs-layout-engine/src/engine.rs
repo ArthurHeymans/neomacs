@@ -2377,9 +2377,13 @@ impl LayoutEngine {
                     .skip_rest_of_line_after_carriage_return(&mut byte_idx, &mut charpos);
                 if selective_tail_action.is_line_break() {
                     // Advance to next row (same as newline handler)
-                    x = content_x;
-                    row_extend.clear();
-                    box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
+                    selective_tail_action.apply_hidden_line_break_row_state(
+                        &row_geometry,
+                        &mut row_extend,
+                        &mut box_face,
+                        content_x,
+                        &mut x,
+                    );
                     let line_break_transition =
                         DisplayRowLineBreakTransitionPlan::hidden_line_break();
                     let row_transition = DisplayRowTextWindowEmitContext::new(
@@ -2440,33 +2444,16 @@ impl LayoutEngine {
                         line_break_action.cursor_info(&active_face_state, &row_geometry, x, col),
                     );
                 }
-                // Highlight trailing whitespace before advancing to next row
-                if let Some((_tw_bg, tw_x)) = trailing_whitespace.highlight_start_x(&row_geometry) {
-                    let tw_w = x - tw_x;
-                    if tw_w > 0.0 {}
-                }
-                trailing_whitespace.reset_after_row_transition();
-
-                // Face :extend: fill rest of row with extending face background
-                if let Some((_ext_bg, _ext_face_id)) = row_extend.value_on(&row_geometry) {
-                    let right_edge = text_append_surface.right_edge();
-                    if x < right_edge {}
-                }
-                row_extend.clear();
-
-                // Box face tracking: box stays active across line breaks
-                box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
-
-                charpos = line_break_action.next_charpos();
-                x = content_x;
-                // Record the newline position so the row's
-                // end_buffer_pos includes it. GNU's redisplay engine
-                // counts newlines as part of the row they terminate,
-                // so window-end reflects the position AFTER the last
-                // newline. Without this, trailing empty rows have
-                // end_buffer_pos=None and window-end falls short of
-                // point-max, causing %p to show "Top" instead of "All".
-                output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
+                line_break_action.apply_before_row_transition(
+                    &row_geometry,
+                    &mut trailing_whitespace,
+                    &mut row_extend,
+                    &mut box_face,
+                    &mut output_emitter,
+                    content_x,
+                    &mut x,
+                    &mut charpos,
+                );
                 // Record hit-test row (newline ends the row)
                 let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
                 let row_transition = DisplayRowTextWindowEmitContext::new(
@@ -2493,7 +2480,11 @@ impl LayoutEngine {
                 }
                 charpos = sync_charpos_from_byte_idx(byte_idx);
                 hit_row_range.advance_to(charpos);
-                box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
+                line_break_action.apply_after_row_transition(
+                    &row_geometry,
+                    &mut box_face,
+                    content_x,
+                );
                 let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                     &mut prefix_request,
                     has_prefix,
@@ -2510,9 +2501,7 @@ impl LayoutEngine {
                 if selective_display_context.hides_indented_lines_after_line_break(byte_idx) {
                     let hidden_lines = selective_display_context
                         .skip_hidden_indented_lines_after_line_break(&mut byte_idx, &mut charpos);
-                    for _ in 0..hidden_lines.hidden_line_count() {
-                        line_numbers.advance_hidden_line();
-                    }
+                    hidden_lines.apply_to_line_numbers(&mut line_numbers);
                 }
                 continue;
             }

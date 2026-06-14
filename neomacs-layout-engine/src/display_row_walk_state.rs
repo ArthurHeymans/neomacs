@@ -1,7 +1,7 @@
 use crate::coords::lisp_char_pos_to_layout_i64;
-use crate::display_row_geometry::{
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker,
-};
+#[cfg(test)]
+use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::types::Color;
@@ -652,6 +652,7 @@ impl TrailingWhitespaceRenderState {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn highlight_start_x(
         self,
         geometry: &DisplayRowGeometryState,

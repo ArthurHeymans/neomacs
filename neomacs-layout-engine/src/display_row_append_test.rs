@@ -814,14 +814,17 @@ fn buffer_selective_display_context_skips_hidden_indented_lines() {
     let context = BufferSelectiveDisplayContext::new(text, 1, 4);
     let mut byte_idx = 0;
     let mut charpos = 0;
+    let mut line_numbers = LineNumberRenderState::new(true, 7, 9);
 
     assert!(context.hides_indented_lines_after_line_break(byte_idx));
     let hidden_lines =
         context.skip_hidden_indented_lines_after_line_break(&mut byte_idx, &mut charpos);
+    hidden_lines.apply_to_line_numbers(&mut line_numbers);
 
     assert_eq!(hidden_lines.hidden_line_count(), 2);
     assert_eq!(byte_idx, b"  hidden\n\talso\n".len());
     assert_eq!(charpos, b"  hidden\n\talso\n".len() as i64);
+    assert_eq!(line_numbers.current_line(), 9);
 }
 
 #[test]
@@ -970,6 +973,49 @@ fn buffer_text_line_break_source_action_builds_row_end_cursor_info() {
     assert_eq!(cursor.col, 4);
     assert_eq!(cursor.slot_width, Some(8.0));
     assert!(!cursor.stretch_like);
+}
+
+#[test]
+fn buffer_text_line_break_source_action_applies_row_transition_state() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut context = RowTransitionTestContext::new("line-break-source-state");
+    let geometry = context.geometry;
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
+    trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(24.0));
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        geometry.current_row_marker(),
+        (Color::from_pixel(0x112233), 17),
+    );
+    let mut box_face = BoxFaceRowState::inactive();
+    box_face.activate(geometry.current_row_marker(), 8.0);
+    let mut x = 40.0;
+    let mut charpos = 4;
+
+    action.apply_before_row_transition(
+        &geometry,
+        &mut trailing_whitespace,
+        &mut row_extend,
+        &mut box_face,
+        &mut context.output_emitter,
+        2.0,
+        &mut x,
+        &mut charpos,
+    );
+
+    assert_eq!(x, 2.0);
+    assert_eq!(charpos, 5);
+    assert_eq!(trailing_whitespace.highlight_start_x(&geometry), None);
+    assert_eq!(row_extend.value_on(&geometry), None);
+    assert_eq!(box_face.row(), geometry.current_row_marker());
+    assert_eq!(box_face.start_x(), Some(2.0));
 }
 
 #[test]
