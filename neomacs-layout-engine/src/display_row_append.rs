@@ -1874,18 +1874,13 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_requested_to_text_row_and_emit<B: LayoutBufferView>(
         self,
         request: &mut DisplayRowPrefixRequest,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
+        state: &mut TextRowSourceRenderState<'_>,
         buffer: &B,
         anchor_charpos: i64,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         if !request.is_requested() {
@@ -1907,11 +1902,11 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
 
         let prefix_base_face = display_string_base_face(
             buffer,
-            face_resolver,
+            state.face_resolver,
             prefix_source.origin(),
             prefix_source.base_face_policy(),
             face_ids,
-            builder,
+            state.builder,
         );
         LispStringRowAppendContext::new(
             self.append_surface,
@@ -1921,13 +1916,7 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             self.default_row_height,
         )
         .render_prefix_source_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
+            state,
             face_ids,
             &prefix_base_face,
             prefix_source,
@@ -1961,14 +1950,16 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
     ) {
         let position = self.context.render_requested_to_text_row_and_emit(
             request,
-            evaluator,
-            output_emitter,
+            &mut TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
             buffer,
             anchor_charpos,
-            font_metrics,
-            face_resolver,
             face_ids,
-            builder,
             self.position,
         );
         *x = position.x_px;
@@ -2870,23 +2861,14 @@ impl<'a> SyntheticTextAppendContext<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_to_text_row_and_emit(
         &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         position: DisplayRowPosition,
         source: SyntheticTextSource,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         append_synthetic_text_to_display_row(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            state,
             self.base_face,
             self.frame.clone(),
             position,
@@ -2972,14 +2954,9 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_request_to_text_row_and_emit<'face>(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         request: SyntheticTextAppendRequest<'face>,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let (position, source, face) = request.into_parts();
@@ -2987,15 +2964,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
             SyntheticTextAppendFace::ActiveFace => {
                 let active_face = self.active_face_context.active_face;
                 self.active_face(active_face.face_id(), active_face.resolved_face())
-                    .append_to_text_row_and_emit(
-                        builder,
-                        output_emitter,
-                        evaluator,
-                        font_metrics,
-                        face_resolver,
-                        position,
-                        source,
-                    )
+                    .append_to_text_row_and_emit(state, position, source)
             }
             SyntheticTextAppendFace::TextRowMetrics {
                 face_id,
@@ -3005,15 +2974,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
                 char_width_px,
             } => self
                 .text_row(face_id, base_face, height_px, ascent_px, char_width_px)
-                .append_to_text_row_and_emit(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    font_metrics,
-                    face_resolver,
-                    position,
-                    source,
-                ),
+                .append_to_text_row_and_emit(state, position, source),
         }
     }
 }
@@ -3060,47 +3021,26 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_request_to_text_row<'face>(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         geometry: &'a DisplayRowGeometryState,
         request: SyntheticTextAppendRequest<'face>,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         self.row_context(geometry)
-            .append_request_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                request,
-            )
+            .append_request_to_text_row_and_emit(state, request)
     }
 
     #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_active_marker_to_text_row(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         geometry: &'a DisplayRowGeometryState,
         position: DisplayRowPosition,
         marker: SyntheticTextMarker,
     ) -> Option<DisplayRowPosition> {
         self.render_request_to_text_row(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            state,
             geometry,
             SyntheticTextAppendRequest::active_marker(position, marker),
         )
@@ -3127,28 +3067,16 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
     }
 
     #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_hscroll_truncation_marker_to_text_row(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut TextRowSourceRenderState<'_>,
         face_resolver: &'a FaceResolver,
         geometry: &'a DisplayRowGeometryState,
         content_x: f32,
     ) -> Option<DisplayRowPosition> {
         let request = self.hscroll_truncation_request(face_resolver, content_x);
-        self.render_request_to_text_row(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            geometry,
-            request,
-        )
-        .map(|(_progress, position)| position)
+        self.render_request_to_text_row(state, geometry, request)
+            .map(|(_progress, position)| position)
     }
 }
 
@@ -6858,11 +6786,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
 }
 
 pub(crate) struct BufferSyntheticTextRenderState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    output_emitter: &'a mut WindowOutputEmitter,
-    evaluator: &'a mut Context,
-    font_metrics: &'a mut Option<FontMetricsService>,
-    face_resolver: &'a FaceResolver,
+    source_render: TextRowSourceRenderState<'a>,
     x: &'a mut f32,
     col: &'a mut usize,
 }
@@ -6879,11 +6803,13 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
         col: &'a mut usize,
     ) -> Self {
         Self {
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            source_render: TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
             x,
             col,
         }
@@ -6903,11 +6829,7 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
         request: SyntheticTextAppendRequest<'face>,
     ) {
         let Some((_progress, position)) = render_context.render_request_to_text_row(
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
-            self.font_metrics,
-            self.face_resolver,
+            &mut self.source_render,
             row_geometry,
             request,
         ) else {
@@ -6926,7 +6848,7 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
     ) {
         let request = render_context.hscroll_truncation_request(face_resolver, content_x);
         self.append_request_to_text_row(render_context, row_geometry, request);
-        mark_current_text_row_truncated_left(self.builder);
+        mark_current_text_row_truncated_left(self.source_render.builder);
     }
 }
 
@@ -8997,14 +8919,9 @@ impl DisplayReplacementStringSourceAppendRequest {
         ))
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_to_text_row_and_emit(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         append_context: &DisplayReplacementAppendContext<'_>,
         item_policy: &mut impl DisplayRowRenderPolicy,
@@ -9021,18 +8938,7 @@ impl DisplayReplacementStringSourceAppendRequest {
             position,
             DisplayRowAppendKind::DisplayReplacementString,
         )
-        .render_source_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
-            source,
-            face_ids,
-            &mut render_policy,
-        ) else {
+        .render_source_to_text_row_and_emit(state, source, face_ids, &mut render_policy) else {
             return position;
         };
         outcome.end_position()
@@ -9066,15 +8972,10 @@ impl DisplayReplacementStringAppendRequest {
         self.item.base_face_policy()
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
@@ -9094,11 +8995,7 @@ impl DisplayReplacementStringAppendRequest {
             replacement_base_face.face(),
         );
         source_request.render_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            state,
             face_ids,
             &append_context,
             &mut item_policy,
@@ -9108,12 +9005,8 @@ impl DisplayReplacementStringAppendRequest {
 
 #[cfg(test)]
 fn append_raw_display_replacement_item_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
+    state: &mut TextRowSourceRenderState<'_>,
     item: DisplayItem,
-    face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     fallback_face_id: u32,
     frame: DisplayRowAppendFrame,
@@ -9128,16 +9021,7 @@ fn append_raw_display_replacement_item_to_text_row_and_emit(
         position,
         DisplayRowAppendKind::DisplayReplacement,
     )
-    .render_to_text_row_and_emit(
-        &mut TextRowSourceRenderState::new(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-        ),
-        &mut render_policy,
-    )
+    .render_to_text_row_and_emit(state, &mut render_policy)
 }
 
 #[derive(Clone, Debug)]
@@ -9884,11 +9768,13 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
         )
         .resolve_and_append_to_text_row(
             buffer,
-            evaluator,
-            output_emitter,
-            builder,
-            font_metrics,
-            face_resolver,
+            &mut TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
             face_ids,
             append_surface,
             row_geometry,
@@ -10077,15 +9963,10 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_and_append_to_text_row<B: LayoutBufferView>(
         self,
         buffer: &B,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        builder: &mut GlyphMatrixBuilder,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
@@ -10097,11 +9978,11 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             self.anchor_charpos,
             self.source_text,
             self.active_face_state,
-            font_metrics,
+            state.font_metrics,
             self.current_x,
             self.content_x,
             self.params,
-            evaluator.display_host.as_deref(),
+            state.evaluator.display_host.as_deref(),
         ) {
             let replacement = DisplayPropertyReplacementAppendRequest::new(
                 BufferDisplayReplacementSource::new(
@@ -10116,11 +9997,8 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             )
             .append_to_text_row(
                 buffer,
-                evaluator,
-                output_emitter,
-                builder,
-                font_metrics,
-                face_resolver,
+                state,
+                state.face_resolver,
                 face_ids,
                 append_surface,
                 row_geometry,
@@ -10412,28 +10290,20 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
         ))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_and_append_to_text_row<B: LayoutBufferView>(
         self,
         buffer: &B,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        builder: &mut GlyphMatrixBuilder,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
     ) -> Option<DisplayPropertyReplacementAppendOutcome> {
         let active_face_state = self.active_face_state;
-        let request = self.resolve(font_metrics, evaluator.display_host.as_deref())?;
+        let request = self.resolve(state.font_metrics, state.evaluator.display_host.as_deref())?;
         Some(request.append_to_text_row(
             buffer,
-            evaluator,
-            output_emitter,
-            builder,
-            font_metrics,
-            face_resolver,
+            state,
+            state.face_resolver,
             face_ids,
             append_surface,
             row_geometry,
@@ -10501,14 +10371,10 @@ impl DisplayPropertyReplacementAppendRequest {
         self.item
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_to_text_row<B: LayoutBufferView>(
         self,
         buffer: &B,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        builder: &mut GlyphMatrixBuilder,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut TextRowSourceRenderState<'_>,
         face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
         append_surface: &DisplayRowAppendSurface,
@@ -10517,13 +10383,15 @@ impl DisplayPropertyReplacementAppendRequest {
     ) -> DisplayPropertyReplacementAppendOutcome {
         let start_position = self.start_position();
         let cursor_policy = self.cursor_policy();
-        let plan = self.into_plan(buffer, face_resolver, active_face_state, face_ids, builder);
-        let end_position = plan.append_to_text_row(
-            evaluator,
-            output_emitter,
-            builder,
-            font_metrics,
+        let plan = self.into_plan(
+            buffer,
             face_resolver,
+            active_face_state,
+            face_ids,
+            state.builder,
+        );
+        let end_position = plan.append_to_text_row(
+            state,
             face_ids,
             append_surface,
             row_geometry,
@@ -10579,14 +10447,9 @@ impl DisplayPropertyReplacementAppendPlan {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_to_text_row(
         self,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        builder: &mut GlyphMatrixBuilder,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
@@ -10604,11 +10467,7 @@ impl DisplayPropertyReplacementAppendPlan {
         self.item.append_to_text_row(
             replacement_append_context,
             row_geometry,
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            state,
             face_ids,
             position,
         )
@@ -10747,48 +10606,28 @@ impl DisplayPropertyReplacementAppendItem {
 }
 
 impl DisplayPropertyReplacementAppendPlanItem {
-    #[allow(clippy::too_many_arguments)]
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         match self {
-            Self::String(request) => request.append_to_text_row(
-                replacement_append_context,
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                face_ids,
-                position,
-            ),
+            Self::String(request) => {
+                request.append_to_text_row(replacement_append_context, state, face_ids, position)
+            }
             Self::Stretch(stretch_item) => stretch_item.append_to_text_row(
                 replacement_append_context,
                 row_geometry,
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                state,
                 position,
             ),
             Self::Media(media_item) => media_item.append_to_text_row(
                 replacement_append_context,
                 row_geometry,
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                state,
                 position,
             ),
         }
@@ -10796,16 +10635,11 @@ impl DisplayPropertyReplacementAppendPlanItem {
 }
 
 impl DisplayReplacementStretchAppendItem {
-    #[allow(clippy::too_many_arguments)]
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         let Some(request) = self.append_request(position) else {
@@ -10813,78 +10647,44 @@ impl DisplayReplacementStretchAppendItem {
         };
         row_geometry.include_glyph_vertical_metrics(self.height_px(), self.ascent_px());
         replacement_append_context
-            .append_item_request_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                request,
-            )
+            .append_item_request_to_text_row_and_emit(state, request)
             .map(|(_progress, position)| position)
             .unwrap_or(position)
     }
 }
 
 impl DisplayReplacementMediaAppendResolution {
-    #[allow(clippy::too_many_arguments)]
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         match self {
             Self::Media(media_item) => media_item.append_to_text_row(
                 replacement_append_context,
                 row_geometry,
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                state,
                 position,
             ),
-            Self::Placeholder(placeholder_item) => placeholder_item.append_to_text_row(
-                replacement_append_context,
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                position,
-            ),
+            Self::Placeholder(placeholder_item) => {
+                placeholder_item.append_to_text_row(replacement_append_context, state, position)
+            }
         }
     }
 }
 
 impl DisplayReplacementMediaAppendItem {
-    #[allow(clippy::too_many_arguments)]
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         if let Some((progress, appended_position)) = replacement_append_context
-            .append_item_request_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                self.append_request(position),
-            )
+            .append_item_request_to_text_row_and_emit(state, self.append_request(position))
             && let Some((height, ascent)) = self.row_extents_after_append(&progress)
         {
             row_geometry.include_row_extents(height, ascent);
@@ -10896,26 +10696,14 @@ impl DisplayReplacementMediaAppendItem {
 }
 
 impl DisplayReplacementSourceMappedTextAppendItem {
-    #[allow(clippy::too_many_arguments)]
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         replacement_append_context
-            .append_item_request_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                self.append_request(position),
-            )
+            .append_item_request_to_text_row_and_emit(state, self.append_request(position))
             .map(|(_progress, position)| position)
             .unwrap_or(position)
     }
@@ -11142,14 +10930,9 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn append_item_request_to_text_row_and_emit(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         request: DisplayReplacementItemAppendRequest,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let DisplayReplacementItemAppendRequest {
@@ -11171,15 +10954,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
                 ascent_px,
             ),
         };
-        append_context.append_replacement_item_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            item,
-            position,
-        )
+        append_context.append_replacement_item_to_text_row_and_emit(state, item, position)
     }
 }
 
@@ -11206,14 +10981,9 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn append_replacement_item_to_text_row_and_emit(
         &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         item: DisplayReplacementAppendItem,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
@@ -11227,16 +10997,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             position,
             DisplayRowAppendKind::DisplayReplacement,
         )
-        .render_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
-            &mut render_policy,
-        )
+        .render_to_text_row_and_emit(state, &mut render_policy)
     }
 }
 
@@ -11730,11 +11491,7 @@ impl DisplayRowAppendKind {
 }
 
 fn append_synthetic_text_to_display_row(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    face_resolver: &FaceResolver,
+    state: &mut TextRowSourceRenderState<'_>,
     base_face: &ResolvedFace,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
@@ -11751,16 +11508,7 @@ fn append_synthetic_text_to_display_row(
         position,
         DisplayRowAppendKind::SourceText,
     )
-    .render_to_text_row_and_emit(
-        &mut TextRowSourceRenderState::new(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-        ),
-        &mut render_policy,
-    )
+    .render_to_text_row_and_emit(state, &mut render_policy)
 }
 
 #[cfg(test)]

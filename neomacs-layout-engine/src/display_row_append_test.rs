@@ -3489,11 +3489,13 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
     let (progress, end) = append_context
         .append_request_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             SyntheticTextAppendRequest::active_source(
                 DisplayRowPosition { x_px: 0.0, col: 0 },
                 SyntheticTextSource::new(99, "..."),
@@ -3573,11 +3575,13 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
 
     let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
         .render_active_marker_to_text_row(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             &geometry,
             DisplayRowPosition { x_px: 0.0, col: 0 },
             SyntheticTextMarker::InvisibleEllipsis,
@@ -3635,10 +3639,13 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
 
     let end = BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0)
         .render_hscroll_truncation_marker_to_text_row(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             &face_resolver,
             &geometry,
             0.0,
@@ -3722,14 +3729,16 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
         BufferLinePrefixRenderContext::new(values, &surface, &geometry, &active_face, 0.0, 16.0)
             .render_requested_to_text_row_and_emit(
                 &mut prefix_request,
-                &mut eval,
-                &mut output_emitter,
+                &mut TextRowSourceRenderState::new(
+                    &mut builder,
+                    &mut output_emitter,
+                    &mut eval,
+                    &mut font_metrics,
+                    &face_resolver,
+                ),
                 &snapshot,
                 0,
-                &mut font_metrics,
-                &face_resolver,
                 &mut face_ids,
-                &mut builder,
                 DisplayRowPosition { x_px: 0.0, col: 0 },
             );
 
@@ -3862,11 +3871,13 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
     let (progress, end) = append_context
         .append_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             DisplayRowPosition { x_px: 8.0, col: 1 },
             SyntheticTextSource::new(100, "\u{301}"),
         )
@@ -7858,11 +7869,13 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     )
     .resolve_and_append_to_text_row(
         &buffer,
-        &mut eval,
-        &mut output_emitter,
-        &mut builder,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &mut face_ids,
         &surface,
         &mut geometry,
@@ -8640,11 +8653,13 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
     let end = request.render_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &mut face_ids,
         &append_context,
         &mut measurer,
@@ -8709,12 +8724,14 @@ fn append_raw_display_replacement_item_to_text_row_and_emit_uses_face_fallback()
     );
 
     let (progress, end) = append_raw_display_replacement_item_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
+        &mut TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         item,
-        &face_resolver,
         base_face,
         7,
         frame,
@@ -8796,11 +8813,13 @@ fn display_replacement_append_context_advances_stretch_output() {
         .expect("stretch append request");
     let (_progress, end) = append_context
         .append_item_request_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             request,
         )
         .expect("append progress");
@@ -8880,11 +8899,13 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
         .append_item_request_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             request,
         )
         .expect("append progress");
@@ -8952,11 +8973,13 @@ fn synthetic_text_append_context_uses_source_append_request() {
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0);
     let (_progress, end) = append_context
         .append_request_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             SyntheticTextAppendRequest::text_row_metrics_source(
                 DisplayRowPosition { x_px: 0.0, col: 0 },
                 SyntheticTextSource::new(9, "x"),
@@ -9052,11 +9075,13 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     let request = media_item.append_request(DisplayRowPosition { x_px: 16.0, col: 2 });
     let (progress, end) = append_context
         .append_item_request_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             request,
         )
         .expect("append progress");
@@ -9182,11 +9207,13 @@ fn display_replacement_append_context_installs_image_replacements() {
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
     let (progress, end) = append_context
         .append_replacement_item_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             DisplayReplacementAppendItem::media(media_item),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
@@ -9315,11 +9342,13 @@ fn display_replacement_append_context_installs_video_replacements() {
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
     let (progress, end) = append_context
         .append_replacement_item_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             DisplayReplacementAppendItem::media(media_item),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
