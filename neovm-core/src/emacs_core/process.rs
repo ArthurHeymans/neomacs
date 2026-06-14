@@ -662,7 +662,7 @@ struct ProcessWaitBackend {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ProcessWaitBackendInterest {
+pub(crate) enum ProcessWaitBackendInterest {
     ProcessesOnly,
     InputWakeupOnly,
     InputWakeupAndProcesses,
@@ -2043,28 +2043,11 @@ impl ProcessManager {
         self.wait_backend.notify_handle()
     }
 
-    pub(crate) fn wait_for_input_wakeup_events(
-        &self,
-        timeout: std::time::Duration,
-    ) -> Option<ProcessWaitEvents> {
-        self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::InputWakeupOnly)
-    }
-
-    pub(crate) fn wait_for_process_backend_events(
-        &self,
-        timeout: std::time::Duration,
-    ) -> Option<ProcessWaitEvents> {
-        self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::ProcessesOnly)
-    }
-
-    pub(crate) fn wait_for_input_wakeup_or_process_events(
-        &self,
-        timeout: std::time::Duration,
-    ) -> Option<ProcessWaitEvents> {
-        self.wait_for_backend_events(timeout, ProcessWaitBackendInterest::InputWakeupAndProcesses)
-    }
-
-    fn wait_for_backend_events(
+    /// Block on the unified wait poller (input-wakeup fd and/or process fds,
+    /// per `interest`) until something is ready or `timeout` elapses. This is
+    /// the single GNU-`pselect`-style primitive the wait loop blocks on; see
+    /// `Context::block_for_wait_request`.
+    pub(crate) fn wait_for_backend_events(
         &self,
         timeout: std::time::Duration,
         interest: ProcessWaitBackendInterest,

@@ -2347,7 +2347,10 @@ fn wait_backend_wakes_on_registered_input_wakeup_fd() {
 
     write.write_all(&[1]).expect("write input wakeup");
     let events = processes
-        .wait_for_input_wakeup_events(Duration::from_secs(1))
+        .wait_for_backend_events(
+            Duration::from_secs(1),
+            ProcessWaitBackendInterest::InputWakeupOnly,
+        )
         .expect("poller should be available");
 
     assert!(events.has_input_wakeup());
@@ -2367,7 +2370,7 @@ fn wait_backend_process_interest_ignores_input_wakeup_fd() {
 
     write.write_all(&[1]).expect("write input wakeup");
     let events = processes
-        .wait_for_process_backend_events(Duration::ZERO)
+        .wait_for_backend_events(Duration::ZERO, ProcessWaitBackendInterest::ProcessesOnly)
         .expect("poller should be available");
 
     assert!(!events.has_input_wakeup());

@@ -13,7 +13,7 @@ use crate::keyboard::SpecialInputServiceOutcome;
 use super::error::Flow;
 use super::process::{
     ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest, ProcessOutputWaitRequest,
-    ProcessOutputWaitTiming, ProcessWaitEvents,
+    ProcessOutputWaitTiming, ProcessWaitBackendInterest, ProcessWaitEvents,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -644,14 +644,27 @@ impl WaitBlockActivity {
     }
 }
 
+/// How the wait loop blocks for one iteration.
+///
+/// When a wait poller exists (the normal case on every OS) we block on it —
+/// GNU's single `pselect` equivalent — watching the input-wakeup fd and/or the
+/// process fds as the request requires (`Poller`). Without a poller (creation
+/// failed / headless) we fall back to an explicit degraded primitive.
 #[derive(Debug, PartialEq, Eq)]
-enum WaitBlockStrategy {
-    ServiceNow,
-    BackendInputWakeup,
-    BackendProcesses,
-    BackendInputWakeupAndProcesses,
-    HostInput,
-    ProcessOutput,
+enum WaitBlock {
+    /// Zero timeout: service immediately, don't block.
+    Poll,
+    /// Block on the unified poller with the given interest.
+    Poller(ProcessWaitBackendInterest),
+    /// Block directly on the host-input channel (`recv_timeout`), ignoring
+    /// process fds. Used when no poller exists, or when host input is wanted
+    /// but process output is not *and* live process fds exist — polling those
+    /// with no interest would spin (they stay readable), so we wait on the
+    /// channel instead.
+    HostInputChannel,
+    /// No poller: poll process output via a short sleep + harvest all live.
+    ProcessOutputSleep,
+    /// No poller, pure timeout: blind sleep.
     Sleep,
 }
 
@@ -853,44 +866,54 @@ impl super::eval::Context {
         request: &WaitRequest,
         wait_time: Duration,
     ) -> Result<WaitBlockActivity, Flow> {
-        match self.wait_block_strategy(request, wait_time) {
-            WaitBlockStrategy::ServiceNow => Ok(WaitBlockActivity::poll()),
-            WaitBlockStrategy::BackendInputWakeup => {
+        match self.wait_block(request, wait_time) {
+            WaitBlock::Poll => Ok(WaitBlockActivity::poll()),
+            WaitBlock::Poller(interest) => {
+                // Mirror GNU: while blocked reading a command key,
+                // `waiting-for-user-input-p` must report t. The channel path
+                // sets this itself (see `wait_for_next_host_input_event`); the
+                // poller path must set it explicitly around the block.
+                let restore = self.begin_waiting_for_user_input_if_requested(request);
                 let events = self
                     .processes
-                    .wait_for_input_wakeup_events(wait_time)
+                    .wait_for_backend_events(wait_time, interest)
                     .unwrap_or_default();
+                self.end_waiting_for_user_input(restore);
                 Ok(WaitBlockActivity::from_source_events(events))
             }
-            WaitBlockStrategy::BackendProcesses => {
-                let events = self
-                    .processes
-                    .wait_for_process_backend_events(wait_time)
-                    .unwrap_or_default();
-                Ok(WaitBlockActivity::from_source_events(events))
-            }
-            WaitBlockStrategy::BackendInputWakeupAndProcesses => {
-                let events = self
-                    .processes
-                    .wait_for_input_wakeup_or_process_events(wait_time)
-                    .unwrap_or_default();
-                Ok(WaitBlockActivity::from_source_events(events))
-            }
-            WaitBlockStrategy::HostInput => {
+            WaitBlock::HostInputChannel => {
                 let _ = self.wait_for_next_host_input_event(
                     wait_time,
                     request.sets_waiting_for_user_input(),
                 )?;
                 Ok(WaitBlockActivity::poll())
             }
-            WaitBlockStrategy::ProcessOutput => {
+            WaitBlock::ProcessOutputSleep => {
                 let events = self.processes.wait_for_process_events(wait_time);
                 Ok(WaitBlockActivity::from_source_events(events))
             }
-            WaitBlockStrategy::Sleep => {
+            WaitBlock::Sleep => {
                 std::thread::sleep(wait_time);
                 Ok(WaitBlockActivity::ready_processes(Vec::new()))
             }
+        }
+    }
+
+    /// Set `waiting_for_user_input` for the duration of a poller block when the
+    /// request reads a command key, returning the previous value to restore.
+    fn begin_waiting_for_user_input_if_requested(&mut self, request: &WaitRequest) -> Option<bool> {
+        if request.sets_waiting_for_user_input() {
+            let previous = self.waiting_for_user_input();
+            self.set_waiting_for_user_input(true);
+            Some(previous)
+        } else {
+            None
+        }
+    }
+
+    fn end_waiting_for_user_input(&mut self, restore: Option<bool>) {
+        if let Some(previous) = restore {
+            self.set_waiting_for_user_input(previous);
         }
     }
 
@@ -906,52 +929,53 @@ impl super::eval::Context {
         timeout
     }
 
-    fn wait_block_strategy(&self, request: &WaitRequest, wait_time: Duration) -> WaitBlockStrategy {
+    /// Choose how to block for one wait-loop iteration. See [`WaitBlock`].
+    ///
+    /// With a poller present (the normal case) this is GNU's single `pselect`:
+    /// we watch the input-wakeup fd whenever the request reads host input and
+    /// the process fds whenever it services process output. The one wrinkle is
+    /// `(host input, no process output)` while process fds are live: the poller
+    /// is level-triggered, so polling readable-but-unserviced process fds with
+    /// no interest would spin — there we block on the input channel instead.
+    fn wait_block(&self, request: &WaitRequest, wait_time: Duration) -> WaitBlock {
         if wait_time.is_zero() {
-            return WaitBlockStrategy::ServiceNow;
+            return WaitBlock::Poll;
         }
 
-        if let Some(strategy) = self.wait_backend_interest_for_request(request) {
-            return strategy;
-        }
+        let wants_input = request.waits_for_host_input();
+        let wants_processes = request.services_process_output();
 
-        if request.waits_for_host_input() && self.input_rx.is_some() {
-            return WaitBlockStrategy::HostInput;
-        }
-
-        if request.services_process_output() {
-            return WaitBlockStrategy::ProcessOutput;
-        }
-
-        // Pure timeout wait (no input/process interest). Prefer a poller wait
-        // (wakeable by a process event or notify, and timeout-bounded) over a
-        // blind `std::thread::sleep`; fall back to sleeping only when no poller
-        // exists (e.g. headless/batch where poller creation failed).
         if self.processes.has_wait_input_wakeup_backend() {
-            return WaitBlockStrategy::BackendProcesses;
-        }
-
-        WaitBlockStrategy::Sleep
-    }
-
-    fn wait_backend_interest_for_request(
-        &self,
-        request: &WaitRequest,
-    ) -> Option<WaitBlockStrategy> {
-        if !self.processes.has_wait_input_wakeup_backend() {
-            return None;
-        }
-        if request.services_process_output() {
-            return if request.waits_for_host_input() {
-                Some(WaitBlockStrategy::BackendInputWakeupAndProcesses)
-            } else {
-                Some(WaitBlockStrategy::BackendProcesses)
+            use ProcessWaitBackendInterest::{
+                InputWakeupAndProcesses, InputWakeupOnly, ProcessesOnly,
+            };
+            return match (wants_input, wants_processes) {
+                (true, true) => WaitBlock::Poller(InputWakeupAndProcesses),
+                (true, false) => {
+                    if self.processes.live_process_ids().is_empty() {
+                        WaitBlock::Poller(InputWakeupOnly)
+                    } else if self.input_rx.is_some() {
+                        // Live process fds we won't service → channel, no spin.
+                        WaitBlock::HostInputChannel
+                    } else {
+                        // No channel to drain; watch the live process fds.
+                        WaitBlock::Poller(ProcessesOnly)
+                    }
+                }
+                // Process output, or a pure timeout: a wakeable poll beats a
+                // blind sleep and harvests live process fds.
+                (false, _) => WaitBlock::Poller(ProcessesOnly),
             };
         }
-        if request.waits_for_host_input() && self.processes.live_process_ids().is_empty() {
-            return Some(WaitBlockStrategy::BackendInputWakeup);
+
+        // No poller (creation failed / headless): explicit degraded fallbacks.
+        if wants_input && self.input_rx.is_some() {
+            WaitBlock::HostInputChannel
+        } else if wants_processes {
+            WaitBlock::ProcessOutputSleep
+        } else {
+            WaitBlock::Sleep
         }
-        None
     }
 }
 
