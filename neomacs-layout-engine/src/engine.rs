@@ -19,7 +19,7 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
-use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
+use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
@@ -1011,31 +1011,19 @@ impl LayoutEngine {
         let cols = ((text_width - lnum_pixel_width) / char_w).floor() as usize;
         let content_x = text_x + lnum_pixel_width;
 
-        let requested_window_start = params.window_start_charpos().get();
-        let previous_window_end = params.previous_window_end_charpos().map(|pos| pos.get());
-        let point_charpos = params.point_charpos().get();
-        let accessible_start = params.accessible_start_charpos().get();
-        let accessible_end = params.accessible_end_charpos().get();
-
         // GNU Emacs redisplay advances iterators until the visible window is
         // fully resolved; it does not stop at an arbitrary "rows * cols"
         // character budget.  Capping the text slice here truncates long
         // wrapped or truncated lines before they are actually offscreen, which
         // breaks both redisplay and geometry queries.
-        let text_source = BufferTextWindowSourceRequest::new(
-            requested_window_start,
-            previous_window_end,
-            point_charpos,
-            accessible_start,
-            accessible_end,
-            max_rows,
-            params.bounds.width,
-            params.is_minibuffer,
-        )
-        .read_into(&buf_access, &mut self.text_buf);
+        let text_source = BufferTextWindowSourceReadRequest::new(params, max_rows)
+            .read_into(&buf_access, &mut self.text_buf);
         let window_start = text_source.window_start();
         let text_start_byte = text_source.text_start_byte();
         let bytes_read = text_source.bytes_read();
+        let point_charpos = text_source.point_charpos();
+        let accessible_start = text_source.accessible_start();
+        let accessible_end = text_source.accessible_end();
 
         let text = if bytes_read > 0 {
             &self.text_buf[..bytes_read]

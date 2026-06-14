@@ -1,10 +1,14 @@
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::types::WindowParams;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowSource {
     window_start: i64,
     text_start_byte: usize,
     bytes_read: usize,
+    point_charpos: i64,
+    accessible_start: i64,
+    accessible_end: i64,
 }
 
 impl BufferTextWindowSource {
@@ -19,6 +23,24 @@ impl BufferTextWindowSource {
     pub(crate) const fn bytes_read(self) -> usize {
         self.bytes_read
     }
+
+    pub(crate) const fn point_charpos(self) -> i64 {
+        self.point_charpos
+    }
+
+    pub(crate) const fn accessible_start(self) -> i64 {
+        self.accessible_start
+    }
+
+    pub(crate) const fn accessible_end(self) -> i64 {
+        self.accessible_end
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferTextWindowSourceReadRequest<'a> {
+    params: &'a WindowParams,
+    max_rows: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,7 +55,35 @@ pub(crate) struct BufferTextWindowSourceRequest {
     is_minibuffer: bool,
 }
 
+impl<'a> BufferTextWindowSourceReadRequest<'a> {
+    pub(crate) fn new(params: &'a WindowParams, max_rows: usize) -> Self {
+        Self { params, max_rows }
+    }
+
+    pub(crate) fn read_into<B: LayoutBufferView>(
+        self,
+        access: &RustBufferAccess<'_, B>,
+        out: &mut Vec<u8>,
+    ) -> BufferTextWindowSource {
+        BufferTextWindowSourceRequest::from_window_params(self.params, self.max_rows)
+            .read_into(access, out)
+    }
+}
+
 impl BufferTextWindowSourceRequest {
+    pub(crate) fn from_window_params(params: &WindowParams, max_rows: usize) -> Self {
+        Self::new(
+            params.window_start_charpos().get(),
+            params.previous_window_end_charpos().map(|pos| pos.get()),
+            params.point_charpos().get(),
+            params.accessible_start_charpos().get(),
+            params.accessible_end_charpos().get(),
+            max_rows,
+            params.bounds.width,
+            params.is_minibuffer,
+        )
+    }
+
     pub(crate) fn new(
         requested_window_start: i64,
         previous_window_end: Option<i64>,
@@ -79,6 +129,9 @@ impl BufferTextWindowSourceRequest {
             window_start,
             text_start_byte,
             bytes_read,
+            point_charpos: self.point_charpos,
+            accessible_start: self.accessible_start,
+            accessible_end: self.accessible_end,
         }
     }
 

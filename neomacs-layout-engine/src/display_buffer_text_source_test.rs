@@ -1,4 +1,66 @@
 use super::*;
+use crate::types::WindowParams;
+use neomacs_display_protocol::types::Rect;
+
+fn window_params() -> WindowParams {
+    WindowParams {
+        window_id: 1,
+        buffer_id: 1,
+        bounds: Rect::new(0.0, 8.0, 240.0, 120.0),
+        text_bounds: Rect::new(16.0, 32.0, 160.0, 80.0),
+        selected: true,
+        is_minibuffer: false,
+        window_start: 17,
+        window_end: 29,
+        point: 21,
+        buffer_size: 80,
+        buffer_begv: 3,
+        hscroll: 0,
+        vscroll: 0,
+        truncate_lines: false,
+        word_wrap: false,
+        tab_width: 8,
+        tab_stop_list: vec![],
+        default_fg: 0x00ff_ffff,
+        default_bg: 0,
+        char_width: 8.0,
+        char_height: 16.0,
+        window_system: true,
+        font_pixel_size: 14.0,
+        font_ascent: 11.0,
+        mode_line_height: 0.0,
+        header_line_height: 0.0,
+        tab_line_height: 0.0,
+        cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::FilledBox,
+        cursor_bar_width: neomacs_display_protocol::cursor::CursorBarWidth::TWO,
+        x_stretch_cursor: false,
+        cursor_color: 0x00ff_ffff,
+        cursor_effects: None,
+        visual_cursors: Vec::new(),
+        left_fringe_width: 8.0,
+        right_fringe_width: 8.0,
+        indicate_empty_lines: 2,
+        show_trailing_whitespace: false,
+        trailing_ws_bg: 0,
+        fill_column_indicator: 3,
+        fill_column_indicator_char: '|',
+        fill_column_indicator_fg: 0,
+        extra_line_spacing: 0.0,
+        selective_display: 0,
+        escape_glyph_fg: 0,
+        nobreak_char_display: 0,
+        nobreak_char_fg: 0,
+        glyphless_char_fg: 0,
+        wrap_prefix: vec![],
+        line_prefix: vec![],
+        left_margin_width: 0.0,
+        right_margin_width: 0.0,
+        vertical_scroll_bar_side: None,
+        horizontal_scroll_bar: false,
+        scroll_bar_pixel_width: 0.0,
+        scroll_bar_pixel_height: 0.0,
+    }
+}
 
 fn request(
     requested_window_start: i64,
@@ -22,6 +84,21 @@ fn request(
 
 fn byte_at_charpos(text: &'static [u8]) -> impl Fn(i64) -> Option<u8> {
     move |charpos| text.get(charpos as usize).copied()
+}
+
+#[test]
+fn source_request_from_window_params_carries_source_bounds() {
+    let params = window_params();
+    let request = BufferTextWindowSourceRequest::from_window_params(&params, 6);
+
+    assert_eq!(request.requested_window_start, 17);
+    assert_eq!(request.previous_window_end, Some(29));
+    assert_eq!(request.point_charpos, 21);
+    assert_eq!(request.accessible_start, 3);
+    assert_eq!(request.accessible_end, 80);
+    assert_eq!(request.max_rows, 6);
+    assert_eq!(request.window_width_px, 240);
+    assert!(!request.is_minibuffer);
 }
 
 #[test]
