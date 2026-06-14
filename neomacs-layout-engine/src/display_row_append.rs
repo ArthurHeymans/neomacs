@@ -3619,6 +3619,67 @@ impl DisplayReplacementStringSourceAppendRequest {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct DisplayReplacementStringAppendRequest {
+    item: DisplayReplacementStringAppendItem,
+    replacement_base_face: Option<DisplayStringBaseFace>,
+}
+
+impl DisplayReplacementStringAppendRequest {
+    fn new(
+        item: DisplayReplacementStringAppendItem,
+        replacement_base_face: Option<DisplayStringBaseFace>,
+    ) -> Self {
+        Self {
+            item,
+            replacement_base_face,
+        }
+    }
+
+    #[cfg(test)]
+    fn origin(&self) -> DisplayOrigin {
+        self.item.origin()
+    }
+
+    #[cfg(test)]
+    fn base_face_policy(&self) -> BaseFacePolicy {
+        self.item.base_face_policy()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        if self.item.is_empty() {
+            return position;
+        }
+        let Some(replacement_base_face) = self.replacement_base_face else {
+            debug_assert!(false, "display string replacement missing base face");
+            return position;
+        };
+        replacement_append_context.append_full_text_width_string_item_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            self.item,
+            face_resolver,
+            face_ids,
+            replacement_base_face.face_id(),
+            replacement_base_face.face(),
+            position,
+        )
+    }
+}
+
 #[cfg(test)]
 fn append_raw_display_replacement_item_to_text_row_and_emit(
     builder: &mut GlyphMatrixBuilder,
@@ -4272,46 +4333,27 @@ impl DisplayPropertyReplacementAppendRequest {
         self.start_position
     }
 
-    pub(crate) fn row_append_context<'a>(
-        &self,
-        append_surface: &'a DisplayRowAppendSurface,
-        geometry: &DisplayRowGeometryState,
-        active_face: &'a DisplayRowActiveFaceState,
-    ) -> DisplayReplacementRowAppendContext<'a> {
-        DisplayReplacementRowAppendContext::new(
-            self.replacement_source,
-            append_surface,
-            geometry,
-            active_face,
-            self.glyph_y_offset,
-            self.default_row_height,
-        )
-    }
-
-    pub(crate) fn string_base_face_request(
-        &self,
-    ) -> Option<DisplayPropertyReplacementStringBaseFaceRequest> {
-        match &self.item {
-            DisplayPropertyReplacementAppendItem::String(item) if !item.is_empty() => {
-                Some(DisplayPropertyReplacementStringBaseFaceRequest {
-                    origin: item.origin(),
-                    base_face_policy: item.base_face_policy(),
-                })
-            }
-            _ => None,
-        }
-    }
-
-    pub(crate) fn into_plan(
+    pub(crate) fn into_plan<B: LayoutBufferView>(
         self,
-        string_base_face: Option<DisplayStringBaseFace>,
+        buffer: &B,
+        face_resolver: &FaceResolver,
+        active_face_state: &DisplayRowActiveFaceState,
+        face_ids: &mut FrameFaceIdAllocator,
+        builder: &mut GlyphMatrixBuilder,
     ) -> DisplayPropertyReplacementAppendPlan {
+        let item =
+            self.item
+                .into_plan_item(buffer, face_resolver, active_face_state, face_ids, builder);
         DisplayPropertyReplacementAppendPlan {
-            request: self,
-            string_base_face,
+            replacement_source: self.replacement_source,
+            item,
+            glyph_y_offset: self.glyph_y_offset,
+            default_row_height: self.default_row_height,
+            start_position: self.start_position,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn into_item(self) -> DisplayPropertyReplacementAppendItem {
         self.item
     }
@@ -4332,18 +4374,8 @@ impl DisplayPropertyReplacementAppendRequest {
     ) -> DisplayPropertyReplacementAppendOutcome {
         let start_position = self.start_position();
         let cursor_policy = self.cursor_policy();
-        let string_base_face = self.string_base_face_request().map(|request| {
-            display_string_base_face_for_active_row(
-                buffer,
-                face_resolver,
-                request.origin(),
-                request.base_face_policy(),
-                active_face_state,
-                face_ids,
-                builder,
-            )
-        });
-        let end_position = self.into_plan(string_base_face).append_to_text_row(
+        let plan = self.into_plan(buffer, face_resolver, active_face_state, face_ids, builder);
+        let end_position = plan.append_to_text_row(
             evaluator,
             output_emitter,
             builder,
@@ -4387,28 +4419,23 @@ impl DisplayPropertyReplacementAppendOutcome {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayPropertyReplacementStringBaseFaceRequest {
-    origin: DisplayOrigin,
-    base_face_policy: BaseFacePolicy,
-}
-
-impl DisplayPropertyReplacementStringBaseFaceRequest {
-    pub(crate) fn origin(self) -> DisplayOrigin {
-        self.origin
-    }
-
-    pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
-        self.base_face_policy
-    }
-}
-
 pub(crate) struct DisplayPropertyReplacementAppendPlan {
-    request: DisplayPropertyReplacementAppendRequest,
-    string_base_face: Option<DisplayStringBaseFace>,
+    replacement_source: BufferDisplayReplacementSource,
+    item: DisplayPropertyReplacementAppendPlanItem,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    start_position: DisplayRowPosition,
 }
 
 impl DisplayPropertyReplacementAppendPlan {
+    #[cfg(test)]
+    pub(crate) fn string_append_request(&self) -> Option<&DisplayReplacementStringAppendRequest> {
+        match &self.item {
+            DisplayPropertyReplacementAppendPlanItem::String(request) => Some(request),
+            _ => None,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn append_to_text_row(
         self,
@@ -4422,13 +4449,17 @@ impl DisplayPropertyReplacementAppendPlan {
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
     ) -> DisplayRowPosition {
-        let position = self.request.start_position();
-        let replacement_append_context =
-            self.request
-                .row_append_context(append_surface, row_geometry, active_face_state);
-        self.request.into_item().append_to_text_row(
+        let position = self.start_position;
+        let replacement_append_context = DisplayReplacementRowAppendContext::new(
+            self.replacement_source,
+            append_surface,
+            row_geometry,
+            active_face_state,
+            self.glyph_y_offset,
+            self.default_row_height,
+        );
+        self.item.append_to_text_row(
             replacement_append_context,
-            self.string_base_face,
             row_geometry,
             builder,
             output_emitter,
@@ -4439,6 +4470,13 @@ impl DisplayPropertyReplacementAppendPlan {
             position,
         )
     }
+}
+
+#[derive(Clone)]
+enum DisplayPropertyReplacementAppendPlanItem {
+    String(DisplayReplacementStringAppendRequest),
+    Stretch(DisplayReplacementStretchAppendItem),
+    Media(DisplayReplacementMediaAppendResolution),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -4456,6 +4494,37 @@ pub(crate) enum DisplayPropertyReplacementCursorPolicy {
 }
 
 impl DisplayPropertyReplacementAppendItem {
+    #[allow(clippy::too_many_arguments)]
+    fn into_plan_item<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        face_resolver: &FaceResolver,
+        active_face_state: &DisplayRowActiveFaceState,
+        face_ids: &mut FrameFaceIdAllocator,
+        builder: &mut GlyphMatrixBuilder,
+    ) -> DisplayPropertyReplacementAppendPlanItem {
+        match self {
+            Self::String(item) => {
+                let replacement_base_face = (!item.is_empty()).then(|| {
+                    display_string_base_face_for_active_row(
+                        buffer,
+                        face_resolver,
+                        item.origin(),
+                        item.base_face_policy(),
+                        active_face_state,
+                        face_ids,
+                        builder,
+                    )
+                });
+                DisplayPropertyReplacementAppendPlanItem::String(
+                    DisplayReplacementStringAppendRequest::new(item, replacement_base_face),
+                )
+            }
+            Self::Stretch(item) => DisplayPropertyReplacementAppendPlanItem::Stretch(item),
+            Self::Media(item) => DisplayPropertyReplacementAppendPlanItem::Media(item),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve(
         display_property: &DisplayPropertyClassification,
@@ -4532,12 +4601,13 @@ impl DisplayPropertyReplacementAppendItem {
             }
         }
     }
+}
 
+impl DisplayPropertyReplacementAppendPlanItem {
     #[allow(clippy::too_many_arguments)]
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        string_base_face: Option<DisplayStringBaseFace>,
         row_geometry: &mut DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
@@ -4548,9 +4618,8 @@ impl DisplayPropertyReplacementAppendItem {
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         match self {
-            Self::String(replacement_item) => replacement_item.append_to_text_row(
+            Self::String(request) => request.append_to_text_row(
                 replacement_append_context,
-                string_base_face,
                 builder,
                 output_emitter,
                 evaluator,
@@ -4580,42 +4649,6 @@ impl DisplayPropertyReplacementAppendItem {
                 position,
             ),
         }
-    }
-}
-
-impl DisplayReplacementStringAppendItem {
-    #[allow(clippy::too_many_arguments)]
-    fn append_to_text_row(
-        self,
-        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        string_base_face: Option<DisplayStringBaseFace>,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        position: DisplayRowPosition,
-    ) -> DisplayRowPosition {
-        if self.is_empty() {
-            return position;
-        }
-        let Some(replacement_base_face) = string_base_face else {
-            debug_assert!(false, "display string replacement missing base face");
-            return position;
-        };
-        replacement_append_context.append_full_text_width_string_item_to_text_row(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            self,
-            face_resolver,
-            face_ids,
-            replacement_base_face.face_id(),
-            replacement_base_face.face(),
-            position,
-        )
     }
 }
 

@@ -3560,7 +3560,6 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
         request.start_position(),
         DisplayRowPosition { x_px: 24.0, col: 4 }
     );
-    assert!(request.string_base_face_request().is_none());
     let DisplayPropertyReplacementAppendItem::Stretch(item) = request.into_item() else {
         panic!("expected stretch replacement item");
     };
@@ -3570,7 +3569,13 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
 
 #[test]
 fn display_property_replacement_append_resolve_request_builds_append_request() {
-    let _eval = Context::new();
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer = current_buffer_snapshot(&eval, buf_id);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
     let value = Value::string("ab");
@@ -3580,7 +3585,7 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         &classification,
         value,
         crate::display_source::BufferDisplayReplacementSource::new(
-            BufferId(7),
+            buf_id,
             CharPos0::new(3),
             EmacsBytePos::new(12),
         ),
@@ -3608,20 +3613,32 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         request.start_position(),
         DisplayRowPosition { x_px: 24.0, col: 4 }
     );
-    let string_base_face_request = request
-        .string_base_face_request()
-        .expect("string replacement requires base face resolution");
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let plan = request.into_plan(
+        &buffer,
+        &face_resolver,
+        &active_face,
+        &mut face_ids,
+        &mut builder,
+    );
+    let string_append_request = plan
+        .string_append_request()
+        .expect("string replacement lowers to string append request");
     assert_eq!(
-        string_base_face_request.origin(),
+        string_append_request.origin(),
         DisplayOrigin::DisplayPropertyString {
             anchor_charpos: CharPos0::new(3),
             source: DisplayPropertySource::TextProperty,
         }
     );
     assert_eq!(
-        string_base_face_request.base_face_policy(),
+        string_append_request.base_face_policy(),
         BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
+    assert!(string_append_request.replacement_base_face.is_some());
 }
 
 #[test]
