@@ -61,10 +61,11 @@ use crate::display_row_append::{
     BufferHscrollSkipAction, BufferHscrollSkipSourceChar, BufferInvisibleTextScanAction,
     BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
-    BufferSyntheticTextRenderContext, BufferTextLineBreakSourceAction,
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, BufferTextTruncationSkipAction,
+    BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
+    BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
+    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
+    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
+    BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
     DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
     DisplayRowTransitionPrefixContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
@@ -2360,7 +2361,7 @@ impl LayoutEngine {
             // character-wrap can resume from the same buffer position on the
             // next visual row, like GNU Emacs restoring its iterator state.
             let ch_start_byte_idx = byte_idx;
-            let _ch_start_charpos = charpos;
+            let ch_start_charpos = charpos;
             let ch = match std::str::from_utf8(&text[byte_idx..]) {
                 Ok(s) => {
                     let ch = s.chars().next().unwrap_or('\u{FFFD}');
@@ -2776,17 +2777,9 @@ impl LayoutEngine {
                     break_candidate: wrap_break,
                     transition,
                 } => {
-                    // Word-wrap: rewind to last break point
-                    output_emitter.truncate_display_points(wrap_break.display_point_count());
-                    let (row_first_display_pos, row_last_display_pos) =
-                        wrap_break.row_display_positions();
-                    output_emitter.restore_current_row_display_positions(
-                        row_first_display_pos,
-                        row_last_display_pos,
-                    );
-                    byte_idx = wrap_break.byte_idx();
-                    charpos = wrap_break.charpos();
-                    col = 0;
+                    let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
+                    word_wrap_action.restore_row_output_progress(&mut output_emitter);
+                    word_wrap_action.rewind_source_state(&mut byte_idx, &mut charpos, &mut col);
 
                     x = content_x;
                     row_extend.clear();
@@ -2812,7 +2805,7 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    charpos = sync_charpos_from_byte_idx(byte_idx);
+                    charpos = word_wrap_action.charpos();
                     hit_row_range.advance_to(charpos);
                     let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                         &mut prefix_request,
@@ -2833,6 +2826,10 @@ impl LayoutEngine {
                     continue;
                 }
                 BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
+                    let character_wrap_action = BufferTextCharacterWrapSourceAction::new(
+                        ch_start_byte_idx,
+                        ch_start_charpos,
+                    );
                     // Character wrap (no break point available)
                     x = content_x;
                     row_extend.clear();
@@ -2867,8 +2864,7 @@ impl LayoutEngine {
                         &mut trailing_whitespace,
                     );
                     transition.apply_row_start_prefix_action(&mut col, &mut transition_prefix);
-                    byte_idx = ch_start_byte_idx;
-                    charpos = sync_charpos_from_byte_idx(byte_idx);
+                    character_wrap_action.rewind_source_state(&mut byte_idx, &mut charpos);
                     hit_row_range.advance_to(charpos);
                     face_scan.invalidate();
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {

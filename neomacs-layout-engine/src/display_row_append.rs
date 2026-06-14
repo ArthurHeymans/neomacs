@@ -4498,6 +4498,65 @@ impl BufferTextTruncationSkipAction {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWordWrapSourceAction {
+    break_candidate: WordWrapBreakCandidate,
+}
+
+impl BufferTextWordWrapSourceAction {
+    pub(crate) fn new(break_candidate: WordWrapBreakCandidate) -> Self {
+        Self { break_candidate }
+    }
+
+    pub(crate) fn restore_row_output_progress(self, output_emitter: &mut WindowOutputEmitter) {
+        output_emitter.truncate_display_points(self.break_candidate.display_point_count());
+        let (row_first_display_pos, row_last_display_pos) =
+            self.break_candidate.row_display_positions();
+        output_emitter
+            .restore_current_row_display_positions(row_first_display_pos, row_last_display_pos);
+    }
+
+    pub(crate) fn rewind_source_state(
+        self,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        col: &mut usize,
+    ) {
+        *byte_idx = self.break_candidate.byte_idx();
+        *charpos = self.break_candidate.charpos();
+        *col = 0;
+    }
+
+    pub(crate) fn charpos(self) -> i64 {
+        self.break_candidate.charpos()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn byte_idx(self) -> usize {
+        self.break_candidate.byte_idx()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextCharacterWrapSourceAction {
+    ch_start_byte_idx: usize,
+    ch_start_charpos: i64,
+}
+
+impl BufferTextCharacterWrapSourceAction {
+    pub(crate) fn new(ch_start_byte_idx: usize, ch_start_charpos: i64) -> Self {
+        Self {
+            ch_start_byte_idx,
+            ch_start_charpos,
+        }
+    }
+
+    pub(crate) fn rewind_source_state(self, byte_idx: &mut usize, charpos: &mut i64) {
+        *byte_idx = self.ch_start_byte_idx;
+        *charpos = self.ch_start_charpos;
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSpecialSourceCharRequest {
     range: BufferTextSourceRange,

@@ -28,7 +28,7 @@ use crate::display_row_geometry::{
     DisplayRowYPositions,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, FaceScanCheckpoint, WordWrapRenderState,
+    BufferTextRowOverflowDecision, FaceScanCheckpoint, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
@@ -963,6 +963,41 @@ fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
     assert_eq!(action.charpos(), 4);
     assert_eq!(byte_idx, text.len());
     assert_eq!(charpos, 4);
+}
+
+#[test]
+fn buffer_text_word_wrap_source_action_rewinds_source_state() {
+    let mut break_candidate = WordWrapBreakCandidate::default();
+    break_candidate.record(
+        7,
+        12,
+        3,
+        (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
+    );
+    let action = BufferTextWordWrapSourceAction::new(break_candidate);
+    let mut byte_idx = 20;
+    let mut charpos = 30;
+    let mut col = 9;
+
+    action.rewind_source_state(&mut byte_idx, &mut charpos, &mut col);
+
+    assert_eq!(action.byte_idx(), 7);
+    assert_eq!(action.charpos(), 12);
+    assert_eq!(byte_idx, 7);
+    assert_eq!(charpos, 12);
+    assert_eq!(col, 0);
+}
+
+#[test]
+fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
+    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let mut byte_idx = 17;
+    let mut charpos = 22;
+
+    action.rewind_source_state(&mut byte_idx, &mut charpos);
+
+    assert_eq!(byte_idx, 13);
+    assert_eq!(charpos, 21);
 }
 
 #[test]
