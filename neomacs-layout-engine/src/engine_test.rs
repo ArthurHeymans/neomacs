@@ -7,11 +7,11 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
-    OverlayStringRenderBatchSource,
+    DisplayRowLineBreakTransitionPlan, OverlayStringRenderBatchSource,
 };
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision,
+    BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
 };
 use crate::display_source::DisplayItemSource;
 use crate::display_status_line::EchoMinibufferRowsRenderRequest;
@@ -166,12 +166,14 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
         },
     );
 
-    let prefix = TextRowTransitionStatePolicy::hidden_line_break().apply(
-        &mut line_numbers,
-        &mut hscroll,
-        &mut word_wrap,
-        &mut trailing,
-    );
+    let prefix = DisplayRowLineBreakTransitionPlan::hidden_line_break()
+        .state_policy()
+        .apply(
+            &mut line_numbers,
+            &mut hscroll,
+            &mut word_wrap,
+            &mut trailing,
+        );
 
     assert_eq!(
         prefix,

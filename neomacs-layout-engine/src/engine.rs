@@ -63,7 +63,7 @@ use crate::display_row_append::{
     BufferOverlayStringRenderContext, BufferSyntheticTextRenderContext,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceChar, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionRequest,
+    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
     DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
     SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
@@ -82,7 +82,7 @@ use crate::display_row_walk_state::WordWrapBreakCandidate;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
-    TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapRenderState,
+    TrailingWhitespaceRenderState, WordWrapRenderState,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos, skip_to_newline,
@@ -2209,7 +2209,9 @@ impl LayoutEngine {
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                     row_extend.clear();
 
-                    let boundary_request = DisplayRowLineBreakTransitionRequest::new(
+                    let line_break_transition =
+                        DisplayRowLineBreakTransitionPlan::hscroll_line_break();
+                    let boundary_request = line_break_transition.request(
                         hit_row_range.range_to(charpos),
                         row_geometry_defaults,
                         text_matrix_row_base,
@@ -2234,7 +2236,7 @@ impl LayoutEngine {
                     col = 0;
                     prefix_request.apply_transition_prefix_action(
                         has_prefix,
-                        TextRowTransitionStatePolicy::hscroll_line_break().apply(
+                        line_break_transition.state_policy().apply(
                             &mut line_numbers,
                             &mut hscroll_skip,
                             &mut word_wrap,
@@ -2453,23 +2455,26 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend.clear();
                         box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
-                        let row_transition = DisplayRowLineBreakTransitionRequest::new(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            0.0,
-                            row_y_positions.recording(),
-                            max_rows,
-                        )
-                        .emit(
-                            &mut row_geometry,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                        );
+                        let line_break_transition =
+                            DisplayRowLineBreakTransitionPlan::hidden_line_break();
+                        let row_transition = line_break_transition
+                            .request(
+                                hit_row_range.range_to(charpos),
+                                row_geometry_defaults,
+                                text_matrix_row_base,
+                                col,
+                                x,
+                                0.0,
+                                row_y_positions.recording(),
+                                max_rows,
+                            )
+                            .emit(
+                                &mut row_geometry,
+                                &mut hit_rows,
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                            );
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -2478,7 +2483,7 @@ impl LayoutEngine {
                         col = 0;
                         prefix_request.apply_transition_prefix_action(
                             has_prefix,
-                            TextRowTransitionStatePolicy::hidden_line_break().apply(
+                            line_break_transition.state_policy().apply(
                                 &mut line_numbers,
                                 &mut hscroll_skip,
                                 &mut word_wrap,
@@ -2555,23 +2560,25 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                let row_transition = DisplayRowLineBreakTransitionRequest::new(
-                    hit_row_range.range_to(charpos),
-                    row_geometry_defaults,
-                    text_matrix_row_base,
-                    col,
-                    x,
-                    line_spacing,
-                    row_y_positions.recording(),
-                    max_rows,
-                )
-                .emit(
-                    &mut row_geometry,
-                    &mut hit_rows,
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                );
+                let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
+                let row_transition = line_break_transition
+                    .request(
+                        hit_row_range.range_to(charpos),
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        col,
+                        x,
+                        line_spacing,
+                        row_y_positions.recording(),
+                        max_rows,
+                    )
+                    .emit(
+                        &mut row_geometry,
+                        &mut hit_rows,
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                    );
                 if row_transition.is_exhausted() {
                     break;
                 }
@@ -2581,7 +2588,7 @@ impl LayoutEngine {
                 col = 0;
                 prefix_request.apply_transition_prefix_action(
                     has_prefix,
-                    TextRowTransitionStatePolicy::line_break().apply(
+                    line_break_transition.state_policy().apply(
                         &mut line_numbers,
                         &mut hscroll_skip,
                         &mut word_wrap,

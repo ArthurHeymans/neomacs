@@ -260,6 +260,11 @@ pub(crate) struct DisplayRowLineBreakTransitionRequest<'a> {
     max_rows: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowLineBreakTransitionPlan {
+    state_policy: TextRowTransitionStatePolicy,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayRowOverflowTransitionKind {
     Truncation,
@@ -304,6 +309,52 @@ impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
             evaluator,
             geometry_transition,
             self.max_rows,
+        )
+    }
+}
+
+impl DisplayRowLineBreakTransitionPlan {
+    fn new(state_policy: TextRowTransitionStatePolicy) -> Self {
+        Self { state_policy }
+    }
+
+    pub(crate) fn hscroll_line_break() -> Self {
+        Self::new(TextRowTransitionStatePolicy::hscroll_line_break())
+    }
+
+    pub(crate) fn hidden_line_break() -> Self {
+        Self::new(TextRowTransitionStatePolicy::hidden_line_break())
+    }
+
+    pub(crate) fn line_break() -> Self {
+        Self::new(TextRowTransitionStatePolicy::line_break())
+    }
+
+    pub(crate) fn state_policy(self) -> TextRowTransitionStatePolicy {
+        self.state_policy
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn request<'a>(
+        self,
+        hit_range: DisplayRowHitRange,
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        col: usize,
+        x: f32,
+        line_spacing: f32,
+        row_y_recording: DisplayRowYRecording<'a>,
+        max_rows: usize,
+    ) -> DisplayRowLineBreakTransitionRequest<'a> {
+        DisplayRowLineBreakTransitionRequest::new(
+            hit_range,
+            defaults,
+            row_base,
+            col,
+            x,
+            line_spacing,
+            row_y_recording,
+            max_rows,
         )
     }
 }
