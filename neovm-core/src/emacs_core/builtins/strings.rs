@@ -1468,11 +1468,6 @@ fn format_string_spec_tracked(
     }
 }
 
-/// Get the princ representation of a value (for %s).
-fn format_value_princ(val: &Value) -> String {
-    super::misc_eval::print_value_princ(val)
-}
-
 /// Core format implementation shared by both pure and eval variants.
 /// Maps a span of bytes in a `%s` argument to its byte range in the
 /// formatted result, so the caller can copy text properties from the

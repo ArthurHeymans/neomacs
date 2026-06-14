@@ -1580,187 +1580,13 @@ pub(super) fn print_value_eval(eval: &super::eval::Context, value: &Value) -> St
     super::error::print_value_with_eval(eval, value)
 }
 
-fn print_value_princ_list_shorthand(
-    value: &Value,
-    print_quoted: bool,
-    render: &dyn Fn(&Value) -> String,
-) -> Option<String> {
-    if !print_quoted {
-        return None;
-    }
-
-    let items = super::value::list_to_vec(value)?;
-    if items.len() != 2 {
-        return None;
-    }
-
-    let head = match items[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id),
-        _ => return None,
-    };
-    let prefix = match head {
-        "quote" => "'",
-        "function" => "#'",
-        "`" => "`",
-        "," => ",",
-        ",@" => ",@",
-        _ => return None,
-    };
-    Some(format!("{prefix}{}", render(&items[1])))
-}
-
-pub(super) fn print_value_princ(value: &Value) -> String {
-    match value.kind() {
-        ValueKind::String => runtime_string_value(*value),
-        ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        ValueKind::Cons => {
-            if let Some(shorthand) =
-                print_value_princ_list_shorthand(value, true, &print_value_princ)
-            {
-                return shorthand;
-            }
-            let mut out = String::from("(");
-            let mut cursor = *value;
-            let mut first = true;
-            loop {
-                match cursor.kind() {
-                    ValueKind::Cons => {
-                        if !first {
-                            out.push(' ');
-                        }
-                        let pair_car = cursor.cons_car();
-                        let pair_cdr = cursor.cons_cdr();
-                        out.push_str(&print_value_princ(&pair_car));
-                        cursor = pair_cdr;
-                        first = false;
-                    }
-                    ValueKind::Nil => break,
-                    other => {
-                        if !first {
-                            out.push_str(" . ");
-                        }
-                        out.push_str(&print_value_princ(&cursor));
-                        break;
-                    }
-                }
-            }
-            out.push(')');
-            out
-        }
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            if super::chartable::bool_vector_length(value).is_some() {
-                return super::print::print_value(value);
-            }
-            let items = value.as_vector_data().unwrap().clone();
-            let parts: Vec<String> = items.iter().map(print_value_princ).collect();
-            format!("[{}]", parts.join(" "))
-        }
-        ValueKind::Veclike(VecLikeType::Record) => {
-            let items = value.as_record_data().unwrap().clone();
-            let parts: Vec<String> = items.iter().map(print_value_princ).collect();
-            format!("#s({})", parts.join(" "))
-        }
-        other => super::print::print_value(value),
-    }
-}
-
-pub(crate) fn print_value_princ_in_state(
-    ctx: &crate::emacs_core::eval::Context,
-    value: &Value,
-) -> String {
-    let print_quoted = ctx
-        .obarray
-        .symbol_value("print-quoted")
-        .map_or(true, |v| v.is_truthy());
-    if super::terminal::pure::print_terminal_handle(value).is_some()
-        || ctx.threads.thread_id_from_handle(value).is_some()
-        || ctx.threads.mutex_id_from_handle(value).is_some()
-        || ctx
-            .threads
-            .condition_variable_id_from_handle(value)
-            .is_some()
-    {
-        return super::error::print_value_in_state(ctx, value);
-    }
-    match value.kind() {
-        ValueKind::String => runtime_string_value(*value),
-        ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let id = value.as_buffer_id().unwrap();
-            if let Some(buf) = ctx.buffers.get(id) {
-                return buf.name_runtime_string_owned();
-            }
-            if ctx.buffers.dead_buffer_last_name_value(id).is_some() {
-                return "#<killed buffer>".to_string();
-            }
-            super::error::print_value_in_state(ctx, value)
-        }
-        ValueKind::Cons => {
-            if let Some(shorthand) =
-                print_value_princ_list_shorthand(value, print_quoted, &|item| {
-                    print_value_princ_in_state(ctx, item)
-                })
-            {
-                return shorthand;
-            }
-            let mut out = String::from("(");
-            let mut cursor = *value;
-            let mut first = true;
-            loop {
-                match cursor.kind() {
-                    ValueKind::Cons => {
-                        if !first {
-                            out.push(' ');
-                        }
-                        let pair_car = cursor.cons_car();
-                        let pair_cdr = cursor.cons_cdr();
-                        out.push_str(&print_value_princ_in_state(ctx, &pair_car));
-                        cursor = pair_cdr;
-                        first = false;
-                    }
-                    ValueKind::Nil => break,
-                    other => {
-                        if !first {
-                            out.push_str(" . ");
-                        }
-                        out.push_str(&print_value_princ_in_state(ctx, &cursor));
-                        break;
-                    }
-                }
-            }
-            out.push(')');
-            out
-        }
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            if super::chartable::bool_vector_length(value).is_some() {
-                return super::error::print_value_in_state(ctx, value);
-            }
-            let items = value.as_vector_data().unwrap().clone();
-            let parts: Vec<String> = items
-                .iter()
-                .map(|item| print_value_princ_in_state(ctx, item))
-                .collect();
-            format!("[{}]", parts.join(" "))
-        }
-        ValueKind::Veclike(VecLikeType::Record) => {
-            let items = value.as_record_data().unwrap().clone();
-            let parts: Vec<String> = items
-                .iter()
-                .map(|item| print_value_princ_in_state(ctx, item))
-                .collect();
-            format!("#s({})", parts.join(" "))
-        }
-        other => super::error::print_value_in_state(ctx, value),
-    }
-}
-
-/// Issue #131: byte-faithful sibling of [`print_value_princ_in_state`]. Renders
-/// the `princ` form as canonical Emacs internal-encoding bytes — a string emits
-/// its bytes verbatim (a real Private-Use glyph survives instead of being decoded
-/// as a raw byte), symbol/buffer names emit their name bytes, and cons / vector /
-/// record recurse with `princ` semantics. Opaque handles fall back to the byte
-/// `prin1` sink. This replaces `print_value_princ_in_state` for the `princ`
-/// builtins, retiring their storage-string round-trip.
+/// Issue #131: render the `princ` form of `value` as canonical Emacs
+/// internal-encoding bytes — a string emits its bytes verbatim (a real
+/// Private-Use glyph survives instead of being decoded as a raw byte), symbol /
+/// buffer names emit their name bytes, and cons / vector / record recurse with
+/// `princ` semantics. Opaque handles fall back to the byte `prin1` sink. This is
+/// the sole `princ` producer (the former storage-string `print_value_princ*`
+/// functions have been retired).
 pub(crate) fn print_value_princ_bytes(
     ctx: &crate::emacs_core::eval::Context,
     value: &Value,
@@ -1882,7 +1708,8 @@ pub(crate) fn print_value_princ_bytes(
     }
 }
 
-/// Byte-faithful sibling of [`print_value_princ_list_shorthand`].
+/// Recognise the `'x` / `#'x` / `` `x `` / `,x` / `,@x` two-element-list
+/// shorthands for [`print_value_princ_bytes`] and render them as Emacs bytes.
 fn print_value_princ_bytes_list_shorthand(
     value: &Value,
     print_quoted: bool,
@@ -1912,10 +1739,6 @@ fn print_value_princ_bytes_list_shorthand(
     let mut out = prefix.to_vec();
     out.extend_from_slice(&render(&items[1]));
     Some(out)
-}
-
-pub(super) fn print_value_princ_eval(eval: &super::eval::Context, value: &Value) -> String {
-    print_value_princ_in_state(eval, value)
 }
 
 fn prin1_to_string_value(value: &Value, noescape: bool) -> String {
