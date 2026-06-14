@@ -4257,85 +4257,18 @@ impl DisplayPropertyReplacementAppendPlan {
         let replacement_append_context =
             self.request
                 .row_append_context(append_surface, row_geometry, active_face_state);
-        match self.request.into_item() {
-            DisplayPropertyReplacementAppendItem::String(replacement_item) => {
-                if replacement_item.is_empty() {
-                    return position;
-                }
-                let Some(replacement_base_face) = self.string_base_face else {
-                    debug_assert!(false, "display string replacement missing base face");
-                    return position;
-                };
-                replacement_append_context.append_full_text_width_string_item_to_text_row(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    font_metrics,
-                    replacement_item,
-                    face_resolver,
-                    face_ids,
-                    replacement_base_face.face_id(),
-                    replacement_base_face.face(),
-                    position,
-                )
-            }
-            DisplayPropertyReplacementAppendItem::Stretch(stretch_item) => {
-                if stretch_item.width_px() <= 0.0 {
-                    return position;
-                }
-                row_geometry.include_glyph_vertical_metrics(
-                    stretch_item.height_px(),
-                    stretch_item.ascent_px(),
-                );
-                replacement_append_context
-                    .append_active_face_stretch_to_text_row_and_emit(
-                        builder,
-                        output_emitter,
-                        evaluator,
-                        font_metrics,
-                        face_resolver,
-                        stretch_item,
-                        position,
-                    )
-                    .map(|(_progress, position)| position)
-                    .unwrap_or(position)
-            }
-            DisplayPropertyReplacementAppendItem::Media(
-                DisplayReplacementMediaAppendResolution::Media(media_item),
-            ) => {
-                if let Some((progress, appended_position)) = replacement_append_context
-                    .append_display_box_media_to_text_row_and_emit(
-                        builder,
-                        output_emitter,
-                        evaluator,
-                        font_metrics,
-                        face_resolver,
-                        media_item,
-                        position,
-                    )
-                    && let Some((height, ascent)) = media_item.row_extents_after_append(&progress)
-                {
-                    row_geometry.include_row_extents(height, ascent);
-                    appended_position
-                } else {
-                    position
-                }
-            }
-            DisplayPropertyReplacementAppendItem::Media(
-                DisplayReplacementMediaAppendResolution::Placeholder(placeholder_item),
-            ) => replacement_append_context
-                .append_active_face_source_mapped_text_to_text_row_and_emit(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    font_metrics,
-                    face_resolver,
-                    placeholder_item,
-                    position,
-                )
-                .map(|(_progress, position)| position)
-                .unwrap_or(position),
-        }
+        self.request.into_item().append_to_text_row(
+            replacement_append_context,
+            self.string_base_face,
+            row_geometry,
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            position,
+        )
     }
 }
 
@@ -4429,6 +4362,220 @@ impl DisplayPropertyReplacementAppendItem {
                 DisplayPropertyReplacementCursorPolicy::FaceChar
             }
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        string_base_face: Option<DisplayStringBaseFace>,
+        row_geometry: &mut DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        match self {
+            Self::String(replacement_item) => replacement_item.append_to_text_row(
+                replacement_append_context,
+                string_base_face,
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                face_ids,
+                position,
+            ),
+            Self::Stretch(stretch_item) => stretch_item.append_to_text_row(
+                replacement_append_context,
+                row_geometry,
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                position,
+            ),
+            Self::Media(media_item) => media_item.append_to_text_row(
+                replacement_append_context,
+                row_geometry,
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                position,
+            ),
+        }
+    }
+}
+
+impl DisplayReplacementStringAppendItem {
+    #[allow(clippy::too_many_arguments)]
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        string_base_face: Option<DisplayStringBaseFace>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        if self.is_empty() {
+            return position;
+        }
+        let Some(replacement_base_face) = string_base_face else {
+            debug_assert!(false, "display string replacement missing base face");
+            return position;
+        };
+        replacement_append_context.append_full_text_width_string_item_to_text_row(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            self,
+            face_resolver,
+            face_ids,
+            replacement_base_face.face_id(),
+            replacement_base_face.face(),
+            position,
+        )
+    }
+}
+
+impl DisplayReplacementStretchAppendItem {
+    #[allow(clippy::too_many_arguments)]
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        if self.width_px() <= 0.0 {
+            return position;
+        }
+        row_geometry.include_glyph_vertical_metrics(self.height_px(), self.ascent_px());
+        replacement_append_context
+            .append_active_face_stretch_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                self,
+                position,
+            )
+            .map(|(_progress, position)| position)
+            .unwrap_or(position)
+    }
+}
+
+impl DisplayReplacementMediaAppendResolution {
+    #[allow(clippy::too_many_arguments)]
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        match self {
+            Self::Media(media_item) => media_item.append_to_text_row(
+                replacement_append_context,
+                row_geometry,
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                position,
+            ),
+            Self::Placeholder(placeholder_item) => placeholder_item.append_to_text_row(
+                replacement_append_context,
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                position,
+            ),
+        }
+    }
+}
+
+impl DisplayReplacementMediaAppendItem {
+    #[allow(clippy::too_many_arguments)]
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        if let Some((progress, appended_position)) = replacement_append_context
+            .append_display_box_media_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                self,
+                position,
+            )
+            && let Some((height, ascent)) = self.row_extents_after_append(&progress)
+        {
+            row_geometry.include_row_extents(height, ascent);
+            appended_position
+        } else {
+            position
+        }
+    }
+}
+
+impl DisplayReplacementSourceMappedTextAppendItem {
+    #[allow(clippy::too_many_arguments)]
+    fn append_to_text_row(
+        self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        replacement_append_context
+            .append_active_face_source_mapped_text_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                self,
+                position,
+            )
+            .map(|(_progress, position)| position)
+            .unwrap_or(position)
     }
 }
 
