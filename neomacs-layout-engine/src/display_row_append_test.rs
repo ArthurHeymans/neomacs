@@ -3273,12 +3273,11 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         24.0,
         8.0,
         &params,
-        None,
         -2.0,
         18.0,
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
-    .resolve(&mut font_metrics)
+    .resolve(&mut font_metrics, None)
     .expect("display replacement append request");
 
     assert_eq!(
@@ -3306,6 +3305,110 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
         string_base_face_request.base_face_policy(),
         BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
+}
+
+#[test]
+fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer = current_buffer_snapshot(&eval, buf_id);
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "display-property-replacement-request",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut font_metrics = None;
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 32.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let mut geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let active_face = test_active_face_state(7, 8.0);
+    let value = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("relative-width"),
+        Value::fixnum(2),
+        Value::keyword("height"),
+        Value::fixnum(3),
+    ]);
+    let classification = classify_display_property(value);
+    let params = test_display_space_window_params();
+
+    let outcome = DisplayPropertyReplacementAppendResolveRequest::for_text_property(
+        &classification,
+        value,
+        buf_id,
+        CharPos0::new(3),
+        EmacsBytePos::new(12),
+        b"x",
+        &active_face,
+        24.0,
+        8.0,
+        &params,
+        -2.0,
+        18.0,
+        DisplayRowPosition { x_px: 24.0, col: 4 },
+    )
+    .resolve_and_append_to_text_row(
+        &buffer,
+        &mut eval,
+        &mut output_emitter,
+        &mut builder,
+        &mut font_metrics,
+        &face_resolver,
+        &mut face_ids,
+        &surface,
+        &mut geometry,
+    )
+    .expect("display replacement outcome");
+
+    assert_eq!(
+        outcome.start_position(),
+        DisplayRowPosition { x_px: 24.0, col: 4 }
+    );
+    assert_eq!(
+        outcome.end_position(),
+        DisplayRowPosition { x_px: 40.0, col: 6 }
+    );
+    let cursor = outcome.cursor_info(
+        &active_face,
+        geometry.text_position(
+            outcome.start_position().x_px,
+            0,
+            outcome.start_position().col,
+        ),
+    );
+    assert_eq!(cursor.x, 24.0);
+    assert_eq!(cursor.slot_width, Some(16.0));
+    let metrics = geometry.row_metrics_snapshot(0);
+    assert!(metrics.height > 16.0);
+    assert!(metrics.ascent > 12.0);
 }
 
 #[test]

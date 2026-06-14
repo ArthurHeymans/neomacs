@@ -41,8 +41,8 @@ use crate::display_cursor::resolve_cursor_vertical_metrics;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     CursorGeometryContext, CursorGeometrySource, capture_cursor_info, cursor_style_for_visual,
-    cursor_style_for_window, display_property_replacement_cursor_info, resolve_cursor_geometry,
-    row_metrics_for_cursor, update_cursor_info_for_main_char, visual_cursor_source_from_point,
+    cursor_style_for_window, resolve_cursor_geometry, row_metrics_for_cursor,
+    update_cursor_info_for_main_char, visual_cursor_source_from_point,
 };
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
@@ -80,10 +80,7 @@ use crate::display_row_walk_state::{
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos, skip_to_newline,
 };
-use crate::display_source::BufferDisplayReplacementSource;
-use crate::display_source_resolver::{
-    display_string_base_face, display_string_base_face_for_active_row,
-};
+use crate::display_source_resolver::display_string_base_face;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
@@ -2336,57 +2333,26 @@ impl LayoutEngine {
                         && point_charpos < skip_to;
                     let display_property_char_pos = CharPos0::new(charpos.max(0) as usize);
                     let display_property_byte_pos = EmacsBytePos::new(text_start_byte + byte_idx);
-                    let display_replacement_source = BufferDisplayReplacementSource::new(
-                        buf_id,
-                        display_property_char_pos,
-                        display_property_byte_pos,
-                    );
                     let display_property = classify_display_property(prop_val);
                     let replacement_resolve_request =
-                        DisplayPropertyReplacementAppendResolveRequest::new(
+                        DisplayPropertyReplacementAppendResolveRequest::for_text_property(
                             &display_property,
                             prop_val,
-                            display_replacement_source,
+                            buf_id,
                             display_property_char_pos,
+                            display_property_byte_pos,
                             &text[byte_idx..],
                             &active_face_state,
                             x,
                             content_x,
                             params,
-                            evaluator.display_host.as_deref(),
                             raise_span.value_or(0.0),
                             char_h,
                             DisplayRowPosition { x_px: x, col },
                         );
-                    if let Some(replacement_request) =
-                        replacement_resolve_request.resolve(&mut self.font_metrics)
-                    {
-                        if point_in_display_replacement {
-                            capture_cursor_info(
-                                &mut cursor_info,
-                                display_property_replacement_cursor_info(
-                                    replacement_request.cursor_policy(),
-                                    &active_face_state,
-                                    row_geometry.text_position(x, byte_idx, col),
-                                ),
-                            );
-                        }
-                        let string_base_face =
-                            replacement_request
-                                .string_base_face_request()
-                                .map(|request| {
-                                    display_string_base_face_for_active_row(
-                                        buffer,
-                                        face_resolver,
-                                        request.origin(),
-                                        request.base_face_policy(),
-                                        &active_face_state,
-                                        &mut face_ids,
-                                        &mut self.matrix_builder,
-                                    )
-                                });
-                        let replacement_plan = replacement_request.into_plan(string_base_face);
-                        let position = replacement_plan.append_to_text_row(
+                    if let Some(replacement_outcome) = replacement_resolve_request
+                        .resolve_and_append_to_text_row(
+                            buffer,
                             evaluator,
                             &mut output_emitter,
                             &mut self.matrix_builder,
@@ -2395,8 +2361,23 @@ impl LayoutEngine {
                             &mut face_ids,
                             &text_append_surface,
                             &mut row_geometry,
-                            &active_face_state,
-                        );
+                        )
+                    {
+                        if point_in_display_replacement {
+                            let start_position = replacement_outcome.start_position();
+                            capture_cursor_info(
+                                &mut cursor_info,
+                                replacement_outcome.cursor_info(
+                                    &active_face_state,
+                                    row_geometry.text_position(
+                                        start_position.x_px,
+                                        byte_idx,
+                                        start_position.col,
+                                    ),
+                                ),
+                            );
+                        }
+                        let position = replacement_outcome.end_position();
                         x = position.x_px;
                         col = position.col;
 

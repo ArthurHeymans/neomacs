@@ -1,6 +1,6 @@
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
-    CapturedCursorVisualState, CursorCaptureState,
+    CapturedCursorVisualState, CursorCaptureState, display_property_replacement_cursor_info,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -34,7 +34,7 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit,
-    DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowTextPosition, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{
@@ -45,7 +45,8 @@ use crate::display_source::{
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
     DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace, ResolvedDisplayReplacement,
-    resolve_and_install_display_string_base_face, resolve_display_replacement,
+    display_string_base_face_for_active_row, resolve_and_install_display_string_base_face,
+    resolve_display_replacement,
 };
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
@@ -60,7 +61,7 @@ use crate::window_output::TextRowOutput;
 use crate::window_output::{
     WindowOutputEmitter, emit_text_matrix_row_transition, finish_and_end_text_matrix_row_output,
 };
-use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsByteRange};
+use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
@@ -3503,7 +3504,6 @@ pub(crate) struct DisplayPropertyReplacementAppendResolveRequest<'a> {
     current_x: f32,
     content_x: f32,
     params: &'a WindowParams,
-    display_host: Option<&'a dyn DisplayHost>,
     glyph_y_offset: f32,
     default_row_height: f32,
     start_position: DisplayRowPosition,
@@ -3521,7 +3521,6 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
         current_x: f32,
         content_x: f32,
         params: &'a WindowParams,
-        display_host: Option<&'a dyn DisplayHost>,
         glyph_y_offset: f32,
         default_row_height: f32,
         start_position: DisplayRowPosition,
@@ -3536,16 +3535,48 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
             current_x,
             content_x,
             params,
-            display_host,
             glyph_y_offset,
             default_row_height,
             start_position,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn for_text_property(
+        display_property: &'a DisplayPropertyClassification,
+        value: Value,
+        buffer_id: BufferId,
+        anchor_charpos: CharPos0,
+        anchor_bytepos: EmacsBytePos,
+        source_text: &'a [u8],
+        active_face_state: &'a DisplayRowActiveFaceState,
+        current_x: f32,
+        content_x: f32,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        start_position: DisplayRowPosition,
+    ) -> Self {
+        Self::new(
+            display_property,
+            value,
+            BufferDisplayReplacementSource::new(buffer_id, anchor_charpos, anchor_bytepos),
+            anchor_charpos,
+            source_text,
+            active_face_state,
+            current_x,
+            content_x,
+            params,
+            glyph_y_offset,
+            default_row_height,
+            start_position,
+        )
+    }
+
     pub(crate) fn resolve(
         self,
         font_metrics: &mut Option<FontMetricsService>,
+        display_host: Option<&dyn DisplayHost>,
     ) -> Option<DisplayPropertyReplacementAppendRequest> {
         let item = DisplayPropertyReplacementAppendItem::resolve(
             self.display_property,
@@ -3557,7 +3588,7 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
             self.current_x,
             self.content_x,
             self.params,
-            self.display_host,
+            display_host,
         )?;
         Some(DisplayPropertyReplacementAppendRequest::new(
             self.replacement_source,
@@ -3565,6 +3596,35 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
             self.glyph_y_offset,
             self.default_row_height,
             self.start_position,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_and_append_to_text_row<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        evaluator: &mut Context,
+        output_emitter: &mut WindowOutputEmitter,
+        builder: &mut GlyphMatrixBuilder,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        append_surface: &DisplayRowAppendSurface,
+        row_geometry: &mut DisplayRowGeometryState,
+    ) -> Option<DisplayPropertyReplacementAppendOutcome> {
+        let active_face_state = self.active_face_state;
+        let request = self.resolve(font_metrics, evaluator.display_host.as_deref())?;
+        Some(request.append_to_text_row(
+            buffer,
+            evaluator,
+            output_emitter,
+            builder,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            append_surface,
+            row_geometry,
+            active_face_state,
         ))
     }
 }
@@ -3645,6 +3705,76 @@ impl DisplayPropertyReplacementAppendRequest {
 
     pub(crate) fn into_item(self) -> DisplayPropertyReplacementAppendItem {
         self.item
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_to_text_row<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        evaluator: &mut Context,
+        output_emitter: &mut WindowOutputEmitter,
+        builder: &mut GlyphMatrixBuilder,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        append_surface: &DisplayRowAppendSurface,
+        row_geometry: &mut DisplayRowGeometryState,
+        active_face_state: &DisplayRowActiveFaceState,
+    ) -> DisplayPropertyReplacementAppendOutcome {
+        let start_position = self.start_position();
+        let cursor_policy = self.cursor_policy();
+        let string_base_face = self.string_base_face_request().map(|request| {
+            display_string_base_face_for_active_row(
+                buffer,
+                face_resolver,
+                request.origin(),
+                request.base_face_policy(),
+                active_face_state,
+                face_ids,
+                builder,
+            )
+        });
+        let end_position = self.into_plan(string_base_face).append_to_text_row(
+            evaluator,
+            output_emitter,
+            builder,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            append_surface,
+            row_geometry,
+            active_face_state,
+        );
+        DisplayPropertyReplacementAppendOutcome {
+            start_position,
+            end_position,
+            cursor_policy,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayPropertyReplacementAppendOutcome {
+    start_position: DisplayRowPosition,
+    end_position: DisplayRowPosition,
+    cursor_policy: DisplayPropertyReplacementCursorPolicy,
+}
+
+impl DisplayPropertyReplacementAppendOutcome {
+    pub(crate) fn start_position(self) -> DisplayRowPosition {
+        self.start_position
+    }
+
+    pub(crate) fn end_position(self) -> DisplayRowPosition {
+        self.end_position
+    }
+
+    pub(crate) fn cursor_info(
+        self,
+        active_face_state: &DisplayRowActiveFaceState,
+        position: DisplayRowTextPosition,
+    ) -> CapturedCursorInfo {
+        display_property_replacement_cursor_info(self.cursor_policy, active_face_state, position)
     }
 }
 
