@@ -11381,6 +11381,64 @@ fn write_char_to_buffer_preserves_private_use_glyphs_issue_131() {
     );
 }
 
+/// Issue #131: `format`/`format-message` must preserve real Private-Use-Area
+/// glyphs through `%c`, `%s`, and literal text rather than decoding them as
+/// raw-byte sentinels. Covers both residual sentinel ranges (U+E080..E0FF,
+/// U+E380..E3FF) plus the B2 range (U+E300..E37F).
+/// Issue #131: `princ` of a real Private-Use glyph (string or char) to a buffer
+/// must store the glyph, not a raw-byte sentinel. `princ` of pure-Unicode values
+/// routes through the byte-faithful sink; eight-bit values keep the storage path.
+#[test]
+fn princ_to_buffer_preserves_private_use_glyphs_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (mapcar (lambda (cp)
+                      (erase-buffer)
+                      (princ (char-to-string cp) (current-buffer))
+                      (char-after 1))
+                    '(#xe080 #xe0a0 #xe0ff #xe380 #xe3a0 #xe3ff))
+            "#,
+        )
+        .expect("princ to a buffer should preserve real PUA glyphs");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::fixnum(0xe080),
+            Value::fixnum(0xe0a0),
+            Value::fixnum(0xe0ff),
+            Value::fixnum(0xe380),
+            Value::fixnum(0xe3a0),
+            Value::fixnum(0xe3ff),
+        ])
+    );
+}
+
+#[test]
+fn format_preserves_private_use_glyphs_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (mapcar (lambda (cp)
+                      (and (= (aref (format "%c" cp) 0) cp)
+                           (= (aref (format "%s" (char-to-string cp)) 0) cp)
+                           (= (aref (format "x%cy" cp) 1) cp)
+                           (= (aref (format-message "%c" cp) 0) cp)))
+                    '(#xe080 #xe0a0 #xe0ff #xe380 #xe3a0 #xe3ff #xe300 #xe322))
+            "#,
+        )
+        .expect("format/format-message should preserve real PUA glyphs");
+
+    assert_eq!(result, Value::list(vec![Value::T; 8]));
+}
+
 #[test]
 fn prin1_to_string_respects_print_overrides_for_control_characters() {
     crate::test_utils::init_test_tracing();

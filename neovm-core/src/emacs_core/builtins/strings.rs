@@ -1516,16 +1516,101 @@ fn push_format_literal(
     }
 }
 
+/// Issue #131: does printing `v` (via princ/prin1, recursively) yield only
+/// real Unicode characters — i.e. nothing that the storage-string encoder turns
+/// into an in-Unicode Private-Use sentinel?
+///
+/// A genuine sentinel is produced only for codes that are NOT valid Rust
+/// `char`s: eight-bit raw bytes (0x3FFF80..) and non-Unicode codes (>0x10FFFF)
+/// and surrogates. Those live exclusively inside `LispString`s, whose
+/// Emacs-bytes then fail UTF-8 validation. So a value renders "pure" iff every
+/// string it reaches is valid UTF-8. When pure, the format result can be taken
+/// as real Emacs bytes verbatim (real PUA glyphs survive); when impure, that
+/// span must go through the sentinel-decoding `storage_string_to_buffer_bytes`.
+///
+/// Defaults to `true` for value kinds whose printed form cannot carry a raw
+/// sentinel (numbers, symbols — symbol names are already valid `&str`), and is
+/// conservative (`false`) past a depth bound to stay cycle-safe.
+pub(crate) fn value_render_pure_unicode(v: Value, depth: u32) -> bool {
+    if depth > 64 {
+        return false;
+    }
+    match v.kind() {
+        ValueKind::String => v
+            .as_lisp_string()
+            .map(|ls| std::str::from_utf8(ls.as_bytes()).is_ok())
+            .unwrap_or(true),
+        ValueKind::Cons => {
+            value_render_pure_unicode(v.cons_car(), depth + 1)
+                && value_render_pure_unicode(v.cons_cdr(), depth + 1)
+        }
+        _ => true,
+    }
+}
+
+/// Assemble the final `format`/`format-message` result bytes from the storage
+/// String `s`, given the byte ranges of `s` that came from impure (eight-bit /
+/// non-Unicode) sources.
+///
+/// Pure spans are real text whose UTF-8 already IS the Emacs internal encoding,
+/// so they pass through verbatim — this is what keeps a real Private-Use glyph
+/// (a nerd-font icon) from being decoded as a raw byte (issue #131). Impure
+/// spans are genuine storage strings and go through `storage_string_to_buffer_bytes`,
+/// reproducing the previous behaviour exactly for eight-bit content. `impure_ranges`
+/// are non-overlapping and in increasing order (pushed in output order).
+fn assemble_format_result_bytes(
+    s: &str,
+    impure_ranges: &[(usize, usize)],
+    multibyte: bool,
+) -> Vec<u8> {
+    if impure_ranges.is_empty() {
+        return s.as_bytes().to_vec();
+    }
+    let mut out = Vec::with_capacity(s.len());
+    let mut pos = 0usize;
+    for &(start, end) in impure_ranges {
+        if start > pos {
+            out.extend_from_slice(s[pos..start].as_bytes());
+        }
+        out.extend(
+            crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
+                &s[start..end],
+                multibyte,
+            ),
+        );
+        pos = end;
+    }
+    if pos < s.len() {
+        out.extend_from_slice(s[pos..].as_bytes());
+    }
+    out
+}
+
 fn do_format(
     args: &[Value],
     princ_fn: &dyn Fn(&Value) -> String,
     prin1_fn: &dyn Fn(&Value) -> String,
     quoting_style: FormatMessageQuotingStyle,
-) -> Result<(String, Vec<FormatPropSpan>, Vec<FormatSourceSpan>, bool), Flow> {
+) -> Result<
+    (
+        String,
+        Vec<FormatPropSpan>,
+        Vec<FormatSourceSpan>,
+        bool,
+        Vec<(usize, usize)>,
+    ),
+    Flow,
+> {
     let fmt_str = expect_strict_string(&args[0])?;
     let mut result = String::new();
     let mut spans: Vec<FormatPropSpan> = Vec::new();
     let mut source_spans: Vec<FormatSourceSpan> = Vec::new();
+    // Issue #131: byte ranges of `result` that came from impure (eight-bit /
+    // non-Unicode) sources and therefore must be decoded as storage strings.
+    // Everything else is real text passed through verbatim so real PUA glyphs
+    // are not mistaken for raw-byte sentinels.
+    let mut impure_ranges: Vec<(usize, usize)> = Vec::new();
+    let fmt_pure = value_render_pure_unicode(args[0], 0);
     let mut force_multibyte_result = false;
     let mut arg_idx = 1;
     let mut chars = fmt_str.chars().peekable();
@@ -1538,7 +1623,11 @@ fn do_format(
         let source_start = format_char_pos;
         format_char_pos += 1;
         if ch != '%' {
+            let lit_start = result.len();
             force_multibyte_result |= push_format_literal(&mut result, ch, quoting_style);
+            if !fmt_pure {
+                impure_ranges.push((lit_start, result.len()));
+            }
             source_spans.push(FormatSourceSpan {
                 source_char_start: source_start,
                 source_char_end: format_char_pos,
@@ -1571,8 +1660,12 @@ fn do_format(
             return Err(format_not_enough_args_error());
         }
 
+        // Issue #131: whether this conversion's output is real text (passes
+        // through verbatim) or a storage string that must be sentinel-decoded.
+        let mut piece_pure = true;
         let formatted = match spec.conversion {
             's' => {
+                piece_pure = value_render_pure_unicode(args[this_arg_idx], 0);
                 let s = princ_fn(&args[this_arg_idx]);
                 // Only `%s` on a string argument preserves text
                 // properties: princ_fn on a string returns the same
@@ -1612,6 +1705,7 @@ fn do_format(
                 formatted
             }
             'S' => {
+                piece_pure = value_render_pure_unicode(args[this_arg_idx], 0);
                 let s = prin1_fn(&args[this_arg_idx]);
                 format_string_spec(&s, &spec)
             }
@@ -1638,6 +1732,9 @@ fn do_format(
             'c' => {
                 let n = expect_int(&args[this_arg_idx])
                     .map_err(|_| format_spec_type_mismatch_error())?;
+                // A real Unicode char renders as itself; eight-bit/non-Unicode
+                // codes render as storage sentinels that must be decoded.
+                piece_pure = u32::try_from(n).ok().and_then(char::from_u32).is_some();
                 let formatted_char = format_char_argument(n)?;
                 force_multibyte_result |= formatted_char.force_multibyte_result;
                 format_string_spec(&formatted_char.rendered, &spec)
@@ -1663,10 +1760,20 @@ fn do_format(
             });
         }
         result_char_pos += formatted_chars;
+        let piece_start = result.len();
         result.push_str(&formatted);
+        if !piece_pure {
+            impure_ranges.push((piece_start, result.len()));
+        }
     }
 
-    Ok((result, spans, source_spans, force_multibyte_result))
+    Ok((
+        result,
+        spans,
+        source_spans,
+        force_multibyte_result,
+        impure_ranges,
+    ))
 }
 
 fn build_format_result(
@@ -1675,11 +1782,21 @@ fn build_format_result(
     spans: &[FormatPropSpan],
     source_spans: &[FormatSourceSpan],
     force_multibyte_result: bool,
+    impure_ranges: &[(usize, usize)],
 ) -> Value {
     let multibyte = force_multibyte_result
         || args.iter().any(|value| value.string_is_multibyte())
         || runtime_string_result_multibyte(false, s);
-    let result = Value::heap_string(super::runtime_string_to_lisp_string(s, multibyte));
+    // Issue #131: pure (real-text) spans of `s` are already valid Emacs internal
+    // encoding and pass through verbatim so real Private-Use glyphs survive; only
+    // impure spans are sentinel-decoded. Reproduces the old whole-string decode
+    // when every piece is impure.
+    let bytes = assemble_format_result_bytes(s, impure_ranges, multibyte);
+    let result = Value::heap_string(if multibyte {
+        crate::heap_types::LispString::from_emacs_bytes(bytes)
+    } else {
+        crate::heap_types::LispString::from_unibyte(bytes)
+    });
 
     // Copy text properties from the format string first, then from each
     // `%s` argument's string, mirroring GNU `styled_format`
@@ -1711,7 +1828,7 @@ pub(crate) fn builtin_format_wrapper_strict_slice(
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
         expect_min_args("format", args, 1)?;
-        let (s, spans, source_spans, force_multibyte_result) = do_format(
+        let (s, spans, source_spans, force_multibyte_result, impure_ranges) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
             &|v| super::error::print_value_in_state(ctx, v),
@@ -1723,6 +1840,7 @@ pub(crate) fn builtin_format_wrapper_strict_slice(
             &spans,
             &source_spans,
             force_multibyte_result,
+            &impure_ranges,
         ))
     })
 }
@@ -1877,7 +1995,7 @@ pub(crate) fn builtin_format_message_slice(
         let quoting_style = TextQuotingStyle::from_symbol_value(quoting_style)
             .map(FormatMessageQuotingStyle::from_text_quoting_style)
             .expect("text-quoting-style builtin returns a GNU quoting style symbol");
-        let (s, spans, source_spans, force_multibyte_result) = do_format(
+        let (s, spans, source_spans, force_multibyte_result, impure_ranges) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
             &|v| super::error::print_value_in_state(ctx, v),
@@ -1889,6 +2007,7 @@ pub(crate) fn builtin_format_message_slice(
             &spans,
             &source_spans,
             force_multibyte_result,
+            &impure_ranges,
         ))
     })
 }

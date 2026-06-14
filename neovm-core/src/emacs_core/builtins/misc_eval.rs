@@ -1946,7 +1946,17 @@ pub(crate) fn builtin_princ_impl(
 ) -> EvalResult {
     expect_min_args("princ", &args, 1)?;
     let text = print_value_princ_in_state(ctx, &args[0]);
-    write_print_output_from_ctx(ctx, args.get(1), &text)?;
+    // Issue #131: when the printed value contains only real Unicode characters
+    // (the common case, including nerd-font glyphs), its `princ` text is real
+    // Emacs bytes and must be inserted verbatim, not decoded through the
+    // storage-string sink that would mistake a Private-Use glyph for a raw byte.
+    // Values carrying genuine eight-bit/non-Unicode content keep the storage
+    // path, where those sentinels decode correctly.
+    if super::strings::value_render_pure_unicode(args[0], 0) {
+        write_print_bytes_from_ctx(ctx, args.get(1), text.as_bytes())?;
+    } else {
+        write_print_output_from_ctx(ctx, args.get(1), &text)?;
+    }
     Ok(args[0])
 }
 
