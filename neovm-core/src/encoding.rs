@@ -1251,19 +1251,6 @@ fn lisp_string_coding_source_bytes(s: &crate::heap_types::LispString) -> Vec<u8>
     }
 }
 
-fn bytes_to_multibyte_raw_string(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for &b in bytes {
-        if b <= 0x7F {
-            out.push(b as char);
-            continue;
-        }
-        let code = crate::emacs_core::emacs_char::unibyte_to_char(b);
-        push_emacs_utf8_decoded_char(&mut out, code);
-    }
-    out
-}
-
 fn charset_property_runs(text: &str, charset: &str) -> Vec<StringTextPropertyRun> {
     let mut char_count = 0usize;
     let mut first_non_ascii = None;
