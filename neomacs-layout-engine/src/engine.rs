@@ -61,12 +61,13 @@ use crate::display_row_append::{
     BufferHscrollSkipAction, BufferHscrollSkipSourceChar, BufferInvisibleTextScanAction,
     BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
-    BufferSyntheticTextRenderContext, BufferTextPreparedSourceCharAppend,
-    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
-    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
-    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
-    DisplayRowTransitionPrefixContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
+    BufferSyntheticTextRenderContext, BufferTextLineBreakSourceAction,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
+    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
+    DisplayRowTextWindowTransitionContext, DisplayRowTransitionPrefixContext, SyntheticTextMarker,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2462,7 +2463,14 @@ impl LayoutEngine {
             save_word_wrap_candidate!(ch, ch_start_byte_idx);
 
             if ch == '\n' {
-                if cursor_info.is_missing() && point_charpos == charpos {
+                let line_break_action = BufferTextLineBreakSourceAction::for_newline(
+                    buffer,
+                    charpos,
+                    ch_start_byte_idx,
+                    char_h,
+                    params.extra_line_spacing,
+                );
+                if cursor_info.is_missing() && line_break_action.point_matches(point_charpos) {
                     // GNU `set_cursor_from_row` treats the terminating
                     // newline as an exact match for point on this row.  The
                     // newline itself has no rendered text glyph, so the
@@ -2470,14 +2478,7 @@ impl LayoutEngine {
                     // waiting for the next row.
                     capture_cursor_info(
                         &mut cursor_info,
-                        CapturedCursorInfo::from_active_face_state(
-                            &active_face_state,
-                            CapturedCursorPlacement::from_row_text_position(
-                                row_geometry.text_position(x, ch_start_byte_idx, col),
-                                CapturedCursorSlotWidth::FaceChar,
-                                false,
-                            ),
-                        ),
+                        line_break_action.cursor_info(&active_face_state, &row_geometry, x, col),
                     );
                 }
                 // Highlight trailing whitespace before advancing to next row
@@ -2497,22 +2498,7 @@ impl LayoutEngine {
                 // Box face tracking: box stays active across line breaks
                 box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
 
-                charpos += 1;
-
-                // Check line-spacing text property on the newline we just consumed.
-                // Text property overrides buffer-local line-spacing for that line.
-                let text_prop_spacing = {
-                    let nl_pos = charpos - 1; // the newline char
-                    let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
-                    text_props.check_line_spacing(nl_pos, char_h)
-                };
-                let line_spacing = if text_prop_spacing > 0.0 {
-                    text_prop_spacing
-                } else if params.extra_line_spacing > 0.0 {
-                    params.extra_line_spacing
-                } else {
-                    0.0
-                };
+                charpos = line_break_action.next_charpos();
                 x = content_x;
                 // Record the newline position so the row's
                 // end_buffer_pos includes it. GNU's redisplay engine
@@ -2541,7 +2527,7 @@ impl LayoutEngine {
                     line_break_transition,
                     hit_row_range.range_to(charpos),
                     DisplayRowPosition { x_px: x, col },
-                    line_spacing,
+                    line_break_action.line_spacing(),
                 );
                 if row_transition.is_exhausted() {
                     break;

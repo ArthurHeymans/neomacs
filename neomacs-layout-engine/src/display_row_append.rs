@@ -4406,6 +4406,68 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextLineBreakSourceAction {
+    ch_start_byte_idx: usize,
+    charpos: i64,
+    next_charpos: i64,
+    line_spacing: f32,
+}
+
+impl BufferTextLineBreakSourceAction {
+    pub(crate) fn for_newline<B: LayoutBufferView>(
+        buffer: &B,
+        charpos: i64,
+        ch_start_byte_idx: usize,
+        char_h: f32,
+        extra_line_spacing: f32,
+    ) -> Self {
+        let text_prop_spacing = RustTextPropAccess::new(buffer).check_line_spacing(charpos, char_h);
+        let line_spacing = if text_prop_spacing > 0.0 {
+            text_prop_spacing
+        } else if extra_line_spacing > 0.0 {
+            extra_line_spacing
+        } else {
+            0.0
+        };
+        Self {
+            ch_start_byte_idx,
+            charpos,
+            next_charpos: charpos + 1,
+            line_spacing,
+        }
+    }
+
+    pub(crate) fn point_matches(self, point_charpos: i64) -> bool {
+        point_charpos == self.charpos
+    }
+
+    pub(crate) fn next_charpos(self) -> i64 {
+        self.next_charpos
+    }
+
+    pub(crate) fn line_spacing(self) -> f32 {
+        self.line_spacing
+    }
+
+    pub(crate) fn cursor_info(
+        self,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        x: f32,
+        col: usize,
+    ) -> CapturedCursorInfo {
+        CapturedCursorInfo::from_active_face_state(
+            active_face_state,
+            CapturedCursorPlacement::from_row_text_position(
+                row_geometry.text_position(x, self.ch_start_byte_idx, col),
+                CapturedCursorSlotWidth::FaceChar,
+                false,
+            ),
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSpecialSourceCharRequest {
     range: BufferTextSourceRange,

@@ -840,6 +840,78 @@ fn buffer_selective_display_context_keeps_visible_indented_line() {
 }
 
 #[test]
+fn buffer_text_line_break_source_action_uses_extra_line_spacing() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a\nb");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 1, 1, 16.0, 5.0);
+
+    assert!(action.point_matches(1));
+    assert!(!action.point_matches(2));
+    assert_eq!(action.next_charpos(), 2);
+    assert_eq!(action.line_spacing(), 5.0);
+}
+
+#[test]
+fn buffer_text_line_break_source_action_prefers_text_property_spacing() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a\nb");
+        let _ = eval
+            .buffer_manager_mut()
+            .put_buffer_text_property_in_emacs_byte_range(
+                buf_id,
+                EmacsByteRange::from_usize(1, 2),
+                Value::symbol("line-spacing"),
+                Value::fixnum(7),
+            );
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 1, 1, 16.0, 5.0);
+
+    assert_eq!(action.next_charpos(), 2);
+    assert_eq!(action.line_spacing(), 7.0);
+}
+
+#[test]
+fn buffer_text_line_break_source_action_builds_row_end_cursor_info() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+
+    let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let cursor = action.cursor_info(&active_face, &geometry, 32.0, 4);
+
+    assert_eq!(cursor.x, 32.0);
+    assert_eq!(cursor.byte_idx, 12);
+    assert_eq!(cursor.col, 4);
+    assert_eq!(cursor.slot_width, Some(8.0));
+    assert!(!cursor.stretch_like);
+}
+
+#[test]
 fn display_row_transition_prefix_context_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
