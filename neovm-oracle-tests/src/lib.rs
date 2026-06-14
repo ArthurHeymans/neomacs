@@ -1906,6 +1906,7 @@ mod divergence_utf8_buffer_region_ops;
 mod divergence_utf8_char_ops_regex;
 mod divergence_utf8_char_properties;
 mod divergence_utf8_char_tables;
+mod divergence_utf8_charset_coding_infra;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;

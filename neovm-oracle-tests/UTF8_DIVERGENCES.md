@@ -19,7 +19,7 @@ cargo nextest run -p neovm-oracle-tests -E 'test(/div_utf8/)' --no-fail-fast
 GNU Emacs is expected on `PATH` (or `NEOVM_FORCE_ORACLE_PATH=/path/to/emacs`);
 the Neomacs binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH=...`).
 
-Scope at time of writing: **247 tests, 181 pass, 66 divergences.**
+Scope at time of writing: **255 tests, 187 pass, 68 divergences.**
 
 Root cause theme: **Neomacs uses a UTF-8-internal string model**, diverging
 from GNU's eight-bit-charset model. Almost every divergence traces back to
@@ -127,6 +127,16 @@ codings. The following 30 are **unsupported**: single-byte decode yields
   (`div_utf8_*_roundtrip`), plus `div_utf8_find_auto_coding_expressions`.
 Supported (pass): iso-8859-9, gb2312 (besides utf-8/16, latin-1/9, big5).
 
+### Theme 10 — Charset registry metadata incomplete / broken
+- `charset-chars` ERRORS in Neomacs (`wrong-type-argument arrayp nil`)
+  instead of returning char counts (`charset_coding_infra::div_utf8_charset_chars_counts`).
+- `charset-plist` returns an INCOMPLETE plist — only `:dimension :docstring
+  :short-name :long-name`; missing `:name :code-space :iso-final-char
+  :emacs-mule-id :ascii-compatible-p :code-offset`
+  (`charset_coding_infra::div_utf8_charset_plist_builtins`).
+  (`define-charset`, `make-coding-system`, `charset-code-space`,
+  `coding-system-aliases`/`type`/`mnemonic` all work.)
+
 ## What already works (coverage, not divergences)
 UTF-8/UTF-16 encode-decode, Unicode property tables (general-category,
 bidi-class, char-script, char-to-name, case, decomposition), char-width,
@@ -140,7 +150,7 @@ of normal multibyte.
 ## Files
 `divergence_utf8_{bidi_compose_misc, bidi_deep, buffer_charset_props,
 buffer_io, buffer_multibyte_toggle, buffer_region_ops, char_ops_regex,
-char_properties, char_tables, charset_conv_deep, coding, coding_deep,
-compose_bidi_syntax, digest_print, fill_case_category, legacy_codings,
-more_codings, print_escape, string_compare_format, string_primitives,
-syntax_display, unicode_property_matrix}.rs`
+char_properties, char_tables, charset_coding_infra, charset_conv_deep,
+coding, coding_deep, compose_bidi_syntax, digest_print, fill_case_category,
+legacy_codings, more_codings, print_escape, string_compare_format,
+string_primitives, syntax_display, unicode_property_matrix}.rs`
