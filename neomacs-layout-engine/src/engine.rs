@@ -2624,10 +2624,14 @@ impl LayoutEngine {
                                     ),
                                     &mut col,
                                 );
-                                if row_transition.is_exhausted() {
-                                    break;
-                                }
-                                if !row_geometry.current_row_is_visible(row_visibility_limit) {
+                                if special_wrap_action
+                                    .transition_continuation(
+                                        row_transition,
+                                        &row_geometry,
+                                        row_visibility_limit,
+                                    )
+                                    .should_break()
+                                {
                                     break;
                                 }
                             }
@@ -2751,25 +2755,26 @@ impl LayoutEngine {
                         hit_row_range.range_to(charpos),
                         DisplayRowPosition { x_px: x, col },
                     );
-                    if row_transition.is_exhausted() {
-                        break;
-                    }
-                    word_wrap_action.apply_after_row_transition_and_prefix(
-                        transition,
-                        &mut charpos,
-                        &mut hit_row_range,
-                        &mut face_scan,
-                        DisplayRowTransitionRenderState::new(
-                            &mut prefix_request,
-                            has_prefix,
-                            &mut line_numbers,
-                            &mut hscroll_skip,
-                            &mut word_wrap,
-                            &mut trailing_whitespace,
-                        ),
-                    );
-
-                    if !row_geometry.current_row_is_visible(row_visibility_limit) {
+                    if word_wrap_action
+                        .apply_after_row_transition_and_prefix(
+                            row_transition,
+                            transition,
+                            &mut charpos,
+                            &mut hit_row_range,
+                            &mut face_scan,
+                            &row_geometry,
+                            row_visibility_limit,
+                            DisplayRowTransitionRenderState::new(
+                                &mut prefix_request,
+                                has_prefix,
+                                &mut line_numbers,
+                                &mut hscroll_skip,
+                                &mut word_wrap,
+                                &mut trailing_whitespace,
+                            ),
+                        )
+                        .should_break()
+                    {
                         break;
                     }
                     continue;
@@ -2811,16 +2816,18 @@ impl LayoutEngine {
                         ),
                         &mut col,
                     );
-                    if row_transition.is_exhausted() {
-                        break;
-                    }
-                    character_wrap_action.apply_after_row_transition(
-                        &mut byte_idx,
-                        &mut charpos,
-                        &mut hit_row_range,
-                        &mut face_scan,
-                    );
-                    if !row_geometry.current_row_is_visible(row_visibility_limit) {
+                    if character_wrap_action
+                        .apply_after_visible_row_transition(
+                            row_transition,
+                            &mut byte_idx,
+                            &mut charpos,
+                            &mut hit_row_range,
+                            &mut face_scan,
+                            &row_geometry,
+                            row_visibility_limit,
+                        )
+                        .should_break()
+                    {
                         break;
                     }
                     continue;

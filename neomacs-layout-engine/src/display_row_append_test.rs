@@ -25,7 +25,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowStartMarker,
-    DisplayRowYPositions,
+    DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
@@ -1431,11 +1431,17 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         panic!("expected word wrap transition");
     };
 
-    action.apply_after_row_transition_and_prefix(
+    let continuation = action.apply_after_row_transition_and_prefix(
+        TextMatrixRowTransition::BeganNextRow,
         transition,
         &mut final_charpos,
         &mut hit_row_range,
         &mut face_scan,
+        &geometry,
+        DisplayRowVisibilityLimit {
+            max_rows: 2,
+            bottom_y: 64.0,
+        },
         DisplayRowTransitionRenderState::new(
             &mut prefix_request,
             true,
@@ -1446,6 +1452,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
         ),
     );
 
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
     assert_eq!(final_charpos, 12);
     assert_eq!(hit_row_range.start(), 12);
     assert!(face_scan.should_resolve_at(0));
@@ -1480,6 +1487,17 @@ fn buffer_text_special_wrap_source_action_applies_transition_state() {
     assert_eq!(hit_range.charpos_start, 6);
     assert_eq!(hit_range.charpos_end, 21);
     assert_eq!(hit_row_range.start(), 21);
+    assert_eq!(
+        action.transition_continuation(
+            TextMatrixRowTransition::BeganNextRow,
+            &geometry,
+            DisplayRowVisibilityLimit {
+                max_rows: 2,
+                bottom_y: 64.0,
+            },
+        ),
+        DisplayRowTransitionContinuation::Continue
+    );
 }
 
 #[test]
@@ -1532,13 +1550,80 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
 
-    action.apply_after_row_transition(
+    let continuation = action.apply_after_visible_row_transition(
+        TextMatrixRowTransition::BeganNextRow,
         &mut byte_idx,
         &mut charpos,
         &mut hit_row_range,
         &mut face_scan,
+        &geometry,
+        DisplayRowVisibilityLimit {
+            max_rows: 2,
+            bottom_y: 64.0,
+        },
     );
 
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
+    assert_eq!(byte_idx, 13);
+    assert_eq!(charpos, 21);
+    assert_eq!(hit_row_range.start(), 21);
+    assert!(face_scan.should_resolve_at(0));
+}
+
+#[test]
+fn buffer_text_character_wrap_source_action_skips_state_when_transition_exhausted() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let mut byte_idx = 17;
+    let mut charpos = 22;
+    let mut hit_row_range = HitRowRangeTracker::new(6);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+
+    let continuation = action.apply_after_visible_row_transition(
+        TextMatrixRowTransition::ExhaustedRows,
+        &mut byte_idx,
+        &mut charpos,
+        &mut hit_row_range,
+        &mut face_scan,
+        &geometry,
+        DisplayRowVisibilityLimit {
+            max_rows: 2,
+            bottom_y: 64.0,
+        },
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
+    assert_eq!(byte_idx, 17);
+    assert_eq!(charpos, 22);
+    assert_eq!(hit_row_range.start(), 6);
+    assert!(!face_scan.should_resolve_at(0));
+}
+
+#[test]
+fn buffer_text_character_wrap_source_action_reports_hidden_after_state_sync() {
+    let geometry = DisplayRowGeometryState::new(0, 64.0, 0.0, 16.0, 12.0);
+    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let mut byte_idx = 17;
+    let mut charpos = 22;
+    let mut hit_row_range = HitRowRangeTracker::new(6);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+
+    let continuation = action.apply_after_visible_row_transition(
+        TextMatrixRowTransition::BeganNextRow,
+        &mut byte_idx,
+        &mut charpos,
+        &mut hit_row_range,
+        &mut face_scan,
+        &geometry,
+        DisplayRowVisibilityLimit {
+            max_rows: 2,
+            bottom_y: 64.0,
+        },
+    );
+
+    assert_eq!(continuation, DisplayRowTransitionContinuation::Hidden);
     assert_eq!(byte_idx, 13);
     assert_eq!(charpos, 21);
     assert_eq!(hit_row_range.start(), 21);

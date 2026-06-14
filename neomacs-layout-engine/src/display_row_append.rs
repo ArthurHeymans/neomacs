@@ -33,7 +33,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowScopedValue,
-    DisplayRowTextPosition, DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
@@ -295,6 +295,13 @@ pub(crate) struct DisplayRowTransitionRenderState<'a> {
     hscroll_skip: &'a mut HorizontalScrollSkipState,
     word_wrap: &'a mut WordWrapRenderState,
     trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayRowTransitionContinuation {
+    Continue,
+    Exhausted,
+    Hidden,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -640,6 +647,26 @@ impl<'a> DisplayRowTransitionRenderState<'a> {
         col: &mut usize,
     ) {
         plan.apply_row_start_prefix_state(col, self);
+    }
+}
+
+impl DisplayRowTransitionContinuation {
+    pub(crate) fn after_visible_row_transition(
+        row_transition: TextMatrixRowTransition,
+        row_geometry: &DisplayRowGeometryState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+    ) -> Self {
+        if row_transition.is_exhausted() {
+            Self::Exhausted
+        } else if row_geometry.current_row_is_visible(row_visibility_limit) {
+            Self::Continue
+        } else {
+            Self::Hidden
+        }
+    }
+
+    pub(crate) fn should_break(self) -> bool {
+        !matches!(self, Self::Continue)
     }
 }
 
@@ -4879,14 +4906,25 @@ impl BufferTextWordWrapSourceAction {
 
     pub(crate) fn apply_after_row_transition_and_prefix(
         self,
+        row_transition: TextMatrixRowTransition,
         transition: DisplayRowOverflowTransitionPlan,
         charpos: &mut i64,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
+        row_geometry: &DisplayRowGeometryState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
         render_state: DisplayRowTransitionRenderState<'_>,
-    ) {
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
         self.apply_after_row_transition(charpos, hit_row_range, face_scan);
         render_state.apply_overflow_prefix(transition);
+        DisplayRowTransitionContinuation::after_visible_row_transition(
+            row_transition,
+            row_geometry,
+            row_visibility_limit,
+        )
     }
 
     pub(crate) fn charpos(self) -> i64 {
@@ -4926,6 +4964,19 @@ impl BufferTextSpecialWrapSourceAction {
         let hit_range = hit_row_range.range_to(self.charpos);
         hit_row_range.advance_to(self.charpos);
         hit_range
+    }
+
+    pub(crate) fn transition_continuation(
+        self,
+        row_transition: TextMatrixRowTransition,
+        row_geometry: &DisplayRowGeometryState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+    ) -> DisplayRowTransitionContinuation {
+        DisplayRowTransitionContinuation::after_visible_row_transition(
+            row_transition,
+            row_geometry,
+            row_visibility_limit,
+        )
     }
 
     #[cfg(test)]
@@ -4977,6 +5028,27 @@ impl BufferTextCharacterWrapSourceAction {
         self.rewind_source_state(byte_idx, charpos);
         hit_row_range.advance_to(*charpos);
         face_scan.invalidate();
+    }
+
+    pub(crate) fn apply_after_visible_row_transition(
+        self,
+        row_transition: TextMatrixRowTransition,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+        row_geometry: &DisplayRowGeometryState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        self.apply_after_row_transition(byte_idx, charpos, hit_row_range, face_scan);
+        DisplayRowTransitionContinuation::after_visible_row_transition(
+            row_transition,
+            row_geometry,
+            row_visibility_limit,
+        )
     }
 }
 
