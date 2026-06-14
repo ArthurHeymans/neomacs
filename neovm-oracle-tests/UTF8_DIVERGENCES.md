@@ -19,7 +19,7 @@ cargo nextest run -p neovm-oracle-tests -E 'test(/div_utf8/)' --no-fail-fast
 GNU Emacs is expected on `PATH` (or `NEOVM_FORCE_ORACLE_PATH=/path/to/emacs`);
 the Neomacs binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH=...`).
 
-Scope at time of writing: **207 tests, 171 pass, 36 divergences.**
+Scope at time of writing: **239 tests, 173 pass, 66 divergences.**
 
 Root cause theme: **Neomacs uses a UTF-8-internal string model**, diverging
 from GNU's eight-bit-charset model. Almost every divergence traces back to
@@ -111,6 +111,22 @@ honored — only auto-detection is broken.
 - `compose_bidi_syntax::div_utf8_current_bidi_paragraph_direction_rtl`
 - `bidi_deep::div_utf8_bidi_direction_across_scripts`
 
+### Theme 9 — Legacy coding-system matrix (30 unsupported codings)
+Comprehensive expansion of Theme 4. Neomacs supports only **utf-8, utf-16,
+latin-1, latin-9 (iso-8859-15), big5, iso-8859-9, and gb2312** of the tested
+codings. The following 30 are **unsupported**: single-byte decode yields
+`U+FFFD (65533)` for every byte; multibyte encode yields `nil`.
+- ISO-8859 family (10): iso-8859-2, -3, -4, -5, -6, -8, -10, -13, -14, -16
+  (`legacy_codings::div_utf8_decode_iso8859_*`,
+   `div_utf8_decode_coding_string_cyrillic_iso8859_5`)
+- Windows codepages (7): windows-1250, -1251, -1253, -1254, -1255, -1256,
+  -1257 (`div_utf8_decode_windows_*`)
+- Other single-byte (4): koi8-u, mac-roman, viscii, tis-620
+- CJK / multibyte / misc (9): euc-kr, gb18030, iso-2022-jp, iso-2022-cn,
+  iso-2022-kr, utf-7, emacs-mule
+  (`div_utf8_*_roundtrip`), plus `div_utf8_find_auto_coding_expressions`.
+Supported (pass): iso-8859-9, gb2312 (besides utf-8/16, latin-1/9, big5).
+
 ## What already works (coverage, not divergences)
 UTF-8/UTF-16 encode-decode, Unicode property tables (general-category,
 bidi-class, char-script, char-to-name, case, decomposition), char-width,
@@ -125,5 +141,6 @@ of normal multibyte.
 `divergence_utf8_{bidi_compose_misc, bidi_deep, buffer_charset_props,
 buffer_io, buffer_multibyte_toggle, buffer_region_ops, char_ops_regex,
 char_properties, char_tables, charset_conv_deep, coding, coding_deep,
-compose_bidi_syntax, digest_print, fill_case_category, more_codings,
-print_escape, string_compare_format, string_primitives, syntax_display}.rs`
+compose_bidi_syntax, digest_print, fill_case_category, legacy_codings,
+more_codings, print_escape, string_compare_format, string_primitives,
+syntax_display}.rs`

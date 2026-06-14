@@ -1911,6 +1911,7 @@ mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
 mod divergence_utf8_digest_print;
 mod divergence_utf8_fill_case_category;
+mod divergence_utf8_legacy_codings;
 mod divergence_utf8_more_codings;
 mod divergence_utf8_print_escape;
 mod divergence_utf8_string_compare_format;
