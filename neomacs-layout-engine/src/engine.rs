@@ -2728,11 +2728,15 @@ impl LayoutEngine {
                     transition,
                 } => {
                     let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
-                    word_wrap_action.restore_row_output_progress(&mut output_emitter);
-                    word_wrap_action.rewind_source_state(&mut byte_idx, &mut charpos, &mut col);
-
-                    x = content_x;
-                    row_extend.clear();
+                    word_wrap_action.apply_before_row_transition(
+                        &mut output_emitter,
+                        &mut byte_idx,
+                        &mut charpos,
+                        &mut col,
+                        &mut row_extend,
+                        &mut x,
+                        content_x,
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
@@ -2755,8 +2759,11 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    charpos = word_wrap_action.charpos();
-                    hit_row_range.advance_to(charpos);
+                    word_wrap_action.apply_after_row_transition(
+                        &mut charpos,
+                        &mut hit_row_range,
+                        &mut face_scan,
+                    );
                     let mut transition_prefix = DisplayRowTransitionPrefixContext::new(
                         &mut prefix_request,
                         has_prefix,
@@ -2767,9 +2774,6 @@ impl LayoutEngine {
                     );
                     transition.apply_prefix_action(&mut transition_prefix);
 
-                    // Force face re-check since we rewound
-                    face_scan.invalidate();
-
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
                     }
@@ -2779,8 +2783,11 @@ impl LayoutEngine {
                     let character_wrap_action =
                         BufferTextCharacterWrapSourceAction::from_decoded_char(decoded_source_char);
                     // Character wrap (no break point available)
-                    x = content_x;
-                    row_extend.clear();
+                    character_wrap_action.apply_before_row_transition(
+                        &mut row_extend,
+                        &mut x,
+                        content_x,
+                    );
                     // Record hit-test row (wrap/truncation break)
                     let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
@@ -2812,9 +2819,12 @@ impl LayoutEngine {
                         &mut trailing_whitespace,
                     );
                     transition.apply_row_start_prefix_action(&mut col, &mut transition_prefix);
-                    character_wrap_action.rewind_source_state(&mut byte_idx, &mut charpos);
-                    hit_row_range.advance_to(charpos);
-                    face_scan.invalidate();
+                    character_wrap_action.apply_after_row_transition(
+                        &mut byte_idx,
+                        &mut charpos,
+                        &mut hit_row_range,
+                        &mut face_scan,
+                    );
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
                     }

@@ -4676,6 +4676,33 @@ impl BufferTextWordWrapSourceAction {
         *col = 0;
     }
 
+    pub(crate) fn apply_before_row_transition(
+        self,
+        output_emitter: &mut WindowOutputEmitter,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        col: &mut usize,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        self.restore_row_output_progress(output_emitter);
+        self.rewind_source_state(byte_idx, charpos, col);
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn apply_after_row_transition(
+        self,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+    ) {
+        *charpos = self.charpos();
+        hit_row_range.advance_to(*charpos);
+        face_scan.invalidate();
+    }
+
     pub(crate) fn charpos(self) -> i64 {
         self.break_candidate.charpos()
     }
@@ -4707,6 +4734,28 @@ impl BufferTextCharacterWrapSourceAction {
     pub(crate) fn rewind_source_state(self, byte_idx: &mut usize, charpos: &mut i64) {
         *byte_idx = self.ch_start_byte_idx;
         *charpos = self.ch_start_charpos;
+    }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn apply_after_row_transition(
+        self,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+    ) {
+        self.rewind_source_state(byte_idx, charpos);
+        hit_row_range.advance_to(*charpos);
+        face_scan.invalidate();
     }
 }
 

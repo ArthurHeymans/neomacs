@@ -29,7 +29,7 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
-    WordWrapBreakCandidate, WordWrapRenderState,
+    HitRowRangeTracker, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
@@ -1097,6 +1097,55 @@ fn buffer_text_word_wrap_source_action_rewinds_source_state() {
 }
 
 #[test]
+fn buffer_text_word_wrap_source_action_applies_transition_state() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut context = RowTransitionTestContext::new("word-wrap-source-state");
+    let mut break_candidate = WordWrapBreakCandidate::default();
+    break_candidate.record(
+        7,
+        12,
+        3,
+        (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
+    );
+    let action = BufferTextWordWrapSourceAction::new(break_candidate);
+    let mut byte_idx = 20;
+    let mut charpos = 30;
+    let mut col = 9;
+    let mut x = 88.0;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        geometry.current_row_marker(),
+        (Color::from_pixel(0x112233), 17),
+    );
+
+    action.apply_before_row_transition(
+        &mut context.output_emitter,
+        &mut byte_idx,
+        &mut charpos,
+        &mut col,
+        &mut row_extend,
+        &mut x,
+        2.0,
+    );
+
+    assert_eq!(byte_idx, 7);
+    assert_eq!(charpos, 12);
+    assert_eq!(col, 0);
+    assert_eq!(x, 2.0);
+    assert_eq!(row_extend.value_on(&geometry), None);
+
+    let mut hit_row_range = HitRowRangeTracker::new(4);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+    let mut final_charpos = 30;
+    action.apply_after_row_transition(&mut final_charpos, &mut hit_row_range, &mut face_scan);
+
+    assert_eq!(final_charpos, 12);
+    assert_eq!(hit_row_range.start(), 12);
+    assert!(face_scan.should_resolve_at(0));
+}
+
+#[test]
 fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
     let action = BufferTextCharacterWrapSourceAction::new(13, 21);
     let mut byte_idx = 17;
@@ -1122,6 +1171,41 @@ fn buffer_text_character_wrap_source_action_rewinds_decoded_source_char() {
 
     assert_eq!(rewind_byte_idx, "a".len());
     assert_eq!(rewind_charpos, 9);
+}
+
+#[test]
+fn buffer_text_character_wrap_source_action_applies_transition_state() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let action = BufferTextCharacterWrapSourceAction::new(13, 21);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        geometry.current_row_marker(),
+        (Color::from_pixel(0x445566), 21),
+    );
+    let mut x = 88.0;
+
+    action.apply_before_row_transition(&mut row_extend, &mut x, 3.0);
+
+    assert_eq!(x, 3.0);
+    assert_eq!(row_extend.value_on(&geometry), None);
+
+    let mut byte_idx = 17;
+    let mut charpos = 22;
+    let mut hit_row_range = HitRowRangeTracker::new(6);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+
+    action.apply_after_row_transition(
+        &mut byte_idx,
+        &mut charpos,
+        &mut hit_row_range,
+        &mut face_scan,
+    );
+
+    assert_eq!(byte_idx, 13);
+    assert_eq!(charpos, 21);
+    assert_eq!(hit_row_range.start(), 21);
+    assert!(face_scan.should_resolve_at(0));
 }
 
 #[test]
