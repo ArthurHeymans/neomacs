@@ -4165,31 +4165,29 @@ fn buffer_text_source_append_context_appends_source_char() {
                 && break_candidate.charpos() == 0
                 && break_candidate.display_point_count() == 2
     ));
-    let append_outcome = prepared_append
-        .append_to_text_row(
-            &append_context,
-            &geometry,
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        )
-        .expect("appended buffer fragment");
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     let mut word_wrap = WordWrapRenderState::new(true);
     let mut charpos = 4;
     let mut end_x = 0.0;
     let mut end_col = 0;
-    append_outcome.apply_rendered_char_to_walk_state(
-        &mut trailing_whitespace,
-        &mut word_wrap,
-        ' ',
+    let continuation = prepared_append.append_to_text_row_and_apply(
+        &append_context,
         &geometry,
-        &mut end_x,
-        &mut end_col,
-        &mut charpos,
+        ' ',
+        &mut BufferTextSourceCharRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            &mut trailing_whitespace,
+            &mut word_wrap,
+            &mut end_x,
+            &mut end_col,
+            &mut charpos,
+        ),
     );
+    assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);
     assert_eq!(
         trailing_whitespace
             .highlight_start_x(&geometry)
@@ -4833,32 +4831,31 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let mut params = test_display_space_window_params();
     params.nobreak_char_fg = 0x00ff00;
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
-    let append_outcome = prepared_append
-        .append_to_text_row(
-            &append_context,
-            &geometry,
-            &params,
-            &mut policy_face_ids,
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        )
-        .expect("appended source-mapped buffer text item fragment");
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
     let mut word_wrap = WordWrapRenderState::new(true);
     let mut charpos = 8;
     let mut end_x = 0.0;
     let mut end_col = 0;
-    append_outcome.apply_rendered_special_char_to_walk_state(
-        &mut face_scan,
-        &mut word_wrap,
-        &mut end_x,
-        &mut end_col,
-        &mut charpos,
+    let continuation = prepared_append.append_to_text_row_and_apply(
+        &append_context,
+        &geometry,
+        &params,
+        &mut BufferTextSpecialSourceCharRenderState::new(
+            &mut policy_face_ids,
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_scan,
+            &mut word_wrap,
+            &mut end_x,
+            &mut end_col,
+            &mut charpos,
+        ),
     );
+    assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);
     assert!(face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 31);
 

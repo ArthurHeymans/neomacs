@@ -3540,6 +3540,105 @@ pub(crate) struct BufferTextSourceCharPreparedAppend {
     plan: BufferTextSourceCharAppendPlan,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceAppendContinuation {
+    Rendered,
+    Stopped,
+}
+
+pub(crate) struct BufferTextSourceCharRenderState<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+    trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
+    word_wrap: &'a mut WordWrapRenderState,
+    x: &'a mut f32,
+    col: &'a mut usize,
+    charpos: &'a mut i64,
+}
+
+impl<'a> BufferTextSourceCharRenderState<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+        trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
+        word_wrap: &'a mut WordWrapRenderState,
+        x: &'a mut f32,
+        col: &'a mut usize,
+        charpos: &'a mut i64,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            trailing_whitespace,
+            word_wrap,
+            x,
+            col,
+            charpos,
+        }
+    }
+}
+
+pub(crate) struct BufferTextSpecialSourceCharRenderState<'a> {
+    face_ids: &'a mut FrameFaceIdAllocator,
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+    face_scan: &'a mut FaceScanCheckpoint,
+    word_wrap: &'a mut WordWrapRenderState,
+    x: &'a mut f32,
+    col: &'a mut usize,
+    charpos: &'a mut i64,
+}
+
+impl<'a> BufferTextSpecialSourceCharRenderState<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        face_ids: &'a mut FrameFaceIdAllocator,
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+        face_scan: &'a mut FaceScanCheckpoint,
+        word_wrap: &'a mut WordWrapRenderState,
+        x: &'a mut f32,
+        col: &'a mut usize,
+        charpos: &'a mut i64,
+    ) -> Self {
+        Self {
+            face_ids,
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_scan,
+            word_wrap,
+            x,
+            col,
+            charpos,
+        }
+    }
+}
+
+impl BufferTextSourceAppendContinuation {
+    pub(crate) fn should_break(self) -> bool {
+        matches!(self, Self::Stopped)
+    }
+}
+
 impl BufferTextSourceCharPreparedAppend {
     fn advance_px(self) -> f32 {
         self.plan.advance_px()
@@ -3656,6 +3755,36 @@ impl BufferTextSourceCharPreparedAppend {
             position,
             advance_px,
         })
+    }
+
+    pub(crate) fn append_to_text_row_and_apply<B: LayoutBufferView + ?Sized>(
+        self,
+        context: &BufferTextRowAppendContext<'_, '_, B>,
+        geometry: &DisplayRowGeometryState,
+        ch: char,
+        state: &mut BufferTextSourceCharRenderState<'_>,
+    ) -> BufferTextSourceAppendContinuation {
+        let Some(outcome) = self.append_to_text_row(
+            context,
+            geometry,
+            state.builder,
+            state.output_emitter,
+            state.evaluator,
+            state.font_metrics,
+            state.face_resolver,
+        ) else {
+            return BufferTextSourceAppendContinuation::Stopped;
+        };
+        outcome.apply_rendered_char_to_walk_state(
+            state.trailing_whitespace,
+            state.word_wrap,
+            ch,
+            geometry,
+            state.x,
+            state.col,
+            state.charpos,
+        );
+        BufferTextSourceAppendContinuation::Rendered
     }
 }
 
@@ -5216,6 +5345,36 @@ impl BufferTextSpecialSourceCharPreparedAppend {
             position,
             append_policy,
         })
+    }
+
+    pub(crate) fn append_to_text_row_and_apply<B: LayoutBufferView + ?Sized>(
+        self,
+        context: &BufferTextRowAppendContext<'_, '_, B>,
+        geometry: &DisplayRowGeometryState,
+        params: &WindowParams,
+        state: &mut BufferTextSpecialSourceCharRenderState<'_>,
+    ) -> BufferTextSourceAppendContinuation {
+        let Some(outcome) = self.append_to_text_row(
+            context,
+            geometry,
+            params,
+            state.face_ids,
+            state.builder,
+            state.output_emitter,
+            state.evaluator,
+            state.font_metrics,
+            state.face_resolver,
+        ) else {
+            return BufferTextSourceAppendContinuation::Stopped;
+        };
+        outcome.apply_rendered_special_char_to_walk_state(
+            state.face_scan,
+            state.word_wrap,
+            state.x,
+            state.col,
+            state.charpos,
+        );
+        BufferTextSourceAppendContinuation::Rendered
     }
 }
 

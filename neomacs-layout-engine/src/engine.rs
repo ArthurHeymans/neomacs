@@ -63,7 +63,8 @@ use crate::display_row_append::{
     BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
+    BufferTextSourceCharOverflowAction, BufferTextSourceCharRenderState,
+    BufferTextSpecialSourceCharOverflowAction, BufferTextSpecialSourceCharRenderState,
     BufferTextSpecialWrapSourceAction, BufferTextTruncationSkipAction,
     BufferTextWordWrapSourceAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
     DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
@@ -2643,24 +2644,28 @@ impl LayoutEngine {
                         }
                     }
 
-                    if let Some(append_outcome) = special_prepared_append.append_to_text_row(
-                        &buffer_row_append_context,
-                        &row_geometry,
-                        params,
-                        &mut face_ids,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                    ) {
-                        append_outcome.apply_rendered_special_char_to_walk_state(
-                            &mut face_scan,
-                            &mut word_wrap,
-                            &mut x,
-                            &mut col,
-                            &mut charpos,
-                        );
+                    if special_prepared_append
+                        .append_to_text_row_and_apply(
+                            &buffer_row_append_context,
+                            &row_geometry,
+                            params,
+                            &mut BufferTextSpecialSourceCharRenderState::new(
+                                &mut face_ids,
+                                &mut self.matrix_builder,
+                                &mut output_emitter,
+                                evaluator,
+                                &mut self.font_metrics,
+                                face_resolver,
+                                &mut face_scan,
+                                &mut word_wrap,
+                                &mut x,
+                                &mut col,
+                                &mut charpos,
+                            ),
+                        )
+                        .should_break()
+                    {
+                        break;
                     }
                     continue;
                 }
@@ -2865,27 +2870,28 @@ impl LayoutEngine {
             let mut overlay_state = overlay_render_state!();
             overlay_string_context!().render_before_at(buffer, charpos, &mut overlay_state);
 
-            let appended = prepared_append.append_to_text_row(
-                &buffer_row_append_context,
-                &append_geometry,
-                &mut self.matrix_builder,
-                &mut output_emitter,
-                evaluator,
-                &mut self.font_metrics,
-                face_resolver,
-            );
-            let Some(append_outcome) = appended else {
+            if prepared_append
+                .append_to_text_row_and_apply(
+                    &buffer_row_append_context,
+                    &append_geometry,
+                    ch,
+                    &mut BufferTextSourceCharRenderState::new(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        &mut trailing_whitespace,
+                        &mut word_wrap,
+                        &mut x,
+                        &mut col,
+                        &mut charpos,
+                    ),
+                )
+                .should_break()
+            {
                 break;
-            };
-            append_outcome.apply_rendered_char_to_walk_state(
-                &mut trailing_whitespace,
-                &mut word_wrap,
-                ch,
-                &row_geometry,
-                &mut x,
-                &mut col,
-                &mut charpos,
-            );
+            }
 
             // --- Overlay after-strings ---
             let mut overlay_state = overlay_render_state!();
