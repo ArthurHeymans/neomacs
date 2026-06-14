@@ -34,9 +34,14 @@ use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Rect;
+use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
+use neovm_core::emacs_core::value::list_to_vec;
+use neovm_core::window::WindowId;
+use strum::{EnumString, IntoStaticStr};
 
 fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<RenderedDisplayRow> {
     let mut row = GlyphRow::new(GlyphRowRole::Minibuffer);
@@ -117,6 +122,370 @@ pub(crate) struct EchoMinibufferDisplayRowsRequest<'face> {
     pub(crate) max_rows: usize,
     pub(crate) truncate_lines: bool,
     pub(crate) reserve_right_special_col: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+pub(crate) enum ResizeMiniWindowsMode {
+    #[strum(to_string = "nil")]
+    Disabled,
+    #[strum(to_string = "grow-only")]
+    GrowOnly,
+    #[strum(to_string = "t")]
+    Exact,
+}
+
+impl ResizeMiniWindowsMode {
+    pub(crate) fn from_lisp_value(value: Option<&Value>) -> Self {
+        let Some(value) = value else {
+            return Self::Exact;
+        };
+        if value.is_nil() {
+            return Self::Disabled;
+        }
+        value
+            .as_symbol_name()
+            .and_then(|name| name.parse().ok())
+            .unwrap_or(Self::Exact)
+    }
+
+    pub(crate) fn should_grow(self) -> bool {
+        !matches!(self, Self::Disabled)
+    }
+
+    pub(crate) fn should_shrink(self, visible_region_empty: bool) -> bool {
+        match self {
+            Self::Disabled => false,
+            Self::GrowOnly => visible_region_empty,
+            Self::Exact => true,
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn eval_status_line_format(
+    evaluator: &mut Context,
+    format_symbol: &str,
+    window_id: i64,
+    buffer_id: u64,
+    target_cols: usize,
+) -> Option<String> {
+    eval_status_line_format_value(evaluator, format_symbol, window_id, buffer_id, target_cols)
+        .and_then(|val| val.as_runtime_string_owned())
+        .filter(|s| !s.is_empty())
+}
+
+pub(crate) fn eval_status_line_format_value(
+    evaluator: &mut Context,
+    format_symbol: &str,
+    window_id: i64,
+    buffer_id: u64,
+    target_cols: usize,
+) -> Option<Value> {
+    evaluator.setup_thread_locals();
+    // GNU Emacs (xdisp.c:28187): format-mode-line reads the format
+    // variable from the TARGET buffer, not the caller's current
+    // buffer. We must read the buffer-local value of mode-line-format
+    // from the specified buffer BEFORE calling the walker.
+    let window_format_value = evaluator
+        .frame_manager()
+        .window_parameter(WindowId(window_id as u64), &Value::symbol(format_symbol));
+    let format_value = window_format_value
+        .filter(|value| !value.is_nil())
+        .unwrap_or_else(|| {
+            evaluator
+                .buffer_manager()
+                .get(BufferId(buffer_id))
+                .and_then(|buf| buf.buffer_local_value(format_symbol))
+                .unwrap_or_else(|| {
+                    // Fall back to the global default
+                    evaluator
+                        .obarray()
+                        .symbol_value(format_symbol)
+                        .copied()
+                        .unwrap_or(Value::NIL)
+                })
+        });
+    // GNU `display_mode_line` (xdisp.c:27911) runs the mode-line
+    // walker in `MODE_LINE_DISPLAY` mode, which makes `%-` expand to
+    // dashes filling the remaining row width. Our layout engine is the
+    // equivalent redisplay path, so we call
+    // `format_mode_line_for_display` directly rather than going
+    // through the Lisp-facing `format-mode-line` builtin (which uses
+    // `MODE_LINE_STRING` and returns `"--"` for `%-`).
+    //
+    // `target_cols` is the window's width in character cells, which
+    // the DISPLAY walker uses to size the dash fill for `%-`.
+    let rendered = neovm_core::emacs_core::xdisp::format_mode_line_for_display(
+        evaluator,
+        format_value,
+        Value::make_window(window_id as u64),
+        Value::make_buffer(BufferId(buffer_id)),
+        target_cols,
+    );
+    if rendered
+        .as_runtime_string_owned()
+        .is_some_and(|s| !s.is_empty())
+    {
+        Some(rendered)
+    } else {
+        None
+    }
+}
+
+fn tab_bar_menu_item_caption(entry: Value) -> Option<Value> {
+    if let Some(items) = list_to_vec(&entry) {
+        if items
+            .get(1)
+            .is_some_and(|value| KeymapMarker::MenuItem.is_value(*value))
+        {
+            let caption = *items.get(2)?;
+            return caption.is_string().then_some(caption);
+        }
+    }
+
+    if !entry.is_cons() {
+        return None;
+    }
+    let pair_cdr = entry.cons_cdr();
+    let items = list_to_vec(&pair_cdr)?;
+    if !items
+        .first()
+        .is_some_and(|value| KeymapMarker::MenuItem.is_value(*value))
+    {
+        return None;
+    }
+    let caption = *items.get(1)?;
+    caption.is_string().then_some(caption)
+}
+
+pub(crate) struct BuiltTabBar {
+    pub(crate) text: Value,
+    pub(crate) items: Vec<neomacs_display_protocol::ui_types::TabBarItem>,
+}
+
+pub(crate) struct ScratchGcRootScope {
+    saved_len: usize,
+}
+
+impl ScratchGcRootScope {
+    pub(crate) fn new() -> Self {
+        Self {
+            saved_len: neovm_core::emacs_core::eval::save_scratch_gc_roots(),
+        }
+    }
+
+    fn root(&self, value: Value) {
+        neovm_core::emacs_core::eval::push_scratch_gc_root(value);
+    }
+}
+
+impl Drop for ScratchGcRootScope {
+    fn drop(&mut self) {
+        neovm_core::emacs_core::eval::restore_scratch_gc_roots(self.saved_len);
+    }
+}
+
+pub(crate) fn build_tab_bar_display(
+    evaluator: &mut Context,
+    frame_id: u64,
+    gc_roots: &ScratchGcRootScope,
+) -> Option<BuiltTabBar> {
+    evaluator.setup_thread_locals();
+    if !evaluator.obarray().fboundp("tab-bar-make-keymap-1") {
+        return None;
+    }
+
+    let saved_frame = evaluator
+        .eval_form(Value::list(vec![Value::symbol("selected-frame")]))
+        .ok();
+    if let Some(frame) = saved_frame {
+        gc_roots.root(frame);
+    }
+    let saved_window = evaluator
+        .eval_form(Value::list(vec![Value::symbol("selected-window")]))
+        .ok();
+    if let Some(window) = saved_window {
+        gc_roots.root(window);
+    }
+    let saved_buffer = evaluator
+        .buffer_manager()
+        .current_buffer()
+        .map(|buffer| buffer.id());
+
+    evaluator
+        .eval_form(Value::list(vec![
+            Value::symbol("select-frame"),
+            Value::make_frame(frame_id),
+            Value::NIL,
+        ]))
+        .ok()?;
+
+    let result = evaluator
+        .eval_form(Value::list(vec![Value::symbol("tab-bar-make-keymap-1")]))
+        .ok()
+        .and_then(|keymap| list_to_vec(&keymap))
+        .and_then(|entries| {
+            let mut text_values = Vec::new();
+            let mut items = Vec::new();
+            for (index, entry) in entries.iter().enumerate() {
+                if index == 0 && KeymapMarker::Keymap.is_value(*entry) {
+                    continue;
+                }
+
+                if is_list_keymap(entry) {
+                    break;
+                }
+
+                if let Some(caption) = tab_bar_menu_item_caption(*entry) {
+                    let label = caption.as_runtime_string_owned().unwrap_or_default();
+                    text_values.push(caption);
+                    items.push(neomacs_display_protocol::ui_types::TabBarItem {
+                        index: items.len() as u32,
+                        label,
+                        help: String::new(),
+                        enabled: true,
+                        selected: false,
+                        is_separator: false,
+                    });
+                }
+            }
+
+            if text_values.is_empty() {
+                return None;
+            }
+            let mut concat_form = Vec::with_capacity(text_values.len() + 1);
+            concat_form.push(Value::symbol("concat"));
+            concat_form.extend(text_values);
+            let text = evaluator.eval_form(Value::list(concat_form)).ok()?;
+            text.as_runtime_string_owned()
+                .is_some_and(|text| !text.is_empty())
+                .then_some(BuiltTabBar { text, items })
+        });
+    if let Some(tab_bar) = &result {
+        gc_roots.root(tab_bar.text);
+    }
+
+    if let Some(frame) = saved_frame {
+        let _ = evaluator.eval_form(Value::list(vec![
+            Value::symbol("select-frame"),
+            frame,
+            Value::NIL,
+        ]));
+    }
+    if let Some(window) = saved_window {
+        let _ = evaluator.eval_form(Value::list(vec![
+            Value::symbol("select-window"),
+            window,
+            Value::NIL,
+        ]));
+    }
+    if let Some(buffer_id) = saved_buffer {
+        if evaluator.buffer_manager().get(buffer_id).is_some() {
+            evaluator.buffer_manager_mut().set_current(buffer_id);
+        }
+    }
+
+    result
+}
+
+pub(crate) fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
+    let raw = evaluator
+        .obarray()
+        .symbol_value("max-mini-window-height")
+        .copied()
+        .unwrap_or_else(|| Value::make_float(0.25));
+    match raw.kind() {
+        neovm_core::emacs_core::value::ValueKind::Float => {
+            (frame_rows * raw.as_float().unwrap_or(0.25) as f32).max(1.0)
+        }
+        neovm_core::emacs_core::value::ValueKind::Fixnum(_) => raw.as_int().unwrap_or(1) as f32,
+        _ => 1.0,
+    }
+}
+
+pub(crate) fn message_truncate_lines(evaluator: &Context) -> bool {
+    evaluator
+        .obarray()
+        .symbol_value("message-truncate-lines")
+        .is_some_and(|value| !value.is_nil())
+}
+
+pub(crate) fn minibuffer_echo_message_for_window(
+    is_minibuffer_window: bool,
+    active_minibuffer_window: bool,
+    current_message: Option<Value>,
+) -> Option<Value> {
+    if !is_minibuffer_window || active_minibuffer_window {
+        return None;
+    }
+    current_message.filter(|message| {
+        message
+            .as_runtime_string_owned()
+            .is_some_and(|text| !text.is_empty())
+    })
+}
+
+pub(crate) fn minibuffer_resize_line_count(
+    buffer: &neovm_core::buffer::Buffer,
+    window_id: u64,
+) -> usize {
+    let text_lines = buffer
+        .buffer_substring_bytes_range(buffer.accessible_emacs_byte_range())
+        .into_iter()
+        .filter(|&byte| byte == b'\n')
+        .count();
+
+    let window_sym = Value::symbol("window");
+    let accessible_end_byte = buffer.accessible_emacs_byte_region().end();
+    let overlays = buffer.overlays();
+    let overlay_lines: usize = overlays
+        .overlays_in_emacs_byte_range(EmacsByteRange::new(
+            EmacsBytePos::ZERO,
+            EmacsBytePos::ZERO.add_len(buffer.total_emacs_byte_len()),
+        ))
+        .iter()
+        .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {
+            Some(prop) => prop
+                .as_window_id()
+                .is_none_or(|overlay_window_id| overlay_window_id == window_id),
+            None => true,
+        })
+        .map(|ov| {
+            let before_lines = if overlays
+                .overlay_start_emacs_byte_pos(*ov)
+                .is_some_and(|start| start < accessible_end_byte)
+            {
+                overlays
+                    .overlay_get_named(*ov, Value::symbol("before-string"))
+                    .and_then(|value| value.as_lisp_string())
+                    .map(|string| {
+                        string
+                            .as_bytes()
+                            .iter()
+                            .filter(|&&byte| byte == b'\n')
+                            .count()
+                    })
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+
+            let after_lines = overlays
+                .overlay_get_named(*ov, Value::symbol("after-string"))
+                .and_then(|value| value.as_lisp_string())
+                .map(|string| {
+                    string
+                        .as_bytes()
+                        .iter()
+                        .filter(|&&byte| byte == b'\n')
+                        .count()
+                })
+                .unwrap_or(0);
+            before_lines + after_lines
+        })
+        .sum();
+
+    text_lines + overlay_lines + 1
 }
 
 fn window_chrome_glyph_row_role(kind: WindowChromeKind) -> GlyphRowRole {
