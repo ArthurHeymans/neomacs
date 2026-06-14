@@ -215,7 +215,7 @@ fn sequence_value_to_env_string_preserves_nonunicode_char_codes() {
     let code = 0x3F_FF80i64;
     let result = sequence_value_to_env_string(&Value::vector(vec![Value::fixnum(code)]))
         .expect("sequence should convert");
-    let decoded = crate::emacs_core::string_escape::decode_storage_char_codes(&result);
+    let decoded = crate::emacs_core::string_escape::decode_storage_char_codes(&result, true);
     assert_eq!(decoded, vec![code as u32]);
 }
 

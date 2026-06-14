@@ -753,7 +753,7 @@ fn runtime_string_value(value: &Value) -> Option<String> {
 
 fn runtime_string_result(text: impl Into<String>) -> Value {
     let text = text.into();
-    let multibyte = crate::emacs_core::string_escape::decode_storage_char_codes(&text)
+    let multibyte = crate::emacs_core::string_escape::decode_storage_char_codes_auto(&text)
         .into_iter()
         .any(|code| code > 0xFF);
     Value::heap_string(super::builtins::runtime_string_to_lisp_string(

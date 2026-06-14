@@ -5,8 +5,14 @@ const RAW_BYTE_SENTINEL_MIN: u32 = 0xE080;
 const RAW_BYTE_SENTINEL_MAX: u32 = 0xE0FF;
 const RAW_BYTE_CHAR_MIN: u32 = 0x3FFF80;
 const RAW_BYTE_CHAR_MAX: u32 = 0x3FFFFF;
+// Unibyte raw bytes 0x80..0xFF are stored as U+E380..U+E3FF (BASE + byte); see
+// `bytes_to_unibyte_storage_string`. Bytes 0x00..0x7F stay ASCII, so the
+// sentinel range is U+E380..U+E3FF — NOT U+E300..U+E37F, which are genuine
+// Private-Use-Area characters (e.g. nerd-font weather icons U+E322). Treating
+// the wider range as sentinels corrupted those glyphs and broke byte-compiled
+// `.elc` syntax (issue #131).
 const UNIBYTE_BYTE_SENTINEL_BASE: u32 = 0xE300;
-const UNIBYTE_BYTE_SENTINEL_MIN: u32 = 0xE300;
+const UNIBYTE_BYTE_SENTINEL_MIN: u32 = 0xE380;
 const UNIBYTE_BYTE_SENTINEL_MAX: u32 = 0xE3FF;
 
 const EXT_SEQ_PREFIX: u32 = 0xE100;
@@ -199,7 +205,16 @@ pub(crate) struct StorageUnit {
     pub logical_byte_len: usize,
 }
 
-pub(crate) fn scan_storage_units(s: &str) -> Vec<StorageUnit> {
+/// Scan a storage string into [`StorageUnit`]s.
+///
+/// `multibyte` selects how the U+E300..E3FF range is interpreted: in a
+/// **unibyte** storage string those code points are the byte-0x80..0xFF
+/// sentinels produced by `bytes_to_unibyte_storage_string` and decode to the
+/// raw byte; in a **multibyte** storage string that range only ever holds real
+/// characters (e.g. nerd-font glyphs), so they pass through unchanged. Decoding
+/// them unconditionally was issue #131 (U+E322 → 0x22). The U+E080..E0FF
+/// raw-byte and U+E100.. extended sentinels are multibyte-only and always decoded.
+pub(crate) fn scan_storage_units(s: &str, multibyte: bool) -> Vec<StorageUnit> {
     let mut out = Vec::new();
     let mut idx = 0usize;
 
@@ -221,7 +236,7 @@ pub(crate) fn scan_storage_units(s: &str) -> Vec<StorageUnit> {
             continue;
         }
 
-        if (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&code) {
+        if !multibyte && (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&code) {
             let byte = (code - UNIBYTE_BYTE_SENTINEL_BASE) as u8;
             out.push(StorageUnit {
                 storage_start: idx,
@@ -264,9 +279,26 @@ pub(crate) fn scan_storage_units(s: &str) -> Vec<StorageUnit> {
     out
 }
 
+/// Scan a storage string, inferring multibyte-ness from its content: a string
+/// is treated as unibyte only if it actually contains unibyte byte-sentinels
+/// (U+E380..U+E3FF). Used by display/metric/format helpers that receive a bare
+/// storage string without an explicit flag. Data paths that know the flag
+/// (e.g. `storage_string_to_buffer_bytes`) thread it through `scan_storage_units`
+/// directly instead.
+pub(crate) fn scan_storage_units_auto(s: &str) -> Vec<StorageUnit> {
+    scan_storage_units(s, !storage_string_contains_unibyte_bytes(s))
+}
+
+/// [`decode_storage_char_codes`] with multibyte-ness inferred from content (see
+/// [`scan_storage_units_auto`]). For callers holding a bare storage string.
+pub(crate) fn decode_storage_char_codes_auto(s: &str) -> Vec<u32> {
+    decode_storage_char_codes(s, !storage_string_contains_unibyte_bytes(s))
+}
+
 /// Return the Emacs character code at a storage byte position and the next
-/// storage byte position.
-pub(crate) fn storage_code_step(s: &str, pos: usize) -> Option<(u32, usize)> {
+/// storage byte position. See [`scan_storage_units`] for how `multibyte`
+/// governs the U+E300..E3FF range.
+pub(crate) fn storage_code_step(s: &str, pos: usize, multibyte: bool) -> Option<(u32, usize)> {
     if pos >= s.len() {
         return None;
     }
@@ -280,7 +312,7 @@ pub(crate) fn storage_code_step(s: &str, pos: usize) -> Option<(u32, usize)> {
         return Some((0x3FFF00 + raw, next));
     }
 
-    if (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&code) {
+    if !multibyte && (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&code) {
         return Some((code - UNIBYTE_BYTE_SENTINEL_BASE, next));
     }
 
@@ -359,7 +391,7 @@ pub(crate) fn emacs_bytes_to_storage_string(bytes: &[u8], multibyte: bool) -> St
 }
 
 pub(crate) fn storage_string_to_buffer_bytes(s: &str, multibyte: bool) -> Vec<u8> {
-    let codes = decode_storage_char_codes(s);
+    let codes = decode_storage_char_codes(s, multibyte);
     if !multibyte {
         return codes
             .into_iter()
@@ -393,22 +425,23 @@ pub(crate) fn encode_char_code_for_string_storage(code: u32, multibyte: bool) ->
     encode_nonunicode_char_for_storage(code)
 }
 
-pub(crate) fn decode_storage_units(s: &str) -> Vec<(u32, usize)> {
+pub(crate) fn decode_storage_units(s: &str, multibyte: bool) -> Vec<(u32, usize)> {
     if !storage_has_special_units(s) {
         return s
             .chars()
             .map(|ch| (ch as u32, crate::encoding::char_width(ch)))
             .collect();
     }
-    scan_storage_units(s)
+    scan_storage_units(s, multibyte)
         .into_iter()
         .map(|unit| (unit.code, unit.display_width))
         .collect()
 }
 
-/// Decode NeoVM string storage into Emacs character codes.
-pub(crate) fn decode_storage_char_codes(s: &str) -> Vec<u32> {
-    decode_storage_units(s)
+/// Decode NeoVM string storage into Emacs character codes. `multibyte` governs
+/// the U+E300..E3FF range (see [`scan_storage_units`]).
+pub(crate) fn decode_storage_char_codes(s: &str, multibyte: bool) -> Vec<u32> {
+    decode_storage_units(s, multibyte)
         .into_iter()
         .map(|(cp, _)| cp)
         .collect()
@@ -424,7 +457,7 @@ pub(crate) fn storage_char_len(s: &str) -> usize {
             s.chars().count()
         };
     }
-    scan_storage_units(s).len()
+    scan_storage_units_auto(s).len()
 }
 
 /// Count Emacs string bytes represented by NeoVM string storage.
@@ -432,7 +465,7 @@ pub(crate) fn storage_byte_len(s: &str) -> usize {
     if !storage_has_special_units(s) {
         return s.len();
     }
-    scan_storage_units(s)
+    scan_storage_units_auto(s)
         .into_iter()
         .map(|unit| unit.logical_byte_len)
         .sum()
@@ -444,7 +477,7 @@ pub(crate) fn storage_byte_to_logical_byte(s: &str, storage_byte_pos: usize) -> 
         return storage_byte_pos.min(s.len());
     }
 
-    let units = scan_storage_units(s);
+    let units = scan_storage_units_auto(s);
     let mut logical = 0usize;
     for unit in &units {
         if storage_byte_pos <= unit.storage_start {
@@ -467,7 +500,7 @@ pub(crate) fn storage_logical_byte_to_storage_byte(s: &str, logical_byte_pos: us
         return logical_byte_pos.min(s.len());
     }
 
-    let units = scan_storage_units(s);
+    let units = scan_storage_units_auto(s);
     let mut logical = 0usize;
     for unit in &units {
         if logical_byte_pos == logical {
@@ -728,7 +761,7 @@ pub(crate) fn format_lisp_string_bytes_inner(s: &str, options: &PrintOptions) ->
     if storage_has_special_units(s) {
         use crate::emacs_core::emacs_char;
 
-        let units = scan_storage_units(s);
+        let units = scan_storage_units_auto(s);
         let is_multibyte = units.iter().any(|unit| unit.code > 0xFF);
         let mut data = Vec::with_capacity(s.len());
         for unit in units {

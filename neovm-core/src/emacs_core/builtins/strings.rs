@@ -1410,7 +1410,7 @@ fn format_string_spec_tracked(s: &str, spec: &FormatSpec) -> (String, usize, usi
     let mut saw_limit = spec.precision.is_none();
     if spec.precision.is_some() || spec.width.is_some() {
         truncated_end = 0;
-        for unit in crate::emacs_core::string_escape::scan_storage_units(s) {
+        for unit in crate::emacs_core::string_escape::scan_storage_units_auto(s) {
             if let Some(prec) = spec.precision {
                 if content_width + unit.display_width > prec {
                     saw_limit = true;

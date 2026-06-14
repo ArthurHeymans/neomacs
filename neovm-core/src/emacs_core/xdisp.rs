@@ -1161,9 +1161,10 @@ impl ModeLineRendered {
     }
 
     fn into_value(mut self, face_spec: ModeLineFaceSpec) -> Value {
-        let multibyte = crate::emacs_core::string_escape::decode_storage_char_codes(&self.text)
-            .into_iter()
-            .any(|code| code > 0xFF);
+        let multibyte =
+            crate::emacs_core::string_escape::decode_storage_char_codes_auto(&self.text)
+                .into_iter()
+                .any(|code| code > 0xFF);
         if face_spec.no_props {
             return Value::heap_string(crate::emacs_core::builtins::runtime_string_to_lisp_string(
                 &self.text, multibyte,

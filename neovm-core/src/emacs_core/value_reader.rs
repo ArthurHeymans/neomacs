@@ -2373,7 +2373,7 @@ impl<'a> Reader<'a> {
         }
         match self.source {
             ReaderSource::Runtime(input) => {
-                crate::emacs_core::string_escape::storage_code_step(input, pos)
+                crate::emacs_core::string_escape::storage_code_step(input, pos, true)
                     .filter(|(_, next)| *next <= self.limit)
             }
             ReaderSource::LispString(input) => self

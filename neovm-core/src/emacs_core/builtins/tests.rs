@@ -38,7 +38,7 @@ fn decode_value_char_codes(v: &Value) -> Vec<u32> {
 
 /// Backward-compat: decode char codes from an &str (for tests using as_str).
 fn decode_storage_char_codes(s: &str) -> Vec<u32> {
-    crate::emacs_core::string_escape::decode_storage_char_codes(s)
+    crate::emacs_core::string_escape::decode_storage_char_codes(s, true)
 }
 
 fn dispatch_builtin_pure(name: &str, args: Vec<Value>) -> Option<EvalResult> {

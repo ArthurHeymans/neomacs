@@ -75,7 +75,7 @@ fn decode_storage_char_codes_handles_nonunicode_and_raw_byte() {
         encode_nonunicode_char_for_storage(0x3FFFFF).expect("raw byte should encode")
     );
     assert_eq!(
-        decode_storage_char_codes(&encoded),
+        decode_storage_char_codes(&encoded, true),
         vec![0x110000, 0x3FFFFF]
     );
 }
@@ -94,14 +94,14 @@ fn storage_char_len_for_nonunicode() {
 fn decode_storage_handles_overlong_raw_byte_encoding() {
     crate::test_utils::init_test_tracing();
     let encoded = emacs_bytes_to_storage_string(&[0xC1, 0xBF], true);
-    assert_eq!(decode_storage_char_codes(&encoded), vec![0x3FFFFF]);
+    assert_eq!(decode_storage_char_codes(&encoded, true), vec![0x3FFFFF]);
 }
 
 #[test]
 fn multibyte_storage_string_handles_surrogate_character_codes() {
     crate::test_utils::init_test_tracing();
     let encoded = emacs_bytes_to_storage_string(&[0xED, 0xA0, 0x80], true);
-    assert_eq!(decode_storage_char_codes(&encoded), vec![0xD800]);
+    assert_eq!(decode_storage_char_codes(&encoded, true), vec![0xD800]);
     assert_eq!(
         storage_string_to_buffer_bytes(&encoded, true),
         vec![0xED, 0xA0, 0x80]
@@ -122,7 +122,7 @@ fn unibyte_storage_string_round_trips_emacs_mule_bytes() {
         ]
     );
     assert_eq!(
-        decode_storage_char_codes(&encoded),
+        decode_storage_char_codes(&encoded, false),
         vec![6, 34, 92, 10, 127, 128, 169, 255]
     );
     assert_eq!(storage_char_len(&encoded), 8);
@@ -146,7 +146,35 @@ fn private_use_chars_outside_sentinel_ranges_are_not_rewritten() {
     crate::test_utils::init_test_tracing();
     let plain_private_use = char::from_u32(0xE400).expect("valid private-use scalar");
     let s = plain_private_use.to_string();
-    assert_eq!(decode_storage_char_codes(&s), vec![0xE400]);
+    assert_eq!(decode_storage_char_codes(&s, true), vec![0xE400]);
     assert_eq!(storage_char_len(&s), 1);
     assert_eq!(storage_byte_len(&s), s.len());
+}
+
+/// Issue #131: real Private-Use-Area glyphs in U+E300..U+E37F (e.g. nerd-font
+/// weather icons U+E322) are NOT unibyte byte-sentinels — those only occupy
+/// U+E380..U+E3FF. They must not be detected as unibyte, and a multibyte
+/// storage string must convert them to their real Emacs bytes (not a low byte).
+#[test]
+fn nerd_font_pua_glyphs_are_not_unibyte_sentinels_issue_131() {
+    crate::test_utils::init_test_tracing();
+    for cp in [0xE300u32, 0xE322, 0xE325, 0xE379, 0xE37F] {
+        let s = char::from_u32(cp).unwrap().to_string();
+        assert!(
+            !storage_string_contains_unibyte_bytes(&s),
+            "U+{cp:04X} must not look unibyte"
+        );
+        // Multibyte conversion preserves the real char (its own Emacs bytes).
+        assert_eq!(
+            storage_string_to_buffer_bytes(&s, true),
+            s.as_bytes(),
+            "U+{cp:04X} must convert to its real bytes"
+        );
+        assert_eq!(decode_storage_char_codes(&s, true), vec![cp]);
+    }
+    // The genuine unibyte sentinel range (U+E380..U+E3FF = bytes 0x80..0xFF)
+    // still decodes to raw bytes for unibyte storage.
+    let unibyte = bytes_to_unibyte_storage_string(&[0x80, 0xFF]);
+    assert!(storage_string_contains_unibyte_bytes(&unibyte));
+    assert_eq!(decode_storage_char_codes(&unibyte, false), vec![0x80, 0xFF]);
 }

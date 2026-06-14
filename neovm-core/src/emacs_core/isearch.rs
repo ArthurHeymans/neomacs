@@ -244,7 +244,7 @@ fn storage_string_to_lisp_string(source: &str, multibyte: bool) -> crate::heap_t
 }
 
 fn pattern_has_special_storage_units(pattern: &str) -> bool {
-    crate::emacs_core::string_escape::scan_storage_units(pattern)
+    crate::emacs_core::string_escape::scan_storage_units_auto(pattern)
         .into_iter()
         .any(|unit| (unit.storage_end - unit.storage_start) != unit.logical_byte_len)
 }
@@ -1636,7 +1636,7 @@ fn replace_string_eval_impl(
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
-        let units = crate::emacs_core::string_escape::scan_storage_units(&source);
+        let units = crate::emacs_core::string_escape::scan_storage_units_auto(&source);
         let mut out = String::with_capacity(source.len() + to.len() * units.len());
         if backward {
             for unit in &units {
