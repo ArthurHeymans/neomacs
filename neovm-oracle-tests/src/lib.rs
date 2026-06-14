@@ -1947,3 +1947,6 @@ mod divergence_window_frame_display;
 mod divergence_window_frame_real;
 mod divergence_window_geometry;
 mod divergence_window_redisplay;
+mod divergence_window_frame;
+mod divergence_window_frame2;
+mod divergence_window_frame3;
