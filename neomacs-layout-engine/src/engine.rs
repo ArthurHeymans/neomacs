@@ -59,7 +59,7 @@ use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
     DisplayPropertyReplacementAppendResolveRequest, DisplayRowPrefixRequest,
-    LispStringRowAppendContext, LispStringSourceAppendRequest, OverlayStringRenderBatchSource,
+    DisplayRowPrefixValues, LispStringRowAppendContext, OverlayStringRenderBatchSource,
     OverlayStringRenderRowContext, SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest,
     SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest, render_overlay_string_batch,
 };
@@ -1401,13 +1401,11 @@ impl LayoutEngine {
         // t (True) = only CR hides rest of line (mapped to i32::MAX so indent check never triggers)
         let selective_display = super::neovm_bridge::buffer_selective_display(buffer);
 
-        // Line/wrap prefix: keep Lisp string values so display-time prefixes
-        // retain text properties while moving through the shared row builder.
-        let line_prefix_value = super::neovm_bridge::buffer_local_value(buffer, "line-prefix")
-            .filter(|value| value.as_lisp_string().is_some());
-        let wrap_prefix_value = super::neovm_bridge::buffer_local_value(buffer, "wrap-prefix")
-            .filter(|value| value.as_lisp_string().is_some());
-        let has_prefix = line_prefix_value.is_some() || wrap_prefix_value.is_some();
+        let prefix_values = DisplayRowPrefixValues::default_values(
+            super::neovm_bridge::buffer_local_value(buffer, "line-prefix"),
+            super::neovm_bridge::buffer_local_value(buffer, "wrap-prefix"),
+        );
+        let has_prefix = prefix_values.has_default_prefix();
 
         // Use face_resolver's default face for this window.
         // Chrome row reservation must use the same realized face metrics as
@@ -1826,7 +1824,7 @@ impl LayoutEngine {
         let mut word_wrap = WordWrapRenderState::new(params.word_wrap);
 
         let mut prefix_request =
-            DisplayRowPrefixRequest::initial(has_prefix, line_prefix_value.is_some());
+            DisplayRowPrefixRequest::initial(has_prefix, prefix_values.has_line_default_prefix());
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
@@ -2045,26 +2043,14 @@ impl LayoutEngine {
 
             // --- Line/wrap prefix rendering ---
             if prefix_request.is_requested() {
-                // Check text property prefix first (overrides buffer-local)
                 let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
-                let prefix = if prefix_request.uses_wrap_prefix() {
-                    text_props
-                        .get_property(charpos, Value::symbol("wrap-prefix"))
-                        .filter(|value| value.as_lisp_string().is_some())
-                        .or(wrap_prefix_value)
-                } else if prefix_request.uses_line_prefix() {
-                    text_props
-                        .get_property(charpos, Value::symbol("line-prefix"))
-                        .filter(|value| value.as_lisp_string().is_some())
-                        .or(line_prefix_value)
-                } else {
-                    None
-                };
+                let line_property = text_props.get_property(charpos, Value::symbol("line-prefix"));
+                let wrap_property = text_props.get_property(charpos, Value::symbol("wrap-prefix"));
 
-                if let Some(prefix_value) = prefix {
-                    let prefix_source = prefix_request
-                        .source_for_value(prefix_value, CharPos0::new(charpos as usize))
-                        .expect("requested prefix should build a prefix source");
+                if let Some(prefix_source) = prefix_request.source_from_values(
+                    prefix_values.with_properties(line_property, wrap_property),
+                    CharPos0::new(charpos as usize),
+                ) {
                     let prefix_base_face = display_string_base_face(
                         buffer,
                         face_resolver,
@@ -2081,23 +2067,18 @@ impl LayoutEngine {
                         raise_span.value_or(0.0),
                         char_h,
                     );
-                    let prefix_append_request = LispStringSourceAppendRequest::new(
+                    let position = append_context.render_prefix_source_to_text_row_and_emit(
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                        &mut self.font_metrics,
+                        face_resolver,
+                        &mut face_ids,
+                        &prefix_base_face,
+                        prefix_source,
                         DisplayRowPosition { x_px: x, col },
                         LISP_STRING_SOURCE_PREFIX,
-                        prefix_source.value(),
                     );
-                    let position = append_context
-                        .render_active_face_source_request_to_text_row_and_emit(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                            &mut self.font_metrics,
-                            face_resolver,
-                            &mut face_ids,
-                            prefix_base_face.face_id(),
-                            prefix_base_face.face(),
-                            prefix_append_request,
-                        );
                     x = position.x_px;
                     col = position.col;
                 }

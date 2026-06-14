@@ -201,7 +201,7 @@ impl<'row> LispStringRowAppendContext<'row> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_active_face_source_request_to_text_row_and_emit(
+    fn render_active_face_source_request_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
@@ -233,6 +233,33 @@ impl<'row> LispStringRowAppendContext<'row> {
             )
             .map(|outcome| outcome.end_position())
             .unwrap_or(position)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_prefix_source_to_text_row_and_emit(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        base_face: &DisplayStringBaseFace,
+        prefix_source: DisplayRowPrefixSource,
+        position: DisplayRowPosition,
+        source_id: u64,
+    ) -> DisplayRowPosition {
+        self.render_active_face_source_request_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            base_face.face_id(),
+            base_face.face(),
+            prefix_source.append_request(position, source_id),
+        )
     }
 }
 
@@ -322,14 +349,14 @@ impl<'a> LispStringSourceAppendContext<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct LispStringSourceAppendRequest {
+struct LispStringSourceAppendRequest {
     position: DisplayRowPosition,
     source_id: u64,
     value: Value,
 }
 
 impl LispStringSourceAppendRequest {
-    pub(crate) fn new(position: DisplayRowPosition, source_id: u64, value: Value) -> Self {
+    fn new(position: DisplayRowPosition, source_id: u64, value: Value) -> Self {
         Self {
             position,
             source_id,
@@ -430,6 +457,14 @@ pub(crate) enum DisplayRowPrefixRequest {
     Wrap,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowPrefixValues {
+    line_property: Option<Value>,
+    wrap_property: Option<Value>,
+    line_default: Option<Value>,
+    wrap_default: Option<Value>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DisplayRowPrefixKind {
     Line,
@@ -468,14 +503,6 @@ impl DisplayRowPrefixRequest {
         !matches!(self, Self::None)
     }
 
-    pub(crate) fn uses_line_prefix(self) -> bool {
-        matches!(self, Self::Line)
-    }
-
-    pub(crate) fn uses_wrap_prefix(self) -> bool {
-        matches!(self, Self::Wrap)
-    }
-
     pub(crate) fn source_for_value(
         self,
         value: Value,
@@ -492,9 +519,68 @@ impl DisplayRowPrefixRequest {
             kind,
         })
     }
+
+    pub(crate) fn source_from_values(
+        self,
+        values: DisplayRowPrefixValues,
+        anchor_charpos: CharPos0,
+    ) -> Option<DisplayRowPrefixSource> {
+        let value = match self {
+            Self::Line => values.line_property.or(values.line_default),
+            Self::Wrap => values.wrap_property.or(values.wrap_default),
+            Self::None => None,
+        }?;
+        self.source_for_value(value, anchor_charpos)
+    }
+}
+
+impl DisplayRowPrefixValues {
+    pub(crate) fn new(
+        line_property: Option<Value>,
+        wrap_property: Option<Value>,
+        line_default: Option<Value>,
+        wrap_default: Option<Value>,
+    ) -> Self {
+        Self {
+            line_property: Self::lisp_string_value(line_property),
+            wrap_property: Self::lisp_string_value(wrap_property),
+            line_default: Self::lisp_string_value(line_default),
+            wrap_default: Self::lisp_string_value(wrap_default),
+        }
+    }
+
+    fn lisp_string_value(value: Option<Value>) -> Option<Value> {
+        value.filter(|value| value.as_lisp_string().is_some())
+    }
+
+    pub(crate) fn default_values(line_default: Option<Value>, wrap_default: Option<Value>) -> Self {
+        Self::new(None, None, line_default, wrap_default)
+    }
+
+    pub(crate) fn with_properties(
+        self,
+        line_property: Option<Value>,
+        wrap_property: Option<Value>,
+    ) -> Self {
+        Self::new(
+            line_property,
+            wrap_property,
+            self.line_default,
+            self.wrap_default,
+        )
+    }
+
+    pub(crate) fn has_default_prefix(self) -> bool {
+        self.line_default.is_some() || self.wrap_default.is_some()
+    }
+
+    pub(crate) fn has_line_default_prefix(self) -> bool {
+        self.line_default.is_some()
+    }
 }
 
 impl DisplayRowPrefixSource {
+    #[cfg(test)]
     pub(crate) fn value(self) -> Value {
         self.value
     }
@@ -512,6 +598,14 @@ impl DisplayRowPrefixSource {
 
     pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
         BaseFacePolicy::DefaultFace
+    }
+
+    fn append_request(
+        self,
+        position: DisplayRowPosition,
+        source_id: u64,
+    ) -> LispStringSourceAppendRequest {
+        LispStringSourceAppendRequest::new(position, source_id, self.value)
     }
 }
 
@@ -977,7 +1071,7 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
     }
 }
 
-pub(crate) struct LispStringSourceRowAppendSession<'a> {
+struct LispStringSourceRowAppendSession<'a> {
     source_session: LispStringSourceAppendSession<'a>,
     append_surface: &'a DisplayRowAppendSurface,
     glyph_y_offset: f32,
@@ -986,7 +1080,7 @@ pub(crate) struct LispStringSourceRowAppendSession<'a> {
 
 impl<'a> LispStringSourceRowAppendSession<'a> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    fn new(
         request: LispStringSourceAppendRequest,
         base_face_id: u32,
         base_face: &'a ResolvedFace,
@@ -2922,10 +3016,7 @@ impl DisplayReplacementStringAppendItem {
         }
     }
 
-    pub(crate) fn source_append_request(
-        &self,
-        position: DisplayRowPosition,
-    ) -> LispStringSourceAppendRequest {
+    fn source_append_request(&self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
         LispStringSourceAppendRequest::new(position, self.source_id, self.value)
     }
 }

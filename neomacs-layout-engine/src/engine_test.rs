@@ -312,12 +312,47 @@ fn frame_face_id_allocator_clamps_to_sentinel_and_allocates_sequential_ids() {
 }
 
 #[test]
-fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
+fn display_row_prefix_request_tracks_pending_prefix_mode() {
+    let _eval = Context::new();
     let mut request = DisplayRowPrefixRequest::initial(true, true);
 
     assert!(request.is_requested());
-    assert!(request.uses_line_prefix());
-    assert!(!request.uses_wrap_prefix());
+    let line_source = request
+        .source_from_values(
+            DisplayRowPrefixValues::new(
+                Some(Value::string("line-property")),
+                Some(Value::string("wrap-property")),
+                Some(Value::string("line-default")),
+                Some(Value::string("wrap-default")),
+            ),
+            CharPos0::new(3),
+        )
+        .expect("line prefix source");
+    assert_eq!(
+        line_source.origin(),
+        DisplayOrigin::LinePrefix {
+            anchor_charpos: CharPos0::new(3),
+        }
+    );
+    assert_eq!(
+        line_source.value().as_runtime_string_owned(),
+        Some("line-property".to_string())
+    );
+    let line_fallback_source = request
+        .source_from_values(
+            DisplayRowPrefixValues::new(
+                Some(Value::fixnum(1)),
+                None,
+                Some(Value::string("line-default")),
+                None,
+            ),
+            CharPos0::new(4),
+        )
+        .expect("line default source");
+    assert_eq!(
+        line_fallback_source.value().as_runtime_string_owned(),
+        Some("line-default".to_string())
+    );
 
     request.clear();
 
@@ -326,8 +361,27 @@ fn display_row_prefix_request_names_line_and_wrap_prefix_modes() {
     request.request_wrap();
 
     assert!(request.is_requested());
-    assert!(request.uses_wrap_prefix());
-    assert!(!request.uses_line_prefix());
+    let wrap_source = request
+        .source_from_values(
+            DisplayRowPrefixValues::new(
+                Some(Value::string("line-property")),
+                None,
+                Some(Value::string("line-default")),
+                Some(Value::string("wrap-default")),
+            ),
+            CharPos0::new(5),
+        )
+        .expect("wrap prefix source");
+    assert_eq!(
+        wrap_source.origin(),
+        DisplayOrigin::WrapPrefix {
+            anchor_charpos: CharPos0::new(5),
+        }
+    );
+    assert_eq!(
+        wrap_source.value().as_runtime_string_owned(),
+        Some("wrap-default".to_string())
+    );
 
     assert_eq!(
         DisplayRowPrefixRequest::initial(false, true),
