@@ -297,6 +297,35 @@ fn print_literal_private_use_unicode_does_not_masquerade_as_raw_byte() {
     );
 }
 
+/// Issue #131: Private-Use-Area characters (nerd-font icons live across
+/// U+E000..U+F8FF) must extract as their real code points. neomacs reused
+/// U+E300..U+E3FF as a unibyte "sentinel", so char access masked e.g.
+/// U+E322 → 0x22 (`"`), corrupting glyphs and breaking byte-compiled `.elc`
+/// syntax. This guards that whole range (the nerd-font weather/material icons).
+///
+/// (U+E080..U+E0FF is still used as the in-`String` storage for eight-bit raw
+/// bytes, so genuine glyphs there remain ambiguous until the storage rework —
+/// issue #131 Step B — and are intentionally not covered here.)
+#[test]
+fn private_use_chars_survive_char_extraction_issue_131() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::builtins::{lisp_string_char_at, lisp_string_char_codes};
+    for cp in [0xE300u32, 0xE322, 0xE325, 0xE379, 0xE39A, 0xE3FF] {
+        let ch = char::from_u32(cp).expect("private use scalar");
+        let value = Value::string(ch.to_string());
+        let ls = value.as_lisp_string().expect("string value");
+        assert_eq!(ls.schars(), 1, "U+{cp:04X} must be one character");
+        assert_eq!(
+            lisp_string_char_at(ls, 0),
+            Some(cp),
+            "aref of U+{cp:04X} must keep the real code point (issue #131)"
+        );
+        assert_eq!(lisp_string_char_codes(ls), vec![cp]);
+        // The printer must emit the real glyph, not a masked low byte.
+        assert_eq!(print_value(&value), format!("\"{ch}\""));
+    }
+}
+
 #[test]
 fn print_list() {
     crate::test_utils::init_test_tracing();
