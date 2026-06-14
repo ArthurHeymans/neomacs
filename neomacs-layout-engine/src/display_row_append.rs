@@ -3319,8 +3319,24 @@ impl BufferTextSourceCharPreparedAppend {
         ))
     }
 
-    pub(crate) fn cursor_slot_width(self) -> CapturedCursorSlotWidth {
+    fn cursor_slot_width(self) -> CapturedCursorSlotWidth {
         CapturedCursorSlotWidth::Explicit(self.advance_px())
+    }
+
+    pub(crate) fn cursor_info_for_main_char(
+        self,
+        active_face_state: &DisplayRowActiveFaceState,
+        position: DisplayRowTextPosition,
+        is_tab: bool,
+    ) -> CapturedCursorInfo {
+        CapturedCursorInfo::from_active_face_state(
+            active_face_state,
+            CapturedCursorPlacement::from_row_text_position(
+                position,
+                self.cursor_slot_width(),
+                is_tab,
+            ),
+        )
     }
 
     pub(crate) fn track_trailing_whitespace_rendered_char(

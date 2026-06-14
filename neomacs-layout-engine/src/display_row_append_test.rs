@@ -1,5 +1,4 @@
 use super::*;
-use crate::display_cursor::CapturedCursorSlotWidth;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
@@ -2266,10 +2265,15 @@ fn buffer_text_source_append_context_appends_source_char() {
         )
         .into_text()
         .expect("ordinary buffer char should prepare text append");
-    assert_eq!(
-        prepared_append.cursor_slot_width(),
-        CapturedCursorSlotWidth::Explicit(8.0)
+    let cursor_info = prepared_append.cursor_info_for_main_char(
+        &active_face,
+        geometry.text_position(2.0, 0, 3),
+        false,
     );
+    assert_eq!(cursor_info.x, 2.0);
+    assert_eq!(cursor_info.col, 3);
+    assert_eq!(cursor_info.slot_width, Some(8.0));
+    assert!(!cursor_info.stretch_like);
     assert_eq!(
         prepared_append.overflow_decision('a', 80.0, false, WordWrapRenderState::new(false)),
         BufferTextRowOverflowDecision::Fits

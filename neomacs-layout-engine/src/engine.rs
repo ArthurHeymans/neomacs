@@ -2986,13 +2986,10 @@ impl LayoutEngine {
             if cursor_info.is_missing() && charpos == point_charpos {
                 capture_cursor_info(
                     &mut cursor_info,
-                    CapturedCursorInfo::from_active_face_state(
+                    prepared_append.cursor_info_for_main_char(
                         &active_face_state,
-                        CapturedCursorPlacement::from_row_text_position(
-                            row_geometry.text_position(x, ch_start_byte_idx, col),
-                            prepared_append.cursor_slot_width(),
-                            ch == '\t',
-                        ),
+                        row_geometry.text_position(x, ch_start_byte_idx, col),
+                        ch == '\t',
                     ),
                 );
             }
