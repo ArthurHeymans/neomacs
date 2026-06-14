@@ -695,7 +695,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
 
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
-    let item = synthetic_display_text_item(9, "...", 7);
+    let item = synthetic_display_text_item(SyntheticTextSource::new(9, "..."), 7);
 
     assert_eq!(item.face, RenderFaceRef::FaceId(7));
     assert_eq!(item.span.start, DisplaySourcePosition::synthetic(9, 0));
@@ -791,8 +791,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
             &mut font_metrics,
             &face_resolver,
             DisplayRowPosition { x_px: 0.0, col: 0 },
-            99,
-            "...",
+            SyntheticTextSource::new(99, "..."),
         )
         .expect("synthetic text progress");
 
@@ -840,7 +839,7 @@ fn display_row_prefix_source_builds_append_request_with_prefix_source_id() {
         .into_parts();
 
     assert_eq!(request_parts.value, value);
-    assert_eq!(request_parts.source_id, LISP_STRING_SOURCE_PREFIX);
+    assert_eq!(request_parts.source_id, LispStringSourceId::PREFIX);
     assert_eq!(
         request_parts.position,
         DisplayRowPosition { x_px: 10.0, col: 2 }
@@ -888,8 +887,7 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
             &mut font_metrics,
             &face_resolver,
             DisplayRowPosition { x_px: 8.0, col: 1 },
-            100,
-            "\u{301}",
+            SyntheticTextSource::new(100, "\u{301}"),
         )
         .expect("combining fragment progress");
 
@@ -2018,7 +2016,7 @@ fn lisp_string_append_context_appends_fragment_items() {
 
     let request = LispStringSourceAppendRequest::new(
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        2,
+        LispStringSourceId::PREFIX,
         Value::string("=>"),
     );
     let end = append_context.render_active_face_source_request_to_text_row_and_emit(
@@ -2942,7 +2940,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
 
     let request = LispStringSourceAppendRequest::new(
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        1,
+        LispStringSourceId::OVERLAY_STRING,
         Value::string("a\nb"),
     );
     let mut append_context = LispStringSourceRowAppendSession::new(
@@ -3193,7 +3191,10 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
     let request = item.source_append_request(DisplayRowPosition { x_px: 2.0, col: 1 });
     let request_parts = request.into_parts();
     assert_eq!(request_parts.value, value);
-    assert_eq!(request_parts.source_id, 9);
+    assert_eq!(
+        request_parts.source_id,
+        LispStringSourceId::display_replacement(9)
+    );
     assert_eq!(
         request_parts.position,
         DisplayRowPosition { x_px: 2.0, col: 1 }
@@ -4020,8 +4021,11 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
-    let request =
-        LispStringSourceAppendRequest::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 1, value);
+    let request = LispStringSourceAppendRequest::new(
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        LispStringSourceId::display_replacement(1),
+        value,
+    );
 
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
@@ -4341,8 +4345,7 @@ fn synthetic_text_append_context_uses_source_append_request() {
             &mut font_metrics,
             &face_resolver,
             DisplayRowPosition { x_px: 0.0, col: 0 },
-            9,
-            "x",
+            SyntheticTextSource::new(9, "x"),
             7,
             base_face,
             16.0,

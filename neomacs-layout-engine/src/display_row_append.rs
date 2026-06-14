@@ -69,8 +69,22 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
 
-const LISP_STRING_SOURCE_OVERLAY_STRING: u64 = 1;
-const LISP_STRING_SOURCE_PREFIX: u64 = 2;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LispStringSourceId(u64);
+
+impl LispStringSourceId {
+    const OVERLAY_STRING: Self = Self(1);
+    const PREFIX: Self = Self(2);
+
+    fn display_replacement(source_id: u64) -> Self {
+        Self(source_id)
+    }
+
+    fn raw(self) -> u64 {
+        self.0
+    }
+}
+
 const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
 const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
 const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
@@ -596,12 +610,12 @@ impl<'a> LispStringSourceAppendContext<'a> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct LispStringSourceAppendRequest {
     position: DisplayRowPosition,
-    source_id: u64,
+    source_id: LispStringSourceId,
     value: Value,
 }
 
 impl LispStringSourceAppendRequest {
-    fn new(position: DisplayRowPosition, source_id: u64, value: Value) -> Self {
+    fn new(position: DisplayRowPosition, source_id: LispStringSourceId, value: Value) -> Self {
         Self {
             position,
             source_id,
@@ -625,7 +639,7 @@ impl LispStringSourceAppendRequest {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct LispStringSourceAppendRequestParts {
     position: DisplayRowPosition,
-    source_id: u64,
+    source_id: LispStringSourceId,
     value: Value,
 }
 
@@ -644,7 +658,7 @@ impl<'a> LispStringSourceAppendSession<'a> {
     ) -> Option<Self> {
         let parts = request.into_parts();
         let source = LispStringSourceCursor::new(
-            parts.source_id,
+            parts.source_id.raw(),
             parts.value,
             RenderFaceRef::FaceId(base_face_id),
         )?;
@@ -860,7 +874,7 @@ impl DisplayRowPrefixSource {
     }
 
     fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
-        LispStringSourceAppendRequest::new(position, LISP_STRING_SOURCE_PREFIX, self.value)
+        LispStringSourceAppendRequest::new(position, LispStringSourceId::PREFIX, self.value)
     }
 }
 
@@ -1129,7 +1143,7 @@ fn render_overlay_string<B: LayoutBufferView>(
             x_px: *x,
             col: *col,
         },
-        LISP_STRING_SOURCE_OVERLAY_STRING,
+        LispStringSourceId::OVERLAY_STRING,
         text_value,
     );
     let Some(mut source_context) = LispStringSourceRowAppendSession::new(
@@ -1211,7 +1225,7 @@ fn root_lisp_position_char(source: &crate::display_item::DisplaySourcePosition) 
             source_id,
             char_index,
             ..
-        } if source_id.get() == LISP_STRING_SOURCE_OVERLAY_STRING => Some(*char_index),
+        } if source_id.get() == LispStringSourceId::OVERLAY_STRING.raw() => Some(*char_index),
         _ => None,
     }
 }
@@ -1398,17 +1412,48 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
 }
 
 pub(crate) fn synthetic_display_text_item(
-    source_id: u64,
-    text: impl Into<Box<str>>,
+    source: SyntheticTextSource,
     face_id: u32,
 ) -> DisplayItem {
-    let text = text.into();
+    let source_id = source.source_id();
+    let text = source.into_text();
     let char_len = text.chars().count();
     DisplayItem::new(
         SourceSpan::synthetic(source_id, 0, char_len),
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     )
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SyntheticTextSource {
+    source_id: u64,
+    text: Box<str>,
+}
+
+impl SyntheticTextSource {
+    #[cfg(test)]
+    pub(crate) fn new(source_id: u64, text: impl Into<Box<str>>) -> Self {
+        Self {
+            source_id,
+            text: text.into(),
+        }
+    }
+
+    fn marker(marker: SyntheticTextMarker) -> Self {
+        Self {
+            source_id: marker.source_id(),
+            text: marker.text().into(),
+        }
+    }
+
+    fn source_id(&self) -> u64 {
+        self.source_id
+    }
+
+    fn into_text(self) -> Box<str> {
+        self.text
+    }
 }
 
 #[derive(Clone)]
@@ -1440,8 +1485,7 @@ impl<'a> SyntheticTextAppendContext<'a> {
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
-        source_id: u64,
-        text: impl Into<Box<str>>,
+        source: SyntheticTextSource,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         append_synthetic_text_to_display_row(
             builder,
@@ -1452,8 +1496,7 @@ impl<'a> SyntheticTextAppendContext<'a> {
             self.base_face,
             self.frame.clone(),
             position,
-            source_id,
-            text,
+            source,
             self.face_id,
         )
     }
@@ -1544,8 +1587,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
-        source_id: u64,
-        text: impl Into<Box<str>>,
+        source: SyntheticTextSource,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let active_face = self.active_face_context.active_face;
         self.active_face(active_face.face_id(), active_face.resolved_face())
@@ -1556,8 +1598,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
                 font_metrics,
                 face_resolver,
                 position,
-                source_id,
-                text,
+                source,
             )
     }
 
@@ -1579,8 +1620,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
             font_metrics,
             face_resolver,
             position,
-            marker.source_id(),
-            marker.text(),
+            SyntheticTextSource::marker(marker),
         )
     }
 
@@ -1593,8 +1633,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
-        source_id: u64,
-        text: impl Into<Box<str>>,
+        source: SyntheticTextSource,
         face_id: u32,
         base_face: &'a ResolvedFace,
         height_px: f32,
@@ -1609,8 +1648,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
                 font_metrics,
                 face_resolver,
                 position,
-                source_id,
-                text,
+                source,
             )
     }
 
@@ -1637,8 +1675,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
             font_metrics,
             face_resolver,
             position,
-            marker.source_id(),
-            marker.text(),
+            SyntheticTextSource::marker(marker),
             face_id,
             base_face,
             height_px,
@@ -3301,7 +3338,7 @@ pub(crate) struct DisplayReplacementStringAppendItem {
     value: Value,
     origin: DisplayOrigin,
     base_face_policy: BaseFacePolicy,
-    source_id: u64,
+    source_id: LispStringSourceId,
     active_face_state: DisplayRowActiveFaceState,
     cursor_slot_width_px: f32,
     is_empty: bool,
@@ -3328,7 +3365,7 @@ impl DisplayReplacementStringAppendItem {
                 source,
             },
             base_face_policy: BaseFacePolicy::DisplayPropertyUnderlyingFace,
-            source_id,
+            source_id: LispStringSourceId::display_replacement(source_id),
             active_face_state: active_face_state.clone(),
             cursor_slot_width_px: measurer.replacement_string_cursor_slot_width_px(
                 font_metrics,
@@ -4804,7 +4841,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             font_metrics,
             parts.value,
             self.replacement_source,
-            parts.source_id,
+            parts.source_id.raw(),
             face_resolver,
             self.base_face,
             self.face_id,
@@ -5421,11 +5458,10 @@ fn append_synthetic_text_to_display_row(
     base_face: &ResolvedFace,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
-    source_id: u64,
-    text: impl Into<Box<str>>,
+    source: SyntheticTextSource,
     face_id: u32,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let item = synthetic_display_text_item(source_id, text, face_id);
+    let item = synthetic_display_text_item(source, face_id);
     let request = frame.source_append_request(
         position,
         face_id,
