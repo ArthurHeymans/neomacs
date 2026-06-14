@@ -297,6 +297,36 @@ impl DisplayRowGlyphCheckpoint {
     }
 }
 
+pub(crate) fn display_row_total_glyph_count(row: &GlyphRow) -> usize {
+    row.glyphs[GlyphArea::LeftMargin.index()].len()
+        + row.glyphs[GlyphArea::Text.index()].len()
+        + row.glyphs[GlyphArea::RightMargin.index()].len()
+}
+
+pub(crate) fn trim_display_row_text_to_total_glyph_count(row: &mut GlyphRow, target: usize) {
+    while display_row_total_glyph_count(row) > target {
+        let text_area = &mut row.glyphs[GlyphArea::Text.index()];
+        if text_area.is_empty() {
+            break;
+        }
+        text_area.pop();
+    }
+}
+
+pub(crate) fn pop_display_row_trailing_text_char(row: &mut GlyphRow, ch: char) -> Option<Glyph> {
+    if row.glyphs[GlyphArea::Text.index()].last().is_some_and(
+        |glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: glyph_ch } if glyph_ch == ch),
+    ) {
+        row.glyphs[GlyphArea::Text.index()].pop()
+    } else {
+        None
+    }
+}
+
+pub(crate) fn push_display_row_text_glyph(row: &mut GlyphRow, glyph: Glyph) {
+    row.glyphs[GlyphArea::Text.index()].push(glyph);
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct DisplayRowPosition {
     pub(crate) x_px: f32,

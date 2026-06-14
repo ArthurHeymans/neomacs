@@ -15,6 +15,8 @@ use crate::display_item::{
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{
     DisplayRowGlyphSlot, DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
+    display_row_total_glyph_count, pop_display_row_trailing_text_char, push_display_row_text_glyph,
+    trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -22,7 +24,7 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
@@ -478,12 +480,6 @@ fn line_number_margin_stretch_item(
     )
 }
 
-fn glyph_area_glyph_count(row: &GlyphRow) -> usize {
-    row.glyphs[GlyphArea::LeftMargin.index()].len()
-        + row.glyphs[GlyphArea::Text.index()].len()
-        + row.glyphs[GlyphArea::RightMargin.index()].len()
-}
-
 fn current_row_text_layout(
     row: &GlyphRow,
     width_cols: usize,
@@ -574,17 +570,11 @@ fn install_right_edge_marker_into_row(
     }
     row.enabled = true;
     let clamped_col = target_col.min(matrix_cols - 1);
-    while glyph_area_glyph_count(row) > clamped_col {
-        let text_area = &mut row.glyphs[GlyphArea::Text.index()];
-        if text_area.is_empty() {
-            break;
-        }
-        text_area.pop();
-    }
+    trim_display_row_text_to_total_glyph_count(row, clamped_col);
 
     let layout = current_row_text_layout(row, matrix_cols, char_width, face_id);
     let mut source_offset = 0usize;
-    let padding_cols = clamped_col.saturating_sub(glyph_area_glyph_count(row));
+    let padding_cols = clamped_col.saturating_sub(display_row_total_glyph_count(row));
     if padding_cols > 0 {
         append_right_edge_marker_text(
             row,
@@ -611,27 +601,14 @@ fn install_right_border_into_row(
     let prior_displays_text = row.displays_text;
     row.enabled = true;
     let target_col = target_col.min(matrix_cols - 1);
-    let preserved_trailing = if row.glyphs[GlyphArea::Text.index()]
-        .last()
-        .is_some_and(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '$' }))
-    {
-        row.glyphs[GlyphArea::Text.index()].pop()
-    } else {
-        None
-    };
+    let preserved_trailing = pop_display_row_trailing_text_char(row, '$');
     let preserved_cols = usize::from(preserved_trailing.is_some());
     let before_final_cols = target_col.saturating_sub(preserved_cols);
-    while glyph_area_glyph_count(row) > before_final_cols {
-        let text_area = &mut row.glyphs[GlyphArea::Text.index()];
-        if text_area.is_empty() {
-            break;
-        }
-        text_area.pop();
-    }
+    trim_display_row_text_to_total_glyph_count(row, before_final_cols);
 
     let layout = current_row_text_layout(row, matrix_cols, request.char_width, request.face_id);
     let mut source_offset = 0usize;
-    let leading_padding = before_final_cols.saturating_sub(glyph_area_glyph_count(row));
+    let leading_padding = before_final_cols.saturating_sub(display_row_total_glyph_count(row));
     if leading_padding > 0 {
         append_right_border_text(
             row,
@@ -645,11 +622,11 @@ fn install_right_border_into_row(
     }
 
     if let Some(glyph) = preserved_trailing {
-        row.glyphs[GlyphArea::Text.index()].push(glyph);
+        push_display_row_text_glyph(row, glyph);
         source_offset = source_offset.saturating_add(preserved_cols);
     }
 
-    let trailing_padding = target_col.saturating_sub(glyph_area_glyph_count(row));
+    let trailing_padding = target_col.saturating_sub(display_row_total_glyph_count(row));
     if trailing_padding > 0 {
         append_right_border_text(
             row,
