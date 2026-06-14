@@ -59,7 +59,8 @@ use crate::unicode::decode_utf8;
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
-    WindowOutputEmitter, emit_text_matrix_row_transition, finish_and_end_text_matrix_row_output,
+    TextMatrixRowTransition, WindowOutputEmitter, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
 };
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -175,6 +176,36 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
     output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
     end
+}
+
+pub(crate) struct DisplayRowBoundaryTransitionRequest<'a> {
+    target: DisplayRowBoundaryTarget<'a>,
+    max_rows: usize,
+}
+
+impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
+    pub(crate) fn new(target: DisplayRowBoundaryTarget<'a>, max_rows: usize) -> Self {
+        Self { target, max_rows }
+    }
+
+    pub(crate) fn emit(
+        self,
+        row_geometry: &mut DisplayRowGeometryState,
+        hit_rows: &mut Vec<HitRow>,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+    ) -> TextMatrixRowTransition {
+        let geometry_transition =
+            row_geometry.finish_boundary_and_record_hit(self.target, hit_rows);
+        emit_text_matrix_row_transition_with_limit(
+            builder,
+            output_emitter,
+            evaluator,
+            geometry_transition,
+            self.max_rows,
+        )
+    }
 }
 
 #[derive(Clone, Copy)]

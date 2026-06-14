@@ -25,11 +25,11 @@ use super::window_output::{
     TextWindowDecorativeCursor, TextWindowDisplayRange, TextWindowLineNumberMargin,
     TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
     begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
-    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
-    finish_text_matrix_row_output, finish_text_window_output_rows,
-    install_text_window_cursor_effects, install_text_window_right_edge_markers,
-    mark_current_text_row_truncated_left, publish_text_window_cursor,
-    publish_text_window_decorative_cursor, record_text_window_display_range,
+    emit_text_window_line_number_margin, finish_text_matrix_row_output,
+    finish_text_window_output_rows, install_text_window_cursor_effects,
+    install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
+    publish_text_window_cursor, publish_text_window_decorative_cursor,
+    record_text_window_display_range,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -58,10 +58,11 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, LispStringRowAppendContext, OverlayStringRenderBatchSource,
-    OverlayStringRenderRowContext, SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest,
-    SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest, render_overlay_string_batch,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayRowBoundaryTransitionRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
+    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextAppendRequest,
+    SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
+    TextWindowAppendSurfaceRequest, render_overlay_string_batch,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{
@@ -2201,7 +2202,7 @@ impl LayoutEngine {
                     output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                     row_extend.clear();
 
-                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                    let boundary_request = DisplayRowBoundaryTransitionRequest::new(
                         DisplayRowBoundaryTarget::line_break(
                             hit_row_range.range_to(charpos),
                             row_geometry_defaults,
@@ -2211,16 +2212,16 @@ impl LayoutEngine {
                             0.0,
                             row_y_positions.recording(),
                         ),
-                        &mut hit_rows,
+                        max_rows,
                     );
                     // Record hit-test row (hscroll newline)
                     hit_row_range.advance_to(charpos);
-                    let row_transition = emit_text_matrix_row_transition_with_limit(
+                    let row_transition = boundary_request.emit(
+                        &mut row_geometry,
+                        &mut hit_rows,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
-                        max_rows,
                     );
                     if row_transition.is_exhausted() {
                         break;
@@ -2473,7 +2474,7 @@ impl LayoutEngine {
                         x = content_x;
                         row_extend.clear();
                         box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
-                        let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                        let row_transition = DisplayRowBoundaryTransitionRequest::new(
                             DisplayRowBoundaryTarget::line_break(
                                 hit_row_range.range_to(charpos),
                                 row_geometry_defaults,
@@ -2483,14 +2484,14 @@ impl LayoutEngine {
                                 0.0,
                                 row_y_positions.recording(),
                             ),
+                            max_rows,
+                        )
+                        .emit(
+                            &mut row_geometry,
                             &mut hit_rows,
-                        );
-                        let row_transition = emit_text_matrix_row_transition_with_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition,
-                            max_rows,
                         );
                         if row_transition.is_exhausted() {
                             break;
@@ -2575,7 +2576,7 @@ impl LayoutEngine {
                 // point-max, causing %p to show "Top" instead of "All".
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
-                let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                let row_transition = DisplayRowBoundaryTransitionRequest::new(
                     DisplayRowBoundaryTarget::line_break(
                         hit_row_range.range_to(charpos),
                         row_geometry_defaults,
@@ -2585,14 +2586,14 @@ impl LayoutEngine {
                         line_spacing,
                         row_y_positions.recording(),
                     ),
+                    max_rows,
+                )
+                .emit(
+                    &mut row_geometry,
                     &mut hit_rows,
-                );
-                let row_transition = emit_text_matrix_row_transition_with_limit(
                     &mut self.matrix_builder,
                     &mut output_emitter,
                     evaluator,
-                    geometry_transition,
-                    max_rows,
                 );
                 if row_transition.is_exhausted() {
                     break;
@@ -2695,7 +2696,8 @@ impl LayoutEngine {
                         }
                         x = content_x;
                         row_extend.clear();
-                        let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                        // Record hit-test row (wrap/truncation break)
+                        let row_transition = DisplayRowBoundaryTransitionRequest::new(
                             DisplayRowBoundaryTarget::truncation(
                                 hit_row_range.range_to(charpos),
                                 row_geometry_defaults,
@@ -2704,15 +2706,14 @@ impl LayoutEngine {
                                 x,
                                 row_y_positions.recording(),
                             ),
+                            max_rows,
+                        )
+                        .emit(
+                            &mut row_geometry,
                             &mut hit_rows,
-                        );
-                        // Record hit-test row (wrap/truncation break)
-                        let row_transition = emit_text_matrix_row_transition_with_limit(
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition,
-                            max_rows,
                         );
                         if row_transition.is_exhausted() {
                             break;
@@ -2734,7 +2735,7 @@ impl LayoutEngine {
                         );
                         x = content_x;
                         row_extend.clear();
-                        let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                        let boundary_request = DisplayRowBoundaryTransitionRequest::new(
                             DisplayRowBoundaryTarget::visual_wrap(
                                 hit_row_range.range_to(charpos),
                                 row_geometry_defaults,
@@ -2743,16 +2744,16 @@ impl LayoutEngine {
                                 x,
                                 row_y_positions.recording(),
                             ),
-                            &mut hit_rows,
+                            max_rows,
                         );
                         // Record hit-test row (wrap/truncation break)
                         hit_row_range.advance_to(charpos);
-                        let row_transition = emit_text_matrix_row_transition_with_limit(
+                        let row_transition = boundary_request.emit(
+                            &mut row_geometry,
+                            &mut hit_rows,
                             &mut self.matrix_builder,
                             &mut output_emitter,
                             evaluator,
-                            geometry_transition,
-                            max_rows,
                         );
                         if row_transition.is_exhausted() {
                             break;
@@ -2902,7 +2903,8 @@ impl LayoutEngine {
                     }
                     x = content_x;
                     row_extend.clear();
-                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                    // Record hit-test row (wrap/truncation break)
+                    let row_transition = DisplayRowBoundaryTransitionRequest::new(
                         DisplayRowBoundaryTarget::truncation(
                             hit_row_range.range_to(charpos),
                             row_geometry_defaults,
@@ -2911,15 +2913,14 @@ impl LayoutEngine {
                             x,
                             row_y_positions.recording(),
                         ),
+                        max_rows,
+                    )
+                    .emit(
+                        &mut row_geometry,
                         &mut hit_rows,
-                    );
-                    // Record hit-test row (wrap/truncation break)
-                    let row_transition = emit_text_matrix_row_transition_with_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
-                        max_rows,
                     );
                     if row_transition.is_exhausted() {
                         break;
@@ -2952,7 +2953,8 @@ impl LayoutEngine {
                     );
                     x = content_x;
                     row_extend.clear();
-                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                    // Record hit-test row (wrap/truncation break)
+                    let row_transition = DisplayRowBoundaryTransitionRequest::new(
                         DisplayRowBoundaryTarget::visual_wrap(
                             hit_row_range.range_to(charpos),
                             row_geometry_defaults,
@@ -2961,15 +2963,14 @@ impl LayoutEngine {
                             x,
                             row_y_positions.recording(),
                         ),
+                        max_rows,
+                    )
+                    .emit(
+                        &mut row_geometry,
                         &mut hit_rows,
-                    );
-                    // Record hit-test row (wrap/truncation break)
-                    let row_transition = emit_text_matrix_row_transition_with_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
-                        max_rows,
                     );
                     if row_transition.is_exhausted() {
                         break;
@@ -3003,7 +3004,8 @@ impl LayoutEngine {
                     );
                     x = content_x;
                     row_extend.clear();
-                    let geometry_transition = row_geometry.finish_boundary_and_record_hit(
+                    // Record hit-test row (wrap/truncation break)
+                    let row_transition = DisplayRowBoundaryTransitionRequest::new(
                         DisplayRowBoundaryTarget::visual_wrap(
                             hit_row_range.range_to(charpos),
                             row_geometry_defaults,
@@ -3012,15 +3014,14 @@ impl LayoutEngine {
                             x,
                             row_y_positions.recording(),
                         ),
+                        max_rows,
+                    )
+                    .emit(
+                        &mut row_geometry,
                         &mut hit_rows,
-                    );
-                    // Record hit-test row (wrap/truncation break)
-                    let row_transition = emit_text_matrix_row_transition_with_limit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
-                        geometry_transition,
-                        max_rows,
                     );
                     if row_transition.is_exhausted() {
                         break;

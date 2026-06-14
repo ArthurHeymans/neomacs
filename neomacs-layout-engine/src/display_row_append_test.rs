@@ -21,9 +21,13 @@ use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
 };
-use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_geometry::{
+    DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState,
+    DisplayRowHitRange, DisplayRowYPositions,
+};
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
+use crate::window_output::TextMatrixRowTransition;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -161,6 +165,65 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
             default_row_height: 16.0,
         }
     );
+}
+
+#[test]
+fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("boundary-transition-request", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let defaults = DisplayRowGeometryDefaults::new(0.0, 16.0, 12.0);
+    let mut geometry = defaults.initial_state();
+    let mut row_y_positions = DisplayRowYPositions::with_capacity_and_first_row(4, 0.0);
+    let mut hit_rows = Vec::new();
+
+    let transition = DisplayRowBoundaryTransitionRequest::new(
+        DisplayRowBoundaryTarget::visual_wrap(
+            DisplayRowHitRange {
+                charpos_start: 3,
+                charpos_end: 9,
+            },
+            defaults,
+            0,
+            6,
+            48.0,
+            row_y_positions.recording(),
+        ),
+        4,
+    )
+    .emit(
+        &mut geometry,
+        &mut hit_rows,
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+    );
+
+    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(geometry.row(), 1);
+    assert_eq!(hit_rows.len(), 1);
+    assert_eq!(hit_rows[0].charpos_start, 3);
+    assert_eq!(hit_rows[0].charpos_end, 9);
+    assert_eq!(row_y_positions.recorded(), &[0.0, 16.0]);
 }
 
 fn test_active_face_state(face_id: u32, char_width: f32) -> DisplayRowActiveFaceState {
