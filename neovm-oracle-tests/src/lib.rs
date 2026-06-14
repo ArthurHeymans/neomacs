@@ -1844,6 +1844,7 @@ mod divergence_motion_search_deep;
 mod divergence_multibyte_bidi_deep;
 mod divergence_narrowing_edge;
 mod divergence_narrowing_multibyte;
+mod divergence_number_print;
 mod divergence_net_thread_json_xml;
 mod divergence_net_xml_dom_mail;
 mod divergence_network_mail_web;
