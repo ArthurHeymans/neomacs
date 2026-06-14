@@ -878,21 +878,6 @@ fn encode_single_byte_family_char(family: &str, code: u32) -> Option<u8> {
     }
 }
 
-fn push_emacs_utf8_decoded_char(out: &mut String, code: u32) {
-    if let Some(ch) = char::from_u32(code) {
-        out.push(ch);
-    } else if let Some(encoded) =
-        crate::emacs_core::string_escape::encode_nonunicode_char_for_storage(code)
-    {
-        // Non-Unicode Emacs chars (raw bytes, extended range) are encoded
-        // using sentinel codepoints in String-based paths (buffer layer,
-        // coding system layer).
-        out.push_str(&encoded);
-    } else {
-        out.push('\u{FFFD}');
-    }
-}
-
 /// Decode UTF-8(-emacs) `bytes` into Emacs character codes, invoking `f` for
 /// each code in order. Valid (extended) UTF-8 sequences decode to their code
 /// point; any invalid byte becomes the eight-bit raw-byte char `0x3FFF00+byte`.
@@ -992,17 +977,11 @@ fn for_each_utf8_emacs_code(bytes: &[u8], mut f: impl FnMut(u32)) {
     }
 }
 
-fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len());
-    for_each_utf8_emacs_code(bytes, |code| push_emacs_utf8_decoded_char(&mut out, code));
-    out
-}
-
 /// Decode UTF-8(-emacs) `bytes` directly into Emacs-internal storage bytes
 /// (the representation `LispString::from_emacs_bytes` expects).
 ///
-/// Unlike [`decode_utf8_emacs_bytes`], this never goes through the Rust-`String`
-/// "storage string" with its in-Unicode PUA sentinels, so eight-bit raw bytes
+/// This never goes through the Rust-`String` "storage string" with its
+/// in-Unicode PUA sentinels, so eight-bit raw bytes
 /// become the extended `0x3FFF00+byte` sequence while genuine Private-Use-Area
 /// characters (nerd-font glyphs in U+E000..F8FF) keep their real code points —
 /// the two can never be confused (issue #131).
@@ -1101,7 +1080,10 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
         family,
         "chinese-iso-8bit" | "chinese-big5" | "chinese-big5-hkscs"
     ) {
-        let text = decode_utf8_emacs_bytes(s.as_bytes());
+        // The Big5/GBK encoders operate on real Unicode text; chinese text is
+        // all real scalar values, so decode the LispString's Emacs bytes to a
+        // display string rather than the legacy in-Unicode storage form.
+        let text = crate::emacs_core::emacs_char::to_utf8_lossy(s.as_bytes());
         return encode_string(&text, coding_system);
     }
 
@@ -1196,7 +1178,10 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
         bytes.drain(..3);
     }
     match coding_system_family(coding_system) {
-        "utf-8" | "utf-8-emacs" => decode_utf8_emacs_bytes(&bytes),
+        "utf-8" | "utf-8-emacs" => crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
+            &decode_utf8_to_emacs_bytes(&bytes),
+            true,
+        ),
         "chinese-big5" | "chinese-big5-hkscs" => {
             let (decoded, _, _) = BIG5.decode(&bytes);
             decoded.into_owned()
