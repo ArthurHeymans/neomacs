@@ -242,6 +242,138 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
 }
 
 #[test]
+fn buffer_current_face_resolution_context_skips_before_checkpoint() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let default_face = face_resolver.default_face().clone();
+    let mut font_metrics = None;
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measured = measurement_policy.measured_face(
+        7,
+        &default_face,
+        None,
+        8.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        &mut font_metrics,
+    );
+    let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+    let height_span = ActiveDisplayPropertySpan::inactive();
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+
+    let resolved = BufferCurrentFaceResolutionContext::new(
+        &buffer,
+        &face_resolver,
+        measurement_policy,
+        &default_face,
+        8.0,
+        12.0,
+        16.0,
+        8.0,
+        16.0,
+        12.0,
+        false,
+    )
+    .resolve_at_checkpoint(
+        &mut BufferCurrentFaceResolutionState::new(
+            &mut face_scan,
+            &height_span,
+            &mut font_metrics,
+            &mut face_ids,
+            &mut builder,
+            &mut active_face,
+            &mut row_geometry,
+            &mut row_extend,
+            &mut box_face,
+            0.0,
+        ),
+        1,
+    );
+
+    assert!(!resolved);
+    assert_eq!(active_face.face_id(), 7);
+    assert_eq!(face_ids.allocate(), 20);
+}
+
+#[test]
+fn buffer_current_face_resolution_context_resolves_due_face() {
+    let eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let default_face = face_resolver.default_face().clone();
+    let mut font_metrics = None;
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measured = measurement_policy.measured_face(
+        7,
+        &default_face,
+        None,
+        8.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        &mut font_metrics,
+    );
+    let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    let height_span = ActiveDisplayPropertySpan::inactive();
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 8.0, 6.0);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+
+    let resolved = BufferCurrentFaceResolutionContext::new(
+        &buffer,
+        &face_resolver,
+        measurement_policy,
+        &default_face,
+        8.0,
+        12.0,
+        16.0,
+        8.0,
+        16.0,
+        12.0,
+        false,
+    )
+    .resolve_at_checkpoint(
+        &mut BufferCurrentFaceResolutionState::new(
+            &mut face_scan,
+            &height_span,
+            &mut font_metrics,
+            &mut face_ids,
+            &mut builder,
+            &mut active_face,
+            &mut row_geometry,
+            &mut row_extend,
+            &mut box_face,
+            4.0,
+        ),
+        0,
+    );
+
+    assert!(resolved);
+    assert_eq!(active_face.face_id(), 20);
+    assert_eq!(active_face.metrics().row_height, 16.0);
+    assert_eq!(row_geometry.height(), 16.0);
+}
+
+#[test]
 fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
     let mut ctx = RowTransitionTestContext::new("boundary-transition-request");
 

@@ -4,6 +4,7 @@ use crate::display_cursor::{
     display_property_replacement_cursor_info, update_cursor_info_for_main_char,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
@@ -21,10 +22,11 @@ use crate::display_row::RenderedDisplayRow;
 use crate::display_row::append_rendered_display_row_fragment_to_current_row;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowRenderBounds,
-    DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowSourceAppendRequest,
-    DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState, DisplaySourceAppendMeasurement,
-    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    DisplayRowFallbackMetrics, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
+    DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderClipBehavior,
+    DisplayRowRenderPolicy, DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy,
+    DisplayRowSourceState, DisplaySourceAppendMeasurement, DisplaySourceAppendRenderPolicy,
+    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
@@ -4734,6 +4736,174 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
         let request = render_context.hscroll_truncation_request(face_resolver, content_x);
         self.append_request_to_text_row(render_context, row_geometry, request);
         mark_current_text_row_truncated_left(self.builder);
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferCurrentFaceResolutionContext<'a, B: LayoutBufferView> {
+    buffer: &'a B,
+    face_resolver: &'a FaceResolver,
+    measurement_policy: DisplayRowMeasurementPolicy,
+    default_resolved: &'a ResolvedFace,
+    default_face_char_w: f32,
+    default_face_ascent: f32,
+    default_face_h: f32,
+    char_w: f32,
+    char_h: f32,
+    font_ascent: f32,
+    window_system: bool,
+}
+
+impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        buffer: &'a B,
+        face_resolver: &'a FaceResolver,
+        measurement_policy: DisplayRowMeasurementPolicy,
+        default_resolved: &'a ResolvedFace,
+        default_face_char_w: f32,
+        default_face_ascent: f32,
+        default_face_h: f32,
+        char_w: f32,
+        char_h: f32,
+        font_ascent: f32,
+        window_system: bool,
+    ) -> Self {
+        Self {
+            buffer,
+            face_resolver,
+            measurement_policy,
+            default_resolved,
+            default_face_char_w,
+            default_face_ascent,
+            default_face_h,
+            char_w,
+            char_h,
+            font_ascent,
+            window_system,
+        }
+    }
+
+    pub(crate) fn resolve_at_checkpoint(
+        self,
+        state: &mut BufferCurrentFaceResolutionState<'_>,
+        charpos: i64,
+    ) -> bool {
+        if !state.face_scan.should_resolve_at(charpos as usize) {
+            return false;
+        }
+
+        let mut resolved = self.face_resolver.face_at_pos(
+            self.buffer,
+            charpos as usize,
+            state.face_scan.next_check_mut(),
+        );
+        if let Some(factor) = state.height_span.value()
+            && let Some(adjusted) = height_adjusted_face(
+                &resolved,
+                DisplayHeightFaceBasis {
+                    canonical_face: self.default_resolved,
+                    base_face: self.default_resolved,
+                    fallback_char_width: self.default_face_char_w,
+                    fallback_ascent: self.default_face_ascent,
+                    fallback_row_height: self.default_face_h,
+                },
+                factor,
+            )
+        {
+            resolved = adjusted;
+        }
+
+        let face_id = state.face_ids.allocate();
+        let metrics = if self.window_system {
+            state.font_metrics.as_mut().map(|svc| {
+                svc.font_metrics(
+                    &resolved.font_family,
+                    resolved.font_weight,
+                    resolved.italic,
+                    resolved.font_size,
+                )
+            })
+        } else {
+            None
+        };
+        let resolved_measured_face = self.measurement_policy.resolved_measured_face(
+            face_id,
+            resolved.clone(),
+            metrics,
+            self.char_w,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                self.char_w,
+                self.char_h,
+                self.font_ascent,
+            ),
+            state.font_metrics,
+        );
+        resolved_measured_face.install_into(state.builder);
+        *state.active_face_state = resolved_measured_face.into_active_face_state();
+        let face_metrics = state.active_face_state.metrics();
+        state
+            .row_geometry
+            .include_row_extents(face_metrics.row_height, face_metrics.ascent);
+
+        if resolved.extend {
+            let ext_bg = Color::from_pixel(resolved.bg);
+            state
+                .row_extend
+                .activate(state.row_geometry.current_row_marker(), (ext_bg, face_id));
+        }
+
+        if state.box_face.is_active() && resolved.box_type == 0 {
+            state.box_face.clear();
+        }
+        if resolved.box_type > 0 {
+            state
+                .box_face
+                .activate(state.row_geometry.current_row_marker(), state.x);
+        }
+        true
+    }
+}
+
+pub(crate) struct BufferCurrentFaceResolutionState<'a> {
+    face_scan: &'a mut FaceScanCheckpoint,
+    height_span: &'a ActiveDisplayPropertySpan<f32>,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_ids: &'a mut FrameFaceIdAllocator,
+    builder: &'a mut GlyphMatrixBuilder,
+    active_face_state: &'a mut DisplayRowActiveFaceState,
+    row_geometry: &'a mut DisplayRowGeometryState,
+    row_extend: &'a mut DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'a mut BoxFaceRowState,
+    x: f32,
+}
+
+impl<'a> BufferCurrentFaceResolutionState<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        face_scan: &'a mut FaceScanCheckpoint,
+        height_span: &'a ActiveDisplayPropertySpan<f32>,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_ids: &'a mut FrameFaceIdAllocator,
+        builder: &'a mut GlyphMatrixBuilder,
+        active_face_state: &'a mut DisplayRowActiveFaceState,
+        row_geometry: &'a mut DisplayRowGeometryState,
+        row_extend: &'a mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'a mut BoxFaceRowState,
+        x: f32,
+    ) -> Self {
+        Self {
+            face_scan,
+            height_span,
+            font_metrics,
+            face_ids,
+            builder,
+            active_face_state,
+            row_geometry,
+            row_extend,
+            box_face,
+            x,
+        }
     }
 }
 

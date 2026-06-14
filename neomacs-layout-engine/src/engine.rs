@@ -47,7 +47,6 @@ use crate::display_cursor::{
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -58,6 +57,7 @@ use crate::display_row::{
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
+    BufferCurrentFaceResolutionContext, BufferCurrentFaceResolutionState,
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
     BufferEndOfBufferCursorAction, BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState,
     BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
@@ -1913,70 +1913,34 @@ impl LayoutEngine {
 
         macro_rules! resolve_current_face_state {
             () => {
-                if face_scan.should_resolve_at(charpos as usize) {
-                    let mut resolved = face_resolver.face_at_pos(
-                        buffer,
-                        charpos as usize,
-                        face_scan.next_check_mut(),
-                    );
-                    if let Some(factor) = height_span.value()
-                        && let Some(adjusted) = height_adjusted_face(
-                            &resolved,
-                            DisplayHeightFaceBasis {
-                                canonical_face: default_resolved,
-                                base_face: default_resolved,
-                                fallback_char_width: default_face_char_w,
-                                fallback_ascent: default_face_ascent,
-                                fallback_row_height: default_face_h,
-                            },
-                            factor,
-                        )
-                    {
-                        resolved = adjusted;
-                    }
-                    let face_id = face_ids.allocate();
-
-                    let metrics = if frame_params.window_system {
-                        self.font_metrics.as_mut().map(|svc| {
-                            svc.font_metrics(
-                                &resolved.font_family,
-                                resolved.font_weight,
-                                resolved.italic,
-                                resolved.font_size,
-                            )
-                        })
-                    } else {
-                        None
-                    };
-                    let resolved_measured_face = measurement_policy.resolved_measured_face(
-                        face_id,
-                        resolved.clone(),
-                        metrics,
-                        char_w,
-                        DisplayRowFallbackMetrics::from_default_face_extents(
-                            char_w,
-                            char_h,
-                            font_ascent,
-                        ),
+                BufferCurrentFaceResolutionContext::new(
+                    buffer,
+                    face_resolver,
+                    measurement_policy,
+                    default_resolved,
+                    default_face_char_w,
+                    default_face_ascent,
+                    default_face_h,
+                    char_w,
+                    char_h,
+                    font_ascent,
+                    frame_params.window_system,
+                )
+                .resolve_at_checkpoint(
+                    &mut BufferCurrentFaceResolutionState::new(
+                        &mut face_scan,
+                        &height_span,
                         &mut self.font_metrics,
-                    );
-                    resolved_measured_face.install_into(&mut self.matrix_builder);
-                    active_face_state = resolved_measured_face.into_active_face_state();
-                    let face_metrics = active_face_state.metrics();
-                    row_geometry.include_row_extents(face_metrics.row_height, face_metrics.ascent);
-
-                    if resolved.extend {
-                        let ext_bg = Color::from_pixel(resolved.bg);
-                        row_extend.activate(row_geometry.current_row_marker(), (ext_bg, face_id));
-                    }
-
-                    if box_face.is_active() && resolved.box_type == 0 {
-                        box_face.clear();
-                    }
-                    if resolved.box_type > 0 {
-                        box_face.activate(row_geometry.current_row_marker(), x);
-                    }
-                }
+                        &mut face_ids,
+                        &mut self.matrix_builder,
+                        &mut active_face_state,
+                        &mut row_geometry,
+                        &mut row_extend,
+                        &mut box_face,
+                        x,
+                    ),
+                    charpos,
+                );
             };
         }
 
