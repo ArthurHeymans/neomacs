@@ -5,7 +5,7 @@ use crate::display_item::{DisplayItem, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::DisplayMediaReplacementProperty;
-use crate::display_row::insert_resolved_display_row_face;
+use crate::display_row::{DisplayRowActiveFaceState, insert_resolved_display_row_face};
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -287,6 +287,51 @@ pub(crate) fn resolve_and_install_display_string_base_face<B: LayoutBufferView>(
         );
     }
     base_face
+}
+
+pub(crate) fn display_string_base_face<B: LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &FaceResolver,
+    origin: DisplayOrigin,
+    policy: BaseFacePolicy,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut GlyphMatrixBuilder,
+) -> DisplayStringBaseFace {
+    resolve_and_install_display_string_base_face(
+        buffer,
+        face_resolver,
+        origin,
+        policy,
+        None,
+        DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
+        face_ids,
+        builder,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn display_string_base_face_for_active_row<B: LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &FaceResolver,
+    origin: DisplayOrigin,
+    policy: BaseFacePolicy,
+    active_face_state: &DisplayRowActiveFaceState,
+    face_ids: &mut FrameFaceIdAllocator,
+    builder: &mut GlyphMatrixBuilder,
+) -> DisplayStringBaseFace {
+    resolve_and_install_display_string_base_face(
+        buffer,
+        face_resolver,
+        origin,
+        policy,
+        Some(ActiveDisplayStringBaseFace::new(
+            active_face_state.face_id(),
+            active_face_state.resolved_face(),
+        )),
+        DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
+        face_ids,
+        builder,
+    )
 }
 
 #[derive(Clone, Debug)]

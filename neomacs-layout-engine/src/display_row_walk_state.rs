@@ -3,6 +3,7 @@ use crate::display_row_geometry::{
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::unicode::decode_utf8;
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::window::DisplayRowSnapshot;
@@ -578,6 +579,39 @@ pub(crate) fn next_window_start_for_point_line_continuation<B: LayoutBufferView>
         .skip(1)
         .find_map(row_next_window_start_charpos)
         .filter(|&pos| pos > current_start)
+}
+
+#[inline]
+pub(crate) fn skip_to_newline(text: &[u8], byte_idx: &mut usize, charpos: &mut i64) -> bool {
+    while *byte_idx < text.len() {
+        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
+        if ch_len == 0 {
+            break;
+        }
+        *byte_idx += ch_len;
+        *charpos += 1;
+        if ch == '\n' {
+            return true;
+        }
+    }
+    false
+}
+
+#[inline]
+pub(crate) fn skip_text_to_charpos(
+    text: &[u8],
+    byte_idx: &mut usize,
+    charpos: &mut i64,
+    target: i64,
+) {
+    while *charpos < target && *byte_idx < text.len() {
+        let (_ch, ch_len) = decode_utf8(&text[*byte_idx..]);
+        if ch_len == 0 {
+            break;
+        }
+        *byte_idx += ch_len;
+        *charpos += 1;
+    }
 }
 
 #[inline]

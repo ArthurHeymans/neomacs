@@ -48,8 +48,7 @@ use crate::display_cursor::{
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
-use crate::display_face_policy::BaseFacePolicy;
-use crate::display_origin::{DisplayOrigin, OverlayStringKind};
+use crate::display_origin::OverlayStringKind;
 use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
@@ -79,11 +78,11 @@ use crate::display_row_walk_state::{
     TrailingWhitespaceRenderState, WordWrapRenderState,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
+    skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::BufferDisplayReplacementSource;
 use crate::display_source_resolver::{
-    ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
-    resolve_and_install_display_string_base_face,
+    display_string_base_face, display_string_base_face_for_active_row,
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -233,34 +232,6 @@ fn run_is_pure_ligature(run: &LigatureRunBuffer) -> bool {
 /// a no-op retained only to keep call-sites compiling during the migration.
 fn flush_run(_run: &LigatureRunBuffer, _ligatures: bool) {}
 
-#[inline]
-fn skip_to_newline(text: &[u8], byte_idx: &mut usize, charpos: &mut i64) -> bool {
-    while *byte_idx < text.len() {
-        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
-        if ch_len == 0 {
-            break;
-        }
-        *byte_idx += ch_len;
-        *charpos += 1;
-        if ch == '\n' {
-            return true;
-        }
-    }
-    false
-}
-
-#[inline]
-fn skip_text_to_charpos(text: &[u8], byte_idx: &mut usize, charpos: &mut i64, target: i64) {
-    while *charpos < target && *byte_idx < text.len() {
-        let (_ch, ch_len) = decode_utf8(&text[*byte_idx..]);
-        if ch_len == 0 {
-            break;
-        }
-        *byte_idx += ch_len;
-        *charpos += 1;
-    }
-}
-
 #[cfg(test)]
 #[inline]
 fn cursor_point_columns(text: &[u8], byte_idx: usize, col: i32, params: &WindowParams) -> usize {
@@ -290,51 +261,6 @@ fn text_display_tab_policy(
         content_x,
         params.tab_width,
         &params.tab_stop_list,
-    )
-}
-
-fn display_string_base_face<B: super::neovm_bridge::LayoutBufferView>(
-    buffer: &B,
-    face_resolver: &super::neovm_bridge::FaceResolver,
-    origin: DisplayOrigin,
-    policy: BaseFacePolicy,
-    face_ids: &mut FrameFaceIdAllocator,
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-) -> DisplayStringBaseFace {
-    resolve_and_install_display_string_base_face(
-        buffer,
-        face_resolver,
-        origin,
-        policy,
-        None,
-        DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
-        face_ids,
-        builder,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn display_string_base_face_for_active_row<B: super::neovm_bridge::LayoutBufferView>(
-    buffer: &B,
-    face_resolver: &super::neovm_bridge::FaceResolver,
-    origin: DisplayOrigin,
-    policy: BaseFacePolicy,
-    active_face_state: &DisplayRowActiveFaceState,
-    face_ids: &mut FrameFaceIdAllocator,
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
-) -> DisplayStringBaseFace {
-    resolve_and_install_display_string_base_face(
-        buffer,
-        face_resolver,
-        origin,
-        policy,
-        Some(ActiveDisplayStringBaseFace::new(
-            active_face_state.face_id(),
-            active_face_state.resolved_face(),
-        )),
-        DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
-        face_ids,
-        builder,
     )
 }
 
