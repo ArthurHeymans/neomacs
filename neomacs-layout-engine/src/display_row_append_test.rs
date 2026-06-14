@@ -392,11 +392,19 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
 fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
     let mut line_ctx = RowTransitionTestContext::new("text-window-transition-line-break");
 
-    let transition = DisplayRowTextWindowTransitionContext::new(
+    let row_limit = line_ctx.row_limit;
+    let transition = DisplayRowTextWindowEmitContext::new(
         line_ctx.defaults,
         0,
         &mut line_ctx.row_y_positions,
         4,
+        &mut line_ctx.geometry,
+        &mut line_ctx.row_flags,
+        row_limit,
+        &mut line_ctx.hit_rows,
+        &mut line_ctx.builder,
+        &mut line_ctx.output_emitter,
+        &mut line_ctx.eval,
     )
     .emit_line_break(
         DisplayRowLineBreakTransitionPlan::line_break(),
@@ -406,11 +414,6 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         },
         DisplayRowPosition { x_px: 32.0, col: 4 },
         2.0,
-        &mut line_ctx.geometry,
-        &mut line_ctx.hit_rows,
-        &mut line_ctx.builder,
-        &mut line_ctx.output_emitter,
-        &mut line_ctx.eval,
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -430,7 +433,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
     };
 
     let row_limit = overflow_ctx.row_limit;
-    let transition = DisplayRowTextWindowOverflowEmitContext::new(
+    let transition = DisplayRowTextWindowEmitContext::new(
         overflow_ctx.defaults,
         0,
         &mut overflow_ctx.row_y_positions,
@@ -443,7 +446,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         &mut overflow_ctx.output_emitter,
         &mut overflow_ctx.eval,
     )
-    .emit(
+    .emit_overflow(
         transition,
         DisplayRowHitRange {
             charpos_start: 2,

@@ -64,7 +64,7 @@ use crate::display_row_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceChar, BufferTextSourceCharOverflowAction,
     BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowOverflowEmitContext,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
     DisplayRowTextWindowTransitionContext, DisplayRowTransitionPrefixContext,
     LispStringRowAppendContext, SyntheticTextAppendRequest, SyntheticTextMarker,
     TextWindowAppendSurfaceRequest,
@@ -2215,26 +2215,27 @@ impl LayoutEngine {
 
                     let line_break_transition =
                         DisplayRowLineBreakTransitionPlan::hscroll_line_break();
-                    let boundary_request = DisplayRowTextWindowTransitionContext::new(
+                    let hit_range = hit_row_range.range_to(charpos);
+                    // Record hit-test row (hscroll newline)
+                    hit_row_range.advance_to(charpos);
+                    let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
                         text_matrix_row_base,
                         &mut row_y_positions,
                         max_rows,
-                    )
-                    .line_break(
-                        line_break_transition,
-                        hit_row_range.range_to(charpos),
-                        DisplayRowPosition { x_px: x, col },
-                        0.0,
-                    );
-                    // Record hit-test row (hscroll newline)
-                    hit_row_range.advance_to(charpos);
-                    let row_transition = boundary_request.emit(
                         &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
                         &mut hit_rows,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
+                    )
+                    .emit_line_break(
+                        line_break_transition,
+                        hit_range,
+                        DisplayRowPosition { x_px: x, col },
+                        0.0,
                     );
                     if row_transition.is_exhausted() {
                         break;
@@ -2467,22 +2468,24 @@ impl LayoutEngine {
                         box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
                         let line_break_transition =
                             DisplayRowLineBreakTransitionPlan::hidden_line_break();
-                        let row_transition = DisplayRowTextWindowTransitionContext::new(
+                        let row_transition = DisplayRowTextWindowEmitContext::new(
                             row_geometry_defaults,
                             text_matrix_row_base,
                             &mut row_y_positions,
                             max_rows,
+                            &mut row_geometry,
+                            &mut row_flags,
+                            row_limit,
+                            &mut hit_rows,
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
                         )
                         .emit_line_break(
                             line_break_transition,
                             hit_row_range.range_to(charpos),
                             DisplayRowPosition { x_px: x, col },
                             0.0,
-                            &mut row_geometry,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
                         );
                         if row_transition.is_exhausted() {
                             break;
@@ -2570,22 +2573,24 @@ impl LayoutEngine {
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
                 let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
-                let row_transition = DisplayRowTextWindowTransitionContext::new(
+                let row_transition = DisplayRowTextWindowEmitContext::new(
                     row_geometry_defaults,
                     text_matrix_row_base,
                     &mut row_y_positions,
                     max_rows,
+                    &mut row_geometry,
+                    &mut row_flags,
+                    row_limit,
+                    &mut hit_rows,
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
                 )
                 .emit_line_break(
                     line_break_transition,
                     hit_row_range.range_to(charpos),
                     DisplayRowPosition { x_px: x, col },
                     line_spacing,
-                    &mut row_geometry,
-                    &mut hit_rows,
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
                 );
                 if row_transition.is_exhausted() {
                     break;
@@ -2704,7 +2709,7 @@ impl LayoutEngine {
                                 }
                                 x = content_x;
                                 row_extend.clear();
-                                let row_transition = DisplayRowTextWindowOverflowEmitContext::new(
+                                let row_transition = DisplayRowTextWindowEmitContext::new(
                                     row_geometry_defaults,
                                     text_matrix_row_base,
                                     &mut row_y_positions,
@@ -2717,7 +2722,7 @@ impl LayoutEngine {
                                     &mut output_emitter,
                                     evaluator,
                                 )
-                                .emit(
+                                .emit_overflow(
                                     transition,
                                     hit_row_range.range_to(charpos),
                                     DisplayRowPosition { x_px: x, col },
@@ -2832,7 +2837,7 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowTextWindowOverflowEmitContext::new(
+                    let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
                         text_matrix_row_base,
                         &mut row_y_positions,
@@ -2845,7 +2850,7 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                     )
-                    .emit(
+                    .emit_overflow(
                         transition,
                         hit_row_range.range_to(charpos),
                         DisplayRowPosition { x_px: x, col },
@@ -2883,7 +2888,7 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowTextWindowOverflowEmitContext::new(
+                    let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
                         text_matrix_row_base,
                         &mut row_y_positions,
@@ -2896,7 +2901,7 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                     )
-                    .emit(
+                    .emit_overflow(
                         transition,
                         hit_row_range.range_to(charpos),
                         DisplayRowPosition { x_px: x, col },
@@ -2929,7 +2934,7 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = DisplayRowTextWindowOverflowEmitContext::new(
+                    let row_transition = DisplayRowTextWindowEmitContext::new(
                         row_geometry_defaults,
                         text_matrix_row_base,
                         &mut row_y_positions,
@@ -2942,7 +2947,7 @@ impl LayoutEngine {
                         &mut output_emitter,
                         evaluator,
                     )
-                    .emit(
+                    .emit_overflow(
                         transition,
                         hit_row_range.range_to(charpos),
                         DisplayRowPosition { x_px: x, col },

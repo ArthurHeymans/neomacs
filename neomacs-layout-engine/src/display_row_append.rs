@@ -272,7 +272,7 @@ pub(crate) struct DisplayRowTextWindowTransitionContext<'a> {
     request_context: DisplayRowTransitionRequestContext<'a>,
 }
 
-pub(crate) struct DisplayRowTextWindowOverflowEmitContext<'a, 'emit> {
+pub(crate) struct DisplayRowTextWindowEmitContext<'a, 'emit> {
     defaults: DisplayRowGeometryDefaults,
     row_base: usize,
     row_y_positions: &'a mut DisplayRowYPositions,
@@ -476,7 +476,7 @@ impl<'a> DisplayRowTextWindowTransitionContext<'a> {
     }
 }
 
-impl<'a, 'emit> DisplayRowTextWindowOverflowEmitContext<'a, 'emit> {
+impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         defaults: DisplayRowGeometryDefaults,
@@ -506,7 +506,33 @@ impl<'a, 'emit> DisplayRowTextWindowOverflowEmitContext<'a, 'emit> {
         }
     }
 
-    pub(crate) fn emit(
+    pub(crate) fn emit_line_break(
+        self,
+        plan: DisplayRowLineBreakTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        position: DisplayRowPosition,
+        line_spacing: f32,
+    ) -> TextMatrixRowTransition {
+        DisplayRowTextWindowTransitionContext::new(
+            self.defaults,
+            self.row_base,
+            self.row_y_positions,
+            self.max_rows,
+        )
+        .emit_line_break(
+            plan,
+            hit_range,
+            position,
+            line_spacing,
+            self.row_geometry,
+            self.hit_rows,
+            self.builder,
+            self.output_emitter,
+            self.evaluator,
+        )
+    }
+
+    pub(crate) fn emit_overflow(
         self,
         plan: DisplayRowOverflowTransitionPlan,
         hit_range: DisplayRowHitRange,
