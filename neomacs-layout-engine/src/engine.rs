@@ -29,7 +29,15 @@ use super::window_output::{
 use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
 #[cfg(test)]
 use crate::display_cursor::CursorSlotWidthPolicy;
-use crate::display_cursor::CursorSlotWidthRequest;
+#[cfg(test)]
+use crate::display_cursor::resolve_cursor_vertical_metrics;
+use crate::display_cursor::{
+    CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
+    CapturedCursorVisualState, CursorCaptureState, CursorGeometryContext, CursorGeometrySource,
+    resolve_cursor_geometry, visual_cursor_source_from_point,
+};
+#[cfg(test)]
+use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
@@ -62,8 +70,10 @@ use crate::display_source_resolver::{
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
+#[cfg(test)]
+use neomacs_display_protocol::frame_glyphs::DisplaySlotId;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo,
+    CursorStyle, FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo,
     WindowTransitionHint, WindowTransitionKind,
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
@@ -72,9 +82,7 @@ use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispC
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
-use neovm_core::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorPos, WindowDisplaySnapshot, WindowId,
-};
+use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
 use strum::{EnumString, IntoStaticStr};
 
 /// Maximum number of characters in a ligature run before forced flush.
@@ -146,249 +154,6 @@ struct LigatureRunBuffer {
     is_overlay: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct CapturedCursorInfo {
-    x: f32,
-    y: f32,
-    face_w: f32,
-    face_h: f32,
-    face_ascent: f32,
-    bg: Color,
-    byte_idx: usize,
-    col: usize,
-    matrix_row: usize,
-    slot_width: Option<f32>,
-    stretch_like: bool,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-struct CursorCaptureState {
-    captured: Option<CapturedCursorInfo>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum CapturedCursorSlotWidth {
-    FaceChar,
-    Explicit(f32),
-}
-
-impl CapturedCursorSlotWidth {
-    fn resolve(self, face_char_width: f32) -> f32 {
-        match self {
-            Self::FaceChar => face_char_width,
-            Self::Explicit(width) => width,
-        }
-        .max(1.0)
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct CapturedCursorPlacement {
-    x: f32,
-    y: f32,
-    byte_idx: usize,
-    col: usize,
-    matrix_row: usize,
-    slot_width: CapturedCursorSlotWidth,
-    stretch_like: bool,
-}
-
-impl CapturedCursorPlacement {
-    fn from_row_text_position(
-        position: DisplayRowTextPosition,
-        slot_width: CapturedCursorSlotWidth,
-        stretch_like: bool,
-    ) -> Self {
-        Self {
-            x: position.x,
-            y: position.y,
-            byte_idx: position.byte_idx,
-            col: position.col,
-            matrix_row: position.row,
-            slot_width,
-            stretch_like,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct CapturedCursorVisualState {
-    face_width: f32,
-    face_height: f32,
-    face_ascent: f32,
-    background: Color,
-}
-
-impl CapturedCursorVisualState {
-    fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
-        let metrics = active_face_state.metrics();
-        Self {
-            face_width: metrics.char_width,
-            face_height: metrics.row_height,
-            face_ascent: metrics.ascent,
-            background: active_face_state.background(),
-        }
-    }
-
-    fn display_box_from_active_face_state(
-        active_face_state: &DisplayRowActiveFaceState,
-        face_height: f32,
-        face_ascent: f32,
-    ) -> Self {
-        let metrics = active_face_state.metrics();
-        Self {
-            face_width: metrics.char_width,
-            face_height,
-            face_ascent,
-            background: active_face_state.background(),
-        }
-    }
-
-    fn line_break_from_active_face_state(
-        active_face_state: &DisplayRowActiveFaceState,
-        line_height: f32,
-    ) -> Self {
-        let metrics = active_face_state.metrics();
-        Self::display_box_from_active_face_state(active_face_state, line_height, metrics.ascent)
-    }
-}
-
-impl CapturedCursorInfo {
-    fn logical_cursor_position(
-        &self,
-        row_metric: RowMetricsSnapshot,
-        text_matrix_row_base: usize,
-        text_area_left: f32,
-        window_top: f32,
-    ) -> WindowCursorPos {
-        WindowCursorPos {
-            x: (self.x - text_area_left).round() as i64,
-            y: (row_metric.pixel_y - window_top).round() as i64,
-            row: text_matrix_row_base as i64 + self.matrix_row as i64,
-            col: self.col as i64,
-        }
-    }
-
-    fn resolved_slot_width(&self, style: CursorStyle, text: &[u8], params: &WindowParams) -> f32 {
-        if let Some(slot_width) = self.slot_width {
-            slot_width.max(1.0)
-        } else {
-            CursorSlotWidthRequest::from_window_params(
-                style,
-                text,
-                self.byte_idx,
-                self.col as i32,
-                params,
-            )
-            .width_px(self.face_w)
-            .max(1.0)
-        }
-    }
-
-    fn from_visual_state(
-        visual_state: CapturedCursorVisualState,
-        placement: CapturedCursorPlacement,
-    ) -> Self {
-        Self {
-            x: placement.x,
-            y: placement.y,
-            face_w: visual_state.face_width,
-            face_h: visual_state.face_height,
-            face_ascent: visual_state.face_ascent,
-            bg: visual_state.background,
-            byte_idx: placement.byte_idx,
-            col: placement.col,
-            matrix_row: placement.matrix_row,
-            slot_width: Some(placement.slot_width.resolve(visual_state.face_width)),
-            stretch_like: placement.stretch_like,
-        }
-    }
-
-    fn from_active_face_state(
-        active_face_state: &DisplayRowActiveFaceState,
-        placement: CapturedCursorPlacement,
-    ) -> Self {
-        Self::from_visual_state(
-            CapturedCursorVisualState::from_active_face_state(active_face_state),
-            placement,
-        )
-    }
-
-    fn display_box_from_active_face_state(
-        active_face_state: &DisplayRowActiveFaceState,
-        placement: CapturedCursorPlacement,
-        face_height: f32,
-        face_ascent: f32,
-    ) -> Self {
-        Self::from_visual_state(
-            CapturedCursorVisualState::display_box_from_active_face_state(
-                active_face_state,
-                face_height,
-                face_ascent,
-            ),
-            placement,
-        )
-    }
-
-    fn line_break_from_active_face_state(
-        active_face_state: &DisplayRowActiveFaceState,
-        placement: CapturedCursorPlacement,
-        line_height: f32,
-    ) -> Self {
-        Self::from_visual_state(
-            CapturedCursorVisualState::line_break_from_active_face_state(
-                active_face_state,
-                line_height,
-            ),
-            placement,
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ResolvedCursorGeometry {
-    slot_id: DisplaySlotId,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    ascent: f32,
-    style: CursorStyle,
-    color: Color,
-    cursor_fg: Color,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct CursorGeometrySource {
-    slot_id: DisplaySlotId,
-    x: f32,
-    y: f32,
-    slot_width: f32,
-    face_height: f32,
-    face_ascent: f32,
-    row_height: f32,
-    row_ascent: f32,
-    default_line_height: f32,
-    stretch_like: bool,
-    ends_at_visible_eob: bool,
-    cursor_fg: Color,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct CursorGeometryContext {
-    window_id: i64,
-    slot_width: f32,
-    default_line_height: f32,
-    ends_at_visible_eob: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct VisualCursorGeometryContext {
-    window_id: i64,
-    text_area_left: f32,
-    window_top: f32,
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct WordWrapBreakCandidate {
     byte_idx: usize,
@@ -452,103 +217,6 @@ struct HitRowRangeTracker {
 struct TextPropertyScanCheckpoints {
     invisible_next: i64,
     display_next: i64,
-}
-
-impl CursorGeometrySource {
-    fn from_captured_cursor(
-        cursor: &CapturedCursorInfo,
-        row_metric: RowMetricsSnapshot,
-        context: CursorGeometryContext,
-    ) -> Self {
-        Self {
-            slot_id: DisplaySlotId {
-                window_id: context.window_id,
-                row: row_metric.row as u32,
-                col: cursor.col as u16,
-            },
-            x: cursor.x,
-            y: cursor.y,
-            slot_width: context.slot_width.max(1.0),
-            face_height: cursor.face_h,
-            face_ascent: cursor.face_ascent,
-            row_height: row_metric.height,
-            row_ascent: row_metric.ascent,
-            default_line_height: context.default_line_height,
-            stretch_like: cursor.stretch_like,
-            ends_at_visible_eob: context.ends_at_visible_eob,
-            cursor_fg: cursor.bg,
-        }
-    }
-
-    fn from_display_point(
-        point: &DisplayPointSnapshot,
-        context: VisualCursorGeometryContext,
-    ) -> Self {
-        let point_h = (point.height as f32).max(1.0);
-        Self {
-            slot_id: DisplaySlotId {
-                window_id: context.window_id,
-                row: point.row.max(0) as u32,
-                col: point.col.max(0) as u16,
-            },
-            x: context.text_area_left + point.x as f32,
-            y: context.window_top + point.y as f32,
-            slot_width: (point.width as f32).max(1.0),
-            face_height: point_h,
-            face_ascent: point_h,
-            row_height: point_h,
-            row_ascent: point_h,
-            default_line_height: point_h,
-            stretch_like: false,
-            ends_at_visible_eob: false,
-            cursor_fg: Color::BLACK,
-        }
-    }
-}
-
-impl ResolvedCursorGeometry {
-    fn window_id(&self) -> i64 {
-        self.slot_id.window_id
-    }
-}
-
-impl CursorCaptureState {
-    fn new() -> Self {
-        Self { captured: None }
-    }
-
-    fn is_missing(self) -> bool {
-        self.captured.is_none()
-    }
-
-    fn is_captured(self) -> bool {
-        self.captured.is_some()
-    }
-
-    fn capture_once(&mut self, info: CapturedCursorInfo) {
-        if self.captured.is_none() {
-            self.captured = Some(info);
-        }
-    }
-
-    fn update_for_main_char(&mut self, byte_idx: usize, advance: f32) {
-        let Some(cursor) = self.captured.as_mut() else {
-            return;
-        };
-        if cursor.byte_idx != byte_idx {
-            return;
-        }
-        cursor.slot_width = Some(advance.max(1.0));
-    }
-
-    #[cfg(test)]
-    fn as_ref(&self) -> Option<&CapturedCursorInfo> {
-        self.captured.as_ref()
-    }
-
-    fn captured(self) -> Option<CapturedCursorInfo> {
-        self.captured
-    }
 }
 
 fn capture_cursor_info(target: &mut CursorCaptureState, info: CapturedCursorInfo) {
@@ -1351,77 +1019,6 @@ fn row_metrics_for_cursor(
         .unwrap_or(current_row_fallback)
 }
 
-fn resolve_cursor_vertical_metrics(
-    cursor_y: f32,
-    face_h: f32,
-    face_ascent: f32,
-    row_height: f32,
-    row_ascent: f32,
-    default_line_height: f32,
-    ends_at_visible_eob: bool,
-) -> (f32, f32, f32) {
-    let row_height = row_height.max(1.0);
-    let glyph_ascent = face_ascent.max(0.0).min(face_h.max(1.0));
-    let glyph_descent = (face_h - glyph_ascent).max(0.0);
-    let mut y = cursor_y;
-    let mut ascent = row_ascent.max(0.0).min(row_height);
-
-    // GNU's physical cursor follows the row baseline, but if the glyph under
-    // point rises above that baseline, the cursor origin shifts upward to keep
-    // the box aligned with the displayed glyph. End-of-buffer rows are the
-    // exception because point can sit on an empty visual slot there.
-    if !ends_at_visible_eob && ascent < glyph_ascent {
-        y -= glyph_ascent - ascent;
-        ascent = glyph_ascent.min(row_height);
-    }
-
-    let minimum_height = default_line_height.max(1.0).min(row_height);
-    let height = (ascent + glyph_descent).max(minimum_height).min(row_height);
-    (y, height, ascent.min(height))
-}
-
-fn resolve_cursor_geometry(
-    style: CursorStyle,
-    source: CursorGeometrySource,
-    x_stretch_cursor: bool,
-    fallback_char_width: f32,
-    color: Color,
-) -> ResolvedCursorGeometry {
-    let actual_slot_width = match style {
-        CursorStyle::Bar(width) => width.max(1.0),
-        CursorStyle::Hbar(_) | CursorStyle::FilledBox | CursorStyle::Hollow => {
-            source.slot_width.max(1.0)
-        }
-    };
-    let width = if source.stretch_like && !x_stretch_cursor && !matches!(style, CursorStyle::Bar(_))
-    {
-        fallback_char_width.max(1.0)
-    } else {
-        actual_slot_width
-    };
-    let (y, height, ascent) = resolve_cursor_vertical_metrics(
-        source.y,
-        source.face_height,
-        source.face_ascent,
-        source.row_height,
-        source.row_ascent,
-        source.default_line_height,
-        source.ends_at_visible_eob,
-    );
-
-    ResolvedCursorGeometry {
-        slot_id: source.slot_id,
-        x: source.x,
-        y,
-        width,
-        height,
-        ascent,
-        style,
-        color,
-        cursor_fg: source.cursor_fg,
-    }
-}
-
 fn next_window_start_from_visible_rows(
     rows: &[DisplayRowSnapshot],
     current_start: i64,
@@ -1639,22 +1236,6 @@ fn cursor_style_for_visual(spec: &VisualCursorSpec) -> Option<CursorStyle> {
     }
 
     CursorStyle::from_kind(spec.cursor_kind, spec.cursor_bar_width)
-}
-
-fn visual_cursor_source_from_point(
-    point: &DisplayPointSnapshot,
-    window_id: i64,
-    text_area_left: f32,
-    window_top: f32,
-) -> CursorGeometrySource {
-    CursorGeometrySource::from_display_point(
-        point,
-        VisualCursorGeometryContext {
-            window_id,
-            text_area_left,
-            window_top,
-        },
-    )
 }
 
 fn text_display_tab_policy(
