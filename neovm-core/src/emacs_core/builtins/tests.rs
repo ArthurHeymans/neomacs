@@ -11385,6 +11385,33 @@ fn write_char_to_buffer_preserves_private_use_glyphs_issue_131() {
 /// glyphs through `%c`, `%s`, and literal text rather than decoding them as
 /// raw-byte sentinels. Covers both residual sentinel ranges (U+E080..E0FF,
 /// U+E380..E3FF) plus the B2 range (U+E300..E37F).
+/// Issue #131: string-transforming builtins (`upcase`/`downcase`/`capitalize`/
+/// `upcase-initials`/`propertize`) must preserve real Private-Use glyphs — they
+/// have no case mapping, so each must round-trip the glyph unchanged rather than
+/// decode it as a raw byte through the storage-string form.
+#[test]
+fn case_and_propertize_preserve_private_use_glyphs_issue_131() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (mapcar (lambda (cp)
+                      (let ((s (char-to-string cp)))
+                        (and (= (aref (upcase s) 0) cp)
+                             (= (aref (downcase s) 0) cp)
+                             (= (aref (capitalize s) 0) cp)
+                             (= (aref (upcase-initials s) 0) cp)
+                             (= (aref (propertize s 'k 1) 0) cp))))
+                    '(#xe080 #xe0a0 #xe0ff #xe380 #xe3a0 #xe3ff))
+            "#,
+        )
+        .expect("case/propertize builtins should preserve real PUA glyphs");
+
+    assert_eq!(result, Value::list(vec![Value::T; 6]));
+}
+
 /// Issue #131: `princ` of a real Private-Use glyph (string or char) to a buffer
 /// must store the glyph, not a raw-byte sentinel. `princ` of pure-Unicode values
 /// routes through the byte-faithful sink; eight-bit values keep the storage path.

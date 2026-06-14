@@ -2195,9 +2195,9 @@ pub(crate) fn builtin_write_char_impl(
 pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
     expect_min_args("propertize", &args, 1)?;
 
-    let (s, multibyte) = match args[0].kind() {
-        ValueKind::String => (runtime_string_value(args[0]), args[0].string_is_multibyte()),
-        other => {
+    let string = match args[0].kind() {
+        ValueKind::String => args[0].as_lisp_string().expect("propertize string arg"),
+        _ => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("stringp"), args[0]],
@@ -2216,8 +2216,14 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
         ));
     }
 
-    // Create a copy of the string
-    let new_str = Value::heap_string(super::runtime_string_to_lisp_string(&s, multibyte));
+    // Issue #131: copy the source string's Emacs bytes verbatim rather than
+    // round-tripping through the lossy storage-string form, which would decode a
+    // real Private-Use glyph as a raw byte.
+    let new_str = Value::heap_string(if string.is_multibyte() {
+        crate::heap_types::LispString::from_emacs_bytes(string.as_bytes().to_vec())
+    } else {
+        crate::heap_types::LispString::from_unibyte(string.as_bytes().to_vec())
+    });
 
     // Copy existing text properties from source string
     if args[0].is_string() {

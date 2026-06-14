@@ -655,8 +655,9 @@ pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
                 .flatten();
             let rendered = super::runtime_string_from_lisp_string(string);
             let upcased = upcase_string_emacs_compat(&rendered);
-            let result = Value::heap_string(super::runtime_string_to_lisp_string(
+            let result = Value::heap_string(super::rebuild_transformed_runtime_string(
                 &upcased,
+                source,
                 runtime_string_result_multibyte(string.is_multibyte(), &upcased),
             ));
             if let Some(table) = source_props {
@@ -844,8 +845,9 @@ pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
                 .flatten();
             let rendered = super::runtime_string_from_lisp_string(string);
             let downcased = downcase_string_emacs_compat(&rendered);
-            let result = Value::heap_string(super::runtime_string_to_lisp_string(
+            let result = Value::heap_string(super::rebuild_transformed_runtime_string(
                 &downcased,
+                source,
                 runtime_string_result_multibyte(string.is_multibyte(), &downcased),
             ));
             if let Some(table) = source_props {
