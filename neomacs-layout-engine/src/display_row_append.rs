@@ -3346,8 +3346,8 @@ impl BufferTextSourceCharPreparedAppend {
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        context.append_source_char_plan_to_text_row(
+    ) -> Option<BufferTextSourceCharAppendOutcome> {
+        let (progress, position) = context.append_source_char_plan_to_text_row(
             geometry,
             builder,
             output_emitter,
@@ -3355,7 +3355,22 @@ impl BufferTextSourceCharPreparedAppend {
             font_metrics,
             face_resolver,
             self.plan,
-        )
+        )?;
+        Some(BufferTextSourceCharAppendOutcome { progress, position })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceCharAppendOutcome {
+    progress: DisplayRowAppendProgress,
+    position: DisplayRowPosition,
+}
+
+impl BufferTextSourceCharAppendOutcome {
+    pub(crate) fn into_progress_and_position(
+        self,
+    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
+        (self.progress, self.position)
     }
 }
 
@@ -3795,7 +3810,7 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         self.kind
     }
 
-    pub(crate) fn prepare_append_policy(
+    fn prepare_append_policy(
         &self,
         params: &WindowParams,
         face_ids: &mut FrameFaceIdAllocator,
@@ -3842,13 +3857,16 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         self,
         context: &BufferTextRowAppendContext<'_, '_, B>,
         geometry: &DisplayRowGeometryState,
+        params: &WindowParams,
+        face_ids: &mut FrameFaceIdAllocator,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        context.append_special_source_char_plan_to_text_row_and_emit(
+    ) -> Option<BufferTextSpecialSourceCharAppendOutcome> {
+        let append_policy = self.prepare_append_policy(params, face_ids);
+        let (progress, position) = context.append_special_source_char_plan_to_text_row_and_emit(
             geometry,
             builder,
             output_emitter,
@@ -3856,18 +3874,42 @@ impl BufferTextSpecialSourceCharPreparedAppend {
             font_metrics,
             face_resolver,
             self.append_plan,
-        )
+        )?;
+        Some(BufferTextSpecialSourceCharAppendOutcome {
+            progress,
+            position,
+            append_policy,
+        })
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextSpecialSourceCharAppendPolicy {
+struct BufferTextSpecialSourceCharAppendPolicy {
     invalidate_face_after_append: bool,
 }
 
 impl BufferTextSpecialSourceCharAppendPolicy {
-    pub(crate) fn invalidates_face_after_append(self) -> bool {
+    fn invalidates_face_after_append(self) -> bool {
         self.invalidate_face_after_append
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSpecialSourceCharAppendOutcome {
+    progress: DisplayRowAppendProgress,
+    position: DisplayRowPosition,
+    append_policy: BufferTextSpecialSourceCharAppendPolicy,
+}
+
+impl BufferTextSpecialSourceCharAppendOutcome {
+    pub(crate) fn into_progress_and_position(
+        self,
+    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
+        (self.progress, self.position)
+    }
+
+    pub(crate) fn invalidates_face_after_append(&self) -> bool {
+        self.append_policy.invalidates_face_after_append()
     }
 }
 

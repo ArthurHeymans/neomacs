@@ -2302,7 +2302,7 @@ fn buffer_text_source_append_context_appends_source_char() {
                 && break_candidate.charpos() == 0
                 && break_candidate.display_point_count() == 2
     ));
-    let (_progress, end) = prepared_append
+    let append_outcome = prepared_append
         .append_to_text_row(
             &append_context,
             &geometry,
@@ -2313,6 +2313,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             &face_resolver,
         )
         .expect("appended buffer fragment");
+    let (_progress, end) = append_outcome.into_progress_and_position();
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
@@ -2949,13 +2950,12 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let mut params = test_display_space_window_params();
     params.nobreak_char_fg = 0x00ff00;
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
-    let append_policy = prepared_append.prepare_append_policy(&params, &mut policy_face_ids);
-    assert!(append_policy.invalidates_face_after_append());
-    assert_eq!(policy_face_ids.finish(), 31);
-    let (_progress, end) = prepared_append
+    let append_outcome = prepared_append
         .append_to_text_row(
             &append_context,
             &geometry,
+            &params,
+            &mut policy_face_ids,
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -2963,6 +2963,9 @@ fn buffer_text_item_append_context_builds_mapped_item() {
             &face_resolver,
         )
         .expect("appended source-mapped buffer text item fragment");
+    assert!(append_outcome.invalidates_face_after_append());
+    assert_eq!(policy_face_ids.finish(), 31);
+    let (_progress, end) = append_outcome.into_progress_and_position();
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
@@ -3042,14 +3045,13 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     assert_eq!(prepared_append.overflow_decision(0.0, 80.0, false), None);
     assert_eq!(prepared_append.overflow_action(0.0, 80.0, false), None);
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
-    let append_policy = prepared_append
-        .prepare_append_policy(&test_display_space_window_params(), &mut policy_face_ids);
-    assert!(!append_policy.invalidates_face_after_append());
-    assert_eq!(policy_face_ids.finish(), 30);
-    let (_progress, end) = prepared_append
+    let params = test_display_space_window_params();
+    let append_outcome = prepared_append
         .append_to_text_row(
             &append_context,
             &geometry,
+            &params,
+            &mut policy_face_ids,
             &mut builder,
             &mut output_emitter,
             &mut eval,
@@ -3057,6 +3059,9 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
             &face_resolver,
         )
         .expect("appended glyphless buffer text item fragment");
+    assert!(!append_outcome.invalidates_face_after_append());
+    assert_eq!(policy_face_ids.finish(), 30);
+    let (_progress, end) = append_outcome.into_progress_and_position();
 
     assert_eq!(end, DisplayRowPosition { x_px: 48.0, col: 6 });
     builder

@@ -2783,25 +2783,28 @@ impl LayoutEngine {
                         }
                     }
 
-                    let append_policy =
-                        special_prepared_append.prepare_append_policy(params, &mut face_ids);
-                    if let Some((_progress, position)) = special_prepared_append.append_to_text_row(
+                    if let Some(append_outcome) = special_prepared_append.append_to_text_row(
                         &buffer_row_append_context,
                         &row_geometry,
+                        params,
+                        &mut face_ids,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
                     ) {
+                        let invalidates_face_after_append =
+                            append_outcome.invalidates_face_after_append();
+                        let (_progress, position) = append_outcome.into_progress_and_position();
                         x = position.x_px;
                         col = position.col;
+                        if invalidates_face_after_append {
+                            face_scan.invalidate();
+                        }
                     }
                     charpos += 1;
                     word_wrap.disallow_after_current_char();
-                    if append_policy.invalidates_face_after_append() {
-                        face_scan.invalidate();
-                    }
                     continue;
                 }
                 BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
@@ -3022,9 +3025,10 @@ impl LayoutEngine {
                 &mut self.font_metrics,
                 face_resolver,
             );
-            let Some((_progress, position)) = appended else {
+            let Some(append_outcome) = appended else {
                 break;
             };
+            let (_progress, position) = append_outcome.into_progress_and_position();
 
             x = position.x_px;
             col = position.col;
