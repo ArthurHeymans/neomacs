@@ -9850,23 +9850,13 @@ fn cursor_slot_width_policy_names_style_and_buffer_width_sources() {
     let text = b"\t";
 
     assert_eq!(
-        CursorSlotWidthPolicy::from_style_and_buffer_position(
-            CursorStyle::Bar(2.5),
-            text,
-            0,
-            1,
-            &params,
-        ),
+        CursorSlotWidthRequest::from_window_params(CursorStyle::Bar(2.5), text, 0, 1, &params)
+            .width_policy(),
         CursorSlotWidthPolicy::ExplicitPixels(2.5)
     );
     assert_eq!(
-        CursorSlotWidthPolicy::from_style_and_buffer_position(
-            CursorStyle::FilledBox,
-            text,
-            0,
-            1,
-            &params,
-        ),
+        CursorSlotWidthRequest::from_window_params(CursorStyle::FilledBox, text, 0, 1, &params)
+            .width_policy(),
         CursorSlotWidthPolicy::TabClamp {
             frame_char_width: 6.0,
         }
@@ -9874,23 +9864,19 @@ fn cursor_slot_width_policy_names_style_and_buffer_width_sources() {
 
     params.x_stretch_cursor = true;
     assert_eq!(
-        CursorSlotWidthPolicy::from_style_and_buffer_position(
-            CursorStyle::FilledBox,
-            text,
-            0,
-            1,
-            &params,
-        ),
+        CursorSlotWidthRequest::from_window_params(CursorStyle::FilledBox, text, 0, 1, &params)
+            .width_policy(),
         CursorSlotWidthPolicy::GlyphColumns(7)
     );
     assert_eq!(
-        CursorSlotWidthPolicy::from_style_and_buffer_position(
+        CursorSlotWidthRequest::from_window_params(
             CursorStyle::Hbar(2.0),
             "你".as_bytes(),
             0,
             0,
             &params,
-        ),
+        )
+        .width_policy(),
         CursorSlotWidthPolicy::GlyphColumns(2)
     );
 }
@@ -9901,13 +9887,9 @@ fn cursor_slot_width_policy_tab_clamp_uses_frame_char_width() {
     params.char_width = 6.0;
     let text = b"\t";
 
-    let policy = CursorSlotWidthPolicy::from_style_and_buffer_position(
-        CursorStyle::FilledBox,
-        text,
-        0,
-        1,
-        &params,
-    );
+    let policy =
+        CursorSlotWidthRequest::from_window_params(CursorStyle::FilledBox, text, 0, 1, &params)
+            .width_policy();
 
     assert_eq!(policy.width_px(8.0), 6.0);
 }
