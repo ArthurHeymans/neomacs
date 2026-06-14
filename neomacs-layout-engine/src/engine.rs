@@ -27,13 +27,13 @@ use super::window_output::{
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
+use crate::display_cursor::CursorCaptureState;
 #[cfg(test)]
 use crate::display_cursor::CursorSlotWidthPolicy;
 #[cfg(test)]
 use crate::display_cursor::resolve_cursor_vertical_metrics;
 #[cfg(test)]
 use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth};
-use crate::display_cursor::{CursorCaptureState, VisualTextWindowCursorPublishContext};
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -2427,16 +2427,6 @@ impl LayoutEngine {
             output_emitter: &mut output_emitter,
             evaluator,
         });
-
-        VisualTextWindowCursorPublishContext::new(
-            params,
-            text_area_left,
-            window_top,
-            text_y,
-            text_height,
-            char_w,
-        )
-        .publish_visual_cursors(&mut self.matrix_builder, &output_emitter);
 
         // GNU redisplay keeps iterating until point visibility converges or no
         // further progress can be made.  Advance by actual rendered row spans

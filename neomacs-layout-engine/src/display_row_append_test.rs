@@ -5706,6 +5706,17 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     params.selected = true;
     params.cursor_color = 0x00ffffff;
     params.text_bounds = Rect::new(0.0, 0.0, 160.0, 48.0);
+    params.visual_cursors = vec![crate::types::VisualCursorSpec {
+        id: -42,
+        charpos: 0,
+        cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::Bar,
+        cursor_bar_width: neomacs_display_protocol::frame_glyphs::CursorBarWidth::new(3),
+        color: 0x00112233,
+        effects: None,
+    }];
+    context
+        .output_emitter
+        .push_display_point(LispCharPos1::ONE, 34.0, 20.0, 11.0, 16.0, 0, 4);
 
     let mut cursor_info = CursorCaptureState::new();
     cursor_info.capture_once(crate::display_cursor::CapturedCursorInfo {
@@ -5753,6 +5764,8 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     assert!(outcome.cursor_requested());
     assert!(outcome.cursor_published());
     assert!(outcome.pending_row_finished());
+    assert_eq!(outcome.visual_cursor_summary().requested, 1);
+    assert_eq!(outcome.visual_cursor_summary().published, 1);
     assert_eq!(context.hit_rows.len(), 1);
     let cursor = context.builder.phys_cursor().expect("physical cursor");
     assert_eq!(cursor.window_id, 1);
@@ -5760,6 +5773,11 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     assert_eq!(cursor.col, 0);
     assert_eq!(cursor.x, 0.0);
     assert_eq!(cursor.height, 16.0);
+    let cursors = context.builder.cursors();
+    assert_eq!(cursors.len(), 1);
+    assert_eq!(cursors[0].window_id, -42);
+    assert_eq!(cursors[0].slot_id.row, 0);
+    assert_eq!(cursors[0].slot_id.col, 4);
 }
 
 #[test]

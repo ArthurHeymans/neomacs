@@ -1,6 +1,7 @@
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
     CapturedCursorVisualState, CapturedTextWindowCursorPublishContext, CursorCaptureState,
+    VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
     capture_cursor_info, display_property_replacement_cursor_info,
     update_cursor_info_for_main_char,
 };
@@ -637,6 +638,7 @@ pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
 pub(crate) struct BufferTextWindowTailFinalizeOutcome {
     cursor_requested: bool,
     cursor_published: bool,
+    visual_cursor_summary: VisualTextWindowCursorPublishSummary,
     pending_row_finished: bool,
 }
 
@@ -4308,6 +4310,11 @@ impl BufferTextWindowTailFinalizeOutcome {
     }
 
     #[cfg(test)]
+    pub(crate) fn visual_cursor_summary(self) -> VisualTextWindowCursorPublishSummary {
+        self.visual_cursor_summary
+    }
+
+    #[cfg(test)]
     pub(crate) fn pending_row_finished(self) -> bool {
         self.pending_row_finished
     }
@@ -6096,9 +6103,20 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             },
         );
 
+        let visual_cursor_summary = VisualTextWindowCursorPublishContext::new(
+            self.params,
+            self.text_area_left,
+            self.window_top,
+            self.text_y,
+            self.text_height,
+            self.char_w,
+        )
+        .publish_visual_cursors(builder, output_emitter);
+
         BufferTextWindowTailFinalizeOutcome {
             cursor_requested,
             cursor_published,
+            visual_cursor_summary,
             pending_row_finished,
         }
     }
