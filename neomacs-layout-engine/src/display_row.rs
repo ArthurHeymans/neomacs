@@ -2360,36 +2360,6 @@ fn render_display_item_source_into_current_text_row_and_emit<
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn append_single_display_item_fragment_to_text_row_and_emit<
-    P: DisplayRowRenderPolicy,
->(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
-    mut item: DisplayItem,
-    face_resolver: &FaceResolver,
-    request: DisplayRowSourceAppendRequest<'_>,
-    render_policy: &mut P,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let base_face_id = request.base_face_id();
-    item.face = RenderFaceRef::FaceId(base_face_id);
-    let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
-    let start = request.start_position();
-    let outcome = request.render_single_display_item_into_current_text_row_and_emit(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        item,
-        face_resolver,
-        &mut face_ids,
-        render_policy,
-    )?;
-    Some(outcome.into_append_progress_and_position(start))
-}
-
 pub(crate) fn install_rendered_display_row(
     builder: &mut GlyphMatrixBuilder,
     rendered: &RenderedDisplayRow,

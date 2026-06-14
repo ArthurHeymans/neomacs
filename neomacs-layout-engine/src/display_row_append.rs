@@ -23,7 +23,6 @@ use crate::display_row::{
     DisplayRowRenderClipBehavior, DisplayRowRenderPolicy, DisplayRowSourceAppendRequest,
     DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState, DisplaySourceAppendMeasurement,
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
-    append_single_display_item_fragment_to_text_row_and_emit,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
@@ -1958,16 +1957,22 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
         render_policy: &mut P,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let request = self.request();
-        append_single_display_item_fragment_to_text_row_and_emit(
+        let base_face_id = request.base_face_id();
+        let mut item = self.item;
+        item.face = RenderFaceRef::FaceId(base_face_id);
+        let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
+        let start = request.start_position();
+        let outcome = request.render_single_display_item_into_current_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
-            self.item,
+            item,
             face_resolver,
-            request,
+            &mut face_ids,
             render_policy,
-        )
+        )?;
+        Some(outcome.into_append_progress_and_position(start))
     }
 }
 
