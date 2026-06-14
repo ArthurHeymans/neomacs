@@ -3686,25 +3686,18 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     #[cfg(test)]
     fn resolve_source_advance_request_to_text_row(
         &self,
         state: &mut BufferTextRowAppendState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        measure_state: &mut TextRowSourceMeasureState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
         request: BufferTextSourceAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
         state
             .advance_resolver()
             .resolve_source_advance_request_to_text_row(
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                measure_state,
                 self.buffer_id,
                 self.buffer,
                 active_face_state,
@@ -3737,19 +3730,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
     #[cfg(test)]
     fn measure_source_range_natural_advance_to_text_row(
         &self,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
+        state: &mut TextRowSourceMeasureState<'_>,
         range: BufferTextSourceRange,
-        face_resolver: &FaceResolver,
         position: DisplayRowPosition,
     ) -> Option<f32> {
         measure_buffer_text_source_range_natural_advance_to_text_row(
-            builder,
-            evaluator,
-            font_metrics,
+            state,
             range,
-            face_resolver,
             self.base_face,
             self.buffer_id,
             self.buffer,
@@ -3821,68 +3808,47 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn measure_item_source_request_width_or_active_face_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceMeasureState<'_>,
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
         self.item_active_face(geometry)
             .measure_source_request_width_or_active_face_fallback_to_text_row(
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                state,
                 source_item,
                 position,
             )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceMeasureState<'_>,
         request: BufferTextSpecialSourceCharMeasureRequest,
     ) -> f32 {
         let position = request.position();
         self.measure_item_source_request_width_or_active_face_fallback_to_text_row(
             geometry,
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            state,
             request.source_item(),
             position,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_special_source_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceMeasureState<'_>,
         request: BufferTextSpecialSourceCharRequest,
         position: DisplayRowPosition,
     ) -> BufferTextSpecialSourceCharPreparedAppend {
         let measured_width_px = request.requires_overflow_measurement().then(|| {
             self.measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
                 geometry,
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                state,
                 request.measure_at(position),
             )
         });
@@ -3919,21 +3885,15 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn resolve_source_advance_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
-        state: &mut BufferTextRowAppendState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        append_state: &mut BufferTextRowAppendState,
+        measure_state: &mut TextRowSourceMeasureState<'_>,
         request: BufferTextSourceAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
         let frame = self.active_face_context(geometry).active_face_frame();
-        state
+        append_state
             .advance_resolver()
             .resolve_source_advance_request_to_text_row(
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                measure_state,
                 self.buffer_id,
                 self.buffer,
                 self.active_face,
@@ -3942,24 +3902,17 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn prepare_source_char_append_plan(
         &self,
         geometry: &DisplayRowGeometryState,
-        state: &mut BufferTextRowAppendState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        append_state: &mut BufferTextRowAppendState,
+        measure_state: &mut TextRowSourceMeasureState<'_>,
         request: BufferTextSourceAdvanceRequest<'_>,
     ) -> BufferTextSourceCharAppendPlan {
         let resolved_advance = self.resolve_source_advance_request_to_text_row(
             geometry,
-            state,
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            append_state,
+            measure_state,
             request,
         );
         request.append_plan(resolved_advance)
@@ -3969,11 +3922,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn prepare_text_source_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
-        state: &mut BufferTextRowAppendState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        append_state: &mut BufferTextRowAppendState,
+        measure_state: &mut TextRowSourceMeasureState<'_>,
         source_char: &BufferTextSourceChar,
         text: &[u8],
         byte_idx: usize,
@@ -3984,11 +3934,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         BufferTextSourceCharPreparedAppend {
             plan: self.prepare_source_char_append_plan(
                 geometry,
-                state,
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                append_state,
+                measure_state,
                 request,
             ),
         }
@@ -3998,11 +3945,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     pub(crate) fn prepare_source_char_at(
         &self,
         geometry: &DisplayRowGeometryState,
-        state: &mut BufferTextRowAppendState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        append_state: &mut BufferTextRowAppendState,
+        measure_state: &mut TextRowSourceMeasureState<'_>,
         source_char: &BufferTextSourceChar,
         text: &[u8],
         byte_idx: usize,
@@ -4011,24 +3955,13 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> BufferTextPreparedSourceCharAppend {
         if let Some(request) = source_char.special_request(cluster_tail) {
             return BufferTextPreparedSourceCharAppend::Special(
-                self.prepare_special_source_char_at(
-                    geometry,
-                    builder,
-                    evaluator,
-                    font_metrics,
-                    face_resolver,
-                    request,
-                    position,
-                ),
+                self.prepare_special_source_char_at(geometry, measure_state, request, position),
             );
         }
         BufferTextPreparedSourceCharAppend::Text(self.prepare_text_source_char_at(
             geometry,
-            state,
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            append_state,
+            measure_state,
             source_char,
             text,
             byte_idx,
@@ -4042,14 +3975,11 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         request: BufferTextSourceCharPreparationRequest<'_>,
         state: &mut BufferTextSourceCharPreparationState<'_>,
     ) -> BufferTextPreparedSourceCharAppend {
-        let cluster_tail = current_text_window_cluster_tail(state.builder);
+        let cluster_tail = current_text_window_cluster_tail(state.measure.builder);
         self.prepare_source_char_at(
             &request.geometry,
             state.append_state,
-            state.builder,
-            state.evaluator,
-            state.font_metrics,
-            state.face_resolver,
+            &mut state.measure,
             request.source_char,
             request.text,
             request.byte_idx,
@@ -4124,10 +4054,7 @@ impl<'a> BufferTextSourceCharPreparationRequest<'a> {
 
 pub(crate) struct BufferTextSourceCharPreparationState<'a> {
     append_state: &'a mut BufferTextRowAppendState,
-    builder: &'a mut GlyphMatrixBuilder,
-    evaluator: &'a mut Context,
-    font_metrics: &'a mut Option<FontMetricsService>,
-    face_resolver: &'a FaceResolver,
+    measure: TextRowSourceMeasureState<'a>,
 }
 
 impl<'a> BufferTextSourceCharPreparationState<'a> {
@@ -4140,10 +4067,12 @@ impl<'a> BufferTextSourceCharPreparationState<'a> {
     ) -> Self {
         Self {
             append_state,
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            measure: TextRowSourceMeasureState::new(
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
         }
     }
 }
@@ -5422,13 +5351,9 @@ impl BufferTextSourceCharAppendOutcome {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
+    state: &mut TextRowSourceMeasureState<'_>,
     range: BufferTextSourceRange,
-    face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     buffer_id: BufferId,
     buffer: &B,
@@ -5443,15 +5368,7 @@ fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
         DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
     Some(
         operation
-            .measure_to_text_row(
-                &mut TextRowSourceMeasureState::new(
-                    builder,
-                    evaluator,
-                    font_metrics,
-                    face_resolver,
-                ),
-                &mut render_policy,
-            )?
+            .measure_to_text_row(state, &mut render_policy)?
             .metrics
             .width_px,
     )
@@ -5459,11 +5376,8 @@ fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
 
 #[allow(clippy::too_many_arguments)]
 fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
-    builder: &mut GlyphMatrixBuilder,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
+    state: &mut TextRowSourceMeasureState<'_>,
     range: BufferTextSourceRange,
-    face_resolver: &FaceResolver,
     buffer_id: BufferId,
     buffer: &B,
     active_face_state: &DisplayRowActiveFaceState,
@@ -5472,11 +5386,8 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     cluster: BufferTextSourceClusterState,
 ) -> f32 {
     if let Some(measured_width) = measure_buffer_text_source_range_natural_advance_to_text_row(
-        builder,
-        evaluator,
-        font_metrics,
+        state,
         range,
-        face_resolver,
         active_face_state.resolved_face(),
         buffer_id,
         buffer,
@@ -5488,7 +5399,7 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     }
 
     fallback_buffer_text_source_range_natural_advance_to_text_row(
-        font_metrics,
+        state.font_metrics,
         active_face_state,
         &frame,
         position,
@@ -5516,10 +5427,7 @@ impl BufferTextSourceAdvanceResolver {
     #[allow(clippy::too_many_arguments)]
     fn resolve_source_advance_request_to_text_row<B: LayoutBufferView + ?Sized>(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceMeasureState<'_>,
         buffer_id: BufferId,
         buffer: &B,
         active_face_state: &DisplayRowActiveFaceState,
@@ -5529,8 +5437,10 @@ impl BufferTextSourceAdvanceResolver {
         let ch = request.cluster().ch();
         match BufferTextSourceAdvancePath::for_cluster_state(request.cluster()) {
             BufferTextSourceAdvancePath::ResolvedComplexRun => {
-                let mut policy =
-                    DisplayRowComplexTextRunAdvancePolicy::new(active_face_state, font_metrics);
+                let mut policy = DisplayRowComplexTextRunAdvancePolicy::new(
+                    active_face_state,
+                    state.font_metrics,
+                );
                 let advance_px = self.complex_run.advance_for_char(
                     request.text(),
                     request.byte_idx(),
@@ -5542,11 +5452,8 @@ impl BufferTextSourceAdvanceResolver {
             }
             BufferTextSourceAdvancePath::NaturalRenderedSource => {
                 let advance_px = resolve_buffer_text_source_range_natural_advance_to_text_row(
-                    builder,
-                    evaluator,
-                    font_metrics,
+                    state,
                     request.range(),
-                    face_resolver,
                     buffer_id,
                     buffer,
                     active_face_state,
@@ -8951,20 +8858,14 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn measure_source_request_width_or_active_face_fallback_to_text_row(
         &self,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceMeasureState<'_>,
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
         let fallback_width = source_item.fallback_width_px(self.frame.geometry.char_width);
-        let mut measure_state =
-            TextRowSourceMeasureState::new(builder, evaluator, font_metrics, face_resolver);
-        self.measure_source_request_width_to_text_row(&mut measure_state, source_item, position)
+        self.measure_source_request_width_to_text_row(state, source_item, position)
             .unwrap_or(fallback_width)
     }
 }

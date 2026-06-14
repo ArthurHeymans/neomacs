@@ -3273,10 +3273,12 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
 
     let resolved = append_context.resolve_source_advance_request_to_text_row(
         &mut append_state,
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &active_face,
         BufferTextSourceAdvanceRequest {
             text: b"x",
@@ -3320,10 +3322,12 @@ fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
 
     let resolved = append_context.resolve_source_advance_request_to_text_row(
         &mut append_state,
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &active_face,
         BufferTextSourceAdvanceRequest {
             text: b"x",
@@ -3370,10 +3374,12 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
 
     let resolved = append_context.resolve_source_advance_request_to_text_row(
         &mut append_state,
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &active_face,
         BufferTextSourceAdvanceRequest {
             text: "\u{0633}".as_bytes(),
@@ -5253,10 +5259,12 @@ fn buffer_text_source_append_context_appends_source_char() {
         .prepare_source_char_at(
             &geometry,
             &mut append_state,
-            &mut builder,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceMeasureState::new(
+                &mut builder,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             &source_char,
             b"a",
             0,
@@ -6216,11 +6224,13 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
     let measured_width = append_context
         .measure_source_range_natural_advance_to_text_row(
-            &mut builder,
-            &mut eval,
-            &mut font_metrics,
+            &mut TextRowSourceMeasureState::new(
+                &mut builder,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             source_range,
-            &face_resolver,
             position,
         )
         .expect("measured buffer fragment append");
@@ -6458,10 +6468,12 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         .expect("current row");
     let fallback_width = append_context
         .measure_source_request_width_or_active_face_fallback_to_text_row(
-            &mut builder,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceMeasureState::new(
+                &mut builder,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             BufferTextSourceItemRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
                 item.clone(),
@@ -6470,10 +6482,12 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         );
     let edge_width = append_context
         .measure_source_request_width_or_active_face_fallback_to_text_row(
-            &mut builder,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceMeasureState::new(
+                &mut builder,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             source_item.clone(),
             DisplayRowPosition {
                 x_px: 80.0,
@@ -6784,10 +6798,12 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         .expect("nobreak source char should map to a display item");
     let prepared_append = append_context.prepare_special_source_char_at(
         &geometry,
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     );
@@ -6894,10 +6910,12 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         .expect("glyphless source char should map to a display item");
     let prepared_append = append_context.prepare_special_source_char_at(
         &geometry,
-        &mut builder,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     );
