@@ -19,10 +19,11 @@ use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmi
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
-    DisplayRowLispStringSourceSessionRequest, DisplayRowOwner, DisplayRowRenderContext,
-    DisplayRowRenderStop, DisplayRowRenderer, DisplayRowSourceRequestPolicy, FrameChromeKind,
-    MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind, install_measured_frame_chrome_row,
-    install_measured_window_display_row, install_rendered_display_row,
+    DisplayRowLispStringSourceSessionRequest, DisplayRowLispStringSourceSessionRowRequest,
+    DisplayRowOwner, DisplayRowRenderContext, DisplayRowRenderStop, DisplayRowRenderer,
+    DisplayRowSourceRequestPolicy, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
+    WindowChromeKind, install_measured_frame_chrome_row, install_measured_window_display_row,
+    install_rendered_display_row,
 };
 pub(crate) use crate::display_row::{
     DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
@@ -394,16 +395,71 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
         (self.text_width / self.char_width.max(1.0)).ceil().max(1.0) as usize
     }
 
-    fn row_policy(&self, row_index: usize, wrap_width: f32) -> DisplayRowSourceRequestPolicy {
-        DisplayRowSourceRequestPolicy::new(
-            self.y + row_index as f32 * self.row_height,
+    fn source_row_request(
+        &self,
+        row_index: usize,
+        wrap_width: f32,
+    ) -> EchoMinibufferSourceRowRequest<'face> {
+        EchoMinibufferSourceRowRequest::new(
+            row_index,
+            self.y,
             wrap_width,
+            self.row_height,
+            self.char_width,
+            self.ascent,
+            self.base_face,
+        )
+    }
+}
+
+struct EchoMinibufferSourceRowRequest<'face> {
+    row_index: usize,
+    y: f32,
+    wrap_width: f32,
+    row_height: f32,
+    char_width: f32,
+    ascent: f32,
+    base_face: &'face ResolvedFace,
+}
+
+impl<'face> EchoMinibufferSourceRowRequest<'face> {
+    fn new(
+        row_index: usize,
+        y: f32,
+        wrap_width: f32,
+        row_height: f32,
+        char_width: f32,
+        ascent: f32,
+        base_face: &'face ResolvedFace,
+    ) -> Self {
+        Self {
+            row_index,
+            y,
+            wrap_width,
+            row_height,
+            char_width,
+            ascent,
+            base_face,
+        }
+    }
+
+    fn source_request_policy(&self) -> DisplayRowSourceRequestPolicy {
+        DisplayRowSourceRequestPolicy::new(
+            self.y + self.row_index as f32 * self.row_height,
+            self.wrap_width,
             self.row_height,
             self.char_width,
             self.ascent,
             DisplayTabPolicy::every(8),
             GlyphRowRole::Minibuffer,
         )
+    }
+
+    fn source_session_row_request(
+        self,
+        source_session: &DisplayRowLispStringSourceSession,
+    ) -> DisplayRowLispStringSourceSessionRowRequest<'face> {
+        source_session.row_request(self.source_request_policy(), self.base_face)
     }
 }
 
@@ -984,8 +1040,9 @@ impl LayoutEngine {
         let mut rows = Vec::new();
         let max_rows = request.max_rows();
         while rows.len() < max_rows {
-            let row_request =
-                source_session.row_request(request.row_policy(rows.len(), wrap_width), &base_face);
+            let row_request = request
+                .source_row_request(rows.len(), wrap_width)
+                .source_session_row_request(&source_session);
             let Some(result) = source_session.render_next_row_with_context(
                 &mut renderer,
                 row_request,

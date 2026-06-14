@@ -1473,6 +1473,21 @@ impl<'a> DisplayRowLispStringSourceSessionRowRequest<'a> {
         Self { row_request }
     }
 
+    #[cfg(test)]
+    pub(crate) fn role(&self) -> GlyphRowRole {
+        self.row_request.role()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn geometry(&self) -> &DisplayRowGeometry {
+        self.row_request.geometry()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn base_face_id(&self) -> u32 {
+        self.row_request.base_face_id()
+    }
+
     fn into_render_plan(self) -> DisplayRowRenderPlan<'a> {
         self.row_request.into_render_plan()
     }

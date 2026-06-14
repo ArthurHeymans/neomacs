@@ -78,6 +78,32 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
 }
 
 #[test]
+fn echo_minibuffer_source_row_request_builds_session_row_request() {
+    let _eval = Context::new();
+    let mut base_face = ResolvedFace::default();
+    base_face.face_id = 7;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
+        Value::string("echo"),
+        &mut face_ids,
+        &base_face,
+    );
+    let source_session =
+        DisplayRowLispStringSourceSession::new(session_request).expect("source session");
+
+    let request = EchoMinibufferSourceRowRequest::new(2, 4.0, 40.0, 16.0, 8.0, 12.0, &base_face)
+        .source_session_row_request(&source_session);
+
+    assert_eq!(request.role(), GlyphRowRole::Minibuffer);
+    assert_eq!(request.base_face_id(), 7);
+    assert_eq!(request.geometry().y, 36.0);
+    assert_eq!(request.geometry().width, 40.0);
+    assert_eq!(request.geometry().height, 16.0);
+    assert_eq!(request.geometry().char_width, 8.0);
+    assert_eq!(request.geometry().ascent, 12.0);
+}
+
+#[test]
 fn display_row_face_preserves_gnu_box_type_codes() {
     let mut resolved = ResolvedFace::default();
     let boxes = [
