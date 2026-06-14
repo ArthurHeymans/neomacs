@@ -2174,35 +2174,29 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(test)]
-    fn resolve_source_range_advance_to_text_row(
+    fn resolve_source_advance_request_to_text_row(
         &self,
         state: &mut BufferTextRowAppendState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        text: &[u8],
-        byte_idx: usize,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         active_face_state: &DisplayRowActiveFaceState,
-        position: DisplayRowPosition,
-        cluster: BufferTextSourceClusterState,
+        request: BufferTextSourceAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
-        state.advance_resolver().resolve_source_range_to_text_row(
-            builder,
-            evaluator,
-            font_metrics,
-            text,
-            byte_idx,
-            range,
-            face_resolver,
-            self.buffer_id,
-            self.buffer,
-            active_face_state,
-            self.frame.clone(),
-            position,
-            cluster,
-        )
+        state
+            .advance_resolver()
+            .resolve_source_advance_request_to_text_row(
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                self.buffer_id,
+                self.buffer,
+                active_face_state,
+                self.frame.clone(),
+                request,
+            )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2441,62 +2435,30 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn resolve_source_range_advance_to_text_row(
+    fn resolve_source_advance_request_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut BufferTextRowAppendState,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        text: &[u8],
-        byte_idx: usize,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
-        position: DisplayRowPosition,
-        cluster: BufferTextSourceClusterState,
+        request: BufferTextSourceAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
         let frame = self.active_face_context(geometry).active_face_frame();
-        state.advance_resolver().resolve_source_range_to_text_row(
-            builder,
-            evaluator,
-            font_metrics,
-            text,
-            byte_idx,
-            range,
-            face_resolver,
-            self.buffer_id,
-            self.buffer,
-            self.active_face,
-            frame,
-            position,
-            cluster,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn resolve_source_char_append_request_to_text_row(
-        &self,
-        geometry: &DisplayRowGeometryState,
-        state: &mut BufferTextRowAppendState,
-        builder: &mut GlyphMatrixBuilder,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        request: BufferTextSourceCharAppendRequest<'_>,
-    ) -> ResolvedBufferTextSourceAdvance {
-        self.resolve_source_range_advance_to_text_row(
-            geometry,
-            state,
-            builder,
-            evaluator,
-            font_metrics,
-            request.text(),
-            request.byte_idx(),
-            request.range(),
-            face_resolver,
-            request.position(),
-            request.cluster(),
-        )
+        state
+            .advance_resolver()
+            .resolve_source_advance_request_to_text_row(
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                self.buffer_id,
+                self.buffer,
+                self.active_face,
+                frame,
+                request,
+            )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2508,9 +2470,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        request: BufferTextSourceCharAppendRequest<'_>,
+        request: BufferTextSourceAdvanceRequest<'_>,
     ) -> BufferTextSourceCharAppendPlan {
-        let resolved_advance = self.resolve_source_char_append_request_to_text_row(
+        let resolved_advance = self.resolve_source_advance_request_to_text_row(
             geometry,
             state,
             builder,
@@ -2537,7 +2499,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
         cluster_tail: Option<(char, bool)>,
     ) -> BufferTextSourceCharPreparedAppend {
-        let request = source_char.append_request_at(text, byte_idx, position, cluster_tail);
+        let request = source_char.advance_request_at(text, byte_idx, position, cluster_tail);
         BufferTextSourceCharPreparedAppend {
             plan: self.prepare_source_char_append_plan(
                 geometry,
@@ -2774,32 +2736,28 @@ fn fallback_buffer_text_source_range_natural_advance_to_text_row(
 
 impl BufferTextSourceAdvanceResolver {
     #[allow(clippy::too_many_arguments)]
-    fn resolve_source_range_to_text_row<B: LayoutBufferView + ?Sized>(
+    fn resolve_source_advance_request_to_text_row<B: LayoutBufferView + ?Sized>(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
-        text: &[u8],
-        byte_idx: usize,
-        range: BufferTextSourceRange,
         face_resolver: &FaceResolver,
         buffer_id: BufferId,
         buffer: &B,
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
-        position: DisplayRowPosition,
-        cluster: BufferTextSourceClusterState,
+        request: BufferTextSourceAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
-        let ch = cluster.ch();
-        match BufferTextSourceAdvancePath::for_cluster_state(cluster) {
+        let ch = request.cluster().ch();
+        match BufferTextSourceAdvancePath::for_cluster_state(request.cluster()) {
             BufferTextSourceAdvancePath::ResolvedComplexRun => {
                 let mut policy =
                     DisplayRowComplexTextRunAdvancePolicy::new(active_face_state, font_metrics);
                 let advance_px = self.complex_run.advance_for_char(
-                    text,
-                    byte_idx,
+                    request.text(),
+                    request.byte_idx(),
                     ch,
-                    cluster.is_cluster_continuation(),
+                    request.cluster().is_cluster_continuation(),
                     &mut policy,
                 );
                 ResolvedBufferTextSourceAdvance::resolved(advance_px)
@@ -2809,14 +2767,14 @@ impl BufferTextSourceAdvanceResolver {
                     builder,
                     evaluator,
                     font_metrics,
-                    range,
+                    request.range(),
                     face_resolver,
                     buffer_id,
                     buffer,
                     active_face_state,
                     frame,
-                    position,
-                    cluster,
+                    request.position(),
+                    request.cluster(),
                 );
                 ResolvedBufferTextSourceAdvance::natural(advance_px)
             }
@@ -2967,14 +2925,14 @@ impl BufferTextSourceChar {
             .map(|display| self.special_request_for_display(display))
     }
 
-    fn append_request_at<'text>(
+    fn advance_request_at<'text>(
         &self,
         text: &'text [u8],
         byte_idx: usize,
         position: DisplayRowPosition,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourceCharAppendRequest<'text> {
-        BufferTextSourceCharAppendRequest {
+    ) -> BufferTextSourceAdvanceRequest<'text> {
+        BufferTextSourceAdvanceRequest {
             text,
             byte_idx,
             range: self.range(),
@@ -3162,7 +3120,7 @@ impl BufferTextSourceCharAppendPlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceCharAppendRequest<'text> {
+struct BufferTextSourceAdvanceRequest<'text> {
     text: &'text [u8],
     byte_idx: usize,
     range: BufferTextSourceRange,
@@ -3170,7 +3128,7 @@ struct BufferTextSourceCharAppendRequest<'text> {
     cluster: BufferTextSourceClusterState,
 }
 
-impl<'text> BufferTextSourceCharAppendRequest<'text> {
+impl<'text> BufferTextSourceAdvanceRequest<'text> {
     fn text(self) -> &'text [u8] {
         self.text
     }
