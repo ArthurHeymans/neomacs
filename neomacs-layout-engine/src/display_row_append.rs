@@ -3878,12 +3878,12 @@ pub(crate) struct BufferTextSpecialSourceCharAppendPlan {
 }
 
 impl BufferTextSpecialSourceCharAppendPlan {
-    fn source_item(&self) -> BufferTextSourceItemRequest {
-        self.source_item.clone()
-    }
-
     fn position(&self) -> DisplayRowPosition {
         self.position
+    }
+
+    fn source_item(&self) -> BufferTextSourceItemRequest {
+        self.source_item.clone()
     }
 }
 
@@ -3894,12 +3894,12 @@ pub(crate) struct BufferTextSpecialSourceCharMeasureRequest {
 }
 
 impl BufferTextSpecialSourceCharMeasureRequest {
-    fn source_item(&self) -> BufferTextSourceItemRequest {
-        self.source_item.clone()
-    }
-
     fn position(&self) -> DisplayRowPosition {
         self.position
+    }
+
+    fn source_item(&self) -> BufferTextSourceItemRequest {
+        self.source_item.clone()
     }
 }
 
@@ -4560,6 +4560,45 @@ impl DisplayReplacementAppendItem {
     }
 }
 
+#[derive(Clone, Debug)]
+struct DisplayReplacementItemAppendRequest {
+    item: DisplayReplacementAppendItem,
+    frame: DisplayReplacementItemAppendFrame,
+    position: DisplayRowPosition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DisplayReplacementItemAppendFrame {
+    ActiveFace,
+    DisplayBox { height_px: f32, ascent_px: f32 },
+}
+
+impl DisplayReplacementItemAppendRequest {
+    fn active_face(item: DisplayReplacementAppendItem, position: DisplayRowPosition) -> Self {
+        Self {
+            item,
+            frame: DisplayReplacementItemAppendFrame::ActiveFace,
+            position,
+        }
+    }
+
+    fn display_box(
+        item: DisplayReplacementAppendItem,
+        height_px: f32,
+        ascent_px: f32,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            item,
+            frame: DisplayReplacementItemAppendFrame::DisplayBox {
+                height_px,
+                ascent_px,
+            },
+            position,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DisplayReplacementStretchAppendItem {
     geometry: DisplayReplacementBox,
@@ -4954,6 +4993,18 @@ impl DisplayReplacementStretchAppendItem {
 
     fn geometry(self) -> DisplayReplacementBox {
         self.geometry
+    }
+
+    fn append_request(
+        self,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayReplacementItemAppendRequest> {
+        (self.width_px() > 0.0).then(|| {
+            DisplayReplacementItemAppendRequest::active_face(
+                DisplayReplacementAppendItem::stretch(self),
+                position,
+            )
+        })
     }
 }
 
@@ -5679,19 +5730,18 @@ impl DisplayReplacementStretchAppendItem {
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
-        if self.width_px() <= 0.0 {
+        let Some(request) = self.append_request(position) else {
             return position;
-        }
+        };
         row_geometry.include_glyph_vertical_metrics(self.height_px(), self.ascent_px());
         replacement_append_context
-            .append_active_face_replacement_item_to_text_row_and_emit(
+            .append_item_request_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
                 face_resolver,
-                DisplayReplacementAppendItem::stretch(self),
-                position,
+                request,
             )
             .map(|(_progress, position)| position)
             .unwrap_or(position)
@@ -5748,19 +5798,14 @@ impl DisplayReplacementMediaAppendItem {
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
-        let display_height_px = self.display_height_px();
-        let display_ascent_px = self.display_ascent_px();
         if let Some((progress, appended_position)) = replacement_append_context
-            .append_display_box_replacement_item_to_text_row_and_emit(
+            .append_item_request_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
                 face_resolver,
-                DisplayReplacementAppendItem::media(self),
-                display_height_px,
-                display_ascent_px,
-                position,
+                self.append_request(position),
             )
             && let Some((height, ascent)) = self.row_extents_after_append(&progress)
         {
@@ -5785,14 +5830,13 @@ impl DisplayReplacementSourceMappedTextAppendItem {
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         replacement_append_context
-            .append_active_face_replacement_item_to_text_row_and_emit(
+            .append_item_request_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
                 face_resolver,
-                DisplayReplacementAppendItem::source_mapped_text(self),
-                position,
+                self.append_request(position),
             )
             .map(|(_progress, position)| position)
             .unwrap_or(position)
@@ -5887,6 +5931,15 @@ impl DisplayReplacementMediaAppendItem {
             None
         }
     }
+
+    fn append_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
+        DisplayReplacementItemAppendRequest::display_box(
+            DisplayReplacementAppendItem::media(self),
+            self.display_height_px(),
+            self.display_ascent_px(),
+            position,
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -5901,6 +5954,13 @@ impl DisplayReplacementSourceMappedTextAppendItem {
 
     fn text(self) -> Box<str> {
         self.text
+    }
+
+    fn append_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
+        DisplayReplacementItemAppendRequest::active_face(
+            DisplayReplacementAppendItem::source_mapped_text(self),
+            position,
+        )
     }
 }
 
@@ -6032,48 +6092,35 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn append_active_face_replacement_item_to_text_row_and_emit(
+    fn append_item_request_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        item: DisplayReplacementAppendItem,
-        position: DisplayRowPosition,
+        request: DisplayReplacementItemAppendRequest,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
-            .append_replacement_item_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                item,
-                position,
-            )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn append_display_box_replacement_item_to_text_row_and_emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        item: DisplayReplacementAppendItem,
-        height_px: f32,
-        ascent_px: f32,
-        position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.display_box(
-            self.active_face.face_id(),
-            self.active_face.resolved_face(),
-            height_px,
-            ascent_px,
-        )
-        .append_replacement_item_to_text_row_and_emit(
+        let DisplayReplacementItemAppendRequest {
+            item,
+            frame,
+            position,
+        } = request;
+        let append_context = match frame {
+            DisplayReplacementItemAppendFrame::ActiveFace => {
+                self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
+            }
+            DisplayReplacementItemAppendFrame::DisplayBox {
+                height_px,
+                ascent_px,
+            } => self.display_box(
+                self.active_face.face_id(),
+                self.active_face.resolved_face(),
+                height_px,
+                ascent_px,
+            ),
+        };
+        append_context.append_replacement_item_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,

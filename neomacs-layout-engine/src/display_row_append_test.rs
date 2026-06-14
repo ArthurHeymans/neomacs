@@ -4439,17 +4439,17 @@ fn display_replacement_append_context_advances_stretch_output() {
         0.0,
         16.0,
     );
+    let request = DisplayReplacementStretchAppendItem::from_extents(13.0, 16.0, 12.0)
+        .append_request(DisplayRowPosition { x_px: 0.0, col: 0 })
+        .expect("stretch append request");
     let (_progress, end) = append_context
-        .append_active_face_replacement_item_to_text_row_and_emit(
+        .append_item_request_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayReplacementAppendItem::stretch(
-                DisplayReplacementStretchAppendItem::from_extents(13.0, 16.0, 12.0),
-            ),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            request,
         )
         .expect("append progress");
 
@@ -4524,17 +4524,16 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         0.0,
         16.0,
     );
+    let request = DisplayReplacementSourceMappedTextAppendItem::new("??")
+        .append_request(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
-        .append_active_face_replacement_item_to_text_row_and_emit(
+        .append_item_request_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayReplacementAppendItem::source_mapped_text(
-                DisplayReplacementSourceMappedTextAppendItem::new("??"),
-            ),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            request,
         )
         .expect("append progress");
 
@@ -4698,19 +4697,15 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         2.0,
         16.0,
     );
-    let display_height_px = media_item.display_height_px();
-    let display_ascent_px = media_item.display_ascent_px();
+    let request = media_item.append_request(DisplayRowPosition { x_px: 16.0, col: 2 });
     let (progress, end) = append_context
-        .append_display_box_replacement_item_to_text_row_and_emit(
+        .append_item_request_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayReplacementAppendItem::media(media_item),
-            display_height_px,
-            display_ascent_px,
-            DisplayRowPosition { x_px: 16.0, col: 2 },
+            request,
         )
         .expect("append progress");
 
