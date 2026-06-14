@@ -893,14 +893,16 @@ fn push_emacs_utf8_decoded_char(out: &mut String, code: u32) {
     }
 }
 
-fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len());
+/// Decode UTF-8(-emacs) `bytes` into Emacs character codes, invoking `f` for
+/// each code in order. Valid (extended) UTF-8 sequences decode to their code
+/// point; any invalid byte becomes the eight-bit raw-byte char `0x3FFF00+byte`.
+fn for_each_utf8_emacs_code(bytes: &[u8], mut f: impl FnMut(u32)) {
     let mut i = 0usize;
 
     while i < bytes.len() {
         let b0 = bytes[i];
         if b0 < 0x80 {
-            out.push(b0 as char);
+            f(b0 as u32);
             i += 1;
             continue;
         }
@@ -909,7 +911,7 @@ fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
             let b1 = bytes[i + 1];
             if (b1 & 0xC0) == 0x80 {
                 let code = (((b0 & 0x1F) as u32) << 6) | ((b1 & 0x3F) as u32);
-                push_emacs_utf8_decoded_char(&mut out, code);
+                f(code);
                 i += 2;
                 continue;
             }
@@ -921,7 +923,7 @@ fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
                 let code = (((b0 & 0x0F) as u32) << 12)
                     | (((b1 & 0x3F) as u32) << 6)
                     | ((b2 & 0x3F) as u32);
-                push_emacs_utf8_decoded_char(&mut out, code);
+                f(code);
                 i += 3;
                 continue;
             }
@@ -934,7 +936,7 @@ fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
                     | (((b1 & 0x3F) as u32) << 12)
                     | (((b2 & 0x3F) as u32) << 6)
                     | ((b3 & 0x3F) as u32);
-                push_emacs_utf8_decoded_char(&mut out, code);
+                f(code);
                 i += 4;
                 continue;
             }
@@ -952,7 +954,7 @@ fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
                     | (((b2 & 0x3F) as u32) << 12)
                     | (((b3 & 0x3F) as u32) << 6)
                     | ((b4 & 0x3F) as u32);
-                push_emacs_utf8_decoded_char(&mut out, code);
+                f(code);
                 i += 5;
                 continue;
             }
@@ -978,20 +980,53 @@ fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
                     | (((b3 & 0x3F) as u32) << 12)
                     | (((b4 & 0x3F) as u32) << 6)
                     | ((b5 & 0x3F) as u32);
-                push_emacs_utf8_decoded_char(&mut out, code);
+                f(code);
                 i += 6;
                 continue;
             }
         }
 
         // Invalid byte: treat as raw-byte char (matching GNU Emacs behavior).
-        let byte = bytes[i];
-        let code = crate::emacs_core::emacs_char::unibyte_to_char(byte);
-        push_emacs_utf8_decoded_char(&mut out, code);
+        f(crate::emacs_core::emacs_char::unibyte_to_char(bytes[i]));
         i += 1;
     }
+}
 
+fn decode_utf8_emacs_bytes(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    for_each_utf8_emacs_code(bytes, |code| push_emacs_utf8_decoded_char(&mut out, code));
     out
+}
+
+/// Decode UTF-8(-emacs) `bytes` directly into Emacs-internal storage bytes
+/// (the representation `LispString::from_emacs_bytes` expects).
+///
+/// Unlike [`decode_utf8_emacs_bytes`], this never goes through the Rust-`String`
+/// "storage string" with its in-Unicode PUA sentinels, so eight-bit raw bytes
+/// become the extended `0x3FFF00+byte` sequence while genuine Private-Use-Area
+/// characters (nerd-font glyphs in U+E000..F8FF) keep their real code points —
+/// the two can never be confused (issue #131).
+fn decode_utf8_to_emacs_bytes(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    for_each_utf8_emacs_code(bytes, |code| {
+        let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..len]);
+    });
+    out
+}
+
+/// Prepare raw bytes for utf-8(-emacs) decoding (EOL conversion + optional BOM
+/// strip) and decode straight to Emacs storage bytes — the sentinel-free
+/// counterpart of the utf-8 arm of [`decode_bytes`].
+fn decode_utf8_coding_to_emacs_bytes(bytes: &[u8], coding_system: &str) -> Vec<u8> {
+    let mut prepared = decode_eol_text(bytes, coding_system);
+    if coding_system_consumes_utf8_signature(coding_system)
+        && prepared.starts_with(&[0xEF, 0xBB, 0xBF])
+    {
+        prepared.drain(..3);
+    }
+    decode_utf8_to_emacs_bytes(&prepared)
 }
 
 fn encode_emacs_utf8_codepoint(code: u32, out: &mut Vec<u8>) {
@@ -1189,6 +1224,14 @@ pub(crate) fn decode_bytes_to_lisp_string(
     bytes: &[u8],
     coding_system: &str,
 ) -> crate::heap_types::LispString {
+    if matches!(coding_system_family(coding_system), "utf-8" | "utf-8-emacs") {
+        // Sentinel-free path: eight-bit bytes become 0x3FFF00+ extended, real
+        // PUA glyphs keep their code points (issue #131).
+        return crate::heap_types::LispString::from_emacs_bytes(decode_utf8_coding_to_emacs_bytes(
+            bytes,
+            coding_system,
+        ));
+    }
     let text = decode_bytes(bytes, coding_system);
     crate::emacs_core::builtins::runtime_string_to_lisp_string(&text, true)
 }
@@ -1912,8 +1955,14 @@ pub(crate) fn builtin_decode_coding_string_with_known(
         ));
     }
     if matches!(coding_system_family(&coding), "utf-8" | "utf-8-emacs") {
-        let decoded = decode_bytes(&bytes, &coding);
-        return Ok(Value::multibyte_string(decoded));
+        // Decode straight to Emacs storage bytes so eight-bit raw bytes use the
+        // 0x3FFF00+ extended form and real Private-Use-Area glyphs keep their
+        // code points — never the colliding in-Unicode sentinels (issue #131).
+        return Ok(Value::heap_string(
+            crate::heap_types::LispString::from_emacs_bytes(decode_utf8_coding_to_emacs_bytes(
+                &bytes, &coding,
+            )),
+        ));
     }
     let decoded = decode_bytes(&bytes, &coding);
     let charset = match coding_system_family(&coding) {

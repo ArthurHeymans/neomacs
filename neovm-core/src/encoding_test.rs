@@ -318,6 +318,31 @@ fn builtin_coding_string_helpers_runtime_match_oracle_core_cases() {
     assert_eq!(encoded_ls.as_bytes(), &[0xE9]);
 }
 
+/// Issue #131: decoding valid UTF-8 for real Private-Use-Area glyphs (nerd-font
+/// icons) must keep their real code points, while truly invalid bytes still
+/// become eight-bit chars. Before the storage rework, decode-coding-string
+/// routed through the in-Unicode sentinel storage-string, so a real U+E322
+/// (weather icon) collided with the unibyte sentinel and an eight-bit raw byte
+/// collided with the raw-byte sentinel — corrupting glyphs.
+#[test]
+fn decode_coding_string_keeps_real_pua_glyphs_issue_131() {
+    crate::test_utils::init_test_tracing();
+    // U+E0A0 (powerline) + U+E322 (nerd-font weather) + a genuine invalid byte.
+    let mut input = Vec::new();
+    input.extend_from_slice("\u{E0A0}\u{E322}".as_bytes()); // valid UTF-8 PUA
+    input.push(0xFF); // invalid byte -> eight-bit char 0x3FFFFF
+    let unibyte_val = Value::heap_string(crate::heap_types::LispString::from_unibyte(input));
+    let decoded = builtin_decode_coding_string(vec![unibyte_val, Value::symbol("utf-8")])
+        .expect("decode-coding-string should succeed");
+    let ls = decoded.as_lisp_string().expect("string result");
+    let codes = crate::emacs_core::builtins::lisp_string_char_codes(ls);
+    assert_eq!(
+        codes,
+        vec![0xE0A0, 0xE322, 0x3FFF00 + 0xFF],
+        "real PUA glyphs must keep their code points; only the invalid byte is eight-bit"
+    );
+}
+
 #[test]
 fn encode_coding_string_extracts_multibyte_byte8_chars_like_gnu() {
     crate::test_utils::init_test_tracing();

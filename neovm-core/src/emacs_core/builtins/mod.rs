@@ -38,43 +38,15 @@ pub(crate) use strings::downcase_char_code_emacs_compat;
 // Transitional string character iteration
 // ---------------------------------------------------------------------------
 
-/// Map a code point decoded from a multibyte string's storage back to the Emacs
-/// character it represents.
-///
-/// neomacs stores an eight-bit (raw 8-bit byte) character `0x3FFF00+b` inside a
-/// multibyte string's Rust-`String` storage as `char::from_u32(0xE000+b)` — in
-/// U+E080..U+E0FF — because a Rust `char` cannot hold codepoints above
-/// U+10FFFF (see `string_escape::encode_nonunicode_char_for_storage`). We map
-/// that range back to the eight-bit char code on extraction.
-///
-/// We deliberately do NOT treat U+E300..U+E3FF as a sentinel: that range is
-/// only used for unibyte *buffer* storage, never multibyte LispStrings, so a
-/// U+E3xx code point in a string is always a real character (e.g. nerd-font
-/// weather icons) and must pass through unchanged. It used to be masked to its
-/// low byte (U+E322 → 0x22), corrupting glyphs and even breaking byte-compiled
-/// `.elc` syntax — see issue #131.
-///
-/// NOTE: U+E080..U+E0FF storage still overlaps real PUA glyphs (e.g. powerline
-/// icons), so eight-bit storage there remains ambiguous with genuine chars;
-/// retiring this in-Unicode encoding for out-of-Unicode storage is the storage
-/// rework tracked as issue #131 Step B.
-#[inline]
-fn decode_raw_byte_storage(cp: u32) -> u32 {
-    const RAW_BYTE_SENTINEL_BASE: u32 = 0xE000;
-    const RAW_BYTE_SENTINEL_MIN: u32 = 0xE080;
-    const RAW_BYTE_SENTINEL_MAX: u32 = 0xE0FF;
-    if (RAW_BYTE_SENTINEL_MIN..=RAW_BYTE_SENTINEL_MAX).contains(&cp) {
-        crate::emacs_core::emacs_char::unibyte_to_char((cp - RAW_BYTE_SENTINEL_BASE) as u8)
-    } else {
-        cp
-    }
-}
-
 /// Iterate Emacs character codes from a `LispString`.
 ///
-/// For **multibyte** strings, raw 8-bit bytes are decoded via
-/// [`decode_raw_byte_storage`]. For **unibyte** strings each byte maps to its
-/// value directly (0..255).
+/// For **multibyte** strings each character is decoded straight from the
+/// Emacs-internal bytes via `string_char_unchecked`: standard UTF-8 code points
+/// (including real Private-Use-Area glyphs such as nerd-font icons) and the
+/// extended `0x3FFF00+byte` sequences for eight-bit raw bytes. There is no
+/// in-Unicode "sentinel" remapping — that conflated real PUA characters with
+/// raw bytes and corrupted them (issue #131). For **unibyte** strings each byte
+/// maps to its value directly (0..255).
 pub(crate) fn lisp_string_char_codes(string: &crate::heap_types::LispString) -> Vec<u32> {
     let bytes = string.as_bytes();
     if !string.is_multibyte() {
@@ -90,7 +62,7 @@ pub(crate) fn lisp_string_char_codes(string: &crate::heap_types::LispString) -> 
             continue;
         }
         let (cp, len) = crate::emacs_core::emacs_char::string_char_unchecked(&bytes[pos..]);
-        out.push(decode_raw_byte_storage(cp));
+        out.push(cp);
         pos += len;
     }
     out
@@ -114,7 +86,7 @@ pub(crate) fn lisp_string_char_at(
     }
     let byte_pos = crate::emacs_core::emacs_char::char_to_byte_pos(bytes, idx);
     let (cp, _) = crate::emacs_core::emacs_char::string_char_unchecked(&bytes[byte_pos..]);
-    Some(decode_raw_byte_storage(cp))
+    Some(cp)
 }
 
 /// Iterate character codes via a closure (avoids allocation when possible).
@@ -132,7 +104,7 @@ pub(crate) fn for_each_lisp_string_char(
     let mut pos = 0;
     while pos < bytes.len() {
         let (cp, len) = crate::emacs_core::emacs_char::string_char_unchecked(&bytes[pos..]);
-        f(decode_raw_byte_storage(cp));
+        f(cp);
         pos += len;
     }
 }
