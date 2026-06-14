@@ -36,7 +36,7 @@ use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit,
     DisplayRowTextPosition, DisplayRowYPositions, DisplayRowYRecording,
 };
-use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_row_walk_state::{HitRowRangeTracker, TextRowTransitionPrefixAction};
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
     DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
@@ -533,6 +533,20 @@ impl DisplayRowPrefixRequest {
 
     pub(crate) fn is_requested(self) -> bool {
         !matches!(self, Self::None)
+    }
+
+    pub(crate) fn apply_transition_prefix_action(
+        &mut self,
+        has_prefix: bool,
+        action: TextRowTransitionPrefixAction,
+    ) {
+        if !has_prefix {
+            return;
+        }
+        match action {
+            TextRowTransitionPrefixAction::Line => self.request_line(),
+            TextRowTransitionPrefixAction::Wrap => self.request_wrap(),
+        }
     }
 
     pub(crate) fn source_for_value(

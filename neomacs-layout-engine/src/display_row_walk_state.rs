@@ -111,6 +111,28 @@ pub(crate) struct TextPropertyScanCheckpoints {
     display_next: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextRowTransitionPrefixAction {
+    Line,
+    Wrap,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TextRowTransitionWordWrapAction {
+    Keep,
+    Reset,
+    Disallow,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextRowTransitionStatePolicy {
+    advance_line_number: bool,
+    reset_hscroll: bool,
+    word_wrap: TextRowTransitionWordWrapAction,
+    reset_trailing_whitespace: bool,
+    prefix: TextRowTransitionPrefixAction,
+}
+
 impl WordWrapBreakCandidate {
     pub(crate) fn record(
         &mut self,
@@ -149,6 +171,128 @@ impl WordWrapBreakCandidate {
 
     pub(crate) fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
         (self.row_first_display_pos, self.row_last_display_pos)
+    }
+}
+
+impl TextRowTransitionStatePolicy {
+    fn new(
+        advance_line_number: bool,
+        reset_hscroll: bool,
+        word_wrap: TextRowTransitionWordWrapAction,
+        reset_trailing_whitespace: bool,
+        prefix: TextRowTransitionPrefixAction,
+    ) -> Self {
+        Self {
+            advance_line_number,
+            reset_hscroll,
+            word_wrap,
+            reset_trailing_whitespace,
+            prefix,
+        }
+    }
+
+    pub(crate) fn hscroll_line_break() -> Self {
+        Self::new(
+            true,
+            true,
+            TextRowTransitionWordWrapAction::Keep,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn line_break() -> Self {
+        Self::new(
+            true,
+            true,
+            TextRowTransitionWordWrapAction::Reset,
+            false,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn hidden_line_break() -> Self {
+        Self::new(
+            true,
+            true,
+            TextRowTransitionWordWrapAction::Reset,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn truncation() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Reset,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn special_truncation() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Disallow,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn visual_wrap() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Reset,
+            true,
+            TextRowTransitionPrefixAction::Wrap,
+        )
+    }
+
+    pub(crate) fn special_visual_wrap() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Keep,
+            true,
+            TextRowTransitionPrefixAction::Wrap,
+        )
+    }
+
+    pub(crate) fn character_wrap() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Disallow,
+            true,
+            TextRowTransitionPrefixAction::Wrap,
+        )
+    }
+
+    pub(crate) fn apply(
+        self,
+        line_numbers: &mut LineNumberRenderState,
+        hscroll_skip: &mut HorizontalScrollSkipState,
+        word_wrap: &mut WordWrapRenderState,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+    ) -> TextRowTransitionPrefixAction {
+        if self.advance_line_number {
+            line_numbers.advance_line();
+        }
+        if self.reset_hscroll {
+            hscroll_skip.reset_line();
+        }
+        match self.word_wrap {
+            TextRowTransitionWordWrapAction::Keep => {}
+            TextRowTransitionWordWrapAction::Reset => word_wrap.reset_after_row_transition(),
+            TextRowTransitionWordWrapAction::Disallow => word_wrap.disallow_after_current_char(),
+        }
+        if self.reset_trailing_whitespace {
+            trailing_whitespace.reset_after_row_transition();
+        }
+        self.prefix
     }
 }
 

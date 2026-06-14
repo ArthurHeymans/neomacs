@@ -76,7 +76,7 @@ use crate::display_row_walk_state::WordWrapBreakCandidate;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
-    TrailingWhitespaceRenderState, WordWrapRenderState,
+    TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapRenderState,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos, skip_to_newline,
@@ -2227,12 +2227,15 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    line_numbers.advance_line();
-                    hscroll_skip.reset_line();
-                    trailing_whitespace.reset_after_row_transition();
-                    if has_prefix {
-                        prefix_request.request_line();
-                    }
+                    prefix_request.apply_transition_prefix_action(
+                        has_prefix,
+                        TextRowTransitionStatePolicy::hscroll_line_break().apply(
+                            &mut line_numbers,
+                            &mut hscroll_skip,
+                            &mut word_wrap,
+                            &mut trailing_whitespace,
+                        ),
+                    );
                     if cursor_info.is_missing() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
@@ -2499,13 +2502,15 @@ impl LayoutEngine {
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_range.advance_to(charpos);
                         col = 0;
-                        line_numbers.advance_line();
-                        hscroll_skip.reset_line();
-                        word_wrap.reset_after_row_transition();
-                        trailing_whitespace.reset_after_row_transition();
-                        if has_prefix {
-                            prefix_request.request_line();
-                        }
+                        prefix_request.apply_transition_prefix_action(
+                            has_prefix,
+                            TextRowTransitionStatePolicy::hidden_line_break().apply(
+                                &mut line_numbers,
+                                &mut hscroll_skip,
+                                &mut word_wrap,
+                                &mut trailing_whitespace,
+                            ),
+                        );
                         break;
                     }
                 }
@@ -2602,12 +2607,15 @@ impl LayoutEngine {
                 hit_row_range.advance_to(charpos);
                 box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
                 col = 0;
-                line_numbers.advance_line();
-                hscroll_skip.reset_line();
-                word_wrap.reset_after_row_transition();
-                if has_prefix {
-                    prefix_request.request_line();
-                }
+                prefix_request.apply_transition_prefix_action(
+                    has_prefix,
+                    TextRowTransitionStatePolicy::line_break().apply(
+                        &mut line_numbers,
+                        &mut hscroll_skip,
+                        &mut word_wrap,
+                        &mut trailing_whitespace,
+                    ),
+                );
                 // Selective display: skip lines indented beyond threshold
                 if selective_display > 0 && selective_display < i32::MAX && byte_idx < text.len() {
                     loop {
@@ -2721,11 +2729,15 @@ impl LayoutEngine {
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_range.advance_to(charpos);
                         col = 0;
-                        word_wrap.disallow_after_current_char();
-                        trailing_whitespace.reset_after_row_transition();
-                        if has_prefix {
-                            prefix_request.request_line();
-                        }
+                        prefix_request.apply_transition_prefix_action(
+                            has_prefix,
+                            TextRowTransitionStatePolicy::special_truncation().apply(
+                                &mut line_numbers,
+                                &mut hscroll_skip,
+                                &mut word_wrap,
+                                &mut trailing_whitespace,
+                            ),
+                        );
                         continue;
                     } else {
                         row_geometry.mark_current_row_flag_kind(
@@ -2759,15 +2771,20 @@ impl LayoutEngine {
                             break;
                         }
                         col = 0;
-                        trailing_whitespace.reset_after_row_transition();
+                        prefix_request.apply_transition_prefix_action(
+                            has_prefix,
+                            TextRowTransitionStatePolicy::special_visual_wrap().apply(
+                                &mut line_numbers,
+                                &mut hscroll_skip,
+                                &mut word_wrap,
+                                &mut trailing_whitespace,
+                            ),
+                        );
                         row_geometry.mark_current_row_flag_kind(
                             &mut row_flags,
                             DisplayRowFlagKind::Continuation,
                             row_limit,
                         );
-                        if has_prefix {
-                            prefix_request.request_wrap();
-                        }
                         if !row_geometry.current_row_is_visible(row_visibility_limit) {
                             break;
                         }
@@ -2926,11 +2943,15 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    word_wrap.reset_after_row_transition();
-                    trailing_whitespace.reset_after_row_transition();
-                    if has_prefix {
-                        prefix_request.request_line();
-                    }
+                    prefix_request.apply_transition_prefix_action(
+                        has_prefix,
+                        TextRowTransitionStatePolicy::truncation().apply(
+                            &mut line_numbers,
+                            &mut hscroll_skip,
+                            &mut word_wrap,
+                            &mut trailing_whitespace,
+                        ),
+                    );
                     continue;
                 } else if word_wrap.has_candidate() {
                     // Word-wrap: rewind to last break point
@@ -2982,11 +3003,15 @@ impl LayoutEngine {
                         DisplayRowFlagKind::Continuation,
                         row_limit,
                     );
-                    word_wrap.reset_after_row_transition();
-                    trailing_whitespace.reset_after_row_transition();
-                    if has_prefix {
-                        prefix_request.request_wrap();
-                    }
+                    prefix_request.apply_transition_prefix_action(
+                        has_prefix,
+                        TextRowTransitionStatePolicy::visual_wrap().apply(
+                            &mut line_numbers,
+                            &mut hscroll_skip,
+                            &mut word_wrap,
+                            &mut trailing_whitespace,
+                        ),
+                    );
 
                     // Force face re-check since we rewound
                     face_scan.invalidate();
@@ -3027,7 +3052,15 @@ impl LayoutEngine {
                         break;
                     }
                     col = 0;
-                    trailing_whitespace.reset_after_row_transition();
+                    prefix_request.apply_transition_prefix_action(
+                        has_prefix,
+                        TextRowTransitionStatePolicy::character_wrap().apply(
+                            &mut line_numbers,
+                            &mut hscroll_skip,
+                            &mut word_wrap,
+                            &mut trailing_whitespace,
+                        ),
+                    );
                     row_geometry.mark_current_row_flag_kind(
                         &mut row_flags,
                         DisplayRowFlagKind::Continuation,
@@ -3036,11 +3069,7 @@ impl LayoutEngine {
                     byte_idx = ch_start_byte_idx;
                     charpos = sync_charpos_from_byte_idx(byte_idx);
                     hit_row_range.advance_to(charpos);
-                    word_wrap.disallow_after_current_char();
                     face_scan.invalidate();
-                    if has_prefix {
-                        prefix_request.request_wrap();
-                    }
                     if !row_geometry.current_row_is_visible(row_visibility_limit) {
                         break;
                     }

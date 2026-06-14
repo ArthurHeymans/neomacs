@@ -145,6 +145,76 @@ fn word_wrap_render_state_records_candidates_only_when_wrap_is_allowed() {
 }
 
 #[test]
+fn text_row_transition_state_policy_applies_line_break_state_updates() {
+    let mut line_numbers = LineNumberRenderState::new(true, 3, 5);
+    let mut hscroll = HorizontalScrollSkipState::new(true, 4);
+    hscroll.consume_columns(2);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    word_wrap.record_candidate('a', 7, 11, 2, (None, None));
+    let mut trailing = TrailingWhitespaceRenderState::new(true, 0x00112233);
+    trailing.track_rendered_char(
+        ' ',
+        DisplayRowStartMarker::Active {
+            row: DisplayRowMarker::Row(0),
+            x: 24.0,
+        },
+    );
+
+    let prefix = TextRowTransitionStatePolicy::hidden_line_break().apply(
+        &mut line_numbers,
+        &mut hscroll,
+        &mut word_wrap,
+        &mut trailing,
+    );
+
+    assert_eq!(
+        prefix,
+        crate::display_row_walk_state::TextRowTransitionPrefixAction::Line
+    );
+    assert_eq!(line_numbers.current_line(), 4);
+    assert_eq!(hscroll.consumed_columns(), 0);
+    assert!(!word_wrap.candidate().is_available());
+    assert_eq!(trailing.start_marker(), DisplayRowStartMarker::Inactive);
+}
+
+#[test]
+fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
+    let mut line_numbers = LineNumberRenderState::new(true, 3, 5);
+    let mut hscroll = HorizontalScrollSkipState::new(true, 4);
+    hscroll.consume_columns(2);
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+    word_wrap.record_candidate('a', 7, 11, 2, (None, None));
+    let mut trailing = TrailingWhitespaceRenderState::new(true, 0x00112233);
+    trailing.track_rendered_char(
+        '\t',
+        DisplayRowStartMarker::Active {
+            row: DisplayRowMarker::Row(0),
+            x: 24.0,
+        },
+    );
+
+    let prefix = TextRowTransitionStatePolicy::character_wrap().apply(
+        &mut line_numbers,
+        &mut hscroll,
+        &mut word_wrap,
+        &mut trailing,
+    );
+
+    assert_eq!(
+        prefix,
+        crate::display_row_walk_state::TextRowTransitionPrefixAction::Wrap
+    );
+    assert_eq!(line_numbers.current_line(), 3);
+    assert_eq!(hscroll.consumed_columns(), 2);
+    assert_eq!(word_wrap.candidate().byte_idx(), 7);
+    word_wrap.record_candidate('b', 9, 13, 4, (None, None));
+    assert_eq!(word_wrap.candidate().byte_idx(), 7);
+    assert_eq!(trailing.start_marker(), DisplayRowStartMarker::Inactive);
+}
+
+#[test]
 fn active_display_property_span_returns_value_until_expired() {
     let mut span = ActiveDisplayPropertySpan::inactive();
 
@@ -387,6 +457,29 @@ fn display_row_prefix_request_tracks_pending_prefix_mode() {
         DisplayRowPrefixRequest::initial(false, true),
         DisplayRowPrefixRequest::None
     );
+
+    request.clear();
+    request.apply_transition_prefix_action(
+        true,
+        crate::display_row_walk_state::TextRowTransitionPrefixAction::Wrap,
+    );
+    let transition_wrap_source = request
+        .source_from_values(
+            DisplayRowPrefixValues::new(None, Some(Value::string("transition-wrap")), None, None),
+            CharPos0::new(6),
+        )
+        .expect("transition wrap prefix source");
+    assert_eq!(
+        transition_wrap_source.value().as_runtime_string_owned(),
+        Some("transition-wrap".to_string())
+    );
+
+    request.clear();
+    request.apply_transition_prefix_action(
+        false,
+        crate::display_row_walk_state::TextRowTransitionPrefixAction::Line,
+    );
+    assert!(!request.is_requested());
 }
 
 #[test]
