@@ -19,11 +19,10 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowPendingRowFinish, TextWindowRightBorder, TextWindowRightEdgeMarkers,
-    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    finish_pending_text_window_row, install_last_window_right_border,
-    install_text_window_body_output, install_text_window_cursor_effects,
+    TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects, TextWindowRightBorder,
+    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
+    close_text_window_output, install_last_window_right_border, install_text_window_body_output,
+    install_text_window_cursor_effects,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -34,10 +33,7 @@ use crate::display_cursor::CursorSlotWidthPolicy;
 use crate::display_cursor::resolve_cursor_vertical_metrics;
 #[cfg(test)]
 use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth};
-use crate::display_cursor::{
-    CapturedTextWindowCursorPublishContext, CursorCaptureState,
-    VisualTextWindowCursorPublishContext,
-};
+use crate::display_cursor::{CursorCaptureState, VisualTextWindowCursorPublishContext};
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -60,7 +56,8 @@ use crate::display_row_append::{
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
     BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    BufferTextSourceCharRenderRequestState, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowTailFinalizeState, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
@@ -2404,54 +2401,32 @@ impl LayoutEngine {
             }
         }
 
-        if point_charpos >= window_start && (point_charpos <= charpos || point_is_visible_eob) {
-            if let Some(cursor) = cursor_info.captured() {
-                let cursor_row_metrics = output_emitter.row_metrics().to_vec();
-                CapturedTextWindowCursorPublishContext::new(
-                    params,
-                    text,
-                    text_matrix_row_base,
-                    text_area_left,
-                    window_top,
-                    text_y,
-                    text_height,
-                    char_w,
-                    char_h,
-                    point_charpos,
-                    point_is_visible_eob,
-                )
-                .publish_captured_cursor(
-                    cursor,
-                    &cursor_row_metrics,
-                    row_geometry.row_metrics_snapshot(text_matrix_row_base),
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                );
-            } else {
-                tracing::debug!(
-                    "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",
-                    point_charpos,
-                    window_start,
-                    charpos
-                );
-            }
-        }
-
-        finish_pending_text_window_row(
-            &mut self.matrix_builder,
-            &mut output_emitter,
+        BufferTextWindowTailFinalizeRequest::new(
+            params,
+            text,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            char_w,
+            char_h,
+            window_start,
+            point_charpos,
+            charpos,
+            point_is_visible_eob,
+            row_limit,
+        )
+        .finalize_and_apply(BufferTextWindowTailFinalizeState {
+            cursor_info,
+            row_geometry: &row_geometry,
+            row_y_positions: &row_y_positions,
+            hit_row_range: &mut hit_row_range,
+            hit_rows: &mut hit_rows,
+            builder: &mut self.matrix_builder,
+            output_emitter: &mut output_emitter,
             evaluator,
-            TextWindowPendingRowFinish {
-                row_geometry: &row_geometry,
-                row_limit,
-                row_y_positions: &row_y_positions,
-                text_y,
-                char_height: char_h,
-                charpos,
-                hit_row_range: &mut hit_row_range,
-                hit_rows: &mut hit_rows,
-            },
-        );
+        });
 
         VisualTextWindowCursorPublishContext::new(
             params,

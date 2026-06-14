@@ -5699,6 +5699,70 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
 }
 
 #[test]
+fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() {
+    let mut context = RowTransitionTestContext::new("tail-finalize-request");
+    let mut params = test_display_space_window_params();
+    params.window_id = 1;
+    params.selected = true;
+    params.cursor_color = 0x00ffffff;
+    params.text_bounds = Rect::new(0.0, 0.0, 160.0, 48.0);
+
+    let mut cursor_info = CursorCaptureState::new();
+    cursor_info.capture_once(crate::display_cursor::CapturedCursorInfo {
+        x: 0.0,
+        y: 0.0,
+        face_w: 8.0,
+        face_h: 16.0,
+        face_ascent: 12.0,
+        bg: Color::BLACK,
+        byte_idx: 0,
+        col: 0,
+        matrix_row: 0,
+        slot_width: Some(8.0),
+        stretch_like: false,
+    });
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+
+    let outcome = BufferTextWindowTailFinalizeRequest::new(
+        &params,
+        b"abc",
+        0,
+        0.0,
+        0.0,
+        0.0,
+        48.0,
+        8.0,
+        16.0,
+        0,
+        0,
+        3,
+        false,
+        context.row_limit,
+    )
+    .finalize_and_apply(BufferTextWindowTailFinalizeState {
+        cursor_info,
+        row_geometry: &context.geometry,
+        row_y_positions: &context.row_y_positions,
+        hit_row_range: &mut hit_row_range,
+        hit_rows: &mut context.hit_rows,
+        builder: &mut context.builder,
+        output_emitter: &mut context.output_emitter,
+        evaluator: &mut context.eval,
+    });
+
+    assert!(outcome.cursor_requested());
+    assert!(outcome.cursor_published());
+    assert!(outcome.pending_row_finished());
+    assert_eq!(context.hit_rows.len(), 1);
+    let cursor = context.builder.phys_cursor().expect("physical cursor");
+    assert_eq!(cursor.window_id, 1);
+    assert_eq!(cursor.row, 0);
+    assert_eq!(cursor.col, 0);
+    assert_eq!(cursor.x, 0.0);
+    assert_eq!(cursor.height, 16.0);
+}
+
+#[test]
 fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating_row() {
     let mut eval = Context::new();
     let buf_id = eval

@@ -1,7 +1,8 @@
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
-    CapturedCursorVisualState, CursorCaptureState, capture_cursor_info,
-    display_property_replacement_cursor_info, update_cursor_info_for_main_char,
+    CapturedCursorVisualState, CapturedTextWindowCursorPublishContext, CursorCaptureState,
+    capture_cursor_info, display_property_replacement_cursor_info,
+    update_cursor_info_for_main_char,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
@@ -69,9 +70,10 @@ use crate::unicode::{decode_utf8, is_wide_char};
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowLineNumberMargin,
-    WindowOutputEmitter, current_text_window_cluster_tail, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
-    finish_and_end_text_matrix_row_output, mark_current_text_row_truncated_left,
+    TextWindowPendingRowFinish, WindowOutputEmitter, current_text_window_cluster_tail,
+    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
+    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
+    finish_pending_text_window_row, mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -601,6 +603,41 @@ pub(crate) struct BufferEndOfBufferTailRenderState<'a, 'emit> {
     pub(crate) evaluator: &'emit mut Context,
     pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
     pub(crate) face_resolver: &'a FaceResolver,
+}
+
+pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
+    params: &'a WindowParams,
+    text: &'a [u8],
+    text_matrix_row_base: usize,
+    text_area_left: f32,
+    window_top: f32,
+    text_y: f32,
+    text_height: f32,
+    char_w: f32,
+    char_h: f32,
+    window_start: i64,
+    point_charpos: i64,
+    charpos: i64,
+    point_is_visible_eob: bool,
+    row_limit: DisplayRowLimit,
+}
+
+pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
+    pub(crate) cursor_info: CursorCaptureState,
+    pub(crate) row_geometry: &'a DisplayRowGeometryState,
+    pub(crate) row_y_positions: &'a DisplayRowYPositions,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) evaluator: &'emit mut Context,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowTailFinalizeOutcome {
+    cursor_requested: bool,
+    cursor_published: bool,
+    pending_row_finished: bool,
 }
 
 pub(crate) struct DisplayRowTransitionRenderState<'a> {
@@ -4259,6 +4296,23 @@ impl BufferEndOfBufferTailRenderOutcome {
     }
 }
 
+impl BufferTextWindowTailFinalizeOutcome {
+    #[cfg(test)]
+    pub(crate) fn cursor_requested(self) -> bool {
+        self.cursor_requested
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cursor_published(self) -> bool {
+        self.cursor_published
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pending_row_finished(self) -> bool {
+        self.pending_row_finished
+    }
+}
+
 impl BufferTextOverflowRenderOutcome {
     pub(crate) fn should_break(self) -> bool {
         matches!(
@@ -5933,6 +5987,119 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
 
         BufferEndOfBufferTailRenderOutcome {
             point_is_visible_eob,
+        }
+    }
+}
+
+impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        text: &'a [u8],
+        text_matrix_row_base: usize,
+        text_area_left: f32,
+        window_top: f32,
+        text_y: f32,
+        text_height: f32,
+        char_w: f32,
+        char_h: f32,
+        window_start: i64,
+        point_charpos: i64,
+        charpos: i64,
+        point_is_visible_eob: bool,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            params,
+            text,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            char_w,
+            char_h,
+            window_start,
+            point_charpos,
+            charpos,
+            point_is_visible_eob,
+            row_limit,
+        }
+    }
+
+    pub(crate) fn finalize_and_apply(
+        self,
+        state: BufferTextWindowTailFinalizeState<'_, '_>,
+    ) -> BufferTextWindowTailFinalizeOutcome {
+        let BufferTextWindowTailFinalizeState {
+            cursor_info,
+            row_geometry,
+            row_y_positions,
+            hit_row_range,
+            hit_rows,
+            builder,
+            output_emitter,
+            evaluator,
+        } = state;
+
+        let cursor_requested = self.point_charpos >= self.window_start
+            && (self.point_charpos <= self.charpos || self.point_is_visible_eob);
+        let mut cursor_published = false;
+
+        if cursor_requested {
+            if let Some(cursor) = cursor_info.captured() {
+                let cursor_row_metrics = output_emitter.row_metrics().to_vec();
+                CapturedTextWindowCursorPublishContext::new(
+                    self.params,
+                    self.text,
+                    self.text_matrix_row_base,
+                    self.text_area_left,
+                    self.window_top,
+                    self.text_y,
+                    self.text_height,
+                    self.char_w,
+                    self.char_h,
+                    self.point_charpos,
+                    self.point_is_visible_eob,
+                )
+                .publish_captured_cursor(
+                    cursor,
+                    &cursor_row_metrics,
+                    row_geometry.row_metrics_snapshot(self.text_matrix_row_base),
+                    builder,
+                    output_emitter,
+                );
+                cursor_published = true;
+            } else {
+                tracing::debug!(
+                    "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",
+                    self.point_charpos,
+                    self.window_start,
+                    self.charpos
+                );
+            }
+        }
+
+        let pending_row_finished = finish_pending_text_window_row(
+            builder,
+            output_emitter,
+            evaluator,
+            TextWindowPendingRowFinish {
+                row_geometry,
+                row_limit: self.row_limit,
+                row_y_positions,
+                text_y: self.text_y,
+                char_height: self.char_h,
+                charpos: self.charpos,
+                hit_row_range,
+                hit_rows,
+            },
+        );
+
+        BufferTextWindowTailFinalizeOutcome {
+            cursor_requested,
+            cursor_published,
+            pending_row_finished,
         }
     }
 }
