@@ -2235,8 +2235,8 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    col = 0;
-                    line_break_transition.apply_prefix_action(
+                    line_break_transition.apply_row_start_prefix_action(
+                        &mut col,
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
@@ -2482,8 +2482,8 @@ impl LayoutEngine {
                         }
                         charpos = sync_charpos_from_byte_idx(byte_idx);
                         hit_row_range.advance_to(charpos);
-                        col = 0;
-                        line_break_transition.apply_prefix_action(
+                        line_break_transition.apply_row_start_prefix_action(
+                            &mut col,
                             &mut prefix_request,
                             has_prefix,
                             &mut line_numbers,
@@ -2587,8 +2587,8 @@ impl LayoutEngine {
                 charpos = sync_charpos_from_byte_idx(byte_idx);
                 hit_row_range.advance_to(charpos);
                 box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
-                col = 0;
-                line_break_transition.apply_prefix_action(
+                line_break_transition.apply_row_start_prefix_action(
+                    &mut col,
                     &mut prefix_request,
                     has_prefix,
                     &mut line_numbers,
@@ -2722,8 +2722,8 @@ impl LayoutEngine {
                                 }
                                 charpos = sync_charpos_from_byte_idx(byte_idx);
                                 hit_row_range.advance_to(charpos);
-                                col = 0;
-                                transition.apply_prefix_action(
+                                transition.apply_row_start_prefix_action(
+                                    &mut col,
                                     &mut prefix_request,
                                     has_prefix,
                                     &mut line_numbers,
@@ -2760,8 +2760,8 @@ impl LayoutEngine {
                                 if row_transition.is_exhausted() {
                                     break;
                                 }
-                                col = 0;
-                                transition.apply_prefix_action(
+                                transition.apply_row_start_prefix_action(
+                                    &mut col,
                                     &mut prefix_request,
                                     has_prefix,
                                     &mut line_numbers,
@@ -2848,8 +2848,8 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    col = 0;
-                    transition.apply_prefix_action(
+                    transition.apply_row_start_prefix_action(
+                        &mut col,
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,
@@ -2948,8 +2948,8 @@ impl LayoutEngine {
                     if row_transition.is_exhausted() {
                         break;
                     }
-                    col = 0;
-                    transition.apply_prefix_action(
+                    transition.apply_row_start_prefix_action(
+                        &mut col,
                         &mut prefix_request,
                         has_prefix,
                         &mut line_numbers,

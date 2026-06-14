@@ -406,6 +406,28 @@ impl DisplayRowLineBreakTransitionPlan {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn apply_row_start_prefix_action(
+        self,
+        col: &mut usize,
+        prefix_request: &mut DisplayRowPrefixRequest,
+        has_prefix: bool,
+        line_numbers: &mut LineNumberRenderState,
+        hscroll_skip: &mut HorizontalScrollSkipState,
+        word_wrap: &mut WordWrapRenderState,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+    ) {
+        *col = 0;
+        self.apply_prefix_action(
+            prefix_request,
+            has_prefix,
+            line_numbers,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn request<'a>(
         self,
         hit_range: DisplayRowHitRange,
@@ -522,6 +544,28 @@ impl DisplayRowOverflowTransitionPlan {
             has_prefix,
             self.state_policy
                 .apply(line_numbers, hscroll_skip, word_wrap, trailing_whitespace),
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn apply_row_start_prefix_action(
+        self,
+        col: &mut usize,
+        prefix_request: &mut DisplayRowPrefixRequest,
+        has_prefix: bool,
+        line_numbers: &mut LineNumberRenderState,
+        hscroll_skip: &mut HorizontalScrollSkipState,
+        word_wrap: &mut WordWrapRenderState,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+    ) {
+        *col = 0;
+        self.apply_prefix_action(
+            prefix_request,
+            has_prefix,
+            line_numbers,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
         );
     }
 

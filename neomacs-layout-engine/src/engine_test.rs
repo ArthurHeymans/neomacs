@@ -166,8 +166,10 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
         },
     );
 
+    let mut col = 8;
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    DisplayRowLineBreakTransitionPlan::hidden_line_break().apply_prefix_action(
+    DisplayRowLineBreakTransitionPlan::hidden_line_break().apply_row_start_prefix_action(
+        &mut col,
         &mut prefix_request,
         true,
         &mut line_numbers,
@@ -176,6 +178,7 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
         &mut trailing,
     );
 
+    assert_eq!(col, 0);
     assert_eq!(prefix_request, DisplayRowPrefixRequest::Line);
     assert_eq!(line_numbers.current_line(), 4);
     assert_eq!(hscroll.consumed_columns(), 0);
