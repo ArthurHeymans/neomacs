@@ -6,8 +6,10 @@ use crate::display_row_append::{
     BufferInvisibleTextRenderRequest, BufferOverlayStringTextRowRenderContext,
     BufferSelectiveDisplayTailRenderRequest, BufferTextDecodedSourceChar,
     BufferTextLineBreakRenderRequest, BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
-    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRequest, DisplayRowAppendSurface,
-    DisplayRowPrefixRequest, TextWindowAppendSurfaceRequest,
+    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowFinishRequest, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowVisibilityRetryRequest, DisplayRowAppendSurface, DisplayRowPrefixRequest,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -19,11 +21,11 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::hit_test::HitRow;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
-use neovm_core::window::{FrameId, WindowId};
+use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowId};
 
 pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
     window_start: i64,
@@ -111,6 +113,34 @@ pub(crate) struct BufferTextWindowBodyInstallContext {
 pub(crate) struct BufferTextWindowRetryBounds {
     pub(crate) text_area_top: i64,
     pub(crate) text_area_bottom: i64,
+}
+
+pub(crate) struct BufferTextWindowTailRequestContext<'a> {
+    params: &'a WindowParams,
+    window_start: i64,
+    accessible_start: i64,
+    accessible_end: i64,
+    text_start_byte: usize,
+    text_matrix_row_base: usize,
+    text_area_left: f32,
+    window_top: f32,
+    text_y: f32,
+    text_height: f32,
+    content_x: f32,
+    cols: usize,
+    char_width: f32,
+    char_height: f32,
+    default_fg: Color,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    retry_bounds: BufferTextWindowRetryBounds,
+    body_install_context: BufferTextWindowBodyInstallContext,
+    reserve_right_special_col: bool,
+    reserve_right_border_col: bool,
+    mode_line_height: f32,
+    header_line_height: f32,
+    tab_line_height: f32,
 }
 
 pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
@@ -415,6 +445,168 @@ impl BufferTextWindowBodyInstallContext {
     #[cfg(test)]
     pub(crate) fn matrix_cols(self) -> usize {
         self.matrix_cols
+    }
+}
+
+impl<'a> BufferTextWindowTailRequestContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        window_start: i64,
+        accessible_start: i64,
+        accessible_end: i64,
+        text_start_byte: usize,
+        text_matrix_row_base: usize,
+        text_area_left: f32,
+        window_top: f32,
+        text_y: f32,
+        text_height: f32,
+        content_x: f32,
+        cols: usize,
+        char_width: f32,
+        char_height: f32,
+        default_fg: Color,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        retry_bounds: BufferTextWindowRetryBounds,
+        body_install_context: BufferTextWindowBodyInstallContext,
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        mode_line_height: f32,
+        header_line_height: f32,
+        tab_line_height: f32,
+    ) -> Self {
+        Self {
+            params,
+            window_start,
+            accessible_start,
+            accessible_end,
+            text_start_byte,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            content_x,
+            cols,
+            char_width,
+            char_height,
+            default_fg,
+            max_rows,
+            row_limit,
+            row_geometry_defaults,
+            retry_bounds,
+            body_install_context,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        }
+    }
+
+    pub(crate) fn tail_decoration_request(&self) -> BufferTextWindowTailDecorationRequest<'a> {
+        BufferTextWindowTailDecorationRequest::new(
+            self.params,
+            self.content_x,
+            self.cols,
+            self.text_y,
+            self.text_height,
+            self.char_width,
+            self.char_height,
+            self.default_fg,
+            self.max_rows,
+            self.row_limit,
+            self.row_geometry_defaults,
+        )
+    }
+
+    pub(crate) fn tail_finalize_request<'request>(
+        &'request self,
+        text: &'request [u8],
+        charpos: i64,
+        point_is_visible_eob: bool,
+    ) -> BufferTextWindowTailFinalizeRequest<'request> {
+        BufferTextWindowTailFinalizeRequest::new(
+            self.params,
+            text,
+            self.text_matrix_row_base,
+            self.text_area_left,
+            self.window_top,
+            self.text_y,
+            self.text_height,
+            self.char_width,
+            self.char_height,
+            self.window_start,
+            self.params.point_charpos().get(),
+            charpos,
+            point_is_visible_eob,
+            self.row_limit,
+        )
+    }
+
+    pub(crate) fn visibility_retry_request<'rows, 'buf, B>(
+        &self,
+        rows: &'rows [DisplayRowSnapshot],
+        charpos: i64,
+        point_is_visible_eob: bool,
+        buf_access: &'rows RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowVisibilityRetryRequest<'rows, 'buf, B>
+    where
+        B: LayoutBufferView,
+    {
+        BufferTextWindowVisibilityRetryRequest::new(
+            rows,
+            self.window_start,
+            self.accessible_start,
+            self.accessible_end,
+            self.params.point_charpos().get(),
+            charpos,
+            point_is_visible_eob,
+            self.params.is_minibuffer,
+            self.retry_bounds.text_area_top,
+            self.retry_bounds.text_area_bottom,
+            buf_access,
+        )
+    }
+
+    pub(crate) fn body_install_request<'flags>(
+        &self,
+        byte_idx: usize,
+        row_flags: &'flags DisplayRowFlags,
+    ) -> BufferTextWindowBodyInstallRequest<'flags> {
+        self.body_install_context.request(
+            self.window_start,
+            self.text_start_byte,
+            byte_idx,
+            self.reserve_right_special_col,
+            self.reserve_right_border_col,
+            row_flags,
+            self.char_width,
+        )
+    }
+
+    pub(crate) fn finish_request(&self) -> BufferTextWindowFinishRequest {
+        BufferTextWindowFinishRequest::new(
+            self.params.window_id,
+            self.content_x,
+            self.char_width,
+            (self.text_area_left - self.params.bounds.x).round() as i64,
+            self.mode_line_height.round() as i64,
+            self.header_line_height.round() as i64,
+            self.tab_line_height.round() as i64,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn window_start(&self) -> i64 {
+        self.window_start
+    }
+
+    #[cfg(test)]
+    pub(crate) fn accessible_range(&self) -> (i64, i64) {
+        (self.accessible_start, self.accessible_end)
     }
 }
 

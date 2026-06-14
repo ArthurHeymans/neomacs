@@ -23,8 +23,8 @@ use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
-    BufferTextWindowRenderContextsRequest, BufferTextWindowTailDecorationRequest,
-    BufferTextWindowTailDecorationState, BufferTextWindowWalkSetup,
+    BufferTextWindowRenderContextsRequest, BufferTextWindowTailDecorationState,
+    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
     BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
@@ -65,9 +65,7 @@ use crate::display_row_append::{
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderState,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBeginState,
     BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixValues,
+    BufferTextWindowFinishState, BufferTextWindowTailFinalizeState, DisplayRowPrefixValues,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -1279,6 +1277,33 @@ impl LayoutEngine {
             max_rows,
             row_limit,
         );
+        let tail_request_context = BufferTextWindowTailRequestContext::new(
+            params,
+            window_start,
+            accessible_start,
+            accessible_end,
+            text_start_byte,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            content_x,
+            cols,
+            char_w,
+            char_h,
+            default_fg,
+            max_rows,
+            row_limit,
+            row_geometry_defaults,
+            retry_bounds,
+            body_install_context,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        );
 
         let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState {
             builder: &mut self.matrix_builder,
@@ -1602,75 +1627,44 @@ impl LayoutEngine {
             );
         let point_is_visible_eob = end_of_buffer_tail.point_is_visible_eob();
 
-        BufferTextWindowTailDecorationRequest::new(
-            params,
-            content_x,
-            cols,
-            text_y,
-            text_height,
-            char_w,
-            char_h,
-            default_fg,
-            max_rows,
-            row_limit,
-            row_geometry_defaults,
-        )
-        .apply(BufferTextWindowTailDecorationState {
-            x,
-            text_append_surface: &text_append_surface,
-            row_geometry: &row_geometry,
-            row_y_positions: &row_y_positions,
-            row_flags: &row_flags,
-            row_extend: &row_extend,
-            box_face: &box_face,
-        });
+        tail_request_context
+            .tail_decoration_request()
+            .apply(BufferTextWindowTailDecorationState {
+                x,
+                text_append_surface: &text_append_surface,
+                row_geometry: &row_geometry,
+                row_y_positions: &row_y_positions,
+                row_flags: &row_flags,
+                row_extend: &row_extend,
+                box_face: &box_face,
+            });
 
-        BufferTextWindowTailFinalizeRequest::new(
-            params,
-            text,
-            text_matrix_row_base,
-            text_area_left,
-            window_top,
-            text_y,
-            text_height,
-            char_w,
-            char_h,
-            window_start,
-            point_charpos,
-            charpos,
-            point_is_visible_eob,
-            row_limit,
-        )
-        .finalize_and_apply(BufferTextWindowTailFinalizeState {
-            cursor_info,
-            row_geometry: &row_geometry,
-            row_y_positions: &row_y_positions,
-            hit_row_range: &mut hit_row_range,
-            hit_rows: &mut hit_rows,
-            builder: &mut self.matrix_builder,
-            output_emitter: &mut output_emitter,
-            evaluator,
-        });
+        tail_request_context
+            .tail_finalize_request(text, charpos, point_is_visible_eob)
+            .finalize_and_apply(BufferTextWindowTailFinalizeState {
+                cursor_info,
+                row_geometry: &row_geometry,
+                row_y_positions: &row_y_positions,
+                hit_row_range: &mut hit_row_range,
+                hit_rows: &mut hit_rows,
+                builder: &mut self.matrix_builder,
+                output_emitter: &mut output_emitter,
+                evaluator,
+            });
 
         // GNU redisplay keeps iterating until point visibility converges or no
         // further progress can be made.  Advance by actual rendered row spans
         // from this pass rather than rescanning by logical newlines, since
         // wrapped and variable-height lines are exactly where newline-based
         // retry selection goes wrong.
-        let retry_outcome = BufferTextWindowVisibilityRetryRequest::new(
-            output_emitter.rows(),
-            window_start,
-            accessible_start,
-            accessible_end,
-            point_charpos,
-            charpos,
-            point_is_visible_eob,
-            params.is_minibuffer,
-            retry_bounds.text_area_top,
-            retry_bounds.text_area_bottom,
-            &buf_access,
-        )
-        .decide();
+        let retry_outcome = tail_request_context
+            .visibility_retry_request(
+                output_emitter.rows(),
+                charpos,
+                point_is_visible_eob,
+                &buf_access,
+            )
+            .decide();
         if retry_outcome.scroll_down_window_start().is_some() {
             tracing::debug!(
                 "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
@@ -1736,16 +1730,8 @@ impl LayoutEngine {
             return;
         }
 
-        let redisplay_positions = body_install_context
-            .request(
-                window_start,
-                text_start_byte,
-                byte_idx,
-                reserve_right_special_col,
-                reserve_right_border_col,
-                &row_flags,
-                char_w,
-            )
+        let redisplay_positions = tail_request_context
+            .body_install_request(byte_idx, &row_flags)
             .install_and_apply(BufferTextWindowBodyInstallState {
                 builder: &mut self.matrix_builder,
                 output_emitter: &output_emitter,
@@ -1794,21 +1780,14 @@ impl LayoutEngine {
             },
         );
 
-        let finished_window = BufferTextWindowFinishRequest::new(
-            params.window_id,
-            content_x,
-            char_w,
-            (text_area_left - params.bounds.x).round() as i64,
-            mode_line_height.round() as i64,
-            header_line_height.round() as i64,
-            tab_line_height.round() as i64,
-        )
-        .finish_and_snapshot(BufferTextWindowFinishState {
-            builder: &mut self.matrix_builder,
-            output_emitter,
-            evaluator,
-            hit_rows,
-        });
+        let finished_window = tail_request_context.finish_request().finish_and_snapshot(
+            BufferTextWindowFinishState {
+                builder: &mut self.matrix_builder,
+                output_emitter,
+                evaluator,
+                hit_rows,
+            },
+        );
         self.hit_data.push(finished_window.hit_data);
         self.display_snapshots.push(finished_window.snapshot);
 

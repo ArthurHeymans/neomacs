@@ -223,28 +223,48 @@ fn tail_decoration_request_reports_rows_considered_for_decorations() {
     )
     .into_setup(5, &setup);
 
-    let outcome = BufferTextWindowTailDecorationRequest::new(
+    let context = BufferTextWindowTailRequestContext::new(
         &params,
-        24.0,
-        20,
+        11,
+        1,
+        80,
+        4,
+        2,
+        setup.text_area_left,
+        setup.window_top,
         32.0,
         80.0,
+        24.0,
+        20,
         8.0,
         16.0,
         Color::from_pixel(0x00ff_ffff),
         5,
         output_setup.row_limit,
         setup.row_geometry_defaults,
-    )
-    .apply(BufferTextWindowTailDecorationState {
-        x: 40.0,
-        text_append_surface: &setup.text_append_surface,
-        row_geometry: &setup.row_geometry,
-        row_y_positions: &setup.row_y_positions,
-        row_flags: &setup.row_flags,
-        row_extend: &setup.row_extend,
-        box_face: &setup.box_face,
-    });
+        output_setup.retry_bounds,
+        output_setup.body_install_context,
+        true,
+        false,
+        12.0,
+        0.0,
+        0.0,
+    );
+
+    assert_eq!(context.window_start(), 11);
+    assert_eq!(context.accessible_range(), (1, 80));
+
+    let outcome = context
+        .tail_decoration_request()
+        .apply(BufferTextWindowTailDecorationState {
+            x: 40.0,
+            text_append_surface: &setup.text_append_surface,
+            row_geometry: &setup.row_geometry,
+            row_y_positions: &setup.row_y_positions,
+            row_flags: &setup.row_flags,
+            row_extend: &setup.row_extend,
+            box_face: &setup.box_face,
+        });
 
     assert!(outcome.box_face_active);
     assert!(outcome.row_extend_active);
