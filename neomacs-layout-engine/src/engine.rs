@@ -100,8 +100,6 @@ use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 
-/// Maximum number of characters in a ligature run before forced flush.
-const MAX_LIGATURE_RUN_LEN: usize = 64;
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
 const LISP_STRING_SOURCE_PREFIX: u64 = 2;
@@ -117,120 +115,6 @@ struct ScrollBarMetrics {
     thumb_start: f32,
     thumb_size: f32,
 }
-
-/// Buffer for accumulating same-face text runs for ligature shaping.
-struct LigatureRunBuffer {
-    chars: Vec<char>,
-    advances: Vec<f32>,
-    start_x: f32,
-    start_y: f32,
-    face_h: f32,
-    face_ascent: f32,
-    face_id: u32,
-    total_advance: f32,
-    is_overlay: bool,
-}
-
-impl LigatureRunBuffer {
-    fn new() -> Self {
-        Self {
-            chars: Vec::with_capacity(MAX_LIGATURE_RUN_LEN),
-            advances: Vec::with_capacity(MAX_LIGATURE_RUN_LEN),
-            start_x: 0.0,
-            start_y: 0.0,
-            face_h: 0.0,
-            face_ascent: 0.0,
-            face_id: 0,
-            total_advance: 0.0,
-            is_overlay: false,
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.chars.is_empty()
-    }
-
-    fn len(&self) -> usize {
-        self.chars.len()
-    }
-
-    fn clear(&mut self) {
-        self.chars.clear();
-        self.advances.clear();
-        self.total_advance = 0.0;
-    }
-
-    /// Push a character and its advance width into the run.
-    fn push(&mut self, ch: char, advance: f32) {
-        self.chars.push(ch);
-        self.advances.push(advance);
-        self.total_advance += advance;
-    }
-
-    /// Start a new run at the given position with the given face parameters.
-    fn start(
-        &mut self,
-        x: f32,
-        y: f32,
-        face_h: f32,
-        face_ascent: f32,
-        face_id: u32,
-        is_overlay: bool,
-    ) {
-        self.clear();
-        self.start_x = x;
-        self.start_y = y;
-        self.face_h = face_h;
-        self.face_ascent = face_ascent;
-        self.face_id = face_id;
-        self.is_overlay = is_overlay;
-    }
-}
-
-/// Check if a character is a ligature-eligible symbol/punctuation.
-/// Programming font ligatures only form between these characters.
-#[inline]
-#[cfg(test)]
-fn is_ligature_char(ch: char) -> bool {
-    matches!(
-        ch,
-        '!' | '#'
-            | '$'
-            | '%'
-            | '&'
-            | '*'
-            | '+'
-            | '-'
-            | '.'
-            | '/'
-            | ':'
-            | ';'
-            | '<'
-            | '='
-            | '>'
-            | '?'
-            | '@'
-            | '\\'
-            | '^'
-            | '|'
-            | '~'
-    )
-}
-
-/// Check if a run consists entirely of ligature-eligible characters.
-/// Mixed runs (e.g., "arrow:" or "Font:") should NOT be composed,
-/// only pure symbol runs (e.g., "->", "!=", "===").
-#[inline]
-#[cfg(test)]
-fn run_is_pure_ligature(run: &LigatureRunBuffer) -> bool {
-    run.chars.iter().all(|&ch| is_ligature_char(ch))
-}
-
-/// Flush the accumulated ligature run as either individual chars or a composed glyph.
-///
-/// NOTE: Glyph output has been migrated to `GlyphMatrixBuilder`. This function is now
-/// a no-op retained only to keep call-sites compiling during the migration.
-fn flush_run(_run: &LigatureRunBuffer, _ligatures: bool) {}
 
 #[cfg(test)]
 #[inline]
@@ -276,10 +160,6 @@ pub struct LayoutEngine {
     hit_data: Vec<WindowHitData>,
     /// Authoritative visible glyph geometry published back into core state.
     display_snapshots: Vec<WindowDisplaySnapshot>,
-    /// Reusable ligature run buffer
-    run_buf: LigatureRunBuffer,
-    /// Whether ligatures are enabled
-    pub ligatures_enabled: bool,
     /// Cosmic-text font metrics service.
     ///
     /// Populated by `enable_cosmic_metrics()` at GUI startup. Left
@@ -346,8 +226,6 @@ impl LayoutEngine {
             text_buf: Vec::with_capacity(64 * 1024), // 64KB initial
             hit_data: Vec::new(),
             display_snapshots: Vec::new(),
-            run_buf: LigatureRunBuffer::new(),
-            ligatures_enabled: false,
             font_metrics: Some(FontMetricsService::new()),
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
@@ -372,8 +250,6 @@ impl LayoutEngine {
             text_buf: Vec::with_capacity(64 * 1024),
             hit_data: Vec::new(),
             display_snapshots: Vec::new(),
-            run_buf: LigatureRunBuffer::new(),
-            ligatures_enabled: false,
             font_metrics: None,
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
@@ -1859,8 +1735,6 @@ impl LayoutEngine {
         );
         let mut active_face_state =
             DisplayRowActiveFaceState::new(default_resolved.clone(), default_measured_face);
-        // Per-face metrics — start with defaults, updated on face change.
-        let mut face_metrics = active_face_state.metrics();
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -2031,9 +1905,6 @@ impl LayoutEngine {
             buf_access.bytepos_to_charpos(text_start_byte as i64 + byte_idx as i64)
         };
 
-        let ligatures = self.ligatures_enabled;
-        self.run_buf.clear();
-
         // Margin state tracking
         let has_margins = params.left_margin_width > 0.0 || params.right_margin_width > 0.0;
 
@@ -2054,8 +1925,6 @@ impl LayoutEngine {
         macro_rules! resolve_current_face_state {
             () => {
                 if face_scan.should_resolve_at(charpos as usize) {
-                    flush_run(&self.run_buf, ligatures);
-                    self.run_buf.clear();
                     let mut resolved = face_resolver.face_at_pos(
                         buffer,
                         charpos as usize,
@@ -2104,7 +1973,7 @@ impl LayoutEngine {
                     );
                     resolved_measured_face.install_into(&mut self.matrix_builder);
                     active_face_state = resolved_measured_face.into_active_face_state();
-                    face_metrics = active_face_state.metrics();
+                    let face_metrics = active_face_state.metrics();
                     row_geometry.include_row_extents(face_metrics.row_height, face_metrics.ascent);
 
                     if resolved.extend {
@@ -2125,8 +1994,6 @@ impl LayoutEngine {
         macro_rules! save_word_wrap_candidate {
             ($ch:expr, $break_byte_idx:expr) => {
                 if word_wrap.can_record_candidate($ch) {
-                    flush_run(&self.run_buf, ligatures);
-                    self.run_buf.clear();
                     word_wrap.record_candidate(
                         $ch,
                         $break_byte_idx,
@@ -2226,9 +2093,6 @@ impl LayoutEngine {
                 };
 
                 if let Some(prefix_value) = prefix {
-                    // Flush ligature run before prefix
-                    flush_run(&self.run_buf, ligatures);
-                    self.run_buf.clear();
                     let prefix_source = prefix_request
                         .source_for_value(prefix_value, CharPos0::new(charpos as usize))
                         .expect("requested prefix should build a prefix source");
@@ -2301,9 +2165,6 @@ impl LayoutEngine {
                     // GNU displays ellipsis only when the matching
                     // `buffer-invisibility-spec' entry requests it.
                     if invisible.ellipsis {
-                        flush_run(&self.run_buf, ligatures);
-                        self.run_buf.clear();
-
                         let append_context = SyntheticTextRowAppendContext::new(
                             &text_append_surface,
                             &row_geometry,
@@ -2343,8 +2204,6 @@ impl LayoutEngine {
                         let (_before_strings, after_strings) =
                             invis_text_props.overlay_strings_at(charpos);
                         if !after_strings.is_empty() {
-                            flush_run(&self.run_buf, ligatures);
-                            self.run_buf.clear();
                             render_overlay_string_batch(
                                 evaluator,
                                 &mut output_emitter,
@@ -2377,9 +2236,6 @@ impl LayoutEngine {
                             );
                         }
                     }
-
-                    flush_run(&self.run_buf, ligatures);
-                    self.run_buf.clear();
                     continue;
                 }
                 text_property_checkpoints.record_invisible_next(next_visible);
@@ -2387,8 +2243,6 @@ impl LayoutEngine {
 
             // Handle hscroll: skip columns consumed by horizontal scroll
             if hscroll_skip.should_skip() {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
                 let ch_start_byte_idx = byte_idx;
                 let (ch, ch_len) = decode_utf8(&text[byte_idx..]);
                 byte_idx += ch_len;
@@ -2526,8 +2380,6 @@ impl LayoutEngine {
                 };
 
                 if let Some(prop_val) = display_prop_val {
-                    flush_run(&self.run_buf, ligatures);
-                    self.run_buf.clear();
                     let skip_to = text_property_checkpoints.display_skip_to(accessible_end);
                     let point_in_display_replacement = cursor_info.is_missing()
                         && point_charpos >= charpos
@@ -2654,8 +2506,6 @@ impl LayoutEngine {
 
             // Selective display: \r hides rest of line until \n
             if selective_display > 0 && ch == '\r' {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
                 let append_context = SyntheticTextRowAppendContext::new(
                     &text_append_surface,
                     &row_geometry,
@@ -2733,8 +2583,6 @@ impl LayoutEngine {
             save_word_wrap_candidate!(ch, ch_start_byte_idx);
 
             if ch == '\n' {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
                 if cursor_info.is_missing() && point_charpos == charpos {
                     // GNU `set_cursor_from_row` treats the terminating
                     // newline as an exact match for point on this row.  The
@@ -2885,8 +2733,6 @@ impl LayoutEngine {
 
             // Control characters: render as ^X notation
             if let Some(special_source_request) = buffer_source_char.control_special_request() {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
                 let special_layout_plan = buffer_row_append_context
                     .prepare_special_source_char_layout_plan(
                         &row_geometry,
@@ -3024,8 +2870,6 @@ impl LayoutEngine {
 
             // Nobreak character display (U+00A0 non-breaking space, U+00AD soft hyphen)
             if let Some(special_source_request) = buffer_source_char.nobreak_special_request() {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
                 if params.nobreak_char_fg != 0 {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
@@ -3066,9 +2910,6 @@ impl LayoutEngine {
             if let Some(special_source_request) =
                 buffer_source_char.cluster_special_request(cluster_tail)
             {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
-
                 let special_plan =
                     special_source_request.append_plan_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
@@ -3114,8 +2955,6 @@ impl LayoutEngine {
             let advance = append_plan.advance_px();
             update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx, advance);
             if ch != '\t' && x + advance > text_append_surface.right_edge() {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
                 if params.truncate_lines {
                     row_geometry.mark_current_row_flag_kind(
                         &mut row_flags,
@@ -3306,9 +3145,6 @@ impl LayoutEngine {
                 );
                 let (before_strings, _) = text_props.overlay_strings_at(charpos);
                 if !before_strings.is_empty() {
-                    // Flush run buffer before emitting overlay chars
-                    flush_run(&self.run_buf, ligatures);
-                    self.run_buf.clear();
                     render_overlay_string_batch(
                         evaluator,
                         &mut output_emitter,
@@ -3342,25 +3178,6 @@ impl LayoutEngine {
                 }
             }
 
-            // Accumulate drawable text into the ligature run buffer. Tabs are
-            // emitted as stretch glyphs through the display-row builder.
-            if ch == '\t' {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
-            } else if self.run_buf.is_empty() {
-                let gy = row_geometry.glyph_y(raise_span.value_or(0.0));
-                self.run_buf.start(
-                    x,
-                    gy,
-                    face_metrics.row_height,
-                    face_metrics.ascent,
-                    active_face_state.face_id(),
-                    false,
-                );
-            }
-            if ch != '\t' {
-                self.run_buf.push(ch, advance);
-            }
             let appended = buffer_row_append_context.append_source_char_plan_to_text_row(
                 &append_geometry,
                 &mut self.matrix_builder,
@@ -3373,12 +3190,6 @@ impl LayoutEngine {
             let Some((_progress, position)) = appended else {
                 break;
             };
-
-            // Flush if run is too long
-            if self.run_buf.len() >= MAX_LIGATURE_RUN_LEN {
-                flush_run(&self.run_buf, ligatures);
-                self.run_buf.clear();
-            }
 
             x = position.x_px;
             col = position.col;
@@ -3393,9 +3204,6 @@ impl LayoutEngine {
                 );
                 let (_, after_strings) = text_props.overlay_strings_at(charpos);
                 if !after_strings.is_empty() {
-                    // Flush run buffer before emitting overlay chars
-                    flush_run(&self.run_buf, ligatures);
-                    self.run_buf.clear();
                     render_overlay_string_batch(
                         evaluator,
                         &mut output_emitter,
@@ -3432,9 +3240,6 @@ impl LayoutEngine {
             trailing_whitespace
                 .track_rendered_char(ch, row_geometry.start_marker_at_x(x - advance));
         }
-
-        flush_run(&self.run_buf, ligatures);
-        self.run_buf.clear();
 
         let point_is_visible_eob = point_charpos == accessible_end && charpos == accessible_end;
 
