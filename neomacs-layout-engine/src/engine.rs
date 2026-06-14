@@ -59,13 +59,13 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextAppendRequest,
-    BufferOverlayStringRenderContext, BufferSyntheticTextRenderContext,
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
-    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
-    DisplayRowTextWindowTransitionContext, DisplayRowTransitionPrefixContext,
-    LispStringRowAppendContext, SyntheticTextAppendRequest, SyntheticTextMarker,
+    BufferLinePrefixRenderContext, BufferOverlayStringRenderContext,
+    BufferSyntheticTextRenderContext, BufferTextPreparedSourceCharAppend,
+    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
+    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
+    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTextWindowEmitContext, DisplayRowTextWindowTransitionContext,
+    DisplayRowTransitionPrefixContext, SyntheticTextAppendRequest, SyntheticTextMarker,
     TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
@@ -88,7 +88,6 @@ use crate::display_row_walk_state::{
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos, skip_to_newline,
 };
-use crate::display_source_resolver::display_string_base_face;
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
@@ -2083,45 +2082,28 @@ impl LayoutEngine {
 
             // --- Line/wrap prefix rendering ---
             if prefix_request.is_requested() {
-                let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
-                let line_property = text_props.get_property(charpos, Value::symbol("line-prefix"));
-                let wrap_property = text_props.get_property(charpos, Value::symbol("wrap-prefix"));
-
-                if let Some(prefix_source) = prefix_request.source_from_values(
-                    prefix_values.with_properties(line_property, wrap_property),
-                    CharPos0::new(charpos as usize),
-                ) {
-                    let prefix_base_face = display_string_base_face(
-                        buffer,
-                        face_resolver,
-                        prefix_source.origin(),
-                        prefix_source.base_face_policy(),
-                        &mut face_ids,
-                        &mut self.matrix_builder,
-                    );
-
-                    let append_context = LispStringRowAppendContext::new(
-                        &text_append_surface,
-                        &row_geometry,
-                        &active_face_state,
-                        raise_span.value_or(0.0),
-                        char_h,
-                    );
-                    let position = append_context.render_prefix_source_to_text_row_and_emit(
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        &mut face_ids,
-                        &prefix_base_face,
-                        prefix_source,
-                        DisplayRowPosition { x_px: x, col },
-                    );
-                    x = position.x_px;
-                    col = position.col;
-                }
-                prefix_request.clear();
+                let position = BufferLinePrefixRenderContext::new(
+                    prefix_values,
+                    &text_append_surface,
+                    &row_geometry,
+                    &active_face_state,
+                    raise_span.value_or(0.0),
+                    char_h,
+                )
+                .render_requested_to_text_row_and_emit(
+                    &mut prefix_request,
+                    evaluator,
+                    &mut output_emitter,
+                    buffer,
+                    charpos,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut face_ids,
+                    &mut self.matrix_builder,
+                    DisplayRowPosition { x_px: x, col },
+                );
+                x = position.x_px;
+                col = position.col;
             }
 
             // --- Invisible text check ---

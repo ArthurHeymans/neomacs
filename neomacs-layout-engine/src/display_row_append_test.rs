@@ -34,7 +34,7 @@ use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunM
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
 use crate::window_output::TextMatrixRowTransition;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::GlyphType;
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::eval::{
@@ -1179,6 +1179,82 @@ fn display_row_prefix_source_builds_append_request_with_prefix_source_id() {
     assert_eq!(request.value, value);
     assert_eq!(request.source_id, LispStringSourceId::PREFIX);
     assert_eq!(request.position, DisplayRowPosition { x_px: 10.0, col: 2 });
+}
+
+#[test]
+fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("abc");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-line-prefix-context", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let values = DisplayRowPrefixValues::default_values(Some(Value::string("=>")), None);
+    let mut prefix_request = DisplayRowPrefixRequest::Line;
+
+    let end =
+        BufferLinePrefixRenderContext::new(values, &surface, &geometry, &active_face, 0.0, 16.0)
+            .render_requested_to_text_row_and_emit(
+                &mut prefix_request,
+                &mut eval,
+                &mut output_emitter,
+                &snapshot,
+                0,
+                &mut font_metrics,
+                &face_resolver,
+                &mut face_ids,
+                &mut builder,
+                DisplayRowPosition { x_px: 0.0, col: 0 },
+            );
+
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
+    assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 2);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '=' }));
+            assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: '>' }));
+            assert_eq!(text[0].face_id, 0);
+            assert_eq!(text[1].face_id, 0);
+        })
+        .expect("current row");
 }
 
 #[test]

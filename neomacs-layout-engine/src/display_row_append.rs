@@ -49,8 +49,8 @@ use crate::display_source::{
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
     DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace, ResolvedDisplayReplacement,
-    display_string_base_face_for_active_row, resolve_and_install_display_string_base_face,
-    resolve_display_replacement,
+    display_string_base_face, display_string_base_face_for_active_row,
+    resolve_and_install_display_string_base_face, resolve_display_replacement,
 };
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
@@ -1169,6 +1169,15 @@ pub(crate) struct DisplayRowPrefixSource {
     kind: DisplayRowPrefixKind,
 }
 
+pub(crate) struct BufferLinePrefixRenderContext<'a> {
+    values: DisplayRowPrefixValues,
+    append_surface: &'a DisplayRowAppendSurface,
+    row_geometry: &'a DisplayRowGeometryState,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+}
+
 impl DisplayRowPrefixRequest {
     pub(crate) fn initial(has_prefix: bool, has_line_prefix: bool) -> Self {
         if has_prefix && has_line_prefix {
@@ -1307,6 +1316,85 @@ impl DisplayRowPrefixSource {
 
     fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
         LispStringSourceAppendRequest::new(position, LispStringSourceId::PREFIX, self.value)
+    }
+}
+
+impl<'a> BufferLinePrefixRenderContext<'a> {
+    pub(crate) fn new(
+        values: DisplayRowPrefixValues,
+        append_surface: &'a DisplayRowAppendSurface,
+        row_geometry: &'a DisplayRowGeometryState,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+    ) -> Self {
+        Self {
+            values,
+            append_surface,
+            row_geometry,
+            active_face_state,
+            glyph_y_offset,
+            default_row_height,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_requested_to_text_row_and_emit<B: LayoutBufferView>(
+        self,
+        request: &mut DisplayRowPrefixRequest,
+        evaluator: &mut Context,
+        output_emitter: &mut WindowOutputEmitter,
+        buffer: &B,
+        anchor_charpos: i64,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        builder: &mut GlyphMatrixBuilder,
+        position: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        if !request.is_requested() {
+            return position;
+        }
+
+        let text_props = RustTextPropAccess::new(buffer);
+        let line_property = text_props.get_property(anchor_charpos, Value::symbol("line-prefix"));
+        let wrap_property = text_props.get_property(anchor_charpos, Value::symbol("wrap-prefix"));
+        let source = request.source_from_values(
+            self.values.with_properties(line_property, wrap_property),
+            CharPos0::new(anchor_charpos as usize),
+        );
+        request.clear();
+
+        let Some(prefix_source) = source else {
+            return position;
+        };
+
+        let prefix_base_face = display_string_base_face(
+            buffer,
+            face_resolver,
+            prefix_source.origin(),
+            prefix_source.base_face_policy(),
+            face_ids,
+            builder,
+        );
+        LispStringRowAppendContext::new(
+            self.append_surface,
+            self.row_geometry,
+            self.active_face_state,
+            self.glyph_y_offset,
+            self.default_row_height,
+        )
+        .render_prefix_source_to_text_row_and_emit(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            &prefix_base_face,
+            prefix_source,
+            position,
+        )
     }
 }
 
