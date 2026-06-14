@@ -60,12 +60,12 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyTextAppendAction, BufferDisplayPropertyTextAppendRequest,
-    BufferOverlayStringRenderContext, BufferTextPreparedSourceCharAppend,
-    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
-    BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
-    DisplayRowLineBreakTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    LispStringRowAppendContext, SyntheticTextMarker, SyntheticTextRowAppendContext,
-    TextWindowAppendSurfaceRequest,
+    BufferOverlayStringRenderContext, BufferSyntheticTextRenderContext,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextSourceChar, BufferTextSourceCharOverflowAction,
+    BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
+    SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2006,6 +2006,19 @@ impl LayoutEngine {
             };
         }
 
+        macro_rules! synthetic_text_context {
+            ($glyph_y_offset:expr) => {
+                BufferSyntheticTextRenderContext::new(
+                    &text_append_surface,
+                    &active_face_state,
+                    $glyph_y_offset,
+                    char_h,
+                    default_face_ascent,
+                    char_w,
+                )
+            };
+        }
+
         // --- GlyphMatrix builder: begin window and first row ---
         let matrix_rows = text_matrix_row_base + text_matrix_rows + bottom_chrome_rows;
         let matrix_cols = cols.max(1);
@@ -2140,23 +2153,18 @@ impl LayoutEngine {
                     // GNU displays ellipsis only when the matching
                     // `buffer-invisibility-spec' entry requests it.
                     if invisible.ellipsis {
-                        let append_context = SyntheticTextRowAppendContext::new(
-                            &text_append_surface,
-                            &row_geometry,
-                            &active_face_state,
-                            raise_span.value_or(0.0),
-                            char_h,
-                        );
-                        if let Some((_progress, position)) = append_context
-                            .append_active_face_marker_to_text_row_and_emit(
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                                &mut self.font_metrics,
-                                face_resolver,
-                                DisplayRowPosition { x_px: x, col },
-                                SyntheticTextMarker::InvisibleEllipsis,
-                            )
+                        if let Some((_progress, position)) =
+                            synthetic_text_context!(raise_span.value_or(0.0))
+                                .render_active_marker_to_text_row(
+                                    &mut self.matrix_builder,
+                                    &mut output_emitter,
+                                    evaluator,
+                                    &mut self.font_metrics,
+                                    face_resolver,
+                                    &row_geometry,
+                                    DisplayRowPosition { x_px: x, col },
+                                    SyntheticTextMarker::InvisibleEllipsis,
+                                )
                         {
                             x = position.x_px;
                             col = position.col;
@@ -2261,30 +2269,15 @@ impl LayoutEngine {
 
                     // When hscroll is exhausted, show $ indicator at left edge
                     if !hscroll_skip.should_skip() && hscroll_skip.should_show_left_truncation() {
-                        let append_context = SyntheticTextRowAppendContext::new(
-                            &text_append_surface,
-                            &row_geometry,
-                            &active_face_state,
-                            0.0,
-                            char_h,
-                        );
-                        if let Some((_progress, position)) = append_context
-                            .append_text_row_metrics_marker_to_text_row_and_emit(
+                        if let Some((_progress, position)) = synthetic_text_context!(0.0)
+                            .render_hscroll_truncation_marker_to_text_row(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
                                 face_resolver,
-                                DisplayRowPosition {
-                                    x_px: content_x,
-                                    col: 0,
-                                },
-                                SyntheticTextMarker::HscrollTruncation,
-                                BasicFaceId::Default.into(),
-                                face_resolver.default_face(),
-                                char_h,
-                                default_face_ascent,
-                                char_w,
+                                &row_geometry,
+                                content_x,
                             )
                         {
                             x = position.x_px;
@@ -2433,23 +2426,18 @@ impl LayoutEngine {
 
             // Selective display: \r hides rest of line until \n
             if selective_display > 0 && ch == '\r' {
-                let append_context = SyntheticTextRowAppendContext::new(
-                    &text_append_surface,
-                    &row_geometry,
-                    &active_face_state,
-                    raise_span.value_or(0.0),
-                    char_h,
-                );
-                if let Some((_progress, position)) = append_context
-                    .append_active_face_marker_to_text_row_and_emit(
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        DisplayRowPosition { x_px: x, col },
-                        SyntheticTextMarker::SelectiveEllipsis,
-                    )
+                if let Some((_progress, position)) =
+                    synthetic_text_context!(raise_span.value_or(0.0))
+                        .render_active_marker_to_text_row(
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                            &mut self.font_metrics,
+                            face_resolver,
+                            &row_geometry,
+                            DisplayRowPosition { x_px: x, col },
+                            SyntheticTextMarker::SelectiveEllipsis,
+                        )
                 {
                     x = position.x_px;
                     col = position.col;

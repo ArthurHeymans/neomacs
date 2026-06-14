@@ -68,6 +68,7 @@ use crate::window_output::{
     emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
     finish_and_end_text_matrix_row_output,
 };
+use neomacs_display_protocol::face::BasicFaceId;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
@@ -2007,6 +2008,104 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
             ascent_px,
             char_width_px,
         )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferSyntheticTextRenderContext<'a> {
+    append_surface: &'a DisplayRowAppendSurface,
+    active_face: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    default_row_ascent: f32,
+    default_char_width: f32,
+}
+
+impl<'a> BufferSyntheticTextRenderContext<'a> {
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        default_row_ascent: f32,
+        default_char_width: f32,
+    ) -> Self {
+        Self {
+            append_surface,
+            active_face,
+            glyph_y_offset,
+            default_row_height,
+            default_row_ascent,
+            default_char_width,
+        }
+    }
+
+    fn row_context(
+        self,
+        geometry: &'a DisplayRowGeometryState,
+    ) -> SyntheticTextRowAppendContext<'a> {
+        SyntheticTextRowAppendContext::new(
+            self.append_surface,
+            geometry,
+            self.active_face,
+            self.glyph_y_offset,
+            self.default_row_height,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_active_marker_to_text_row(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        geometry: &'a DisplayRowGeometryState,
+        position: DisplayRowPosition,
+        marker: SyntheticTextMarker,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.row_context(geometry)
+            .append_active_face_marker_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                position,
+                marker,
+            )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_hscroll_truncation_marker_to_text_row(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+        geometry: &'a DisplayRowGeometryState,
+        content_x: f32,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.row_context(geometry)
+            .append_text_row_metrics_marker_to_text_row_and_emit(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                DisplayRowPosition {
+                    x_px: content_x,
+                    col: 0,
+                },
+                SyntheticTextMarker::HscrollTruncation,
+                BasicFaceId::Default.into(),
+                face_resolver.default_face(),
+                self.default_row_height,
+                self.default_row_ascent,
+                self.default_char_width,
+            )
     }
 }
 
