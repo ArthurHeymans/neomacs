@@ -1494,14 +1494,9 @@ impl<'row> LispStringRowAppendContext<'row> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_active_face_source_request_to_text_row_and_emit(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         base_face_id: u32,
         base_face: &'row ResolvedFace,
@@ -1515,39 +1510,21 @@ impl<'row> LispStringRowAppendContext<'row> {
         };
         let frame = self.active_face_context.active_face_frame();
         source_session
-            .render_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                face_ids,
-                frame,
-                position,
-            )
+            .render_to_text_row_and_emit(state, face_ids, frame, position)
             .map(|outcome| outcome.end_position())
             .unwrap_or(position)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_prefix_source_to_text_row_and_emit(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &DisplayStringBaseFace,
         prefix_source: DisplayRowPrefixSource,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         self.render_active_face_source_request_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            state,
             face_ids,
             base_face.face_id(),
             base_face.face(),
@@ -1556,15 +1533,10 @@ impl<'row> LispStringRowAppendContext<'row> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn render_lisp_string_source_append_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    font_metrics: &mut Option<FontMetricsService>,
+    state: &mut TextRowSourceRenderState<'_>,
     source: &mut LispStringSourceCursor,
     source_state: &mut DisplayRowSourceState,
-    face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     base_face_id: u32,
     face_ids: &mut FrameFaceIdAllocator,
@@ -1578,18 +1550,7 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
         position,
         DisplayRowAppendKind::SourceText,
     )
-    .render_source_cursor_to_text_row_and_emit(
-        &mut TextRowSourceRenderState::new(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-        ),
-        source,
-        source_state,
-        face_ids,
-    )
+    .render_source_cursor_to_text_row_and_emit(state, source, source_state, face_ids)
 }
 
 pub(crate) struct LispStringSourceAppendContext<'a> {
@@ -1614,26 +1575,17 @@ impl<'a> LispStringSourceAppendContext<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_to_text_row_and_emit(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
         render_lisp_string_source_append_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
+            state,
             self.source,
             self.source_state,
-            face_resolver,
             self.base_face,
             self.base_face_id,
             face_ids,
@@ -1703,28 +1655,15 @@ impl<'a> LispStringSourceAppendSession<'a> {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_to_text_row_and_emit(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        self.append_context().render_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            face_ids,
-            frame,
-            position,
-        )
+        self.append_context()
+            .render_to_text_row_and_emit(state, face_ids, frame, position)
     }
 
     fn discard_pending_until_row_break(&mut self) -> bool {
@@ -1982,11 +1921,13 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             self.default_row_height,
         )
         .render_prefix_source_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            &mut TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
             face_ids,
             &prefix_base_face,
             prefix_source,
@@ -2548,11 +2489,13 @@ fn render_overlay_string<B: LayoutBufferView>(
         }
 
         let Some(outcome) = source_context.render_to_text_row_and_emit(
-            state.builder,
-            state.output_emitter,
-            state.evaluator,
-            state.font_metrics,
-            state.face_resolver,
+            &mut TextRowSourceRenderState::new(
+                state.builder,
+                state.output_emitter,
+                state.evaluator,
+                state.font_metrics,
+                state.face_resolver,
+            ),
             state.face_ids,
             state.geometry,
             DisplayRowPosition {
@@ -2685,14 +2628,9 @@ pub(crate) struct LispStringSourceRowAppendContext<'a> {
 }
 
 impl<'a> LispStringSourceRowAppendContext<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_to_text_row_and_emit(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         geometry: &DisplayRowGeometryState,
         position: DisplayRowPosition,
@@ -2708,16 +2646,8 @@ impl<'a> LispStringSourceRowAppendContext<'a> {
             self.metrics.ascent,
             self.metrics.char_width,
         );
-        self.source_context.render_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            face_ids,
-            frame,
-            position,
-        )
+        self.source_context
+            .render_to_text_row_and_emit(state, face_ids, frame, position)
     }
 }
 
@@ -2764,28 +2694,15 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_to_text_row_and_emit(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         geometry: &DisplayRowGeometryState,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        self.append_context().render_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            face_ids,
-            geometry,
-            position,
-        )
+        self.append_context()
+            .render_to_text_row_and_emit(state, face_ids, geometry, position)
     }
 
     pub(crate) fn discard_pending_until_row_break(&mut self) -> bool {
@@ -3281,11 +3198,13 @@ pub(crate) fn append_lisp_string_to_text_row(
     let mut font_metrics = None;
     source_session
         .render_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            &mut font_metrics,
-            face_resolver,
+            &mut TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                &mut font_metrics,
+                face_resolver,
+            ),
             face_ids,
             frame,
             position,

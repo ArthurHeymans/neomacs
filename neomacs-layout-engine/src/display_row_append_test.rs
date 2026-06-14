@@ -5182,11 +5182,13 @@ fn lisp_string_append_context_appends_fragment_items() {
         Value::string("=>"),
     );
     let end = append_context.render_active_face_source_request_to_text_row_and_emit(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &mut face_ids,
         0,
         base_face,
@@ -7076,11 +7078,13 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
 
     let first = append_context
         .render_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             &mut face_ids,
             &first_geometry,
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -7095,11 +7099,13 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
 
     let second = append_context
         .render_to_text_row_and_emit(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             &mut face_ids,
             &second_geometry,
             DisplayRowPosition { x_px: 0.0, col: 0 },
