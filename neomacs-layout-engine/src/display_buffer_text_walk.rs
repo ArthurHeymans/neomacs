@@ -15,11 +15,11 @@ use crate::display_row_append::{
     BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
     BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
-    BufferTextWindowFinishRequest, BufferTextWindowTailFinalizeOutcome,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
-    DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTransitionContinuation, TextWindowAppendSurfaceRequest,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeOutcome, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
+    BufferTextWindowVisibilityRetryRequest, DisplayRowAppendSurface, DisplayRowPrefixRequest,
+    DisplayRowPrefixValues, DisplayRowTransitionContinuation, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -33,7 +33,7 @@ use crate::display_row_walk_state::{
     WordWrapRenderState,
 };
 use crate::font_metrics::FontMetricsService;
-use crate::hit_test::HitRow;
+use crate::hit_test::{HitRow, WindowHitData};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{
     FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess,
@@ -44,7 +44,7 @@ use crate::window_output::{TextWindowRedisplayPositions, WindowOutputEmitter};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
-use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowId};
+use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextWindowGeometryRequest {
@@ -232,6 +232,15 @@ pub(crate) struct BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
     row_flags: &'emit DisplayRowFlags,
     row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
     box_face: &'emit BoxFaceRowState,
+}
+
+pub(crate) struct BufferTextWindowFinishInstallState<'a> {
+    pub(crate) builder: &'a mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: WindowOutputEmitter,
+    pub(crate) evaluator: &'a mut Context,
+    pub(crate) hit_rows: Vec<HitRow>,
+    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
+    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1003,6 +1012,19 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
             self.header_line_height.round() as i64,
             self.tab_line_height.round() as i64,
         )
+    }
+
+    pub(crate) fn finish_and_install(&self, state: BufferTextWindowFinishInstallState<'_>) {
+        let finished_window =
+            self.finish_request()
+                .finish_and_snapshot(BufferTextWindowFinishState {
+                    builder: state.builder,
+                    output_emitter: state.output_emitter,
+                    evaluator: state.evaluator,
+                    hit_rows: state.hit_rows,
+                });
+        state.hit_data.push(finished_window.hit_data);
+        state.display_snapshots.push(finished_window.snapshot);
     }
 
     #[cfg(test)]

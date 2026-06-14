@@ -21,9 +21,10 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowLoopRenderState, BufferTextWindowLoopRequestContext,
-    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
+    BufferTextWindowFinishInstallState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
+    BufferTextWindowLocalDisplayPolicy, BufferTextWindowLoopRenderState,
+    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
     BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
     BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
     BufferTextWindowWalkSetupRequest,
@@ -60,9 +61,7 @@ use crate::display_row_append::DisplayRowPrefixRequest;
 use crate::display_row_append::DisplayRowPrefixValues;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
-use crate::display_row_append::{
-    BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest, BufferTextWindowFinishState,
-};
+use crate::display_row_append::{BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest};
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
     new_display_row,
@@ -1446,16 +1445,14 @@ impl LayoutEngine {
             },
         );
 
-        let finished_window = tail_request_context.finish_request().finish_and_snapshot(
-            BufferTextWindowFinishState {
-                builder: &mut self.matrix_builder,
-                output_emitter,
-                evaluator,
-                hit_rows,
-            },
-        );
-        self.hit_data.push(finished_window.hit_data);
-        self.display_snapshots.push(finished_window.snapshot);
+        tail_request_context.finish_and_install(BufferTextWindowFinishInstallState {
+            builder: &mut self.matrix_builder,
+            output_emitter,
+            evaluator,
+            hit_rows,
+            hit_data: &mut self.hit_data,
+            display_snapshots: &mut self.display_snapshots,
+        });
 
         // Persist the face-id counter back to the frame-wide
         // slot so the NEXT window in this frame starts allocating
