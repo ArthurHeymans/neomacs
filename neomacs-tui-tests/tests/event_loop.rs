@@ -166,25 +166,16 @@ fn synchronous_shell_command_completes_and_editor_stays_responsive() {
     assert_eval_echoes(&mut neo, "(+ 40 2)", "42");
 }
 
-/// KNOWN BUG (issue #132, not yet fixed) — `#[ignore]`d so the suite stays
-/// green while the failure is tracked in-code rather than hidden.
-///
-/// With `shell-command-switch "-ic"`, a synchronous `M-!` launches an
-/// interactive `bash -ic …`. Neomacs then wedges: it blocks forever in
-/// `command.output()` (observed `wchan = pipe_read`) draining the child's
-/// pipe, the `Shell command:` prompt never clears, and the editor stops
-/// responding to input. GNU's `child_setup` does `setpgid(0,0)` **and**
-/// `tcsetpgrp(0, pid)` (callproc.c:1289-1290) to hand the controlling
-/// terminal to the synchronous child's group; Neomacs's `isolate_child_command`
-/// only does the `process_group(0)` half, so the interactive child sits as a
-/// background process group on Neomacs's controlling pty and never exits
-/// cleanly. The earlier #132 work fixed the *suspend* but left this *hang*.
-///
-/// Run with `cargo nextest run -E 'test(=...)' --run-ignored all` to verify a
-/// fix; remove `#[ignore]` once the synchronous interactive shell-command path
-/// reaps the child and returns responsive. See [[project_issue132_jobcontrol_suspend]].
+/// Issue #132 (hang): with `shell-command-switch "-ic"`, a synchronous `M-!`
+/// launches an interactive `bash -ic …`. Before the fix Neomacs wedged forever
+/// in `command.output()` (`wchan = pipe_read`): the interactive child, left as
+/// a background process group on Neomacs's controlling pty, was SIGTTOU/SIGTTIN-
+/// stopped during its own job-control init and never exited. The fix `setsid`s
+/// every pipe-stdio child (`isolate_child_command`), giving it no controlling
+/// terminal, so `bash -i` degrades to "no job control" and runs to completion.
+/// This guards that the synchronous shell-command returns and the editor stays
+/// responsive afterward.
 #[test]
-#[ignore = "known #132 hang: synchronous interactive (bash -ic) shell-command wedges neomacs"]
 fn interactive_switch_synchronous_shell_command_stays_responsive() {
     let mut neo = boot_neo("");
 
@@ -199,7 +190,7 @@ fn interactive_switch_synchronous_shell_command_stays_responsive() {
     neo.send_key("RET");
     neo.read(Duration::from_secs(2));
 
-    // Currently hangs here: the editor never returns from the synchronous
-    // interactive shell command, so this eval never echoes.
+    // The synchronous interactive shell command must return and leave the
+    // command loop responsive: an eval round-trips.
     assert_eval_echoes(&mut neo, "(+ 40 2)", "42");
 }

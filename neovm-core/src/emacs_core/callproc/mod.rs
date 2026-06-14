@@ -16,19 +16,24 @@ use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferManager, EmacsByteRange};
 use crate::heap_types::LispString;
 
-/// Build a child `Command` already isolated into its own OS process group.
+/// Build a child `Command` already isolated into its own OS session.
 ///
-/// Every subprocess neomacs launches MUST go through this (instead of bare
-/// `Command::new`) so that a child's job-control signals can never suspend or
-/// kill the editor. This mirrors GNU Emacs's `child_setup` (callproc.c), which
-/// does `setpgid (0, 0)` in every child: an interactive shell (e.g. via
-/// `shell-command-switch "-ic"` → `bash -i`) grabs the controlling terminal and
-/// emits SIGTSTP/SIGTTOU; without isolation that stop hits neomacs's whole
-/// process group and freezes the editor (issue #132).
+/// Every pipe-stdio subprocess neomacs launches MUST go through this (instead
+/// of bare `Command::new`) so that an interactive child (e.g. `bash -i` via
+/// `shell-command-switch "-ic"`) cannot disrupt the editor. Such a child does
+/// terminal job-control setup; without isolation that breaks neomacs two ways,
+/// both reported under issue #132:
+///   * suspend — the child's SIGTSTP/SIGTTOU reach neomacs's process group and
+///     stop the whole editor;
+///   * hang — left as a *background* process group on neomacs's controlling
+///     terminal, the child is SIGTTOU/SIGTTIN-stopped during its own job-control
+///     init and never exits, wedging a synchronous `call-process` wait forever.
 ///
-/// Cross-platform: Unix puts the child in a fresh process group pre-exec;
-/// Windows gives it its own process group (`CREATE_NEW_PROCESS_GROUP`); other
-/// targets fall back to a plain command.
+/// On Unix we therefore `setsid` the child (new session: own process group AND
+/// no controlling terminal), which fixes both. On Windows we give it its own
+/// process group (`CREATE_NEW_PROCESS_GROUP`). Children that genuinely need a
+/// controlling terminal (M-x shell/term) are spawned via portable_pty, which
+/// sets up the pty as their controlling terminal — they do not use this path.
 pub(crate) fn new_child_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
     let mut command = Command::new(program);
     isolate_child_command(&mut command);
@@ -42,9 +47,30 @@ pub(crate) fn isolate_child_command(command: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        // setpgid(0, 0) in the child before exec: its SIGTSTP/SIGTTOU stay in
-        // its own group and cannot stop neomacs.
-        command.process_group(0);
+        // setsid() in the child before exec puts it in a brand-new session:
+        // its own process group AND no controlling terminal. Two #132 reasons:
+        //   * isolation — the child's SIGTSTP/SIGTTOU stay in its own group and
+        //     can never stop neomacs (the original suspend);
+        //   * no controlling tty — an interactive child (`bash -i` via
+        //     `shell-command-switch "-ic"`) is otherwise a *background* process
+        //     group on neomacs's controlling terminal, gets SIGTTOU/SIGTTIN-
+        //     stopped during its job-control init, and wedges a synchronous
+        //     `call-process` wait forever (the hang). With no controlling
+        //     terminal bash degrades to "no job control" and runs to completion.
+        // `setsid` subsumes `setpgid(0, 0)`. PTY children that *need* a
+        // controlling terminal go through portable_pty instead, not this path.
+        //
+        // SAFETY: the closure runs in the forked child before exec and calls
+        // only the async-signal-safe `setsid`. A freshly forked process is
+        // never a process-group leader, so `setsid` cannot fail with EPERM.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
     }
     #[cfg(windows)]
     {
@@ -1004,12 +1030,17 @@ mod child_isolation_tests {
     use super::new_child_command;
     use std::process::Stdio;
 
-    /// Regression test for issue #132: every spawned child must live in its own
-    /// process group, so a child's job-control signals (SIGTSTP/SIGTTOU from an
-    /// interactive `bash -i`) cannot reach — and suspend — the editor.
+    /// Regression test for issue #132: every spawned pipe-stdio child must live
+    /// in its own *session* (`setsid`) — its own process group AND no
+    /// controlling terminal. The process group stops a child's SIGTSTP/SIGTTOU
+    /// from suspending the editor (the suspend); the lack of a controlling
+    /// terminal stops an interactive `bash -i` from being SIGTTOU/SIGTTIN-
+    /// stopped as a background process group, which would wedge a synchronous
+    /// `call-process` forever (the hang).
     #[test]
-    fn child_runs_in_its_own_process_group() {
+    fn child_runs_in_its_own_session() {
         let parent_pgid = unsafe { libc::getpgrp() };
+        let parent_sid = unsafe { libc::getsid(0) };
         let mut child = new_child_command("sh")
             .arg("-c")
             .arg("sleep 1")
@@ -1019,18 +1050,32 @@ mod child_isolation_tests {
             .spawn()
             .expect("spawn child");
         let pid = child.id() as libc::pid_t;
-        // Read the child's process group while it is still alive.
+        // Read the child's process group + session while it is still alive.
         let child_pgid = unsafe { libc::getpgid(pid) };
+        let child_sid = unsafe { libc::getsid(pid) };
         let _ = child.kill();
         let _ = child.wait();
+
         assert!(child_pgid > 0, "getpgid failed for live child");
         assert_ne!(
             child_pgid, parent_pgid,
-            "child shares the editor's process group; its SIGTSTP/SIGTTOU could suspend neomacs (#132)"
+            "child shares the editor's process group; its SIGTSTP/SIGTTOU could suspend neomacs (#132 suspend)"
         );
         assert_eq!(
             child_pgid, pid,
-            "isolated child should lead its own process group (setpgid(0,0))"
+            "isolated child should lead its own process group"
+        );
+        // setsid makes the child a session leader (sid == pid) in a session
+        // distinct from the editor's, so it has no controlling terminal and an
+        // interactive shell cannot get SIGTTOU/SIGTTIN-stopped (#132 hang).
+        assert!(child_sid > 0, "getsid failed for live child");
+        assert_eq!(
+            child_sid, pid,
+            "isolated child should lead its own session (setsid)"
+        );
+        assert_ne!(
+            child_sid, parent_sid,
+            "child shares the editor's session/controlling terminal (#132 hang)"
         );
     }
 }
