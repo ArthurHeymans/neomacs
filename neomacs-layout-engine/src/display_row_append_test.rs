@@ -2439,6 +2439,99 @@ fn buffer_text_character_wrap_source_action_reports_hidden_after_state_sync() {
 }
 
 #[test]
+fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
+    let mut context = RowTransitionTestContext::new("text-overflow-character-wrap-request");
+    let text = b"a";
+    let mut byte_idx = 0;
+    let decoded_source_char =
+        BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 21)
+            .expect("decoded source char");
+    let prepared_append = BufferTextSourceCharPreparedAppend {
+        plan: BufferTextSourceCharAppendPlan {
+            source_text: BufferTextSourceTextRequest::new(
+                BufferTextSourceRange::single_char(CharPos0::new(21)),
+                ResolvedBufferTextSourceAdvance::resolved(8.0),
+            ),
+            position: DisplayRowPosition {
+                x_px: 80.0,
+                col: 10,
+            },
+        },
+    };
+    let mut charpos = 21;
+    let mut col = 10;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(
+        context.geometry.current_row_marker(),
+        (Color::from_pixel(0x445566), 21),
+    );
+    let mut x = 80.0;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(6);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+    let row_limit = context.row_limit;
+
+    let outcome = BufferTextOverflowRenderRequest::new(
+        prepared_append,
+        decoded_source_char,
+        'a',
+        80.0,
+        false,
+        word_wrap,
+        DisplayRowVisibilityLimit {
+            max_rows: 4,
+            bottom_y: 64.0,
+        },
+        0.0,
+        false,
+        context.defaults,
+        0,
+        4,
+        row_limit,
+    )
+    .render_if_needed_and_apply(
+        text,
+        BufferTextOverflowRenderState {
+            byte_idx: &mut byte_idx,
+            charpos: &mut charpos,
+            col: &mut col,
+            output_emitter: &mut context.output_emitter,
+            row_extend: &mut row_extend,
+            x: &mut x,
+            line_numbers: &mut line_numbers,
+            row_geometry: &mut context.geometry,
+            row_flags: &mut context.row_flags,
+            hit_rows: &mut context.hit_rows,
+            hit_row_range: &mut hit_row_range,
+            builder: &mut context.builder,
+            evaluator: &mut context.eval,
+            prefix_request: &mut prefix_request,
+            hscroll_skip: &mut hscroll_skip,
+            word_wrap: &mut word_wrap,
+            trailing_whitespace: &mut trailing_whitespace,
+            face_scan: &mut face_scan,
+            row_y_positions: &mut context.row_y_positions,
+        },
+    );
+
+    assert_eq!(
+        outcome,
+        BufferTextOverflowRenderOutcome::Transition(DisplayRowTransitionContinuation::Continue)
+    );
+    assert_eq!(byte_idx, 0);
+    assert_eq!(charpos, 21);
+    assert_eq!(hit_row_range.start(), 21);
+    assert_eq!(x, 0.0);
+    assert!(face_scan.should_resolve_at(0));
+    assert_eq!(row_extend.value_on(&context.geometry), None);
+}
+
+#[test]
 fn display_row_transition_render_state_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
