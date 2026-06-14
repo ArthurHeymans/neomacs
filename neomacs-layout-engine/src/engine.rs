@@ -2678,11 +2678,8 @@ impl LayoutEngine {
                         special_source_request,
                         DisplayRowPosition { x_px: x, col },
                     );
-                let needed_width = special_layout_plan.measured_width_px();
-
-                match SpecialTextRowOverflowDecision::for_width(
+                match special_layout_plan.overflow_decision(
                     x,
-                    needed_width,
                     text_append_surface.full_text_right_edge(),
                     params.truncate_lines,
                 ) {
@@ -2780,19 +2777,16 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     let _ = face_ids.allocate();
                 }
-                let special_plan =
-                    special_layout_plan.append_plan_at(DisplayRowPosition { x_px: x, col });
-                if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_plan_to_text_row_and_emit(
-                        &row_geometry,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        special_plan,
-                    )
-                {
+                if let Some((_progress, position)) = special_layout_plan.append_to_text_row_at(
+                    &buffer_row_append_context,
+                    &row_geometry,
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    DisplayRowPosition { x_px: x, col },
+                ) {
                     x = position.x_px;
                     col = position.col;
                 }
@@ -2808,19 +2802,16 @@ impl LayoutEngine {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
                 }
-                let special_plan =
-                    special_source_request.append_plan_at(DisplayRowPosition { x_px: x, col });
-                if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_plan_to_text_row_and_emit(
-                        &row_geometry,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        special_plan,
-                    )
-                {
+                if let Some((_progress, position)) = special_source_request.append_to_text_row_at(
+                    &buffer_row_append_context,
+                    &row_geometry,
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    DisplayRowPosition { x_px: x, col },
+                ) {
                     x = position.x_px;
                     col = position.col;
                 }
@@ -2844,19 +2835,16 @@ impl LayoutEngine {
             if let Some(special_source_request) =
                 buffer_source_char.cluster_special_request(cluster_tail)
             {
-                let special_plan =
-                    special_source_request.append_plan_at(DisplayRowPosition { x_px: x, col });
-                if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_plan_to_text_row_and_emit(
-                        &row_geometry,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                        &mut self.font_metrics,
-                        face_resolver,
-                        special_plan,
-                    )
-                {
+                if let Some((_progress, position)) = special_source_request.append_to_text_row_at(
+                    &buffer_row_append_context,
+                    &row_geometry,
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    DisplayRowPosition { x_px: x, col },
+                ) {
                     x = position.x_px;
                     col = position.col;
                 }

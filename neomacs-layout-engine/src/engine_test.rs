@@ -9,6 +9,7 @@ use crate::display_row_append::{
     DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
 };
 use crate::display_row_builder::DisplayGlyphMeasurer;
+use crate::display_row_walk_state::SpecialTextRowOverflowDecision;
 use crate::display_source::DisplayItemSource;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};

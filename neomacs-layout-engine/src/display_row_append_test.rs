@@ -2709,16 +2709,16 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
     );
-    let plan = layout_plan.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 });
-    let (_progress, end) = append_context
-        .append_special_source_char_plan_to_text_row_and_emit(
+    let (_progress, end) = layout_plan
+        .append_to_text_row_at(
+            &append_context,
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            plan,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended source-mapped buffer text item fragment");
 
@@ -2785,16 +2785,16 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let source_request = source_char
         .cluster_special_request(None)
         .expect("glyphless source char should map to a display item");
-    let plan = source_request.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 });
-    let (_progress, end) = append_context
-        .append_special_source_char_plan_to_text_row_and_emit(
+    let (_progress, end) = source_request
+        .append_to_text_row_at(
+            &append_context,
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            plan,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended glyphless buffer text item fragment");
 

@@ -35,8 +35,8 @@ use crate::display_row_geometry::{
     DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, HitRowRangeTracker, TextRowTransitionPrefixAction,
-    TrailingWhitespaceRenderState, WordWrapRenderState,
+    BufferTextRowOverflowDecision, HitRowRangeTracker, SpecialTextRowOverflowDecision,
+    TextRowTransitionPrefixAction, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -2150,7 +2150,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_special_source_char_plan_to_text_row_and_emit(
+    fn append_special_source_char_plan_to_text_row_and_emit(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -2805,7 +2805,7 @@ impl BufferTextSpecialSourceCharRequest {
         }
     }
 
-    pub(crate) fn append_plan_at(
+    fn append_plan_at(
         &self,
         position: DisplayRowPosition,
     ) -> BufferTextSpecialSourceCharAppendPlan {
@@ -2814,6 +2814,29 @@ impl BufferTextSpecialSourceCharRequest {
             special_display: self.special_display.clone(),
             position,
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_to_text_row_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        context: &BufferTextRowAppendContext<'_, '_, B>,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        position: DisplayRowPosition,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        context.append_special_source_char_plan_to_text_row_and_emit(
+            geometry,
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            self.append_plan_at(position),
+        )
     }
 
     fn layout_plan(self, measured_width_px: f32) -> BufferTextSpecialSourceCharLayoutPlan {
@@ -2842,15 +2865,46 @@ pub(crate) struct BufferTextSpecialSourceCharLayoutPlan {
 }
 
 impl BufferTextSpecialSourceCharLayoutPlan {
-    pub(crate) fn measured_width_px(&self) -> f32 {
+    fn measured_width_px(&self) -> f32 {
         self.measured_width_px
     }
 
-    pub(crate) fn append_plan_at(
+    pub(crate) fn overflow_decision(
         &self,
+        x_px: f32,
+        right_edge_px: f32,
+        truncate_lines: bool,
+    ) -> SpecialTextRowOverflowDecision {
+        SpecialTextRowOverflowDecision::for_width(
+            x_px,
+            self.measured_width_px(),
+            right_edge_px,
+            truncate_lines,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_to_text_row_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        context: &BufferTextRowAppendContext<'_, '_, B>,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
         position: DisplayRowPosition,
-    ) -> BufferTextSpecialSourceCharAppendPlan {
-        self.source_request.append_plan_at(position)
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.source_request.append_to_text_row_at(
+            context,
+            geometry,
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            position,
+        )
     }
 }
 
