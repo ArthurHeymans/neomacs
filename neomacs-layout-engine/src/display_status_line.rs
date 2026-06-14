@@ -227,6 +227,94 @@ pub(crate) struct EchoMinibufferDisplayRowsRequest<'face> {
     pub(crate) reserve_right_special_col: bool,
 }
 
+pub(crate) struct EchoMinibufferRowsRenderRequest<'face> {
+    pub(crate) y: f32,
+    pub(crate) text_width: f32,
+    pub(crate) char_width: f32,
+    pub(crate) ascent: f32,
+    pub(crate) row_height: f32,
+    pub(crate) base_face: &'face ResolvedFace,
+    pub(crate) message: Value,
+    pub(crate) max_rows: usize,
+    pub(crate) truncate_lines: bool,
+    pub(crate) reserve_right_special_col: bool,
+}
+
+struct EchoMinibufferDisplayRowsRenderParts<'face> {
+    window_id: u64,
+    window_bounds: Rect,
+    text_bounds: Rect,
+    selected: bool,
+    text_width: f32,
+    char_width: f32,
+    max_rows: usize,
+    rows_request: EchoMinibufferRowsRenderRequest<'face>,
+}
+
+impl<'face> EchoMinibufferDisplayRowsRequest<'face> {
+    fn into_render_parts(self) -> EchoMinibufferDisplayRowsRenderParts<'face> {
+        EchoMinibufferDisplayRowsRenderParts {
+            window_id: self.window_id,
+            window_bounds: self.window_bounds,
+            text_bounds: self.text_bounds,
+            selected: self.selected,
+            text_width: self.text_width,
+            char_width: self.char_width,
+            max_rows: self.max_rows,
+            rows_request: EchoMinibufferRowsRenderRequest {
+                y: self.window_bounds.y,
+                text_width: self.text_width,
+                char_width: self.char_width,
+                ascent: self.ascent,
+                row_height: self.row_height,
+                base_face: self.base_face,
+                message: self.message,
+                max_rows: self.max_rows,
+                truncate_lines: self.truncate_lines,
+                reserve_right_special_col: self.reserve_right_special_col,
+            },
+        }
+    }
+}
+
+impl<'face> EchoMinibufferRowsRenderRequest<'face> {
+    fn max_rows(&self) -> usize {
+        self.max_rows.max(1)
+    }
+
+    fn reserve_width(&self, char_width: f32) -> f32 {
+        if self.reserve_right_special_col {
+            char_width.max(1.0)
+        } else {
+            0.0
+        }
+    }
+
+    fn wrap_width(&self, char_width: f32) -> f32 {
+        if self.truncate_lines {
+            self.text_width
+        } else {
+            (self.text_width - self.reserve_width(char_width)).max(char_width.max(1.0))
+        }
+    }
+
+    fn matrix_cols(&self) -> usize {
+        (self.text_width / self.char_width.max(1.0)).ceil().max(1.0) as usize
+    }
+
+    fn row_policy(&self, row_index: usize, wrap_width: f32) -> DisplayRowSourceRequestPolicy {
+        DisplayRowSourceRequestPolicy::new(
+            self.y + row_index as f32 * self.row_height,
+            wrap_width,
+            self.row_height,
+            self.char_width,
+            self.ascent,
+            DisplayTabPolicy::every(8),
+            GlyphRowRole::Minibuffer,
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 pub(crate) enum ResizeMiniWindowsMode {
     #[strum(to_string = "nil")]
@@ -739,32 +827,24 @@ impl LayoutEngine {
         face_ids: &mut FrameFaceIdAllocator,
         request: EchoMinibufferDisplayRowsRequest<'_>,
     ) {
+        let parts = request.into_render_parts();
         let rows = self.render_minibuffer_echo_rows(
-            request.window_bounds.y,
-            request.text_width,
-            request.char_width,
-            request.ascent,
-            request.row_height,
-            request.base_face,
             face_resolver,
             display_host,
-            request.message,
-            request.max_rows,
-            request.truncate_lines,
-            request.reserve_right_special_col,
             face_ids,
+            parts.rows_request,
         );
-        let max_rows = rows.len().clamp(1, request.max_rows.max(1));
-        let cols = (request.text_width / request.char_width.max(1.0))
+        let max_rows = rows.len().clamp(1, parts.max_rows.max(1));
+        let cols = (parts.text_width / parts.char_width.max(1.0))
             .ceil()
             .max(1.0) as usize;
         self.matrix_builder.begin_window_with_text_bounds(
-            request.window_id,
+            parts.window_id,
             max_rows,
             cols,
-            request.window_bounds,
-            request.text_bounds,
-            request.selected,
+            parts.window_bounds,
+            parts.text_bounds,
+            parts.selected,
         );
         for (row_index, rendered) in rows.iter().enumerate() {
             install_rendered_display_row(&mut self.matrix_builder, rendered, row_index);
@@ -778,67 +858,45 @@ impl LayoutEngine {
     /// the caller can install them through the same path used by chrome rows.
     pub(crate) fn render_minibuffer_echo_rows(
         &mut self,
-        y: f32,
-        text_width: f32,
-        char_w: f32,
-        ascent: f32,
-        row_height: f32,
-        default_resolved: &ResolvedFace,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        echo_message: Value,
-        max_rows: usize,
-        truncate_lines: bool,
-        reserve_right_special_col: bool,
         face_ids: &mut FrameFaceIdAllocator,
+        request: EchoMinibufferRowsRenderRequest<'_>,
     ) -> Vec<RenderedDisplayRow> {
-        let base_face = default_resolved.clone();
-        let row_face = self.realize_display_row_face(0, &base_face, char_w, ascent, row_height);
+        let base_face = request.base_face.clone();
+        let row_face = self.realize_display_row_face(
+            0,
+            &base_face,
+            request.char_width,
+            request.ascent,
+            request.row_height,
+        );
         let base_render_face = row_face.render_face();
-        let char_width = self.display_row_char_width(&row_face, char_w);
-        let reserve_width = if reserve_right_special_col {
-            char_width.max(1.0)
-        } else {
-            0.0
-        };
-        let wrap_width = if truncate_lines {
-            text_width
-        } else {
-            (text_width - reserve_width).max(char_width.max(1.0))
-        };
-        let matrix_cols = (text_width / char_w.max(1.0)).ceil().max(1.0) as usize;
+        let char_width = self.display_row_char_width(&row_face, request.char_width);
+        let wrap_width = request.wrap_width(char_width);
+        let matrix_cols = request.matrix_cols();
         let special_col = matrix_cols.saturating_sub(1);
         let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
-            echo_message,
+            request.message,
             face_ids,
             &base_face,
         );
         let Some(mut source_session) = DisplayRowLispStringSourceSession::new(session_request)
         else {
-            return empty_minibuffer_echo_row(y, ascent, row_height);
+            return empty_minibuffer_echo_row(request.y, request.ascent, request.row_height);
         };
         let mut renderer = DisplayRowRenderer::new(&mut self.font_metrics);
         let mut render_context =
             DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
 
         let mut rows = Vec::new();
-        let max_rows = max_rows.max(1);
+        let max_rows = request.max_rows();
         while rows.len() < max_rows {
-            let request = source_session.row_request(
-                DisplayRowSourceRequestPolicy::new(
-                    y + rows.len() as f32 * row_height,
-                    wrap_width,
-                    row_height,
-                    char_w,
-                    ascent,
-                    DisplayTabPolicy::every(8),
-                    GlyphRowRole::Minibuffer,
-                ),
-                &base_face,
-            );
+            let row_request =
+                source_session.row_request(request.row_policy(rows.len(), wrap_width), &base_face);
             let Some(result) = source_session.render_next_row_with_context(
                 &mut renderer,
-                request,
+                row_request,
                 &mut render_context,
             ) else {
                 break;
@@ -852,8 +910,8 @@ impl LayoutEngine {
                 .unwrap_or(base_render_face.id);
             rendered.row.role = GlyphRowRole::Minibuffer;
             rendered.row.mode_line = false;
-            if reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
-                let ch = if truncate_lines { '$' } else { '\\' };
+            if request.reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
+                let ch = if request.truncate_lines { '$' } else { '\\' };
                 while rendered.row.glyphs[1].len() < special_col {
                     rendered.row.glyphs[1].push(
                         Glyph::char(' ', special_face_id, 0).with_pixel_width(char_width.max(1.0)),
@@ -862,7 +920,7 @@ impl LayoutEngine {
                 rendered.row.glyphs[1].push(
                     Glyph::char(ch, special_face_id, 0).with_pixel_width(char_width.max(1.0)),
                 );
-                rendered.progress.end_x = text_width.max(0.0);
+                rendered.progress.end_x = request.text_width.max(0.0);
                 rendered.progress.end_col = matrix_cols as i64;
             }
             rows.push(rendered);
@@ -870,14 +928,14 @@ impl LayoutEngine {
                 DisplayRowRenderStop::SourceExhausted => break,
                 DisplayRowRenderStop::RowBreak => {}
                 DisplayRowRenderStop::Clipped => {
-                    if truncate_lines {
+                    if request.truncate_lines {
                         break;
                     }
                 }
             }
         }
         if rows.is_empty() {
-            return empty_minibuffer_echo_row(y, ascent, row_height);
+            return empty_minibuffer_echo_row(request.y, request.ascent, request.row_height);
         }
         rows
     }

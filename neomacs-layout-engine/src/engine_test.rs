@@ -11,6 +11,7 @@ use crate::display_row_append::{
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_row_walk_state::SpecialTextRowOverflowDecision;
 use crate::display_source::DisplayItemSource;
+use crate::display_status_line::EchoMinibufferRowsRenderRequest;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
 use neomacs_display_protocol::cursor::CursorBarWidth;
@@ -2484,19 +2485,21 @@ fn minibuffer_echo_rows_continue_after_display_property_clips() {
     let mut face_ids = FrameFaceIdAllocator::new(1);
 
     let rows = engine.render_minibuffer_echo_rows(
-        0.0,
-        24.0,
-        8.0,
-        12.0,
-        16.0,
-        &default_face,
         &resolver,
         None,
-        echo,
-        2,
-        false,
-        false,
         &mut face_ids,
+        EchoMinibufferRowsRenderRequest {
+            y: 0.0,
+            text_width: 24.0,
+            char_width: 8.0,
+            ascent: 12.0,
+            row_height: 16.0,
+            base_face: &default_face,
+            message: echo,
+            max_rows: 2,
+            truncate_lines: false,
+            reserve_right_special_col: false,
+        },
     );
     let rendered = rows
         .iter()
