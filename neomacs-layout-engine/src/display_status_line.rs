@@ -80,11 +80,8 @@ pub(crate) struct FrameTabBarDisplayRowRequest<'face> {
 }
 
 impl<'face> FrameTabBarDisplayRowRequest<'face> {
-    fn render_request(
-        &self,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayRowLispStringRenderRequest<'face> {
-        let row_request = DisplayRowSourceRequestPolicy::new(
+    fn lisp_string_row_request(&self) -> ChromeLispStringRowRequest<'face> {
+        ChromeLispStringRowRequest::new(
             self.y,
             self.width,
             self.row_height,
@@ -92,13 +89,16 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             self.ascent,
             DisplayTabPolicy::every(8),
             GlyphRowRole::TabBar,
-        );
-        DisplayRowLispStringRenderRequest::from_base_face_policy(
-            row_request,
-            face_ids,
             self.base_face,
             self.text,
         )
+    }
+
+    fn render_request(
+        &self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayRowLispStringRenderRequest<'face> {
+        self.lisp_string_row_request().render_request(face_ids)
     }
 
     fn bounds(&self) -> Rect {
@@ -118,6 +118,95 @@ impl WindowChromeDisplayText {
 
     fn value(self) -> Value {
         self.value
+    }
+}
+
+struct ChromeLispStringRowRequest<'face> {
+    y: f32,
+    width: f32,
+    row_height: f32,
+    char_width: f32,
+    ascent: f32,
+    tab_policy: DisplayTabPolicy,
+    role: GlyphRowRole,
+    base_face: &'face ResolvedFace,
+    text: Value,
+    symbol_values: std::collections::HashMap<String, Value>,
+}
+
+impl<'face> ChromeLispStringRowRequest<'face> {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        y: f32,
+        width: f32,
+        row_height: f32,
+        char_width: f32,
+        ascent: f32,
+        tab_policy: DisplayTabPolicy,
+        role: GlyphRowRole,
+        base_face: &'face ResolvedFace,
+        text: Value,
+    ) -> Self {
+        Self {
+            y,
+            width,
+            row_height,
+            char_width,
+            ascent,
+            tab_policy,
+            role,
+            base_face,
+            text,
+            symbol_values: std::collections::HashMap::new(),
+        }
+    }
+
+    fn with_symbol_values(
+        mut self,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Self {
+        self.symbol_values = symbol_values;
+        self
+    }
+
+    fn into_render_request_parts(
+        self,
+    ) -> (DisplayRowSourceRequestPolicy, &'face ResolvedFace, Value) {
+        let Self {
+            y,
+            width,
+            row_height,
+            char_width,
+            ascent,
+            tab_policy,
+            role,
+            base_face,
+            text,
+            symbol_values,
+        } = self;
+        let policy = DisplayRowSourceRequestPolicy::new(
+            y, width, row_height, char_width, ascent, tab_policy, role,
+        )
+        .with_symbol_values(symbol_values);
+        (policy, base_face, text)
+    }
+
+    #[cfg(test)]
+    fn into_source_request_policy(self) -> DisplayRowSourceRequestPolicy {
+        self.into_render_request_parts().0
+    }
+
+    fn render_request(
+        self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayRowLispStringRenderRequest<'face> {
+        let (row_request, base_face, text) = self.into_render_request_parts();
+        DisplayRowLispStringRenderRequest::from_base_face_policy(
+            row_request,
+            face_ids,
+            base_face,
+            text,
+        )
     }
 }
 
@@ -144,20 +233,28 @@ struct WindowChromeDisplayRowRenderParts<'face> {
 }
 
 impl<'face> WindowChromeDisplayRowRequest<'face> {
-    fn into_render_parts(
-        self,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> WindowChromeDisplayRowRenderParts<'face> {
-        let row_request = DisplayRowSourceRequestPolicy::new(
+    fn lisp_string_row_request(&self) -> ChromeLispStringRowRequest<'face> {
+        ChromeLispStringRowRequest::new(
             self.bounds.y,
             self.bounds.width,
             self.bounds.height,
             self.char_width,
             self.ascent,
-            self.tab_policy,
+            self.tab_policy.clone(),
             window_chrome_glyph_row_role(self.kind),
+            self.base_face,
+            self.text.value(),
         )
-        .with_symbol_values(self.symbol_values);
+    }
+
+    fn into_render_parts(
+        self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> WindowChromeDisplayRowRenderParts<'face> {
+        let render_request = self
+            .lisp_string_row_request()
+            .with_symbol_values(self.symbol_values)
+            .render_request(face_ids);
         WindowChromeDisplayRowRenderParts {
             output: self.output,
             owner: DisplayRowOwner::WindowChrome {
@@ -166,12 +263,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             },
             matrix_row: self.matrix_row.min(u32::MAX as usize) as u32,
             bounds: self.bounds,
-            render_request: DisplayRowLispStringRenderRequest::from_base_face_policy(
-                row_request,
-                face_ids,
-                self.base_face,
-                self.text.value(),
-            ),
+            render_request,
         }
     }
 }
@@ -189,11 +281,8 @@ pub(crate) struct InactiveMinibufferDisplayRowRequest<'face> {
 }
 
 impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
-    fn render_request(
-        &self,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayRowLispStringRenderRequest<'face> {
-        let row_request = DisplayRowSourceRequestPolicy::new(
+    fn lisp_string_row_request(&self) -> ChromeLispStringRowRequest<'face> {
+        ChromeLispStringRowRequest::new(
             self.window_bounds.y,
             self.text_width,
             self.row_height,
@@ -201,13 +290,16 @@ impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
             self.ascent,
             DisplayTabPolicy::every(8),
             GlyphRowRole::Minibuffer,
-        );
-        DisplayRowLispStringRenderRequest::from_base_face_policy(
-            row_request,
-            face_ids,
             self.base_face,
             Value::string(""),
         )
+    }
+
+    fn render_request(
+        &self,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayRowLispStringRenderRequest<'face> {
+        self.lisp_string_row_request().render_request(face_ids)
     }
 }
 
