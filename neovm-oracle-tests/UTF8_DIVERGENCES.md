@@ -19,7 +19,7 @@ cargo nextest run -p neovm-oracle-tests -E 'test(/div_utf8/)' --no-fail-fast
 GNU Emacs is expected on `PATH` (or `NEOVM_FORCE_ORACLE_PATH=/path/to/emacs`);
 the Neomacs binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH=...`).
 
-Scope at time of writing: **239 tests, 173 pass, 66 divergences.**
+Scope at time of writing: **247 tests, 181 pass, 66 divergences.**
 
 Root cause theme: **Neomacs uses a UTF-8-internal string model**, diverging
 from GNU's eight-bit-charset model. Almost every divergence traces back to
@@ -143,4 +143,4 @@ buffer_io, buffer_multibyte_toggle, buffer_region_ops, char_ops_regex,
 char_properties, char_tables, charset_conv_deep, coding, coding_deep,
 compose_bidi_syntax, digest_print, fill_case_category, legacy_codings,
 more_codings, print_escape, string_compare_format, string_primitives,
-syntax_display}.rs`
+syntax_display, unicode_property_matrix}.rs`
