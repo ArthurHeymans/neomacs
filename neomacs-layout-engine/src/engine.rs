@@ -13,19 +13,20 @@ use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_b
 use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
+#[cfg(test)]
+use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    ChromeRowOutput, RowMetricsSnapshot, TextWindowBegin, TextWindowCursor,
-    TextWindowCursorEffects, TextWindowDecorativeCursor, TextWindowDisplayRange,
-    TextWindowLineNumberMargin, TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers,
-    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    current_text_window_cluster_tail, emit_text_matrix_row_transition_with_limit,
-    emit_text_window_line_number_margin, finish_text_matrix_row_output,
-    finish_text_window_output_rows, install_text_window_cursor_effects,
-    install_text_window_right_edge_markers, mark_current_text_row_truncated_left,
-    publish_text_window_cursor, publish_text_window_decorative_cursor,
-    record_text_window_display_range,
+    ChromeRowOutput, TextWindowBegin, TextWindowCursor, TextWindowCursorEffects,
+    TextWindowDecorativeCursor, TextWindowDisplayRange, TextWindowLineNumberMargin,
+    TextWindowRightEdgeMarkerColumn, TextWindowRightEdgeMarkers, WindowOutputEmitter,
+    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
+    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
+    finish_text_matrix_row_output, finish_text_window_output_rows,
+    install_text_window_cursor_effects, install_text_window_right_edge_markers,
+    mark_current_text_row_truncated_left, publish_text_window_cursor,
+    publish_text_window_decorative_cursor, record_text_window_display_range,
 };
-use crate::coords::{layout_i64_char_pos_to_lisp_char_pos, lisp_char_pos_to_layout_i64};
+use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
 #[cfg(test)]
@@ -34,8 +35,9 @@ use crate::display_cursor::CursorSlotWidthPolicy;
 use crate::display_cursor::resolve_cursor_vertical_metrics;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
-    CursorGeometryContext, CursorGeometrySource, resolve_cursor_geometry,
-    visual_cursor_source_from_point,
+    CursorGeometryContext, CursorGeometrySource, capture_cursor_info, cursor_style_for_visual,
+    cursor_style_for_window, display_property_replacement_cursor_info, resolve_cursor_geometry,
+    row_metrics_for_cursor, update_cursor_info_for_main_char, visual_cursor_source_from_point,
 };
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
@@ -52,17 +54,15 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferTextRowAppendContext, BufferTextSourceAdvanceResolver, BufferTextSourceChar,
-    DisplayPropertyReplacementAppendResolveRequest, DisplayPropertyReplacementCursorPolicy,
-    DisplayRowAppendArea, DisplayRowAppendSurface, DisplayRowPrefixRequest,
-    LispStringRowAppendContext, LispStringSourceAppendRequest, OverlayStringRenderBatchSource,
-    OverlayStringRenderRowContext, SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest,
-    SyntheticTextRowAppendContext, render_overlay_string_batch,
+    DisplayPropertyReplacementAppendResolveRequest, DisplayRowAppendArea, DisplayRowAppendSurface,
+    DisplayRowPrefixRequest, LispStringRowAppendContext, LispStringSourceAppendRequest,
+    OverlayStringRenderBatchSource, OverlayStringRenderRowContext, SyntheticTextAppendRequest,
+    SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext, render_overlay_string_batch,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
-    DisplayRowLimit, DisplayRowScopedValue, DisplayRowTextPosition, DisplayRowVisibilityLimit,
-    DisplayRowYPositions,
+    DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
@@ -72,6 +72,8 @@ use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
     TrailingWhitespaceRenderState, WordWrapRenderState,
+    next_window_start_for_partially_visible_point_row,
+    next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
 };
 use crate::display_source::BufferDisplayReplacementSource;
 use crate::display_source_resolver::{
@@ -81,10 +83,12 @@ use crate::display_source_resolver::{
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
+use neomacs_display_protocol::frame_glyphs::CursorStyle;
+#[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::DisplaySlotId;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo,
-    WindowTransitionHint, WindowTransitionKind,
+    FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    WindowTransitionKind,
 };
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -92,7 +96,7 @@ use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispC
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::emacs_core::{Context, Value};
-use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
+use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 use strum::{EnumString, IntoStaticStr};
 
 /// Maximum number of characters in a ligature run before forced flush.
@@ -161,62 +165,6 @@ struct LigatureRunBuffer {
     face_id: u32,
     total_advance: f32,
     is_overlay: bool,
-}
-
-fn capture_cursor_info(target: &mut CursorCaptureState, info: CapturedCursorInfo) {
-    target.capture_once(info);
-}
-
-fn display_property_replacement_cursor_info(
-    policy: DisplayPropertyReplacementCursorPolicy,
-    active_face_state: &DisplayRowActiveFaceState,
-    position: DisplayRowTextPosition,
-) -> CapturedCursorInfo {
-    match policy {
-        DisplayPropertyReplacementCursorPolicy::TextSlot {
-            width_px,
-            stretch_like,
-        } => CapturedCursorInfo::from_active_face_state(
-            active_face_state,
-            CapturedCursorPlacement::from_row_text_position(
-                position,
-                CapturedCursorSlotWidth::Explicit(width_px),
-                stretch_like,
-            ),
-        ),
-        DisplayPropertyReplacementCursorPolicy::DisplayBox {
-            width_px,
-            cursor_face_height_px,
-            cursor_face_ascent_px,
-        } => CapturedCursorInfo::display_box_from_active_face_state(
-            active_face_state,
-            CapturedCursorPlacement::from_row_text_position(
-                position,
-                CapturedCursorSlotWidth::Explicit(width_px),
-                false,
-            ),
-            cursor_face_height_px,
-            cursor_face_ascent_px,
-        ),
-        DisplayPropertyReplacementCursorPolicy::FaceChar => {
-            CapturedCursorInfo::from_active_face_state(
-                active_face_state,
-                CapturedCursorPlacement::from_row_text_position(
-                    position,
-                    CapturedCursorSlotWidth::FaceChar,
-                    false,
-                ),
-            )
-        }
-    }
-}
-
-fn update_cursor_info_for_main_char(
-    target: &mut CursorCaptureState,
-    byte_idx: usize,
-    advance: f32,
-) {
-    target.update_for_main_char(byte_idx, advance);
 }
 
 #[cfg(test)]
@@ -575,143 +523,6 @@ fn skip_text_to_charpos(text: &[u8], byte_idx: &mut usize, charpos: &mut i64, ta
     }
 }
 
-fn row_metrics_for_cursor(
-    row_metrics: &[RowMetricsSnapshot],
-    cursor_row: usize,
-    current_row_fallback: RowMetricsSnapshot,
-) -> RowMetricsSnapshot {
-    row_metrics
-        .iter()
-        .find(|metric| metric.row == cursor_row)
-        .copied()
-        .unwrap_or(current_row_fallback)
-}
-
-fn next_window_start_from_visible_rows(
-    rows: &[DisplayRowSnapshot],
-    current_start: i64,
-) -> Option<i64> {
-    if rows.is_empty() {
-        return None;
-    }
-
-    rows.iter()
-        .rev()
-        .filter_map(row_next_window_start_charpos)
-        .find(|&pos| pos > current_start)
-}
-
-#[inline]
-fn row_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
-    row.start_buffer_pos.map(lisp_char_pos_to_layout_i64)
-}
-
-#[inline]
-fn row_end_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
-    row.end_buffer_pos.map(lisp_char_pos_to_layout_i64)
-}
-
-#[inline]
-fn row_next_window_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
-    row.end_buffer_pos
-        .map(LispCharPos1::as_i64)
-        .or_else(|| row_start_charpos(row))
-}
-
-fn next_window_start_for_partially_visible_point_row(
-    rows: &[DisplayRowSnapshot],
-    point: i64,
-    text_area_top: i64,
-    text_area_bottom: i64,
-    current_start: i64,
-) -> Option<i64> {
-    let text_area_height = text_area_bottom.saturating_sub(text_area_top);
-    let point_row_index = rows.iter().position(|row| {
-        let start = row_start_charpos(row).unwrap_or(i64::MAX);
-        let end = row_end_charpos(row).unwrap_or(i64::MIN);
-        start <= point && point <= end
-    })?;
-    let point_row = &rows[point_row_index];
-    if point_row.height > text_area_height {
-        return None;
-    }
-
-    let row_top = point_row.y;
-    let row_bottom = point_row.y.saturating_add(point_row.height);
-    if row_top >= text_area_top && row_bottom <= text_area_bottom {
-        return None;
-    }
-
-    if row_bottom > text_area_bottom {
-        let overflow = row_bottom.saturating_sub(text_area_bottom);
-        let mut lifted = 0i64;
-        for row in rows.iter().take(point_row_index) {
-            lifted = lifted.saturating_add(row.height.max(1));
-            let candidate = row_next_window_start_charpos(row);
-            if lifted >= overflow
-                && let Some(pos) = candidate
-                && pos > current_start
-            {
-                return Some(pos);
-            }
-        }
-    }
-
-    None
-}
-
-fn next_window_start_for_point_line_continuation<B: super::neovm_bridge::LayoutBufferView>(
-    rows: &[DisplayRowSnapshot],
-    point: i64,
-    current_start: i64,
-    buf_access: &super::neovm_bridge::RustBufferAccess<'_, B>,
-    buffer_size: i64,
-) -> Option<i64> {
-    let point_row_index = rows.iter().position(|row| {
-        let start = row_start_charpos(row).unwrap_or(i64::MAX);
-        let end = row_end_charpos(row).unwrap_or(i64::MIN);
-        start <= point && point <= end
-    })?;
-    let point_row = rows.get(point_row_index)?;
-    let point_is_visible_row_start =
-        row_start_charpos(point_row).is_some_and(|start| start == point);
-
-    for row in rows.iter().skip(point_row_index) {
-        let end_pos = row.end_buffer_pos?.as_i64();
-        let end_byte = buf_access.lisp_charpos_to_bytepos(end_pos);
-        if matches!(buf_access.byte_at(end_byte), Some(b'\n')) {
-            return None;
-        }
-        let next_pos = end_pos.saturating_add(1);
-        if next_pos > buffer_size {
-            return None;
-        }
-
-        let next_byte = buf_access.lisp_charpos_to_bytepos(next_pos);
-        match buf_access.byte_at(next_byte) {
-            Some(b'\n') | None => return None,
-            Some(_) if std::ptr::eq(row, rows.last()?) => {
-                if point_is_visible_row_start {
-                    return point
-                        .checked_sub(1)
-                        .filter(|&new_start| new_start > current_start);
-                }
-                break;
-            }
-            Some(_) => {}
-        }
-    }
-
-    if point_row_index + 1 < rows.len() {
-        return None;
-    }
-
-    rows.iter()
-        .skip(1)
-        .find_map(row_next_window_start_charpos)
-        .filter(|&pos| pos > current_start)
-}
-
 fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
     let raw = evaluator
         .obarray()
@@ -768,27 +579,6 @@ fn cursor_width_for_style(
 ) -> f32 {
     CursorSlotWidthRequest::from_window_params(style, text, byte_idx, col, params)
         .width_px(face_char_w)
-}
-
-#[inline]
-fn cursor_style_for_window(params: &WindowParams) -> Option<CursorStyle> {
-    use neomacs_display_protocol::frame_glyphs::CursorKind;
-
-    if params.cursor_kind == CursorKind::NoCursor {
-        return None;
-    }
-
-    CursorStyle::from_kind(params.cursor_kind, params.cursor_bar_width)
-}
-
-fn cursor_style_for_visual(spec: &VisualCursorSpec) -> Option<CursorStyle> {
-    use neomacs_display_protocol::frame_glyphs::CursorKind;
-
-    if spec.cursor_kind == CursorKind::NoCursor {
-        return None;
-    }
-
-    CursorStyle::from_kind(spec.cursor_kind, spec.cursor_bar_width)
 }
 
 fn text_display_tab_policy(

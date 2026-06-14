@@ -1,8 +1,11 @@
+use crate::coords::lisp_char_pos_to_layout_i64;
 use crate::display_row_geometry::{
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker,
 };
+use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::LispCharPos1;
+use neovm_core::window::DisplayRowSnapshot;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WordWrapBreakCandidate {
@@ -450,6 +453,131 @@ impl TextPropertyScanCheckpoints {
     pub(crate) fn display_next(self) -> i64 {
         self.display_next
     }
+}
+
+pub(crate) fn next_window_start_from_visible_rows(
+    rows: &[DisplayRowSnapshot],
+    current_start: i64,
+) -> Option<i64> {
+    if rows.is_empty() {
+        return None;
+    }
+
+    rows.iter()
+        .rev()
+        .filter_map(row_next_window_start_charpos)
+        .find(|&pos| pos > current_start)
+}
+
+#[inline]
+fn row_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
+    row.start_buffer_pos.map(lisp_char_pos_to_layout_i64)
+}
+
+#[inline]
+fn row_end_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
+    row.end_buffer_pos.map(lisp_char_pos_to_layout_i64)
+}
+
+#[inline]
+fn row_next_window_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
+    row.end_buffer_pos
+        .map(LispCharPos1::as_i64)
+        .or_else(|| row_start_charpos(row))
+}
+
+pub(crate) fn next_window_start_for_partially_visible_point_row(
+    rows: &[DisplayRowSnapshot],
+    point: i64,
+    text_area_top: i64,
+    text_area_bottom: i64,
+    current_start: i64,
+) -> Option<i64> {
+    let text_area_height = text_area_bottom.saturating_sub(text_area_top);
+    let point_row_index = rows.iter().position(|row| {
+        let start = row_start_charpos(row).unwrap_or(i64::MAX);
+        let end = row_end_charpos(row).unwrap_or(i64::MIN);
+        start <= point && point <= end
+    })?;
+    let point_row = &rows[point_row_index];
+    if point_row.height > text_area_height {
+        return None;
+    }
+
+    let row_top = point_row.y;
+    let row_bottom = point_row.y.saturating_add(point_row.height);
+    if row_top >= text_area_top && row_bottom <= text_area_bottom {
+        return None;
+    }
+
+    if row_bottom > text_area_bottom {
+        let overflow = row_bottom.saturating_sub(text_area_bottom);
+        let mut lifted = 0i64;
+        for row in rows.iter().take(point_row_index) {
+            lifted = lifted.saturating_add(row.height.max(1));
+            let candidate = row_next_window_start_charpos(row);
+            if lifted >= overflow
+                && let Some(pos) = candidate
+                && pos > current_start
+            {
+                return Some(pos);
+            }
+        }
+    }
+
+    None
+}
+
+pub(crate) fn next_window_start_for_point_line_continuation<B: LayoutBufferView>(
+    rows: &[DisplayRowSnapshot],
+    point: i64,
+    current_start: i64,
+    buf_access: &RustBufferAccess<'_, B>,
+    buffer_size: i64,
+) -> Option<i64> {
+    let point_row_index = rows.iter().position(|row| {
+        let start = row_start_charpos(row).unwrap_or(i64::MAX);
+        let end = row_end_charpos(row).unwrap_or(i64::MIN);
+        start <= point && point <= end
+    })?;
+    let point_row = rows.get(point_row_index)?;
+    let point_is_visible_row_start =
+        row_start_charpos(point_row).is_some_and(|start| start == point);
+
+    for row in rows.iter().skip(point_row_index) {
+        let end_pos = row.end_buffer_pos?.as_i64();
+        let end_byte = buf_access.lisp_charpos_to_bytepos(end_pos);
+        if matches!(buf_access.byte_at(end_byte), Some(b'\n')) {
+            return None;
+        }
+        let next_pos = end_pos.saturating_add(1);
+        if next_pos > buffer_size {
+            return None;
+        }
+
+        let next_byte = buf_access.lisp_charpos_to_bytepos(next_pos);
+        match buf_access.byte_at(next_byte) {
+            Some(b'\n') | None => return None,
+            Some(_) if std::ptr::eq(row, rows.last()?) => {
+                if point_is_visible_row_start {
+                    return point
+                        .checked_sub(1)
+                        .filter(|&new_start| new_start > current_start);
+                }
+                break;
+            }
+            Some(_) => {}
+        }
+    }
+
+    if point_row_index + 1 < rows.len() {
+        return None;
+    }
+
+    rows.iter()
+        .skip(1)
+        .find_map(row_next_window_start_charpos)
+        .filter(|&pos| pos > current_start)
 }
 
 #[inline]

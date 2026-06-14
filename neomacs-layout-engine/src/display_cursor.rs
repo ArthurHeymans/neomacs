@@ -1,6 +1,7 @@
 use crate::display_row::DisplayRowActiveFaceState;
+use crate::display_row_append::DisplayPropertyReplacementCursorPolicy;
 use crate::display_row_geometry::DisplayRowTextPosition;
-use crate::types::WindowParams;
+use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::RowMetricsSnapshot;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
@@ -350,6 +351,95 @@ impl CursorCaptureState {
     pub(crate) fn captured(self) -> Option<CapturedCursorInfo> {
         self.captured
     }
+}
+
+pub(crate) fn capture_cursor_info(target: &mut CursorCaptureState, info: CapturedCursorInfo) {
+    target.capture_once(info);
+}
+
+pub(crate) fn update_cursor_info_for_main_char(
+    target: &mut CursorCaptureState,
+    byte_idx: usize,
+    advance: f32,
+) {
+    target.update_for_main_char(byte_idx, advance);
+}
+
+pub(crate) fn display_property_replacement_cursor_info(
+    policy: DisplayPropertyReplacementCursorPolicy,
+    active_face_state: &DisplayRowActiveFaceState,
+    position: DisplayRowTextPosition,
+) -> CapturedCursorInfo {
+    match policy {
+        DisplayPropertyReplacementCursorPolicy::TextSlot {
+            width_px,
+            stretch_like,
+        } => CapturedCursorInfo::from_active_face_state(
+            active_face_state,
+            CapturedCursorPlacement::from_row_text_position(
+                position,
+                CapturedCursorSlotWidth::Explicit(width_px),
+                stretch_like,
+            ),
+        ),
+        DisplayPropertyReplacementCursorPolicy::DisplayBox {
+            width_px,
+            cursor_face_height_px,
+            cursor_face_ascent_px,
+        } => CapturedCursorInfo::display_box_from_active_face_state(
+            active_face_state,
+            CapturedCursorPlacement::from_row_text_position(
+                position,
+                CapturedCursorSlotWidth::Explicit(width_px),
+                false,
+            ),
+            cursor_face_height_px,
+            cursor_face_ascent_px,
+        ),
+        DisplayPropertyReplacementCursorPolicy::FaceChar => {
+            CapturedCursorInfo::from_active_face_state(
+                active_face_state,
+                CapturedCursorPlacement::from_row_text_position(
+                    position,
+                    CapturedCursorSlotWidth::FaceChar,
+                    false,
+                ),
+            )
+        }
+    }
+}
+
+pub(crate) fn row_metrics_for_cursor(
+    row_metrics: &[RowMetricsSnapshot],
+    cursor_row: usize,
+    current_row_fallback: RowMetricsSnapshot,
+) -> RowMetricsSnapshot {
+    row_metrics
+        .iter()
+        .find(|metric| metric.row == cursor_row)
+        .copied()
+        .unwrap_or(current_row_fallback)
+}
+
+#[inline]
+pub(crate) fn cursor_style_for_window(params: &WindowParams) -> Option<CursorStyle> {
+    use neomacs_display_protocol::frame_glyphs::CursorKind;
+
+    if params.cursor_kind == CursorKind::NoCursor {
+        return None;
+    }
+
+    CursorStyle::from_kind(params.cursor_kind, params.cursor_bar_width)
+}
+
+pub(crate) fn cursor_style_for_visual(spec: &VisualCursorSpec) -> Option<CursorStyle> {
+    use neomacs_display_protocol::frame_glyphs::CursorKind;
+
+    if spec.cursor_kind == CursorKind::NoCursor {
+        return None;
+    }
+
+    CursorStyle::from_kind(spec.cursor_kind, spec.cursor_bar_width)
 }
 
 pub(crate) fn resolve_cursor_vertical_metrics(
