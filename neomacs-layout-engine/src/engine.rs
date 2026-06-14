@@ -64,8 +64,8 @@ use crate::display_row_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceChar, BufferTextSourceCharOverflowAction,
     BufferTextSpecialSourceCharOverflowAction, DisplayRowLineBreakTransitionPlan,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
-    SyntheticTextMarker, TextWindowAppendSurfaceRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTransitionRequestContext,
+    LispStringRowAppendContext, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -2211,15 +2211,18 @@ impl LayoutEngine {
 
                     let line_break_transition =
                         DisplayRowLineBreakTransitionPlan::hscroll_line_break();
-                    let boundary_request = line_break_transition.request(
-                        hit_row_range.range_to(charpos),
+                    let boundary_request = DisplayRowTransitionRequestContext::new(
                         row_geometry_defaults,
                         text_matrix_row_base,
+                        row_y_positions.recording(),
+                        max_rows,
+                    )
+                    .line_break(
+                        line_break_transition,
+                        hit_row_range.range_to(charpos),
                         col,
                         x,
                         0.0,
-                        row_y_positions.recording(),
-                        max_rows,
                     );
                     // Record hit-test row (hscroll newline)
                     hit_row_range.advance_to(charpos);
@@ -2456,24 +2459,26 @@ impl LayoutEngine {
                         box_face.continue_on_row(row_geometry.next_row_marker(), content_x);
                         let line_break_transition =
                             DisplayRowLineBreakTransitionPlan::hidden_line_break();
-                        let row_transition = line_break_transition
-                            .request(
-                                hit_row_range.range_to(charpos),
-                                row_geometry_defaults,
-                                text_matrix_row_base,
-                                col,
-                                x,
-                                0.0,
-                                row_y_positions.recording(),
-                                max_rows,
-                            )
-                            .emit(
-                                &mut row_geometry,
-                                &mut hit_rows,
-                                &mut self.matrix_builder,
-                                &mut output_emitter,
-                                evaluator,
-                            );
+                        let row_transition = DisplayRowTransitionRequestContext::new(
+                            row_geometry_defaults,
+                            text_matrix_row_base,
+                            row_y_positions.recording(),
+                            max_rows,
+                        )
+                        .line_break(
+                            line_break_transition,
+                            hit_row_range.range_to(charpos),
+                            col,
+                            x,
+                            0.0,
+                        )
+                        .emit(
+                            &mut row_geometry,
+                            &mut hit_rows,
+                            &mut self.matrix_builder,
+                            &mut output_emitter,
+                            evaluator,
+                        );
                         if row_transition.is_exhausted() {
                             break;
                         }
@@ -2559,24 +2564,26 @@ impl LayoutEngine {
                 output_emitter.note_display_buffer_pos(LispCharPos1::new(charpos));
                 // Record hit-test row (newline ends the row)
                 let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
-                let row_transition = line_break_transition
-                    .request(
-                        hit_row_range.range_to(charpos),
-                        row_geometry_defaults,
-                        text_matrix_row_base,
-                        col,
-                        x,
-                        line_spacing,
-                        row_y_positions.recording(),
-                        max_rows,
-                    )
-                    .emit(
-                        &mut row_geometry,
-                        &mut hit_rows,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                    );
+                let row_transition = DisplayRowTransitionRequestContext::new(
+                    row_geometry_defaults,
+                    text_matrix_row_base,
+                    row_y_positions.recording(),
+                    max_rows,
+                )
+                .line_break(
+                    line_break_transition,
+                    hit_row_range.range_to(charpos),
+                    col,
+                    x,
+                    line_spacing,
+                )
+                .emit(
+                    &mut row_geometry,
+                    &mut hit_rows,
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                );
                 if row_transition.is_exhausted() {
                     break;
                 }
@@ -2693,25 +2700,22 @@ impl LayoutEngine {
                                 }
                                 x = content_x;
                                 row_extend.clear();
-                                let row_transition = transition
-                                    .request(
-                                        hit_row_range.range_to(charpos),
-                                        row_geometry_defaults,
-                                        text_matrix_row_base,
-                                        col,
-                                        x,
-                                        row_y_positions.recording(),
-                                        max_rows,
-                                    )
-                                    .emit(
-                                        &mut row_geometry,
-                                        &mut row_flags,
-                                        row_limit,
-                                        &mut hit_rows,
-                                        &mut self.matrix_builder,
-                                        &mut output_emitter,
-                                        evaluator,
-                                    );
+                                let row_transition = DisplayRowTransitionRequestContext::new(
+                                    row_geometry_defaults,
+                                    text_matrix_row_base,
+                                    row_y_positions.recording(),
+                                    max_rows,
+                                )
+                                .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                                .emit(
+                                    &mut row_geometry,
+                                    &mut row_flags,
+                                    row_limit,
+                                    &mut hit_rows,
+                                    &mut self.matrix_builder,
+                                    &mut output_emitter,
+                                    evaluator,
+                                );
                                 if row_transition.is_exhausted() {
                                     break;
                                 }
@@ -2731,14 +2735,17 @@ impl LayoutEngine {
                             BufferTextSpecialSourceCharOverflowAction::Wrap { transition } => {
                                 x = content_x;
                                 row_extend.clear();
-                                let boundary_request = transition.request(
-                                    hit_row_range.range_to(charpos),
+                                let boundary_request = DisplayRowTransitionRequestContext::new(
                                     row_geometry_defaults,
                                     text_matrix_row_base,
-                                    col,
-                                    x,
                                     row_y_positions.recording(),
                                     max_rows,
+                                )
+                                .overflow(
+                                    transition,
+                                    hit_row_range.range_to(charpos),
+                                    col,
+                                    x,
                                 );
                                 hit_row_range.advance_to(charpos);
                                 let row_transition = boundary_request.emit(
@@ -2818,25 +2825,22 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = transition
-                        .request(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                            max_rows,
-                        )
-                        .emit(
-                            &mut row_geometry,
-                            &mut row_flags,
-                            row_limit,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                        );
+                    let row_transition = DisplayRowTransitionRequestContext::new(
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        row_y_positions.recording(),
+                        max_rows,
+                    )
+                    .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                    .emit(
+                        &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
+                        &mut hit_rows,
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                    );
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -2870,25 +2874,22 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = transition
-                        .request(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                            max_rows,
-                        )
-                        .emit(
-                            &mut row_geometry,
-                            &mut row_flags,
-                            row_limit,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                        );
+                    let row_transition = DisplayRowTransitionRequestContext::new(
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        row_y_positions.recording(),
+                        max_rows,
+                    )
+                    .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                    .emit(
+                        &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
+                        &mut hit_rows,
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                    );
                     if row_transition.is_exhausted() {
                         break;
                     }
@@ -2916,25 +2917,22 @@ impl LayoutEngine {
                     x = content_x;
                     row_extend.clear();
                     // Record hit-test row (wrap/truncation break)
-                    let row_transition = transition
-                        .request(
-                            hit_row_range.range_to(charpos),
-                            row_geometry_defaults,
-                            text_matrix_row_base,
-                            col,
-                            x,
-                            row_y_positions.recording(),
-                            max_rows,
-                        )
-                        .emit(
-                            &mut row_geometry,
-                            &mut row_flags,
-                            row_limit,
-                            &mut hit_rows,
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                        );
+                    let row_transition = DisplayRowTransitionRequestContext::new(
+                        row_geometry_defaults,
+                        text_matrix_row_base,
+                        row_y_positions.recording(),
+                        max_rows,
+                    )
+                    .overflow(transition, hit_row_range.range_to(charpos), col, x)
+                    .emit(
+                        &mut row_geometry,
+                        &mut row_flags,
+                        row_limit,
+                        &mut hit_rows,
+                        &mut self.matrix_builder,
+                        &mut output_emitter,
+                        evaluator,
+                    );
                     if row_transition.is_exhausted() {
                         break;
                     }

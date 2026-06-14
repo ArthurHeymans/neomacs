@@ -261,6 +261,13 @@ pub(crate) struct DisplayRowLineBreakTransitionRequest<'a> {
     max_rows: usize,
 }
 
+pub(crate) struct DisplayRowTransitionRequestContext<'a> {
+    defaults: DisplayRowGeometryDefaults,
+    row_base: usize,
+    row_y_recording: DisplayRowYRecording<'a>,
+    max_rows: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowLineBreakTransitionPlan {
     state_policy: TextRowTransitionStatePolicy,
@@ -309,6 +316,60 @@ impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
             output_emitter,
             evaluator,
             geometry_transition,
+            self.max_rows,
+        )
+    }
+}
+
+impl<'a> DisplayRowTransitionRequestContext<'a> {
+    pub(crate) fn new(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        row_y_recording: DisplayRowYRecording<'a>,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            defaults,
+            row_base,
+            row_y_recording,
+            max_rows,
+        }
+    }
+
+    pub(crate) fn line_break(
+        self,
+        plan: DisplayRowLineBreakTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        col: usize,
+        x: f32,
+        line_spacing: f32,
+    ) -> DisplayRowLineBreakTransitionRequest<'a> {
+        plan.request(
+            hit_range,
+            self.defaults,
+            self.row_base,
+            col,
+            x,
+            line_spacing,
+            self.row_y_recording,
+            self.max_rows,
+        )
+    }
+
+    pub(crate) fn overflow(
+        self,
+        plan: DisplayRowOverflowTransitionPlan,
+        hit_range: DisplayRowHitRange,
+        col: usize,
+        x: f32,
+    ) -> DisplayRowOverflowTransitionRequest<'a> {
+        plan.request(
+            hit_range,
+            self.defaults,
+            self.row_base,
+            col,
+            x,
+            self.row_y_recording,
             self.max_rows,
         )
     }
