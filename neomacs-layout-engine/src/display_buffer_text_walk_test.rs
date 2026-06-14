@@ -1,6 +1,67 @@
 use super::*;
+use crate::display_row_geometry::DisplayRowMarker;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{FrameId, WindowId};
+
+fn window_params() -> WindowParams {
+    WindowParams {
+        window_id: 1,
+        buffer_id: 1,
+        bounds: Rect::new(0.0, 8.0, 240.0, 120.0),
+        text_bounds: Rect::new(16.0, 32.0, 160.0, 80.0),
+        selected: true,
+        is_minibuffer: false,
+        window_start: 17,
+        window_end: 0,
+        point: 17,
+        buffer_size: 80,
+        buffer_begv: 1,
+        hscroll: 0,
+        vscroll: 0,
+        truncate_lines: false,
+        word_wrap: false,
+        tab_width: 8,
+        tab_stop_list: vec![],
+        default_fg: 0x00ff_ffff,
+        default_bg: 0,
+        char_width: 8.0,
+        char_height: 16.0,
+        window_system: true,
+        font_pixel_size: 14.0,
+        font_ascent: 11.0,
+        mode_line_height: 0.0,
+        header_line_height: 0.0,
+        tab_line_height: 0.0,
+        cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::FilledBox,
+        cursor_bar_width: neomacs_display_protocol::cursor::CursorBarWidth::TWO,
+        x_stretch_cursor: false,
+        cursor_color: 0x00ff_ffff,
+        cursor_effects: None,
+        visual_cursors: Vec::new(),
+        left_fringe_width: 8.0,
+        right_fringe_width: 8.0,
+        indicate_empty_lines: 2,
+        show_trailing_whitespace: false,
+        trailing_ws_bg: 0,
+        fill_column_indicator: 3,
+        fill_column_indicator_char: '|',
+        fill_column_indicator_fg: 0,
+        extra_line_spacing: 0.0,
+        selective_display: 0,
+        escape_glyph_fg: 0,
+        nobreak_char_display: 0,
+        nobreak_char_fg: 0,
+        glyphless_char_fg: 0,
+        wrap_prefix: vec![],
+        line_prefix: vec![],
+        left_margin_width: 0.0,
+        right_margin_width: 0.0,
+        vertical_scroll_bar_side: None,
+        horizontal_scroll_bar: false,
+        scroll_bar_pixel_width: 0.0,
+        scroll_bar_pixel_height: 0.0,
+    }
+}
 
 fn setup_request() -> BufferTextWindowWalkSetupRequest<'static> {
     BufferTextWindowWalkSetupRequest::new(
@@ -84,4 +145,70 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
     assert_eq!(output_setup.body_install_context.matrix_cols(), 1);
     assert_eq!(output_setup.retry_bounds.text_area_top, 24);
     assert_eq!(output_setup.retry_bounds.text_area_bottom, 72);
+}
+
+#[test]
+fn tail_decoration_request_reports_rows_considered_for_decorations() {
+    let mut setup = setup_request().into_setup();
+    setup.row_geometry = DisplayRowGeometryState::new(2, 64.0, 0.0, 16.0, 11.0);
+    setup.row_y_positions.record(1, 48.0);
+    setup.row_y_positions.record(2, 64.0);
+    setup.row_flags.mark(0, DisplayRowFlagKind::Continued);
+    setup.row_flags.mark(0, DisplayRowFlagKind::Truncated);
+    setup.row_flags.mark(1, DisplayRowFlagKind::Continuation);
+    setup
+        .row_extend
+        .activate(DisplayRowMarker::Row(2), (Color::from_pixel(0x101010), 7));
+    setup.box_face.activate(DisplayRowMarker::Row(2), 24.0);
+
+    let params = window_params();
+    let output_setup = BufferTextWindowOutputSetupRequest::new(
+        FrameId(3),
+        WindowId(9),
+        99,
+        2,
+        6,
+        1,
+        20,
+        params.bounds,
+        params.text_bounds,
+        params.selected,
+        32.0,
+        80.0,
+    )
+    .into_setup(5, &setup);
+
+    let outcome = BufferTextWindowTailDecorationRequest::new(
+        &params,
+        24.0,
+        20,
+        32.0,
+        80.0,
+        8.0,
+        16.0,
+        Color::from_pixel(0x00ff_ffff),
+        5,
+        output_setup.row_limit,
+        setup.row_geometry_defaults,
+    )
+    .apply(BufferTextWindowTailDecorationState {
+        x: 40.0,
+        text_append_surface: &setup.text_append_surface,
+        row_geometry: &setup.row_geometry,
+        row_y_positions: &setup.row_y_positions,
+        row_flags: &setup.row_flags,
+        row_extend: &setup.row_extend,
+        box_face: &setup.box_face,
+    });
+
+    assert!(outcome.box_face_active);
+    assert!(outcome.row_extend_active);
+    assert!(outcome.current_row_extended);
+    assert_eq!(outcome.empty_extend_rows, 2);
+    assert_eq!(outcome.fringe_rows, 2);
+    assert_eq!(outcome.right_continuation_rows, 1);
+    assert_eq!(outcome.right_truncation_rows, 1);
+    assert_eq!(outcome.left_continuation_rows, 1);
+    assert_eq!(outcome.empty_line_fringe_rows, 3);
+    assert_eq!(outcome.fill_column_rows, 2);
 }

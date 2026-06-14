@@ -21,8 +21,9 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest, BufferTextWindowWalkSetup,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowTailDecorationRequest, BufferTextWindowTailDecorationState,
+    BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -74,7 +75,6 @@ use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
     display_row_text_glyph_count, new_display_row,
 };
-use crate::display_row_geometry::DisplayRowFlagKind;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
@@ -1248,10 +1248,6 @@ impl LayoutEngine {
         // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
         let has_overlays = !buffer.overlays().is_empty();
 
-        // Fringe state tracking
-        let left_fringe_x = params.text_bounds.x - params.left_fringe_width;
-        let right_fringe_x = params.text_bounds.x + params.text_bounds.width;
-
         let face_resolution_context = BufferCurrentFaceResolutionContext::new(
             buffer,
             face_resolver,
@@ -1655,93 +1651,28 @@ impl LayoutEngine {
         );
         let point_is_visible_eob = end_of_buffer_tail.point_is_visible_eob();
 
-        // Close any remaining box face region at end of text
-        if box_face.is_active() {
-            let _ = (box_face.start_x(), box_face.row()); // suppress unused warnings
-        }
-
-        // Face :extend at end-of-buffer: fill remaining empty rows
-        // with the last :extend face's background color
-        if let Some((_ext_bg, _ext_face_id)) = row_extend.value() {
-            let right_edge = text_append_surface.right_edge();
-            // First, extend the current (partially filled) row if text didn't fill it
-            if x < right_edge && row_geometry.is_within_row_limit(row_limit) {
-                let _ry = row_geometry.current_row_y(&row_y_positions, text_y, char_h);
-            }
-            // Then fill completely empty rows below
-            let start_row = row_geometry.first_row_below_current(row_limit);
-            for r in start_row..max_rows {
-                let ry = row_geometry.row_y(r, &row_y_positions, text_y, char_h);
-                if ry + char_h > text_y + text_height {
-                    break;
-                } // Don't extend past text area
-            }
-        }
-
-        // Render fringe indicators
-        if params.left_fringe_width > 0.0 || params.right_fringe_width > 0.0 {
-            let _fringe_char_w = params.left_fringe_width.min(char_w).max(char_w * 0.5);
-
-            for r in 0..row_geometry.rendered_row_count(row_limit) {
-                let _gy = row_y_positions.y_for_row(r, row_geometry_defaults.row_y_fallback(0.0));
-
-                // Right fringe: continuation arrow for wrapped lines
-                if params.right_fringe_width > 0.0
-                    && row_flags.is_set(r, DisplayRowFlagKind::Continued)
-                {}
-
-                // Right fringe: truncation indicator
-                if params.right_fringe_width > 0.0
-                    && row_flags.is_set(r, DisplayRowFlagKind::Truncated)
-                {}
-
-                // Left fringe: continuation from previous line
-                if params.left_fringe_width > 0.0
-                    && row_flags.is_set(r, DisplayRowFlagKind::Continuation)
-                {}
-            }
-
-            // Empty line indicators (after buffer text ends)
-            if params.indicate_empty_lines > 0 {
-                let eob_start = row_geometry.rendered_row_count(row_limit);
-                for r in eob_start..max_rows {
-                    let _gy = row_geometry.row_y(r, &row_y_positions, text_y, char_h);
-                    let _fringe_x = if params.indicate_empty_lines == 2 {
-                        right_fringe_x
-                    } else {
-                        left_fringe_x
-                    };
-                    let fringe_w = if params.indicate_empty_lines == 2 {
-                        params.right_fringe_width
-                    } else {
-                        params.left_fringe_width
-                    };
-                    if fringe_w > 0.0 {}
-                }
-            }
-        }
-
-        // Render fill-column indicator
-        if params.fill_column_indicator >= 0 {
-            let fci_col = params.fill_column_indicator;
-            let _fci_char = params.fill_column_indicator_char;
-            let _fci_fg = if params.fill_column_indicator_fg != 0 {
-                Color::from_pixel(params.fill_column_indicator_fg)
-            } else {
-                default_fg
-            };
-
-            // Draw indicator character at the fill column on each row
-            if (fci_col as usize) < cols {
-                let indicator_x = content_x + fci_col as f32 * char_w;
-                let total_rows = row_geometry.rendered_row_count(row_limit);
-                for r in 0..total_rows {
-                    let _gy =
-                        row_y_positions.y_for_row(r, row_geometry_defaults.row_y_fallback(0.0));
-                    if indicator_x < text_append_surface.right_edge() {}
-                }
-            }
-        }
+        BufferTextWindowTailDecorationRequest::new(
+            params,
+            content_x,
+            cols,
+            text_y,
+            text_height,
+            char_w,
+            char_h,
+            default_fg,
+            max_rows,
+            row_limit,
+            row_geometry_defaults,
+        )
+        .apply(BufferTextWindowTailDecorationState {
+            x,
+            text_append_surface: &text_append_surface,
+            row_geometry: &row_geometry,
+            row_y_positions: &row_y_positions,
+            row_flags: &row_flags,
+            row_extend: &row_extend,
+            box_face: &box_face,
+        });
 
         BufferTextWindowTailFinalizeRequest::new(
             params,
