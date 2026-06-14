@@ -544,6 +544,38 @@ pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
     pub(crate) face_resolver: &'a FaceResolver,
 }
 
+pub(crate) struct BufferInvisibleTextRenderRequest<'a> {
+    text: &'a [u8],
+    accessible_end: i64,
+    point_charpos: i64,
+    append_surface: &'a DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_face_ascent: f32,
+    char_h: f32,
+    char_w: f32,
+}
+
+pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
+    pub(crate) checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'a FaceResolver,
+}
+
 pub(crate) struct DisplayRowTransitionRenderState<'a> {
     prefix_request: &'a mut DisplayRowPrefixRequest,
     has_prefix: bool,
@@ -4064,6 +4096,12 @@ pub(crate) enum BufferSelectiveDisplayTailRenderOutcome {
     Stop,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferInvisibleTextRenderOutcome {
+    Visible,
+    ContinueBufferWalk,
+}
+
 pub(crate) struct BufferTextSourceCharRenderState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
@@ -4172,6 +4210,12 @@ impl BufferSelectiveDisplayTailRenderOutcome {
         matches!(self, Self::Stop)
     }
 
+    pub(crate) fn should_continue_buffer_walk(self) -> bool {
+        matches!(self, Self::ContinueBufferWalk)
+    }
+}
+
+impl BufferInvisibleTextRenderOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         matches!(self, Self::ContinueBufferWalk)
     }
@@ -6175,6 +6219,117 @@ impl<'a> BufferInvisibleTextRenderState<'a> {
             ),
             cursor_info,
         }
+    }
+}
+
+impl<'a> BufferInvisibleTextRenderRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'a [u8],
+        accessible_end: i64,
+        point_charpos: i64,
+        append_surface: &'a DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_face_ascent: f32,
+        char_h: f32,
+        char_w: f32,
+    ) -> Self {
+        Self {
+            text,
+            accessible_end,
+            point_charpos,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            glyph_y_offset,
+            default_face_ascent,
+            char_h,
+            char_w,
+        }
+    }
+
+    pub(crate) fn render_at_checkpoint_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: BufferInvisibleTextRenderRequestState<'_, '_>,
+    ) -> BufferInvisibleTextRenderOutcome {
+        let BufferInvisibleTextRenderRequestState {
+            checkpoints,
+            byte_idx,
+            charpos,
+            output_emitter,
+            x,
+            col,
+            row_geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+        } = state;
+
+        let action = BufferInvisibleTextScanContext::new(
+            self.text,
+            self.accessible_end,
+            self.point_charpos,
+            cursor_info.is_missing(),
+        )
+        .consume_at_checkpoint(buffer, checkpoints, byte_idx, charpos);
+        let BufferInvisibleTextScanAction::Hidden(hidden_text) = action else {
+            return BufferInvisibleTextRenderOutcome::Visible;
+        };
+
+        let mut hidden_text_state = BufferInvisibleTextRenderState::new(
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            cursor_info,
+            x,
+            col,
+        );
+        hidden_text.append_to_text_row_and_apply(
+            BufferSyntheticTextRenderContext::new(
+                self.append_surface,
+                self.active_face_state,
+                self.glyph_y_offset,
+                self.char_h,
+                self.default_face_ascent,
+                self.char_w,
+            ),
+            row_geometry,
+            &mut hidden_text_state,
+        );
+
+        let mut overlay_state = OverlayStringRenderState::new(
+            evaluator,
+            output_emitter,
+            font_metrics,
+            face_resolver,
+            x,
+            col,
+            row_geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+            builder,
+        );
+        self.overlay_context.render_after_at(
+            buffer,
+            *charpos,
+            self.active_face_state,
+            &mut overlay_state,
+        );
+        BufferInvisibleTextRenderOutcome::ContinueBufferWalk
     }
 }
 

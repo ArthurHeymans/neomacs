@@ -1421,6 +1421,116 @@ fn buffer_invisible_text_skip_omits_ellipsis_request_without_policy() {
 }
 
 #[test]
+fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
+    let mut context = RowTransitionTestContext::new("invisible-text-render-request");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert("folded rest");
+        buffer.set_buffer_local(
+            "buffer-invisibility-spec",
+            Value::list(vec![Value::cons(Value::symbol("outline"), Value::T)]),
+        );
+        let _ = context
+            .eval
+            .buffer_manager_mut()
+            .put_buffer_text_property_in_emacs_byte_range(
+                buf_id,
+                EmacsByteRange::from_usize(0, 6),
+                Value::symbol("invisible"),
+                Value::symbol("outline"),
+            );
+    }
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let overlay_context =
+        BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
+    let mut checkpoints = TextPropertyScanCheckpoints::new(0);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
+    let mut x = 0.0;
+    let mut col = 0;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut font_metrics = None;
+
+    let outcome = BufferInvisibleTextRenderRequest::new(
+        b"folded rest",
+        11,
+        2,
+        &surface,
+        overlay_context,
+        &active_face,
+        0.0,
+        12.0,
+        16.0,
+        8.0,
+    )
+    .render_at_checkpoint_and_apply(
+        &snapshot,
+        BufferInvisibleTextRenderRequestState {
+            checkpoints: &mut checkpoints,
+            byte_idx: &mut byte_idx,
+            charpos: &mut charpos,
+            output_emitter: &mut context.output_emitter,
+            x: &mut x,
+            col: &mut col,
+            row_geometry: &mut context.geometry,
+            cursor_info: &mut cursor_info,
+            hit_rows: &mut context.hit_rows,
+            hit_row_range: &mut hit_row_range,
+            row_y_positions: &mut context.row_y_positions,
+            face_ids: &mut face_ids,
+            builder: &mut context.builder,
+            evaluator: &mut context.eval,
+            font_metrics: &mut font_metrics,
+            face_resolver: &face_resolver,
+        },
+    );
+
+    assert_eq!(
+        outcome,
+        BufferInvisibleTextRenderOutcome::ContinueBufferWalk
+    );
+    assert_eq!(byte_idx, 6);
+    assert_eq!(charpos, 6);
+    assert_eq!(x, 24.0);
+    assert_eq!(col, 3);
+    assert!(cursor_info.captured().is_some());
+    context
+        .builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 3);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '.' }));
+            assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: '.' }));
+            assert!(matches!(text[2].glyph_type, GlyphType::Char { ch: '.' }));
+        })
+        .expect("current row");
+}
+
+#[test]
 fn buffer_selective_display_context_skips_carriage_return_tail_to_newline() {
     let text = b"a\rb\nc";
     let context = BufferSelectiveDisplayContext::new(text, 1, 8);

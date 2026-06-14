@@ -53,12 +53,11 @@ use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
     BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailAction,
-    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderState,
-    BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
-    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
-    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
-    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferSyntheticTextRenderContext, BufferTextDecodedSourceChar,
+    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderRequest,
+    BufferInvisibleTextRenderRequestState, BufferLineNumberMarginRenderRequest,
+    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
+    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayTailRenderRequest,
+    BufferSelectiveDisplayTailRenderState, BufferTextDecodedSourceChar,
     BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
     BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
     DisplayRowPrefixRequest, DisplayRowPrefixValues, OverlayStringRenderState,
@@ -1988,67 +1987,41 @@ impl LayoutEngine {
             );
 
             // --- Invisible text check ---
-            if let BufferInvisibleTextScanAction::Hidden(hidden_text) =
-                BufferInvisibleTextScanContext::new(
-                    text,
-                    accessible_end,
-                    point_charpos,
-                    cursor_info.is_missing(),
-                )
-                .consume_at_checkpoint(
-                    buffer,
-                    &mut text_property_checkpoints,
-                    &mut byte_idx,
-                    &mut charpos,
-                )
+            if BufferInvisibleTextRenderRequest::new(
+                text,
+                accessible_end,
+                point_charpos,
+                &text_append_surface,
+                overlay_text_row_context,
+                &active_face_state,
+                raise_span.value_or(0.0),
+                default_face_ascent,
+                char_h,
+                char_w,
+            )
+            .render_at_checkpoint_and_apply(
+                buffer,
+                BufferInvisibleTextRenderRequestState {
+                    checkpoints: &mut text_property_checkpoints,
+                    byte_idx: &mut byte_idx,
+                    charpos: &mut charpos,
+                    output_emitter: &mut output_emitter,
+                    x: &mut x,
+                    col: &mut col,
+                    row_geometry: &mut row_geometry,
+                    cursor_info: &mut cursor_info,
+                    hit_rows: &mut hit_rows,
+                    hit_row_range: &mut hit_row_range,
+                    row_y_positions: &mut row_y_positions,
+                    face_ids: &mut face_ids,
+                    builder: &mut self.matrix_builder,
+                    evaluator,
+                    font_metrics: &mut self.font_metrics,
+                    face_resolver,
+                },
+            )
+            .should_continue_buffer_walk()
             {
-                let mut hidden_text_state = BufferInvisibleTextRenderState::new(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut cursor_info,
-                    &mut x,
-                    &mut col,
-                );
-                hidden_text.append_to_text_row_and_apply(
-                    BufferSyntheticTextRenderContext::new(
-                        &text_append_surface,
-                        &active_face_state,
-                        raise_span.value_or(0.0),
-                        char_h,
-                        default_face_ascent,
-                        char_w,
-                    ),
-                    &row_geometry,
-                    &mut hidden_text_state,
-                );
-
-                // Check for overlay strings at invisible region boundary.
-                // Packages like org-mode use overlay after-strings at invisible
-                // boundaries to show fold indicators (e.g. "[N lines]").
-                let mut overlay_state = OverlayStringRenderState::new(
-                    evaluator,
-                    &mut output_emitter,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut x,
-                    &mut col,
-                    &mut row_geometry,
-                    &mut cursor_info,
-                    &mut hit_rows,
-                    &mut hit_row_range,
-                    &mut row_y_positions,
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                );
-                overlay_text_row_context.render_after_at(
-                    buffer,
-                    charpos,
-                    &active_face_state,
-                    &mut overlay_state,
-                );
                 continue;
             }
 
