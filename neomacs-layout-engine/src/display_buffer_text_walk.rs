@@ -1,36 +1,47 @@
 use crate::display_cursor::CursorCaptureState;
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
+    BufferDisplayPropertyCheckpointRenderState, BufferDisplayPropertyTextWalkOutcome,
     BufferEndOfBufferTailRenderRequest, BufferHscrollSkipRenderRequest,
-    BufferInvisibleTextRenderRequest, BufferLineNumberMarginRenderRequest,
-    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
-    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayTailRenderRequest,
-    BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextRowAppendState,
-    BufferTextSourceCharRenderRequest, BufferTextWindowBeginRequest,
+    BufferHscrollSkipRenderState, BufferInvisibleTextRenderOutcome,
+    BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
+    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
+    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
+    BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
+    BufferSelectiveDisplayTailRenderState, BufferTextDecodedSourceChar,
+    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
+    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
+    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
     BufferTextWindowBodyInstallRequest, BufferTextWindowFinishRequest,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowVisibilityRetryRequest,
     DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    TextWindowAppendSurfaceRequest,
+    DisplayRowTransitionContinuation, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
+use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
+use crate::font_metrics::FontMetricsService;
 use crate::hit_test::HitRow;
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{
     FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess,
     buffer_display_line_numbers_mode, buffer_local_bool, buffer_local_int, buffer_local_value,
 };
 use crate::types::WindowParams;
+use crate::window_output::WindowOutputEmitter;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
+use neovm_core::emacs_core::Context;
 use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowId};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -252,6 +263,37 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     text_matrix_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
+}
+
+pub(crate) struct BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
+    append_state: &'emit mut BufferTextRowAppendState,
+    text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    byte_idx: &'emit mut usize,
+    charpos: &'emit mut i64,
+    col: &'emit mut usize,
+    output_emitter: &'emit mut WindowOutputEmitter,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'emit mut BoxFaceRowState,
+    x: &'emit mut f32,
+    line_numbers: &'emit mut LineNumberRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
+    row_y_positions: &'rows mut DisplayRowYPositions,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    cursor_info: &'emit mut CursorCaptureState,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+    height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
 }
 
 pub(crate) struct BufferTextWindowTailDecorationRequest<'a> {
@@ -1268,6 +1310,390 @@ impl BufferTextWindowLoopRequestContext {
     #[cfg(test)]
     pub(crate) fn row_limit(self) -> DisplayRowLimit {
         self.row_limit
+    }
+}
+
+impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        append_state: &'emit mut BufferTextRowAppendState,
+        text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+        byte_idx: &'emit mut usize,
+        charpos: &'emit mut i64,
+        col: &'emit mut usize,
+        output_emitter: &'emit mut WindowOutputEmitter,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'emit mut BoxFaceRowState,
+        x: &'emit mut f32,
+        line_numbers: &'emit mut LineNumberRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        builder: &'emit mut GlyphMatrixBuilder,
+        evaluator: &'emit mut Context,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        face_scan: &'emit mut FaceScanCheckpoint,
+        row_y_positions: &'rows mut DisplayRowYPositions,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        cursor_info: &'emit mut CursorCaptureState,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+        raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+        height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+    ) -> Self {
+        Self {
+            append_state,
+            text_property_checkpoints,
+            byte_idx,
+            charpos,
+            col,
+            output_emitter,
+            row_extend,
+            box_face,
+            x,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            builder,
+            evaluator,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            face_scan,
+            row_y_positions,
+            font_metrics,
+            face_resolver,
+            cursor_info,
+            face_ids,
+            raise_span,
+            height_span,
+        }
+    }
+
+    pub(crate) fn hscroll_should_skip(&self) -> bool {
+        self.hscroll_skip.should_skip()
+    }
+
+    pub(crate) fn consume_source_char(
+        &mut self,
+        text: &[u8],
+    ) -> Option<BufferTextDecodedSourceChar> {
+        BufferTextDecodedSourceChar::consume_from_text(text, self.byte_idx, *self.charpos)
+    }
+
+    pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        context: BufferTextWindowLoopRequestContext,
+        text: &'request [u8],
+        append_surface: &'request DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferInvisibleTextRenderOutcome {
+        let request = context.invisible_text_request(
+            text,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            self.raise_span.value_or(0.0),
+        );
+        self.render_invisible_text_at_checkpoint(request, buffer)
+    }
+
+    pub(crate) fn render_hscroll_skip_for_context<'request>(
+        &mut self,
+        context: BufferTextWindowLoopRequestContext,
+        text: &'request [u8],
+        append_surface: &'request DisplayRowAppendSurface,
+        active_face_state: &'request DisplayRowActiveFaceState,
+    ) -> DisplayRowTransitionContinuation
+    where
+        'face: 'request,
+    {
+        let request = context.hscroll_skip_request(
+            text,
+            append_surface,
+            active_face_state,
+            self.face_resolver,
+        );
+        self.render_hscroll_skip(request)
+    }
+
+    pub(crate) fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        context: BufferTextWindowLoopRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        append_surface: &'request DisplayRowAppendSurface,
+        active_face_state: &mut DisplayRowActiveFaceState,
+    ) -> BufferDisplayPropertyTextWalkOutcome {
+        let request = context.display_property_checkpoint_request(
+            face_resolution_context,
+            text,
+            params,
+            *self.x,
+            *self.col,
+            *self.charpos,
+            *self.byte_idx,
+            self.raise_span.value_or(0.0),
+        );
+        self.render_display_property_checkpoint(
+            request,
+            append_surface,
+            active_face_state,
+            context.point_charpos,
+        )
+    }
+
+    pub(crate) fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        context: BufferTextWindowLoopRequestContext,
+        decoded_source_char: BufferTextDecodedSourceChar,
+        text: &'request [u8],
+        append_surface: &'request DisplayRowAppendSurface,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferSelectiveDisplayTailRenderOutcome {
+        let request = context.selective_display_tail_request(
+            decoded_source_char,
+            text,
+            append_surface,
+            active_face_state,
+            self.raise_span.value_or(0.0),
+        );
+        self.render_selective_display_tail(request, buffer)
+    }
+
+    pub(crate) fn render_line_break_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        context: BufferTextWindowLoopRequestContext,
+        decoded_source_char: BufferTextDecodedSourceChar,
+        text: &'request [u8],
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> DisplayRowTransitionContinuation {
+        let request = context.line_break_request(decoded_source_char, text, active_face_state);
+        self.render_line_break(request, buffer)
+    }
+
+    pub(crate) fn render_source_char_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        context: BufferTextWindowLoopRequestContext,
+        decoded_source_char: BufferTextDecodedSourceChar,
+        text: &'request [u8],
+        append_surface: &'request DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        params: &'request WindowParams,
+        buffer: &B,
+    ) -> BufferTextSourceCharRenderOutcome {
+        let request = context.source_char_request(
+            decoded_source_char,
+            text,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+            self.raise_span.value_or(0.0),
+        );
+        self.render_source_char(request, buffer)
+    }
+
+    fn render_invisible_text_at_checkpoint<B: LayoutBufferView>(
+        &mut self,
+        request: BufferInvisibleTextRenderRequest<'_>,
+        buffer: &B,
+    ) -> BufferInvisibleTextRenderOutcome {
+        request.render_at_checkpoint_and_apply(
+            buffer,
+            BufferInvisibleTextRenderRequestState {
+                checkpoints: self.text_property_checkpoints,
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                output_emitter: self.output_emitter,
+                x: self.x,
+                col: self.col,
+                row_geometry: self.row_geometry,
+                cursor_info: self.cursor_info,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                row_y_positions: self.row_y_positions,
+                face_ids: self.face_ids,
+                builder: self.builder,
+                evaluator: self.evaluator,
+                font_metrics: self.font_metrics,
+                face_resolver: self.face_resolver,
+            },
+        )
+    }
+
+    fn render_hscroll_skip(
+        &mut self,
+        request: BufferHscrollSkipRenderRequest<'_>,
+    ) -> DisplayRowTransitionContinuation {
+        request.render_next_and_apply(BufferHscrollSkipRenderState {
+            byte_idx: self.byte_idx,
+            charpos: self.charpos,
+            hscroll_skip: self.hscroll_skip,
+            row_extend: self.row_extend,
+            output_emitter: self.output_emitter,
+            x: self.x,
+            col: self.col,
+            prefix_request: self.prefix_request,
+            line_numbers: self.line_numbers,
+            word_wrap: self.word_wrap,
+            trailing_whitespace: self.trailing_whitespace,
+            row_geometry: self.row_geometry,
+            row_flags: self.row_flags,
+            hit_rows: self.hit_rows,
+            hit_row_range: self.hit_row_range,
+            cursor_info: self.cursor_info,
+            row_y_positions: self.row_y_positions,
+            builder: self.builder,
+            evaluator: self.evaluator,
+            font_metrics: self.font_metrics,
+        })
+    }
+
+    fn render_display_property_checkpoint<B: LayoutBufferView>(
+        &mut self,
+        request: BufferDisplayPropertyCheckpointRenderRequest<'_, B>,
+        append_surface: &DisplayRowAppendSurface,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        point_charpos: i64,
+    ) -> BufferDisplayPropertyTextWalkOutcome {
+        request.render_and_apply(BufferDisplayPropertyCheckpointRenderState {
+            output_emitter: self.output_emitter,
+            builder: self.builder,
+            evaluator: self.evaluator,
+            font_metrics: self.font_metrics,
+            face_ids: self.face_ids,
+            append_surface,
+            row_geometry: self.row_geometry,
+            checkpoints: self.text_property_checkpoints,
+            face_scan: self.face_scan,
+            active_face_state,
+            row_extend: self.row_extend,
+            box_face: self.box_face,
+            byte_idx: self.byte_idx,
+            charpos: self.charpos,
+            x: self.x,
+            col: self.col,
+            cursor_info: self.cursor_info,
+            raise_span: self.raise_span,
+            height_span: self.height_span,
+            point_charpos,
+        })
+    }
+
+    fn render_selective_display_tail<B: LayoutBufferView>(
+        &mut self,
+        request: BufferSelectiveDisplayTailRenderRequest<'_>,
+        buffer: &B,
+    ) -> BufferSelectiveDisplayTailRenderOutcome {
+        request.render_if_needed_and_apply(
+            buffer,
+            BufferSelectiveDisplayTailRenderState {
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                col: self.col,
+                output_emitter: self.output_emitter,
+                row_extend: self.row_extend,
+                box_face: self.box_face,
+                x: self.x,
+                line_numbers: self.line_numbers,
+                row_geometry: self.row_geometry,
+                row_flags: self.row_flags,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                builder: self.builder,
+                evaluator: self.evaluator,
+                prefix_request: self.prefix_request,
+                hscroll_skip: self.hscroll_skip,
+                word_wrap: self.word_wrap,
+                trailing_whitespace: self.trailing_whitespace,
+                row_y_positions: self.row_y_positions,
+                font_metrics: self.font_metrics,
+                face_resolver: self.face_resolver,
+            },
+        )
+    }
+
+    fn render_line_break<B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextLineBreakRenderRequest<'_>,
+        buffer: &B,
+    ) -> DisplayRowTransitionContinuation {
+        request.render_and_apply(
+            buffer,
+            BufferTextLineBreakRenderState {
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                cursor_info: self.cursor_info,
+                row_geometry: self.row_geometry,
+                trailing_whitespace: self.trailing_whitespace,
+                row_extend: self.row_extend,
+                box_face: self.box_face,
+                output_emitter: self.output_emitter,
+                x: self.x,
+                col: self.col,
+                prefix_request: self.prefix_request,
+                line_numbers: self.line_numbers,
+                hscroll_skip: self.hscroll_skip,
+                word_wrap: self.word_wrap,
+                row_flags: self.row_flags,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                row_y_positions: self.row_y_positions,
+                builder: self.builder,
+                evaluator: self.evaluator,
+            },
+        )
+    }
+
+    fn render_source_char<B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextSourceCharRenderRequest<'_>,
+        buffer: &B,
+    ) -> BufferTextSourceCharRenderOutcome {
+        request.render_and_apply(
+            buffer,
+            BufferTextSourceCharRenderRequestState {
+                append_state: self.append_state,
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                col: self.col,
+                output_emitter: self.output_emitter,
+                row_extend: self.row_extend,
+                x: self.x,
+                line_numbers: self.line_numbers,
+                row_geometry: self.row_geometry,
+                row_flags: self.row_flags,
+                hit_rows: self.hit_rows,
+                hit_row_range: self.hit_row_range,
+                builder: self.builder,
+                evaluator: self.evaluator,
+                prefix_request: self.prefix_request,
+                hscroll_skip: self.hscroll_skip,
+                word_wrap: self.word_wrap,
+                trailing_whitespace: self.trailing_whitespace,
+                face_scan: self.face_scan,
+                row_y_positions: self.row_y_positions,
+                font_metrics: self.font_metrics,
+                face_resolver: self.face_resolver,
+                cursor_info: self.cursor_info,
+                face_ids: self.face_ids,
+                raise_span: self.raise_span,
+            },
+        )
     }
 }
 
