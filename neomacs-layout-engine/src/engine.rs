@@ -57,12 +57,12 @@ use crate::display_row_append::{
     BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
     BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
-    BufferSelectiveDisplayContext, BufferSyntheticTextRenderContext,
-    BufferSyntheticTextRenderState, BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest,
-    BufferTextLineBreakRenderState, BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, DisplayRowLineBreakTransitionPlan,
-    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTextWindowEmitContext,
-    DisplayRowTransitionRenderState, OverlayStringRenderState, TextWindowAppendSurfaceRequest,
+    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
+    BufferSyntheticTextRenderContext, BufferTextDecodedSourceChar,
+    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
+    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, OverlayStringRenderState,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -1878,9 +1878,6 @@ impl LayoutEngine {
             window_top,
         );
         output_emitter.begin_update(evaluator);
-        let sync_charpos_from_byte_idx = |byte_idx: usize| {
-            buf_access.bytepos_to_charpos(text_start_byte as i64 + byte_idx as i64)
-        };
 
         // Margin state tracking
         let has_margins = params.left_margin_width > 0.0 || params.right_margin_width > 0.0;
@@ -2156,87 +2153,55 @@ impl LayoutEngine {
             };
             let ch = decoded_source_char.ch();
 
-            // Selective display: \r hides rest of line until \n
-            let selective_display_context =
-                BufferSelectiveDisplayContext::new(text, selective_display, params.tab_width);
-            if let Some(selective_tail_marker) =
-                selective_display_context.carriage_return_tail_marker(ch)
-            {
-                let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
+            let selective_display_outcome = BufferSelectiveDisplayTailRenderRequest::new(
+                decoded_source_char,
+                text,
+                text_start_byte,
+                selective_display,
+                params.tab_width,
+                &text_append_surface,
+                &active_face_state,
+                raise_span.value_or(0.0),
+                default_face_ascent,
+                char_h,
+                char_w,
+                content_x,
+                has_prefix,
+                row_geometry_defaults,
+                text_matrix_row_base,
+                max_rows,
+                row_limit,
+            )
+            .render_if_needed_and_apply(
+                buffer,
+                BufferSelectiveDisplayTailRenderState {
+                    byte_idx: &mut byte_idx,
+                    charpos: &mut charpos,
+                    col: &mut col,
+                    output_emitter: &mut output_emitter,
+                    row_extend: &mut row_extend,
+                    box_face: &mut box_face,
+                    x: &mut x,
+                    line_numbers: &mut line_numbers,
+                    row_geometry: &mut row_geometry,
+                    row_flags: &mut row_flags,
+                    hit_rows: &mut hit_rows,
+                    hit_row_range: &mut hit_row_range,
+                    builder: &mut self.matrix_builder,
                     evaluator,
-                    &mut self.font_metrics,
+                    prefix_request: &mut prefix_request,
+                    hscroll_skip: &mut hscroll_skip,
+                    word_wrap: &mut word_wrap,
+                    trailing_whitespace: &mut trailing_whitespace,
+                    row_y_positions: &mut row_y_positions,
+                    font_metrics: &mut self.font_metrics,
                     face_resolver,
-                    &mut x,
-                    &mut col,
-                );
-                selective_tail_marker.append_to_text_row_and_apply(
-                    BufferSyntheticTextRenderContext::new(
-                        &text_append_surface,
-                        &active_face_state,
-                        raise_span.value_or(0.0),
-                        char_h,
-                        default_face_ascent,
-                        char_w,
-                    ),
-                    &row_geometry,
-                    &mut synthetic_text_state,
-                );
-                // Skip remaining chars until newline
-                let selective_tail_action = selective_display_context
-                    .skip_rest_of_line_after_carriage_return(&mut byte_idx, &mut charpos);
-                if selective_tail_action.is_line_break() {
-                    // Advance to next row (same as newline handler)
-                    selective_tail_action.apply_hidden_line_break_row_state(
-                        &row_geometry,
-                        &mut row_extend,
-                        &mut box_face,
-                        content_x,
-                        &mut x,
-                    );
-                    let line_break_transition =
-                        DisplayRowLineBreakTransitionPlan::hidden_line_break();
-                    let row_transition = DisplayRowTextWindowEmitContext::new(
-                        row_geometry_defaults,
-                        text_matrix_row_base,
-                        &mut row_y_positions,
-                        max_rows,
-                        &mut row_geometry,
-                        &mut row_flags,
-                        row_limit,
-                        &mut hit_rows,
-                        &mut self.matrix_builder,
-                        &mut output_emitter,
-                        evaluator,
-                    )
-                    .emit_line_break_then_row_start(
-                        line_break_transition,
-                        hit_row_range.range_to(charpos),
-                        DisplayRowPosition { x_px: x, col },
-                        0.0,
-                        DisplayRowTransitionRenderState::new(
-                            &mut prefix_request,
-                            has_prefix,
-                            &mut line_numbers,
-                            &mut hscroll_skip,
-                            &mut word_wrap,
-                            &mut trailing_whitespace,
-                        ),
-                        &mut col,
-                    );
-                    if selective_tail_action
-                        .apply_after_hidden_line_break_transition(
-                            row_transition,
-                            sync_charpos_from_byte_idx(byte_idx),
-                            &mut charpos,
-                            &mut hit_row_range,
-                        )
-                        .should_break()
-                    {
-                        break;
-                    }
-                }
+                },
+            );
+            if selective_display_outcome.should_break() {
+                break;
+            }
+            if selective_display_outcome.should_continue_buffer_walk() {
                 continue;
             }
 

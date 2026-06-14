@@ -2003,6 +2003,115 @@ fn buffer_selective_display_line_tail_action_skips_after_state_when_transition_e
 }
 
 #[test]
+fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_row() {
+    let mut context = RowTransitionTestContext::new("selective-display-tail-request");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = context
+            .eval
+            .buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer");
+        buffer.insert("a\rb\nc");
+    }
+    let snapshot = current_buffer_snapshot(&context.eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let text = b"a\rb\nc";
+    let mut byte_idx = 1;
+    let decoded_source_char =
+        BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 1)
+            .expect("decoded carriage return");
+    let mut charpos = 1;
+    let mut col = 0;
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    let mut box_face = BoxFaceRowState::inactive();
+    let mut x = 0.0;
+    let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
+    let mut hit_row_range = HitRowRangeTracker::new(1);
+    let mut prefix_request = DisplayRowPrefixRequest::None;
+    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut word_wrap = WordWrapRenderState::new(false);
+    let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
+    let mut font_metrics = None;
+
+    let outcome = BufferSelectiveDisplayTailRenderRequest::new(
+        decoded_source_char,
+        text,
+        0,
+        1,
+        8,
+        &surface,
+        &active_face,
+        0.0,
+        12.0,
+        16.0,
+        8.0,
+        0.0,
+        false,
+        context.defaults,
+        0,
+        4,
+        context.row_limit,
+    )
+    .render_if_needed_and_apply(
+        &snapshot,
+        BufferSelectiveDisplayTailRenderState {
+            byte_idx: &mut byte_idx,
+            charpos: &mut charpos,
+            col: &mut col,
+            output_emitter: &mut context.output_emitter,
+            row_extend: &mut row_extend,
+            box_face: &mut box_face,
+            x: &mut x,
+            line_numbers: &mut line_numbers,
+            row_geometry: &mut context.geometry,
+            row_flags: &mut context.row_flags,
+            hit_rows: &mut context.hit_rows,
+            hit_row_range: &mut hit_row_range,
+            builder: &mut context.builder,
+            evaluator: &mut context.eval,
+            prefix_request: &mut prefix_request,
+            hscroll_skip: &mut hscroll_skip,
+            word_wrap: &mut word_wrap,
+            trailing_whitespace: &mut trailing_whitespace,
+            row_y_positions: &mut context.row_y_positions,
+            font_metrics: &mut font_metrics,
+            face_resolver: &face_resolver,
+        },
+    );
+
+    assert_eq!(
+        outcome,
+        BufferSelectiveDisplayTailRenderOutcome::ContinueBufferWalk
+    );
+    assert_eq!(byte_idx, 4);
+    assert_eq!(charpos, 4);
+    assert_eq!(hit_row_range.start(), 4);
+    assert_eq!(context.geometry.row(), 1);
+    assert_eq!(x, 0.0);
+    assert_eq!(col, 0);
+    assert_eq!(context.hit_rows.len(), 1);
+    assert_eq!(context.hit_rows[0].charpos_start, 1);
+    assert_eq!(context.hit_rows[0].charpos_end, 4);
+}
+
+#[test]
 fn buffer_text_truncation_skip_action_consumes_decoded_char_and_reaches_newline() {
     let text = b"abc\nnext";
     let mut byte_idx = 1;

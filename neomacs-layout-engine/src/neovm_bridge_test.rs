@@ -990,7 +990,12 @@ fn test_layout_buffer_snapshot_preserves_byte_bounds_for_multibyte_text() {
 
     assert_eq!(access.zv(), 9);
     assert_eq!(access.charpos_to_bytepos(5), 9);
-    assert_eq!(access.bytepos_to_charpos(9), 5);
+    assert_eq!(
+        snapshot
+            .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(9))
+            .get(),
+        5
+    );
 }
 
 #[test]

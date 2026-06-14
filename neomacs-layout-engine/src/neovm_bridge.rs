@@ -1551,15 +1551,6 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
         self.buffer.layout_point_min_emacs_byte_pos().get() as i64
     }
 
-    /// Convert an absolute byte position to the layout engine's internal
-    /// 0-based char position space.
-    pub fn bytepos_to_charpos(&self, bytepos: i64) -> i64 {
-        let Some(bytepos) = layout_emacs_byte_pos_from_i64(bytepos) else {
-            return 0;
-        };
-        buffer_emacs_byte_pos_to_charpos(self.buffer, bytepos) as i64
-    }
-
     /// Get the buffer's narrowed end (zv) as byte position.
     pub fn zv(&self) -> i64 {
         self.buffer.layout_point_max_emacs_byte_pos().get() as i64
