@@ -70,6 +70,9 @@ use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
 
 const LISP_STRING_SOURCE_OVERLAY_STRING: u64 = 1;
+const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
+const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
+const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ResolvedBufferTextSourceAdvance {
@@ -1460,94 +1463,28 @@ impl<'a> SyntheticTextAppendContext<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct SyntheticTextAppendRequest {
-    position: DisplayRowPosition,
-    source_id: u64,
-    text: Box<str>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SyntheticTextMarker {
+    InvisibleEllipsis,
+    HscrollTruncation,
+    SelectiveEllipsis,
 }
 
-impl SyntheticTextAppendRequest {
-    pub(crate) fn new(
-        position: DisplayRowPosition,
-        source_id: u64,
-        text: impl Into<Box<str>>,
-    ) -> Self {
-        Self {
-            position,
-            source_id,
-            text: text.into(),
+impl SyntheticTextMarker {
+    fn source_id(self) -> u64 {
+        match self {
+            Self::InvisibleEllipsis => SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
+            Self::HscrollTruncation => SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
+            Self::SelectiveEllipsis => SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
         }
     }
 
-    pub(crate) fn position(&self) -> DisplayRowPosition {
-        self.position
-    }
-
-    fn into_source_text(self) -> (u64, Box<str>) {
-        (self.source_id, self.text)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct SyntheticTextMetricsAppendRequest<'face> {
-    position: DisplayRowPosition,
-    source_id: u64,
-    text: Box<str>,
-    face_id: u32,
-    base_face: &'face ResolvedFace,
-    height_px: f32,
-    ascent_px: f32,
-    char_width_px: f32,
-}
-
-impl<'face> SyntheticTextMetricsAppendRequest<'face> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        position: DisplayRowPosition,
-        source_id: u64,
-        text: impl Into<Box<str>>,
-        face_id: u32,
-        base_face: &'face ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
-    ) -> Self {
-        Self {
-            position,
-            source_id,
-            text: text.into(),
-            face_id,
-            base_face,
-            height_px,
-            ascent_px,
-            char_width_px,
+    fn text(self) -> &'static str {
+        match self {
+            Self::InvisibleEllipsis | Self::SelectiveEllipsis => "...",
+            Self::HscrollTruncation => "$",
         }
     }
-
-    fn into_parts(self) -> SyntheticTextMetricsAppendRequestParts<'face> {
-        SyntheticTextMetricsAppendRequestParts {
-            position: self.position,
-            source_id: self.source_id,
-            text: self.text,
-            face_id: self.face_id,
-            base_face: self.base_face,
-            height_px: self.height_px,
-            ascent_px: self.ascent_px,
-            char_width_px: self.char_width_px,
-        }
-    }
-}
-
-struct SyntheticTextMetricsAppendRequestParts<'face> {
-    position: DisplayRowPosition,
-    source_id: u64,
-    text: Box<str>,
-    face_id: u32,
-    base_face: &'face ResolvedFace,
-    height_px: f32,
-    ascent_px: f32,
-    char_width_px: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -1629,17 +1566,16 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_active_face_request_to_text_row_and_emit(
+    pub(crate) fn append_active_face_marker_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        request: SyntheticTextAppendRequest,
+        position: DisplayRowPosition,
+        marker: SyntheticTextMarker,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let position = request.position();
-        let (source_id, text) = request.into_source_text();
         self.append_active_face_to_text_row_and_emit(
             builder,
             output_emitter,
@@ -1647,8 +1583,8 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
             font_metrics,
             face_resolver,
             position,
-            source_id,
-            text,
+            marker.source_id(),
+            marker.text(),
         )
     }
 
@@ -1683,30 +1619,35 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_text_row_metrics_request_to_text_row_and_emit(
+    pub(crate) fn append_text_row_metrics_marker_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        request: SyntheticTextMetricsAppendRequest<'a>,
+        position: DisplayRowPosition,
+        marker: SyntheticTextMarker,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        height_px: f32,
+        ascent_px: f32,
+        char_width_px: f32,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let parts = request.into_parts();
         self.append_text_row_metrics_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
             font_metrics,
             face_resolver,
-            parts.position,
-            parts.source_id,
-            parts.text,
-            parts.face_id,
-            parts.base_face,
-            parts.height_px,
-            parts.ascent_px,
-            parts.char_width_px,
+            position,
+            marker.source_id(),
+            marker.text(),
+            face_id,
+            base_face,
+            height_px,
+            ascent_px,
+            char_width_px,
         )
     }
 }

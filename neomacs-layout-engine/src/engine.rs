@@ -61,8 +61,8 @@ use crate::display_row_append::{
     DisplayPropertyReplacementAppendResolveRequest, DisplayRowLineBreakTransitionRequest,
     DisplayRowOverflowTransitionRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     LispStringRowAppendContext, OverlayStringRenderBatchSource, OverlayStringRenderRowContext,
-    SyntheticTextAppendRequest, SyntheticTextMetricsAppendRequest, SyntheticTextRowAppendContext,
-    TextWindowAppendSurfaceRequest, render_overlay_string_batch,
+    SyntheticTextMarker, SyntheticTextRowAppendContext, TextWindowAppendSurfaceRequest,
+    render_overlay_string_batch,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{
@@ -102,9 +102,6 @@ use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
 const LISP_STRING_SOURCE_PREFIX: u64 = 2;
-const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
-const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
-const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
 
 #[derive(Clone, Copy, Debug)]
 struct ScrollBarMetrics {
@@ -2121,19 +2118,15 @@ impl LayoutEngine {
                             raise_span.value_or(0.0),
                             char_h,
                         );
-                        let ellipsis_request = SyntheticTextAppendRequest::new(
-                            DisplayRowPosition { x_px: x, col },
-                            SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
-                            "...",
-                        );
                         if let Some((_progress, position)) = append_context
-                            .append_active_face_request_to_text_row_and_emit(
+                            .append_active_face_marker_to_text_row_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
                                 face_resolver,
-                                ellipsis_request,
+                                DisplayRowPosition { x_px: x, col },
+                                SyntheticTextMarker::InvisibleEllipsis,
                             )
                         {
                             x = position.x_px;
@@ -2270,27 +2263,23 @@ impl LayoutEngine {
                             0.0,
                             char_h,
                         );
-                        let truncation_request = SyntheticTextMetricsAppendRequest::new(
-                            DisplayRowPosition {
-                                x_px: content_x,
-                                col: 0,
-                            },
-                            SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
-                            "$",
-                            BasicFaceId::Default.into(),
-                            face_resolver.default_face(),
-                            char_h,
-                            default_face_ascent,
-                            char_w,
-                        );
                         if let Some((_progress, position)) = append_context
-                            .append_text_row_metrics_request_to_text_row_and_emit(
+                            .append_text_row_metrics_marker_to_text_row_and_emit(
                                 &mut self.matrix_builder,
                                 &mut output_emitter,
                                 evaluator,
                                 &mut self.font_metrics,
                                 face_resolver,
-                                truncation_request,
+                                DisplayRowPosition {
+                                    x_px: content_x,
+                                    col: 0,
+                                },
+                                SyntheticTextMarker::HscrollTruncation,
+                                BasicFaceId::Default.into(),
+                                face_resolver.default_face(),
+                                char_h,
+                                default_face_ascent,
+                                char_w,
                             )
                         {
                             x = position.x_px;
@@ -2447,19 +2436,15 @@ impl LayoutEngine {
                     raise_span.value_or(0.0),
                     char_h,
                 );
-                let ellipsis_request = SyntheticTextAppendRequest::new(
-                    DisplayRowPosition { x_px: x, col },
-                    SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
-                    "...",
-                );
                 if let Some((_progress, position)) = append_context
-                    .append_active_face_request_to_text_row_and_emit(
+                    .append_active_face_marker_to_text_row_and_emit(
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
-                        ellipsis_request,
+                        DisplayRowPosition { x_px: x, col },
+                        SyntheticTextMarker::SelectiveEllipsis,
                     )
                 {
                     x = position.x_px;

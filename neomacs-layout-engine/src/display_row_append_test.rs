@@ -783,17 +783,16 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
-    let request =
-        SyntheticTextAppendRequest::new(DisplayRowPosition { x_px: 0.0, col: 0 }, 99, "...");
-    assert_eq!(request.position(), DisplayRowPosition { x_px: 0.0, col: 0 });
     let (progress, end) = append_context
-        .append_active_face_request_to_text_row_and_emit(
+        .append_active_face_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            request,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            99,
+            "...",
         )
         .expect("synthetic text progress");
 
@@ -816,6 +815,16 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
             );
         })
         .expect("current row");
+}
+
+#[test]
+fn synthetic_text_marker_names_source_ids_and_text() {
+    assert_eq!(SyntheticTextMarker::InvisibleEllipsis.source_id(), 3);
+    assert_eq!(SyntheticTextMarker::InvisibleEllipsis.text(), "...");
+    assert_eq!(SyntheticTextMarker::HscrollTruncation.source_id(), 4);
+    assert_eq!(SyntheticTextMarker::HscrollTruncation.text(), "$");
+    assert_eq!(SyntheticTextMarker::SelectiveEllipsis.source_id(), 5);
+    assert_eq!(SyntheticTextMarker::SelectiveEllipsis.text(), "...");
 }
 
 #[test]
@@ -4304,24 +4313,21 @@ fn synthetic_text_append_context_uses_source_append_request() {
 
     let append_context =
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0);
-    let request = SyntheticTextMetricsAppendRequest::new(
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-        9,
-        "x",
-        7,
-        base_face,
-        16.0,
-        12.0,
-        8.0,
-    );
     let (_progress, end) = append_context
-        .append_text_row_metrics_request_to_text_row_and_emit(
+        .append_text_row_metrics_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            request,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            9,
+            "x",
+            7,
+            base_face,
+            16.0,
+            12.0,
+            8.0,
         )
         .expect("append progress");
 
