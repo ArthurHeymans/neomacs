@@ -3949,6 +3949,74 @@ pub(crate) enum BufferTextSourceSpecialDisplay {
     Glyphless(BufferTextSourceAppendItem),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextDecodedSourceChar {
+    ch: char,
+    start_byte_idx: usize,
+    start_charpos: i64,
+}
+
+impl BufferTextDecodedSourceChar {
+    pub(crate) fn consume_from_text(
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<Self> {
+        if *byte_idx >= text.len() {
+            return None;
+        }
+
+        let start_byte_idx = *byte_idx;
+        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
+        if ch_len == 0 {
+            return None;
+        }
+        *byte_idx += ch_len;
+
+        Some(Self {
+            ch,
+            start_byte_idx,
+            start_charpos: charpos,
+        })
+    }
+
+    pub(crate) fn ch(self) -> char {
+        self.ch
+    }
+
+    pub(crate) fn start_byte_idx(self) -> usize {
+        self.start_byte_idx
+    }
+
+    pub(crate) fn start_charpos(self) -> i64 {
+        self.start_charpos
+    }
+
+    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
+        BufferTextSourceChar::new(
+            self.ch,
+            CharPos0::new(self.start_charpos as usize),
+            nobreak_display_policy,
+        )
+    }
+
+    pub(crate) fn record_word_wrap_candidate(
+        self,
+        word_wrap: &mut WordWrapRenderState,
+        output_emitter: &WindowOutputEmitter,
+    ) {
+        if word_wrap.can_record_candidate(self.ch) {
+            word_wrap.record_candidate(
+                self.ch,
+                self.start_byte_idx,
+                self.start_charpos,
+                output_emitter.display_point_len(),
+                output_emitter.current_row_display_positions(),
+            );
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceChar {
     ch: char,
@@ -4453,6 +4521,21 @@ impl BufferTextLineBreakSourceAction {
         }
     }
 
+    pub(crate) fn for_decoded_newline<B: LayoutBufferView>(
+        buffer: &B,
+        source_char: BufferTextDecodedSourceChar,
+        char_h: f32,
+        extra_line_spacing: f32,
+    ) -> Self {
+        Self::for_newline(
+            buffer,
+            source_char.start_charpos(),
+            source_char.start_byte_idx(),
+            char_h,
+            extra_line_spacing,
+        )
+    }
+
     pub(crate) fn point_matches(self, point_charpos: i64) -> bool {
         point_charpos == self.charpos
     }
@@ -4564,6 +4647,10 @@ impl BufferTextCharacterWrapSourceAction {
             ch_start_byte_idx,
             ch_start_charpos,
         }
+    }
+
+    pub(crate) fn from_decoded_char(source_char: BufferTextDecodedSourceChar) -> Self {
+        Self::new(source_char.start_byte_idx(), source_char.start_charpos())
     }
 
     pub(crate) fn rewind_source_state(self, byte_idx: &mut usize, charpos: &mut i64) {

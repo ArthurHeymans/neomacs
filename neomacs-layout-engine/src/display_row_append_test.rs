@@ -840,6 +840,67 @@ fn buffer_selective_display_context_keeps_visible_indented_line() {
 }
 
 #[test]
+fn buffer_text_decoded_source_char_consumes_multibyte_source_coordinates() {
+    let text = "a界b".as_bytes();
+    let mut byte_idx = "a".len();
+    let charpos = 4;
+
+    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, charpos)
+        .expect("decoded source char");
+
+    assert_eq!(source_char.ch(), '界');
+    assert_eq!(source_char.start_byte_idx(), 1);
+    assert_eq!(source_char.start_charpos(), 4);
+    assert_eq!(byte_idx, "a界".len());
+}
+
+#[test]
+fn buffer_text_decoded_source_char_records_word_wrap_candidate() {
+    let context = RowTransitionTestContext::new("decoded-source-char-word-wrap");
+    let text = b" a";
+    let mut byte_idx = 1;
+    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 6)
+        .expect("decoded source char");
+    let mut word_wrap = WordWrapRenderState::new(true);
+    word_wrap.allow_after_current_char(' ');
+
+    source_char.record_word_wrap_candidate(&mut word_wrap, &context.output_emitter);
+
+    let candidate = word_wrap.candidate();
+    assert!(candidate.is_available());
+    assert_eq!(candidate.byte_idx(), 1);
+    assert_eq!(candidate.charpos(), 6);
+    assert_eq!(candidate.display_point_count(), 0);
+}
+
+#[test]
+fn buffer_text_decoded_source_char_builds_line_break_action() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a\nb");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut byte_idx = 1;
+    let source_char =
+        BufferTextDecodedSourceChar::consume_from_text("a\nb".as_bytes(), &mut byte_idx, 1)
+            .expect("decoded newline");
+
+    let action =
+        BufferTextLineBreakSourceAction::for_decoded_newline(&snapshot, source_char, 16.0, 5.0);
+
+    assert_eq!(source_char.ch(), '\n');
+    assert!(action.point_matches(1));
+    assert_eq!(action.next_charpos(), 2);
+    assert_eq!(action.line_spacing(), 5.0);
+}
+
+#[test]
 fn buffer_text_line_break_source_action_uses_extra_line_spacing() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -998,6 +1059,22 @@ fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
 
     assert_eq!(byte_idx, 13);
     assert_eq!(charpos, 21);
+}
+
+#[test]
+fn buffer_text_character_wrap_source_action_rewinds_decoded_source_char() {
+    let text = "a界b".as_bytes();
+    let mut byte_idx = "a".len();
+    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 9)
+        .expect("decoded source char");
+    let action = BufferTextCharacterWrapSourceAction::from_decoded_char(source_char);
+    let mut rewind_byte_idx = byte_idx;
+    let mut rewind_charpos = 10;
+
+    action.rewind_source_state(&mut rewind_byte_idx, &mut rewind_charpos);
+
+    assert_eq!(rewind_byte_idx, "a".len());
+    assert_eq!(rewind_charpos, 9);
 }
 
 #[test]

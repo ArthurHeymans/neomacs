@@ -62,8 +62,8 @@ use crate::display_row_append::{
     BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
     BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
     BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
-    BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
-    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceChar,
+    BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceCharOverflowAction, BufferTextSpecialSourceCharOverflowAction,
     BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
     DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
@@ -101,7 +101,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, ScrollBarItem};
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1};
+use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 
@@ -1977,20 +1977,6 @@ impl LayoutEngine {
             };
         }
 
-        macro_rules! save_word_wrap_candidate {
-            ($ch:expr, $break_byte_idx:expr) => {
-                if word_wrap.can_record_candidate($ch) {
-                    word_wrap.record_candidate(
-                        $ch,
-                        $break_byte_idx,
-                        charpos,
-                        output_emitter.display_point_len(),
-                        output_emitter.current_row_display_positions(),
-                    );
-                }
-            };
-        }
-
         macro_rules! overlay_string_context {
             () => {
                 BufferOverlayStringRenderContext::for_text_row(
@@ -2357,36 +2343,15 @@ impl LayoutEngine {
                 BufferDisplayPropertyTextAppendAction::None => {}
             }
 
-            // Decode UTF-8 character. Keep the original byte/char position so
-            // character-wrap can resume from the same buffer position on the
-            // next visual row, like GNU Emacs restoring its iterator state.
-            let ch_start_byte_idx = byte_idx;
-            let ch_start_charpos = charpos;
-            let ch = match std::str::from_utf8(&text[byte_idx..]) {
-                Ok(s) => {
-                    let ch = s.chars().next().unwrap_or('\u{FFFD}');
-                    byte_idx += ch.len_utf8();
-                    ch
-                }
-                Err(e) => {
-                    // Partial valid UTF-8: try decoding from the valid prefix
-                    let valid_up_to = e.valid_up_to();
-                    if valid_up_to > 0 {
-                        if let Ok(s) = std::str::from_utf8(&text[byte_idx..byte_idx + valid_up_to])
-                        {
-                            let ch = s.chars().next().unwrap_or('\u{FFFD}');
-                            byte_idx += ch.len_utf8();
-                            ch
-                        } else {
-                            byte_idx += 1;
-                            '\u{FFFD}'
-                        }
-                    } else {
-                        byte_idx += 1;
-                        '\u{FFFD}'
-                    }
-                }
+            // Decode UTF-8 character. Keep the original byte/char position in
+            // the source object so wrap/newline/cursor paths all use the same
+            // typed buffer source coordinates.
+            let Some(decoded_source_char) =
+                BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, charpos)
+            else {
+                break;
             };
+            let ch = decoded_source_char.ch();
 
             // Selective display: \r hides rest of line until \n
             let selective_display_context =
@@ -2455,13 +2420,12 @@ impl LayoutEngine {
                 continue;
             }
 
-            save_word_wrap_candidate!(ch, ch_start_byte_idx);
+            decoded_source_char.record_word_wrap_candidate(&mut word_wrap, &output_emitter);
 
             if ch == '\n' {
-                let line_break_action = BufferTextLineBreakSourceAction::for_newline(
+                let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
                     buffer,
-                    charpos,
-                    ch_start_byte_idx,
+                    decoded_source_char,
                     char_h,
                     params.extra_line_spacing,
                 );
@@ -2553,11 +2517,7 @@ impl LayoutEngine {
                 continue;
             }
 
-            let buffer_source_char = BufferTextSourceChar::new(
-                ch,
-                CharPos0::new(charpos as usize),
-                params.nobreak_char_display,
-            );
+            let buffer_source_char = decoded_source_char.source_char(params.nobreak_char_display);
             let buffer_row_append_context = BufferTextRowAppendContext::new(
                 buffer,
                 buf_id,
@@ -2589,7 +2549,7 @@ impl LayoutEngine {
                 face_resolver,
                 &buffer_source_char,
                 &text,
-                ch_start_byte_idx,
+                decoded_source_char.start_byte_idx(),
                 append_position,
                 cluster_tail,
             );
@@ -2724,7 +2684,10 @@ impl LayoutEngine {
             // Check for line wrap / truncation. Use the same append renderer
             // that materializes buffer text where builder semantics differ
             // from a simple per-face ASCII advance.
-            prepared_append.update_cursor_info_for_main_char(&mut cursor_info, ch_start_byte_idx);
+            prepared_append.update_cursor_info_for_main_char(
+                &mut cursor_info,
+                decoded_source_char.start_byte_idx(),
+            );
             match prepared_append.overflow_action(
                 ch,
                 text_append_surface.right_edge(),
@@ -2830,10 +2793,8 @@ impl LayoutEngine {
                     continue;
                 }
                 BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
-                    let character_wrap_action = BufferTextCharacterWrapSourceAction::new(
-                        ch_start_byte_idx,
-                        ch_start_charpos,
-                    );
+                    let character_wrap_action =
+                        BufferTextCharacterWrapSourceAction::from_decoded_char(decoded_source_char);
                     // Character wrap (no break point available)
                     x = content_x;
                     row_extend.clear();
@@ -2886,7 +2847,7 @@ impl LayoutEngine {
                 &active_face_state,
                 &row_geometry,
                 x,
-                ch_start_byte_idx,
+                decoded_source_char.start_byte_idx(),
                 col,
                 ch == '\t',
                 charpos,
