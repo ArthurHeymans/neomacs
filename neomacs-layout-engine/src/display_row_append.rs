@@ -7142,7 +7142,6 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
 pub(crate) struct BufferCurrentFaceResolutionContext<'a, B: LayoutBufferView> {
     buffer: &'a B,
     face_resolver: &'a FaceResolver,
@@ -7156,6 +7155,14 @@ pub(crate) struct BufferCurrentFaceResolutionContext<'a, B: LayoutBufferView> {
     font_ascent: f32,
     window_system: bool,
 }
+
+impl<'a, B: LayoutBufferView> Clone for BufferCurrentFaceResolutionContext<'a, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, B: LayoutBufferView> Copy for BufferCurrentFaceResolutionContext<'a, B> {}
 
 impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
     #[allow(clippy::too_many_arguments)]

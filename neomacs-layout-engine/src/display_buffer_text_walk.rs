@@ -317,6 +317,37 @@ pub(crate) struct BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
     height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
 }
 
+pub(crate) struct BufferTextWindowLoopRunState<'face, 'rows, 'emit> {
+    append_state: &'emit mut BufferTextRowAppendState,
+    text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    byte_idx: &'emit mut usize,
+    charpos: &'emit mut i64,
+    col: &'emit mut usize,
+    output_emitter: &'emit mut WindowOutputEmitter,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'emit mut BoxFaceRowState,
+    x: &'emit mut f32,
+    line_numbers: &'emit mut LineNumberRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
+    row_y_positions: &'rows mut DisplayRowYPositions,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    cursor_info: &'emit mut CursorCaptureState,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+    height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextWindowLoopStepOutcome {
     ContinueBufferWalk,
@@ -1490,6 +1521,139 @@ impl BufferTextWindowLoopRequestContext {
     #[cfg(test)]
     pub(crate) fn row_limit(self) -> DisplayRowLimit {
         self.row_limit
+    }
+}
+
+impl<'face, 'rows, 'emit> BufferTextWindowLoopRunState<'face, 'rows, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        append_state: &'emit mut BufferTextRowAppendState,
+        text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+        byte_idx: &'emit mut usize,
+        charpos: &'emit mut i64,
+        col: &'emit mut usize,
+        output_emitter: &'emit mut WindowOutputEmitter,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'emit mut BoxFaceRowState,
+        x: &'emit mut f32,
+        line_numbers: &'emit mut LineNumberRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        builder: &'emit mut GlyphMatrixBuilder,
+        evaluator: &'emit mut Context,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        face_scan: &'emit mut FaceScanCheckpoint,
+        row_y_positions: &'rows mut DisplayRowYPositions,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        cursor_info: &'emit mut CursorCaptureState,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+        raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+        height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+    ) -> Self {
+        Self {
+            append_state,
+            text_property_checkpoints,
+            byte_idx,
+            charpos,
+            col,
+            output_emitter,
+            row_extend,
+            box_face,
+            x,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            builder,
+            evaluator,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            face_scan,
+            row_y_positions,
+            font_metrics,
+            face_resolver,
+            cursor_info,
+            face_ids,
+            raise_span,
+            height_span,
+        }
+    }
+
+    pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
+        &mut self,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        loop_context: BufferTextWindowLoopRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        append_surface: &'request DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        buffer: &B,
+    ) where
+        'face: 'request,
+    {
+        while *self.byte_idx < text.len()
+            && self
+                .row_geometry
+                .current_row_is_visible(loop_context.row_visibility_limit)
+        {
+            let mut loop_render_state = BufferTextWindowLoopRenderState::new(
+                &mut *self.append_state,
+                &mut *self.text_property_checkpoints,
+                &mut *self.byte_idx,
+                &mut *self.charpos,
+                &mut *self.col,
+                &mut *self.output_emitter,
+                &mut *self.row_extend,
+                &mut *self.box_face,
+                &mut *self.x,
+                &mut *self.line_numbers,
+                &mut *self.row_geometry,
+                &mut *self.row_flags,
+                &mut *self.hit_rows,
+                &mut *self.hit_row_range,
+                &mut *self.builder,
+                &mut *self.evaluator,
+                &mut *self.prefix_request,
+                &mut *self.hscroll_skip,
+                &mut *self.word_wrap,
+                &mut *self.trailing_whitespace,
+                &mut *self.face_scan,
+                &mut *self.row_y_positions,
+                &mut *self.font_metrics,
+                self.face_resolver,
+                &mut *self.cursor_info,
+                &mut *self.face_ids,
+                &mut *self.raise_span,
+                &mut *self.height_span,
+            );
+            if matches!(
+                loop_render_state.render_next_step(
+                    row_prelude_context,
+                    loop_context,
+                    face_resolution_context.clone(),
+                    text,
+                    params,
+                    append_surface,
+                    overlay_context,
+                    active_face_state,
+                    buffer,
+                ),
+                BufferTextWindowLoopStepOutcome::StopBufferWalk
+            ) {
+                break;
+            }
+        }
     }
 }
 

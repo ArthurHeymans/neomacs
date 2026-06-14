@@ -22,8 +22,7 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowLoopRenderState, BufferTextWindowLoopRequestContext,
-    BufferTextWindowLoopStepOutcome, BufferTextWindowOutputSetup,
+    BufferTextWindowLoopRequestContext, BufferTextWindowLoopRunState, BufferTextWindowOutputSetup,
     BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopState,
     BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
     BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
@@ -1240,54 +1239,47 @@ impl LayoutEngine {
             evaluator,
         });
 
-        while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
-            let mut loop_render_state = BufferTextWindowLoopRenderState::new(
-                &mut buffer_text_append_state,
-                &mut text_property_checkpoints,
-                &mut byte_idx,
-                &mut charpos,
-                &mut col,
-                &mut output_emitter,
-                &mut row_extend,
-                &mut box_face,
-                &mut x,
-                &mut line_numbers,
-                &mut row_geometry,
-                &mut row_flags,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut self.matrix_builder,
-                evaluator,
-                &mut prefix_request,
-                &mut hscroll_skip,
-                &mut word_wrap,
-                &mut trailing_whitespace,
-                &mut face_scan,
-                &mut row_y_positions,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut cursor_info,
-                &mut face_ids,
-                &mut raise_span,
-                &mut height_span,
-            );
-            if matches!(
-                loop_render_state.render_next_step(
-                    row_prelude_request_context,
-                    loop_request_context,
-                    face_resolution_context.clone(),
-                    text,
-                    params,
-                    &text_append_surface,
-                    overlay_text_row_context,
-                    &mut active_face_state,
-                    buffer,
-                ),
-                BufferTextWindowLoopStepOutcome::StopBufferWalk
-            ) {
-                break;
-            }
-        }
+        BufferTextWindowLoopRunState::new(
+            &mut buffer_text_append_state,
+            &mut text_property_checkpoints,
+            &mut byte_idx,
+            &mut charpos,
+            &mut col,
+            &mut output_emitter,
+            &mut row_extend,
+            &mut box_face,
+            &mut x,
+            &mut line_numbers,
+            &mut row_geometry,
+            &mut row_flags,
+            &mut hit_rows,
+            &mut hit_row_range,
+            &mut self.matrix_builder,
+            evaluator,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut row_y_positions,
+            &mut self.font_metrics,
+            face_resolver,
+            &mut cursor_info,
+            &mut face_ids,
+            &mut raise_span,
+            &mut height_span,
+        )
+        .render_visible_steps(
+            row_prelude_request_context,
+            loop_request_context,
+            face_resolution_context.clone(),
+            text,
+            params,
+            &text_append_surface,
+            overlay_text_row_context,
+            &mut active_face_state,
+            buffer,
+        );
 
         let (retry_outcome, rendered_rows_len) = {
             let mut post_loop_state = BufferTextWindowPostLoopState::new(
