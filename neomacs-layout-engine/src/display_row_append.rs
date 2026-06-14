@@ -74,13 +74,14 @@ use crate::unicode::{decode_utf8, is_wide_char};
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
-    TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBodyOutputInstall,
-    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, close_text_window_output,
-    current_text_window_cluster_tail, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
-    finish_and_end_text_matrix_row_output, finish_pending_text_window_row,
-    install_text_window_body_output, mark_current_text_row_truncated_left,
+    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBegin,
+    TextWindowBodyOutputInstall, TextWindowLineNumberMargin, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, WindowOutputEmitter,
+    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
+    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
+    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
+    finish_pending_text_window_row, install_text_window_body_output,
+    mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -88,7 +89,7 @@ use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRan
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
-use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot};
+use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct LispStringSourceId(u64);
@@ -611,6 +612,26 @@ pub(crate) struct BufferEndOfBufferTailRenderState<'a, 'emit> {
     pub(crate) evaluator: &'emit mut Context,
     pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
     pub(crate) face_resolver: &'a FaceResolver,
+}
+
+pub(crate) struct BufferTextWindowBeginRequest {
+    frame_id: FrameId,
+    window_id: WindowId,
+    text_matrix_row_base: usize,
+    text_area_left: f32,
+    window_top: f32,
+    matrix_window_id: u64,
+    matrix_rows: usize,
+    matrix_cols: usize,
+    bounds: neomacs_display_protocol::types::Rect,
+    text_bounds: neomacs_display_protocol::types::Rect,
+    selected: bool,
+    first_row: TextMatrixRowBegin,
+}
+
+pub(crate) struct BufferTextWindowBeginState<'a> {
+    pub(crate) builder: &'a mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'a mut Context,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
@@ -4389,6 +4410,68 @@ impl BufferTextWindowTailFinalizeOutcome {
     #[cfg(test)]
     pub(crate) fn pending_row_finished(self) -> bool {
         self.pending_row_finished
+    }
+}
+
+impl BufferTextWindowBeginRequest {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        frame_id: FrameId,
+        window_id: WindowId,
+        text_matrix_row_base: usize,
+        text_area_left: f32,
+        window_top: f32,
+        matrix_window_id: u64,
+        matrix_rows: usize,
+        matrix_cols: usize,
+        bounds: neomacs_display_protocol::types::Rect,
+        text_bounds: neomacs_display_protocol::types::Rect,
+        selected: bool,
+        first_row: TextMatrixRowBegin,
+    ) -> Self {
+        Self {
+            frame_id,
+            window_id,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            matrix_window_id,
+            matrix_rows,
+            matrix_cols,
+            bounds,
+            text_bounds,
+            selected,
+            first_row,
+        }
+    }
+
+    pub(crate) fn begin_and_apply(
+        self,
+        state: BufferTextWindowBeginState<'_>,
+    ) -> WindowOutputEmitter {
+        let mut output_emitter = WindowOutputEmitter::new(
+            self.frame_id,
+            self.window_id,
+            self.text_matrix_row_base,
+            self.text_area_left,
+            self.window_top,
+        );
+        output_emitter.begin_update(state.evaluator);
+        begin_text_window_output(
+            state.builder,
+            &mut output_emitter,
+            state.evaluator,
+            TextWindowBegin {
+                window_id: self.matrix_window_id,
+                rows: self.matrix_rows,
+                cols: self.matrix_cols,
+                bounds: self.bounds,
+                text_bounds: self.text_bounds,
+                selected: self.selected,
+                first_row: self.first_row,
+            },
+        );
+        output_emitter
     }
 }
 

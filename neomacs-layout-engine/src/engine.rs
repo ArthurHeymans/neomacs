@@ -19,8 +19,8 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    TextWindowBegin, TextWindowCursorEffects, TextWindowRightBorder, WindowOutputEmitter,
-    begin_text_window_output, install_last_window_right_border, install_text_window_cursor_effects,
+    TextWindowCursorEffects, TextWindowRightBorder, install_last_window_right_border,
+    install_text_window_cursor_effects,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -54,7 +54,8 @@ use crate::display_row_append::{
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
     BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, BufferTextWindowBodyInstallRequest,
+    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
+    BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
     BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
     BufferTextWindowVisibilityRetryRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
@@ -1864,14 +1865,6 @@ impl LayoutEngine {
         let mut hit_row_range = HitRowRangeTracker::new(window_start);
         let text_area_left = text_x;
         let window_top = params.bounds.y;
-        let mut output_emitter = WindowOutputEmitter::new(
-            frame_id,
-            window_id,
-            text_matrix_row_base,
-            text_area_left,
-            window_top,
-        );
-        output_emitter.begin_update(evaluator);
 
         // Margin state tracking
         let has_margins = params.left_margin_width > 0.0 || params.right_margin_width > 0.0;
@@ -1917,20 +1910,24 @@ impl LayoutEngine {
         // --- GlyphMatrix builder: begin window and first row ---
         let matrix_rows = text_matrix_row_base + text_matrix_rows + bottom_chrome_rows;
         let matrix_cols = cols.max(1);
-        begin_text_window_output(
-            &mut self.matrix_builder,
-            &mut output_emitter,
+        let mut output_emitter = BufferTextWindowBeginRequest::new(
+            frame_id,
+            window_id,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            params.window_id as u64,
+            matrix_rows,
+            matrix_cols,
+            params.bounds,
+            params.text_bounds,
+            params.selected,
+            row_geometry.text_matrix_row_begin(text_matrix_row_base, col, x),
+        )
+        .begin_and_apply(BufferTextWindowBeginState {
+            builder: &mut self.matrix_builder,
             evaluator,
-            TextWindowBegin {
-                window_id: params.window_id as u64,
-                rows: matrix_rows,
-                cols: matrix_cols,
-                bounds: params.bounds,
-                text_bounds: params.text_bounds,
-                selected: params.selected,
-                first_row: row_geometry.text_matrix_row_begin(text_matrix_row_base, col, x),
-            },
-        );
+        });
 
         let row_visibility_limit = DisplayRowVisibilityLimit {
             max_rows,

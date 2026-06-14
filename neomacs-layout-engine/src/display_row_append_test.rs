@@ -5871,6 +5871,75 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
 }
 
 #[test]
+fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("begin-request", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut output_emitter = BufferTextWindowBeginRequest::new(
+        frame_id,
+        window_id,
+        2,
+        10.0,
+        5.0,
+        41,
+        4,
+        8,
+        Rect::new(3.0, 5.0, 80.0, 64.0),
+        Rect::new(10.0, 9.0, 64.0, 48.0),
+        true,
+        crate::window_output::TextMatrixRowBegin {
+            matrix_row: 2,
+            row: 0,
+            col: 1,
+            y: 9.0,
+            x: 18.0,
+        },
+    )
+    .begin_and_apply(BufferTextWindowBeginState {
+        builder: &mut builder,
+        evaluator: &mut eval,
+    });
+
+    output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
+    crate::window_output::finish_text_matrix_row_output(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        crate::window_output::TextMatrixRowMetrics {
+            y: 9.0,
+            height: 17.0,
+            ascent: 12.0,
+        },
+    );
+    crate::window_output::close_text_window_output(&mut builder);
+
+    let state = builder.finish(8, 4, 8.0, 16.0);
+    assert_eq!(state.window_matrices.len(), 1);
+    let window = &state.window_matrices[0];
+    assert_eq!(window.window_id, 41);
+    assert!(window.selected);
+    assert_eq!(window.pixel_bounds, Rect::new(3.0, 5.0, 80.0, 64.0));
+    assert_eq!(window.text_pixel_bounds, Rect::new(10.0, 9.0, 64.0, 48.0));
+    assert_eq!(window.matrix.rows[2].role, GlyphRowRole::Text);
+    assert_eq!(window.matrix.rows[2].pixel_y, 4.0);
+    assert_eq!(window.matrix.rows[2].height_px, 17.0);
+    assert_eq!(window.matrix.rows[2].ascent_px, 12.0);
+}
+
+#[test]
 fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifacts() {
     let mut eval = Context::new();
     let buf_id = eval
