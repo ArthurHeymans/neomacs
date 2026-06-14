@@ -1,4 +1,5 @@
 use super::*;
+use crate::display_row::DisplayRowFace;
 use neomacs_display_protocol::glyph_matrix::GlyphArea;
 
 fn row_text(row: &GlyphRow) -> String {
@@ -136,26 +137,29 @@ fn echo_minibuffer_clipped_row_appends_reserved_marker_through_text_row() {
     base_face.font_char_width = 8.0;
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
-    let mut engine = LayoutEngine::new_without_font_metrics();
+    let mut builder = GlyphMatrixBuilder::new();
+    let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(1);
 
-    let rows = engine.render_minibuffer_echo_rows(
-        &resolver,
-        None,
-        &mut face_ids,
-        EchoMinibufferRowsRenderRequest {
-            y: 0.0,
-            text_width: 24.0,
-            char_width: 8.0,
-            ascent: 12.0,
-            row_height: 16.0,
-            base_face: &base_face,
-            message: Value::string("ABCD"),
-            max_rows: 1,
-            truncate_lines: false,
-            reserve_right_special_col: true,
-        },
-    );
+    let rows = EchoMinibufferRowsRenderRequest {
+        y: 0.0,
+        text_width: 24.0,
+        char_width: 8.0,
+        ascent: 12.0,
+        row_height: 16.0,
+        base_face: &base_face,
+        message: Value::string("ABCD"),
+        max_rows: 1,
+        truncate_lines: false,
+        reserve_right_special_col: true,
+    }
+    .render_rows(&mut MinibufferDisplayRenderState {
+        builder: &mut builder,
+        font_metrics: &mut font_metrics,
+        face_resolver: &resolver,
+        display_host: None,
+        face_ids: &mut face_ids,
+    });
 
     assert_eq!(rows.len(), 1);
     assert_eq!(row_text(&rows[0].row), "AB\\");

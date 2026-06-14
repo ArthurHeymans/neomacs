@@ -28,9 +28,7 @@ use crate::display_row::{
     install_measured_frame_chrome_row, install_measured_window_display_row,
     install_rendered_display_row,
 };
-pub(crate) use crate::display_row::{
-    DisplayRowFace, DisplayRowFaceRealizer, DisplayRowOutputProgress,
-};
+pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
     display_row_text_is_empty, new_display_row,
@@ -41,7 +39,7 @@ use crate::types::WindowParams;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::GlyphRow;
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
 use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Context;
@@ -155,6 +153,47 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
     fn bounds(&self) -> Rect {
         Rect::new(0.0, self.y, self.width, self.height)
     }
+
+    pub(crate) fn render(
+        self,
+        state: &mut FrameTabBarDisplayRowRenderState<'_, '_>,
+    ) -> Option<FrameTabBarDisplayRowRender> {
+        let render_request = self.render_request(&mut *state.face_ids);
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut *state.font_metrics,
+            state.face_resolver,
+            state.display_host,
+            &mut *state.face_ids,
+        );
+        let rendered = render_executor.render_lisp_string_request(render_request)?;
+        if display_row_text_is_empty(&rendered.row) {
+            return Some(FrameTabBarDisplayRowRender::Empty);
+        }
+        let measured = MeasuredDisplayRow::new(
+            DisplayRowOwner::FrameChrome {
+                kind: FrameChromeKind::TabBar,
+            },
+            self.row_index,
+            self.bounds(),
+            rendered,
+            DisplayRowBoundsPolicy::MeasureContent,
+        );
+        install_measured_frame_chrome_row(
+            &mut *state.builder,
+            &mut *state.pending_frame_chrome_rows,
+            &measured,
+        );
+        Some(FrameTabBarDisplayRowRender::Measured(measured))
+    }
+}
+
+pub(crate) struct FrameTabBarDisplayRowRenderState<'emit, 'face> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) display_host: Option<&'emit dyn DisplayHost>,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 #[derive(Clone, Copy)]
@@ -561,6 +600,30 @@ impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
     ) -> DisplayRowLispStringRenderRequest<'face> {
         self.lisp_string_row_request().render_request(face_ids)
     }
+
+    pub(crate) fn render_window(self, state: &mut MinibufferDisplayRenderState<'_, '_>) {
+        let cols = (self.text_width / self.char_width.max(1.0)).ceil().max(1.0) as usize;
+        state.builder.begin_window_with_text_bounds(
+            self.window_id,
+            1,
+            cols,
+            self.window_bounds,
+            self.text_bounds,
+            self.selected,
+        );
+        let render_request = self.render_request(&mut *state.face_ids);
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut *state.font_metrics,
+            state.face_resolver,
+            state.display_host,
+            &mut *state.face_ids,
+        );
+        let rendered = render_executor
+            .render_lisp_string_request(render_request)
+            .expect("empty Lisp string should render an inactive minibuffer row");
+        install_rendered_display_row(&mut *state.builder, &rendered, 0);
+        state.builder.end_window();
+    }
 }
 
 pub(crate) struct EchoMinibufferDisplayRowsRequest<'face> {
@@ -627,6 +690,27 @@ impl<'face> EchoMinibufferDisplayRowsRequest<'face> {
             },
         }
     }
+
+    pub(crate) fn render_window(self, state: &mut MinibufferDisplayRenderState<'_, '_>) {
+        let parts = self.into_render_parts();
+        let rows = parts.rows_request.render_rows(state);
+        let max_rows = rows.len().clamp(1, parts.max_rows.max(1));
+        let cols = (parts.text_width / parts.char_width.max(1.0))
+            .ceil()
+            .max(1.0) as usize;
+        state.builder.begin_window_with_text_bounds(
+            parts.window_id,
+            max_rows,
+            cols,
+            parts.window_bounds,
+            parts.text_bounds,
+            parts.selected,
+        );
+        for (row_index, rendered) in rows.iter().enumerate() {
+            install_rendered_display_row(&mut *state.builder, rendered, row_index);
+        }
+        state.builder.end_window();
+    }
 }
 
 impl<'face> EchoMinibufferRowsRenderRequest<'face> {
@@ -669,6 +753,119 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
             self.base_face,
         )
     }
+
+    /// Build minibuffer echo rows through the shared display-source path.
+    ///
+    /// The returned rows retain their realized faces and progress metadata so
+    /// callers can install them through the same path used by chrome rows.
+    pub(crate) fn render_rows(
+        self,
+        state: &mut MinibufferDisplayRenderState<'_, '_>,
+    ) -> Vec<RenderedDisplayRow> {
+        let base_face = self.base_face.clone();
+        let row_face = DisplayRowFaceRealizer::new(&mut *state.font_metrics).realize_face(
+            0,
+            &base_face,
+            self.char_width,
+            self.ascent,
+            self.row_height,
+        );
+        let base_render_face = row_face.render_face();
+        let char_width = DisplayRowFaceRealizer::new(&mut *state.font_metrics)
+            .char_width(&row_face, self.char_width);
+        let wrap_width = self.wrap_width(char_width);
+        let matrix_cols = self.matrix_cols();
+        let special_col = matrix_cols.saturating_sub(1);
+        let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
+            self.message,
+            &mut *state.face_ids,
+            &base_face,
+        );
+        let Some(mut source_session) = DisplayRowLispStringSourceSession::new(session_request)
+        else {
+            return empty_minibuffer_echo_row(self.y, self.ascent, self.row_height);
+        };
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut *state.font_metrics,
+            state.face_resolver,
+            state.display_host,
+            &mut *state.face_ids,
+        );
+
+        let mut rows = Vec::new();
+        let max_rows = self.max_rows();
+        while rows.len() < max_rows {
+            let row_request = self
+                .source_row_request(rows.len(), wrap_width)
+                .source_session_row_request(&source_session);
+            let Some(result) =
+                render_executor.render_lisp_string_session_row(&mut source_session, row_request)
+            else {
+                break;
+            };
+            let stop = result.stop;
+            let mut rendered = result.rendered;
+            let special_face_id = rendered
+                .faces
+                .first()
+                .map(|face| face.id)
+                .unwrap_or(base_render_face.id);
+            rendered.row.role = GlyphRowRole::Minibuffer;
+            rendered.row.mode_line = false;
+            if self.reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
+                let ch = if self.truncate_lines { '$' } else { '\\' };
+                let current_cols = display_row_text_glyph_count(&rendered.row);
+                if current_cols < special_col {
+                    append_synthetic_minibuffer_text(
+                        &mut rendered.row,
+                        " ".repeat(special_col - current_cols),
+                        special_face_id,
+                        rendered.progress.y,
+                        self.text_width,
+                        char_width,
+                        self.ascent,
+                        self.row_height,
+                        current_cols,
+                    );
+                }
+                append_synthetic_minibuffer_text(
+                    &mut rendered.row,
+                    ch.to_string(),
+                    special_face_id,
+                    rendered.progress.y,
+                    self.text_width,
+                    char_width,
+                    self.ascent,
+                    self.row_height,
+                    special_col,
+                );
+                rendered.progress.end_x = self.text_width.max(0.0);
+                rendered.progress.end_col = matrix_cols as i64;
+            }
+            rows.push(rendered);
+            match stop {
+                DisplayRowRenderStop::SourceExhausted => break,
+                DisplayRowRenderStop::RowBreak => {}
+                DisplayRowRenderStop::Clipped => {
+                    if self.truncate_lines {
+                        break;
+                    }
+                }
+            }
+        }
+        if rows.is_empty() {
+            return empty_minibuffer_echo_row(self.y, self.ascent, self.row_height);
+        }
+        rows
+    }
+}
+
+pub(crate) struct MinibufferDisplayRenderState<'emit, 'face> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) display_host: Option<&'emit dyn DisplayHost>,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 struct EchoMinibufferSourceRowRequest<'face> {
@@ -1101,18 +1298,6 @@ fn window_chrome_target_cols(width: f32, char_width: f32, reserve_right_border_c
 }
 
 impl LayoutEngine {
-    pub(crate) fn realize_display_row_face(
-        &mut self,
-        face_id: u32,
-        face: &ResolvedFace,
-        char_w: f32,
-        ascent: f32,
-        row_height: f32,
-    ) -> DisplayRowFace {
-        DisplayRowFaceRealizer::new(&mut self.font_metrics)
-            .realize_face(face_id, face, char_w, ascent, row_height)
-    }
-
     pub(crate) fn display_row_height_for_face(
         &mut self,
         face: &ResolvedFace,
@@ -1126,212 +1311,6 @@ impl LayoutEngine {
             fallback_ascent,
             fallback_row_height,
         )
-    }
-
-    pub(crate) fn render_frame_tab_bar_display_row(
-        &mut self,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-        request: FrameTabBarDisplayRowRequest<'_>,
-    ) -> Option<FrameTabBarDisplayRowRender> {
-        let render_request = request.render_request(face_ids);
-        let mut render_executor = DisplayRowRenderExecutor::new(
-            &mut self.font_metrics,
-            face_resolver,
-            display_host,
-            face_ids,
-        );
-        let rendered = render_executor.render_lisp_string_request(render_request)?;
-        if display_row_text_is_empty(&rendered.row) {
-            return Some(FrameTabBarDisplayRowRender::Empty);
-        }
-        let measured = MeasuredDisplayRow::new(
-            DisplayRowOwner::FrameChrome {
-                kind: FrameChromeKind::TabBar,
-            },
-            request.row_index,
-            request.bounds(),
-            rendered,
-            DisplayRowBoundsPolicy::MeasureContent,
-        );
-        install_measured_frame_chrome_row(
-            &mut self.matrix_builder,
-            &mut self.pending_frame_chrome_rows,
-            &measured,
-        );
-        Some(FrameTabBarDisplayRowRender::Measured(measured))
-    }
-
-    pub(crate) fn render_inactive_minibuffer_window(
-        &mut self,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-        request: InactiveMinibufferDisplayRowRequest<'_>,
-    ) {
-        let cols = (request.text_width / request.char_width.max(1.0))
-            .ceil()
-            .max(1.0) as usize;
-        self.matrix_builder.begin_window_with_text_bounds(
-            request.window_id,
-            1,
-            cols,
-            request.window_bounds,
-            request.text_bounds,
-            request.selected,
-        );
-        let render_request = request.render_request(face_ids);
-        let mut render_executor = DisplayRowRenderExecutor::new(
-            &mut self.font_metrics,
-            face_resolver,
-            display_host,
-            face_ids,
-        );
-        let rendered = render_executor
-            .render_lisp_string_request(render_request)
-            .expect("empty Lisp string should render an inactive minibuffer row");
-        install_rendered_display_row(&mut self.matrix_builder, &rendered, 0);
-        self.matrix_builder.end_window();
-    }
-
-    pub(crate) fn render_echo_minibuffer_window(
-        &mut self,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-        request: EchoMinibufferDisplayRowsRequest<'_>,
-    ) {
-        let parts = request.into_render_parts();
-        let rows = self.render_minibuffer_echo_rows(
-            face_resolver,
-            display_host,
-            face_ids,
-            parts.rows_request,
-        );
-        let max_rows = rows.len().clamp(1, parts.max_rows.max(1));
-        let cols = (parts.text_width / parts.char_width.max(1.0))
-            .ceil()
-            .max(1.0) as usize;
-        self.matrix_builder.begin_window_with_text_bounds(
-            parts.window_id,
-            max_rows,
-            cols,
-            parts.window_bounds,
-            parts.text_bounds,
-            parts.selected,
-        );
-        for (row_index, rendered) in rows.iter().enumerate() {
-            install_rendered_display_row(&mut self.matrix_builder, rendered, row_index);
-        }
-        self.matrix_builder.end_window();
-    }
-
-    /// Build minibuffer echo rows through the shared display-source path.
-    ///
-    /// The returned rows retain their realized faces and progress metadata so
-    /// the caller can install them through the same path used by chrome rows.
-    pub(crate) fn render_minibuffer_echo_rows(
-        &mut self,
-        face_resolver: &FaceResolver,
-        display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
-        request: EchoMinibufferRowsRenderRequest<'_>,
-    ) -> Vec<RenderedDisplayRow> {
-        let base_face = request.base_face.clone();
-        let row_face = self.realize_display_row_face(
-            0,
-            &base_face,
-            request.char_width,
-            request.ascent,
-            request.row_height,
-        );
-        let base_render_face = row_face.render_face();
-        let char_width = self.display_row_char_width(&row_face, request.char_width);
-        let wrap_width = request.wrap_width(char_width);
-        let matrix_cols = request.matrix_cols();
-        let special_col = matrix_cols.saturating_sub(1);
-        let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
-            request.message,
-            face_ids,
-            &base_face,
-        );
-        let Some(mut source_session) = DisplayRowLispStringSourceSession::new(session_request)
-        else {
-            return empty_minibuffer_echo_row(request.y, request.ascent, request.row_height);
-        };
-        let mut render_executor = DisplayRowRenderExecutor::new(
-            &mut self.font_metrics,
-            face_resolver,
-            display_host,
-            face_ids,
-        );
-
-        let mut rows = Vec::new();
-        let max_rows = request.max_rows();
-        while rows.len() < max_rows {
-            let row_request = request
-                .source_row_request(rows.len(), wrap_width)
-                .source_session_row_request(&source_session);
-            let Some(result) =
-                render_executor.render_lisp_string_session_row(&mut source_session, row_request)
-            else {
-                break;
-            };
-            let stop = result.stop;
-            let mut rendered = result.rendered;
-            let special_face_id = rendered
-                .faces
-                .first()
-                .map(|face| face.id)
-                .unwrap_or(base_render_face.id);
-            rendered.row.role = GlyphRowRole::Minibuffer;
-            rendered.row.mode_line = false;
-            if request.reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
-                let ch = if request.truncate_lines { '$' } else { '\\' };
-                let current_cols = display_row_text_glyph_count(&rendered.row);
-                if current_cols < special_col {
-                    append_synthetic_minibuffer_text(
-                        &mut rendered.row,
-                        " ".repeat(special_col - current_cols),
-                        special_face_id,
-                        rendered.progress.y,
-                        request.text_width,
-                        char_width,
-                        request.ascent,
-                        request.row_height,
-                        current_cols,
-                    );
-                }
-                append_synthetic_minibuffer_text(
-                    &mut rendered.row,
-                    ch.to_string(),
-                    special_face_id,
-                    rendered.progress.y,
-                    request.text_width,
-                    char_width,
-                    request.ascent,
-                    request.row_height,
-                    special_col,
-                );
-                rendered.progress.end_x = request.text_width.max(0.0);
-                rendered.progress.end_col = matrix_cols as i64;
-            }
-            rows.push(rendered);
-            match stop {
-                DisplayRowRenderStop::SourceExhausted => break,
-                DisplayRowRenderStop::RowBreak => {}
-                DisplayRowRenderStop::Clipped => {
-                    if request.truncate_lines {
-                        break;
-                    }
-                }
-            }
-        }
-        if rows.is_empty() {
-            return empty_minibuffer_echo_row(request.y, request.ascent, request.row_height);
-        }
-        rows
     }
 }
 

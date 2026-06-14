@@ -7,11 +7,12 @@
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
-    EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
-    InactiveMinibufferDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope,
-    WindowChromeRowsRenderRequest, WindowChromeRowsRenderState, build_tab_bar_display,
-    max_mini_window_lines, message_truncate_lines, minibuffer_echo_message_for_window,
-    minibuffer_resize_line_count,
+    EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
+    FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
+    InactiveMinibufferDisplayRowRequest, MinibufferDisplayRenderState, ResizeMiniWindowsMode,
+    ScratchGcRootScope, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
+    build_tab_bar_display, max_mini_window_lines, message_truncate_lines,
+    minibuffer_echo_message_for_window, minibuffer_resize_line_count,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -53,8 +54,8 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowFallbackMetrics,
-    DisplayRowMeasurementPolicy, insert_resolved_display_row_face,
+    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
+    insert_resolved_display_row_face,
 };
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
@@ -1039,26 +1040,28 @@ impl LayoutEngine {
             let truncate_echo_lines = message_truncate_lines(evaluator);
             let frame_rows = frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
-            self.render_echo_minibuffer_window(
+            EchoMinibufferDisplayRowsRequest {
+                window_id: params.window_id as u64,
+                window_bounds: params.bounds,
+                text_bounds: params.text_bounds,
+                selected: params.selected,
+                text_width,
+                char_width: char_w,
+                ascent: default_face_ascent,
+                row_height: char_h,
+                base_face: default_resolved,
+                message: echo_message,
+                max_rows: max_mini,
+                truncate_lines: truncate_echo_lines,
+                reserve_right_special_col,
+            }
+            .render_window(&mut MinibufferDisplayRenderState {
+                builder: &mut self.matrix_builder,
+                font_metrics: &mut self.font_metrics,
                 face_resolver,
-                evaluator.display_host.as_deref(),
-                &mut face_ids,
-                EchoMinibufferDisplayRowsRequest {
-                    window_id: params.window_id as u64,
-                    window_bounds: params.bounds,
-                    text_bounds: params.text_bounds,
-                    selected: params.selected,
-                    text_width,
-                    char_width: char_w,
-                    ascent: default_face_ascent,
-                    row_height: char_h,
-                    base_face: default_resolved,
-                    message: echo_message,
-                    max_rows: max_mini,
-                    truncate_lines: truncate_echo_lines,
-                    reserve_right_special_col,
-                },
-            );
+                display_host: evaluator.display_host.as_deref(),
+                face_ids: &mut face_ids,
+            });
             return;
         }
 
@@ -1067,22 +1070,24 @@ impl LayoutEngine {
             // buffer in the minibuffer window.  With no current message that
             // buffer is empty; the inactive minibuffer must not redisplay the
             // ordinary buffer attached to the window record.
-            self.render_inactive_minibuffer_window(
+            InactiveMinibufferDisplayRowRequest {
+                window_id: params.window_id as u64,
+                window_bounds: params.bounds,
+                text_bounds: params.text_bounds,
+                selected: params.selected,
+                text_width,
+                row_height: char_h,
+                char_width: char_w,
+                ascent: default_face_ascent,
+                base_face: default_resolved,
+            }
+            .render_window(&mut MinibufferDisplayRenderState {
+                builder: &mut self.matrix_builder,
+                font_metrics: &mut self.font_metrics,
                 face_resolver,
-                evaluator.display_host.as_deref(),
-                &mut face_ids,
-                InactiveMinibufferDisplayRowRequest {
-                    window_id: params.window_id as u64,
-                    window_bounds: params.bounds,
-                    text_bounds: params.text_bounds,
-                    selected: params.selected,
-                    text_width,
-                    row_height: char_h,
-                    char_width: char_w,
-                    ascent: default_face_ascent,
-                    base_face: default_resolved,
-                },
-            );
+                display_host: evaluator.display_host.as_deref(),
+                face_ids: &mut face_ids,
+            });
             return;
         }
 
@@ -1612,15 +1617,6 @@ fn mock_display_row_from_line(
 }
 
 impl LayoutEngine {
-    pub(crate) fn display_row_char_width(
-        &mut self,
-        face: &DisplayRowFace,
-        fallback_char_width: f32,
-    ) -> f32 {
-        crate::display_row::DisplayRowFaceRealizer::new(&mut self.font_metrics)
-            .char_width(face, fallback_char_width)
-    }
-
     /// Render the frame-level tab-bar from GNU Lisp keymap output on the Rust path.
     ///
     /// Build the frame-level tab-bar row and attach it to the published
@@ -1661,22 +1657,25 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let Some(rendered_tab_bar) = self.render_frame_tab_bar_display_row(
+        let Some(rendered_tab_bar) = (FrameTabBarDisplayRowRequest {
+            row_index,
+            y: tab_bar_y,
+            width,
+            height: tab_bar_height,
+            char_width: frame_params.char_width,
+            ascent: tab_bar_ascent,
+            row_height: frame_params.char_height,
+            base_face: &tab_bar_face,
+            text: tab_bar.text,
+        })
+        .render(&mut FrameTabBarDisplayRowRenderState {
+            builder: &mut self.matrix_builder,
+            pending_frame_chrome_rows: &mut self.pending_frame_chrome_rows,
+            font_metrics: &mut self.font_metrics,
             face_resolver,
-            evaluator.display_host.as_deref(),
-            &mut face_ids,
-            FrameTabBarDisplayRowRequest {
-                row_index,
-                y: tab_bar_y,
-                width,
-                height: tab_bar_height,
-                char_width: frame_params.char_width,
-                ascent: tab_bar_ascent,
-                row_height: frame_params.char_height,
-                base_face: &tab_bar_face,
-                text: tab_bar.text,
-            },
-        ) else {
+            display_host: evaluator.display_host.as_deref(),
+            face_ids: &mut face_ids,
+        }) else {
             return None;
         };
         self.frame_face_id_counter = face_ids.finish();
