@@ -70,11 +70,13 @@ use crate::unicode::{decode_utf8, is_wide_char};
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
-    TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowLineNumberMargin,
-    TextWindowPendingRowFinish, WindowOutputEmitter, current_text_window_cluster_tail,
+    TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBodyOutputInstall,
+    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightEdgeMarkers, WindowOutputEmitter, current_text_window_cluster_tail,
     emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
     emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
-    finish_pending_text_window_row, mark_current_text_row_truncated_left,
+    finish_pending_text_window_row, install_text_window_body_output,
+    mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -632,6 +634,25 @@ pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
     pub(crate) evaluator: &'emit mut Context,
+}
+
+pub(crate) struct BufferTextWindowBodyInstallRequest<'a> {
+    window_id: u64,
+    window_start: i64,
+    text_start_byte: usize,
+    byte_idx: usize,
+    reserve_right_special_col: bool,
+    reserve_right_border_col: bool,
+    text_matrix_row_base: usize,
+    matrix_cols: usize,
+    row_flags: &'a DisplayRowFlags,
+    right_edge_face_id: u32,
+    char_w: f32,
+}
+
+pub(crate) struct BufferTextWindowBodyInstallState<'a, 'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: &'a WindowOutputEmitter,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -6119,6 +6140,64 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             visual_cursor_summary,
             pending_row_finished,
         }
+    }
+}
+
+impl<'a> BufferTextWindowBodyInstallRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        window_id: u64,
+        window_start: i64,
+        text_start_byte: usize,
+        byte_idx: usize,
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        text_matrix_row_base: usize,
+        matrix_cols: usize,
+        row_flags: &'a DisplayRowFlags,
+        right_edge_face_id: u32,
+        char_w: f32,
+    ) -> Self {
+        Self {
+            window_id,
+            window_start,
+            text_start_byte,
+            byte_idx,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            text_matrix_row_base,
+            matrix_cols,
+            row_flags,
+            right_edge_face_id,
+            char_w,
+        }
+    }
+
+    pub(crate) fn install_and_apply(
+        self,
+        state: BufferTextWindowBodyInstallState<'_, '_>,
+    ) -> TextWindowRedisplayPositions {
+        let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
+            self.reserve_right_special_col,
+            self.reserve_right_border_col,
+            self.text_matrix_row_base,
+            self.matrix_cols,
+            self.row_flags,
+            self.right_edge_face_id,
+            self.char_w,
+        );
+
+        install_text_window_body_output(
+            state.builder,
+            state.output_emitter,
+            TextWindowBodyOutputInstall {
+                window_id: self.window_id,
+                window_start: self.window_start,
+                text_start_byte: self.text_start_byte,
+                byte_idx: self.byte_idx,
+                right_edge_markers,
+            },
+        )
     }
 }
 

@@ -19,9 +19,8 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects, TextWindowRightBorder,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
-    close_text_window_output, install_last_window_right_border, install_text_window_body_output,
+    TextWindowBegin, TextWindowCursorEffects, TextWindowRightBorder, WindowOutputEmitter,
+    begin_text_window_output, close_text_window_output, install_last_window_right_border,
     install_text_window_cursor_effects,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
@@ -56,7 +55,8 @@ use crate::display_row_append::{
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
     BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, BufferTextWindowTailFinalizeRequest,
+    BufferTextSourceCharRenderRequestState, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowBodyInstallState, BufferTextWindowTailFinalizeRequest,
     BufferTextWindowTailFinalizeState, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     TextWindowAppendSurfaceRequest,
 };
@@ -2540,7 +2540,11 @@ impl LayoutEngine {
             return;
         }
 
-        let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
+        let redisplay_positions = BufferTextWindowBodyInstallRequest::new(
+            params.window_id as u64,
+            window_start,
+            text_start_byte,
+            byte_idx,
             reserve_right_special_col,
             reserve_right_border_col,
             text_matrix_row_base,
@@ -2548,18 +2552,11 @@ impl LayoutEngine {
             &row_flags,
             0,
             char_w,
-        );
-        let redisplay_positions = install_text_window_body_output(
-            &mut self.matrix_builder,
-            &output_emitter,
-            TextWindowBodyOutputInstall {
-                window_id: params.window_id as u64,
-                window_start,
-                text_start_byte,
-                byte_idx,
-                right_edge_markers,
-            },
-        );
+        )
+        .install_and_apply(BufferTextWindowBodyInstallState {
+            builder: &mut self.matrix_builder,
+            output_emitter: &output_emitter,
+        });
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",

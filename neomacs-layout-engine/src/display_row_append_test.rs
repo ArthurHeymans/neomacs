@@ -5781,6 +5781,74 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
 }
 
 #[test]
+fn buffer_text_window_body_install_request_records_positions_and_edge_markers() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("body-install-request", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(41, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    crate::window_output::TextMatrixRowOutput::new(&mut builder, &mut output_emitter, &mut eval)
+        .begin(crate::window_output::TextMatrixRowBegin {
+            matrix_row: 0,
+            row: 0,
+            col: 0,
+            y: 2.0,
+            x: 0.0,
+        });
+    output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
+    write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
+    crate::window_output::finish_text_matrix_row_output(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        crate::window_output::TextMatrixRowMetrics {
+            y: 2.0,
+            height: 20.0,
+            ascent: 15.0,
+        },
+    );
+
+    let mut row_flags = DisplayRowFlags::new(1);
+    row_flags.mark(0, DisplayRowFlagKind::Truncated);
+    let positions = BufferTextWindowBodyInstallRequest::new(
+        41, 3, 100, 4, true, false, 0, 5, &row_flags, 9, 8.0,
+    )
+    .install_and_apply(BufferTextWindowBodyInstallState {
+        builder: &mut builder,
+        output_emitter: &output_emitter,
+    });
+
+    assert_eq!(positions.window_start, LispCharPos1::new(4));
+    assert_eq!(positions.window_end, LispCharPos1::new(8));
+    assert_eq!(positions.window_end_byte, EmacsBytePos::new(104));
+    assert_eq!(positions.window_end_vpos, 0);
+
+    builder.end_window();
+    let state = builder.finish(5, 1, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert_eq!(row.height_px, 20.0);
+    assert_eq!(row.ascent_px, 15.0);
+    let text = &row.glyphs[GlyphArea::Text.index()];
+    assert!(matches!(text[4].glyph_type, GlyphType::Char { ch: '$' }));
+    assert_eq!(text[4].face_id, 9);
+}
+
+#[test]
 fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating_row() {
     let mut eval = Context::new();
     let buf_id = eval
