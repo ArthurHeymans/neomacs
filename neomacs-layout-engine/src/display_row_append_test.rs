@@ -1028,6 +1028,63 @@ fn buffer_invisible_text_scan_context_reports_ellipsis_policy() {
 }
 
 #[test]
+fn buffer_invisible_text_skip_captures_cursor_at_hidden_span_start() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(2, 24.0, 0.0, 16.0, 12.0);
+    let hidden = BufferInvisibleTextSkip::new(5, 8, 14, 14, true, false);
+    let mut cursor = CursorCaptureState::new();
+
+    hidden.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 40.0, 5);
+
+    let captured = cursor.as_ref().expect("cursor captured");
+    assert_eq!(captured.x, 40.0);
+    assert_eq!(captured.y, 24.0);
+    assert_eq!(captured.byte_idx, 5);
+    assert_eq!(captured.col, 5);
+    assert_eq!(captured.matrix_row, 2);
+    assert_eq!(captured.slot_width, Some(8.0));
+}
+
+#[test]
+fn buffer_invisible_text_skip_keeps_cursor_missing_when_point_is_visible() {
+    let active_face = test_active_face_state(9, 8.0);
+    let geometry = DisplayRowGeometryState::new(2, 24.0, 0.0, 16.0, 12.0);
+    let hidden = BufferInvisibleTextSkip::new(5, 8, 14, 14, false, false);
+    let mut cursor = CursorCaptureState::new();
+
+    hidden.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 40.0, 5);
+
+    assert!(cursor.as_ref().is_none());
+}
+
+#[test]
+fn buffer_invisible_text_skip_builds_active_ellipsis_request() {
+    let hidden = BufferInvisibleTextSkip::new(5, 8, 14, 14, false, true);
+    let position = DisplayRowPosition { x_px: 16.0, col: 2 };
+
+    let request = hidden
+        .ellipsis_append_request(position)
+        .expect("ellipsis request");
+    let (request_position, source, face) = request.into_parts();
+
+    assert_eq!(request_position, position);
+    assert_eq!(source.source_id(), SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS);
+    assert_eq!(source.into_text().as_ref(), "...");
+    assert!(matches!(face, SyntheticTextAppendFace::ActiveFace));
+}
+
+#[test]
+fn buffer_invisible_text_skip_omits_ellipsis_request_without_policy() {
+    let hidden = BufferInvisibleTextSkip::new(5, 8, 14, 14, false, false);
+
+    assert!(
+        hidden
+            .ellipsis_append_request(DisplayRowPosition { x_px: 16.0, col: 2 })
+            .is_none()
+    );
+}
+
+#[test]
 fn buffer_selective_display_context_skips_carriage_return_tail_to_newline() {
     let text = b"a\rb\nc";
     let context = BufferSelectiveDisplayContext::new(text, 1, 8);

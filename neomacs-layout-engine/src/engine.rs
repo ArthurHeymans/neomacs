@@ -58,8 +58,9 @@ use crate::display_row::{
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
-    BufferHscrollSkipSourceChar, BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
-    BufferLinePrefixRenderContext, BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
+    BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState, BufferInvisibleTextScanAction,
+    BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
+    BufferOverlayStringRenderContext, BufferSelectiveDisplayContext,
     BufferSyntheticTextRenderContext, BufferTextCharacterWrapSourceAction,
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
@@ -2128,39 +2129,21 @@ impl LayoutEngine {
                     &mut charpos,
                 )
             {
-                if hidden_text.point_in_hidden_region() {
-                    capture_cursor_info(
-                        &mut cursor_info,
-                        CapturedCursorInfo::from_active_face_state(
-                            &active_face_state,
-                            CapturedCursorPlacement::from_row_text_position(
-                                row_geometry.text_position(x, hidden_text.start_byte_idx(), col),
-                                CapturedCursorSlotWidth::FaceChar,
-                                false,
-                            ),
-                        ),
-                    );
-                }
-
-                // GNU displays ellipsis only when the matching
-                // `buffer-invisibility-spec' entry requests it.
-                if hidden_text.ellipsis() {
-                    if let Some(position) = synthetic_text_context!(raise_span.value_or(0.0))
-                        .render_active_marker_to_text_row(
-                            &mut self.matrix_builder,
-                            &mut output_emitter,
-                            evaluator,
-                            &mut self.font_metrics,
-                            face_resolver,
-                            &row_geometry,
-                            DisplayRowPosition { x_px: x, col },
-                            SyntheticTextMarker::InvisibleEllipsis,
-                        )
-                    {
-                        x = position.x_px;
-                        col = position.col;
-                    }
-                }
+                let mut hidden_text_state = BufferInvisibleTextRenderState::new(
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut cursor_info,
+                    &mut x,
+                    &mut col,
+                );
+                hidden_text.append_to_text_row_and_apply(
+                    synthetic_text_context!(raise_span.value_or(0.0)),
+                    &row_geometry,
+                    &mut hidden_text_state,
+                );
 
                 // Check for overlay strings at invisible region boundary.
                 // Packages like org-mode use overlay after-strings at invisible

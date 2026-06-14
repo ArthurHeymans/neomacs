@@ -4458,6 +4458,7 @@ impl BufferInvisibleTextSkip {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn start_byte_idx(self) -> usize {
         self.start_byte_idx
     }
@@ -4477,12 +4478,121 @@ impl BufferInvisibleTextSkip {
         self.next_visible
     }
 
+    #[cfg(test)]
     pub(crate) fn point_in_hidden_region(self) -> bool {
         self.point_in_hidden_region
     }
 
+    #[cfg(test)]
     pub(crate) fn ellipsis(self) -> bool {
         self.ellipsis
+    }
+
+    pub(crate) fn capture_cursor_if_point(
+        self,
+        target: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        x: f32,
+        col: usize,
+    ) {
+        if !self.point_in_hidden_region {
+            return;
+        }
+        capture_cursor_info(
+            target,
+            CapturedCursorInfo::from_active_face_state(
+                active_face_state,
+                CapturedCursorPlacement::from_row_text_position(
+                    row_geometry.text_position(x, self.start_byte_idx, col),
+                    CapturedCursorSlotWidth::FaceChar,
+                    false,
+                ),
+            ),
+        );
+    }
+
+    pub(crate) fn ellipsis_append_request(
+        self,
+        position: DisplayRowPosition,
+    ) -> Option<SyntheticTextAppendRequest<'static>> {
+        self.ellipsis.then(|| {
+            SyntheticTextAppendRequest::active_marker(
+                position,
+                SyntheticTextMarker::InvisibleEllipsis,
+            )
+        })
+    }
+
+    pub(crate) fn append_to_text_row_and_apply<'ctx>(
+        self,
+        render_context: BufferSyntheticTextRenderContext<'ctx>,
+        row_geometry: &'ctx DisplayRowGeometryState,
+        state: &mut BufferInvisibleTextRenderState<'_>,
+    ) {
+        self.capture_cursor_if_point(
+            state.cursor_info,
+            render_context.active_face,
+            row_geometry,
+            *state.x,
+            *state.col,
+        );
+
+        let Some(request) = self.ellipsis_append_request(DisplayRowPosition {
+            x_px: *state.x,
+            col: *state.col,
+        }) else {
+            return;
+        };
+        let Some((_progress, position)) = render_context.render_request_to_text_row(
+            state.builder,
+            state.output_emitter,
+            state.evaluator,
+            state.font_metrics,
+            state.face_resolver,
+            row_geometry,
+            request,
+        ) else {
+            return;
+        };
+        *state.x = position.x_px;
+        *state.col = position.col;
+    }
+}
+
+pub(crate) struct BufferInvisibleTextRenderState<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+    cursor_info: &'a mut CursorCaptureState,
+    x: &'a mut f32,
+    col: &'a mut usize,
+}
+
+impl<'a> BufferInvisibleTextRenderState<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+        cursor_info: &'a mut CursorCaptureState,
+        x: &'a mut f32,
+        col: &'a mut usize,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            cursor_info,
+            x,
+            col,
+        }
     }
 }
 
