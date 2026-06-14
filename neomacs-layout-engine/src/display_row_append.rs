@@ -3659,6 +3659,18 @@ enum DisplayReplacementAppendItem {
 }
 
 impl DisplayReplacementAppendItem {
+    fn stretch(item: DisplayReplacementStretchAppendItem) -> Self {
+        Self::Stretch(item.geometry())
+    }
+
+    fn media(item: DisplayReplacementMediaAppendItem) -> Self {
+        Self::Media(item.media())
+    }
+
+    fn source_mapped_text(item: DisplayReplacementSourceMappedTextAppendItem) -> Self {
+        Self::SourceMappedText(item.text())
+    }
+
     fn into_display_item(
         self,
         replacement_source: BufferDisplayReplacementSource,
@@ -4625,13 +4637,13 @@ impl DisplayReplacementStretchAppendItem {
         }
         row_geometry.include_glyph_vertical_metrics(self.height_px(), self.ascent_px());
         replacement_append_context
-            .append_active_face_stretch_to_text_row_and_emit(
+            .append_active_face_replacement_item_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
                 face_resolver,
-                self,
+                DisplayReplacementAppendItem::stretch(self),
                 position,
             )
             .map(|(_progress, position)| position)
@@ -4689,14 +4701,18 @@ impl DisplayReplacementMediaAppendItem {
         face_resolver: &FaceResolver,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
+        let display_height_px = self.display_height_px();
+        let display_ascent_px = self.display_ascent_px();
         if let Some((progress, appended_position)) = replacement_append_context
-            .append_display_box_media_to_text_row_and_emit(
+            .append_display_box_replacement_item_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
                 face_resolver,
-                self,
+                DisplayReplacementAppendItem::media(self),
+                display_height_px,
+                display_ascent_px,
                 position,
             )
             && let Some((height, ascent)) = self.row_extents_after_append(&progress)
@@ -4722,13 +4738,13 @@ impl DisplayReplacementSourceMappedTextAppendItem {
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
         replacement_append_context
-            .append_active_face_source_mapped_text_to_text_row_and_emit(
+            .append_active_face_replacement_item_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
                 font_metrics,
                 face_resolver,
-                self,
+                DisplayReplacementAppendItem::source_mapped_text(self),
                 position,
             )
             .map(|(_progress, position)| position)
@@ -4969,18 +4985,18 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_active_face_stretch_to_text_row_and_emit(
+    fn append_active_face_replacement_item_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        item: DisplayReplacementStretchAppendItem,
+        item: DisplayReplacementAppendItem,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
-            .append_stretch_to_text_row_and_emit(
+            .append_replacement_item_to_text_row_and_emit(
                 builder,
                 output_emitter,
                 evaluator,
@@ -4992,23 +5008,25 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_display_box_media_to_text_row_and_emit(
+    fn append_display_box_replacement_item_to_text_row_and_emit(
         self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        item: DisplayReplacementMediaAppendItem,
+        item: DisplayReplacementAppendItem,
+        height_px: f32,
+        ascent_px: f32,
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         self.display_box(
             self.active_face.face_id(),
             self.active_face.resolved_face(),
-            item.display_height_px(),
-            item.display_ascent_px(),
+            height_px,
+            ascent_px,
         )
-        .append_media_to_text_row_and_emit(
+        .append_replacement_item_to_text_row_and_emit(
             builder,
             output_emitter,
             evaluator,
@@ -5017,29 +5035,6 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
             item,
             position,
         )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_active_face_source_mapped_text_to_text_row_and_emit(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        item: DisplayReplacementSourceMappedTextAppendItem,
-        position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.active_face(self.active_face.face_id(), self.active_face.resolved_face())
-            .append_source_mapped_text_to_text_row_and_emit(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                item,
-                position,
-            )
     }
 }
 
@@ -5067,7 +5062,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn append_item_to_text_row_and_emit(
+    fn append_replacement_item_to_text_row_and_emit(
         &self,
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
@@ -5094,72 +5089,6 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             font_metrics,
             face_resolver,
             &mut render_policy,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_stretch_to_text_row_and_emit(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        item: DisplayReplacementStretchAppendItem,
-        position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.append_item_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            DisplayReplacementAppendItem::Stretch(item.geometry()),
-            position,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_media_to_text_row_and_emit(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        item: DisplayReplacementMediaAppendItem,
-        position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.append_item_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            DisplayReplacementAppendItem::Media(item.media()),
-            position,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_source_mapped_text_to_text_row_and_emit(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        item: DisplayReplacementSourceMappedTextAppendItem,
-        position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.append_item_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            DisplayReplacementAppendItem::SourceMappedText(item.text()),
-            position,
         )
     }
 

@@ -4274,13 +4274,15 @@ fn display_replacement_append_context_advances_stretch_output() {
         16.0,
     );
     let (_progress, end) = append_context
-        .append_active_face_stretch_to_text_row_and_emit(
+        .append_active_face_replacement_item_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayReplacementStretchAppendItem::from_extents(13.0, 16.0, 12.0),
+            DisplayReplacementAppendItem::stretch(
+                DisplayReplacementStretchAppendItem::from_extents(13.0, 16.0, 12.0),
+            ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("append progress");
@@ -4357,13 +4359,15 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         16.0,
     );
     let (_progress, end) = append_context
-        .append_active_face_source_mapped_text_to_text_row_and_emit(
+        .append_active_face_replacement_item_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            DisplayReplacementSourceMappedTextAppendItem::new("??"),
+            DisplayReplacementAppendItem::source_mapped_text(
+                DisplayReplacementSourceMappedTextAppendItem::new("??"),
+            ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("append progress");
@@ -4526,14 +4530,18 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         2.0,
         16.0,
     );
+    let display_height_px = media_item.display_height_px();
+    let display_ascent_px = media_item.display_ascent_px();
     let (progress, end) = append_context
-        .append_display_box_media_to_text_row_and_emit(
+        .append_display_box_replacement_item_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            media_item,
+            DisplayReplacementAppendItem::media(media_item),
+            display_height_px,
+            display_ascent_px,
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
@@ -4658,13 +4666,13 @@ fn display_replacement_append_context_installs_image_replacements() {
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
     let (progress, end) = append_context
-        .append_media_to_text_row_and_emit(
+        .append_replacement_item_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            media_item,
+            DisplayReplacementAppendItem::media(media_item),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
@@ -4791,13 +4799,13 @@ fn display_replacement_append_context_installs_video_replacements() {
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
     let (progress, end) = append_context
-        .append_media_to_text_row_and_emit(
+        .append_replacement_item_to_text_row_and_emit(
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            media_item,
+            DisplayReplacementAppendItem::media(media_item),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
