@@ -4785,7 +4785,7 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
     }
 
     pub(crate) fn resolve_at_checkpoint(
-        self,
+        &self,
         state: &mut BufferCurrentFaceResolutionState<'_>,
         charpos: i64,
     ) -> bool {

@@ -1910,39 +1910,19 @@ impl LayoutEngine {
                 let _margin_x = text_x + text_width + params.right_fringe_width;
             }
         }
-
-        macro_rules! resolve_current_face_state {
-            () => {
-                BufferCurrentFaceResolutionContext::new(
-                    buffer,
-                    face_resolver,
-                    measurement_policy,
-                    default_resolved,
-                    default_face_char_w,
-                    default_face_ascent,
-                    default_face_h,
-                    char_w,
-                    char_h,
-                    font_ascent,
-                    frame_params.window_system,
-                )
-                .resolve_at_checkpoint(
-                    &mut BufferCurrentFaceResolutionState::new(
-                        &mut face_scan,
-                        &height_span,
-                        &mut self.font_metrics,
-                        &mut face_ids,
-                        &mut self.matrix_builder,
-                        &mut active_face_state,
-                        &mut row_geometry,
-                        &mut row_extend,
-                        &mut box_face,
-                        x,
-                    ),
-                    charpos,
-                );
-            };
-        }
+        let face_resolution_context = BufferCurrentFaceResolutionContext::new(
+            buffer,
+            face_resolver,
+            measurement_policy,
+            default_resolved,
+            default_face_char_w,
+            default_face_ascent,
+            default_face_h,
+            char_w,
+            char_h,
+            font_ascent,
+            frame_params.window_system,
+        );
 
         macro_rules! overlay_string_context {
             () => {
@@ -2222,7 +2202,21 @@ impl LayoutEngine {
                 charpos,
                 window_start,
             );
-            resolve_current_face_state!();
+            face_resolution_context.resolve_at_checkpoint(
+                &mut BufferCurrentFaceResolutionState::new(
+                    &mut face_scan,
+                    &height_span,
+                    &mut self.font_metrics,
+                    &mut face_ids,
+                    &mut self.matrix_builder,
+                    &mut active_face_state,
+                    &mut row_geometry,
+                    &mut row_extend,
+                    &mut box_face,
+                    x,
+                ),
+                charpos,
+            );
             let display_property_walk = BufferDisplayPropertyTextRenderContext::new(
                 buf_id,
                 text_start_byte,
@@ -2265,7 +2259,21 @@ impl LayoutEngine {
                 &mut face_scan,
             );
             if display_property_walk.should_resolve_face() {
-                resolve_current_face_state!();
+                face_resolution_context.resolve_at_checkpoint(
+                    &mut BufferCurrentFaceResolutionState::new(
+                        &mut face_scan,
+                        &height_span,
+                        &mut self.font_metrics,
+                        &mut face_ids,
+                        &mut self.matrix_builder,
+                        &mut active_face_state,
+                        &mut row_geometry,
+                        &mut row_extend,
+                        &mut box_face,
+                        x,
+                    ),
+                    charpos,
+                );
             }
             if display_property_walk.should_continue_buffer_walk() {
                 continue;
