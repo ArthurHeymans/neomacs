@@ -888,6 +888,7 @@ fn text_window_right_edge_markers_use_row_flags() {
             column: TextWindowRightEdgeMarkerColumn::BeforeRightBorder,
             row_flags: &row_flags,
             face_id: 9,
+            char_width: 8.0,
         },
     );
 
@@ -902,6 +903,61 @@ fn text_window_right_edge_markers_use_row_flags() {
     assert_char_glyph(&row1[3], '\\', 9);
     assert_eq!(row2.len(), 1);
     assert_char_glyph(&row2[0], 'x', 7);
+}
+
+#[test]
+fn text_window_right_edge_markers_render_padding_and_truncation_as_text_items() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for ch in "ABCDE".chars() {
+        write_char_to_current_row(&mut builder, ch, 0, 0);
+    }
+    builder.end_row();
+    builder.begin_row(1, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'X', 0, 0);
+    builder.end_row();
+
+    let mut row_flags = DisplayRowFlags::new(2);
+    row_flags.mark(0, DisplayRowFlagKind::Truncated);
+    row_flags.mark(1, DisplayRowFlagKind::Truncated);
+    install_text_window_right_edge_markers(
+        &mut builder,
+        TextWindowRightEdgeMarkers {
+            text_matrix_row_base: 0,
+            matrix_cols: 5,
+            column: TextWindowRightEdgeMarkerColumn::LastColumn,
+            row_flags: &row_flags,
+            face_id: 13,
+            char_width: 8.0,
+        },
+    );
+    builder.end_window();
+
+    let state = builder.finish(10, 2, 8.0, 16.0);
+    let matrix = &state.window_matrices[0].matrix;
+    let row_text = |row: usize| -> String {
+        matrix.rows[row].glyphs[GlyphArea::Text.index()]
+            .iter()
+            .map(|glyph| match &glyph.glyph_type {
+                GlyphType::Char { ch } => *ch,
+                _ => '?',
+            })
+            .collect()
+    };
+
+    assert_eq!(row_text(0), "ABCD$");
+    assert_eq!(row_text(1), "X   $");
+    assert!(
+        matrix.rows[0].glyphs[GlyphArea::Text.index()]
+            .iter()
+            .all(|glyph| glyph.face_id == 0 || glyph.face_id == 13)
+    );
+    assert!(
+        matrix.rows[1].glyphs[GlyphArea::Text.index()][1..]
+            .iter()
+            .all(|glyph| glyph.face_id == 13)
+    );
 }
 
 #[test]

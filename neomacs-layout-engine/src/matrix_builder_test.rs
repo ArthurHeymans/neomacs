@@ -1148,45 +1148,6 @@ fn overwrite_last_window_right_border_paints_blank_rows() {
 }
 
 #[test]
-fn overwrite_current_window_row_last_glyph_marks_truncated_row() {
-    let mut builder = GlyphMatrixBuilder::new();
-    builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
-    builder.begin_row(0, GlyphRowRole::Text);
-    for ch in "ABCDE".chars() {
-        write_char_to_current_row(&mut builder, ch, 0, 0);
-    }
-    builder.end_row();
-    builder.begin_row(1, GlyphRowRole::Text);
-    write_char_to_current_row(&mut builder, 'X', 0, 0);
-    builder.end_row();
-
-    builder.overwrite_current_window_row_last_glyph(0, '$', 13);
-    builder.overwrite_current_window_row_last_glyph(1, '$', 13);
-    builder.end_window();
-
-    let state = builder.finish(10, 2, 8.0, 16.0);
-    let matrix = &state.window_matrices[0].matrix;
-
-    let row0_chars: String = matrix.rows[0].glyphs[GlyphArea::Text as usize]
-        .iter()
-        .map(|g| match &g.glyph_type {
-            GlyphType::Char { ch } => *ch,
-            _ => '?',
-        })
-        .collect();
-    assert_eq!(row0_chars, "ABCD$");
-
-    let row1_chars: String = matrix.rows[1].glyphs[GlyphArea::Text as usize]
-        .iter()
-        .map(|g| match &g.glyph_type {
-            GlyphType::Char { ch } => *ch,
-            _ => '?',
-        })
-        .collect();
-    assert_eq!(row1_chars, "X   $");
-}
-
-#[test]
 fn overwrite_last_window_right_border_preserves_truncation_marker() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);

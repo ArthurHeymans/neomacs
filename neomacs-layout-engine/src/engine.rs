@@ -3648,6 +3648,7 @@ impl LayoutEngine {
                     column: marker_column,
                     row_flags: &row_flags,
                     face_id: 0,
+                    char_width: char_w,
                 },
             );
         }

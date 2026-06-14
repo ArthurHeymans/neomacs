@@ -33,6 +33,7 @@ use neovm_core::window::{
 use std::collections::HashMap;
 
 const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
+const RIGHT_EDGE_MARKER_SOURCE_ID: u64 = 0x7265_6467;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
@@ -170,6 +171,7 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) column: TextWindowRightEdgeMarkerColumn,
     pub(crate) row_flags: &'a DisplayRowFlags,
     pub(crate) face_id: u32,
+    pub(crate) char_width: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -468,6 +470,95 @@ fn line_number_margin_stretch_item(
     )
 }
 
+fn glyph_area_glyph_count(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> usize {
+    row.glyphs[GlyphArea::LeftMargin.index()].len()
+        + row.glyphs[GlyphArea::Text.index()].len()
+        + row.glyphs[GlyphArea::RightMargin.index()].len()
+}
+
+fn current_row_text_layout(
+    row: &neomacs_display_protocol::glyph_matrix::GlyphRow,
+    width_cols: usize,
+    char_width: f32,
+    face_id: u32,
+) -> DisplayRowLayout {
+    let char_width = char_width.max(1.0);
+    DisplayRowLayout {
+        role: row.role,
+        y_px: row.pixel_y,
+        width_px: width_cols.max(1) as f32 * char_width,
+        height_px: row.height_px.max(1.0),
+        ascent_px: row.ascent_px.max(0.0).min(row.height_px.max(1.0)),
+        char_width_px: char_width,
+        tab_policy: DisplayTabPolicy::every(8),
+        base_face: RenderFaceRef::FaceId(face_id),
+        symbol_values: HashMap::new(),
+    }
+}
+
+fn right_edge_marker_text_item(text: String, face_id: u32, start_offset: usize) -> DisplayItem {
+    let end_offset = start_offset.saturating_add(text.chars().count());
+    DisplayItem::new(
+        SourceSpan::synthetic(RIGHT_EDGE_MARKER_SOURCE_ID, start_offset, end_offset),
+        RenderFaceRef::FaceId(face_id),
+        DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+    )
+}
+
+fn append_right_edge_marker_text(
+    row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow,
+    layout: &DisplayRowLayout,
+    text: String,
+    face_id: u32,
+    source_offset: usize,
+) {
+    if text.is_empty() {
+        return;
+    }
+    DisplayRowWriter::new(layout, row).push_item(right_edge_marker_text_item(
+        text,
+        face_id,
+        source_offset,
+    ));
+}
+
+fn install_right_edge_marker_into_row(
+    row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow,
+    target_col: usize,
+    marker: char,
+    face_id: u32,
+    char_width: f32,
+    matrix_cols: usize,
+) {
+    if matrix_cols == 0 {
+        return;
+    }
+    row.enabled = true;
+    let clamped_col = target_col.min(matrix_cols - 1);
+    while glyph_area_glyph_count(row) > clamped_col {
+        let text_area = &mut row.glyphs[GlyphArea::Text.index()];
+        if text_area.is_empty() {
+            break;
+        }
+        text_area.pop();
+    }
+
+    let layout = current_row_text_layout(row, matrix_cols, char_width, face_id);
+    let mut source_offset = 0usize;
+    let padding_cols = clamped_col.saturating_sub(glyph_area_glyph_count(row));
+    if padding_cols > 0 {
+        append_right_edge_marker_text(
+            row,
+            &layout,
+            " ".repeat(padding_cols),
+            face_id,
+            source_offset,
+        );
+        source_offset = source_offset.saturating_add(padding_cols);
+    }
+    append_right_edge_marker_text(row, &layout, marker.to_string(), face_id, source_offset);
+}
+
 pub(crate) fn emit_text_window_line_number_margin(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowLineNumberMargin<'_>,
@@ -583,27 +674,32 @@ pub(crate) fn install_text_window_right_edge_markers(
     let target_col = request.column.target_col(request.matrix_cols);
     for row_idx in 0..request.row_flags.len() {
         let matrix_row = request.text_matrix_row_base + row_idx;
-        if request
+        let marker = if request
             .row_flags
             .is_set(row_idx, DisplayRowFlagKind::Truncated)
         {
-            builder.overwrite_current_window_row_glyph_at_col(
-                matrix_row,
-                target_col,
-                '$',
-                request.face_id,
-            );
+            Some('$')
         } else if request
             .row_flags
             .is_set(row_idx, DisplayRowFlagKind::Continued)
         {
-            builder.overwrite_current_window_row_glyph_at_col(
-                matrix_row,
+            Some('\\')
+        } else {
+            None
+        };
+        let Some(marker) = marker else {
+            continue;
+        };
+        builder.with_current_window_row_mut(matrix_row, |row, matrix_cols| {
+            install_right_edge_marker_into_row(
+                row,
                 target_col,
-                '\\',
+                marker,
                 request.face_id,
+                request.char_width,
+                matrix_cols,
             );
-        }
+        });
     }
 }
 

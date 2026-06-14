@@ -1107,41 +1107,19 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn overwrite_current_window_row_last_glyph(
+    pub(crate) fn with_current_window_row_mut<R>(
         &mut self,
         row_idx: usize,
-        ch: char,
-        face_id: u32,
-    ) {
-        let Some(matrix) = self.current_matrix.as_ref() else {
-            return;
-        };
-        let ncols = matrix.ncols;
-        if ncols == 0 {
-            return;
-        }
-        self.overwrite_current_window_row_glyph_at_col(row_idx, ncols - 1, ch, face_id);
-    }
-
-    pub fn overwrite_current_window_row_glyph_at_col(
-        &mut self,
-        row_idx: usize,
-        target_col: usize,
-        ch: char,
-        face_id: u32,
-    ) {
+        f: impl FnOnce(&mut GlyphRow, usize) -> R,
+    ) -> Option<R> {
         let Some(matrix) = self.current_matrix.as_mut() else {
-            return;
+            return None;
         };
         let ncols = matrix.ncols;
-        if ncols == 0 {
-            return;
-        }
         let Some(row) = matrix.rows.get_mut(row_idx) else {
-            return;
+            return None;
         };
-        let clamped_col = target_col.min(ncols - 1);
-        Self::pad_row_and_write_glyph(row, clamped_col, ch, face_id, GlyphArea::Text);
+        Some(f(row, ncols))
     }
 
     pub fn current_window_row_enabled(&self, row_idx: usize) -> bool {
