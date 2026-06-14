@@ -2309,28 +2309,21 @@ impl LayoutEngine {
                 accessible_end,
             ) {
                 BufferDisplayPropertyTextAppendAction::Replacement(replacement_outcome) => {
-                    if cursor_info.is_missing()
-                        && replacement_outcome.point_in_replacement(point_charpos, charpos)
-                    {
-                        let start_position = replacement_outcome.start_position();
-                        capture_cursor_info(
-                            &mut cursor_info,
-                            replacement_outcome.cursor_info(
-                                &active_face_state,
-                                row_geometry.text_position(
-                                    start_position.x_px,
-                                    byte_idx,
-                                    start_position.col,
-                                ),
-                            ),
-                        );
-                    }
-                    let position = replacement_outcome.end_position();
-                    x = position.x_px;
-                    col = position.col;
-
-                    // Skip covered buffer text
-                    replacement_outcome.skip_covered_buffer_text(text, &mut byte_idx, &mut charpos);
+                    replacement_outcome.capture_cursor_info_if_point(
+                        &mut cursor_info,
+                        &active_face_state,
+                        &row_geometry,
+                        point_charpos,
+                        charpos,
+                        byte_idx,
+                    );
+                    replacement_outcome.apply_to_walk_state(
+                        text,
+                        &mut byte_idx,
+                        &mut charpos,
+                        &mut x,
+                        &mut col,
+                    );
                     continue;
                 }
                 BufferDisplayPropertyTextAppendAction::Modifiers(modifiers) => {

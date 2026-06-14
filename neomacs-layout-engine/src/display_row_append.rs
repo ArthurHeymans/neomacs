@@ -6436,6 +6436,41 @@ impl BufferDisplayPropertyTextReplacementOutcome {
         skip_text_to_charpos(text, byte_idx, charpos, self.skip_to);
     }
 
+    pub(crate) fn capture_cursor_info_if_point(
+        self,
+        cursor_info: &mut CursorCaptureState,
+        active_face_state: &DisplayRowActiveFaceState,
+        row_geometry: &DisplayRowGeometryState,
+        point_charpos: i64,
+        start_charpos: i64,
+        byte_idx: usize,
+    ) {
+        if cursor_info.is_missing() && self.point_in_replacement(point_charpos, start_charpos) {
+            let start_position = self.start_position();
+            capture_cursor_info(
+                cursor_info,
+                self.cursor_info(
+                    active_face_state,
+                    row_geometry.text_position(start_position.x_px, byte_idx, start_position.col),
+                ),
+            );
+        }
+    }
+
+    pub(crate) fn apply_to_walk_state(
+        self,
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        x: &mut f32,
+        col: &mut usize,
+    ) {
+        let position = self.end_position();
+        *x = position.x_px;
+        *col = position.col;
+        self.skip_covered_buffer_text(text, byte_idx, charpos);
+    }
+
     #[cfg(test)]
     pub(crate) fn skip_to(self) -> i64 {
         self.skip_to

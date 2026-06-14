@@ -4856,7 +4856,7 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
 }
 
 #[test]
-fn buffer_display_property_replacement_outcome_skips_covered_buffer_text() {
+fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let outcome = BufferDisplayPropertyTextReplacementOutcome {
         replacement: DisplayPropertyReplacementAppendOutcome {
             start_position: DisplayRowPosition { x_px: 4.0, col: 1 },
@@ -4867,12 +4867,39 @@ fn buffer_display_property_replacement_outcome_skips_covered_buffer_text() {
     };
     let mut byte_idx = "a".len();
     let mut charpos = 1;
+    let mut x = 4.0;
+    let mut col = 1;
 
-    outcome.skip_covered_buffer_text("a界b\n".as_bytes(), &mut byte_idx, &mut charpos);
+    outcome.apply_to_walk_state(
+        "a界b\n".as_bytes(),
+        &mut byte_idx,
+        &mut charpos,
+        &mut x,
+        &mut col,
+    );
 
     assert_eq!(byte_idx, "a界b\n".len());
     assert_eq!(charpos, 4);
+    assert_eq!(x, 12.0);
+    assert_eq!(col, 2);
     assert_eq!(outcome.skip_to(), 4);
+
+    let active_face = test_active_face_state(7, 8.0);
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut cursor_info = CursorCaptureState::new();
+    outcome.capture_cursor_info_if_point(
+        &mut cursor_info,
+        &active_face,
+        &geometry,
+        2,
+        1,
+        "a".len(),
+    );
+    let cursor = cursor_info.captured().expect("captured replacement cursor");
+    assert_eq!(cursor.x, 4.0);
+    assert_eq!(cursor.byte_idx, "a".len());
+    assert_eq!(cursor.col, 1);
+    assert_eq!(cursor.slot_width, Some(8.0));
 }
 
 #[test]
