@@ -1868,6 +1868,7 @@ mod divergence_package_dired_elp;
 mod divergence_package_system_deep;
 mod divergence_pcase_deep;
 mod divergence_predicates_deep;
+mod divergence_process;
 mod divergence_print_circle_read;
 mod divergence_print_format_charset;
 mod divergence_print_read_circle;
