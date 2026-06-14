@@ -1205,7 +1205,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
+    fn measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -1225,6 +1225,29 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             parts.special_display.into_append_item(),
             parts.position,
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare_special_source_char_layout_plan(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        builder: &mut GlyphMatrixBuilder,
+        evaluator: &mut Context,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        request: BufferTextSpecialSourceCharRequest,
+        position: DisplayRowPosition,
+    ) -> BufferTextSpecialSourceCharLayoutPlan {
+        let measured_width_px = self
+            .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
+                geometry,
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                request.measure_at(position),
+            );
+        request.layout_plan(measured_width_px)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1254,7 +1277,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_special_source_char_request_to_text_row_and_emit(
+    pub(crate) fn append_special_source_char_plan_to_text_row_and_emit(
         &self,
         geometry: &DisplayRowGeometryState,
         builder: &mut GlyphMatrixBuilder,
@@ -1262,9 +1285,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         evaluator: &mut Context,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        request: BufferTextSpecialSourceCharAppendRequest,
+        plan: BufferTextSpecialSourceCharAppendPlan,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let parts = request.into_parts();
+        let parts = plan.into_parts();
         self.append_item_source_range_to_text_row_and_emit(
             geometry,
             builder,
@@ -1808,18 +1831,25 @@ impl BufferTextSpecialSourceCharRequest {
         }
     }
 
-    pub(crate) fn append_at(
+    pub(crate) fn append_plan_at(
         &self,
         position: DisplayRowPosition,
-    ) -> BufferTextSpecialSourceCharAppendRequest {
-        BufferTextSpecialSourceCharAppendRequest {
+    ) -> BufferTextSpecialSourceCharAppendPlan {
+        BufferTextSpecialSourceCharAppendPlan {
             range: self.range,
             special_display: self.special_display.clone(),
             position,
         }
     }
 
-    pub(crate) fn measure_at(
+    fn layout_plan(self, measured_width_px: f32) -> BufferTextSpecialSourceCharLayoutPlan {
+        BufferTextSpecialSourceCharLayoutPlan {
+            source_request: self,
+            measured_width_px,
+        }
+    }
+
+    fn measure_at(
         &self,
         position: DisplayRowPosition,
     ) -> BufferTextSpecialSourceCharMeasureRequest {
@@ -1832,15 +1862,34 @@ impl BufferTextSpecialSourceCharRequest {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharAppendRequest {
+pub(crate) struct BufferTextSpecialSourceCharLayoutPlan {
+    source_request: BufferTextSpecialSourceCharRequest,
+    measured_width_px: f32,
+}
+
+impl BufferTextSpecialSourceCharLayoutPlan {
+    pub(crate) fn measured_width_px(&self) -> f32 {
+        self.measured_width_px
+    }
+
+    pub(crate) fn append_plan_at(
+        &self,
+        position: DisplayRowPosition,
+    ) -> BufferTextSpecialSourceCharAppendPlan {
+        self.source_request.append_plan_at(position)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSpecialSourceCharAppendPlan {
     range: BufferTextSourceRange,
     special_display: BufferTextSourceSpecialDisplay,
     position: DisplayRowPosition,
 }
 
-impl BufferTextSpecialSourceCharAppendRequest {
-    fn into_parts(self) -> BufferTextSpecialSourceCharAppendRequestParts {
-        BufferTextSpecialSourceCharAppendRequestParts {
+impl BufferTextSpecialSourceCharAppendPlan {
+    fn into_parts(self) -> BufferTextSpecialSourceCharAppendPlanParts {
+        BufferTextSpecialSourceCharAppendPlanParts {
             range: self.range,
             special_display: self.special_display,
             position: self.position,
@@ -1848,7 +1897,7 @@ impl BufferTextSpecialSourceCharAppendRequest {
     }
 }
 
-struct BufferTextSpecialSourceCharAppendRequestParts {
+struct BufferTextSpecialSourceCharAppendPlanParts {
     range: BufferTextSourceRange,
     special_display: BufferTextSourceSpecialDisplay,
     position: DisplayRowPosition,

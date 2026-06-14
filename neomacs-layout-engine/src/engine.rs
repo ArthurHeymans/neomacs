@@ -5044,17 +5044,17 @@ impl LayoutEngine {
             if let Some(special_source_request) = buffer_source_char.control_special_request() {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                let measure_request =
-                    special_source_request.measure_at(DisplayRowPosition { x_px: x, col });
-                let needed_width = buffer_row_append_context
-                    .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
+                let special_layout_plan = buffer_row_append_context
+                    .prepare_special_source_char_layout_plan(
                         &row_geometry,
                         &mut self.matrix_builder,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
-                        measure_request,
+                        special_source_request,
+                        DisplayRowPosition { x_px: x, col },
                     );
+                let needed_width = special_layout_plan.measured_width_px();
 
                 // Check if the renderer-measured caret notation fits.
                 if x + needed_width > text_append_surface.full_text_right_edge() {
@@ -5157,17 +5157,17 @@ impl LayoutEngine {
                 if params.escape_glyph_fg != 0 {
                     let _ = face_ids.allocate();
                 }
-                let special_request =
-                    special_source_request.append_at(DisplayRowPosition { x_px: x, col });
+                let special_plan =
+                    special_layout_plan.append_plan_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_request_to_text_row_and_emit(
+                    .append_special_source_char_plan_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
-                        special_request,
+                        special_plan,
                     )
                 {
                     x = position.x_px;
@@ -5187,17 +5187,17 @@ impl LayoutEngine {
                     let _nb_fg = Color::from_pixel(params.nobreak_char_fg);
                     let _ = face_ids.allocate();
                 }
-                let special_request =
-                    special_source_request.append_at(DisplayRowPosition { x_px: x, col });
+                let special_plan =
+                    special_source_request.append_plan_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_request_to_text_row_and_emit(
+                    .append_special_source_char_plan_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
-                        special_request,
+                        special_plan,
                     )
                 {
                     x = position.x_px;
@@ -5226,17 +5226,17 @@ impl LayoutEngine {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
 
-                let special_request =
-                    special_source_request.append_at(DisplayRowPosition { x_px: x, col });
+                let special_plan =
+                    special_source_request.append_plan_at(DisplayRowPosition { x_px: x, col });
                 if let Some((_progress, position)) = buffer_row_append_context
-                    .append_special_source_char_request_to_text_row_and_emit(
+                    .append_special_source_char_plan_to_text_row_and_emit(
                         &row_geometry,
                         &mut self.matrix_builder,
                         &mut output_emitter,
                         evaluator,
                         &mut self.font_metrics,
                         face_resolver,
-                        special_request,
+                        special_plan,
                     )
                 {
                     x = position.x_px;

@@ -2333,14 +2333,14 @@ fn buffer_text_source_char_names_range_and_precluster_policy() {
     );
     assert!(source_char.control_special_request().is_none());
     assert_eq!(
-        request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 }),
+        request.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 }),
         BufferTextSpecialSourceCharRequest::new(
             &source_char,
             BufferTextSourceSpecialDisplay::Nobreak(BufferTextSourceAppendItem::SourceMappedText {
                 text: "\\ ".into()
             }),
         )
-        .append_at(DisplayRowPosition { x_px: 0.0, col: 0 })
+        .append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 })
     );
 }
 
@@ -2359,7 +2359,7 @@ fn buffer_text_source_char_names_cluster_policy() {
     assert_eq!(
         standalone_joiner
             .cluster_special_request(None)
-            .map(|request| request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 })),
+            .map(|request| request.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 })),
         BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
             '\u{200D}', None
         ))
@@ -2367,7 +2367,7 @@ fn buffer_text_source_char_names_cluster_policy() {
             &standalone_joiner,
             display
         )
-        .append_at(DisplayRowPosition { x_px: 0.0, col: 0 }))
+        .append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 }))
     );
 }
 
@@ -2492,30 +2492,29 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let source_request = source_char
         .nobreak_special_request()
         .expect("nobreak source char should map to a display item");
-    let measure_request = source_request.measure_at(DisplayRowPosition { x_px: 0.0, col: 0 });
-    let measured_width = append_context
-        .measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
-            &geometry,
-            &mut builder,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-            measure_request,
-        );
-    let request = source_request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 });
+    let layout_plan = append_context.prepare_special_source_char_layout_plan(
+        &geometry,
+        &mut builder,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+        source_request,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    );
+    let plan = layout_plan.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
-        .append_special_source_char_request_to_text_row_and_emit(
+        .append_special_source_char_plan_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            request,
+            plan,
         )
         .expect("appended source-mapped buffer text item fragment");
 
-    assert_eq!(measured_width, 16.0);
+    assert_eq!(layout_plan.measured_width_px(), 16.0);
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
         .with_current_row_mut(|row| {
@@ -2578,16 +2577,16 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let source_request = source_char
         .cluster_special_request(None)
         .expect("glyphless source char should map to a display item");
-    let request = source_request.append_at(DisplayRowPosition { x_px: 0.0, col: 0 });
+    let plan = source_request.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
-        .append_special_source_char_request_to_text_row_and_emit(
+        .append_special_source_char_plan_to_text_row_and_emit(
             &geometry,
             &mut builder,
             &mut output_emitter,
             &mut eval,
             &mut font_metrics,
             &face_resolver,
-            request,
+            plan,
         )
         .expect("appended glyphless buffer text item fragment");
 
