@@ -67,7 +67,7 @@ use crate::display_row_append::{
     BufferTextSpecialWrapSourceAction, BufferTextTruncationSkipAction,
     BufferTextWordWrapSourceAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
     DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
-    SyntheticTextMarker, TextWindowAppendSurfaceRequest,
+    OverlayStringRenderState, SyntheticTextMarker, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -1992,6 +1992,26 @@ impl LayoutEngine {
             };
         }
 
+        macro_rules! overlay_render_state {
+            () => {
+                OverlayStringRenderState::new(
+                    evaluator,
+                    &mut output_emitter,
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut x,
+                    &mut col,
+                    &mut row_geometry,
+                    &mut cursor_info,
+                    &mut hit_rows,
+                    &mut hit_row_range,
+                    &mut row_y_positions,
+                    &mut face_ids,
+                    &mut self.matrix_builder,
+                )
+            };
+        }
+
         macro_rules! synthetic_text_context {
             ($glyph_y_offset:expr) => {
                 BufferSyntheticTextRenderContext::new(
@@ -2144,23 +2164,8 @@ impl LayoutEngine {
                 // Check for overlay strings at invisible region boundary.
                 // Packages like org-mode use overlay after-strings at invisible
                 // boundaries to show fold indicators (e.g. "[N lines]").
-                overlay_string_context!().render_after_at(
-                    evaluator,
-                    &mut output_emitter,
-                    buffer,
-                    charpos,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut x,
-                    &mut col,
-                    &mut row_geometry,
-                    &mut cursor_info,
-                    &mut hit_rows,
-                    &mut hit_row_range,
-                    &mut row_y_positions,
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                );
+                let mut overlay_state = overlay_render_state!();
+                overlay_string_context!().render_after_at(buffer, charpos, &mut overlay_state);
                 continue;
             }
 
@@ -2857,23 +2862,8 @@ impl LayoutEngine {
             );
 
             // --- Overlay before-strings ---
-            overlay_string_context!().render_before_at(
-                evaluator,
-                &mut output_emitter,
-                buffer,
-                charpos,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
-            );
+            let mut overlay_state = overlay_render_state!();
+            overlay_string_context!().render_before_at(buffer, charpos, &mut overlay_state);
 
             let appended = prepared_append.append_to_text_row(
                 &buffer_row_append_context,
@@ -2898,23 +2888,8 @@ impl LayoutEngine {
             );
 
             // --- Overlay after-strings ---
-            overlay_string_context!().render_after_at(
-                evaluator,
-                &mut output_emitter,
-                buffer,
-                charpos,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
-            );
+            let mut overlay_state = overlay_render_state!();
+            overlay_string_context!().render_after_at(buffer, charpos, &mut overlay_state);
         }
 
         let point_is_visible_eob = point_charpos == accessible_end && charpos == accessible_end;
@@ -2952,23 +2927,8 @@ impl LayoutEngine {
 
         // EOB overlay strings: check for overlay strings at the end-of-buffer position
         if has_overlays && row_geometry.is_within_row_limit(row_limit) {
-            overlay_string_context!().render_both_at(
-                evaluator,
-                &mut output_emitter,
-                buffer,
-                charpos,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut x,
-                &mut col,
-                &mut row_geometry,
-                &mut cursor_info,
-                &mut hit_rows,
-                &mut hit_row_range,
-                &mut row_y_positions,
-                &mut face_ids,
-                &mut self.matrix_builder,
-            );
+            let mut overlay_state = overlay_render_state!();
+            overlay_string_context!().render_both_at(buffer, charpos, &mut overlay_state);
         }
 
         // Face :extend at end-of-buffer: fill remaining empty rows

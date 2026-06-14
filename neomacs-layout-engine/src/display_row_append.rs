@@ -1632,6 +1632,57 @@ pub(crate) struct BufferOverlayStringRenderContext<'a> {
     row_context: OverlayStringRenderRowContext<'a>,
 }
 
+pub(crate) struct OverlayStringRenderState<'a> {
+    evaluator: &'a mut Context,
+    output_emitter: &'a mut WindowOutputEmitter,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
+    x: &'a mut f32,
+    col: &'a mut usize,
+    geometry: &'a mut DisplayRowGeometryState,
+    cursor_info: &'a mut CursorCaptureState,
+    hit_rows: &'a mut Vec<HitRow>,
+    hit_row_range: &'a mut HitRowRangeTracker,
+    row_y_positions: &'a mut DisplayRowYPositions,
+    face_ids: &'a mut FrameFaceIdAllocator,
+    builder: &'a mut GlyphMatrixBuilder,
+}
+
+impl<'a> OverlayStringRenderState<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        evaluator: &'a mut Context,
+        output_emitter: &'a mut WindowOutputEmitter,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+        x: &'a mut f32,
+        col: &'a mut usize,
+        geometry: &'a mut DisplayRowGeometryState,
+        cursor_info: &'a mut CursorCaptureState,
+        hit_rows: &'a mut Vec<HitRow>,
+        hit_row_range: &'a mut HitRowRangeTracker,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        face_ids: &'a mut FrameFaceIdAllocator,
+        builder: &'a mut GlyphMatrixBuilder,
+    ) -> Self {
+        Self {
+            evaluator,
+            output_emitter,
+            font_metrics,
+            face_resolver,
+            x,
+            col,
+            geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+            builder,
+        }
+    }
+}
+
 impl<'a> BufferOverlayStringRenderContext<'a> {
     pub(crate) fn new(
         enabled: bool,
@@ -1672,158 +1723,40 @@ impl<'a> BufferOverlayStringRenderContext<'a> {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_before_at<B: LayoutBufferView>(
         self,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
         buffer: &B,
         anchor_charpos: i64,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        x: &mut f32,
-        col: &mut usize,
-        geometry: &mut DisplayRowGeometryState,
-        cursor_info: &mut CursorCaptureState,
-        hit_rows: &mut Vec<HitRow>,
-        hit_row_range: &mut HitRowRangeTracker,
-        row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
+        state: &mut OverlayStringRenderState<'_>,
     ) {
-        self.render_at_kind(
-            evaluator,
-            output_emitter,
-            buffer,
-            anchor_charpos,
-            OverlayStringKind::Before,
-            font_metrics,
-            face_resolver,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-            builder,
-        );
+        self.render_at_kind(buffer, anchor_charpos, OverlayStringKind::Before, state);
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_after_at<B: LayoutBufferView>(
         self,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
         buffer: &B,
         anchor_charpos: i64,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        x: &mut f32,
-        col: &mut usize,
-        geometry: &mut DisplayRowGeometryState,
-        cursor_info: &mut CursorCaptureState,
-        hit_rows: &mut Vec<HitRow>,
-        hit_row_range: &mut HitRowRangeTracker,
-        row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
+        state: &mut OverlayStringRenderState<'_>,
     ) {
-        self.render_at_kind(
-            evaluator,
-            output_emitter,
-            buffer,
-            anchor_charpos,
-            OverlayStringKind::After,
-            font_metrics,
-            face_resolver,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-            builder,
-        );
+        self.render_at_kind(buffer, anchor_charpos, OverlayStringKind::After, state);
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_both_at<B: LayoutBufferView>(
         self,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
         buffer: &B,
         anchor_charpos: i64,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        x: &mut f32,
-        col: &mut usize,
-        geometry: &mut DisplayRowGeometryState,
-        cursor_info: &mut CursorCaptureState,
-        hit_rows: &mut Vec<HitRow>,
-        hit_row_range: &mut HitRowRangeTracker,
-        row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
+        state: &mut OverlayStringRenderState<'_>,
     ) {
-        self.render_before_at(
-            evaluator,
-            output_emitter,
-            buffer,
-            anchor_charpos,
-            font_metrics,
-            face_resolver,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-            builder,
-        );
-        self.render_after_at(
-            evaluator,
-            output_emitter,
-            buffer,
-            anchor_charpos,
-            font_metrics,
-            face_resolver,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-            builder,
-        );
+        self.render_before_at(buffer, anchor_charpos, state);
+        self.render_after_at(buffer, anchor_charpos, state);
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_at_kind<B: LayoutBufferView>(
         self,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
         buffer: &B,
         anchor_charpos: i64,
         kind: OverlayStringKind,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        x: &mut f32,
-        col: &mut usize,
-        geometry: &mut DisplayRowGeometryState,
-        cursor_info: &mut CursorCaptureState,
-        hit_rows: &mut Vec<HitRow>,
-        hit_row_range: &mut HitRowRangeTracker,
-        row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
+        state: &mut OverlayStringRenderState<'_>,
     ) {
         if !self.enabled {
             return;
@@ -1835,92 +1768,42 @@ impl<'a> BufferOverlayStringRenderContext<'a> {
             OverlayStringKind::After => &after_strings,
         };
         render_overlay_string_batch(
-            evaluator,
-            output_emitter,
             buffer,
             OverlayStringRenderBatchSource::new(
                 overlay_strings,
                 CharPos0::new(anchor_charpos as usize),
                 kind,
             ),
-            font_metrics,
-            face_resolver,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
             self.row_context,
-            face_ids,
-            builder,
+            state,
         );
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_overlay_string_batch<B: LayoutBufferView>(
-    evaluator: &mut Context,
-    output_emitter: &mut WindowOutputEmitter,
     buffer: &B,
     source_batch: OverlayStringRenderBatchSource<'_>,
-    font_metrics: &mut Option<FontMetricsService>,
-    face_resolver: &FaceResolver,
-    x: &mut f32,
-    col: &mut usize,
-    geometry: &mut DisplayRowGeometryState,
-    cursor_info: &mut CursorCaptureState,
-    hit_rows: &mut Vec<HitRow>,
-    hit_row_range: &mut HitRowRangeTracker,
-    row_y_positions: &mut DisplayRowYPositions,
     row_context: OverlayStringRenderRowContext<'_>,
-    face_ids: &mut FrameFaceIdAllocator,
-    builder: &mut GlyphMatrixBuilder,
+    state: &mut OverlayStringRenderState<'_>,
 ) {
     if source_batch.is_empty() {
         return;
     }
     for overlay_string in source_batch.overlay_strings() {
         render_overlay_string(
-            evaluator,
-            output_emitter,
             buffer,
             source_batch.source_for(*overlay_string),
-            font_metrics,
-            face_resolver,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
             row_context,
-            face_ids,
-            builder,
+            state,
         );
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn render_overlay_string<B: LayoutBufferView>(
-    evaluator: &mut Context,
-    output_emitter: &mut WindowOutputEmitter,
     buffer: &B,
     source_request: OverlayStringRenderSource,
-    font_metrics: &mut Option<FontMetricsService>,
-    face_resolver: &FaceResolver,
-    x: &mut f32,
-    col: &mut usize,
-    geometry: &mut DisplayRowGeometryState,
-    cursor_info: &mut CursorCaptureState,
-    hit_rows: &mut Vec<HitRow>,
-    hit_row_range: &mut HitRowRangeTracker,
-    row_y_positions: &mut DisplayRowYPositions,
     row_context: OverlayStringRenderRowContext<'_>,
-    face_ids: &mut FrameFaceIdAllocator,
-    builder: &mut GlyphMatrixBuilder,
+    state: &mut OverlayStringRenderState<'_>,
 ) {
     let anchor_charpos = source_request.anchor_i64();
     let text_value = source_request.value();
@@ -1930,13 +1813,13 @@ fn render_overlay_string<B: LayoutBufferView>(
     let text_props = get_string_text_properties_table_for_value(text_value);
     let base_face = resolve_and_install_display_string_base_face(
         buffer,
-        face_resolver,
+        state.face_resolver,
         source_request.origin(),
         source_request.base_face_policy(),
         None,
         DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
-        face_ids,
-        builder,
+        state.face_ids,
+        state.builder,
     );
     let content_x = row_context.content_x();
     let max_x = row_context.right_edge();
@@ -1946,7 +1829,7 @@ fn render_overlay_string<B: LayoutBufferView>(
     macro_rules! finish_overlay_string_row {
         () => {{
             let geometry_transition = DisplayRowLineBreakTransitionRequest::new(
-                hit_row_range.range_to(anchor_charpos),
+                state.hit_row_range.range_to(anchor_charpos),
                 row_geometry_defaults,
                 row_context.row_base,
                 0,
@@ -1955,24 +1838,24 @@ fn render_overlay_string<B: LayoutBufferView>(
                 DisplayRowYRecording::None,
                 row_context.max_rows,
             )
-            .finish_geometry(geometry, hit_rows);
-            hit_row_range.advance_to(anchor_charpos);
-            if !geometry.is_within_row_limit(row_limit) {
+            .finish_geometry(state.geometry, state.hit_rows);
+            state.hit_row_range.advance_to(anchor_charpos);
+            if !state.geometry.is_within_row_limit(row_limit) {
                 finish_and_end_text_matrix_row_output(
-                    builder,
-                    output_emitter,
-                    evaluator,
+                    state.builder,
+                    state.output_emitter,
+                    state.evaluator,
                     geometry_transition.finished_row,
                 );
                 false
             } else {
-                geometry.record_current_row_y(row_y_positions);
-                *x = content_x;
-                *col = 0;
+                state.geometry.record_current_row_y(state.row_y_positions);
+                *state.x = content_x;
+                *state.col = 0;
                 emit_text_matrix_row_transition(
-                    builder,
-                    output_emitter,
-                    evaluator,
+                    state.builder,
+                    state.output_emitter,
+                    state.evaluator,
                     geometry_transition,
                 );
                 true
@@ -1981,8 +1864,8 @@ fn render_overlay_string<B: LayoutBufferView>(
     }
 
     let append_request = source_request.append_request(DisplayRowPosition {
-        x_px: *x,
-        col: *col,
+        x_px: *state.x,
+        col: *state.col,
     });
     let Some(mut source_context) = LispStringSourceRowAppendSession::new(
         append_request,
@@ -1998,42 +1881,42 @@ fn render_overlay_string<B: LayoutBufferView>(
         return;
     };
 
-    while geometry.is_within_row_limit(row_limit) {
-        if *x >= max_x {
+    while state.geometry.is_within_row_limit(row_limit) {
+        if *state.x >= max_x {
             break;
         }
 
         let Some(outcome) = source_context.render_to_text_row_and_emit(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            face_ids,
-            geometry,
+            state.builder,
+            state.output_emitter,
+            state.evaluator,
+            state.font_metrics,
+            state.face_resolver,
+            state.face_ids,
+            state.geometry,
             DisplayRowPosition {
-                x_px: *x,
-                col: *col,
+                x_px: *state.x,
+                col: *state.col,
             },
         ) else {
             break;
         };
         let stop = outcome.stop();
-        outcome.include_vertical_metrics(geometry);
+        outcome.include_vertical_metrics(state.geometry);
         let overlay_cursor_visual_state = row_context.cursor_visual_state(base_face.face());
         for slot in outcome.source_slots() {
             capture_overlay_string_cursor_at_slot(
                 text_props.as_ref(),
                 slot,
-                cursor_info,
-                geometry.y(),
-                geometry.row(),
+                state.cursor_info,
+                state.geometry.y(),
+                state.geometry.row(),
                 overlay_cursor_visual_state,
             );
         }
         let end = outcome.end_position();
-        *x = end.x_px;
-        *col = end.col;
+        *state.x = end.x_px;
+        *state.col = end.col;
 
         if stop == DisplayRowRenderStop::RowBreak {
             if !finish_overlay_string_row!() {

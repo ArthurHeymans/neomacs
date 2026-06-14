@@ -7,7 +7,7 @@ use crate::display_item::{
     DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
     DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
-use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
     classify_display_property,
@@ -32,7 +32,7 @@ use crate::display_row_walk_state::{
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
-use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, OverlayDisplayString};
 use crate::window_output::TextMatrixRowTransition;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
@@ -2763,6 +2763,133 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
             ));
         })
         .expect("current row");
+}
+
+#[test]
+fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
+    let mut ctx = RowTransitionTestContext::new("overlay-disabled-render-state");
+    let buf_id = ctx
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer = current_buffer_snapshot(&ctx.eval, buf_id);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let active_face = test_active_face_state(7, 8.0);
+    let row_context =
+        OverlayStringRenderRowContext::new(&surface, &active_face, 16.0, 12.0, 0.0, 0, 4);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut x = 24.0;
+    let mut col = 3;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut hit_row_range = HitRowRangeTracker::new(2);
+
+    {
+        let mut state = OverlayStringRenderState::new(
+            &mut ctx.eval,
+            &mut ctx.output_emitter,
+            &mut font_metrics,
+            &face_resolver,
+            &mut x,
+            &mut col,
+            &mut ctx.geometry,
+            &mut cursor_info,
+            &mut ctx.hit_rows,
+            &mut hit_row_range,
+            &mut ctx.row_y_positions,
+            &mut face_ids,
+            &mut ctx.builder,
+        );
+        BufferOverlayStringRenderContext::new(false, 1, row_context)
+            .render_before_at(&buffer, 5, &mut state);
+    }
+
+    assert_eq!(x, 24.0);
+    assert_eq!(col, 3);
+    assert_eq!(ctx.geometry.row(), 0);
+    assert!(cursor_info.captured().is_none());
+    assert!(ctx.hit_rows.is_empty());
+    assert_eq!(hit_row_range.start(), 2);
+}
+
+#[test]
+fn overlay_string_render_batch_empty_keeps_render_state() {
+    let mut ctx = RowTransitionTestContext::new("overlay-empty-render-state");
+    let buf_id = ctx
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer = current_buffer_snapshot(&ctx.eval, buf_id);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let active_face = test_active_face_state(7, 8.0);
+    let row_context =
+        OverlayStringRenderRowContext::new(&surface, &active_face, 16.0, 12.0, 0.0, 0, 4);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut x = 24.0;
+    let mut col = 3;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut hit_row_range = HitRowRangeTracker::new(2);
+    let overlay_strings: [OverlayDisplayString; 0] = [];
+
+    {
+        let mut state = OverlayStringRenderState::new(
+            &mut ctx.eval,
+            &mut ctx.output_emitter,
+            &mut font_metrics,
+            &face_resolver,
+            &mut x,
+            &mut col,
+            &mut ctx.geometry,
+            &mut cursor_info,
+            &mut ctx.hit_rows,
+            &mut hit_row_range,
+            &mut ctx.row_y_positions,
+            &mut face_ids,
+            &mut ctx.builder,
+        );
+        render_overlay_string_batch(
+            &buffer,
+            OverlayStringRenderBatchSource::new(
+                &overlay_strings,
+                CharPos0::new(5),
+                OverlayStringKind::Before,
+            ),
+            row_context,
+            &mut state,
+        );
+    }
+
+    assert_eq!(x, 24.0);
+    assert_eq!(col, 3);
+    assert_eq!(ctx.geometry.row(), 0);
+    assert!(cursor_info.captured().is_none());
+    assert!(ctx.hit_rows.is_empty());
+    assert_eq!(hit_row_range.start(), 2);
 }
 
 #[test]
