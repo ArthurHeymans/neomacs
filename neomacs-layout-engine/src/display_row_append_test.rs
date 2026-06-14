@@ -3195,6 +3195,59 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
 }
 
 #[test]
+fn overlay_string_row_break_context_finishes_current_row() {
+    let mut ctx = RowTransitionTestContext::new("overlay-row-break-context");
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let active_face = test_active_face_state(7, 8.0);
+    let row_context =
+        OverlayStringRenderRowContext::new(&surface, &active_face, 16.0, 12.0, 0.0, 0, 4);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut x = 24.0;
+    let mut col = 3;
+    let mut cursor_info = CursorCaptureState::new();
+    let mut hit_row_range = HitRowRangeTracker::new(2);
+
+    {
+        let mut state = OverlayStringRenderState::new(
+            &mut ctx.eval,
+            &mut ctx.output_emitter,
+            &mut font_metrics,
+            &face_resolver,
+            &mut x,
+            &mut col,
+            &mut ctx.geometry,
+            &mut cursor_info,
+            &mut ctx.hit_rows,
+            &mut hit_row_range,
+            &mut ctx.row_y_positions,
+            &mut face_ids,
+            &mut ctx.builder,
+        );
+
+        assert!(OverlayStringRowBreakRenderContext::new(5, row_context).finish_row(&mut state));
+    }
+
+    assert_eq!(x, 0.0);
+    assert_eq!(col, 0);
+    assert_eq!(ctx.geometry.row(), 1);
+    assert_eq!(ctx.hit_rows.len(), 1);
+    assert_eq!(ctx.hit_rows[0].charpos_start, 2);
+    assert_eq!(ctx.hit_rows[0].charpos_end, 5);
+    assert_eq!(hit_row_range.start(), 5);
+}
+
+#[test]
 fn overlay_string_render_batch_empty_keeps_render_state() {
     let mut ctx = RowTransitionTestContext::new("overlay-empty-render-state");
     let buf_id = ctx

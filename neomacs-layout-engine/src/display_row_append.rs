@@ -1889,6 +1889,61 @@ pub(crate) fn render_overlay_string_batch<B: LayoutBufferView>(
     }
 }
 
+#[derive(Clone, Copy)]
+struct OverlayStringRowBreakRenderContext<'a> {
+    anchor_charpos: i64,
+    row_context: OverlayStringRenderRowContext<'a>,
+}
+
+impl<'a> OverlayStringRowBreakRenderContext<'a> {
+    fn new(anchor_charpos: i64, row_context: OverlayStringRenderRowContext<'a>) -> Self {
+        Self {
+            anchor_charpos,
+            row_context,
+        }
+    }
+
+    fn finish_row(self, state: &mut OverlayStringRenderState<'_>) -> bool {
+        let content_x = self.row_context.content_x();
+        let geometry_transition = DisplayRowLineBreakTransitionRequest::new(
+            state.hit_row_range.range_to(self.anchor_charpos),
+            self.row_context.geometry_defaults(),
+            self.row_context.row_base,
+            0,
+            content_x,
+            0.0,
+            DisplayRowYRecording::None,
+            self.row_context.max_rows,
+        )
+        .finish_geometry(state.geometry, state.hit_rows);
+
+        state.hit_row_range.advance_to(self.anchor_charpos);
+        if !state
+            .geometry
+            .is_within_row_limit(self.row_context.row_limit())
+        {
+            finish_and_end_text_matrix_row_output(
+                state.builder,
+                state.output_emitter,
+                state.evaluator,
+                geometry_transition.finished_row,
+            );
+            return false;
+        }
+
+        state.geometry.record_current_row_y(state.row_y_positions);
+        *state.x = content_x;
+        *state.col = 0;
+        emit_text_matrix_row_transition(
+            state.builder,
+            state.output_emitter,
+            state.evaluator,
+            geometry_transition,
+        );
+        true
+    }
+}
+
 fn render_overlay_string<B: LayoutBufferView>(
     buffer: &B,
     source_request: OverlayStringRenderSource,
@@ -1911,47 +1966,9 @@ fn render_overlay_string<B: LayoutBufferView>(
         state.face_ids,
         state.builder,
     );
-    let content_x = row_context.content_x();
     let max_x = row_context.right_edge();
-    let row_geometry_defaults = row_context.geometry_defaults();
     let row_limit = row_context.row_limit();
-
-    macro_rules! finish_overlay_string_row {
-        () => {{
-            let geometry_transition = DisplayRowLineBreakTransitionRequest::new(
-                state.hit_row_range.range_to(anchor_charpos),
-                row_geometry_defaults,
-                row_context.row_base,
-                0,
-                content_x,
-                0.0,
-                DisplayRowYRecording::None,
-                row_context.max_rows,
-            )
-            .finish_geometry(state.geometry, state.hit_rows);
-            state.hit_row_range.advance_to(anchor_charpos);
-            if !state.geometry.is_within_row_limit(row_limit) {
-                finish_and_end_text_matrix_row_output(
-                    state.builder,
-                    state.output_emitter,
-                    state.evaluator,
-                    geometry_transition.finished_row,
-                );
-                false
-            } else {
-                state.geometry.record_current_row_y(state.row_y_positions);
-                *state.x = content_x;
-                *state.col = 0;
-                emit_text_matrix_row_transition(
-                    state.builder,
-                    state.output_emitter,
-                    state.evaluator,
-                    geometry_transition,
-                );
-                true
-            }
-        }};
-    }
+    let row_break_context = OverlayStringRowBreakRenderContext::new(anchor_charpos, row_context);
 
     let append_request = source_request.append_request(DisplayRowPosition {
         x_px: *state.x,
@@ -2009,7 +2026,7 @@ fn render_overlay_string<B: LayoutBufferView>(
         *state.col = end.col;
 
         if stop == DisplayRowRenderStop::RowBreak {
-            if !finish_overlay_string_row!() {
+            if !row_break_context.finish_row(state) {
                 break;
             }
             continue;
@@ -2018,7 +2035,7 @@ fn render_overlay_string<B: LayoutBufferView>(
             DisplayRowRenderStop::SourceExhausted => break,
             DisplayRowRenderStop::Clipped => {
                 if source_context.discard_pending_until_row_break() {
-                    if !finish_overlay_string_row!() {
+                    if !row_break_context.finish_row(state) {
                         break;
                     }
                     continue;
