@@ -1888,6 +1888,7 @@ mod divergence_sort_type_predicates;
 mod divergence_stress_combo;
 mod divergence_stress_combo_2;
 mod divergence_stress_combo_3;
+mod divergence_syntax_parsing;
 mod divergence_stress_large_deep;
 mod divergence_string_ops;
 mod divergence_string_ops_deep;
