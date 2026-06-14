@@ -20,11 +20,10 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
     TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRightBorder,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
-    close_text_window_output, emit_text_window_line_number_margin, finish_pending_text_window_row,
-    install_last_window_right_border, install_text_window_body_output,
-    install_text_window_cursor_effects,
+    TextWindowPendingRowFinish, TextWindowRightBorder, TextWindowRightEdgeMarkers,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    finish_pending_text_window_row, install_last_window_right_border,
+    install_text_window_body_output, install_text_window_cursor_effects,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
@@ -55,19 +54,20 @@ use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferCurrentFaceResolutionState,
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextRenderContext,
     BufferEndOfBufferTailAction, BufferHscrollSkipSourceChar, BufferInvisibleTextRenderState,
-    BufferInvisibleTextScanAction, BufferInvisibleTextScanContext, BufferLinePrefixRenderContext,
-    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayContext,
-    BufferSyntheticTextRenderContext, BufferSyntheticTextRenderState,
-    BufferTextCharacterWrapSourceAction, BufferTextDecodedSourceChar,
-    BufferTextLineBreakSourceAction, BufferTextPreparedSourceCharAppend,
-    BufferTextRowAppendContext, BufferTextRowAppendState, BufferTextSourceCharOverflowAction,
-    BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
-    BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
-    BufferTextSpecialSourceCharRenderState, BufferTextSpecialWrapSourceAction,
-    BufferTextTruncationSkipAction, BufferTextWordWrapSourceAction,
-    DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState, OverlayStringRenderState,
-    TextWindowAppendSurfaceRequest,
+    BufferInvisibleTextScanAction, BufferInvisibleTextScanContext,
+    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
+    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
+    BufferSelectiveDisplayContext, BufferSyntheticTextRenderContext,
+    BufferSyntheticTextRenderState, BufferTextCharacterWrapSourceAction,
+    BufferTextDecodedSourceChar, BufferTextLineBreakSourceAction,
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextSourceCharOverflowAction, BufferTextSourceCharPreparationRequest,
+    BufferTextSourceCharPreparationState, BufferTextSourceCharRenderState,
+    BufferTextSpecialSourceCharOverflowAction, BufferTextSpecialSourceCharRenderState,
+    BufferTextSpecialWrapSourceAction, BufferTextTruncationSkipAction,
+    BufferTextWordWrapSourceAction, DisplayRowLineBreakTransitionPlan, DisplayRowPrefixRequest,
+    DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionRenderState,
+    OverlayStringRenderState, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -1953,67 +1953,47 @@ impl LayoutEngine {
         let row_limit = DisplayRowLimit { max_rows };
 
         while byte_idx < text.len() && row_geometry.current_row_is_visible(row_visibility_limit) {
-            if let Some(line_number_request) = line_numbers.margin_render_request(
+            BufferLineNumberMarginRenderRequest::new(
                 lnum_mode,
                 lnum_current_absolute,
                 lnum_offset,
                 lnum_major_tick,
                 lnum_cols,
-            ) {
-                let lnum_face =
-                    face_resolver.resolve_named_face(line_number_request.face().face_name());
-                let _lnum_bg = Color::from_pixel(lnum_face.bg);
-                let lnum_face_id = face_ids.allocate();
-                insert_resolved_display_row_face(
-                    &mut self.matrix_builder,
-                    lnum_face_id,
-                    &lnum_face,
-                    None,
-                );
+            )
+            .render_pending(
+                &mut line_numbers,
+                face_resolver,
+                &mut face_ids,
+                &mut self.matrix_builder,
+                &row_geometry,
+                &mut face_scan,
+                char_w,
+            );
 
-                let num_str = line_number_request.text();
-                emit_text_window_line_number_margin(
-                    &mut self.matrix_builder,
-                    TextWindowLineNumberMargin {
-                        text: &num_str,
-                        cols: line_number_request.cols(),
-                        face_id: lnum_face_id,
-                        row_y: row_geometry.y(),
-                        row_height: row_geometry.height(),
-                        row_ascent: row_geometry.ascent(),
-                        char_width: char_w,
-                    },
-                );
-                face_scan.invalidate();
-
-                line_numbers.consume_render_request();
-            }
-
-            // --- Line/wrap prefix rendering ---
-            if prefix_request.is_requested() {
-                let position = BufferLinePrefixRenderContext::new(
+            BufferLinePrefixRenderRequest::new(
+                BufferLinePrefixRenderContext::new(
                     prefix_values,
                     &text_append_surface,
                     &row_geometry,
                     &active_face_state,
                     raise_span.value_or(0.0),
                     char_h,
-                )
-                .render_requested_to_text_row_and_emit(
-                    &mut prefix_request,
-                    evaluator,
-                    &mut output_emitter,
-                    buffer,
-                    charpos,
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut face_ids,
-                    &mut self.matrix_builder,
-                    DisplayRowPosition { x_px: x, col },
-                );
-                x = position.x_px;
-                col = position.col;
-            }
+                ),
+                DisplayRowPosition { x_px: x, col },
+            )
+            .render_requested_to_text_row_and_apply(
+                &mut prefix_request,
+                evaluator,
+                &mut output_emitter,
+                buffer,
+                charpos,
+                &mut self.font_metrics,
+                face_resolver,
+                &mut face_ids,
+                &mut self.matrix_builder,
+                &mut x,
+                &mut col,
+            );
 
             // --- Invisible text check ---
             if let BufferInvisibleTextScanAction::Hidden(hidden_text) =

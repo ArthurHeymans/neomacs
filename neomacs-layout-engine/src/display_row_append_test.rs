@@ -34,6 +34,7 @@ use crate::display_row_walk_state::{
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, OverlayDisplayString};
 use crate::window_output::TextMatrixRowTransition;
+use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
 use neomacs_display_protocol::types::{Color, Rect};
@@ -116,6 +117,47 @@ impl RowTransitionTestContext {
             row_limit: DisplayRowLimit { max_rows },
         }
     }
+}
+
+#[test]
+fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin() {
+    let mut context = RowTransitionTestContext::new("line-number-margin-render-request");
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut line_numbers = LineNumberRenderState::new(true, 12, 9);
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+
+    assert!(
+        BufferLineNumberMarginRenderRequest::new(1, false, 0, 4, 4).render_pending(
+            &mut line_numbers,
+            &face_resolver,
+            &mut face_ids,
+            &mut context.builder,
+            &context.geometry,
+            &mut face_scan,
+            8.0,
+        )
+    );
+
+    context.builder.end_row();
+    context.builder.end_window();
+    let state = context.builder.finish(20, 1, 8.0, 16.0);
+    let margin = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::LeftMargin as usize];
+
+    assert_eq!(margin.len(), 4);
+    assert_eq!(margin[0].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    assert_eq!(margin[1].glyph_type, GlyphType::Char { ch: '1' });
+    assert_eq!(margin[2].glyph_type, GlyphType::Char { ch: '2' });
+    assert_eq!(margin[3].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    assert!(
+        margin
+            .iter()
+            .all(|glyph| glyph.face_id == BasicFaceId::SENTINEL)
+    );
+    assert_eq!(face_scan, FaceScanCheckpoint::initial());
+    assert!(!line_numbers.should_render());
 }
 
 impl DisplayHost for RecordingAppendImageHost {
@@ -3072,6 +3114,86 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
             assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: '>' }));
             assert_eq!(text[0].face_id, 0);
             assert_eq!(text[1].face_id, 0);
+        })
+        .expect("current row");
+}
+
+#[test]
+fn buffer_line_prefix_render_request_applies_rendered_position() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("abc");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-line-prefix-request", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let values = DisplayRowPrefixValues::default_values(Some(Value::string("=>")), None);
+    let mut prefix_request = DisplayRowPrefixRequest::Line;
+    let mut x = 0.0;
+    let mut col = 0;
+
+    BufferLinePrefixRenderRequest::new(
+        BufferLinePrefixRenderContext::new(values, &surface, &geometry, &active_face, 0.0, 16.0),
+        DisplayRowPosition { x_px: x, col },
+    )
+    .render_requested_to_text_row_and_apply(
+        &mut prefix_request,
+        &mut eval,
+        &mut output_emitter,
+        &snapshot,
+        0,
+        &mut font_metrics,
+        &face_resolver,
+        &mut face_ids,
+        &mut builder,
+        &mut x,
+        &mut col,
+    );
+
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
+    assert_eq!(x, 16.0);
+    assert_eq!(col, 2);
+    builder
+        .with_current_row_mut(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 2);
+            assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '=' }));
+            assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: '>' }));
         })
         .expect("current row");
 }

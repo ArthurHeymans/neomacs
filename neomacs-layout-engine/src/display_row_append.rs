@@ -15,7 +15,6 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringK
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, classify_display_property,
 };
-use crate::display_row::DisplayRowRenderStop;
 #[cfg(test)]
 use crate::display_row::RenderedDisplayRow;
 #[cfg(test)]
@@ -28,6 +27,7 @@ use crate::display_row::{
     DisplayRowSourceState, DisplaySourceAppendMeasurement, DisplaySourceAppendRenderPolicy,
     NaturalDisplayRowAppendRenderPolicy,
 };
+use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face};
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
@@ -68,10 +68,10 @@ use crate::unicode::{decode_utf8, is_wide_char};
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
-    TextMatrixRowGeometryTransition, TextMatrixRowTransition, WindowOutputEmitter,
-    current_text_window_cluster_tail, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
-    mark_current_text_row_truncated_left,
+    TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowLineNumberMargin,
+    WindowOutputEmitter, current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
+    finish_and_end_text_matrix_row_output, mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -99,6 +99,77 @@ impl LispStringSourceId {
 const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
 const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
 const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferLineNumberMarginRenderRequest {
+    mode: u8,
+    current_absolute: bool,
+    offset: i64,
+    major_tick: i32,
+    cols: i32,
+}
+
+impl BufferLineNumberMarginRenderRequest {
+    pub(crate) fn new(
+        mode: u8,
+        current_absolute: bool,
+        offset: i64,
+        major_tick: i32,
+        cols: i32,
+    ) -> Self {
+        Self {
+            mode,
+            current_absolute,
+            offset,
+            major_tick,
+            cols,
+        }
+    }
+
+    pub(crate) fn render_pending(
+        self,
+        line_numbers: &mut LineNumberRenderState,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        builder: &mut GlyphMatrixBuilder,
+        row_geometry: &DisplayRowGeometryState,
+        face_scan: &mut FaceScanCheckpoint,
+        char_width: f32,
+    ) -> bool {
+        let Some(line_number_request) = line_numbers.margin_render_request(
+            self.mode,
+            self.current_absolute,
+            self.offset,
+            self.major_tick,
+            self.cols,
+        ) else {
+            return false;
+        };
+
+        let line_number_face =
+            face_resolver.resolve_named_face(line_number_request.face().face_name());
+        let line_number_face_id = face_ids.allocate();
+        insert_resolved_display_row_face(builder, line_number_face_id, &line_number_face, None);
+
+        let text = line_number_request.text();
+        emit_text_window_line_number_margin(
+            builder,
+            TextWindowLineNumberMargin {
+                text: &text,
+                cols: line_number_request.cols(),
+                face_id: line_number_face_id,
+                row_y: row_geometry.y(),
+                row_height: row_geometry.height(),
+                row_ascent: row_geometry.ascent(),
+                char_width,
+            },
+        );
+
+        face_scan.invalidate();
+        line_numbers.consume_render_request();
+        true
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ResolvedBufferTextSourceAdvance {
@@ -1261,6 +1332,11 @@ pub(crate) struct BufferLinePrefixRenderContext<'a> {
     default_row_height: f32,
 }
 
+pub(crate) struct BufferLinePrefixRenderRequest<'a> {
+    context: BufferLinePrefixRenderContext<'a>,
+    position: DisplayRowPosition,
+}
+
 impl DisplayRowPrefixRequest {
     pub(crate) fn initial(has_prefix: bool, has_line_prefix: bool) -> Self {
         if has_prefix && has_line_prefix {
@@ -1478,6 +1554,46 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             prefix_source,
             position,
         )
+    }
+}
+
+impl<'a> BufferLinePrefixRenderRequest<'a> {
+    pub(crate) fn new(
+        context: BufferLinePrefixRenderContext<'a>,
+        position: DisplayRowPosition,
+    ) -> Self {
+        Self { context, position }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_requested_to_text_row_and_apply<B: LayoutBufferView>(
+        self,
+        request: &mut DisplayRowPrefixRequest,
+        evaluator: &mut Context,
+        output_emitter: &mut WindowOutputEmitter,
+        buffer: &B,
+        anchor_charpos: i64,
+        font_metrics: &mut Option<FontMetricsService>,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+        builder: &mut GlyphMatrixBuilder,
+        x: &mut f32,
+        col: &mut usize,
+    ) {
+        let position = self.context.render_requested_to_text_row_and_emit(
+            request,
+            evaluator,
+            output_emitter,
+            buffer,
+            anchor_charpos,
+            font_metrics,
+            face_resolver,
+            face_ids,
+            builder,
+            self.position,
+        );
+        *x = position.x_px;
+        *col = position.col;
     }
 }
 
