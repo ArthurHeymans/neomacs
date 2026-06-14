@@ -32,7 +32,9 @@ use crate::display_row_walk_state::{
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
-use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, OverlayDisplayString};
+use crate::neovm_bridge::{
+    FaceResolver, LayoutBufferSnapshot, OverlayDisplayString, RustBufferAccess,
+};
 use crate::window_output::TextMatrixRowTransition;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -59,6 +61,26 @@ fn write_char_to_current_row_with_width(
             crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
         })
         .expect("current row");
+}
+
+fn emitted_row(
+    row: i64,
+    y: i64,
+    height: i64,
+    start_lisp: i64,
+    end_lisp: i64,
+) -> neovm_core::window::DisplayRowSnapshot {
+    neovm_core::window::DisplayRowSnapshot {
+        row,
+        y,
+        height,
+        start_x: 0,
+        start_col: 0,
+        end_x: 0,
+        end_col: 0,
+        start_buffer_pos: Some(LispCharPos1::new(start_lisp)),
+        end_buffer_pos: Some(LispCharPos1::new(end_lisp)),
+    }
 }
 
 struct RecordingAppendImageHost {
@@ -5846,6 +5868,129 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let text = &row.glyphs[GlyphArea::Text.index()];
     assert!(matches!(text[4].glyph_type, GlyphType::Char { ch: '$' }));
     assert_eq!(text[4].face_id, 9);
+}
+
+#[test]
+fn buffer_text_window_visibility_retry_request_scrolls_down_from_visible_rows() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer_size = {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("abcdefghijklmnopqrstuvwxyz\n");
+        buffer.point_max_char_pos().get() as i64
+    };
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let access = RustBufferAccess::new(buffer);
+    let rows = vec![
+        emitted_row(0, 0, 16, 1, 8),
+        emitted_row(1, 16, 16, 9, 16),
+        emitted_row(2, 32, 16, 17, 24),
+    ];
+
+    let outcome = BufferTextWindowVisibilityRetryRequest::new(
+        &rows,
+        1,
+        0,
+        buffer_size,
+        30,
+        24,
+        false,
+        false,
+        0,
+        48,
+        &access,
+    )
+    .decide();
+
+    assert_eq!(outcome.visible_end_lisp(), Some(LispCharPos1::new(24)));
+    assert!(outcome.point_beyond_visible_span());
+    assert_eq!(outcome.scroll_down_window_start(), Some(24));
+    assert_eq!(outcome.retry_window_start(), Some(24));
+}
+
+#[test]
+fn buffer_text_window_visibility_retry_request_detects_partially_visible_point_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer_size = {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("abcdefghijklmnopqrstuvwxyz\n");
+        buffer.point_max_char_pos().get() as i64
+    };
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let access = RustBufferAccess::new(buffer);
+    let rows = vec![
+        emitted_row(0, 0, 20, 1, 10),
+        emitted_row(1, 20, 20, 11, 20),
+        emitted_row(2, 40, 30, 21, 30),
+    ];
+
+    let outcome = BufferTextWindowVisibilityRetryRequest::new(
+        &rows,
+        1,
+        0,
+        buffer_size,
+        25,
+        30,
+        false,
+        false,
+        0,
+        60,
+        &access,
+    )
+    .decide();
+
+    assert!(!outcome.point_beyond_visible_span());
+    assert_eq!(outcome.point_row_window_start(), Some(10));
+    assert_eq!(outcome.retry_window_start(), Some(10));
+}
+
+#[test]
+fn buffer_text_window_visibility_retry_request_detects_point_line_continuation() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let buffer_size = {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("abcdefghijklmnopqrstuvwxyz\n");
+        buffer.point_max_char_pos().get() as i64
+    };
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let access = RustBufferAccess::new(buffer);
+    let rows = vec![
+        emitted_row(0, 0, 16, 1, 10),
+        emitted_row(1, 16, 16, 11, 20),
+        emitted_row(2, 32, 16, 21, 25),
+    ];
+
+    let outcome = BufferTextWindowVisibilityRetryRequest::new(
+        &rows,
+        1,
+        0,
+        buffer_size,
+        21,
+        25,
+        false,
+        false,
+        0,
+        48,
+        &access,
+    )
+    .decide();
+
+    assert_eq!(outcome.point_line_window_start(), Some(20));
+    assert_eq!(outcome.retry_window_start(), Some(20));
 }
 
 #[test]

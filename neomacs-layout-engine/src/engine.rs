@@ -57,8 +57,8 @@ use crate::display_row_append::{
     BufferTextRowAppendState, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBodyInstallRequest,
     BufferTextWindowBodyInstallState, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowTailFinalizeState, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    TextWindowAppendSurfaceRequest,
+    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryRequest,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
@@ -76,8 +76,6 @@ use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
     TrailingWhitespaceRenderState, WordWrapRenderState,
-    next_window_start_for_partially_visible_point_row,
-    next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -2433,75 +2431,49 @@ impl LayoutEngine {
         // from this pass rather than rescanning by logical newlines, since
         // wrapped and variable-height lines are exactly where newline-based
         // retry selection goes wrong.
-        let visible_end_lisp = output_emitter
-            .rows()
-            .iter()
-            .rev()
-            .find_map(|row| row.end_buffer_pos);
-        let point_lisp = layout_i64_char_pos_to_lisp_char_pos(point_charpos);
-        let visible_end_lisp = if point_is_visible_eob {
-            Some(visible_end_lisp.unwrap_or(point_lisp).max(point_lisp))
-        } else {
-            visible_end_lisp
-        };
-        let visible_progress = visible_end_lisp
-            .map(LispCharPos1::as_i64)
-            .unwrap_or(charpos);
-        let point_beyond_visible_span = visible_end_lisp
-            .map(|end_lisp| point_lisp > end_lisp)
-            .unwrap_or(point_charpos > charpos);
-
-        let scroll_down_ws = if point_beyond_visible_span
-            && visible_progress > window_start
-            && !params.is_minibuffer
-        {
-            let new_ws = next_window_start_from_visible_rows(output_emitter.rows(), window_start)
-                .map(|new_ws| new_ws.min(point_charpos.max(accessible_start)));
-            tracing::debug!(
-                "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
-                point_lisp.as_i64(),
-                visible_end_lisp,
-                charpos,
-                output_emitter.rows().len(),
-                new_ws
-            );
-            new_ws
-        } else {
-            None
-        };
         let text_area_top = (text_y - window_top).round() as i64;
         let text_area_bottom = (text_y + text_height - window_top).round() as i64;
-        let point_row_ws = next_window_start_for_partially_visible_point_row(
+        let retry_outcome = BufferTextWindowVisibilityRetryRequest::new(
             output_emitter.rows(),
+            window_start,
+            accessible_start,
+            accessible_end,
             point_charpos,
+            charpos,
+            point_is_visible_eob,
+            params.is_minibuffer,
             text_area_top,
             text_area_bottom,
-            window_start,
-        );
-        if point_row_ws.is_some() {
+            &buf_access,
+        )
+        .decide();
+        if retry_outcome.scroll_down_window_start().is_some() {
+            tracing::debug!(
+                "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
+                layout_i64_char_pos_to_lisp_char_pos(point_charpos).as_i64(),
+                retry_outcome.visible_end_lisp(),
+                charpos,
+                output_emitter.rows().len(),
+                retry_outcome.scroll_down_window_start()
+            );
+        }
+        if retry_outcome.point_row_window_start().is_some() {
             tracing::debug!(
                 "layout_window_rust: point={} row partially visible within {}..{}, new_window_start={:?}",
                 point_charpos,
                 text_area_top,
                 text_area_bottom,
-                point_row_ws
+                retry_outcome.point_row_window_start()
             );
         }
-        let point_line_ws = next_window_start_for_point_line_continuation(
-            output_emitter.rows(),
-            point_charpos,
-            window_start,
-            &buf_access,
-            accessible_end,
-        );
-        if point_line_ws.is_some() {
+        if retry_outcome.point_line_window_start().is_some() {
             tracing::debug!(
                 "layout_window_rust: point={} line continues below final visible row, new_window_start={:?}",
                 point_charpos,
-                point_line_ws
+                retry_outcome.point_line_window_start()
             );
         }
-        let retry_window_start = scroll_down_ws.or(point_row_ws).or(point_line_ws);
+        let retry_window_start = retry_outcome.retry_window_start();
 
         if let Some(new_window_start) = retry_window_start
             && remaining_visibility_retries > 0

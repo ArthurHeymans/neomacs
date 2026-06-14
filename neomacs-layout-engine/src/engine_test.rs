@@ -18,6 +18,8 @@ use crate::display_row_append::{
 use crate::display_row_builder::DisplayGlyphMeasurer;
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
+    next_window_start_for_partially_visible_point_row,
+    next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos,
 };
 use crate::display_source::DisplayItemSource;

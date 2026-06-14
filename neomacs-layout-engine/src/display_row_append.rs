@@ -1,3 +1,4 @@
+use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
     CapturedCursorVisualState, CapturedTextWindowCursorPublishContext, CursorCaptureState,
@@ -44,7 +45,9 @@ use crate::display_row_walk_state::{
     HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
     SpecialTextRowOverflowDecision, TextPropertyScanCheckpoints, TextRowTransitionPrefixAction,
     TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapBreakCandidate,
-    WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
+    WordWrapRenderState, next_window_start_for_partially_visible_point_row,
+    next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
+    skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
@@ -63,7 +66,8 @@ use crate::font_metrics::FontMetricsService;
 use crate::hit_test::HitRow;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{
-    FaceResolver, LayoutBufferView, OverlayDisplayString, ResolvedFace, RustTextPropAccess,
+    FaceResolver, LayoutBufferView, OverlayDisplayString, ResolvedFace, RustBufferAccess,
+    RustTextPropAccess,
 };
 use crate::types::WindowParams;
 use crate::unicode::{decode_utf8, is_wide_char};
@@ -84,6 +88,7 @@ use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRan
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
+use neovm_core::window::DisplayRowSnapshot;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct LispStringSourceId(u64);
@@ -653,6 +658,30 @@ pub(crate) struct BufferTextWindowBodyInstallRequest<'a> {
 pub(crate) struct BufferTextWindowBodyInstallState<'a, 'emit> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) output_emitter: &'a WindowOutputEmitter,
+}
+
+pub(crate) struct BufferTextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView> {
+    rows: &'a [DisplayRowSnapshot],
+    window_start: i64,
+    accessible_start: i64,
+    accessible_end: i64,
+    point_charpos: i64,
+    charpos: i64,
+    point_is_visible_eob: bool,
+    is_minibuffer: bool,
+    text_area_top: i64,
+    text_area_bottom: i64,
+    buf_access: &'a RustBufferAccess<'buf, B>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowVisibilityRetryOutcome {
+    visible_end_lisp: Option<LispCharPos1>,
+    visible_progress: i64,
+    point_beyond_visible_span: bool,
+    scroll_down_window_start: Option<i64>,
+    point_row_window_start: Option<i64>,
+    point_line_window_start: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -6198,6 +6227,115 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
                 right_edge_markers,
             },
         )
+    }
+}
+
+impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, 'buf, B> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        rows: &'a [DisplayRowSnapshot],
+        window_start: i64,
+        accessible_start: i64,
+        accessible_end: i64,
+        point_charpos: i64,
+        charpos: i64,
+        point_is_visible_eob: bool,
+        is_minibuffer: bool,
+        text_area_top: i64,
+        text_area_bottom: i64,
+        buf_access: &'a RustBufferAccess<'buf, B>,
+    ) -> Self {
+        Self {
+            rows,
+            window_start,
+            accessible_start,
+            accessible_end,
+            point_charpos,
+            charpos,
+            point_is_visible_eob,
+            is_minibuffer,
+            text_area_top,
+            text_area_bottom,
+            buf_access,
+        }
+    }
+
+    pub(crate) fn decide(self) -> BufferTextWindowVisibilityRetryOutcome {
+        let point_lisp = layout_i64_char_pos_to_lisp_char_pos(self.point_charpos);
+        let visible_end_lisp = self.rows.iter().rev().find_map(|row| row.end_buffer_pos);
+        let visible_end_lisp = if self.point_is_visible_eob {
+            Some(visible_end_lisp.unwrap_or(point_lisp).max(point_lisp))
+        } else {
+            visible_end_lisp
+        };
+        let visible_progress = visible_end_lisp
+            .map(LispCharPos1::as_i64)
+            .unwrap_or(self.charpos);
+        let point_beyond_visible_span = visible_end_lisp
+            .map(|end_lisp| point_lisp > end_lisp)
+            .unwrap_or(self.point_charpos > self.charpos);
+
+        let scroll_down_window_start = if point_beyond_visible_span
+            && visible_progress > self.window_start
+            && !self.is_minibuffer
+        {
+            next_window_start_from_visible_rows(self.rows, self.window_start)
+                .map(|new_ws| new_ws.min(self.point_charpos.max(self.accessible_start)))
+        } else {
+            None
+        };
+        let point_row_window_start = next_window_start_for_partially_visible_point_row(
+            self.rows,
+            self.point_charpos,
+            self.text_area_top,
+            self.text_area_bottom,
+            self.window_start,
+        );
+        let point_line_window_start = next_window_start_for_point_line_continuation(
+            self.rows,
+            self.point_charpos,
+            self.window_start,
+            self.buf_access,
+            self.accessible_end,
+        );
+
+        BufferTextWindowVisibilityRetryOutcome {
+            visible_end_lisp,
+            visible_progress,
+            point_beyond_visible_span,
+            scroll_down_window_start,
+            point_row_window_start,
+            point_line_window_start,
+        }
+    }
+}
+
+impl BufferTextWindowVisibilityRetryOutcome {
+    pub(crate) fn visible_end_lisp(self) -> Option<LispCharPos1> {
+        self.visible_end_lisp
+    }
+
+    #[cfg(test)]
+    pub(crate) fn point_beyond_visible_span(self) -> bool {
+        self.point_beyond_visible_span
+    }
+
+    pub(crate) fn scroll_down_window_start(self) -> Option<i64> {
+        self.scroll_down_window_start
+    }
+
+    pub(crate) fn point_row_window_start(self) -> Option<i64> {
+        self.point_row_window_start
+    }
+
+    pub(crate) fn point_line_window_start(self) -> Option<i64> {
+        self.point_line_window_start
+    }
+
+    pub(crate) fn retry_window_start(self) -> Option<i64> {
+        self.scroll_down_window_start
+            .or(self.point_row_window_start)
+            .or(self.point_line_window_start)
     }
 }
 
