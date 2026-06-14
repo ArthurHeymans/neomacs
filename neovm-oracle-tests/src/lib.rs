@@ -1795,6 +1795,8 @@ mod divergence_face_custom_theme;
 mod divergence_face_documentation_matrix;
 mod divergence_face_bg_matrix;
 mod divergence_color_values_matrix;
+mod divergence_completion;
+mod divergence_completion_case;
 mod divergence_face_attributes_matrix;
 mod divergence_face_id_matrix;
 mod divergence_face_fg_matrix;
