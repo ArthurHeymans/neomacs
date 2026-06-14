@@ -1,5 +1,7 @@
 use crate::display_cursor::CursorCaptureState;
+use crate::display_row::DisplayRowMeasurementPolicy;
 use crate::display_row_append::{
+    BufferCurrentFaceResolutionContext, BufferOverlayStringTextRowRenderContext,
     BufferTextRowAppendState, BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRequest,
     DisplayRowAppendSurface, DisplayRowPrefixRequest, TextWindowAppendSurfaceRequest,
 };
@@ -12,6 +14,7 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::hit_test::HitRow;
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::window::{FrameId, WindowId};
@@ -102,6 +105,37 @@ pub(crate) struct BufferTextWindowBodyInstallContext {
 pub(crate) struct BufferTextWindowRetryBounds {
     pub(crate) text_area_top: i64,
     pub(crate) text_area_bottom: i64,
+}
+
+pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
+where
+    B: LayoutBufferView,
+{
+    buffer: &'a B,
+    face_resolver: &'a FaceResolver,
+    measurement_policy: DisplayRowMeasurementPolicy,
+    default_resolved: &'a ResolvedFace,
+    default_face_char_width: f32,
+    default_face_ascent: f32,
+    default_face_height: f32,
+    char_width: f32,
+    char_height: f32,
+    font_ascent: f32,
+    window_system: bool,
+    matrix_window_id: u64,
+    append_surface: &'surface DisplayRowAppendSurface,
+    text_y: f32,
+    text_matrix_row_base: usize,
+    max_rows: usize,
+}
+
+pub(crate) struct BufferTextWindowRenderContexts<'a, 'surface, B>
+where
+    B: LayoutBufferView,
+{
+    pub(crate) has_overlays: bool,
+    pub(crate) face_resolution: BufferCurrentFaceResolutionContext<'a, B>,
+    pub(crate) overlay_text_row: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
 pub(crate) struct BufferTextWindowTailDecorationRequest<'a> {
@@ -354,6 +388,80 @@ impl BufferTextWindowBodyInstallContext {
     #[cfg(test)]
     pub(crate) fn matrix_cols(self) -> usize {
         self.matrix_cols
+    }
+}
+
+impl<'a, 'surface, B> BufferTextWindowRenderContextsRequest<'a, 'surface, B>
+where
+    B: LayoutBufferView,
+{
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        buffer: &'a B,
+        face_resolver: &'a FaceResolver,
+        measurement_policy: DisplayRowMeasurementPolicy,
+        default_resolved: &'a ResolvedFace,
+        default_face_char_width: f32,
+        default_face_ascent: f32,
+        default_face_height: f32,
+        char_width: f32,
+        char_height: f32,
+        font_ascent: f32,
+        window_system: bool,
+        matrix_window_id: u64,
+        append_surface: &'surface DisplayRowAppendSurface,
+        text_y: f32,
+        text_matrix_row_base: usize,
+        max_rows: usize,
+    ) -> Self {
+        Self {
+            buffer,
+            face_resolver,
+            measurement_policy,
+            default_resolved,
+            default_face_char_width,
+            default_face_ascent,
+            default_face_height,
+            char_width,
+            char_height,
+            font_ascent,
+            window_system,
+            matrix_window_id,
+            append_surface,
+            text_y,
+            text_matrix_row_base,
+            max_rows,
+        }
+    }
+
+    pub(crate) fn into_contexts(self) -> BufferTextWindowRenderContexts<'a, 'surface, B> {
+        let has_overlays = !self.buffer.layout_overlays().is_empty();
+        BufferTextWindowRenderContexts {
+            has_overlays,
+            face_resolution: BufferCurrentFaceResolutionContext::new(
+                self.buffer,
+                self.face_resolver,
+                self.measurement_policy,
+                self.default_resolved,
+                self.default_face_char_width,
+                self.default_face_ascent,
+                self.default_face_height,
+                self.char_width,
+                self.char_height,
+                self.font_ascent,
+                self.window_system,
+            ),
+            overlay_text_row: BufferOverlayStringTextRowRenderContext::new(
+                has_overlays,
+                self.matrix_window_id,
+                self.append_surface,
+                self.char_height,
+                self.default_face_ascent,
+                self.text_y,
+                self.text_matrix_row_base,
+                self.max_rows,
+            ),
+        }
     }
 }
 

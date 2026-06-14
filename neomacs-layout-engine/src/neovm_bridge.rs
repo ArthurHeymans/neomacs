@@ -162,10 +162,6 @@ impl LayoutBufferSnapshot {
     pub(crate) fn accessible_end_emacs_byte_pos(&self) -> EmacsBytePos {
         self.accessible_end_emacs_byte
     }
-
-    pub(crate) fn overlays(&self) -> &OverlayList {
-        &self.overlays
-    }
 }
 
 const LAYOUT_DEFAULT_VALUE_SYMBOLS: &[&str] = &[

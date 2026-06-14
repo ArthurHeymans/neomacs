@@ -22,6 +22,7 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
     BufferTextWindowTailDecorationRequest, BufferTextWindowTailDecorationState,
     BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
 };
@@ -56,12 +57,11 @@ use crate::display_row_append::DisplayRowPrefixRequest;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_append::{
-    BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
-    BufferDisplayPropertyCheckpointRenderState, BufferEndOfBufferTailRenderRequest,
-    BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
-    BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
-    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
-    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
+    BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
+    BufferEndOfBufferTailRenderRequest, BufferEndOfBufferTailRenderState,
+    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderRequest,
+    BufferInvisibleTextRenderRequestState, BufferLineNumberMarginRenderRequest,
+    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
     BufferTextDecodedSourceChar, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
     BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
@@ -1245,10 +1245,11 @@ impl LayoutEngine {
             mut hit_row_range,
         } = walk_setup;
 
-        // Check if the buffer has any overlays (optimization: skip per-char overlay checks if empty)
-        let has_overlays = !buffer.overlays().is_empty();
-
-        let face_resolution_context = BufferCurrentFaceResolutionContext::new(
+        let BufferTextWindowRenderContexts {
+            has_overlays,
+            face_resolution: face_resolution_context,
+            overlay_text_row: overlay_text_row_context,
+        } = BufferTextWindowRenderContextsRequest::new(
             buffer,
             face_resolver,
             measurement_policy,
@@ -1260,18 +1261,13 @@ impl LayoutEngine {
             char_h,
             font_ascent,
             frame_params.window_system,
-        );
-
-        let overlay_text_row_context = BufferOverlayStringTextRowRenderContext::new(
-            has_overlays,
             params.window_id as u64,
             &text_append_surface,
-            char_h,
-            default_face_ascent,
             text_y,
             text_matrix_row_base,
             max_rows,
-        );
+        )
+        .into_contexts();
 
         let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState {
             builder: &mut self.matrix_builder,
