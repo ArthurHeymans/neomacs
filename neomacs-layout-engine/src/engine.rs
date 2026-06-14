@@ -21,11 +21,12 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowLocalDisplayPolicy, BufferTextWindowLoopRequestContext,
-    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
-    BufferTextWindowTailDecorationState, BufferTextWindowTailRequestContext,
-    BufferTextWindowWalkSetup, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
+    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
+    BufferTextWindowRenderContextsRequest, BufferTextWindowTailDecorationState,
+    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetup,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -914,41 +915,17 @@ impl LayoutEngine {
         let tab_line_height = tab_line_face.as_ref().map_or(0.0, |face| {
             self.display_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
         });
-        let top_chrome_rows =
-            usize::from(tab_line_height > 0.0) + usize::from(header_line_height > 0.0);
+        let geometry_request = BufferTextWindowGeometryRequest::new(
+            params,
+            char_w,
+            char_h,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        );
+        let lnum_cols = local_display_policy
+            .line_number_columns(&buf_access, geometry_request.line_number_row_capacity());
 
-        let text_x = params.text_bounds.x;
-        let text_y = params.text_bounds.y + header_line_height + tab_line_height;
-        let text_width = params.text_bounds.width;
-        let text_height =
-            params.bounds.height - mode_line_height - header_line_height - tab_line_height;
-
-        // In Emacs, w->vscroll is negative when content is shifted up.
-        let vscroll = (-params.vscroll).max(0) as f32;
-        let text_height = (text_height - vscroll).max(0.0);
-
-        let max_rows = (text_height / char_h).floor() as usize;
-
-        // Compute line number column width.  GNU's
-        // `maybe_produce_line_number' reserves `lnum_width + 2` columns: the
-        // right-aligned number plus one blank on each side.  `lnum_width` is
-        // wide enough for the largest line number that can appear in the
-        // current window, so a tiny buffer in a tall window still gets the
-        // same two-digit gutter GNU displays for visible rows 1..N.
-        let lnum_cols = local_display_policy.line_number_columns(&buf_access, max_rows);
-        let lnum_pixel_width = lnum_cols as f32 * char_w;
-
-        // The minibuffer must always render at least 1 row.  Its pixel
-        // height may be fractionally smaller than char_h (e.g. 24px vs
-        // 24.15 with line-spacing) causing floor() to yield 0.
-        // Exception: when vscroll is active, don't force 1 row -- vscroll
-        // is used (e.g. by vertico-posframe) to intentionally hide content.
-        let max_rows =
-            if params.is_minibuffer && max_rows == 0 && text_height > 0.0 && vscroll == 0.0 {
-                1
-            } else {
-                max_rows
-            };
         // GNU `resize_mini_window` (`xdisp.c:13161-13301`) pre-
         // grows the minibuffer BEFORE layout by running
         // `move_it_to` to walk ALL content (buffer text + overlay
@@ -965,7 +942,7 @@ impl LayoutEngine {
         // the boot-time "tall echo area" bug (single-line content stays
         // at 1 row) while allowing fido/vertico multi-line overlays that
         // GNU counts during mini-window resize to render.
-        let max_rows = if params.is_minibuffer {
+        let minibuffer_content_rows = if params.is_minibuffer {
             let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
             let content_lines = evaluator
                 .buffer_manager()
@@ -974,16 +951,24 @@ impl LayoutEngine {
                 .unwrap_or(1);
             let frame_rows = frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil() as usize;
-            content_lines.clamp(1, max_mini)
+            Some(content_lines.clamp(1, max_mini))
         } else {
-            max_rows
+            None
         };
-        let text_matrix_row_base = top_chrome_rows;
-        let text_matrix_rows = max_rows.max(1);
-        let bottom_chrome_rows = usize::from(mode_line_height > 0.0);
-        let mode_line_matrix_row = text_matrix_row_base + text_matrix_rows;
-        let cols = ((text_width - lnum_pixel_width) / char_w).floor() as usize;
-        let content_x = text_x + lnum_pixel_width;
+        let BufferTextWindowGeometry {
+            text_x,
+            text_y,
+            text_width,
+            text_height,
+            max_rows,
+            text_matrix_row_base,
+            text_matrix_rows,
+            bottom_chrome_rows,
+            mode_line_matrix_row,
+            cols,
+            line_number_pixel_width: lnum_pixel_width,
+            content_x,
+        } = geometry_request.into_geometry(lnum_cols, minibuffer_content_rows);
 
         // GNU Emacs redisplay advances iterators until the visible window is
         // fully resolved; it does not stop at an arbitrary "rows * cols"

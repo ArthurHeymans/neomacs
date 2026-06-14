@@ -33,6 +33,36 @@ use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowId};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextWindowGeometryRequest {
+    text_x: f32,
+    text_y: f32,
+    text_width: f32,
+    text_height: f32,
+    vscroll: f32,
+    is_minibuffer: bool,
+    top_chrome_rows: usize,
+    bottom_chrome_rows: usize,
+    char_width: f32,
+    char_height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextWindowGeometry {
+    pub(crate) text_x: f32,
+    pub(crate) text_y: f32,
+    pub(crate) text_width: f32,
+    pub(crate) text_height: f32,
+    pub(crate) max_rows: usize,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) text_matrix_rows: usize,
+    pub(crate) bottom_chrome_rows: usize,
+    pub(crate) mode_line_matrix_row: usize,
+    pub(crate) cols: usize,
+    pub(crate) line_number_pixel_width: f32,
+    pub(crate) content_x: f32,
+}
+
 pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
     window_start: i64,
     content_x: f32,
@@ -260,6 +290,98 @@ pub(crate) struct BufferTextWindowTailDecorationOutcome {
     pub(crate) left_continuation_rows: usize,
     pub(crate) empty_line_fringe_rows: usize,
     pub(crate) fill_column_rows: usize,
+}
+
+impl BufferTextWindowGeometryRequest {
+    pub(crate) fn new(
+        params: &WindowParams,
+        char_width: f32,
+        char_height: f32,
+        mode_line_height: f32,
+        header_line_height: f32,
+        tab_line_height: f32,
+    ) -> Self {
+        let text_x = params.text_bounds.x;
+        let text_y = params.text_bounds.y + header_line_height + tab_line_height;
+        let text_width = params.text_bounds.width;
+        let text_height =
+            params.bounds.height - mode_line_height - header_line_height - tab_line_height;
+
+        // In Emacs, w->vscroll is negative when content is shifted up.
+        let vscroll = (-params.vscroll).max(0) as f32;
+        let text_height = (text_height - vscroll).max(0.0);
+
+        Self {
+            text_x,
+            text_y,
+            text_width,
+            text_height,
+            vscroll,
+            is_minibuffer: params.is_minibuffer,
+            top_chrome_rows: usize::from(tab_line_height > 0.0)
+                + usize::from(header_line_height > 0.0),
+            bottom_chrome_rows: usize::from(mode_line_height > 0.0),
+            char_width,
+            char_height,
+        }
+    }
+
+    pub(crate) fn line_number_row_capacity(self) -> usize {
+        // GNU's `maybe_produce_line_number' reserves `lnum_width + 2`
+        // columns: the right-aligned number plus one blank on each side.
+        // `lnum_width` is wide enough for the largest line number that can
+        // appear in the current window, so a tiny buffer in a tall window
+        // still gets the same two-digit gutter GNU displays for visible rows
+        // 1..N.
+        self.base_max_rows()
+    }
+
+    pub(crate) fn into_geometry(
+        self,
+        line_number_columns: i32,
+        minibuffer_content_rows: Option<usize>,
+    ) -> BufferTextWindowGeometry {
+        let max_rows = minibuffer_content_rows.unwrap_or_else(|| self.visible_max_rows());
+        let line_number_pixel_width = line_number_columns as f32 * self.char_width;
+        let text_matrix_row_base = self.top_chrome_rows;
+        let text_matrix_rows = max_rows.max(1);
+        let mode_line_matrix_row = text_matrix_row_base + text_matrix_rows;
+        let cols = ((self.text_width - line_number_pixel_width) / self.char_width).floor() as usize;
+        let content_x = self.text_x + line_number_pixel_width;
+
+        BufferTextWindowGeometry {
+            text_x: self.text_x,
+            text_y: self.text_y,
+            text_width: self.text_width,
+            text_height: self.text_height,
+            max_rows,
+            text_matrix_row_base,
+            text_matrix_rows,
+            bottom_chrome_rows: self.bottom_chrome_rows,
+            mode_line_matrix_row,
+            cols,
+            line_number_pixel_width,
+            content_x,
+        }
+    }
+
+    fn base_max_rows(self) -> usize {
+        (self.text_height / self.char_height).floor() as usize
+    }
+
+    fn visible_max_rows(self) -> usize {
+        let max_rows = self.base_max_rows();
+        // The minibuffer must always render at least 1 row.  Its pixel
+        // height may be fractionally smaller than char_height (e.g. 24px vs
+        // 24.15 with line-spacing) causing floor() to yield 0.  Exception:
+        // when vscroll is active, don't force 1 row -- vscroll is used (e.g.
+        // by vertico-posframe) to intentionally hide content.
+        if self.is_minibuffer && max_rows == 0 && self.text_height > 0.0 && self.vscroll == 0.0 {
+            1
+        } else {
+            max_rows
+        }
+    }
 }
 
 impl<'a> BufferTextWindowWalkSetupRequest<'a> {

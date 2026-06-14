@@ -91,6 +91,58 @@ fn setup_request() -> BufferTextWindowWalkSetupRequest<'static> {
 }
 
 #[test]
+fn geometry_request_derives_text_area_and_matrix_rows() {
+    let params = window_params();
+    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 12.0, 10.0, 6.0);
+
+    assert_eq!(request.line_number_row_capacity(), 5);
+
+    let geometry = request.into_geometry(3, None);
+
+    assert_eq!(geometry.text_x, 16.0);
+    assert_eq!(geometry.text_y, 48.0);
+    assert_eq!(geometry.text_width, 160.0);
+    assert_eq!(geometry.text_height, 92.0);
+    assert_eq!(geometry.max_rows, 5);
+    assert_eq!(geometry.text_matrix_row_base, 2);
+    assert_eq!(geometry.text_matrix_rows, 5);
+    assert_eq!(geometry.bottom_chrome_rows, 1);
+    assert_eq!(geometry.mode_line_matrix_row, 7);
+    assert_eq!(geometry.line_number_pixel_width, 24.0);
+    assert_eq!(geometry.content_x, 40.0);
+    assert_eq!(geometry.cols, 17);
+}
+
+#[test]
+fn geometry_request_only_forces_fractional_row_for_minibuffer() {
+    let mut params = window_params();
+    params.bounds.height = 15.0;
+    params.text_bounds.height = 15.0;
+
+    let ordinary = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
+        .into_geometry(0, None);
+    assert_eq!(ordinary.max_rows, 0);
+
+    params.is_minibuffer = true;
+    let minibuffer = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
+        .into_geometry(0, None);
+    assert_eq!(minibuffer.max_rows, 1);
+}
+
+#[test]
+fn geometry_request_uses_minibuffer_resize_rows_when_supplied() {
+    let mut params = window_params();
+    params.is_minibuffer = true;
+    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0);
+
+    let geometry = request.into_geometry(0, Some(2));
+
+    assert_eq!(geometry.max_rows, 2);
+    assert_eq!(geometry.text_matrix_rows, 2);
+    assert_eq!(geometry.mode_line_matrix_row, 2);
+}
+
+#[test]
 fn walk_setup_initializes_source_position_and_geometry_state() {
     let setup = setup_request().into_setup();
 
