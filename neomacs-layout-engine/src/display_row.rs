@@ -2436,13 +2436,8 @@ fn finish_current_text_row_render(
     row_ascent_px: f32,
 ) -> CurrentTextRowRenderOutcome {
     let end = display_row_output_end_position(result.progress);
-    install_rendered_display_row_fragment_assets(
-        state.builder,
-        role,
-        output.row,
-        &result.faces,
-        &result.media,
-    );
+    RenderedDisplayRowAssetsInstall::fragment(role, output.row, &result.faces, &result.media)
+        .install(state.builder);
     DisplayRowCurrentSourceSlotBoundsMergeRequest::new(&result.source_slots).install(state.builder);
     let source_slots = result.source_slots;
     state
@@ -2462,14 +2457,13 @@ pub(crate) fn install_rendered_display_row(
     rendered: &RenderedDisplayRow,
     matrix_row: usize,
 ) {
-    install_rendered_display_row_faces(builder, rendered);
+    RenderedDisplayRowAssetsInstall::from_rendered(
+        rendered,
+        RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row),
+    )
+    .install(builder);
     let row = rendered_row_with_source_bounds(rendered);
     PrebuiltDisplayRowInstall::new(matrix_row, &row).install(builder);
-    install_rendered_display_row_media(
-        builder,
-        rendered,
-        RenderedDisplayRowMediaInstallTarget::MatrixRow(matrix_row),
-    );
 }
 
 pub(crate) struct PrebuiltDisplayRowInstall<'row> {
@@ -2504,21 +2498,20 @@ pub(crate) fn install_measured_window_display_row(
         kind,
         WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
     ));
-    install_rendered_display_row_faces(builder, &measured.rendered);
     let matrix_row = measured.row_index as usize;
+    RenderedDisplayRowAssetsInstall::from_rendered(
+        &measured.rendered,
+        RenderedDisplayRowAssetInstallTarget::WindowRow {
+            row_index: measured.row_index,
+            bounds: measured.bounds,
+        },
+    )
+    .install(builder);
     let mut row = rendered_row_with_source_bounds(&measured.rendered);
     row.pixel_y = measured.bounds.y;
     row.height_px = measured.row_height();
     row.ascent_px = measured.row_ascent();
     PrebuiltDisplayRowInstall::new(matrix_row, &row).install(builder);
-    install_rendered_display_row_media(
-        builder,
-        &measured.rendered,
-        RenderedDisplayRowMediaInstallTarget::WindowRow {
-            row_index: measured.row_index,
-            bounds: measured.bounds,
-        },
-    );
 }
 
 pub(crate) fn install_measured_frame_chrome_row(
@@ -2530,15 +2523,14 @@ pub(crate) fn install_measured_frame_chrome_row(
         panic!("window-owned rows must use install_measured_window_display_row");
     };
     debug_assert!(matches!(kind, FrameChromeKind::TabBar));
-    install_rendered_display_row_faces(builder, &measured.rendered);
-    install_rendered_display_row_media(
-        builder,
+    RenderedDisplayRowAssetsInstall::from_rendered(
         &measured.rendered,
-        RenderedDisplayRowMediaInstallTarget::FrameChrome {
+        RenderedDisplayRowAssetInstallTarget::FrameChrome {
             row_index: measured.row_index,
             bounds: measured.bounds,
         },
-    );
+    )
+    .install(builder);
     let mut row = measured.rendered.row.clone();
     apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
     row.pixel_y = measured.bounds.y;
@@ -2551,58 +2543,65 @@ pub(crate) fn install_measured_frame_chrome_row(
     });
 }
 
-pub(crate) fn install_rendered_display_row_fragment_assets(
-    builder: &mut GlyphMatrixBuilder,
-    role: GlyphRowRole,
-    matrix_row: usize,
-    faces: &[Face],
-    media: &[RenderedDisplayRowMedia],
-) {
-    for face in faces {
-        builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-            id: face.id,
-            face: face.clone(),
-        });
-    }
-    for media in media {
-        media.install(builder, role, matrix_row);
-    }
-}
-
 #[derive(Clone, Copy)]
-enum RenderedDisplayRowMediaInstallTarget {
+enum RenderedDisplayRowAssetInstallTarget {
     MatrixRow(usize),
     WindowRow { row_index: u32, bounds: Rect },
     FrameChrome { row_index: u32, bounds: Rect },
 }
 
-fn install_rendered_display_row_faces(
-    builder: &mut GlyphMatrixBuilder,
-    rendered: &RenderedDisplayRow,
-) {
-    for face in &rendered.faces {
-        builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-            id: face.id,
-            face: face.clone(),
-        });
-    }
+struct RenderedDisplayRowAssetsInstall<'a> {
+    role: GlyphRowRole,
+    faces: &'a [Face],
+    media: &'a [RenderedDisplayRowMedia],
+    target: RenderedDisplayRowAssetInstallTarget,
 }
 
-fn install_rendered_display_row_media(
-    builder: &mut GlyphMatrixBuilder,
-    rendered: &RenderedDisplayRow,
-    target: RenderedDisplayRowMediaInstallTarget,
-) {
-    for media in &rendered.media {
-        match target {
-            RenderedDisplayRowMediaInstallTarget::MatrixRow(matrix_row) => {
-                media.install(builder, rendered.row.role, matrix_row);
-            }
-            RenderedDisplayRowMediaInstallTarget::WindowRow { row_index, bounds } => {
-                media.install_window_row(builder, rendered.row.role, row_index, bounds);
-            }
-            RenderedDisplayRowMediaInstallTarget::FrameChrome { row_index, bounds } => {
-                media.install_frame_chrome(builder, rendered.row.role, row_index, bounds);
+impl<'a> RenderedDisplayRowAssetsInstall<'a> {
+    fn fragment(
+        role: GlyphRowRole,
+        matrix_row: usize,
+        faces: &'a [Face],
+        media: &'a [RenderedDisplayRowMedia],
+    ) -> Self {
+        Self {
+            role,
+            faces,
+            media,
+            target: RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row),
+        }
+    }
+
+    fn from_rendered(
+        rendered: &'a RenderedDisplayRow,
+        target: RenderedDisplayRowAssetInstallTarget,
+    ) -> Self {
+        Self {
+            role: rendered.row.role,
+            faces: &rendered.faces,
+            media: &rendered.media,
+            target,
+        }
+    }
+
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        for face in self.faces {
+            builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
+                id: face.id,
+                face: face.clone(),
+            });
+        }
+        for media in self.media {
+            match self.target {
+                RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row) => {
+                    media.install(builder, self.role, matrix_row);
+                }
+                RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds } => {
+                    media.install_window_row(builder, self.role, row_index, bounds);
+                }
+                RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds } => {
+                    media.install_frame_chrome(builder, self.role, row_index, bounds);
+                }
             }
         }
     }
