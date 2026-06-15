@@ -7697,7 +7697,7 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
 
 #[test]
 fn display_property_replacement_append_resolve_request_builds_append_request() {
-    let eval = Context::new();
+    let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
         .current_buffer()
@@ -7745,13 +7745,24 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let plan = request.into_plan(
-        &buffer,
-        &face_resolver,
-        &active_face,
-        &mut face_ids,
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("display-property-replacement-plan", 80, 40, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    let mut source_render = TextRowSourceRenderState::new(
         &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
     );
+    let plan = request.into_plan(&buffer, &mut source_render, &active_face, &mut face_ids);
     let string_append_request = plan
         .string_append_request()
         .expect("string replacement lowers to string append request");

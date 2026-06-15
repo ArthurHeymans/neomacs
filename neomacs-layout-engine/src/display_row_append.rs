@@ -484,6 +484,25 @@ impl<'a> TextRowSourceRenderState<'a> {
         )
     }
 
+    pub(crate) fn display_string_base_face_for_active_row<B: LayoutBufferView>(
+        &mut self,
+        buffer: &B,
+        origin: DisplayOrigin,
+        policy: BaseFacePolicy,
+        active_face_state: &DisplayRowActiveFaceState,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayStringBaseFace {
+        display_string_base_face_for_active_row(
+            buffer,
+            self.face_resolver,
+            origin,
+            policy,
+            active_face_state,
+            face_ids,
+            self.output_render.builder,
+        )
+    }
+
     pub(crate) fn display_property_replacement_append_plan<B: LayoutBufferView>(
         &mut self,
         request: DisplayPropertyReplacementAppendRequest,
@@ -491,13 +510,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         active_face_state: &DisplayRowActiveFaceState,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayPropertyReplacementAppendPlan {
-        request.into_plan(
-            buffer,
-            self.face_resolver,
-            active_face_state,
-            face_ids,
-            self.output_render.builder,
-        )
+        request.into_plan(buffer, self, active_face_state, face_ids)
     }
 
     pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
@@ -10520,14 +10533,13 @@ impl DisplayPropertyReplacementAppendRequest {
     pub(crate) fn into_plan<B: LayoutBufferView>(
         self,
         buffer: &B,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
         face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
     ) -> DisplayPropertyReplacementAppendPlan {
-        let item =
-            self.item
-                .into_plan_item(buffer, face_resolver, active_face_state, face_ids, builder);
+        let item = self
+            .item
+            .into_plan_item(buffer, state, active_face_state, face_ids);
         DisplayPropertyReplacementAppendPlan {
             replacement_source: self.replacement_source,
             item,
@@ -10669,22 +10681,19 @@ impl DisplayPropertyReplacementAppendItem {
     fn into_plan_item<B: LayoutBufferView>(
         self,
         buffer: &B,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
         face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
     ) -> DisplayPropertyReplacementAppendPlanItem {
         match self {
             Self::String(item) => {
                 let replacement_base_face = (!item.is_empty()).then(|| {
-                    display_string_base_face_for_active_row(
+                    state.display_string_base_face_for_active_row(
                         buffer,
-                        face_resolver,
                         item.origin(),
                         item.base_face_policy(),
                         active_face_state,
                         face_ids,
-                        builder,
                     )
                 });
                 DisplayPropertyReplacementAppendPlanItem::String(
