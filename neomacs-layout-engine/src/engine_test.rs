@@ -25,6 +25,7 @@ use crate::display_row_walk_state::{
 use crate::display_source::DisplayItemSource;
 use crate::display_status_line::{
     ChromeRowRenderServices, EchoMinibufferRowsRenderRequest, MinibufferDisplayRenderState,
+    minibuffer_echo_message_for_window,
 };
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;

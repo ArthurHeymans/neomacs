@@ -34,7 +34,7 @@ use crate::display_row_builder::{
 };
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
-use crate::types::WindowParams;
+use crate::types::{FrameParams, WindowParams};
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -721,16 +721,106 @@ impl WindowChromeRowsRenderState<'_, '_> {
     }
 }
 
-pub(crate) struct InactiveMinibufferDisplayRowRequest<'face> {
-    pub(crate) window_id: u64,
-    pub(crate) window_bounds: Rect,
-    pub(crate) text_bounds: Rect,
-    pub(crate) selected: bool,
-    pub(crate) text_width: f32,
-    pub(crate) row_height: f32,
-    pub(crate) char_width: f32,
-    pub(crate) ascent: f32,
-    pub(crate) base_face: &'face ResolvedFace,
+enum MinibufferSpecialRowsRequest<'face> {
+    Echo(EchoMinibufferDisplayRowsRequest<'face>),
+    Inactive(InactiveMinibufferDisplayRowRequest<'face>),
+}
+
+pub(crate) struct MinibufferSpecialRowsPlan<'face> {
+    request: MinibufferSpecialRowsRequest<'face>,
+}
+
+impl<'face> MinibufferSpecialRowsPlan<'face> {
+    pub(crate) fn from_window(
+        evaluator: &Context,
+        params: &WindowParams,
+        frame_params: &FrameParams,
+        text_width: f32,
+        char_width: f32,
+        row_height: f32,
+        ascent: f32,
+        base_face: &'face ResolvedFace,
+    ) -> Option<Self> {
+        let active_minibuffer_window =
+            evaluator.minibuffer_window_is_active(WindowId(params.window_id as u64));
+        let echo_message = minibuffer_echo_message_for_window(
+            params.is_minibuffer,
+            active_minibuffer_window,
+            evaluator.current_message_value(),
+        );
+        if let Some(message) = echo_message {
+            // GNU `display_echo_area_1` displays the current message by
+            // temporarily making the echo-area buffer current, calling
+            // `resize_mini_window`, then redisplaying the minibuffer window.
+            // GNU measures the displayed height, not just literal newlines:
+            // a long one-line message grows the echo area when
+            // `message-truncate-lines' is nil.
+            let reserve_right_special_col =
+                !frame_params.window_system && params.right_fringe_width == 0.0;
+            let frame_rows = frame_params.height / row_height.max(1.0);
+            let max_rows = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
+            return Some(Self {
+                request: MinibufferSpecialRowsRequest::Echo(EchoMinibufferDisplayRowsRequest {
+                    window_id: params.window_id as u64,
+                    window_bounds: params.bounds,
+                    text_bounds: params.text_bounds,
+                    selected: params.selected,
+                    text_width,
+                    char_width,
+                    ascent,
+                    row_height,
+                    base_face,
+                    message,
+                    max_rows,
+                    truncate_lines: message_truncate_lines(evaluator),
+                    reserve_right_special_col,
+                }),
+            });
+        }
+
+        if params.is_minibuffer && !active_minibuffer_window {
+            // GNU `display_echo_area` temporarily displays an echo-area
+            // buffer in the minibuffer window. With no current message that
+            // buffer is empty; the inactive minibuffer must not redisplay the
+            // ordinary buffer attached to the window record.
+            return Some(Self {
+                request: MinibufferSpecialRowsRequest::Inactive(
+                    InactiveMinibufferDisplayRowRequest {
+                        window_id: params.window_id as u64,
+                        window_bounds: params.bounds,
+                        text_bounds: params.text_bounds,
+                        selected: params.selected,
+                        text_width,
+                        row_height,
+                        char_width,
+                        ascent,
+                        base_face,
+                    },
+                ),
+            });
+        }
+
+        None
+    }
+
+    pub(crate) fn render_window(self, state: &mut MinibufferDisplayRenderState<'_, '_>) {
+        match self.request {
+            MinibufferSpecialRowsRequest::Echo(request) => request.render_window(state),
+            MinibufferSpecialRowsRequest::Inactive(request) => request.render_window(state),
+        }
+    }
+}
+
+struct InactiveMinibufferDisplayRowRequest<'face> {
+    window_id: u64,
+    window_bounds: Rect,
+    text_bounds: Rect,
+    selected: bool,
+    text_width: f32,
+    row_height: f32,
+    char_width: f32,
+    ascent: f32,
+    base_face: &'face ResolvedFace,
 }
 
 impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
@@ -775,20 +865,20 @@ impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
     }
 }
 
-pub(crate) struct EchoMinibufferDisplayRowsRequest<'face> {
-    pub(crate) window_id: u64,
-    pub(crate) window_bounds: Rect,
-    pub(crate) text_bounds: Rect,
-    pub(crate) selected: bool,
-    pub(crate) text_width: f32,
-    pub(crate) char_width: f32,
-    pub(crate) ascent: f32,
-    pub(crate) row_height: f32,
-    pub(crate) base_face: &'face ResolvedFace,
-    pub(crate) message: Value,
-    pub(crate) max_rows: usize,
-    pub(crate) truncate_lines: bool,
-    pub(crate) reserve_right_special_col: bool,
+struct EchoMinibufferDisplayRowsRequest<'face> {
+    window_id: u64,
+    window_bounds: Rect,
+    text_bounds: Rect,
+    selected: bool,
+    text_width: f32,
+    char_width: f32,
+    ascent: f32,
+    row_height: f32,
+    base_face: &'face ResolvedFace,
+    message: Value,
+    max_rows: usize,
+    truncate_lines: bool,
+    reserve_right_special_col: bool,
 }
 
 pub(crate) struct EchoMinibufferRowsRenderRequest<'face> {

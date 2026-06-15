@@ -7,11 +7,10 @@
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
-    ChromeRowRenderServices, EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
-    FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
-    InactiveMinibufferDisplayRowRequest, MinibufferDisplayRenderState, ResizeMiniWindowsMode,
-    ScratchGcRootScope, WindowChromeRowsPlan, build_tab_bar_display, max_mini_window_lines,
-    message_truncate_lines, minibuffer_echo_message_for_window, minibuffer_resize_line_count,
+    ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
+    FrameTabBarDisplayRowRequest, MinibufferDisplayRenderState, MinibufferSpecialRowsPlan,
+    ResizeMiniWindowsMode, ScratchGcRootScope, WindowChromeRowsPlan, build_tab_bar_display,
+    max_mini_window_lines, minibuffer_resize_line_count,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -82,7 +81,7 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
-use neovm_core::window::{WindowDisplaySnapshot, WindowId};
+use neovm_core::window::WindowDisplaySnapshot;
 
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
@@ -821,14 +820,6 @@ impl LayoutEngine {
         let char_w = params.char_width;
         let char_h = params.char_height;
         let font_ascent = params.font_ascent;
-        let active_minibuffer_window =
-            evaluator.minibuffer_window_is_active(WindowId(params.window_id as u64));
-        let echo_message = minibuffer_echo_message_for_window(
-            params.is_minibuffer,
-            active_minibuffer_window,
-            evaluator.current_message_value(),
-        );
-
         let local_display_policy = BufferTextWindowLocalDisplayPolicy::from_buffer(buffer);
         let has_prefix = local_display_policy.has_prefix();
 
@@ -965,63 +956,17 @@ impl LayoutEngine {
         // `init_frame_faces`.
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
 
-        if let Some(echo_message) = echo_message {
-            // GNU `display_echo_area_1` displays the current message by
-            // temporarily making the echo-area buffer current, calling
-            // `resize_mini_window`, then redisplaying the minibuffer window.
-            // GNU measures the displayed height, not just literal newlines:
-            // a long one-line message grows the echo area when
-            // `message-truncate-lines' is nil.
-            let reserve_right_special_col =
-                !frame_params.window_system && params.right_fringe_width == 0.0;
-            let truncate_echo_lines = message_truncate_lines(evaluator);
-            let frame_rows = frame_params.height / char_h;
-            let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
-            EchoMinibufferDisplayRowsRequest {
-                window_id: params.window_id as u64,
-                window_bounds: params.bounds,
-                text_bounds: params.text_bounds,
-                selected: params.selected,
-                text_width,
-                char_width: char_w,
-                ascent: default_face.ascent(),
-                row_height: char_h,
-                base_face: default_resolved,
-                message: echo_message,
-                max_rows: max_mini,
-                truncate_lines: truncate_echo_lines,
-                reserve_right_special_col,
-            }
-            .render_window(&mut MinibufferDisplayRenderState {
-                builder: &mut self.matrix_builder,
-                render_services: ChromeRowRenderServices::new(
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut face_ids,
-                ),
-                display_host: evaluator.display_host.as_deref(),
-            });
-            face_ids.finish_into(&mut self.frame_face_id_counter);
-            return;
-        }
-
-        if params.is_minibuffer && !active_minibuffer_window {
-            // GNU `display_echo_area` temporarily displays an echo-area
-            // buffer in the minibuffer window.  With no current message that
-            // buffer is empty; the inactive minibuffer must not redisplay the
-            // ordinary buffer attached to the window record.
-            InactiveMinibufferDisplayRowRequest {
-                window_id: params.window_id as u64,
-                window_bounds: params.bounds,
-                text_bounds: params.text_bounds,
-                selected: params.selected,
-                text_width,
-                row_height: char_h,
-                char_width: char_w,
-                ascent: default_face.ascent(),
-                base_face: default_resolved,
-            }
-            .render_window(&mut MinibufferDisplayRenderState {
+        if let Some(minibuffer_plan) = MinibufferSpecialRowsPlan::from_window(
+            evaluator,
+            params,
+            frame_params,
+            text_width,
+            char_w,
+            char_h,
+            default_face.ascent(),
+            default_resolved,
+        ) {
+            minibuffer_plan.render_window(&mut MinibufferDisplayRenderState {
                 builder: &mut self.matrix_builder,
                 render_services: ChromeRowRenderServices::new(
                     &mut self.font_metrics,
