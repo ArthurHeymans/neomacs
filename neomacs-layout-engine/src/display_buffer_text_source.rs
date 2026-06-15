@@ -61,7 +61,7 @@ pub(crate) struct BufferTextWindowSourceRequest {
     accessible_start: i64,
     accessible_end: i64,
     max_rows: usize,
-    window_width_px: i64,
+    visible_cols: i64,
     is_minibuffer: bool,
 }
 
@@ -89,7 +89,7 @@ impl BufferTextWindowSourceRequest {
             params.accessible_start_charpos().get(),
             params.accessible_end_charpos().get(),
             max_rows,
-            params.bounds.width,
+            visible_cols_for_window_params(params),
             params.is_minibuffer,
         )
     }
@@ -101,7 +101,7 @@ impl BufferTextWindowSourceRequest {
         accessible_start: i64,
         accessible_end: i64,
         max_rows: usize,
-        window_width_px: f32,
+        visible_cols: i64,
         is_minibuffer: bool,
     ) -> Self {
         Self {
@@ -111,7 +111,7 @@ impl BufferTextWindowSourceRequest {
             accessible_start,
             accessible_end,
             max_rows,
-            window_width_px: window_width_px.max(1.0) as i64,
+            visible_cols: visible_cols.max(1),
             is_minibuffer,
         }
     }
@@ -193,7 +193,7 @@ impl BufferTextWindowSourceRequest {
         let has_prev_end = self
             .previous_window_end
             .is_some_and(|end| self.point_charpos > end);
-        let max_visible_chars = (self.max_rows.max(1) as i64) * self.window_width_px;
+        let max_visible_chars = (self.max_rows.max(1) as i64) * self.visible_cols;
         let far_below_without_prev_end = self.previous_window_end.is_none()
             && self.point_charpos - window_start > max_visible_chars;
         has_prev_end || far_below_without_prev_end
@@ -214,6 +214,13 @@ impl BufferTextWindowSourceRequest {
         }
         scan_pos.max(self.accessible_start)
     }
+}
+
+fn visible_cols_for_window_params(params: &WindowParams) -> i64 {
+    let char_width = params.char_width.max(1.0);
+    (params.text_bounds.width.max(1.0) / char_width)
+        .floor()
+        .max(1.0) as i64
 }
 
 #[cfg(test)]

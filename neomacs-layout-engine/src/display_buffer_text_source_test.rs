@@ -77,7 +77,7 @@ fn request(
         0,
         accessible_end,
         max_rows,
-        20.0,
+        20,
         is_minibuffer,
     )
 }
@@ -97,8 +97,20 @@ fn source_request_from_window_params_carries_source_bounds() {
     assert_eq!(request.accessible_start, 3);
     assert_eq!(request.accessible_end, 80);
     assert_eq!(request.max_rows, 6);
-    assert_eq!(request.window_width_px, 240);
+    assert_eq!(request.visible_cols, 20);
     assert!(!request.is_minibuffer);
+}
+
+#[test]
+fn source_request_from_window_params_uses_text_bounds_columns() {
+    let mut params = window_params();
+    params.bounds.width = 1000.0;
+    params.text_bounds.width = 48.0;
+    params.char_width = 12.0;
+
+    let request = BufferTextWindowSourceRequest::from_window_params(&params, 6);
+
+    assert_eq!(request.visible_cols, 4);
 }
 
 #[test]
