@@ -11,8 +11,8 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
-    SourceSpan, glyphless_method_for_char,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessJoinerPolicy,
+    GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -3229,10 +3229,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
     }
 }
 
-pub(crate) fn synthetic_display_text_item(
-    source: SyntheticTextSource,
-    face_id: u32,
-) -> DisplayItem {
+fn synthetic_display_text_item(source: SyntheticTextSource, face_id: u32) -> DisplayItem {
     let source_id = source.source_id();
     let text = source.into_text();
     let char_len = text.chars().count();
@@ -3241,6 +3238,34 @@ pub(crate) fn synthetic_display_text_item(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     )
+}
+
+struct SyntheticTextItemSource {
+    source_position: DisplaySourcePosition,
+    item: Option<DisplayItem>,
+}
+
+impl SyntheticTextItemSource {
+    fn new(source: SyntheticTextSource, face_id: u32) -> Self {
+        let item = synthetic_display_text_item(source, face_id);
+        Self {
+            source_position: item.span.start.clone(),
+            item: Some(item),
+        }
+    }
+}
+
+impl DisplayItemSource for SyntheticTextItemSource {
+    fn next_item(
+        &mut self,
+        _context: &mut crate::display_source::DisplaySourceContext<'_>,
+    ) -> Option<DisplayItem> {
+        self.item.take()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -12080,17 +12105,19 @@ fn append_synthetic_text_to_display_row(
     source: SyntheticTextSource,
     face_id: u32,
 ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let item = synthetic_display_text_item(source, face_id);
+    let source = SyntheticTextItemSource::new(source, face_id);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    DisplayRowSourceAppendOperation::for_single_item(
-        &item,
+    let start = position;
+    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+    let outcome = DisplayRowSourceAppendOperation::new(
         base_face,
         face_id,
         frame,
         position,
         DisplayRowAppendKind::SourceText,
     )
-    .render_single_item_to_text_row_and_emit(state, item, &mut render_policy)
+    .render_source_to_text_row_and_emit(state, source, &mut face_ids, &mut render_policy)?;
+    Some(outcome.into_append_progress_and_position(start))
 }
 
 #[cfg(test)]
