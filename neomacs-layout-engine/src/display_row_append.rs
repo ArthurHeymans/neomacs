@@ -9814,19 +9814,23 @@ pub(crate) struct BufferDisplayPropertyTextRenderContext<'a> {
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBufferView> {
-    face_resolution_context: BufferCurrentFaceResolutionContext<'a, B>,
-    buffer_id: BufferId,
-    text_start_byte: usize,
-    text: &'a [u8],
-    current_x: f32,
-    content_x: f32,
-    params: &'a WindowParams,
-    glyph_y_offset: f32,
-    default_row_height: f32,
-    start_position: DisplayRowPosition,
-    charpos: i64,
-    byte_idx: usize,
-    accessible_end: i64,
+    context: BufferDisplayPropertyCheckpointRenderContext<'a, B>,
+}
+
+pub(crate) struct BufferDisplayPropertyCheckpointRenderContext<'a, B: LayoutBufferView> {
+    pub(crate) face_resolution_context: BufferCurrentFaceResolutionContext<'a, B>,
+    pub(crate) buffer_id: BufferId,
+    pub(crate) text_start_byte: usize,
+    pub(crate) text: &'a [u8],
+    pub(crate) current_x: f32,
+    pub(crate) content_x: f32,
+    pub(crate) params: &'a WindowParams,
+    pub(crate) glyph_y_offset: f32,
+    pub(crate) default_row_height: f32,
+    pub(crate) start_position: DisplayRowPosition,
+    pub(crate) charpos: i64,
+    pub(crate) byte_idx: usize,
+    pub(crate) accessible_end: i64,
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
@@ -10110,37 +10114,8 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
 }
 
 impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        face_resolution_context: BufferCurrentFaceResolutionContext<'a, B>,
-        buffer_id: BufferId,
-        text_start_byte: usize,
-        text: &'a [u8],
-        current_x: f32,
-        content_x: f32,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        start_position: DisplayRowPosition,
-        charpos: i64,
-        byte_idx: usize,
-        accessible_end: i64,
-    ) -> Self {
-        Self {
-            face_resolution_context,
-            buffer_id,
-            text_start_byte,
-            text,
-            current_x,
-            content_x,
-            params,
-            glyph_y_offset,
-            default_row_height,
-            start_position,
-            charpos,
-            byte_idx,
-            accessible_end,
-        }
+    pub(crate) fn new(context: BufferDisplayPropertyCheckpointRenderContext<'a, B>) -> Self {
+        Self { context }
     }
 
     pub(crate) fn render_and_apply(
@@ -10166,14 +10141,16 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             height_span,
             point_charpos,
         } = state;
+        let context = self.context;
 
         BufferDisplayPropertyTextModifierAction::clear_expired_height_span(
             height_span,
             face_scan,
-            self.charpos,
-            self.params.window_start,
+            context.charpos,
+            context.params.window_start,
         );
-        self.face_resolution_context
+        context
+            .face_resolution_context
             .resolve_at_checkpoint_with_source_state(
                 &mut source_render,
                 face_scan,
@@ -10184,34 +10161,34 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
                 row_extend,
                 box_face,
                 *x,
-                self.charpos,
+                context.charpos,
             );
 
         let action = BufferDisplayPropertyTextRenderContext::new(
-            self.buffer_id,
-            self.text_start_byte,
-            self.text,
+            context.buffer_id,
+            context.text_start_byte,
+            context.text,
             active_face_state,
-            self.current_x,
-            self.content_x,
-            self.params,
-            self.glyph_y_offset,
-            self.default_row_height,
-            self.start_position,
+            context.current_x,
+            context.content_x,
+            context.params,
+            context.glyph_y_offset,
+            context.default_row_height,
+            context.start_position,
         )
         .resolve_and_append_at_checkpoint(
-            self.face_resolution_context.buffer,
+            context.face_resolution_context.buffer,
             &mut source_render,
             face_ids,
             append_surface,
             row_geometry,
             checkpoints,
-            self.charpos,
-            self.byte_idx,
-            self.accessible_end,
+            context.charpos,
+            context.byte_idx,
+            context.accessible_end,
         );
         let outcome = action.apply_to_buffer_walk_state(
-            self.text,
+            context.text,
             byte_idx,
             charpos,
             x,
@@ -10225,7 +10202,8 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             face_scan,
         );
         if outcome.should_resolve_face() {
-            self.face_resolution_context
+            context
+                .face_resolution_context
                 .resolve_at_checkpoint_with_source_state(
                     &mut source_render,
                     face_scan,
