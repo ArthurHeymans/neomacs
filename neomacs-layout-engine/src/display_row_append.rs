@@ -57,8 +57,9 @@ use crate::display_source::{
     BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
     BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
     BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementAppendItem,
-    DisplayReplacementBox, DisplayReplacementSourceMappedTextItem, LispStringSourceCursor,
-    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    DisplayReplacementBox, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementStringSourceItem, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
+    SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -109,6 +110,7 @@ impl LispStringSourceId {
     const OVERLAY_STRING: Self = Self(1);
     const PREFIX: Self = Self(2);
 
+    #[cfg(test)]
     fn display_replacement(source_id: u64) -> Self {
         Self(source_id)
     }
@@ -8603,85 +8605,6 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct DisplayReplacementStringAppendItem {
-    value: Value,
-    origin: DisplayOrigin,
-    source_id: LispStringSourceId,
-    active_face_state: DisplayRowActiveFaceState,
-    cursor_slot_width_px: f32,
-    is_empty: bool,
-}
-
-impl DisplayReplacementStringAppendItem {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn display_property_string(
-        value: Value,
-        anchor_charpos: CharPos0,
-        source: DisplayPropertySource,
-        source_id: u64,
-        active_face_state: &DisplayRowActiveFaceState,
-        font_metrics: &mut Option<FontMetricsService>,
-        fallback_char_width: f32,
-    ) -> Option<Self> {
-        let replacement = value.as_utf8_str()?;
-        let cursor_slot_width_px = replacement
-            .chars()
-            .next()
-            .map(|ch| active_face_state.advance_for_char(font_metrics, ch, fallback_char_width))
-            .unwrap_or_else(|| fallback_char_width.max(1.0));
-        Some(Self {
-            value,
-            origin: DisplayOrigin::DisplayPropertyString {
-                anchor_charpos,
-                source,
-            },
-            source_id: LispStringSourceId::display_replacement(source_id),
-            active_face_state: active_face_state.clone(),
-            cursor_slot_width_px,
-            is_empty: replacement.is_empty(),
-        })
-    }
-
-    pub(crate) fn cursor_slot_width_px(&self) -> f32 {
-        self.cursor_slot_width_px
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.is_empty
-    }
-
-    pub(crate) fn origin(&self) -> DisplayOrigin {
-        self.origin
-    }
-
-    #[cfg(test)]
-    pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
-        self.origin.default_base_face_policy()
-    }
-
-    fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
-        DisplayReplacementStringItemMeasurer {
-            active_face_state: self.active_face_state.clone(),
-        }
-    }
-
-    fn source_append_request(
-        &self,
-        replacement_source: BufferDisplayReplacementSource,
-        position: DisplayRowPosition,
-    ) -> DisplayReplacementStringSourceAppendRequest {
-        DisplayReplacementStringSourceAppendRequest::new(
-            position,
-            BufferDisplayReplacementStringRequest::new(
-                self.source_id.raw(),
-                self.value,
-                replacement_source,
-            ),
-        )
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 struct DisplayReplacementStringSourceAppendRequest {
     position: DisplayRowPosition,
@@ -8735,18 +8658,21 @@ impl DisplayReplacementStringSourceAppendRequest {
 
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementStringAppendRequest {
-    item: DisplayReplacementStringAppendItem,
+    item: DisplayReplacementStringSourceItem,
     replacement_base_face: Option<DisplayStringBaseFace>,
+    active_face_state: DisplayRowActiveFaceState,
 }
 
 impl DisplayReplacementStringAppendRequest {
     fn new(
-        item: DisplayReplacementStringAppendItem,
+        item: DisplayReplacementStringSourceItem,
         replacement_base_face: Option<DisplayStringBaseFace>,
+        active_face_state: DisplayRowActiveFaceState,
     ) -> Self {
         Self {
             item,
             replacement_base_face,
+            active_face_state,
         }
     }
 
@@ -8760,6 +8686,27 @@ impl DisplayReplacementStringAppendRequest {
         self.item.base_face_policy()
     }
 
+    fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
+        DisplayReplacementStringItemMeasurer {
+            active_face_state: self.active_face_state.clone(),
+        }
+    }
+
+    fn source_append_request(
+        &self,
+        replacement_source: BufferDisplayReplacementSource,
+        position: DisplayRowPosition,
+    ) -> DisplayReplacementStringSourceAppendRequest {
+        DisplayReplacementStringSourceAppendRequest::new(
+            position,
+            BufferDisplayReplacementStringRequest::new(
+                self.item.source_id(),
+                self.item.value(),
+                replacement_source,
+            ),
+        )
+    }
+
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
@@ -8770,14 +8717,13 @@ impl DisplayReplacementStringAppendRequest {
         if self.item.is_empty() {
             return position;
         }
-        let Some(replacement_base_face) = self.replacement_base_face else {
+        let Some(ref replacement_base_face) = self.replacement_base_face else {
             debug_assert!(false, "display string replacement missing base face");
             return position;
         };
-        let source_request = self
-            .item
-            .source_append_request(replacement_append_context.replacement_source, position);
-        let mut item_policy = self.item.string_item_measurer();
+        let source_request =
+            self.source_append_request(replacement_append_context.replacement_source, position);
+        let mut item_policy = self.string_item_measurer();
         let append_context = replacement_append_context.full_text_width_active_face(
             replacement_base_face.face_id(),
             replacement_base_face.face(),
@@ -9240,7 +9186,7 @@ pub(crate) enum DisplayReplacementMediaAppendResolution {
 
 #[derive(Clone)]
 pub(crate) enum DisplayPropertyReplacementAppendItem {
-    String(DisplayReplacementStringAppendItem),
+    String(DisplayReplacementStringSourceItem),
     Stretch(DisplayReplacementStretchAppendItem),
     Media(DisplayReplacementMediaAppendResolution),
 }
@@ -10161,7 +10107,11 @@ impl DisplayPropertyReplacementAppendItem {
                     )
                 });
                 DisplayPropertyReplacementAppendPlanItem::String(
-                    DisplayReplacementStringAppendRequest::new(item, replacement_base_face),
+                    DisplayReplacementStringAppendRequest::new(
+                        item,
+                        replacement_base_face,
+                        active_face_state.clone(),
+                    ),
                 )
             }
             Self::Stretch(item) => DisplayPropertyReplacementAppendPlanItem::Stretch(item),
@@ -10175,14 +10125,24 @@ impl DisplayPropertyReplacementAppendItem {
         let face_metrics = context.face_metrics();
         match context.display_property.replacement()? {
             DisplayReplacementProperty::String => {
-                DisplayReplacementStringAppendItem::display_property_string(
+                let replacement = context.source_event.value().as_utf8_str()?;
+                let cursor_slot_width_px = replacement
+                    .chars()
+                    .next()
+                    .map(|ch| {
+                        context.active_face_state.advance_for_char(
+                            context.font_metrics,
+                            ch,
+                            face_metrics.char_width,
+                        )
+                    })
+                    .unwrap_or_else(|| face_metrics.char_width.max(1.0));
+                DisplayReplacementStringSourceItem::display_property_string(
                     context.source_event.value(),
                     context.source_event.anchor_charpos(),
                     DisplayPropertySource::TextProperty,
                     1,
-                    context.active_face_state,
-                    context.font_metrics,
-                    face_metrics.char_width,
+                    cursor_slot_width_px,
                 )
                 .map(Self::String)
             }

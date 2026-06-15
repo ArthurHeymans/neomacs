@@ -34,7 +34,7 @@ use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
     BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
     BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem,
-    DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
@@ -7646,16 +7646,12 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
         .current_buffer()
         .expect("current buffer")
         .id();
-    let active_face = test_active_face_state(7, 8.0);
-    let mut font_metrics = None;
     let value = Value::string("ab");
-    let item = DisplayReplacementStringAppendItem::display_property_string(
+    let item = DisplayReplacementStringSourceItem::display_property_string(
         value,
         CharPos0::new(4),
         DisplayPropertySource::TextProperty,
         9,
-        &active_face,
-        &mut font_metrics,
         8.0,
     )
     .expect("display property string item");
@@ -7667,8 +7663,10 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
         CharPos0::new(4),
         EmacsBytePos::new(4),
     );
+    let active_face = test_active_face_state(7, 8.0);
     let request =
-        item.source_append_request(replacement_source, DisplayRowPosition { x_px: 2.0, col: 1 });
+        DisplayReplacementStringAppendRequest::new(item.clone(), None, active_face.clone())
+            .source_append_request(replacement_source, DisplayRowPosition { x_px: 2.0, col: 1 });
     assert_eq!(request.value(), value);
     assert_eq!(
         request.source_id(),
@@ -7687,13 +7685,11 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
         BaseFacePolicy::DisplayPropertyUnderlyingFace
     );
 
-    let empty = DisplayReplacementStringAppendItem::display_property_string(
+    let empty = DisplayReplacementStringSourceItem::display_property_string(
         Value::string(""),
         CharPos0::new(4),
         DisplayPropertySource::TextProperty,
         10,
-        &active_face,
-        &mut font_metrics,
         9.0,
     )
     .expect("empty display property string item");
@@ -7705,18 +7701,17 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 fn display_replacement_string_append_item_measures_source_text_from_active_face() {
     let _eval = Context::new();
     let active_face = test_active_face_state(7, 8.0);
-    let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
-    let item = DisplayReplacementStringAppendItem::display_property_string(
+    let item = DisplayReplacementStringSourceItem::display_property_string(
         Value::string("abc"),
         CharPos0::new(0),
         DisplayPropertySource::TextProperty,
         11,
-        &active_face,
-        &mut font_metrics,
         8.0,
     )
     .expect("display property string item");
-    let mut measurer = item.string_item_measurer();
+    let request = DisplayReplacementStringAppendRequest::new(item, None, active_face.clone());
+    let mut measurer = request.string_item_measurer();
+    let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(11, 0, 3),
         RenderFaceRef::FaceId(7),

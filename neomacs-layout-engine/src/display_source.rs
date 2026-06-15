@@ -4,6 +4,7 @@ use crate::display_item::{
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
     GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
@@ -1019,6 +1020,62 @@ impl DisplayReplacementSourceMappedTextItem {
 
     pub(crate) fn into_text(self) -> Box<str> {
         self.text
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct DisplayReplacementStringSourceItem {
+    value: Value,
+    origin: DisplayOrigin,
+    source_id: u64,
+    cursor_slot_width_px: f32,
+    is_empty: bool,
+}
+
+impl DisplayReplacementStringSourceItem {
+    pub(crate) fn display_property_string(
+        value: Value,
+        anchor_charpos: CharPos0,
+        source: DisplayPropertySource,
+        source_id: u64,
+        cursor_slot_width_px: f32,
+    ) -> Option<Self> {
+        let replacement = value.as_utf8_str()?;
+        Some(Self {
+            value,
+            origin: DisplayOrigin::DisplayPropertyString {
+                anchor_charpos,
+                source,
+            },
+            source_id,
+            cursor_slot_width_px,
+            is_empty: replacement.is_empty(),
+        })
+    }
+
+    pub(crate) fn value(&self) -> Value {
+        self.value
+    }
+
+    pub(crate) fn source_id(&self) -> u64 {
+        self.source_id
+    }
+
+    pub(crate) fn cursor_slot_width_px(&self) -> f32 {
+        self.cursor_slot_width_px
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.is_empty
+    }
+
+    pub(crate) fn origin(&self) -> DisplayOrigin {
+        self.origin
+    }
+
+    #[cfg(test)]
+    pub(crate) fn base_face_policy(&self) -> crate::display_face_policy::BaseFacePolicy {
+        self.origin.default_base_face_policy()
     }
 }
 
