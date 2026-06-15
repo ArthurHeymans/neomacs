@@ -7632,26 +7632,6 @@ impl DisplayRowRenderPolicy for SourceMappedTextWidthByFace {
 }
 
 #[test]
-fn display_replacement_active_face_measurer_names_cursor_and_display_width_policy() {
-    let active_face = test_active_face_state(7, 8.0);
-    let measurer = DisplayReplacementActiveFaceMeasurer::from_active_face_state(&active_face);
-    let mut font_metrics = None;
-
-    assert_eq!(
-        measurer.replacement_string_cursor_slot_width_px(&mut font_metrics, "ab", 8.0),
-        8.0
-    );
-    assert_eq!(
-        measurer.replacement_string_cursor_slot_width_px(&mut font_metrics, "", 9.0),
-        9.0
-    );
-    assert_eq!(
-        measurer.source_char_width_px(&mut font_metrics, 'x', 8.0),
-        8.0
-    );
-}
-
-#[test]
 fn display_replacement_string_append_item_names_cursor_and_source_policy() {
     let eval = Context::new();
     let buf_id = eval

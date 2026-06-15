@@ -9323,42 +9323,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct DisplayReplacementActiveFaceMeasurer {
-    active_face_state: DisplayRowActiveFaceState,
-}
-
-impl DisplayReplacementActiveFaceMeasurer {
-    pub(crate) fn from_active_face_state(active_face_state: &DisplayRowActiveFaceState) -> Self {
-        Self {
-            active_face_state: active_face_state.clone(),
-        }
-    }
-
-    pub(crate) fn source_char_width_px(
-        &self,
-        font_metrics: &mut Option<FontMetricsService>,
-        ch: char,
-        fallback_advance_px: f32,
-    ) -> f32 {
-        self.active_face_state
-            .advance_for_char(font_metrics, ch, fallback_advance_px)
-    }
-
-    fn replacement_string_cursor_slot_width_px(
-        &self,
-        font_metrics: &mut Option<FontMetricsService>,
-        replacement: &str,
-        fallback_char_width: f32,
-    ) -> f32 {
-        replacement
-            .chars()
-            .next()
-            .map(|ch| self.source_char_width_px(font_metrics, ch, fallback_char_width))
-            .unwrap_or_else(|| fallback_char_width.max(1.0))
-    }
-}
-
 pub(crate) struct DisplayReplacementStringItemMeasurer {
     active_face_state: DisplayRowActiveFaceState,
 }
@@ -9432,8 +9396,11 @@ impl DisplayReplacementStringAppendItem {
         fallback_char_width: f32,
     ) -> Option<Self> {
         let replacement = value.as_utf8_str()?;
-        let measurer =
-            DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state);
+        let cursor_slot_width_px = replacement
+            .chars()
+            .next()
+            .map(|ch| active_face_state.advance_for_char(font_metrics, ch, fallback_char_width))
+            .unwrap_or_else(|| fallback_char_width.max(1.0));
         Some(Self {
             value,
             origin: DisplayOrigin::DisplayPropertyString {
@@ -9442,11 +9409,7 @@ impl DisplayReplacementStringAppendItem {
             },
             source_id: LispStringSourceId::display_replacement(source_id),
             active_face_state: active_face_state.clone(),
-            cursor_slot_width_px: measurer.replacement_string_cursor_slot_width_px(
-                font_metrics,
-                replacement,
-                fallback_char_width,
-            ),
+            cursor_slot_width_px,
             is_empty: replacement.is_empty(),
         })
     }
@@ -10036,8 +9999,7 @@ impl DisplayReplacementStretchAppendItem {
     ) -> Self {
         let (display_ch, _) = decode_utf8(source_text);
         let display_char_width =
-            DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state)
-                .source_char_width_px(font_metrics, display_ch, default_char_width);
+            active_face_state.advance_for_char(font_metrics, display_ch, default_char_width);
         Self::from_display_space_spec(
             spec,
             current_x,
