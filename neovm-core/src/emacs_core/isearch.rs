@@ -1588,6 +1588,99 @@ fn expand_emacs_replacement(rep: &str, groups: &[Option<MatchGroup>], source: &s
 }
 
 // ---------------------------------------------------------------------------
+// Issue #131: Emacs-byte-native variants of the replace helpers. These operate
+// over real Emacs bytes (and char codes via `emacs_char`) instead of the legacy
+// PUA-sentinel storage form, so eight-bit content and Private-Use-Area glyphs
+// round-trip faithfully through delimited-match, case-preservation, and
+// `\N`/`\&` replacement expansion.
+// ---------------------------------------------------------------------------
+
+fn code_is_delimited_word_char(code: u32) -> bool {
+    char::from_u32(code).is_some_and(is_delimited_word_char)
+}
+
+fn is_delimited_match_bytes(text: &[u8], start: usize, end: usize) -> bool {
+    let left = if start > 0 {
+        let prev_len = crate::emacs_core::emacs_char::raw_prev_char_len(text, start);
+        let prev_start = start.saturating_sub(prev_len);
+        Some(crate::emacs_core::emacs_char::string_char(&text[prev_start..start]).0)
+    } else {
+        None
+    };
+    let right = if end < text.len() {
+        Some(crate::emacs_core::emacs_char::string_char(&text[end..]).0)
+    } else {
+        None
+    };
+    let left_ok = left.is_none_or(|code| !code_is_delimited_word_char(code));
+    let right_ok = right.is_none_or(|code| !code_is_delimited_word_char(code));
+    left_ok && right_ok
+}
+
+fn preserve_case_emacs_bytes(replacement: &[u8], matched: &[u8], multibyte: bool) -> Vec<u8> {
+    let rep = lisp_string_from_buffer_bytes(replacement.to_vec(), multibyte);
+    let mat = lisp_string_from_buffer_bytes(matched.to_vec(), multibyte);
+    super::casefiddle::apply_replace_match_case_lisp(&rep, &mat)
+        .as_bytes()
+        .to_vec()
+}
+
+fn expand_emacs_replacement_bytes(
+    rep: &[u8],
+    groups: &[Option<MatchGroup>],
+    source: &[u8],
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(rep.len());
+    let mut i = 0;
+    while i < rep.len() {
+        let ch = rep[i];
+        if ch != b'\\' {
+            out.push(ch);
+            i += 1;
+            continue;
+        }
+        if i + 1 >= rep.len() {
+            out.push(b'\\');
+            break;
+        }
+        let next = rep[i + 1];
+        match next {
+            b'&' => {
+                if let Some(Some(group)) = groups.first()
+                    && let Some(text) = source.get(group.start()..group.end())
+                {
+                    out.extend_from_slice(text);
+                }
+                i += 2;
+            }
+            b'1'..=b'9' => {
+                let idx = (next - b'0') as usize;
+                if let Some(Some(group)) = groups.get(idx)
+                    && let Some(text) = source.get(group.start()..group.end())
+                {
+                    out.extend_from_slice(text);
+                }
+                i += 2;
+            }
+            b'\\' => {
+                out.push(b'\\');
+                i += 2;
+            }
+            _ => {
+                // `\X` for any other X drops the backslash and emits X verbatim,
+                // matching the &str variant. Emit the whole (possibly multibyte)
+                // Emacs char so a char following the backslash is not split.
+                let (_code, clen) = crate::emacs_core::emacs_char::string_char(&rep[i + 1..]);
+                let clen = clen.max(1);
+                out.extend_from_slice(&rep[i + 1..i + 1 + clen]);
+                i += 1 + clen;
+            }
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Builtin functions (stubs for evaluator dispatch)
 // ---------------------------------------------------------------------------
 
@@ -1882,7 +1975,14 @@ fn replace_regexp_eval_impl(
 ) -> EvalResult {
     expect_min_max_args("replace-regexp", &args, 2, 7)?;
     let from = expect_sequence_string(&args[0])?;
-    let to = expect_string(&args[1])?;
+    let from_ls = args[0]
+        .as_lisp_string()
+        .expect("replace-regexp regexp is a string");
+    expect_string(&args[1])?;
+    let to_ls = args[1]
+        .as_lisp_string()
+        .expect("replace-regexp to-string is a string");
+    let to = to_ls.as_bytes();
     let delimited = args.get(2).is_some_and(|v| !v.is_nil());
     let backward = args.get(5).is_some_and(|v| !v.is_nil());
     let region_noncontiguous = args.get(6).is_some_and(|v| !v.is_nil());
@@ -1912,7 +2012,7 @@ fn replace_regexp_eval_impl(
         return Ok(Value::NIL);
     }
 
-    let (range, source_text, source, read_only, buffer_name) = {
+    let (range, source_text, read_only, buffer_name) = {
         let buf = eval
             .buffers
             .current_buffer()
@@ -1925,29 +2025,27 @@ fn replace_regexp_eval_impl(
             backward,
             region_noncontiguous,
         )?;
-        let (source_text, source) = buffer_region_storage_string(buf, range);
+        let source_text = buf.buffer_substring_lisp_string_range(range);
         (
             range,
             source_text,
-            source,
             buffer_read_only_active(eval, buf),
             buf.name_value(),
         )
     };
     let range_start = range.start();
     let source_multibyte = source_text.is_multibyte();
+    // Issue #131: iterate the region's Emacs bytes directly — match offsets are
+    // logical Emacs byte offsets, so the old storage->logical mapping is identity.
+    let source = source_text.as_bytes();
 
     let case_fold = case_fold_for_pattern(eval, &from);
     let preserve_match_case = case_fold && case_replace_enabled(eval);
-    let iterated = super::regex::iterate_string_matches_with_case_fold(
-        &LispString::from_utf8(&from),
-        source.as_bytes(),
-        0,
-        case_fold,
-    )
-    .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
+    let iterated =
+        super::regex::iterate_string_matches_with_case_fold(from_ls, source, 0, case_fold)
+            .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
 
-    let mut out = String::with_capacity(source.len());
+    let mut out: Vec<u8> = Vec::with_capacity(source.len());
     let mut last = 0usize;
     let mut replaced = 0usize;
     let mut backward_point: Option<EmacsByteLen> = None;
@@ -1958,7 +2056,7 @@ fn replace_regexp_eval_impl(
         };
         let match_start = group.start();
         let match_end = group.end();
-        if delimited && !is_delimited_match(&source, match_start, match_end) {
+        if delimited && !is_delimited_match_bytes(source, match_start, match_end) {
             continue;
         }
         if match_start == match_end {
@@ -1973,43 +2071,45 @@ fn replace_regexp_eval_impl(
                     continue;
                 }
             }
-            out.push_str(&source[last..match_start]);
-            let expanded = expand_emacs_replacement(&to, &groups, &source);
+            out.extend_from_slice(&source[last..match_start]);
+            let expanded = expand_emacs_replacement_bytes(to, &groups, source);
             if preserve_match_case {
-                out.push_str(&preserve_case(&expanded, &source[match_start..match_end]));
+                out.extend_from_slice(&preserve_case_emacs_bytes(
+                    &expanded,
+                    &source[match_start..match_end],
+                    source_multibyte,
+                ));
             } else {
-                out.push_str(&expanded);
+                out.extend_from_slice(&expanded);
             }
-            query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
+            query_forward_point = Some(EmacsByteLen::new(out.len()));
             last = match_start;
             if backward && backward_point.is_none() {
-                backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
-                    &source,
-                    match_start,
-                )));
+                backward_point = Some(EmacsByteLen::new(match_start));
             }
             replaced += 1;
             continue;
         }
 
-        out.push_str(&source[last..match_start]);
-        let expanded = expand_emacs_replacement(&to, &groups, &source);
+        out.extend_from_slice(&source[last..match_start]);
+        let expanded = expand_emacs_replacement_bytes(to, &groups, source);
         if preserve_match_case {
-            out.push_str(&preserve_case(&expanded, &source[match_start..match_end]));
+            out.extend_from_slice(&preserve_case_emacs_bytes(
+                &expanded,
+                &source[match_start..match_end],
+                source_multibyte,
+            ));
         } else {
-            out.push_str(&expanded);
+            out.extend_from_slice(&expanded);
         }
-        query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
+        query_forward_point = Some(EmacsByteLen::new(out.len()));
         last = match_end;
         if backward && backward_point.is_none() {
-            backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
-                &source,
-                match_start,
-            )));
+            backward_point = Some(EmacsByteLen::new(match_start));
         }
         replaced += 1;
     }
-    out.push_str(&source[last..]);
+    out.extend_from_slice(&source[last..]);
 
     if replaced == 0 {
         return Ok(Value::NIL);
@@ -2022,7 +2122,7 @@ fn replace_regexp_eval_impl(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let out_text = storage_string_to_lisp_string(&out, source_multibyte);
+    let out_text = lisp_string_from_buffer_bytes(out, source_multibyte);
     let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,

@@ -794,6 +794,76 @@ where
     }
 }
 
+/// Emacs-byte-aware variant of [`apply_replace_match_case`]. Operates over real
+/// Emacs char codes (via `emacs_char::string_char`) and the LispString case
+/// primitives, so eight-bit raw bytes and Private-Use-Area glyphs are analyzed
+/// and cased faithfully instead of through the legacy PUA-sentinel storage form
+/// (issue #131).
+pub(crate) fn apply_replace_match_case_lisp(
+    replacement: &LispString,
+    matched: &LispString,
+) -> LispString {
+    match replace_match_case_action_lisp(matched, default_is_word_char) {
+        ReplaceMatchCaseAction::NoChange => replacement.clone(),
+        ReplaceMatchCaseAction::AllCaps => upcase_lisp_string_emacs_compat(replacement),
+        ReplaceMatchCaseAction::CapInitial => upcase_initials_lisp_string(replacement),
+    }
+}
+
+/// Emacs-byte-aware counterpart of [`replace_match_case_action_with`]. Mirrors
+/// the same GNU `src/search.c` decision logic, but iterates the matched text's
+/// Emacs char codes; codes outside the Unicode scalar range (eight-bit raw
+/// bytes, extended codes) are caseless, non-word constituents — matching GNU,
+/// where raw bytes have no case and are not `Sword`.
+pub(crate) fn replace_match_case_action_lisp<F>(
+    matched: &LispString,
+    mut is_word_char: F,
+) -> ReplaceMatchCaseAction
+where
+    F: FnMut(char) -> bool,
+{
+    let mut some_multiletter_word = false;
+    let mut some_lowercase = false;
+    let mut some_uppercase = false;
+    let mut some_nonuppercase_initial = false;
+    let mut prev_is_word = false;
+
+    let bytes = matched.as_bytes();
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+        pos += len.max(1);
+        let ch = char::from_u32(code);
+        if ch.is_some_and(char::is_lowercase) {
+            some_lowercase = true;
+            if prev_is_word {
+                some_multiletter_word = true;
+            } else {
+                some_nonuppercase_initial = true;
+            }
+        } else if ch.is_some_and(char::is_uppercase) {
+            some_uppercase = true;
+            if prev_is_word {
+                some_multiletter_word = true;
+            }
+        } else if !prev_is_word {
+            some_nonuppercase_initial = true;
+        }
+
+        prev_is_word = ch.is_some_and(&mut is_word_char);
+    }
+
+    if !some_lowercase && some_multiletter_word {
+        ReplaceMatchCaseAction::AllCaps
+    } else if !some_nonuppercase_initial && some_multiletter_word {
+        ReplaceMatchCaseAction::CapInitial
+    } else if !some_nonuppercase_initial && some_uppercase {
+        ReplaceMatchCaseAction::AllCaps
+    } else {
+        ReplaceMatchCaseAction::NoChange
+    }
+}
+
 /// Default "is this a word constituent?" predicate for
 /// `apply_replace_match_case`.
 ///
