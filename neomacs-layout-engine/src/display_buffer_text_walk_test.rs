@@ -1,6 +1,7 @@
 use super::*;
 use crate::display_row_geometry::DisplayRowMarker;
 use neomacs_display_protocol::types::Rect;
+use neovm_core::emacs_core::Context;
 use neovm_core::window::{FrameId, WindowId};
 
 fn window_params() -> WindowParams {
@@ -140,6 +141,23 @@ fn geometry_request_uses_minibuffer_resize_rows_when_supplied() {
     assert_eq!(geometry.max_rows, 2);
     assert_eq!(geometry.text_matrix_rows, 2);
     assert_eq!(geometry.mode_line_matrix_row, 2);
+}
+
+#[test]
+fn content_rows_request_only_applies_to_minibuffer_windows() {
+    let evaluator = Context::new();
+    let mut params = window_params();
+
+    assert_eq!(
+        BufferTextWindowContentRowsRequest::new(&params, 80.0, 16.0).resolve(&evaluator),
+        None
+    );
+
+    params.is_minibuffer = true;
+    assert_eq!(
+        BufferTextWindowContentRowsRequest::new(&params, 80.0, 16.0).resolve(&evaluator),
+        Some(1)
+    );
 }
 
 #[test]

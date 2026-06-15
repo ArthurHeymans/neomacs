@@ -10,7 +10,7 @@ use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
     FrameTabBarDisplayRowRequest, MinibufferDisplayRenderState, MinibufferSpecialRowsPlan,
     ResizeMiniWindowsMode, ScratchGcRootScope, WindowChromeRowsPlan, build_tab_bar_display,
-    max_mini_window_lines, minibuffer_resize_line_count,
+    max_mini_window_lines,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -20,11 +20,12 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyPassState, BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry,
-    BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderedBodyChromeState,
-    BufferTextWindowRenderedBodyFinishState, BufferTextWindowRenderedBodyInstallPublishState,
-    BufferTextWindowRetryRenderCheckpoint, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowBodyPassState, BufferTextWindowContentRowsRequest,
+    BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
+    BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowRenderedBodyChromeState, BufferTextWindowRenderedBodyFinishState,
+    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowRetryRenderCheckpoint,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -872,35 +873,9 @@ impl LayoutEngine {
         let lnum_cols = local_display_policy
             .line_number_columns(&buf_access, geometry_request.line_number_row_capacity());
 
-        // GNU `resize_mini_window` (`xdisp.c:13161-13301`) pre-
-        // grows the minibuffer BEFORE layout by running
-        // `move_it_to` to walk ALL content (buffer text + overlay
-        // strings) and measuring the resulting pixel height.
-        //
-        // neomacs approximation: count `\n` in the buffer text plus
-        // resize-relevant overlay strings to estimate the display line
-        // count.  GNU redisplay can render zero-length EOB overlay
-        // strings (see `overlay_strings' in buffer.c and
-        // `load_overlay_strings' in xdisp.c), but `resize_mini_window'
-        // does not grow the parent minibuffer for a zero-length EOB
-        // `before-string'.  Pre-expand max_rows to the matching count
-        // (clamped to max-mini-window-height = 25% of frame). This avoids
-        // the boot-time "tall echo area" bug (single-line content stays
-        // at 1 row) while allowing fido/vertico multi-line overlays that
-        // GNU counts during mini-window resize to render.
-        let minibuffer_content_rows = if params.is_minibuffer {
-            let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
-            let content_lines = evaluator
-                .buffer_manager()
-                .get(buf_id)
-                .map(|buffer| minibuffer_resize_line_count(buffer, params.window_id as u64))
-                .unwrap_or(1);
-            let frame_rows = frame_params.height / char_h;
-            let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil() as usize;
-            Some(content_lines.clamp(1, max_mini))
-        } else {
-            None
-        };
+        let minibuffer_content_rows =
+            BufferTextWindowContentRowsRequest::new(params, frame_params.height, char_h)
+                .resolve(evaluator);
         let BufferTextWindowGeometry {
             text_x,
             text_y,

@@ -39,6 +39,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_status_line::{
     ChromeRowRenderServices, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
+    max_mini_window_lines, minibuffer_resize_line_count,
 };
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
@@ -149,6 +150,12 @@ pub(crate) struct BufferTextWindowOutputSetupRequest {
     selected: bool,
     text_y: f32,
     text_height: f32,
+}
+
+pub(crate) struct BufferTextWindowContentRowsRequest<'a> {
+    params: &'a WindowParams,
+    frame_height: f32,
+    char_height: f32,
 }
 
 pub(crate) struct BufferTextWindowOutputSetup {
@@ -605,6 +612,46 @@ impl BufferTextWindowGeometryRequest {
         } else {
             max_rows
         }
+    }
+}
+
+impl<'a> BufferTextWindowContentRowsRequest<'a> {
+    pub(crate) fn new(params: &'a WindowParams, frame_height: f32, char_height: f32) -> Self {
+        Self {
+            params,
+            frame_height,
+            char_height,
+        }
+    }
+
+    pub(crate) fn resolve(self, evaluator: &Context) -> Option<usize> {
+        if !self.params.is_minibuffer {
+            return None;
+        }
+
+        // GNU `resize_mini_window` (`xdisp.c:13161-13301`) pre-grows the
+        // minibuffer BEFORE layout by running `move_it_to` to walk all
+        // content (buffer text + overlay strings) and measuring the resulting
+        // pixel height.
+        //
+        // This approximation counts newlines in the buffer text plus
+        // resize-relevant overlay strings to estimate the display line count.
+        // GNU redisplay can render zero-length EOB overlay strings (see
+        // `overlay_strings' in buffer.c and `load_overlay_strings' in
+        // xdisp.c), but `resize_mini_window' does not grow the parent
+        // minibuffer for a zero-length EOB `before-string'. Pre-expanding
+        // max_rows to the matching count avoids the boot-time tall echo-area
+        // case while allowing fido/vertico multi-line overlays that GNU
+        // counts during mini-window resize to render.
+        let buf_id = BufferId(self.params.buffer_id);
+        let content_lines = evaluator
+            .buffer_manager()
+            .get(buf_id)
+            .map(|buffer| minibuffer_resize_line_count(buffer, self.params.window_id as u64))
+            .unwrap_or(1);
+        let frame_rows = self.frame_height / self.char_height;
+        let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil() as usize;
+        Some(content_lines.clamp(1, max_mini))
     }
 }
 
