@@ -304,7 +304,7 @@ impl GlyphMatrixBuilder {
     ///
     /// The source row's `pixel_y` is frame-absolute; rows stored in a window
     /// matrix use window-relative Y, matching GNU `struct glyph_row::y`.
-    pub fn install_prebuilt_current_row(&mut self, source: &GlyphRow) {
+    pub(crate) fn install_prebuilt_current_row(&mut self, source: &GlyphRow) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
                 let row = &mut matrix.rows[self.current_row];
@@ -328,7 +328,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn install_prebuilt_row(&mut self, row: usize, source: &GlyphRow) {
+    pub(crate) fn install_prebuilt_row(&mut self, row: usize, source: &GlyphRow) {
         self.begin_row(row, source.role);
         self.install_prebuilt_current_row(source);
         self.end_prebuilt_row();

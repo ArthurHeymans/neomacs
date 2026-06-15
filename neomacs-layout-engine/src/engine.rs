@@ -75,6 +75,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{DisplaySourceContext, SingleDisplayItemSource};
 use crate::fontconfig::FontSizing;
+use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
@@ -1199,6 +1200,10 @@ fn mock_display_row_from_line(
     row
 }
 
+fn install_mock_display_row(builder: &mut GlyphMatrixBuilder, row_index: usize, row: &GlyphRow) {
+    builder.install_prebuilt_row(row_index, row);
+}
+
 impl LayoutEngine {
     /// Render the frame-level tab-bar from GNU Lisp keymap output on the Rust path.
     ///
@@ -1376,7 +1381,7 @@ impl LayoutEngine {
                     Some(&lnum),
                     None,
                 );
-                builder.install_prebuilt_row(row_idx, &row);
+                install_mock_display_row(&mut builder, row_idx, &row);
             }
 
             // Mode-line pinned to window bottom.
@@ -1393,7 +1398,7 @@ impl LayoutEngine {
                 None,
                 Some((ml_ncols, 1)),
             );
-            builder.install_prebuilt_row(mode_line_row, &row);
+            install_mock_display_row(&mut builder, mode_line_row, &row);
 
             builder.end_window();
         }
@@ -1426,7 +1431,7 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                builder.install_prebuilt_row(row_idx, &row);
+                install_mock_display_row(&mut builder, row_idx, &row);
             }
 
             if has_mode_line {
@@ -1443,7 +1448,7 @@ impl LayoutEngine {
                     None,
                     Some((mini_ncols, 1)),
                 );
-                builder.install_prebuilt_row(mode_line_row, &row);
+                install_mock_display_row(&mut builder, mode_line_row, &row);
             }
 
             builder.end_window();
@@ -1498,7 +1503,7 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                cb.install_prebuilt_row(ri, &row);
+                install_mock_display_row(&mut cb, ri, &row);
             }
             cb.end_window();
             let cs = cb.finish(
