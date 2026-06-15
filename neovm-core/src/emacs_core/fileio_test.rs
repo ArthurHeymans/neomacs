@@ -957,26 +957,67 @@ fn test_make_directory_and_directory_files() {
         f.write_all(b"data").unwrap();
     }
 
+    let base_ls = crate::heap_types::LispString::from_unibyte(base_str.as_bytes().to_vec());
+
     // List files
-    let files = directory_files(&base_str, false, None, false, None).unwrap();
-    assert!(files.contains(&".".to_string()));
-    assert!(files.contains(&"..".to_string()));
-    assert!(files.contains(&"foo.txt".to_string()));
-    assert!(files.contains(&"bar.txt".to_string()));
-    assert!(files.contains(&"baz.el".to_string()));
+    let files = directory_files(&base_ls, false, None, false, None).unwrap();
+    let names: Vec<&[u8]> = files.iter().map(|f| f.as_bytes()).collect();
+    assert!(names.contains(&b".".as_slice()));
+    assert!(names.contains(&b"..".as_slice()));
+    assert!(names.contains(&b"foo.txt".as_slice()));
+    assert!(names.contains(&b"bar.txt".as_slice()));
+    assert!(names.contains(&b"baz.el".as_slice()));
 
     // List with filter
-    let filtered = directory_files(&base_str, false, Some("\\.el$"), false, None).unwrap();
+    let pattern = crate::heap_types::LispString::from_unibyte(b"\\.el$".to_vec());
+    let filtered = directory_files(&base_ls, false, Some(&pattern), false, None).unwrap();
     assert_eq!(filtered.len(), 1);
-    assert_eq!(filtered[0], "baz.el");
+    assert_eq!(filtered[0].as_bytes(), b"baz.el");
 
     // List with full paths
-    let full = directory_files(&base_str, true, None, false, None).unwrap();
+    let full = directory_files(&base_ls, true, None, false, None).unwrap();
     for entry in &full {
-        assert!(entry.starts_with(&base_str));
+        assert!(entry.as_bytes().starts_with(base_str.as_bytes()));
     }
 
     // Clean up
+    let _ = fs::remove_dir_all(&base);
+}
+
+#[cfg(unix)]
+#[test]
+fn directory_files_preserves_raw_unibyte_filename() {
+    crate::test_utils::init_test_tracing();
+    use std::os::unix::ffi::OsStrExt;
+
+    let base = std::env::temp_dir().join(format!("neovm_dirtest_raw_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).unwrap();
+    // A file whose name carries a raw 0xFF byte (not valid UTF-8). GNU's
+    // directory-files DECODE_FILEs each readdir name and keeps the byte; our
+    // path_to_lisp_file_name keeps it as a raw unibyte byte. Either way it must
+    // NOT be lossily mangled to U+FFFD.
+    let raw_path = base.join(std::ffi::OsStr::from_bytes(b"raw-\xFF-file"));
+    fs::File::create(&raw_path).unwrap();
+
+    let base_ls = crate::heap_types::LispString::from_unibyte(base.as_os_str().as_bytes().to_vec());
+    let files = directory_files(&base_ls, false, None, false, None).unwrap();
+
+    assert!(
+        files.iter().any(|f| f.as_bytes() == b"raw-\xFF-file"),
+        "raw-byte filename not preserved: {:?}",
+        files
+            .iter()
+            .map(|f| f.as_bytes().to_vec())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        !files
+            .iter()
+            .any(|f| f.as_bytes() == "raw-\u{FFFD}-file".as_bytes()),
+        "raw-byte filename was lossily mangled to U+FFFD"
+    );
+
     let _ = fs::remove_dir_all(&base);
 }
 

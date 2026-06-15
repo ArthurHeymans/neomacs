@@ -1103,18 +1103,26 @@ fn write_bytes_to_file_with_mode(
 /// If MATCH_REGEX is Some, only include entries whose names match the regex.
 /// If NOSORT is true, preserve filesystem enumeration order.
 /// COUNT limits the number of accepted entries during enumeration.
-fn read_directory_names(dir: &str) -> Result<Vec<String>, DirectoryFilesError> {
-    let entries = fs::read_dir(dir).map_err(|e| DirectoryFilesError::Io {
-        action: "Opening directory",
-        err: e,
-    })?;
-    let mut names = vec![".".to_string(), "..".to_string()];
+fn read_directory_names_lisp(
+    dir: &crate::heap_types::LispString,
+) -> Result<Vec<crate::heap_types::LispString>, DirectoryFilesError> {
+    let entries =
+        fs::read_dir(lisp_file_name_to_path_buf(dir)).map_err(|e| DirectoryFilesError::Io {
+            action: "Opening directory",
+            err: e,
+        })?;
+    let mut names = vec![
+        crate::heap_types::LispString::from_unibyte(b".".to_vec()),
+        crate::heap_types::LispString::from_unibyte(b"..".to_vec()),
+    ];
     for entry in entries {
         let entry = entry.map_err(|e| DirectoryFilesError::Io {
             action: "Reading directory entry",
             err: e,
         })?;
-        names.push(entry.file_name().to_string_lossy().into_owned());
+        // GNU decodes each readdir name (DECODE_FILE); keep the raw file-name
+        // bytes faithfully instead of lossily mapping them to U+FFFD.
+        names.push(path_to_lisp_file_name(Path::new(&entry.file_name())));
     }
     Ok(names)
 }
@@ -1129,43 +1137,42 @@ enum DirectoryFilesError {
 }
 
 fn directory_files(
-    dir: &str,
+    dir: &crate::heap_types::LispString,
     full: bool,
-    match_regex: Option<&str>,
+    match_regex: Option<&crate::heap_types::LispString>,
     nosort: bool,
     count: Option<usize>,
-) -> Result<Vec<String>, DirectoryFilesError> {
+) -> Result<Vec<crate::heap_types::LispString>, DirectoryFilesError> {
     if count == Some(0) {
         return Ok(Vec::new());
     }
 
-    let names = read_directory_names(dir)?;
+    let names = read_directory_names_lisp(dir)?;
 
     // Emacs builds this list via `cons` while scanning readdir output.
     // That makes NOSORT results reverse the traversal order and applies COUNT
     // before sort.
     let mut result = VecDeque::new();
     let mut remaining = count.unwrap_or(usize::MAX);
-    let dir_with_slash = if dir.ends_with('/') {
-        dir.to_string()
-    } else {
-        format!("{dir}/")
-    };
+    let dir_with_slash = lisp_file_name_as_directory(dir);
 
     for name in names {
         if let Some(pattern) = match_regex {
             let mut throwaway = None;
-            let matched = super::regex::string_match_full_with_case_fold(
+            let matched = super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
                 pattern,
                 &name,
+                super::regex::SearchedString::Owned(name.clone()),
                 0,
+                false,
                 false,
                 &mut throwaway,
             )
             .map_err(|msg| {
                 DirectoryFilesError::InvalidRegexp(format!(
                     "Invalid regexp \"{}\": {}",
-                    pattern, msg
+                    crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes()),
+                    msg
                 ))
             })?;
             if matched.is_none() {
@@ -1174,7 +1181,7 @@ fn directory_files(
         }
 
         if full {
-            result.push_front(format!("{dir_with_slash}{name}"));
+            result.push_front(concat_file_name_lisp(&dir_with_slash, &name));
         } else {
             result.push_front(name);
         }
@@ -1187,9 +1194,9 @@ fn directory_files(
         }
     }
 
-    let mut result: Vec<String> = result.into_iter().collect();
+    let mut result: Vec<crate::heap_types::LispString> = result.into_iter().collect();
     if !nosort {
-        result.sort();
+        result.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
     }
     Ok(result)
 }
@@ -1337,37 +1344,8 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
-fn fileio_owned_runtime_string(value: Value) -> String {
-    value
-        .as_runtime_string_owned()
-        .expect("ValueKind::String must carry LispString payload")
-}
-
 fn fileio_owned_runtime_string_opt(value: &Value) -> Option<String> {
     value.as_runtime_string_owned()
-}
-
-fn expect_string(value: &Value) -> Result<String, Flow> {
-    match value.kind() {
-        ValueKind::String => Ok(fileio_owned_runtime_string(*value)),
-        ValueKind::Symbol(id) => Ok(resolve_sym(id).to_owned()),
-        ValueKind::Nil => Ok("nil".to_string()),
-        ValueKind::T => Ok("t".to_string()),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )),
-    }
-}
-
-fn expect_string_strict(value: &Value) -> Result<String, Flow> {
-    match value.kind() {
-        ValueKind::String => Ok(fileio_owned_runtime_string(*value)),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )),
-    }
 }
 
 fn expect_lisp_string_strict(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
@@ -2566,9 +2544,16 @@ fn signal_file_io_paths(err: std::io::Error, action: &str, from: &str, to: &str)
     signal_file_io_error(err, format!("{action} {from} to {to}"))
 }
 
-fn signal_directory_files_error(err: DirectoryFilesError, dir: &str) -> Flow {
+fn signal_directory_files_error(
+    err: DirectoryFilesError,
+    dir: &crate::heap_types::LispString,
+) -> Flow {
     match err {
-        DirectoryFilesError::Io { action, err } => signal_file_io_path(err, action, dir),
+        DirectoryFilesError::Io { action, err } => signal_file_io_path(
+            err,
+            action,
+            &crate::emacs_core::emacs_char::to_utf8_lossy(dir.as_bytes()),
+        ),
         DirectoryFilesError::InvalidRegexp(msg) => {
             signal("invalid-regexp", vec![Value::string(msg)])
         }
@@ -4248,11 +4233,11 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
             ],
         ));
     }
-    let dir = resolve_filename_for_eval(eval, &expect_string_strict(&args[0])?);
+    let dir = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
     let full = args.get(1).is_some_and(|v| v.is_truthy());
     let match_pattern = if let Some(val) = args.get(2) {
         if val.is_truthy() {
-            Some(expect_string_strict(val)?)
+            Some(expect_lisp_string_strict(val)?)
         } else {
             None
         }
@@ -4274,9 +4259,11 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
         None
     };
 
-    let files = directory_files(&dir, full, match_pattern.as_deref(), nosort, count)
+    let files = directory_files(&dir, full, match_pattern.as_ref(), nosort, count)
         .map_err(|e| signal_directory_files_error(e, &dir))?;
-    Ok(Value::list(files.into_iter().map(Value::string).collect()))
+    Ok(Value::list(
+        files.into_iter().map(Value::heap_string).collect(),
+    ))
 }
 
 // ===========================================================================
