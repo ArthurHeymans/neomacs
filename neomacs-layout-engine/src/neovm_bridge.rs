@@ -154,14 +154,6 @@ impl LayoutBufferSnapshot {
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
-
-    pub(crate) fn accessible_end_char_pos(&self) -> CharPos0 {
-        self.accessible_end_char
-    }
-
-    pub(crate) fn accessible_end_emacs_byte_pos(&self) -> EmacsBytePos {
-        self.accessible_end_emacs_byte
-    }
 }
 
 const LAYOUT_DEFAULT_VALUE_SYMBOLS: &[&str] = &[

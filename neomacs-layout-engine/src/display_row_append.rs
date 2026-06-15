@@ -4403,6 +4403,14 @@ impl BufferTextWindowBeginRequest {
         );
         output_emitter
     }
+
+    pub(crate) fn frame_id(&self) -> FrameId {
+        self.frame_id
+    }
+
+    pub(crate) fn window_id(&self) -> WindowId {
+        self.window_id
+    }
 }
 
 impl BufferTextWindowCursorEffectsRequest {

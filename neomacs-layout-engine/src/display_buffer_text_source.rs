@@ -9,6 +9,8 @@ pub(crate) struct BufferTextWindowSource {
     point_charpos: i64,
     accessible_start: i64,
     accessible_end: i64,
+    accessible_end_lisp_char: usize,
+    accessible_end_emacs_byte: usize,
 }
 
 impl BufferTextWindowSource {
@@ -34,6 +36,14 @@ impl BufferTextWindowSource {
 
     pub(crate) const fn accessible_end(self) -> i64 {
         self.accessible_end
+    }
+
+    pub(crate) const fn accessible_end_lisp_char(self) -> usize {
+        self.accessible_end_lisp_char
+    }
+
+    pub(crate) const fn accessible_end_emacs_byte(self) -> usize {
+        self.accessible_end_emacs_byte
     }
 }
 
@@ -132,6 +142,8 @@ impl BufferTextWindowSourceRequest {
             point_charpos: self.point_charpos,
             accessible_start: self.accessible_start,
             accessible_end: self.accessible_end,
+            accessible_end_lisp_char: self.accessible_end.max(0) as usize + 1,
+            accessible_end_emacs_byte: access.zv().max(0) as usize,
         }
     }
 

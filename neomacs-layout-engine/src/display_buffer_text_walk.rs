@@ -1,4 +1,5 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
@@ -320,6 +321,7 @@ pub(crate) struct BufferTextWindowRenderedBody<'a> {
     output_emitter: WindowOutputEmitter,
     post_loop: BufferTextWindowPostLoopRenderOutcome,
     retry_bounds: BufferTextWindowRetryBounds,
+    publish_request: BufferTextWindowRedisplayPublishRequest,
     tail_context: BufferTextWindowTailRequestContext<'a>,
 }
 
@@ -390,6 +392,7 @@ where
 {
     pub(crate) begin_request: BufferTextWindowBeginRequest,
     pub(crate) retry_bounds: BufferTextWindowRetryBounds,
+    pub(crate) publish_request: BufferTextWindowRedisplayPublishRequest,
     pub(crate) local_display_policy: BufferTextWindowLocalDisplayPolicy,
     pub(crate) initial_face_state: BufferTextWindowInitialFaceStateRequest<'a>,
     pub(crate) row_prelude_context: BufferTextWindowRowPreludeRequestContext,
@@ -1032,6 +1035,7 @@ where
             output_emitter,
             post_loop,
             retry_bounds: self.retry_bounds,
+            publish_request: self.publish_request,
             tail_context: self.tail_context,
         }
     }
@@ -1059,7 +1063,6 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         &mut self,
         walk_setup: &mut BufferTextWindowWalkSetup,
         state: BufferTextWindowRenderedBodyInstallPublishState<'_>,
-        publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
@@ -1068,7 +1071,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
                 evaluator: state.evaluator,
             },
             &self.tail_context,
-            publish_request,
+            self.publish_request,
         )
     }
 
@@ -1220,11 +1223,7 @@ impl BufferTextWindowOutputSetup {
         line_number_cols: i32,
         buffer: &'a B,
         buffer_id: BufferId,
-        text_start_byte: usize,
-        window_start: i64,
-        accessible_start: i64,
-        accessible_end: i64,
-        point_charpos: i64,
+        source: BufferTextWindowSource,
         params: &'a WindowParams,
         face_resolver: &'a FaceResolver,
         measurement_policy: DisplayRowMeasurementPolicy,
@@ -1275,9 +1274,9 @@ impl BufferTextWindowOutputSetup {
         .into_contexts();
         let loop_context = BufferTextWindowLoopRequestContext::new(
             buffer_id,
-            text_start_byte,
-            accessible_end,
-            point_charpos,
+            source.text_start_byte(),
+            source.accessible_end(),
+            source.point_charpos(),
             params,
             content_x,
             has_prefix,
@@ -1304,10 +1303,10 @@ impl BufferTextWindowOutputSetup {
         );
         let tail_context = BufferTextWindowTailRequestContext::new(
             params,
-            window_start,
-            accessible_start,
-            accessible_end,
-            text_start_byte,
+            source.window_start(),
+            source.accessible_start(),
+            source.accessible_end(),
+            source.text_start_byte(),
             self.body_install_context.text_matrix_row_base,
             walk_setup.text_area_left,
             walk_setup.window_top,
@@ -1329,10 +1328,17 @@ impl BufferTextWindowOutputSetup {
             header_line_height,
             tab_line_height,
         );
+        let publish_request = BufferTextWindowRedisplayPublishRequest::new(
+            self.begin_request.frame_id(),
+            self.begin_request.window_id(),
+            source.accessible_end_lisp_char(),
+            source.accessible_end_emacs_byte(),
+        );
 
         BufferTextWindowBodyPlan {
             begin_request: self.begin_request,
             retry_bounds: self.retry_bounds,
+            publish_request,
             local_display_policy,
             initial_face_state,
             row_prelude_context,

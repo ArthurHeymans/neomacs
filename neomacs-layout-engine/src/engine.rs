@@ -24,9 +24,8 @@ use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyPassState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
     BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRedisplayPublishRequest, BufferTextWindowRenderedBodyChromeState,
-    BufferTextWindowRenderedBodyFinishState, BufferTextWindowRenderedBodyInstallPublishState,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRenderedBodyChromeState, BufferTextWindowRenderedBodyFinishState,
+    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -815,9 +814,6 @@ impl LayoutEngine {
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name().to_owned();
-        let accessible_end_lisp_char = buffer.accessible_end_char_pos().get().saturating_add(1);
-        let accessible_end_emacs_byte = buffer.accessible_end_emacs_byte_pos().get();
-
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
         BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
             .install_and_apply(&mut self.matrix_builder);
@@ -967,11 +963,8 @@ impl LayoutEngine {
         let text_source = BufferTextWindowSourceReadRequest::new(params, max_rows)
             .read_into(&buf_access, &mut self.text_buf);
         let window_start = text_source.window_start();
-        let text_start_byte = text_source.text_start_byte();
         let bytes_read = text_source.bytes_read();
         let point_charpos = text_source.point_charpos();
-        let accessible_start = text_source.accessible_start();
-        let accessible_end = text_source.accessible_end();
 
         let text = if bytes_read > 0 {
             &self.text_buf[..bytes_read]
@@ -1123,11 +1116,7 @@ impl LayoutEngine {
             lnum_cols,
             buffer,
             buf_id,
-            text_start_byte,
-            window_start,
-            accessible_start,
-            accessible_end,
-            point_charpos,
+            text_source,
             params,
             face_resolver,
             measurement_policy,
@@ -1207,12 +1196,6 @@ impl LayoutEngine {
                 builder: &mut self.matrix_builder,
                 evaluator,
             },
-            BufferTextWindowRedisplayPublishRequest::new(
-                frame_id,
-                neovm_core::window::WindowId(params.window_id as u64),
-                accessible_end_lisp_char,
-                accessible_end_emacs_byte,
-            ),
         );
 
         tracing::debug!(
