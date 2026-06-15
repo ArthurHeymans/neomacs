@@ -600,9 +600,11 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         &mut line_ctx.row_flags,
         row_limit,
         &mut line_ctx.hit_rows,
-        &mut line_ctx.builder,
-        &mut line_ctx.output_emitter,
-        &mut line_ctx.eval,
+        TextRowOutputRenderState::new(
+            &mut line_ctx.builder,
+            &mut line_ctx.output_emitter,
+            &mut line_ctx.eval,
+        ),
     )
     .emit_line_break(
         DisplayRowLineBreakTransitionPlan::line_break(),
@@ -640,9 +642,11 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         &mut overflow_ctx.row_flags,
         row_limit,
         &mut overflow_ctx.hit_rows,
-        &mut overflow_ctx.builder,
-        &mut overflow_ctx.output_emitter,
-        &mut overflow_ctx.eval,
+        TextRowOutputRenderState::new(
+            &mut overflow_ctx.builder,
+            &mut overflow_ctx.output_emitter,
+            &mut overflow_ctx.eval,
+        ),
     )
     .emit_overflow(
         transition,
@@ -694,9 +698,7 @@ fn display_row_text_window_emit_context_applies_line_break_render_state_after_tr
         &mut ctx.row_flags,
         row_limit,
         &mut ctx.hit_rows,
-        &mut ctx.builder,
-        &mut ctx.output_emitter,
-        &mut ctx.eval,
+        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     )
     .emit_line_break_then_row_start(
         DisplayRowLineBreakTransitionPlan::hidden_line_break(),
@@ -757,9 +759,7 @@ fn display_row_text_window_emit_context_applies_overflow_render_state_after_tran
         &mut ctx.row_flags,
         row_limit,
         &mut ctx.hit_rows,
-        &mut ctx.builder,
-        &mut ctx.output_emitter,
-        &mut ctx.eval,
+        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     )
     .emit_overflow_then_row_start(
         transition,

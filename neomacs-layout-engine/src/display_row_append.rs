@@ -261,10 +261,46 @@ impl BufferTextRowAppendState {
     }
 }
 
-pub(crate) struct TextRowSourceRenderState<'a> {
+pub(crate) struct TextRowOutputRenderState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
+}
+
+impl<'a> TextRowOutputRenderState<'a> {
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+        }
+    }
+
+    pub(crate) fn reborrow(&mut self) -> TextRowOutputRenderState<'_> {
+        TextRowOutputRenderState {
+            builder: self.builder,
+            output_emitter: self.output_emitter,
+            evaluator: self.evaluator,
+        }
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        &'a mut GlyphMatrixBuilder,
+        &'a mut WindowOutputEmitter,
+        &'a mut Context,
+    ) {
+        (self.builder, self.output_emitter, self.evaluator)
+    }
+}
+
+pub(crate) struct TextRowSourceRenderState<'a> {
+    output_render: TextRowOutputRenderState<'a>,
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'a FaceResolver,
 }
@@ -278,9 +314,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         face_resolver: &'a FaceResolver,
     ) -> Self {
         Self {
-            builder,
-            output_emitter,
-            evaluator,
+            output_render: TextRowOutputRenderState::new(builder, output_emitter, evaluator),
             font_metrics,
             face_resolver,
         }
@@ -288,12 +322,14 @@ impl<'a> TextRowSourceRenderState<'a> {
 
     pub(crate) fn reborrow(&mut self) -> TextRowSourceRenderState<'_> {
         TextRowSourceRenderState {
-            builder: self.builder,
-            output_emitter: self.output_emitter,
-            evaluator: self.evaluator,
+            output_render: self.output_render.reborrow(),
             font_metrics: self.font_metrics,
             face_resolver: self.face_resolver,
         }
+    }
+
+    pub(crate) fn output_render(&mut self) -> TextRowOutputRenderState<'_> {
+        self.output_render.reborrow()
     }
 
     pub(crate) fn into_parts(
@@ -305,29 +341,46 @@ impl<'a> TextRowSourceRenderState<'a> {
         &'a mut Option<FontMetricsService>,
         &'a FaceResolver,
     ) {
+        let (builder, output_emitter, evaluator) = self.output_render.into_parts();
         (
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
+            builder,
+            output_emitter,
+            evaluator,
             self.font_metrics,
             self.face_resolver,
         )
     }
 
     pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
-        self.output_emitter
+        self.output_render.output_emitter
     }
 
     pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {
-        self.output_emitter.rows()
+        self.output_render.output_emitter.rows()
     }
 
     pub(crate) fn output_rows_len(&self) -> usize {
-        self.output_emitter.rows().len()
+        self.output_render.output_emitter.rows().len()
     }
 
     pub(crate) fn face_resolver(&self) -> &'a FaceResolver {
         self.face_resolver
+    }
+}
+
+fn current_text_render_state<'emit>(
+    state: &'emit mut TextRowSourceRenderState<'_>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
+    let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
+        state.reborrow().into_parts();
+    DisplayRowCurrentTextRenderState {
+        builder,
+        output_emitter,
+        evaluator,
+        font_metrics,
+        face_resolver,
+        face_ids,
     }
 }
 
@@ -464,9 +517,7 @@ pub(crate) struct DisplayRowTextWindowEmitContext<'a, 'emit> {
     row_flags: &'emit mut DisplayRowFlags,
     row_limit: DisplayRowLimit,
     hit_rows: &'emit mut Vec<HitRow>,
-    builder: &'emit mut GlyphMatrixBuilder,
-    output_emitter: &'emit mut WindowOutputEmitter,
-    evaluator: &'emit mut Context,
+    output_render: TextRowOutputRenderState<'emit>,
 }
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
@@ -1025,9 +1076,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         row_flags: &'emit mut DisplayRowFlags,
         row_limit: DisplayRowLimit,
         hit_rows: &'emit mut Vec<HitRow>,
-        builder: &'emit mut GlyphMatrixBuilder,
-        output_emitter: &'emit mut WindowOutputEmitter,
-        evaluator: &'emit mut Context,
+        output_render: TextRowOutputRenderState<'emit>,
     ) -> Self {
         Self {
             defaults,
@@ -1038,9 +1087,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
             row_flags,
             row_limit,
             hit_rows,
-            builder,
-            output_emitter,
-            evaluator,
+            output_render,
         }
     }
 
@@ -1051,6 +1098,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         position: DisplayRowPosition,
         line_spacing: f32,
     ) -> TextMatrixRowTransition {
+        let (builder, output_emitter, evaluator) = self.output_render.into_parts();
         DisplayRowTextWindowTransitionContext::new(
             self.defaults,
             self.row_base,
@@ -1064,9 +1112,9 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
             line_spacing,
             self.row_geometry,
             self.hit_rows,
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
+            builder,
+            output_emitter,
+            evaluator,
         )
     }
 
@@ -1092,6 +1140,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         hit_range: DisplayRowHitRange,
         position: DisplayRowPosition,
     ) -> TextMatrixRowTransition {
+        let (builder, output_emitter, evaluator) = self.output_render.into_parts();
         DisplayRowTextWindowTransitionContext::new(
             self.defaults,
             self.row_base,
@@ -1106,9 +1155,9 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
             self.row_flags,
             self.row_limit,
             self.hit_rows,
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
+            builder,
+            output_emitter,
+            evaluator,
         )
     }
 
@@ -1919,13 +1968,15 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             return position;
         };
 
+        let (builder, _output_emitter, _evaluator, _font_metrics, face_resolver) =
+            state.reborrow().into_parts();
         let prefix_base_face = display_string_base_face(
             buffer,
-            state.face_resolver,
+            face_resolver,
             prefix_source.origin(),
             prefix_source.base_face_policy(),
             face_ids,
-            state.builder,
+            builder,
         );
         LispStringRowAppendContext::new(
             self.append_surface,
@@ -2425,10 +2476,12 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
             .geometry
             .is_within_row_limit(self.row_context.row_limit())
         {
+            let (builder, output_emitter, evaluator) =
+                state.source_render.output_render().into_parts();
             finish_and_end_text_matrix_row_output(
-                state.source_render.builder,
-                state.source_render.output_emitter,
-                state.source_render.evaluator,
+                builder,
+                output_emitter,
+                evaluator,
                 geometry_transition.finished_row,
             );
             return false;
@@ -2437,12 +2490,8 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
         state.geometry.record_current_row_y(state.row_y_positions);
         *state.x = content_x;
         *state.col = 0;
-        emit_text_matrix_row_transition(
-            state.source_render.builder,
-            state.source_render.output_emitter,
-            state.source_render.evaluator,
-            geometry_transition,
-        );
+        let (builder, output_emitter, evaluator) = state.source_render.output_render().into_parts();
+        emit_text_matrix_row_transition(builder, output_emitter, evaluator, geometry_transition);
         true
     }
 }
@@ -2459,15 +2508,17 @@ fn render_overlay_string<B: LayoutBufferView>(
         return;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
+    let (builder, _output_emitter, _evaluator, _font_metrics, face_resolver) =
+        state.source_render.reborrow().into_parts();
     let base_face = resolve_and_install_display_string_base_face(
         buffer,
-        state.source_render.face_resolver,
+        face_resolver,
         source_request.origin(),
         source_request.base_face_policy(),
         None,
         DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
         state.face_ids,
-        state.source_render.builder,
+        builder,
     );
     let max_x = row_context.right_edge();
     let row_limit = row_context.row_limit();
@@ -3295,14 +3346,7 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         let position = self.position;
         let request = self.request();
         let outcome = request.render_single_display_item_into_current_text_row_and_emit(
-            &mut DisplayRowCurrentTextRenderState {
-                builder: state.builder,
-                output_emitter: state.output_emitter,
-                evaluator: state.evaluator,
-                font_metrics: state.font_metrics,
-                face_resolver: state.face_resolver,
-                face_ids: &mut face_ids,
-            },
+            &mut current_text_render_state(state, &mut face_ids),
             self.append_item.into_item(),
             render_policy,
         )?;
@@ -3387,14 +3431,7 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
         let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
         let start = request.start_position();
         let outcome = request.render_single_display_item_into_current_text_row_and_emit(
-            &mut DisplayRowCurrentTextRenderState {
-                builder: state.builder,
-                output_emitter: state.output_emitter,
-                evaluator: state.evaluator,
-                font_metrics: state.font_metrics,
-                face_resolver: state.face_resolver,
-                face_ids: &mut face_ids,
-            },
+            &mut current_text_render_state(state, &mut face_ids),
             item,
             render_policy,
         )?;
@@ -3445,14 +3482,7 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.request()
             .render_owned_display_source_into_current_text_row_and_emit(
-                &mut DisplayRowCurrentTextRenderState {
-                    builder: state.builder,
-                    output_emitter: state.output_emitter,
-                    evaluator: state.evaluator,
-                    font_metrics: state.font_metrics,
-                    face_resolver: state.face_resolver,
-                    face_ids,
-                },
+                &mut current_text_render_state(state, face_ids),
                 source,
                 render_policy,
             )
@@ -3467,14 +3497,7 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.request()
             .render_natural_display_source_into_current_text_row_and_emit(
-                &mut DisplayRowCurrentTextRenderState {
-                    builder: state.builder,
-                    output_emitter: state.output_emitter,
-                    evaluator: state.evaluator,
-                    font_metrics: state.font_metrics,
-                    face_resolver: state.face_resolver,
-                    face_ids,
-                },
+                &mut current_text_render_state(state, face_ids),
                 source,
                 source_state,
             )
@@ -4421,9 +4444,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             row_flags,
             self.row_limit,
             hit_rows,
-            &mut *builder,
-            &mut *output_emitter,
-            &mut *evaluator,
+            TextRowOutputRenderState::new(&mut *builder, &mut *output_emitter, &mut *evaluator),
         )
         .emit_line_break_then_row_start(
             line_break_transition,
@@ -4877,9 +4898,11 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    &mut *builder,
-                    &mut *output_emitter,
-                    &mut *evaluator,
+                    TextRowOutputRenderState::new(
+                        &mut *builder,
+                        &mut *output_emitter,
+                        &mut *evaluator,
+                    ),
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -4925,9 +4948,11 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    &mut *builder,
-                    &mut *output_emitter,
-                    &mut *evaluator,
+                    TextRowOutputRenderState::new(
+                        &mut *builder,
+                        &mut *output_emitter,
+                        &mut *evaluator,
+                    ),
                 )
                 .emit_overflow(
                     transition,
@@ -4971,9 +4996,11 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    &mut *builder,
-                    &mut *output_emitter,
-                    &mut *evaluator,
+                    TextRowOutputRenderState::new(
+                        &mut *builder,
+                        &mut *output_emitter,
+                        &mut *evaluator,
+                    ),
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -6426,9 +6453,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
                 row_flags,
                 self.row_limit,
                 hit_rows,
-                builder,
-                output_emitter,
-                evaluator,
+                TextRowOutputRenderState::new(builder, output_emitter, evaluator),
             )
             .emit_line_break_then_row_start(
                 line_break_transition,
@@ -6787,7 +6812,9 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
     ) {
         let request = render_context.hscroll_truncation_request(face_resolver, content_x);
         self.append_request_to_text_row(render_context, row_geometry, request);
-        mark_current_text_row_truncated_left(self.source_render.builder);
+        let (builder, _output_emitter, _evaluator) =
+            self.source_render.output_render().into_parts();
+        mark_current_text_row_truncated_left(builder);
     }
 }
 
@@ -7384,9 +7411,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             row_flags,
             self.row_limit,
             hit_rows,
-            builder,
-            output_emitter,
-            evaluator,
+            TextRowOutputRenderState::new(builder, output_emitter, evaluator),
         )
         .emit_line_break_then_row_start(
             line_break_transition,
@@ -8108,9 +8133,11 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    &mut *builder,
-                    &mut *output_emitter,
-                    &mut *evaluator,
+                    TextRowOutputRenderState::new(
+                        &mut *builder,
+                        &mut *output_emitter,
+                        &mut *evaluator,
+                    ),
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -8156,9 +8183,11 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    &mut *builder,
-                    &mut *output_emitter,
-                    &mut *evaluator,
+                    TextRowOutputRenderState::new(
+                        &mut *builder,
+                        &mut *output_emitter,
+                        &mut *evaluator,
+                    ),
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -9771,13 +9800,15 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             self.charpos,
             self.params.window_start,
         );
+        let (builder, _output_emitter, _evaluator, font_metrics, _face_resolver) =
+            source_render.reborrow().into_parts();
         self.face_resolution_context.resolve_at_checkpoint(
             &mut BufferCurrentFaceResolutionState::new(
                 face_scan,
                 height_span,
-                source_render.font_metrics,
+                font_metrics,
                 face_ids,
-                source_render.builder,
+                builder,
                 active_face_state,
                 row_geometry,
                 row_extend,
@@ -9825,13 +9856,15 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             face_scan,
         );
         if outcome.should_resolve_face() {
+            let (builder, _output_emitter, _evaluator, font_metrics, _face_resolver) =
+                source_render.reborrow().into_parts();
             self.face_resolution_context.resolve_at_checkpoint(
                 &mut BufferCurrentFaceResolutionState::new(
                     face_scan,
                     height_span,
-                    source_render.font_metrics,
+                    font_metrics,
                     face_ids,
-                    source_render.builder,
+                    builder,
                     active_face_state,
                     row_geometry,
                     row_extend,
@@ -9890,18 +9923,24 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         row_geometry: &mut DisplayRowGeometryState,
     ) -> BufferDisplayPropertyTextAppendAction {
         let display_property = classify_display_property(self.value);
-        if let Some(item) = DisplayPropertyReplacementAppendItem::resolve(
-            &display_property,
-            self.value,
-            self.anchor_charpos,
-            self.source_text,
-            self.active_face_state,
-            state.font_metrics,
-            self.current_x,
-            self.content_x,
-            self.params,
-            state.evaluator.display_host.as_deref(),
-        ) {
+        let replacement_item = {
+            let (_builder, _output_emitter, evaluator, font_metrics, _face_resolver) =
+                state.reborrow().into_parts();
+            DisplayPropertyReplacementAppendItem::resolve(
+                &display_property,
+                self.value,
+                self.anchor_charpos,
+                self.source_text,
+                self.active_face_state,
+                font_metrics,
+                self.current_x,
+                self.content_x,
+                self.params,
+                evaluator.display_host.as_deref(),
+            )
+        };
+        if let Some(item) = replacement_item {
+            let face_resolver = state.face_resolver();
             let replacement = DisplayPropertyReplacementAppendRequest::new(
                 BufferDisplayReplacementSource::new(
                     self.buffer_id,
@@ -9916,7 +9955,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             .append_to_text_row(
                 buffer,
                 state,
-                state.face_resolver,
+                face_resolver,
                 face_ids,
                 append_surface,
                 row_geometry,
@@ -10217,11 +10256,16 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
         row_geometry: &mut DisplayRowGeometryState,
     ) -> Option<DisplayPropertyReplacementAppendOutcome> {
         let active_face_state = self.active_face_state;
-        let request = self.resolve(state.font_metrics, state.evaluator.display_host.as_deref())?;
+        let request = {
+            let (_builder, _output_emitter, evaluator, font_metrics, _face_resolver) =
+                state.reborrow().into_parts();
+            self.resolve(font_metrics, evaluator.display_host.as_deref())?
+        };
+        let face_resolver = state.face_resolver();
         Some(request.append_to_text_row(
             buffer,
             state,
-            state.face_resolver,
+            face_resolver,
             face_ids,
             append_surface,
             row_geometry,
@@ -10301,13 +10345,8 @@ impl DisplayPropertyReplacementAppendRequest {
     ) -> DisplayPropertyReplacementAppendOutcome {
         let start_position = self.start_position();
         let cursor_policy = self.cursor_policy();
-        let plan = self.into_plan(
-            buffer,
-            face_resolver,
-            active_face_state,
-            face_ids,
-            state.builder,
-        );
+        let (builder, _output_emitter, _evaluator) = state.output_render().into_parts();
+        let plan = self.into_plan(buffer, face_resolver, active_face_state, face_ids, builder);
         let end_position = plan.append_to_text_row(
             state,
             face_ids,
