@@ -14,7 +14,10 @@
 //! trait and renamed the file to reflect its new role.
 
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
-use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
+use super::window_output::{
+    ChromeRowOutput, DisplayProgressSink, TextWindowMatrixBegin, WindowOutputEmitter,
+    begin_text_window_matrix, close_text_window_output,
+};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
@@ -851,13 +854,16 @@ impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
 
     pub(crate) fn render_window(self, state: &mut MinibufferDisplayRenderState<'_, '_>) {
         let cols = (self.text_width / self.char_width.max(1.0)).ceil().max(1.0) as usize;
-        state.builder.begin_window_with_text_bounds(
-            self.window_id,
-            1,
-            cols,
-            self.window_bounds,
-            self.text_bounds,
-            self.selected,
+        begin_text_window_matrix(
+            state.builder,
+            TextWindowMatrixBegin {
+                window_id: self.window_id,
+                rows: 1,
+                cols,
+                bounds: self.window_bounds,
+                text_bounds: self.text_bounds,
+                selected: self.selected,
+            },
         );
         let render_request = self.render_request(state.render_services.face_ids());
         let rendered = state
@@ -865,7 +871,7 @@ impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
             .render_lisp_string_request(render_request, state.display_host)
             .expect("empty Lisp string should render an inactive minibuffer row");
         install_rendered_display_row(&mut *state.builder, &rendered, 0);
-        state.builder.end_window();
+        close_text_window_output(state.builder);
     }
 }
 
@@ -941,18 +947,21 @@ impl<'face> EchoMinibufferDisplayRowsRequest<'face> {
         let cols = (parts.text_width / parts.char_width.max(1.0))
             .ceil()
             .max(1.0) as usize;
-        state.builder.begin_window_with_text_bounds(
-            parts.window_id,
-            max_rows,
-            cols,
-            parts.window_bounds,
-            parts.text_bounds,
-            parts.selected,
+        begin_text_window_matrix(
+            state.builder,
+            TextWindowMatrixBegin {
+                window_id: parts.window_id,
+                rows: max_rows,
+                cols,
+                bounds: parts.window_bounds,
+                text_bounds: parts.text_bounds,
+                selected: parts.selected,
+            },
         );
         for (row_index, rendered) in rows.iter().enumerate() {
             install_rendered_display_row(&mut *state.builder, rendered, row_index);
         }
-        state.builder.end_window();
+        close_text_window_output(state.builder);
     }
 }
 

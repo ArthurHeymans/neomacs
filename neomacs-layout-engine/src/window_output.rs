@@ -153,6 +153,29 @@ pub(crate) struct TextWindowBegin {
     pub(crate) first_row: TextMatrixRowBegin,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowMatrixBegin {
+    pub(crate) window_id: u64,
+    pub(crate) rows: usize,
+    pub(crate) cols: usize,
+    pub(crate) bounds: Rect,
+    pub(crate) text_bounds: Rect,
+    pub(crate) selected: bool,
+}
+
+impl From<TextWindowBegin> for TextWindowMatrixBegin {
+    fn from(request: TextWindowBegin) -> Self {
+        Self {
+            window_id: request.window_id,
+            rows: request.rows,
+            cols: request.cols,
+            bounds: request.bounds,
+            text_bounds: request.text_bounds,
+            selected: request.selected,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextWindowDisplayRange {
     pub(crate) window_id: u64,
@@ -425,6 +448,15 @@ pub(crate) fn begin_text_window_output(
     evaluator: &mut Context,
     request: TextWindowBegin,
 ) {
+    let first_row = request.first_row;
+    begin_text_window_matrix(builder, request.into());
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator).begin(first_row);
+}
+
+pub(crate) fn begin_text_window_matrix(
+    builder: &mut GlyphMatrixBuilder,
+    request: TextWindowMatrixBegin,
+) {
     builder.begin_window_with_text_bounds(
         request.window_id,
         request.rows,
@@ -433,7 +465,6 @@ pub(crate) fn begin_text_window_output(
         request.text_bounds,
         request.selected,
     );
-    TextMatrixRowOutput::new(builder, output_emitter, evaluator).begin(request.first_row);
 }
 
 pub(crate) fn record_text_window_display_range(
