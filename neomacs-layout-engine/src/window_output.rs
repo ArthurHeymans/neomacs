@@ -667,7 +667,6 @@ fn line_number_margin_stretch_item(
 
 pub(crate) struct LineNumberMarginItemSource {
     items: std::vec::IntoIter<DisplayItem>,
-    source_position: DisplaySourcePosition,
 }
 
 impl LineNumberMarginItemSource {
@@ -701,7 +700,6 @@ impl LineNumberMarginItemSource {
         ));
         Self {
             items: items.into_iter(),
-            source_position: DisplaySourcePosition::synthetic(LINE_NUMBER_MARGIN_SOURCE_ID, 0),
         }
     }
 }
@@ -709,10 +707,6 @@ impl LineNumberMarginItemSource {
 impl DisplayItemSource for LineNumberMarginItemSource {
     fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.items.next()
-    }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.source_position.clone()
     }
 }
 
@@ -731,7 +725,6 @@ pub(crate) fn right_border_text_source(
 
 pub(crate) struct RightEdgeMarkerItemSource {
     items: std::vec::IntoIter<DisplayItem>,
-    source_position: DisplaySourcePosition,
 }
 
 impl RightEdgeMarkerItemSource {
@@ -755,7 +748,6 @@ impl RightEdgeMarkerItemSource {
         ));
         Self {
             items: items.into_iter(),
-            source_position: DisplaySourcePosition::synthetic(RIGHT_EDGE_MARKER_SOURCE_ID, 0),
         }
     }
 }
@@ -763,10 +755,6 @@ impl RightEdgeMarkerItemSource {
 impl DisplayItemSource for RightEdgeMarkerItemSource {
     fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.items.next()
-    }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.source_position.clone()
     }
 }
 

@@ -804,10 +804,6 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
         ) -> Option<crate::display_item::DisplayItem> {
             self.item.take()
         }
-
-        fn source_position(&self) -> crate::display_item::DisplaySourcePosition {
-            crate::display_item::DisplaySourcePosition::synthetic(9, 0)
-        }
     }
 
     let mut font_metrics = None;
@@ -880,10 +876,6 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
             _context: &mut crate::display_source::DisplaySourceContext<'_>,
         ) -> Option<crate::display_item::DisplayItem> {
             self.item.take()
-        }
-
-        fn source_position(&self) -> crate::display_item::DisplaySourcePosition {
-            crate::display_item::DisplaySourcePosition::synthetic(10, 0)
         }
     }
 

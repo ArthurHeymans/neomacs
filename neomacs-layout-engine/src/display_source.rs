@@ -56,8 +56,6 @@ impl Default for DisplaySourceContext<'_> {
 
 pub(crate) trait DisplayItemSource {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem>;
-    #[allow(dead_code)]
-    fn source_position(&self) -> DisplaySourcePosition;
 }
 
 pub(crate) trait DisplayItemFaceResolver {
@@ -73,7 +71,6 @@ pub(crate) trait DisplayItemFaceResolver {
 }
 
 pub(crate) struct SyntheticTextItemSource {
-    source_position: DisplaySourcePosition,
     item: Option<DisplayItem>,
 }
 
@@ -91,20 +88,13 @@ impl SyntheticTextItemSource {
             face,
             DisplayItemKind::TextRun(DisplayTextRun::new(text)),
         );
-        Self {
-            source_position: item.span.start.clone(),
-            item: Some(item),
-        }
+        Self { item: Some(item) }
     }
 }
 
 impl DisplayItemSource for SyntheticTextItemSource {
     fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.item.take()
-    }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.source_position.clone()
     }
 }
 
@@ -271,10 +261,6 @@ impl<S: DisplayItemSource> DisplayItemSource for BufferDisplayReplacementStringS
         };
         Some(self.replacement_source.item_with_face(item.face, kind))
     }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.replacement_source.span().start
-    }
 }
 
 pub(crate) struct LispStringSourceCursor {
@@ -303,12 +289,9 @@ impl DisplayItemSource for LispStringSourceCursor {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.stack.next_item(context)
     }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.stack.source_position()
-    }
 }
 
+#[allow(dead_code)]
 pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     buffer_id: BufferId,
     buffer: &'a B,
@@ -318,6 +301,7 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     replacement_strings: LispStringSourceStack,
 }
 
+#[allow(dead_code)]
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     #[cfg(test)]
     pub(crate) fn new(
@@ -423,6 +407,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         }
         end.max(start.add_len(CharLen::new(1))).min(limit)
     }
+
+    pub(crate) fn source_position(&self) -> DisplaySourcePosition {
+        if !self.replacement_strings.is_empty() {
+            return self.replacement_strings.source_position();
+        }
+        DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
+    }
 }
 
 impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<'_, B> {
@@ -497,13 +488,6 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
             ));
         }
     }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        if !self.replacement_strings.is_empty() {
-            return self.replacement_strings.source_position();
-        }
-        DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
-    }
 }
 
 enum LispStringAction {
@@ -563,6 +547,7 @@ impl LispStringSourceStack {
         }
     }
 
+    #[allow(dead_code)]
     fn source_position(&self) -> DisplaySourcePosition {
         self.frames
             .last()
@@ -570,6 +555,7 @@ impl LispStringSourceStack {
             .unwrap_or_else(|| DisplaySourcePosition::synthetic(0, 0))
     }
 
+    #[allow(dead_code)]
     fn is_empty(&self) -> bool {
         self.frames.is_empty()
     }
@@ -662,6 +648,7 @@ impl LispStringSourceFrame {
         self.char_byte_offsets.len().saturating_sub(1)
     }
 
+    #[allow(dead_code)]
     fn source_position(&self) -> DisplaySourcePosition {
         DisplaySourcePosition::lisp_string(
             self.source_id,

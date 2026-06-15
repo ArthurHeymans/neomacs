@@ -167,22 +167,16 @@ fn display_item_row_break_cursor_and_hit_test_are_typed_items() {
 
 struct StaticItemSource {
     items: std::vec::IntoIter<DisplayItem>,
-    position: DisplaySourcePosition,
 }
 
 impl DisplayItemSource for StaticItemSource {
     fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.items.next()
     }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.position.clone()
-    }
 }
 
 #[test]
-fn display_item_source_trait_exposes_items_and_position() {
-    let position = DisplaySourcePosition::synthetic(9, 0);
+fn display_item_source_trait_exposes_items() {
     let expected = DisplayItem::new(
         SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::FaceId(1),
@@ -190,11 +184,9 @@ fn display_item_source_trait_exposes_items_and_position() {
     );
     let mut source = StaticItemSource {
         items: vec![expected.clone()].into_iter(),
-        position: position.clone(),
     };
     let mut context = DisplaySourceContext::empty();
 
-    assert_eq!(source.source_position(), position);
     assert_eq!(source.next_item(&mut context), Some(expected));
     assert_eq!(source.next_item(&mut context), None);
 }

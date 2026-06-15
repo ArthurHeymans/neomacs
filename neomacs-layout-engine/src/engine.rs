@@ -50,7 +50,7 @@ use crate::display_frame_output::{
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
@@ -1201,7 +1201,6 @@ fn mock_display_text_item(
 }
 
 struct MockDisplayItemSource {
-    source_position: DisplaySourcePosition,
     items: std::vec::IntoIter<DisplayItem>,
 }
 
@@ -1255,10 +1254,6 @@ impl DisplayItemSource for MockDisplayItemSource {
     fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.items.next()
     }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.source_position.clone()
-    }
 }
 
 #[derive(Default)]
@@ -1284,13 +1279,7 @@ impl MockDisplayItemSourceBuilder {
     }
 
     fn finish(self) -> MockDisplayItemSource {
-        let source_position = self
-            .items
-            .first()
-            .map(|item| item.span.start.clone())
-            .unwrap_or_else(|| DisplaySourcePosition::synthetic(MOCK_DISPLAY_SOURCE_ID, 0));
         MockDisplayItemSource {
-            source_position,
             items: self.items.into_iter(),
         }
     }
