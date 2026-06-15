@@ -52,7 +52,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SingleDisplayItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -217,22 +217,21 @@ impl ResolvedBufferTextSourceAdvance {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct BufferTextSourceTextRequest {
     range: BufferTextSourceRange,
+    source_char: Option<char>,
     resolved_advance: ResolvedBufferTextSourceAdvance,
 }
 
 impl BufferTextSourceTextRequest {
     fn new(
         range: BufferTextSourceRange,
+        source_char: Option<char>,
         resolved_advance: ResolvedBufferTextSourceAdvance,
     ) -> Self {
         Self {
             range,
+            source_char,
             resolved_advance,
         }
-    }
-
-    fn range(self) -> BufferTextSourceRange {
-        self.range
     }
 
     fn append_measurement(self) -> DisplaySourceAppendMeasurement {
@@ -241,6 +240,38 @@ impl BufferTextSourceTextRequest {
 
     fn advance_px(self) -> f32 {
         self.resolved_advance.advance_px()
+    }
+
+    fn append_request<B: LayoutBufferView + ?Sized>(
+        self,
+        buffer_id: BufferId,
+        buffer: &B,
+        face_id: u32,
+    ) -> Option<BufferTextSourceRangeItemAppendRequest> {
+        let Some(ch) = self.source_char else {
+            return buffer_text_source_range_append_request(self.range, buffer_id, buffer, face_id);
+        };
+        if !self.range.is_single_char() {
+            return buffer_text_source_range_append_request(self.range, buffer_id, buffer, face_id);
+        }
+
+        let start = self.range.start();
+        let end = self.range.end();
+        let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(start);
+        let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(end);
+        let item = BufferTextItemSource::single_char(buffer_id, start, byte_start, byte_end).item(
+            RenderFaceRef::FaceId(face_id),
+            DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
+        );
+        let append_kind = if ch == '\t' {
+            DisplayRowAppendKind::Tab
+        } else {
+            DisplayRowAppendKind::SourceText
+        };
+        Some(BufferTextSourceRangeItemAppendRequest::new(
+            item,
+            append_kind,
+        ))
     }
 }
 
@@ -3467,15 +3498,8 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
     ) -> Option<Self> {
-        Self::for_buffer_text_range(
-            source_text.range(),
-            buffer_id,
-            buffer,
-            face_id,
-            base_face,
-            frame,
-            position,
-        )
+        let append_item = source_text.append_request(buffer_id, buffer, face_id)?;
+        Some(Self::new(append_item, base_face, face_id, frame, position))
     }
 
     fn for_display_item_request<B: LayoutBufferView + ?Sized>(
@@ -3509,9 +3533,10 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         let mut face_ids = FrameFaceIdAllocator::new(self.face_id.saturating_add(1));
         let position = self.position;
         let request = self.request();
-        let outcome = request.render_single_display_item_into_current_text_row_and_emit(
+        let source = SingleDisplayItemSource::new(self.append_item.into_item());
+        let outcome = request.render_owned_display_source_into_current_text_row_and_emit(
             &mut current_text_render_state(state, &mut face_ids),
-            self.append_item.into_item(),
+            source,
             render_policy,
         )?;
         Some(outcome.into_append_progress_and_position(position))
@@ -3527,9 +3552,10 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         let request = self
             .request()
             .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
-        let outcome = request.measure_single_display_item_against_current_text_row(
+        let source = SingleDisplayItemSource::new(self.append_item.into_item());
+        let outcome = request.measure_owned_display_source_against_current_text_row(
             &mut current_text_measure_state(state, &mut face_ids),
-            self.append_item.into_item(),
+            source,
             render_policy,
         )?;
         Some(outcome.into_append_progress(position))
@@ -8544,7 +8570,11 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
         resolved_advance: ResolvedBufferTextSourceAdvance,
     ) -> BufferTextSourceCharAppendPlan {
         BufferTextSourceCharAppendPlan {
-            source_text: BufferTextSourceTextRequest::new(self.range, resolved_advance),
+            source_text: BufferTextSourceTextRequest::new(
+                self.range,
+                Some(self.cluster.ch()),
+                resolved_advance,
+            ),
             position: self.position,
         }
     }

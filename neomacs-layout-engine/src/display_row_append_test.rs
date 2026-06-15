@@ -2857,6 +2857,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         plan: BufferTextSourceCharAppendPlan {
             source_text: BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::single_char(CharPos0::new(21)),
+                Some('a'),
                 ResolvedBufferTextSourceAdvance::resolved(8.0),
             ),
             position: DisplayRowPosition {
@@ -3314,6 +3315,40 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
     assert!(matches!(
         &mapped_item.kind,
         DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "x"
+    ));
+}
+
+#[test]
+fn buffer_text_source_text_request_uses_decoded_char_payload() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+
+    let request = BufferTextSourceTextRequest::new(
+        BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+        Some('z'),
+        ResolvedBufferTextSourceAdvance::natural(8.0),
+    )
+    .append_request(buf_id, &snapshot, 7)
+    .expect("append request");
+
+    assert_eq!(request.append_kind(), DisplayRowAppendKind::SourceText);
+    let item = request.into_item();
+    assert_eq!(
+        item.span.start,
+        DisplaySourcePosition::buffer(buf_id, CharPos0::new(0), EmacsBytePos::new(0))
+    );
+    assert!(matches!(
+        &item.kind,
+        DisplayItemKind::TextRun(run) if run.text.as_ref() == "z"
     ));
 }
 
@@ -6386,6 +6421,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
             ),
             BufferTextSourceTextRequest::new(
                 source_range,
+                None,
                 ResolvedBufferTextSourceAdvance::natural(measured_width),
             ),
             position,
@@ -6447,6 +6483,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
             ),
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+                Some('a'),
                 ResolvedBufferTextSourceAdvance::resolved(13.0),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -6518,6 +6555,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
             ),
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
+                Some('\u{301}'),
                 ResolvedBufferTextSourceAdvance::natural(0.0),
             ),
             DisplayRowPosition { x_px: 8.0, col: 1 },

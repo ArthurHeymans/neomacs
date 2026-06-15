@@ -2063,21 +2063,6 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             render_policy,
         )
     }
-
-    pub(crate) fn measure_single_display_item_against_current_text_row<
-        P: DisplayRowRenderPolicy,
-    >(
-        self,
-        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
-        item: DisplayItem,
-        render_policy: &mut P,
-    ) -> Option<CurrentTextRowRenderOutcome> {
-        self.measure_owned_display_source_against_current_text_row(
-            state,
-            SingleDisplayItemSource::new(item),
-            render_policy,
-        )
-    }
 }
 
 impl<'a> DisplayRowSourceRenderRequest<'a> {
