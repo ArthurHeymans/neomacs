@@ -3185,12 +3185,15 @@ fn fallback_buffer_text_source_natural_advance_uses_frame_tab_policy() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(4));
     let mut font_metrics = None;
 
-    let advance = fallback_buffer_text_source_range_natural_advance_to_text_row(
+    let advance = BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+        BufferTextSourceClusterState::for_char('\t', None),
+    )
+    .resolve_to_text_row(
         &mut font_metrics,
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
-        BufferTextSourceClusterState::for_char('\t', None),
+        '\t',
     );
 
     assert_eq!(advance, 24.0);
@@ -3202,12 +3205,15 @@ fn fallback_buffer_text_source_natural_advance_zeroes_cluster_continuation() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
-    let advance = fallback_buffer_text_source_range_natural_advance_to_text_row(
+    let advance = BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+        BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
+    )
+    .resolve_to_text_row(
         &mut font_metrics,
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 8.0, col: 1 },
-        BufferTextSourceClusterState::for_char('\u{301}', Some(('e', false))),
+        '\u{301}',
     );
 
     assert_eq!(advance, 0.0);
@@ -3219,12 +3225,15 @@ fn fallback_buffer_text_source_natural_advance_uses_face_columns() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
-    let advance = fallback_buffer_text_source_range_natural_advance_to_text_row(
+    let advance = BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
+        BufferTextSourceClusterState::for_char('中', None),
+    )
+    .resolve_to_text_row(
         &mut font_metrics,
         &active_face,
         &frame,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        BufferTextSourceClusterState::for_char('中', None),
+        '中',
     );
 
     assert_eq!(advance, 16.0);
@@ -3254,6 +3263,26 @@ fn buffer_text_source_natural_fallback_advance_names_width_policy() {
         BufferTextSourceNaturalFallbackAdvance::for_cluster_state(
             BufferTextSourceClusterState::for_char('中', None),
         ),
+        BufferTextSourceNaturalFallbackAdvance::FaceColumns { columns: 2 }
+    );
+}
+
+#[test]
+fn buffer_text_source_natural_advance_request_names_source_and_fallback() {
+    let request = BufferTextSourceNaturalAdvanceRequest::for_range_and_cluster(
+        BufferTextSourceRange::new(CharPos0::new(2), CharPos0::new(3)),
+        BufferTextSourceClusterState::for_char('中', None),
+    );
+
+    assert_eq!(
+        request.source_item(),
+        BufferTextSourceTextItemRequest::new(
+            BufferTextSourceRange::new(CharPos0::new(2), CharPos0::new(3)),
+            '中'
+        )
+    );
+    assert_eq!(
+        request.fallback(),
         BufferTextSourceNaturalFallbackAdvance::FaceColumns { columns: 2 }
     );
 }

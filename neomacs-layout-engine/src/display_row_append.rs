@@ -280,6 +280,10 @@ impl BufferTextSourceTextItemRequest {
         self.range
     }
 
+    fn source_char(self) -> char {
+        self.ch
+    }
+
     fn append_kind(self) -> DisplayRowAppendKind {
         if self.ch == '\t' {
             DisplayRowAppendKind::Tab
@@ -729,6 +733,88 @@ impl BufferTextSourceNaturalFallbackAdvance {
                 active_face_state.advance_for_columns(font_metrics, ch, columns)
             }
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BufferTextSourceNaturalAdvanceRequest {
+    source_item: BufferTextSourceTextItemRequest,
+    fallback: BufferTextSourceNaturalFallbackAdvance,
+}
+
+impl BufferTextSourceNaturalAdvanceRequest {
+    fn for_range_and_cluster(
+        range: BufferTextSourceRange,
+        cluster: BufferTextSourceClusterState,
+    ) -> Self {
+        Self {
+            source_item: BufferTextSourceTextItemRequest::for_range_and_cluster(range, cluster),
+            fallback: BufferTextSourceNaturalFallbackAdvance::for_cluster_state(cluster),
+        }
+    }
+
+    #[cfg(test)]
+    fn source_item(self) -> BufferTextSourceTextItemRequest {
+        self.source_item
+    }
+
+    #[cfg(test)]
+    fn fallback(self) -> BufferTextSourceNaturalFallbackAdvance {
+        self.fallback
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn measure_to_text_row<B: LayoutBufferView + ?Sized>(
+        self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        base_face: &ResolvedFace,
+        buffer_id: BufferId,
+        buffer: &B,
+        face_id: u32,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> Option<f32> {
+        measure_buffer_text_source_item_natural_advance_to_text_row(
+            state,
+            self.source_item,
+            base_face,
+            buffer_id,
+            buffer,
+            face_id,
+            frame,
+            position,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_to_text_row<B: LayoutBufferView + ?Sized>(
+        self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        buffer_id: BufferId,
+        buffer: &B,
+        active_face_state: &DisplayRowActiveFaceState,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> f32 {
+        if let Some(measured_width) = self.measure_to_text_row(
+            state,
+            active_face_state.resolved_face(),
+            buffer_id,
+            buffer,
+            active_face_state.face_id(),
+            frame.clone(),
+            position,
+        ) {
+            return measured_width;
+        }
+
+        self.fallback.resolve_to_text_row(
+            state.font_metrics(),
+            active_face_state,
+            &frame,
+            position,
+            self.source_item.source_char(),
+        )
     }
 }
 
@@ -5589,55 +5675,6 @@ fn measure_buffer_text_source_item_natural_advance_to_text_row<B: LayoutBufferVi
     operation.measure_natural_width_to_text_row(state)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn resolve_buffer_text_source_item_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
-    state: &mut TextRowSourceMeasureState<'_>,
-    source_item: BufferTextSourceTextItemRequest,
-    buffer_id: BufferId,
-    buffer: &B,
-    active_face_state: &DisplayRowActiveFaceState,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-    cluster: BufferTextSourceClusterState,
-) -> f32 {
-    if let Some(measured_width) = measure_buffer_text_source_item_natural_advance_to_text_row(
-        state,
-        source_item,
-        active_face_state.resolved_face(),
-        buffer_id,
-        buffer,
-        active_face_state.face_id(),
-        frame.clone(),
-        position,
-    ) {
-        return measured_width;
-    }
-
-    fallback_buffer_text_source_range_natural_advance_to_text_row(
-        state.font_metrics(),
-        active_face_state,
-        &frame,
-        position,
-        cluster,
-    )
-}
-
-fn fallback_buffer_text_source_range_natural_advance_to_text_row(
-    font_metrics: &mut Option<FontMetricsService>,
-    active_face_state: &DisplayRowActiveFaceState,
-    frame: &DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-    cluster: BufferTextSourceClusterState,
-) -> f32 {
-    BufferTextSourceNaturalFallbackAdvance::for_cluster_state(cluster).resolve_to_text_row(
-        font_metrics,
-        active_face_state,
-        frame,
-        position,
-        cluster.ch(),
-    )
-}
-
 impl BufferTextSourceAdvanceResolver {
     #[allow(clippy::too_many_arguments)]
     fn resolve_source_advance_request_to_text_row<B: LayoutBufferView + ?Sized>(
@@ -5666,18 +5703,17 @@ impl BufferTextSourceAdvanceResolver {
                 ResolvedBufferTextSourceAdvance::resolved(advance_px)
             }
             BufferTextSourceAdvancePath::NaturalRenderedSource => {
-                let advance_px = resolve_buffer_text_source_item_natural_advance_to_text_row(
+                let advance_px = BufferTextSourceNaturalAdvanceRequest::for_range_and_cluster(
+                    request.range(),
+                    request.cluster(),
+                )
+                .resolve_to_text_row(
                     state,
-                    BufferTextSourceTextItemRequest::for_range_and_cluster(
-                        request.range(),
-                        request.cluster(),
-                    ),
                     buffer_id,
                     buffer,
                     active_face_state,
                     frame,
                     request.position(),
-                    request.cluster(),
                 );
                 ResolvedBufferTextSourceAdvance::natural(advance_px)
             }
