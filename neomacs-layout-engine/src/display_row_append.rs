@@ -23,12 +23,14 @@ use crate::display_property::{
 use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplayRowCurrentTextMeasureState, DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics,
-    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
+    DisplayRowCurrentSourceFragmentRenderState, DisplayRowCurrentTextMeasureState,
+    DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics, DisplayRowGeometry,
+    DisplayRowItemSourceRenderRequest, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
     DisplayRowRenderBounds, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
     DisplayRowResolvedMeasuredFace, DisplayRowSourceAppendRequest,
-    DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState, DisplaySourceAppendMeasurement,
-    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    DisplayRowSourceAppendRequestPolicy, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
+    DisplaySourceAppendMeasurement, DisplaySourceAppendRenderPolicy,
+    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face};
 use crate::display_row_builder::{
@@ -71,18 +73,19 @@ use crate::neovm_bridge::{
 use crate::types::WindowParams;
 use crate::unicode::{decode_utf8, is_wide_char};
 use crate::window_output::{
-    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
-    TextMatrixRowTransition, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightBorder, TextWindowRightEdgeMarkers, TextWindowRowDecorationRequest,
-    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    LineNumberMarginItemSource, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
+    TextMatrixRowMetrics, TextMatrixRowTransition, TextWindowBegin, TextWindowBodyOutputInstall,
+    TextWindowCursorEffects, TextWindowLineNumberMargin, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightBorder, TextWindowRightEdgeMarkers,
+    TextWindowRowDecorationRequest, WindowOutputEmitter, begin_text_window_output,
+    close_text_window_output, current_text_window_cluster_tail, emit_text_matrix_row_transition,
     emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
     finish_pending_text_window_row, install_text_window_body_output,
     install_text_window_cursor_effects, install_text_window_row_decoration,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
+use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -161,17 +164,51 @@ impl BufferLineNumberMarginRenderRequest {
         source_render.insert_resolved_face(line_number_face_id, &line_number_face);
 
         let text = line_number_request.text();
-        install_text_window_row_decoration(
-            source_render.output_render().builder,
-            TextWindowRowDecorationRequest::LineNumberMargin(TextWindowLineNumberMargin {
-                text: &text,
-                cols: line_number_request.cols(),
-                face_id: line_number_face_id,
-                row_y: row_geometry.y(),
-                row_height: row_geometry.height(),
-                row_ascent: row_geometry.ascent(),
-                char_width,
-            }),
+        let margin_request = TextWindowLineNumberMargin {
+            text: &text,
+            cols: line_number_request.cols(),
+            face_id: line_number_face_id,
+            row_y: row_geometry.y(),
+            row_height: row_geometry.height(),
+            row_ascent: row_geometry.ascent(),
+            char_width,
+        };
+        let mut source = LineNumberMarginItemSource::new(&margin_request);
+        let mut source_state = DisplayRowSourceState::default();
+        let request =
+            DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+                DisplayRowSourceRequestPolicy::from_display_row_geometry(
+                    DisplayRowGeometry {
+                        y: margin_request.row_y,
+                        width: (margin_request.cols.max(1) as f32 + 1.0) * char_width.max(1.0),
+                        height: margin_request.row_height,
+                        char_width,
+                        ascent: margin_request.row_ascent,
+                        tab_policy: DisplayTabPolicy::every(8),
+                    },
+                    neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+                ),
+                line_number_face_id,
+                &line_number_face,
+                DisplayRowRenderBounds::whole_row(
+                    (margin_request.cols.max(1) as f32 + 1.0) * char_width.max(1.0),
+                ),
+            )
+            .with_glyph_area(GlyphArea::LeftMargin);
+        request.render_natural_fragment_into_current_row(
+            &mut DisplayRowCurrentSourceFragmentRenderState {
+                builder: source_render.output_render.builder,
+                font_metrics: source_render.font_metrics,
+                face_resolver: source_render.face_resolver,
+                display_host: source_render
+                    .output_render
+                    .evaluator
+                    .display_host
+                    .as_deref(),
+                face_ids,
+            },
+            &mut source,
+            &mut source_state,
         );
 
         face_scan.invalidate();

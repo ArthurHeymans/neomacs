@@ -39,9 +39,7 @@ use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-#[cfg(test)]
-use neomacs_display_protocol::glyph_matrix::GlyphArea;
-use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -1362,6 +1360,11 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
         )
     }
 
+    pub(crate) fn with_glyph_area(mut self, area: GlyphArea) -> Self {
+        self.row_request = self.row_request.with_glyph_area(area);
+        self
+    }
+
     fn into_render_plan(self) -> DisplayRowRenderPlan<'a> {
         self.row_request.into_render_plan()
     }
@@ -1836,6 +1839,7 @@ impl DisplayRowSourceRequestPolicy {
 struct DisplayRowRenderPlan<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
+    area: GlyphArea,
     base_face_id: u32,
     base_face: &'a ResolvedFace,
     role: GlyphRowRole,
@@ -1845,6 +1849,7 @@ struct DisplayRowRenderPlan<'a> {
 pub(crate) struct DisplayRowSourceRenderRequest<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
+    area: GlyphArea,
     base_face_id: u32,
     base_face: &'a ResolvedFace,
     role: GlyphRowRole,
@@ -2086,6 +2091,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         Self {
             geometry,
             render_bounds,
+            area: GlyphArea::Text,
             base_face_id,
             base_face,
             role,
@@ -2109,6 +2115,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         Self {
             geometry,
             render_bounds,
+            area: GlyphArea::Text,
             base_face_id,
             base_face,
             role,
@@ -2118,6 +2125,11 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
     fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
         self.render_bounds = render_bounds;
+        self
+    }
+
+    fn with_glyph_area(mut self, area: GlyphArea) -> Self {
+        self.area = area;
         self
     }
 
@@ -2159,6 +2171,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         DisplayRowRenderPlan {
             geometry: self.geometry,
             render_bounds: self.render_bounds,
+            area: self.area,
             base_face_id: self.base_face_id,
             base_face: self.base_face,
             role: self.role,
@@ -3029,6 +3042,36 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
     }
 }
 
+pub(crate) struct DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) display_host: Option<&'emit dyn DisplayHost>,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'a> DisplayRowItemSourceRenderRequest<'a> {
+    pub(crate) fn render_natural_fragment_into_current_row<S: DisplayItemSource>(
+        self,
+        state: &mut DisplayRowCurrentSourceFragmentRenderState<'_, '_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+    ) -> Option<DisplayRowRenderIntoRowResult> {
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            state.font_metrics,
+            state.face_resolver,
+            state.display_host,
+            state.face_ids,
+        );
+        let result = state.builder.with_current_row_mut(|row| {
+            render_executor.render_item_source_fragment_into_row(self, row, source, source_state)
+        })??;
+        DisplayRowCurrentSourceSlotBoundsMergeRequest::new(&result.source_slots)
+            .install(state.builder);
+        Some(result)
+    }
+}
+
 impl<'metrics> DisplayRowRenderer<'metrics> {
     pub(crate) fn new(font_metrics: &'metrics mut Option<FontMetricsService>) -> Self {
         Self { font_metrics }
@@ -3121,6 +3164,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let DisplayRowRenderPlan {
             geometry,
             render_bounds,
+            area,
             base_face_id,
             base_face,
             role,
@@ -3215,23 +3259,26 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         face_realizer.font_metrics_service_mut(),
                         char_width,
                     );
-                    let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer(
+                    let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer_for_area(
                         &row_layout,
                         &mut *row,
                         &mut glyph_measurer,
                         position,
                         render_bounds.max_x_px,
+                        area,
                     );
                     row_writer.push_item(render_item.row_item_for_write())
                 }
                 DisplayRowItemMeasurement::TextRun(measurement) => {
-                    let mut row_writer = DisplayRowProgressWriter::with_text_run_measurement(
-                        &row_layout,
-                        &mut *row,
-                        measurement,
-                        position,
-                        render_bounds.max_x_px,
-                    );
+                    let mut row_writer =
+                        DisplayRowProgressWriter::with_text_run_measurement_for_area(
+                            &row_layout,
+                            &mut *row,
+                            measurement,
+                            position,
+                            render_bounds.max_x_px,
+                            area,
+                        );
                     row_writer.push_item(render_item.row_item_for_write())
                 }
             };

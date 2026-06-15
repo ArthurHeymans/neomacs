@@ -288,6 +288,7 @@ pub(crate) struct TextWindowLineNumberMargin<'a> {
 
 pub(crate) enum TextWindowRowDecorationRequest<'a> {
     MarkCurrentTruncatedLeft,
+    #[cfg(test)]
     LineNumberMargin(TextWindowLineNumberMargin<'a>),
     RightEdgeMarkers(TextWindowRightEdgeMarkers<'a>),
     LastWindowRightBorder(TextWindowRightBorder),
@@ -301,6 +302,7 @@ impl<'a> TextWindowRowDecorationRequest<'a> {
                     mark_display_row_truncated_left(glyph_row);
                 });
             }
+            #[cfg(test)]
             Self::LineNumberMargin(request) => {
                 let layout = line_number_margin_layout(&request);
                 let mut source = LineNumberMarginItemSource::new(&request);
@@ -697,6 +699,7 @@ pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuil
     );
 }
 
+#[cfg(test)]
 fn line_number_margin_layout(request: &TextWindowLineNumberMargin<'_>) -> DisplayRowLayout {
     let char_width = request.char_width.max(1.0);
     DisplayRowLayout {
@@ -744,13 +747,13 @@ fn line_number_margin_stretch_item(
     )
 }
 
-struct LineNumberMarginItemSource {
+pub(crate) struct LineNumberMarginItemSource {
     items: std::vec::IntoIter<DisplayItem>,
     source_position: DisplaySourcePosition,
 }
 
 impl LineNumberMarginItemSource {
-    fn new(request: &TextWindowLineNumberMargin<'_>) -> Self {
+    pub(crate) fn new(request: &TextWindowLineNumberMargin<'_>) -> Self {
         let mut items = Vec::new();
         let mut source_offset = 0usize;
         let padding = (request.cols - 1) - request.text.chars().count() as i32;

@@ -674,6 +674,7 @@ impl DisplayRowBuilder<'_> {
 
 #[cfg(test)]
 impl<'a> DisplayRowBuilder<'a> {
+    #[cfg(test)]
     pub(crate) fn with_glyph_measurer(
         layout: DisplayRowLayout,
         glyph_measurer: &'a mut dyn DisplayGlyphMeasurer,
@@ -743,6 +744,7 @@ impl<'layout, 'row> DisplayRowProgressWriter<'layout, 'row, '_> {
 }
 
 impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer> {
+    #[cfg(test)]
     pub(crate) fn with_glyph_measurer(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
@@ -750,14 +752,38 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         position: DisplayRowPosition,
         max_x_px: f32,
     ) -> Self {
+        Self::with_glyph_measurer_for_area(
+            layout,
+            row,
+            glyph_measurer,
+            position,
+            max_x_px,
+            GlyphArea::Text,
+        )
+    }
+
+    pub(crate) fn with_glyph_measurer_for_area(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
+        position: DisplayRowPosition,
+        max_x_px: f32,
+        area: GlyphArea,
+    ) -> Self {
         Self {
-            writer: DisplayRowWriter::with_glyph_measurer(layout, row, glyph_measurer),
+            writer: DisplayRowWriter::with_glyph_measurer_for_area(
+                layout,
+                row,
+                glyph_measurer,
+                area,
+            ),
             position,
             max_x_px,
             text_run_measurement: None,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn with_text_run_measurement(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
@@ -765,8 +791,26 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         position: DisplayRowPosition,
         max_x_px: f32,
     ) -> Self {
+        Self::with_text_run_measurement_for_area(
+            layout,
+            row,
+            text_run_measurement,
+            position,
+            max_x_px,
+            GlyphArea::Text,
+        )
+    }
+
+    pub(crate) fn with_text_run_measurement_for_area(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        text_run_measurement: DisplayTextRunMeasurement,
+        position: DisplayRowPosition,
+        max_x_px: f32,
+        area: GlyphArea,
+    ) -> Self {
         Self {
-            writer: DisplayRowWriter::new(layout, row),
+            writer: DisplayRowWriter::for_area(layout, row, area),
             position,
             max_x_px,
             text_run_measurement: Some(text_run_measurement),
@@ -875,7 +919,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 break;
             }
 
-            let before_len = self.text_area_len();
+            let before_len = self.area_len();
             let slot_start = self.position;
             self.writer.push_text_char_state_with_advance_request(
                 source_mapping.charpos(start_char, char_offset),
@@ -898,13 +942,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         status
     }
 
-    fn text_area_len(&self) -> usize {
-        self.writer.row.glyphs[GlyphArea::Text.index()].len()
+    fn area_len(&self) -> usize {
+        self.writer.row.glyphs[self.writer.area_index].len()
     }
 
     fn metrics_since(&self, before_len: usize) -> DisplayRowWriteMetrics {
         DisplayRowWriteMetrics::from_glyphs(
-            &self.writer.row.glyphs[GlyphArea::Text.index()][before_len..],
+            &self.writer.row.glyphs[self.writer.area_index][before_len..],
             self.writer.layout.char_width_px,
         )
     }
@@ -945,6 +989,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn with_glyph_measurer(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
@@ -953,7 +998,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         Self::with_glyph_measurer_for_area(layout, row, glyph_measurer, GlyphArea::Text)
     }
 
-    fn with_glyph_measurer_for_area(
+    pub(crate) fn with_glyph_measurer_for_area(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
         glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
