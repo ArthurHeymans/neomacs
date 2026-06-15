@@ -72,30 +72,6 @@ pub(crate) trait DisplayItemFaceResolver {
     }
 }
 
-pub(crate) struct OwnedDisplayItemSource {
-    source_position: DisplaySourcePosition,
-    items: std::vec::IntoIter<DisplayItem>,
-}
-
-impl OwnedDisplayItemSource {
-    pub(crate) fn single(item: DisplayItem) -> Self {
-        Self {
-            source_position: item.span.start.clone(),
-            items: vec![item].into_iter(),
-        }
-    }
-}
-
-impl DisplayItemSource for OwnedDisplayItemSource {
-    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        self.items.next()
-    }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.source_position.clone()
-    }
-}
-
 pub(crate) struct SyntheticTextItemSource {
     source_position: DisplaySourcePosition,
     item: Option<DisplayItem>,

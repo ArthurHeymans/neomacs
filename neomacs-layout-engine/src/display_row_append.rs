@@ -11,8 +11,8 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
-    glyphless_method_for_char,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, GlyphlessJoinerPolicy,
+    GlyphlessMethod, RenderFaceRef, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -54,7 +54,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, OwnedDisplayItemSource,
+    DisplayItemSource, DisplayReplacementBox, DisplaySourceContext, LispStringSourceCursor,
     SyntheticTextItemSource,
 };
 #[cfg(test)]
@@ -3870,9 +3870,9 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
         )
     }
 
-    fn source_for_single_item(&self, mut item: DisplayItem) -> OwnedDisplayItemSource {
+    fn source_for_single_item(&self, mut item: DisplayItem) -> SingleAppendDisplayItemSource {
         item.face = RenderFaceRef::FaceId(self.base_face_id);
-        OwnedDisplayItemSource::single(item)
+        SingleAppendDisplayItemSource::new(item)
     }
 
     fn render_single_item_to_text_row_and_emit<P: DisplayRowRenderPolicy>(
@@ -3939,6 +3939,30 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
                 source,
                 source_state,
             )
+    }
+}
+
+struct SingleAppendDisplayItemSource {
+    source_position: DisplaySourcePosition,
+    item: Option<DisplayItem>,
+}
+
+impl SingleAppendDisplayItemSource {
+    fn new(item: DisplayItem) -> Self {
+        Self {
+            source_position: item.span.start.clone(),
+            item: Some(item),
+        }
+    }
+}
+
+impl DisplayItemSource for SingleAppendDisplayItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.item.take()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
     }
 }
 
