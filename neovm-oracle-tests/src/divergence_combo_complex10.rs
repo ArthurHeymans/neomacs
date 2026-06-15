@@ -1,0 +1,322 @@
+//! Complex combo batch 10 — process exit code deeper (signal kill, process
+//! contact), write-region MUSTBENEW variants, coding-system-equal-type,
+//! find-operation-coding-system, process-adaptive-read-buffering,
+//! set-buffer-multibyte with overlays+narrowing+undo chain, encode-coding-region
+//! with eol variants, text-property search across narrowed+overlaid region,
+//! copy-to-register/insert-register round-trip, cl-coerce over multibyte
+//! with text properties, prin1-to-string of overlay before/after-strings.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_cx10_process_exit_via_signal() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((p (make-process :name "neo-cx10-sig" :command '("sleep" "10"))))
+  (accept-process-output p 0.1)
+  (signal-process p 9)
+  (accept-process-output p 1)
+  (list (process-status p) (process-exit-status p)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_process_contact_info() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((p (make-process :name "neo-cx10-ci" :command '("echo" "x"))))
+  (prog1 (list (consp (process-contact p))
+               (process-contact p :local)
+               (process-contact p t))
+    (delete-process p)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_write_region_mustbenew_nil() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((f (make-temp-file "neo-cx10-mn-")))
+  (condition-case e
+      (progn (write-region "overwrite" nil f nil 0 nil nil) :ok)
+    (file-already-exists :blocked))
+  (prog1 (with-temp-buffer (insert-file-contents f) (buffer-string))
+    (ignore-errors (delete-file f))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_coding_system_equal_type() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (coding-system-equal-type 'utf-8 'utf-8-unix)
+      (coding-system-equal-type 'utf-8 'latin-1)
+      (coding-system-equal-type 'utf-8-unix 'utf-8-dos))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_find_operation_coding_system() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (find-operation-coding-system 'write-region "data" nil "/tmp/x" nil 0)
+      (find-operation-coding-system 'insert-file-contents "/tmp/x"))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_set_multibyte_overlay_narrow_undo_chain() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (buffer-enable-undo)
+  (insert "AAAAABBBBBCCCCCDDDDD")
+  (let ((ov (make-overlay 6 10)) (m (set-marker (make-marker) 8)))
+    (overlay-put ov 'face 'bold)
+    (narrow-to-region 3 18)
+    (undo-boundary)
+    (goto-char (marker-position m))
+    (insert "X")
+    (let ((after (list (marker-position m) (overlay-start ov) (overlay-end ov))))
+      (undo)
+      (list after (marker-position m) (overlay-start ov) (overlay-end ov)
+            (buffer-string)))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_encode_region_with_eol_variants() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((s "café\n"))
+  (list (with-temp-buffer
+          (insert s) (encode-coding-region 1 (point-max) 'utf-8-dos)
+          (append (buffer-string) nil))
+        (with-temp-buffer
+          (insert s) (encode-coding-region 1 (point-max) 'utf-8-mac)
+          (append (buffer-string) nil))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_text_property_search_narrowed_overlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "0123456789ABCDEF")
+  (put-text-property 3 7 'face 'bold)
+  (put-text-property 10 14 'face 'italic)
+  (let ((ov (make-overlay 5 12))) (overlay-put ov 'mouse-face 'highlight))
+  (narrow-to-region 2 15)
+  (goto-char (point-min))
+  (let (results)
+    (while (text-property-search-forward 'face nil t)
+      (push (prop-match-beginning (match-data t)) results))
+    (nreverse results)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_copy_register_insert_roundtrip() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((buf (get-buffer-create " *neo-cx10-reg*")))
+  (with-current-buffer buf (erase-buffer) (insert "register content"))
+  (copy-to-register ?r buf 1 17)
+  (with-temp-buffer
+    (insert-register ?r)
+    (buffer-string)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_cl_coerce_multibyte_with_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let* ((s (propertize "café" 'face 'bold))
+       (lst (cl-coerce s 'list))
+       (back (cl-coerce lst 'string)))
+  (list (length lst) (text-properties-at 0 back)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_prin1_overlay_before_after_strings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((ov (make-overlay 2 4)))
+    (overlay-put ov 'before-string (propertize ">>" 'face 'bold))
+    (overlay-put ov 'after-string (propertize "<<" 'face 'italic))
+    (list (prin1-to-string (overlay-get ov 'before-string))
+          (prin1-to-string (overlay-get ov 'after-string))
+          (text-properties-at 0 (overlay-get ov 'before-string)))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_coding_system_charset_list() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (coding-system-charset-list 'utf-8)
+      (coding-system-charset-list 'latin-1)
+      (length (coding-system-charset-list 'utf-8)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_buffer_undo_list_markers_overlays() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (buffer-enable-undo)
+  (insert "abcdef")
+  (let ((m (point-marker)))
+    (undo-boundary)
+    (goto-char 3) (insert "X")
+    (undo-boundary)
+    (let ((ov (make-overlay 2 5))) (overlay-put ov 'face 'bold))
+    (let ((entry (car buffer-undo-list)))
+      (list (consp entry) (consp buffer-undo-list)
+            (> (length buffer-undo-list) 2)))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_decode_coding_string_with_offset_limit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((raw (unibyte-string 195 169 226 130 172 195 169 240 159 152 128)))
+  (list (decode-coding-string raw 'utf-8)
+        (length (decode-coding-string raw 'utf-8))
+        (string-bytes (decode-coding-string raw 'utf-8))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_process_filter_partial_data() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let (chunks)
+  (let ((p (make-process :name "neo-cx10-pd" :command '("printf" "%s" "chunk1chunk2chunk3")
+                         :buffer nil
+                         :filter (lambda (proc str) (push str chunks)))))
+    (accept-process-output p 0.1)
+    (accept-process-output p 0.1))
+  (apply #'concat (nreverse chunks)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_set_process_filter_to_nil() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (let ((p (make-process :name "neo-cx10-nf" :command '("echo" "data")
+                         :buffer (current-buffer))))
+    (set-process-filter p (lambda (proc msg) (insert "FILTER:" msg)))
+    (accept-process-output p 1)
+    (let ((with-filter (buffer-string)))
+      (erase-buffer)
+      (set-process-filter p nil)
+      (let ((p2 (make-process :name "neo-cx10-nf2" :command '("echo" "nofilter")
+                              :buffer (current-buffer))))
+        (accept-process-output p2 1))
+      (list with-filter (buffer-string)))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_encode_coding_string_empty_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (encode-coding-string "" 'utf-8)
+      (decode-coding-string "" 'utf-8)
+      (length (encode-coding-string "" 'utf-8)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_string_as_multibyte_vs_make_multibyte() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let* ((raw (unibyte-string 200 201 65))
+       (as-m (string-as-multibyte raw))
+       (make-m (string-make-multibyte raw)))
+  (list (append as-m nil) (append make-m nil)
+        (length as-m) (length make-m)
+        (string-bytes as-m) (string-bytes make-m)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_multiple_overlay_priority_char_property_chain() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "ABCDEFGHIJ")
+  (let ((o1 (make-overlay 1 10)) (o2 (make-overlay 3 7)) (o3 (make-overlay 5 8)))
+    (overlay-put o1 'face 'bold)
+    (overlay-put o2 'face 'italic)
+    (overlay-put o3 'face 'underline)
+    (overlay-put o1 'priority 1) (overlay-put o2 'priority 5) (overlay-put o3 'priority 3)
+    (list (get-char-property 1 'face)
+          (get-char-property 4 'face)
+          (get-char-property 6 'face)
+          (get-char-property 8 'face)
+          (get-char-property 9 'face))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx10_format_mode_line_fragment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(condition-case e
+    (let ((s (format-mode-line "%b %m")))
+      (list (stringp s) (> (length s) 0)))
+  (error (cons 'errored (car e))))
+"##,
+    );
+}
