@@ -2857,7 +2857,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         plan: BufferTextSourceCharAppendPlan {
             source_text: BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::single_char(CharPos0::new(21)),
-                Some('a'),
+                'a',
                 ResolvedBufferTextSourceAdvance::resolved(8.0),
             ),
             position: DisplayRowPosition {
@@ -3334,7 +3334,7 @@ fn buffer_text_source_text_request_uses_decoded_char_payload() {
 
     let request = BufferTextSourceTextRequest::new(
         BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-        Some('z'),
+        'z',
         ResolvedBufferTextSourceAdvance::natural(8.0),
     )
     .append_request(buf_id, &snapshot, 7)
@@ -6421,7 +6421,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
             ),
             BufferTextSourceTextRequest::new(
                 source_range,
-                None,
+                'x',
                 ResolvedBufferTextSourceAdvance::natural(measured_width),
             ),
             position,
@@ -6483,7 +6483,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
             ),
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-                Some('a'),
+                'a',
                 ResolvedBufferTextSourceAdvance::resolved(13.0),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
@@ -6555,7 +6555,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
             ),
             BufferTextSourceTextRequest::new(
                 BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2)),
-                Some('\u{301}'),
+                '\u{301}',
                 ResolvedBufferTextSourceAdvance::natural(0.0),
             ),
             DisplayRowPosition { x_px: 8.0, col: 1 },

@@ -88,7 +88,7 @@ use crate::window_output::{
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
-use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
+use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
@@ -216,20 +216,18 @@ impl ResolvedBufferTextSourceAdvance {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct BufferTextSourceTextRequest {
-    range: BufferTextSourceRange,
-    source_char: Option<char>,
+    source_item: BufferTextSourceTextItemRequest,
     resolved_advance: ResolvedBufferTextSourceAdvance,
 }
 
 impl BufferTextSourceTextRequest {
     fn new(
         range: BufferTextSourceRange,
-        source_char: Option<char>,
+        source_char: char,
         resolved_advance: ResolvedBufferTextSourceAdvance,
     ) -> Self {
         Self {
-            range,
-            source_char,
+            source_item: BufferTextSourceTextItemRequest::new(range, source_char),
             resolved_advance,
         }
     }
@@ -248,30 +246,35 @@ impl BufferTextSourceTextRequest {
         buffer: &B,
         face_id: u32,
     ) -> Option<BufferTextSourceRangeItemAppendRequest> {
-        let Some(ch) = self.source_char else {
-            return buffer_text_source_range_append_request(self.range, buffer_id, buffer, face_id);
-        };
-        if !self.range.is_single_char() {
-            return buffer_text_source_range_append_request(self.range, buffer_id, buffer, face_id);
-        }
+        buffer_text_source_text_item_append_request(self.source_item, buffer_id, buffer, face_id)
+    }
+}
 
-        let start = self.range.start();
-        let end = self.range.end();
-        let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(start);
-        let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(end);
-        let item = BufferTextItemSource::single_char(buffer_id, start, byte_start, byte_end).item(
-            RenderFaceRef::FaceId(face_id),
-            DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
-        );
-        let append_kind = if ch == '\t' {
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BufferTextSourceTextItemRequest {
+    range: BufferTextSourceRange,
+    ch: char,
+}
+
+impl BufferTextSourceTextItemRequest {
+    fn new(range: BufferTextSourceRange, ch: char) -> Self {
+        Self { range, ch }
+    }
+
+    fn range(self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    fn append_kind(self) -> DisplayRowAppendKind {
+        if self.ch == '\t' {
             DisplayRowAppendKind::Tab
         } else {
             DisplayRowAppendKind::SourceText
-        };
-        Some(BufferTextSourceRangeItemAppendRequest::new(
-            item,
-            append_kind,
-        ))
+        }
+    }
+
+    fn into_display_item_kind(self) -> DisplayItemKind {
+        DisplayItemKind::TextRun(DisplayTextRun::new(self.ch.to_string()))
     }
 }
 
@@ -3475,6 +3478,7 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         }
     }
 
+    #[cfg(test)]
     fn for_buffer_text_range<B: LayoutBufferView + ?Sized>(
         range: BufferTextSourceRange,
         buffer_id: BufferId,
@@ -3499,6 +3503,20 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         position: DisplayRowPosition,
     ) -> Option<Self> {
         let append_item = source_text.append_request(buffer_id, buffer, face_id)?;
+        Some(Self::new(append_item, base_face, face_id, frame, position))
+    }
+
+    fn for_buffer_text_item_request<B: LayoutBufferView + ?Sized>(
+        source_item: BufferTextSourceTextItemRequest,
+        buffer_id: BufferId,
+        buffer: &B,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        frame: DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+    ) -> Option<Self> {
+        let append_item =
+            buffer_text_source_text_item_append_request(source_item, buffer_id, buffer, face_id)?;
         Some(Self::new(append_item, base_face, face_id, frame, position))
     }
 
@@ -3688,6 +3706,7 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     }
 }
 
+#[cfg(test)]
 fn buffer_text_source_range_append_request<B: LayoutBufferView + ?Sized>(
     range: BufferTextSourceRange,
     buffer_id: BufferId,
@@ -3703,7 +3722,10 @@ fn buffer_text_source_range_append_request<B: LayoutBufferView + ?Sized>(
     let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(start);
     let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(end);
     let mut bytes = Vec::new();
-    buffer.layout_copy_emacs_byte_range_to(EmacsByteRange::new(byte_start, byte_end), &mut bytes);
+    buffer.layout_copy_emacs_byte_range_to(
+        neovm_core::buffer::EmacsByteRange::new(byte_start, byte_end),
+        &mut bytes,
+    );
     let (ch, len) = decode_utf8(&bytes);
     if len == 0 {
         return None;
@@ -3721,6 +3743,31 @@ fn buffer_text_source_range_append_request<B: LayoutBufferView + ?Sized>(
     Some(BufferTextSourceRangeItemAppendRequest::new(
         item,
         append_kind,
+    ))
+}
+
+fn buffer_text_source_text_item_append_request<B: LayoutBufferView + ?Sized>(
+    source_item: BufferTextSourceTextItemRequest,
+    buffer_id: BufferId,
+    buffer: &B,
+    face_id: u32,
+) -> Option<BufferTextSourceRangeItemAppendRequest> {
+    let range = source_item.range();
+    if !range.is_single_char() {
+        return None;
+    }
+
+    let start = range.start();
+    let end = range.end();
+    let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(start);
+    let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(end);
+    let item = BufferTextItemSource::single_char(buffer_id, start, byte_start, byte_end).item(
+        RenderFaceRef::FaceId(face_id),
+        source_item.into_display_item_kind(),
+    );
+    Some(BufferTextSourceRangeItemAppendRequest::new(
+        item,
+        source_item.append_kind(),
     ))
 }
 
@@ -5349,6 +5396,7 @@ impl BufferTextSourceCharAppendOutcome {
     }
 }
 
+#[cfg(test)]
 fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
     state: &mut TextRowSourceMeasureState<'_>,
     range: BufferTextSourceRange,
@@ -5373,9 +5421,39 @@ fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
 }
 
 #[allow(clippy::too_many_arguments)]
-fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
+fn measure_buffer_text_source_item_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
     state: &mut TextRowSourceMeasureState<'_>,
-    range: BufferTextSourceRange,
+    source_item: BufferTextSourceTextItemRequest,
+    base_face: &ResolvedFace,
+    buffer_id: BufferId,
+    buffer: &B,
+    face_id: u32,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<f32> {
+    let operation = BufferTextSourceAppendOperation::for_buffer_text_item_request(
+        source_item,
+        buffer_id,
+        buffer,
+        face_id,
+        base_face,
+        frame,
+        position,
+    )?;
+    let mut render_policy =
+        DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
+    Some(
+        operation
+            .measure_to_text_row(state, &mut render_policy)?
+            .metrics
+            .width_px,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_buffer_text_source_item_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
+    state: &mut TextRowSourceMeasureState<'_>,
+    source_item: BufferTextSourceTextItemRequest,
     buffer_id: BufferId,
     buffer: &B,
     active_face_state: &DisplayRowActiveFaceState,
@@ -5383,9 +5461,9 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     position: DisplayRowPosition,
     cluster: BufferTextSourceClusterState,
 ) -> f32 {
-    if let Some(measured_width) = measure_buffer_text_source_range_natural_advance_to_text_row(
+    if let Some(measured_width) = measure_buffer_text_source_item_natural_advance_to_text_row(
         state,
-        range,
+        source_item,
         active_face_state.resolved_face(),
         buffer_id,
         buffer,
@@ -5449,9 +5527,9 @@ impl BufferTextSourceAdvanceResolver {
                 ResolvedBufferTextSourceAdvance::resolved(advance_px)
             }
             BufferTextSourceAdvancePath::NaturalRenderedSource => {
-                let advance_px = resolve_buffer_text_source_range_natural_advance_to_text_row(
+                let advance_px = resolve_buffer_text_source_item_natural_advance_to_text_row(
                     state,
-                    request.range(),
+                    BufferTextSourceTextItemRequest::new(request.range(), ch),
                     buffer_id,
                     buffer,
                     active_face_state,
@@ -8572,7 +8650,7 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
         BufferTextSourceCharAppendPlan {
             source_text: BufferTextSourceTextRequest::new(
                 self.range,
-                Some(self.cluster.ch()),
+                self.cluster.ch(),
                 resolved_advance,
             ),
             position: self.position,
