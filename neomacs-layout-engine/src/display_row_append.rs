@@ -52,10 +52,11 @@ use crate::display_source::{
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath,
     BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
     BufferTextSourceItemRequest, BufferTextSourceNaturalAdvanceRequest,
-    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
-    BufferTextSourceTextEvent, BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
-    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange,
+    BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent, BufferTextSourceTextItemRequest,
+    BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest, DisplayItemSource,
+    DisplayReplacementBox, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
+    SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -5442,47 +5443,6 @@ impl BufferTextDecodedSourceChar {
 }
 
 impl BufferTextSourceChar {
-    fn special_request_for_display(
-        &self,
-        display: BufferTextSourceSpecialDisplay,
-    ) -> BufferTextSpecialSourceCharRequest {
-        BufferTextSpecialSourceCharRequest::new(self, display)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn control_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
-        self.precluster_special_display()
-            .filter(|display| display.is_control())
-            .cloned()
-            .map(|display| self.special_request_for_display(display))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn nobreak_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
-        self.precluster_special_display()
-            .filter(|display| display.is_nobreak())
-            .cloned()
-            .map(|display| self.special_request_for_display(display))
-    }
-
-    pub(crate) fn cluster_special_request(
-        &self,
-        tail: Option<(char, bool)>,
-    ) -> Option<BufferTextSpecialSourceCharRequest> {
-        self.cluster_special_display(tail)
-            .map(|display| self.special_request_for_display(display))
-    }
-
-    pub(crate) fn special_request(
-        &self,
-        tail: Option<(char, bool)>,
-    ) -> Option<BufferTextSpecialSourceCharRequest> {
-        self.precluster_special_display()
-            .cloned()
-            .map(|display| self.special_request_for_display(display))
-            .or_else(|| self.cluster_special_request(tail))
-    }
-
     fn advance_request_at<'text>(
         &self,
         text: &'text [u8],
@@ -7983,23 +7943,7 @@ impl BufferTextCharacterWrapSourceAction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharRequest {
-    range: BufferTextSourceRange,
-    special_display: BufferTextSourceSpecialDisplay,
-}
-
 impl BufferTextSpecialSourceCharRequest {
-    pub(crate) fn new(
-        source_char: &BufferTextSourceChar,
-        special_display: BufferTextSourceSpecialDisplay,
-    ) -> Self {
-        Self {
-            range: source_char.range(),
-            special_display,
-        }
-    }
-
     fn append_plan_at(
         &self,
         position: DisplayRowPosition,
@@ -8008,14 +7952,6 @@ impl BufferTextSpecialSourceCharRequest {
             source_item: self.source_item_request(),
             position,
         }
-    }
-
-    pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
-        self.special_display.kind()
-    }
-
-    fn requires_overflow_measurement(&self) -> bool {
-        self.special_display.is_control()
     }
 
     fn prepared_append_at(
@@ -8039,27 +7975,9 @@ impl BufferTextSpecialSourceCharRequest {
             position,
         }
     }
-
-    fn source_item_request(&self) -> BufferTextSourceItemRequest {
-        BufferTextSourceItemRequest::new(
-            self.range,
-            self.special_display.clone().into_append_item(),
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceSpecialDisplayKind {
-    Control,
-    Nobreak,
-    Glyphless,
 }
 
 impl BufferTextSourceSpecialDisplayKind {
-    pub(crate) fn invalidates_face_after_append(self) -> bool {
-        matches!(self, Self::Control | Self::Nobreak)
-    }
-
     fn should_allocate_policy_face(self, params: &WindowParams) -> bool {
         match self {
             Self::Control => params.escape_glyph_fg != 0,
@@ -8533,16 +8451,6 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
                 resolved_advance,
             ),
             position: self.position,
-        }
-    }
-}
-
-impl BufferTextSourceSpecialDisplay {
-    fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
-        match self {
-            Self::Control(_) => BufferTextSourceSpecialDisplayKind::Control,
-            Self::Nobreak(_) => BufferTextSourceSpecialDisplayKind::Nobreak,
-            Self::Glyphless(_) => BufferTextSourceSpecialDisplayKind::Glyphless,
         }
     }
 }

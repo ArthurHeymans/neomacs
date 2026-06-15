@@ -30,7 +30,9 @@ use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
-use crate::display_source::{BufferTextDecodedSourceEvent, BufferTextSourceEventCursor};
+use crate::display_source::{
+    BufferTextDecodedSourceEvent, BufferTextSourceEventCursor, BufferTextSourceSpecialDisplay,
+};
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
     FaceResolver, LayoutBufferSnapshot, OverlayDisplayString, RustBufferAccess,

@@ -247,6 +247,27 @@ impl BufferTextSourceSpecialDisplay {
     fn is_control_char(ch: char) -> bool {
         (ch < ' ' && ch != '\n' && ch != '\t') || ch == '\x7F'
     }
+
+    pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
+        match self {
+            Self::Control(_) => BufferTextSourceSpecialDisplayKind::Control,
+            Self::Nobreak(_) => BufferTextSourceSpecialDisplayKind::Nobreak,
+            Self::Glyphless(_) => BufferTextSourceSpecialDisplayKind::Glyphless,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceSpecialDisplayKind {
+    Control,
+    Nobreak,
+    Glyphless,
+}
+
+impl BufferTextSourceSpecialDisplayKind {
+    pub(crate) fn invalidates_face_after_append(self) -> bool {
+        matches!(self, Self::Control | Self::Nobreak)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -285,6 +306,80 @@ impl BufferTextSourceChar {
         tail: Option<(char, bool)>,
     ) -> Option<BufferTextSourceSpecialDisplay> {
         BufferTextSourceSpecialDisplay::for_cluster_state(self.cluster_state(tail))
+    }
+
+    fn special_request_for_display(
+        &self,
+        display: BufferTextSourceSpecialDisplay,
+    ) -> BufferTextSpecialSourceCharRequest {
+        BufferTextSpecialSourceCharRequest::new(self, display)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn control_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.precluster_special_display()
+            .filter(|display| display.is_control())
+            .cloned()
+            .map(|display| self.special_request_for_display(display))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn nobreak_special_request(&self) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.precluster_special_display()
+            .filter(|display| display.is_nobreak())
+            .cloned()
+            .map(|display| self.special_request_for_display(display))
+    }
+
+    pub(crate) fn cluster_special_request(
+        &self,
+        tail: Option<(char, bool)>,
+    ) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.cluster_special_display(tail)
+            .map(|display| self.special_request_for_display(display))
+    }
+
+    pub(crate) fn special_request(
+        &self,
+        tail: Option<(char, bool)>,
+    ) -> Option<BufferTextSpecialSourceCharRequest> {
+        self.precluster_special_display()
+            .cloned()
+            .map(|display| self.special_request_for_display(display))
+            .or_else(|| self.cluster_special_request(tail))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSpecialSourceCharRequest {
+    range: BufferTextSourceRange,
+    special_display: BufferTextSourceSpecialDisplay,
+}
+
+impl BufferTextSpecialSourceCharRequest {
+    pub(crate) fn new(
+        source_char: &BufferTextSourceChar,
+        special_display: BufferTextSourceSpecialDisplay,
+    ) -> Self {
+        Self {
+            range: source_char.range(),
+            special_display,
+        }
+    }
+
+    pub(crate) fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
+        self.special_display.kind()
+    }
+
+    pub(crate) fn requires_overflow_measurement(&self) -> bool {
+        self.special_display.is_control()
+    }
+
+    pub(crate) fn source_item_request(&self) -> BufferTextSourceItemRequest {
+        BufferTextSourceItemRequest::new(
+            self.range,
+            self.special_display.clone().into_append_item(),
+        )
     }
 }
 
