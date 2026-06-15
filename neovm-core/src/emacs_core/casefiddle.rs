@@ -721,8 +721,12 @@ pub(crate) enum ReplaceMatchCaseAction {
     CapInitial,
 }
 
-pub(crate) fn replace_match_case_action(matched: &str) -> ReplaceMatchCaseAction {
-    replace_match_case_action_with(matched, default_is_word_char)
+/// Faithful (Emacs-byte) classification of the matched text's casing, read
+/// directly from its `LispString` bytes with no storage-String round-trip.
+pub(crate) fn replace_match_case_action_lisp_default(
+    matched: &LispString,
+) -> ReplaceMatchCaseAction {
+    replace_match_case_action_lisp(matched, default_is_word_char)
 }
 
 pub(crate) fn replace_match_case_action_with<F>(

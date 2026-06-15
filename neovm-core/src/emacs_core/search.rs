@@ -315,13 +315,6 @@ struct ReplaceRegexpSubexpStart {
     start: usize,
 }
 
-pub(crate) fn storage_string_from_lisp_string(string: &crate::heap_types::LispString) -> String {
-    crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        string.as_bytes(),
-        string.is_multibyte(),
-    )
-}
-
 fn translate_match_data_to_substring(
     match_data: &super::regex::MatchData,
     delta: i64,

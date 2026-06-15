@@ -1890,9 +1890,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
                 EmacsBytePos::new(replacement.1),
             );
             let matched = buf.buffer_substring_lisp_string_range(matched_range);
-            crate::emacs_core::casefiddle::replace_match_case_action(
-                &crate::emacs_core::search::storage_string_from_lisp_string(&matched),
-            )
+            crate::emacs_core::casefiddle::replace_match_case_action_lisp_default(&matched)
         };
         (
             EmacsByteRange::new(
