@@ -337,6 +337,18 @@ where
     pub(crate) overlay_text_row: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
+pub(crate) struct BufferTextWindowBodyPlan<'a, 'surface, B>
+where
+    B: LayoutBufferView,
+{
+    pub(crate) begin_request: BufferTextWindowBeginRequest,
+    pub(crate) retry_bounds: BufferTextWindowRetryBounds,
+    pub(crate) row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+    pub(crate) loop_context: BufferTextWindowLoopRequestContext,
+    pub(crate) render_contexts: BufferTextWindowRenderContexts<'a, 'surface, B>,
+    pub(crate) tail_context: BufferTextWindowTailRequestContext<'a>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextWindowLoopRequestContext {
     buffer_id: BufferId,
@@ -998,6 +1010,126 @@ impl BufferTextWindowBodyInstallContext {
     #[cfg(test)]
     pub(crate) fn matrix_cols(self) -> usize {
         self.matrix_cols
+    }
+}
+
+impl BufferTextWindowOutputSetup {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn into_body_plan<'a, 'surface, B>(
+        self,
+        walk_setup: &BufferTextWindowWalkSetup,
+        local_display_policy: BufferTextWindowLocalDisplayPolicy,
+        line_number_cols: i32,
+        buffer: &'a B,
+        buffer_id: BufferId,
+        text_start_byte: usize,
+        window_start: i64,
+        accessible_start: i64,
+        accessible_end: i64,
+        point_charpos: i64,
+        params: &'a WindowParams,
+        face_resolver: &'a FaceResolver,
+        measurement_policy: DisplayRowMeasurementPolicy,
+        default_resolved: &'a ResolvedFace,
+        default_face_char_width: f32,
+        default_face_ascent: f32,
+        default_face_height: f32,
+        char_width: f32,
+        char_height: f32,
+        font_ascent: f32,
+        window_system: bool,
+        matrix_window_id: u64,
+        append_surface: &'surface DisplayRowAppendSurface,
+        text_y: f32,
+        text_height: f32,
+        content_x: f32,
+        has_prefix: bool,
+        cols: usize,
+        default_fg: Color,
+        max_rows: usize,
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        mode_line_height: f32,
+        header_line_height: f32,
+        tab_line_height: f32,
+    ) -> BufferTextWindowBodyPlan<'a, 'surface, B>
+    where
+        B: LayoutBufferView,
+    {
+        let render_contexts = BufferTextWindowRenderContextsRequest::new(
+            buffer,
+            face_resolver,
+            measurement_policy,
+            default_resolved,
+            default_face_char_width,
+            default_face_ascent,
+            default_face_height,
+            char_width,
+            char_height,
+            font_ascent,
+            window_system,
+            matrix_window_id,
+            append_surface,
+            text_y,
+            self.body_install_context.text_matrix_row_base,
+            max_rows,
+        )
+        .into_contexts();
+        let loop_context = BufferTextWindowLoopRequestContext::new(
+            buffer_id,
+            text_start_byte,
+            accessible_end,
+            point_charpos,
+            params,
+            content_x,
+            has_prefix,
+            default_face_ascent,
+            char_height,
+            char_width,
+            self.row_visibility_limit,
+            walk_setup.row_geometry_defaults,
+            self.body_install_context.text_matrix_row_base,
+            max_rows,
+            self.row_limit,
+        );
+        let row_prelude_context =
+            local_display_policy.row_prelude_context(line_number_cols, char_width, char_height);
+        let tail_context = BufferTextWindowTailRequestContext::new(
+            params,
+            window_start,
+            accessible_start,
+            accessible_end,
+            text_start_byte,
+            self.body_install_context.text_matrix_row_base,
+            walk_setup.text_area_left,
+            walk_setup.window_top,
+            text_y,
+            text_height,
+            content_x,
+            cols,
+            char_width,
+            char_height,
+            default_fg,
+            max_rows,
+            self.row_limit,
+            walk_setup.row_geometry_defaults,
+            self.retry_bounds,
+            self.body_install_context,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        );
+
+        BufferTextWindowBodyPlan {
+            begin_request: self.begin_request,
+            retry_bounds: self.retry_bounds,
+            row_prelude_context,
+            loop_context,
+            render_contexts,
+            tail_context,
+        }
     }
 }
 

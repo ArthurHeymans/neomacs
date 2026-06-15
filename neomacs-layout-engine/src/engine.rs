@@ -24,12 +24,10 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyPassOutcome,
-    BufferTextWindowBodyPassState, BufferTextWindowFinishInstallState, BufferTextWindowGeometry,
-    BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
+    BufferTextWindowBodyPassState, BufferTextWindowBodyPlan, BufferTextWindowFinishInstallState,
+    BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRedisplayPublishRequest,
-    BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
-    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRenderContexts, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -1125,13 +1123,7 @@ impl LayoutEngine {
         )
         .into_setup();
         let text_append_surface = walk_setup.text_append_surface.clone();
-        let BufferTextWindowOutputSetup {
-            begin_request,
-            row_visibility_limit,
-            row_limit,
-            body_install_context,
-            retry_bounds,
-        } = BufferTextWindowOutputSetupRequest::new(
+        let output_setup = BufferTextWindowOutputSetupRequest::new(
             frame_id,
             window_id,
             params.window_id as u64,
@@ -1147,12 +1139,25 @@ impl LayoutEngine {
         )
         .into_setup(max_rows, &walk_setup);
 
-        let BufferTextWindowRenderContexts {
-            has_overlays,
-            face_resolution: face_resolution_context,
-            overlay_text_row: overlay_text_row_context,
-        } = BufferTextWindowRenderContextsRequest::new(
+        let BufferTextWindowBodyPlan {
+            begin_request,
+            retry_bounds,
+            row_prelude_context: row_prelude_request_context,
+            loop_context: loop_request_context,
+            render_contexts,
+            tail_context: tail_request_context,
+        } = output_setup.into_body_plan(
+            &walk_setup,
+            local_display_policy,
+            lnum_cols,
             buffer,
+            buf_id,
+            text_start_byte,
+            window_start,
+            accessible_start,
+            accessible_end,
+            point_charpos,
+            params,
             face_resolver,
             measurement_policy,
             default_resolved,
@@ -1166,56 +1171,23 @@ impl LayoutEngine {
             params.window_id as u64,
             &text_append_surface,
             text_y,
-            text_matrix_row_base,
-            max_rows,
-        )
-        .into_contexts();
-        let loop_request_context = BufferTextWindowLoopRequestContext::new(
-            buf_id,
-            text_start_byte,
-            accessible_end,
-            point_charpos,
-            params,
-            content_x,
-            has_prefix,
-            default_face_ascent,
-            char_h,
-            char_w,
-            row_visibility_limit,
-            walk_setup.row_geometry_defaults,
-            text_matrix_row_base,
-            max_rows,
-            row_limit,
-        );
-        let row_prelude_request_context =
-            local_display_policy.row_prelude_context(lnum_cols, char_w, char_h);
-        let tail_request_context = BufferTextWindowTailRequestContext::new(
-            params,
-            window_start,
-            accessible_start,
-            accessible_end,
-            text_start_byte,
-            text_matrix_row_base,
-            walk_setup.text_area_left,
-            walk_setup.window_top,
-            text_y,
             text_height,
             content_x,
+            has_prefix,
             cols,
-            char_w,
-            char_h,
             default_fg,
             max_rows,
-            row_limit,
-            walk_setup.row_geometry_defaults,
-            retry_bounds,
-            body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
             mode_line_height,
             header_line_height,
             tab_line_height,
         );
+        let BufferTextWindowRenderContexts {
+            has_overlays,
+            face_resolution: face_resolution_context,
+            overlay_text_row: overlay_text_row_context,
+        } = render_contexts;
 
         let BufferTextWindowBodyPassOutcome {
             mut output_emitter,
