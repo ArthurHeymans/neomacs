@@ -453,6 +453,10 @@ fn frame_face_id_allocator_clamps_to_sentinel_and_allocates_sequential_ids() {
 
     assert_eq!(clamped.allocate(), BasicFaceId::SENTINEL);
     assert_eq!(clamped.finish(), BasicFaceId::SENTINEL + 1);
+
+    let mut frame_counter = 0;
+    FrameFaceIdAllocator::new(200).finish_into(&mut frame_counter);
+    assert_eq!(frame_counter, 200);
 }
 
 #[test]

@@ -1059,6 +1059,7 @@ impl LayoutEngine {
                 ),
                 display_host: evaluator.display_host.as_deref(),
             });
+            face_ids.finish_into(&mut self.frame_face_id_counter);
             return;
         }
 
@@ -1087,6 +1088,7 @@ impl LayoutEngine {
                 ),
                 display_host: evaluator.display_host.as_deref(),
             });
+            face_ids.finish_into(&mut self.frame_face_id_counter);
             return;
         }
 
@@ -1209,12 +1211,9 @@ impl LayoutEngine {
             let mut retry_params = params.clone();
             retry_params.window_start = new_window_start;
             retry_params.window_end = 0;
-            // Persist the counter BEFORE recursing so the retry
-            // call loads the parent's bumped value as its base.
-            // The retry will write back its final counter; the
-            // unconditional `return` below skips the bottom-of-
-            // function writeback path.
-            self.frame_face_id_counter = face_ids.finish();
+            // Persist the counter before recursing so the retry call loads the
+            // parent's bumped value as its base.
+            face_ids.finish_into(&mut self.frame_face_id_counter);
             self.layout_window_rust(
                 evaluator,
                 frame_id,
@@ -1282,17 +1281,7 @@ impl LayoutEngine {
             },
         );
 
-        // Persist the face-id counter back to the frame-wide
-        // slot so the NEXT window in this frame starts allocating
-        // face_ids past the ones we just used. Without this
-        // write-back every sibling window would reuse ids 1..N
-        // and overwrite this window's entries in the shared
-        // `matrix_builder.faces` HashMap — the original
-        // manifestation of the "C-x 2 paints both mode lines
-        // with mode-line-inactive colors" bug. Mirrors GNU's
-        // single `face_cache->used` counter at
-        // `src/xfaces.c::init_frame_faces`.
-        self.frame_face_id_counter = face_ids.finish();
+        face_ids.finish_into(&mut self.frame_face_id_counter);
     }
 
     /// Trigger fontification for a buffer region via the Rust Context.
@@ -1500,7 +1489,7 @@ impl LayoutEngine {
         }) else {
             return None;
         };
-        self.frame_face_id_counter = face_ids.finish();
+        face_ids.finish_into(&mut self.frame_face_id_counter);
         let FrameTabBarDisplayRowRender::Measured(measured) = rendered_tab_bar else {
             return None;
         };

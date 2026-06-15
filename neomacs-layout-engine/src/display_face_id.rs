@@ -25,4 +25,8 @@ impl FrameFaceIdAllocator {
     pub(crate) fn finish(self) -> u32 {
         self.next_face_id
     }
+
+    pub(crate) fn finish_into(self, frame_counter: &mut u32) {
+        *frame_counter = self.finish();
+    }
 }
