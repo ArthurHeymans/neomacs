@@ -50,7 +50,7 @@ use crate::display_frame_output::{
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
@@ -78,7 +78,7 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
-use crate::display_source::OwnedDisplayItemSource;
+use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use neomacs_display_protocol::face::{BasicFaceId, Face, FaceAttributes};
@@ -1182,7 +1182,12 @@ fn new_empty_mock_display_row(
     ))
 }
 
-fn mock_display_text_item(text: String, face_id: u32, source_offset: usize) -> DisplayItem {
+fn mock_display_text_item(
+    text: impl Into<Box<str>>,
+    face_id: u32,
+    source_offset: usize,
+) -> DisplayItem {
+    let text = text.into();
     let char_len = text.chars().count();
     DisplayItem::new(
         SourceSpan::synthetic(
@@ -1195,24 +1200,106 @@ fn mock_display_text_item(text: String, face_id: u32, source_offset: usize) -> D
     )
 }
 
-fn push_mock_display_text_item(
-    items: &mut Vec<DisplayItem>,
-    text: String,
-    face_id: u32,
-    source_offset: &mut usize,
-) {
-    let char_len = text.chars().count();
-    if char_len == 0 {
-        return;
+struct MockDisplayItemSource {
+    source_position: DisplaySourcePosition,
+    items: std::vec::IntoIter<DisplayItem>,
+}
+
+impl MockDisplayItemSource {
+    fn from_text(text: impl Into<Box<str>>, face_id: u32) -> Self {
+        let mut builder = MockDisplayItemSourceBuilder::default();
+        builder.push_text(text, face_id);
+        builder.finish()
     }
-    items.push(mock_display_text_item(text, face_id, *source_offset));
-    *source_offset = source_offset.saturating_add(char_len);
+
+    fn from_line(
+        line: &super::mock_frame::MockStyledLine,
+        fill_to_cols: Option<(usize, u32)>,
+    ) -> Self {
+        use super::mock_frame::MockDisplayProperty;
+
+        let mut builder = MockDisplayItemSourceBuilder::default();
+        let mut visible_cols = 0usize;
+        for glyph in &line.glyphs {
+            match &glyph.display {
+                Some(MockDisplayProperty::Invisible) => {
+                    builder.skip_chars(1);
+                }
+                Some(MockDisplayProperty::Replace(text, face_id)) => {
+                    let char_len = text.chars().count();
+                    builder.push_text(text.clone(), *face_id);
+                    visible_cols = visible_cols.saturating_add(char_len);
+                }
+                Some(MockDisplayProperty::Composition(composed)) => {
+                    for composed_glyph in composed {
+                        builder.push_text(composed_glyph.ch.to_string(), composed_glyph.face_id);
+                        visible_cols = visible_cols.saturating_add(1);
+                    }
+                }
+                None => {
+                    builder.push_text(glyph.ch.to_string(), glyph.face_id);
+                    visible_cols = visible_cols.saturating_add(1);
+                }
+            }
+        }
+        if let Some((target_cols, face_id)) = fill_to_cols {
+            if visible_cols < target_cols {
+                builder.push_text(" ".repeat(target_cols - visible_cols), face_id);
+            }
+        }
+        builder.finish()
+    }
+}
+
+impl DisplayItemSource for MockDisplayItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.items.next()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
+}
+
+#[derive(Default)]
+struct MockDisplayItemSourceBuilder {
+    source_offset: usize,
+    items: Vec<DisplayItem>,
+}
+
+impl MockDisplayItemSourceBuilder {
+    fn push_text(&mut self, text: impl Into<Box<str>>, face_id: u32) {
+        let text = text.into();
+        let char_len = text.chars().count();
+        if char_len == 0 {
+            return;
+        }
+        self.items
+            .push(mock_display_text_item(text, face_id, self.source_offset));
+        self.source_offset = self.source_offset.saturating_add(char_len);
+    }
+
+    fn skip_chars(&mut self, char_len: usize) {
+        self.source_offset = self.source_offset.saturating_add(char_len);
+    }
+
+    fn finish(self) -> MockDisplayItemSource {
+        let source_position = self
+            .items
+            .first()
+            .map(|item| item.span.start.clone())
+            .unwrap_or_else(|| DisplaySourcePosition::synthetic(MOCK_DISPLAY_SOURCE_ID, 0));
+        MockDisplayItemSource {
+            source_position,
+            items: self.items.into_iter(),
+        }
+    }
 }
 
 struct MockDisplayAreaRenderRequest<'a> {
     role: GlyphRowRole,
     area: GlyphArea,
-    items: Vec<DisplayItem>,
+    source: MockDisplayItemSource,
     row: &'a mut GlyphRow,
     geometry: DisplayRowGeometry,
     base_face: &'a ResolvedFace,
@@ -1225,7 +1312,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
     let MockDisplayAreaRenderRequest {
         role,
         area,
-        items,
+        mut source,
         row,
         geometry,
         base_face,
@@ -1233,11 +1320,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
         font_metrics,
         face_ids,
     } = request;
-    if items.is_empty() {
-        return;
-    }
     let render_width = geometry.width;
-    let mut source = OwnedDisplayItemSource::new(items);
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
         DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
@@ -1269,23 +1352,13 @@ fn mock_display_row_from_line(
     font_metrics: &mut Option<FontMetricsService>,
     face_ids: &mut FrameFaceIdAllocator,
 ) -> GlyphRow {
-    use super::mock_frame::MockDisplayProperty;
-
     let geometry = mock_display_row_geometry(pixel_y, width_px, char_w, char_h, ascent);
     let mut row = new_empty_mock_display_row(role, &geometry, base_face);
     if let Some(left_margin) = left_margin {
-        let mut margin_source_offset = 0usize;
-        let mut margin_items = Vec::new();
-        push_mock_display_text_item(
-            &mut margin_items,
-            left_margin.to_owned(),
-            2,
-            &mut margin_source_offset,
-        );
         render_mock_display_area(MockDisplayAreaRenderRequest {
             role,
             area: GlyphArea::LeftMargin,
-            items: margin_items,
+            source: MockDisplayItemSource::from_text(left_margin.to_owned(), 2),
             row: &mut row,
             geometry: geometry.clone(),
             base_face,
@@ -1294,59 +1367,10 @@ fn mock_display_row_from_line(
             face_ids,
         });
     }
-    let mut source_offset = 0usize;
-    let mut visible_cols = 0usize;
-    let mut text_items = Vec::new();
-    for glyph in &line.glyphs {
-        match &glyph.display {
-            Some(MockDisplayProperty::Invisible) => {
-                source_offset = source_offset.saturating_add(1);
-            }
-            Some(MockDisplayProperty::Replace(text, face_id)) => {
-                push_mock_display_text_item(
-                    &mut text_items,
-                    text.clone(),
-                    *face_id,
-                    &mut source_offset,
-                );
-                visible_cols = visible_cols.saturating_add(text.chars().count());
-            }
-            Some(MockDisplayProperty::Composition(composed)) => {
-                for composed_glyph in composed {
-                    push_mock_display_text_item(
-                        &mut text_items,
-                        composed_glyph.ch.to_string(),
-                        composed_glyph.face_id,
-                        &mut source_offset,
-                    );
-                    visible_cols = visible_cols.saturating_add(1);
-                }
-            }
-            None => {
-                push_mock_display_text_item(
-                    &mut text_items,
-                    glyph.ch.to_string(),
-                    glyph.face_id,
-                    &mut source_offset,
-                );
-                visible_cols = visible_cols.saturating_add(1);
-            }
-        }
-    }
-    if let Some((target_cols, face_id)) = fill_to_cols {
-        if visible_cols < target_cols {
-            push_mock_display_text_item(
-                &mut text_items,
-                " ".repeat(target_cols - visible_cols),
-                face_id,
-                &mut source_offset,
-            );
-        }
-    }
     render_mock_display_area(MockDisplayAreaRenderRequest {
         role,
         area: GlyphArea::Text,
-        items: text_items,
+        source: MockDisplayItemSource::from_line(line, fill_to_cols),
         row: &mut row,
         geometry,
         base_face,

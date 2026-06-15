@@ -78,17 +78,6 @@ pub(crate) struct OwnedDisplayItemSource {
 }
 
 impl OwnedDisplayItemSource {
-    pub(crate) fn new(items: Vec<DisplayItem>) -> Self {
-        let source_position = items
-            .first()
-            .map(|item| item.span.start.clone())
-            .unwrap_or_else(|| DisplaySourcePosition::synthetic(0, 0));
-        Self {
-            source_position,
-            items: items.into_iter(),
-        }
-    }
-
     pub(crate) fn single(item: DisplayItem) -> Self {
         Self {
             source_position: item.span.start.clone(),
