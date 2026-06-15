@@ -1817,6 +1817,7 @@ mod divergence_file_attributes;
 mod divergence_widget_custom;
 mod divergence_completion;
 mod divergence_completion_case;
+mod divergence_completion_deep;
 mod divergence_face_attributes_matrix;
 mod divergence_face_id_matrix;
 mod divergence_face_fg_matrix;
