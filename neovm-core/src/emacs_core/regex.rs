@@ -1584,7 +1584,7 @@ fn with_buffer_emacs_bytes<R>(
 /// `bound` optionally limits the search to positions <= bound.
 pub fn search_forward(
     buf: &mut Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     bound: Option<usize>,
     noerror: bool,
     case_fold: bool,
@@ -1601,12 +1601,14 @@ pub fn search_forward(
         if noerror {
             return Ok(None);
         }
-        return Err(format!("Search failed: \"{}\"", pattern));
+        return Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ));
     }
 
     let multibyte = buf.get_multibyte();
-    let literal =
-        crate::emacs_core::string_escape::storage_string_to_buffer_bytes(pattern, multibyte);
+    let literal = coerce_pattern_to_buffer_bytes(pattern, multibyte);
     let found = with_buffer_emacs_bytes(buf, EmacsByteRange::new(start, limit), |text| {
         literal_find_emacs_bytes(text, &literal, multibyte, case_fold)
     });
@@ -1624,7 +1626,10 @@ pub fn search_forward(
         // When noerror is a value, move point to bound.
         Ok(None)
     } else {
-        Err(format!("Search failed: \"{}\"", pattern))
+        Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ))
     }
 }
 
@@ -1634,7 +1639,7 @@ pub fn search_forward(
 /// should apply.
 pub fn search_backward(
     buf: &mut Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     bound: Option<usize>,
     noerror: bool,
     case_fold: bool,
@@ -1651,12 +1656,14 @@ pub fn search_backward(
         if noerror {
             return Ok(None);
         }
-        return Err(format!("Search failed: \"{}\"", pattern));
+        return Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ));
     }
 
     let multibyte = buf.get_multibyte();
-    let literal =
-        crate::emacs_core::string_escape::storage_string_to_buffer_bytes(pattern, multibyte);
+    let literal = coerce_pattern_to_buffer_bytes(pattern, multibyte);
     let found = with_buffer_emacs_bytes(buf, EmacsByteRange::new(limit, end), |text| {
         literal_rfind_emacs_bytes(text, &literal, multibyte, case_fold)
     });
@@ -1671,7 +1678,28 @@ pub fn search_backward(
     } else if noerror {
         Ok(None)
     } else {
-        Err(format!("Search failed: \"{}\"", pattern))
+        Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ))
+    }
+}
+
+/// Issue #131: coerce a literal search pattern to the buffer's multibyteness the
+/// way GNU does, producing Emacs internal-encoding bytes directly — no storage
+/// round-trip. A unibyte pattern in a multibyte buffer promotes its raw bytes to
+/// eight-bit characters (string-to-multibyte); the rare multibyte-pattern /
+/// unibyte-buffer case reinterprets the bytes (string-as-unibyte).
+fn coerce_pattern_to_buffer_bytes(
+    pattern: &crate::heap_types::LispString,
+    buf_multibyte: bool,
+) -> Vec<u8> {
+    if pattern.is_multibyte() == buf_multibyte {
+        pattern.as_bytes().to_vec()
+    } else if buf_multibyte {
+        crate::emacs_core::emacs_char::str_to_multibyte(pattern.as_bytes())
+    } else {
+        pattern.as_bytes().to_vec()
     }
 }
 

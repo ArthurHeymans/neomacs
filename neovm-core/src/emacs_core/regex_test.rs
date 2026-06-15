@@ -7,6 +7,13 @@ fn match_group(group: Option<MatchGroup>) -> Option<MatchGroup> {
     group
 }
 
+/// Build a multibyte `LispString` search pattern from a Rust literal (issue #131:
+/// `search_forward`/`search_backward` now take the faithful pattern, not a storage
+/// `&str`).
+fn lisp_pat(s: &str) -> LispString {
+    LispString::from_utf8(s)
+}
+
 fn match_group_byte_range(group: MatchGroup) -> EmacsByteRange {
     EmacsByteRange::from_usize(group.start(), group.end())
 }
@@ -1627,19 +1634,19 @@ fn literal_search_backend_trace(
     let mut snapshots = Vec::new();
 
     let mut md = None;
-    let result = search_forward(&mut buf, "foo", None, false, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("foo"), None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
         buf.total_emacs_byte_len().get(),
     ));
-    let result = search_backward(&mut buf, "foo", None, false, false, &mut md);
+    let result = search_backward(&mut buf, &lisp_pat("foo"), None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
-    let result = search_forward(&mut buf, "beta", None, false, true, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("beta"), None, false, true, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
@@ -1650,12 +1657,12 @@ fn literal_search_backend_trace(
         narrow_end,
     ));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(narrow_start));
-    let result = search_forward(&mut buf, "foo", None, true, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("foo"), None, true, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(narrow_start));
-    let result = search_forward(&mut buf, "Beta", None, false, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("Beta"), None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     snapshots
@@ -1773,14 +1780,14 @@ fn unibyte_search_backend_trace(
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
-    let result = search_forward(&mut buf, "a", None, false, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("a"), None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
         buf.total_emacs_byte_len().get(),
     ));
-    let result = search_backward(&mut buf, "b", None, false, false, &mut md);
+    let result = search_backward(&mut buf, &lisp_pat("b"), None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     snapshots
@@ -1841,7 +1848,7 @@ fn search_forward_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
     let mut md = None;
-    let result = search_forward(&mut buf, "world", None, false, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("world"), None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(11)); // end of "world"
     assert_eq!(buf.point_char_pos().get(), 0);
@@ -1854,7 +1861,7 @@ fn search_forward_not_found_noerror() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
     let mut md = None;
-    let result = search_forward(&mut buf, "xyz", None, true, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("xyz"), None, true, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), None);
     assert_eq!(buf.point_char_pos().get(), 0); // point unchanged
@@ -1865,7 +1872,7 @@ fn search_forward_not_found_error() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
     let mut md = None;
-    let result = search_forward(&mut buf, "xyz", None, false, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("xyz"), None, false, false, &mut md);
     assert!(result.is_err());
 }
 
@@ -1874,7 +1881,7 @@ fn search_forward_case_fold_true() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("A");
     let mut md = None;
-    let result = search_forward(&mut buf, "a", None, false, true, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("a"), None, false, true, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(1));
 }
@@ -1884,7 +1891,7 @@ fn search_forward_case_fold_true_unicode_literal() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("Äx");
     let mut md = None;
-    let result = search_forward(&mut buf, "ä", None, false, true, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("ä"), None, false, true, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some('Ä'.len_utf8()));
 }
@@ -1908,7 +1915,7 @@ fn search_forward_case_fold_true_ascii_literal_in_non_ascii_buffer() {
     let mut md = None;
     let result = search_forward(
         &mut buf,
-        "generated-autoload-file",
+        &lisp_pat("generated-autoload-file"),
         None,
         false,
         true,
@@ -1930,7 +1937,7 @@ fn search_forward_case_fold_true_ascii_literal_does_not_unicode_fold_kelvin() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("xxKelvin");
     let mut md = None;
-    let result = search_forward(&mut buf, "kelvin", None, true, true, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("kelvin"), None, true, true, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), None);
     assert!(md.is_none());
@@ -1954,7 +1961,7 @@ fn search_forward_with_bound() {
     let mut buf = make_test_buffer("hello world");
     let mut md = None;
     // Search only within first 5 bytes — "world" starts at 6 so should not be found
-    let result = search_forward(&mut buf, "world", Some(5), true, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("world"), Some(5), true, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), None);
 }
@@ -1965,7 +1972,7 @@ fn search_forward_from_middle() {
     let mut buf = make_test_buffer("aaa bbb aaa");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(4)); // after "aaa "
     let mut md = None;
-    let result = search_forward(&mut buf, "aaa", None, false, false, &mut md);
+    let result = search_forward(&mut buf, &lisp_pat("aaa"), None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(11)); // second "aaa" at end
 }
@@ -1980,7 +1987,7 @@ fn search_backward_basic() {
     let mut buf = make_test_buffer("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // end of buffer
     let mut md = None;
-    let result = search_backward(&mut buf, "hello", None, false, false, &mut md);
+    let result = search_backward(&mut buf, &lisp_pat("hello"), None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(0)); // beginning of "hello"
     assert_eq!(buf.point_char_pos().get(), 11);
@@ -1992,7 +1999,7 @@ fn search_backward_not_found() {
     let mut buf = make_test_buffer("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11));
     let mut md = None;
-    let result = search_backward(&mut buf, "xyz", None, true, false, &mut md);
+    let result = search_backward(&mut buf, &lisp_pat("xyz"), None, true, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), None);
 }
@@ -2003,7 +2010,7 @@ fn search_backward_finds_last_occurrence() {
     let mut buf = make_test_buffer("aaa bbb aaa");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(11)); // end
     let mut md = None;
-    let result = search_backward(&mut buf, "aaa", None, false, false, &mut md);
+    let result = search_backward(&mut buf, &lisp_pat("aaa"), None, false, false, &mut md);
     assert!(result.is_ok());
     // Should find the LAST "aaa" (at position 8)
     assert_eq!(result.unwrap(), Some(8));
@@ -2016,7 +2023,7 @@ fn search_backward_case_fold_true_unicode_literal() {
     let mut buf = make_test_buffer("Ää");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("Ää".len()));
     let mut md = None;
-    let result = search_backward(&mut buf, "ä", None, false, true, &mut md);
+    let result = search_backward(&mut buf, &lisp_pat("ä"), None, false, true, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some('Ä'.len_utf8()));
     assert_eq!(buf.point_emacs_byte_pos().get(), "Ää".len());

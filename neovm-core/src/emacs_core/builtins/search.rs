@@ -69,7 +69,7 @@ pub(crate) fn builtin_search_forward_with_state(
     args: &[Value],
 ) -> EvalResult {
     expect_range_args("search-forward", args, 1, 4)?;
-    let pattern = expect_string(&args[0])?;
+    let pattern = expect_lisp_string(&args[0])?;
     let (current_id, opts, start_pt, start_char) =
         current_search_context_in_manager(buffers, args, SearchKind::ForwardLiteral)?;
     if opts.steps == 0 {
@@ -107,13 +107,13 @@ pub(crate) fn builtin_search_forward_with_state(
             }
             Ok(None) => {
                 // regex::search_* with `noerror = false` never returns None.
-                return Err(signal("search-failed", vec![Value::string(pattern)]));
+                return Err(signal("search-failed", vec![args[0]]));
             }
             Err(_) => {
                 return handle_search_failure_in_manager(
                     buffers,
                     current_id,
-                    Value::string(pattern),
+                    args[0],
                     opts,
                     start_pt,
                     SearchErrorKind::NotFound,
@@ -350,7 +350,7 @@ pub(crate) fn builtin_search_backward_with_state(
     args: &[Value],
 ) -> EvalResult {
     expect_range_args("search-backward", args, 1, 4)?;
-    let pattern = expect_string(&args[0])?;
+    let pattern = expect_lisp_string(&args[0])?;
     let (current_id, opts, start_pt, start_char) =
         current_search_context_in_manager(buffers, args, SearchKind::BackwardLiteral)?;
     if opts.steps == 0 {
@@ -393,7 +393,7 @@ pub(crate) fn builtin_search_backward_with_state(
                 return handle_search_failure_in_manager(
                     buffers,
                     current_id,
-                    Value::string(pattern),
+                    args[0],
                     opts,
                     start_pt,
                     SearchErrorKind::NotFound,
