@@ -1463,7 +1463,6 @@ impl BufferTextWindowLoopRequestContext {
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
-        face_resolver: &'a FaceResolver,
     ) -> BufferHscrollSkipRenderRequest<'a> {
         BufferHscrollSkipRenderRequest::new(
             text,
@@ -1474,7 +1473,6 @@ impl BufferTextWindowLoopRequestContext {
             self.default_face_ascent,
             self.char_height,
             self.char_width,
-            face_resolver,
             self.point_charpos,
             self.has_prefix,
             self.row_geometry_defaults,
@@ -1936,12 +1934,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         append_surface: &'request DisplayRowAppendSurface,
         active_face_state: &'request DisplayRowActiveFaceState,
     ) -> DisplayRowTransitionContinuation {
-        let request = context.hscroll_skip_request(
-            text,
-            append_surface,
-            active_face_state,
-            self.source_render.face_resolver(),
-        );
+        let request = context.hscroll_skip_request(text, append_surface, active_face_state);
         self.render_hscroll_skip(request)
     }
 

@@ -985,7 +985,6 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         12.0,
         16.0,
         8.0,
-        &face_resolver,
         99,
         false,
         context.defaults,
@@ -1229,7 +1228,6 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
         BufferSyntheticTextRenderContext::new(&surface, &active_face, 0.0, 16.0, 12.0, 8.0),
         &geometry,
         &mut render_state,
-        &face_resolver,
         0.0,
     );
 
@@ -3676,7 +3674,6 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            &face_resolver,
             &geometry,
             0.0,
         )
