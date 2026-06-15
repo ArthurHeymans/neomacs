@@ -56,8 +56,8 @@ use crate::display_source::{
     BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
     BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
     BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementAppendItem,
-    DisplayReplacementBox, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
-    SyntheticTextItemSource,
+    DisplayReplacementBox, DisplayReplacementSourceMappedTextItem, LispStringSourceCursor,
+    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -9234,7 +9234,7 @@ pub(crate) struct DisplayReplacementMediaAppendItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayReplacementMediaAppendResolution {
     Media(DisplayReplacementMediaAppendItem),
-    Placeholder(DisplayReplacementSourceMappedTextAppendItem),
+    Placeholder(DisplayReplacementSourceMappedTextItem),
 }
 
 #[derive(Clone)]
@@ -10454,7 +10454,7 @@ impl DisplayReplacementMediaAppendItem {
     }
 }
 
-impl DisplayReplacementSourceMappedTextAppendItem {
+impl DisplayReplacementSourceMappedTextItem {
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
@@ -10516,7 +10516,7 @@ impl DisplayReplacementMediaAppendItem {
             }
             ResolvedDisplayReplacement::Placeholder(placeholder) => {
                 Some(DisplayReplacementMediaAppendResolution::Placeholder(
-                    DisplayReplacementSourceMappedTextAppendItem::new(placeholder),
+                    DisplayReplacementSourceMappedTextItem::new(placeholder),
                 ))
             }
         }
@@ -10567,23 +10567,10 @@ impl DisplayReplacementMediaAppendItem {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DisplayReplacementSourceMappedTextAppendItem {
-    text: Box<str>,
-}
-
-impl DisplayReplacementSourceMappedTextAppendItem {
-    pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
-        Self { text: text.into() }
-    }
-
-    fn text(self) -> Box<str> {
-        self.text
-    }
-
+impl DisplayReplacementSourceMappedTextItem {
     fn append_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest::active_face(
-            DisplayReplacementAppendItem::source_mapped_text(self.text()),
+            DisplayReplacementAppendItem::source_mapped_text(self.into_text()),
             position,
         )
     }

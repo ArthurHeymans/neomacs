@@ -1005,6 +1005,21 @@ impl DisplayReplacementAppendItem {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DisplayReplacementSourceMappedTextItem {
+    text: Box<str>,
+}
+
+impl DisplayReplacementSourceMappedTextItem {
+    pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
+        Self { text: text.into() }
+    }
+
+    pub(crate) fn into_text(self) -> Box<str> {
+        self.text
+    }
+}
+
 pub(crate) struct BufferDisplayReplacementStringSource<S> {
     replacement_source: BufferDisplayReplacementSource,
     source: S,

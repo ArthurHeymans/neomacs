@@ -33,7 +33,7 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferDisplayReplacementStringRequest, BufferTextDecodedSourceEvent,
     BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor, BufferTextSourceSpecialDisplay,
-    DisplayReplacementAppendItem,
+    DisplayReplacementAppendItem, DisplayReplacementSourceMappedTextItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
@@ -7925,7 +7925,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
 
     let placeholder = DisplayPropertyReplacementAppendItem::Media(
         DisplayReplacementMediaAppendResolution::Placeholder(
-            DisplayReplacementSourceMappedTextAppendItem::new("[img]"),
+            DisplayReplacementSourceMappedTextItem::new("[img]"),
         ),
     );
     assert_eq!(
@@ -8918,10 +8918,7 @@ fn display_replacement_media_append_item_resolves_placeholder_item_without_host(
 
     match resolved {
         DisplayReplacementMediaAppendResolution::Placeholder(item) => {
-            assert_eq!(
-                item,
-                DisplayReplacementSourceMappedTextAppendItem::new("[img]")
-            );
+            assert_eq!(item, DisplayReplacementSourceMappedTextItem::new("[img]"));
         }
         DisplayReplacementMediaAppendResolution::Media(_) => panic!("expected placeholder item"),
     }
@@ -9254,7 +9251,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         0.0,
         16.0,
     );
-    let request = DisplayReplacementSourceMappedTextAppendItem::new("??")
+    let request = DisplayReplacementSourceMappedTextItem::new("??")
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 });
     let (_progress, end) = append_context
         .append_item_request_to_text_row_and_emit(
