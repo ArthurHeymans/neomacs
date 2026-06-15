@@ -828,9 +828,16 @@ fn find_charset_string_unicode_supplementary() {
 #[test]
 fn find_charset_string_mixed_order_matches_oracle() {
     crate::test_utils::init_test_tracing();
-    let mut s = String::from("a😀é");
-    s.push(char::from_u32(0xE3FF).expect("valid unibyte sentinel"));
-    let r = builtin_find_charset_string(vec![Value::string(s)]).unwrap();
+    // a (ascii) + 😀 (astral unicode) + é (BMP unicode) + a genuine eight-bit
+    // raw byte 255. Issue #131: the eight-bit char is a real byte8 char, not the
+    // in-Unicode PUA codepoint U+E3FF (which is itself a real glyph that GNU
+    // classifies `unicode`, neomacs `unicode-bmp`).
+    let mut bytes = "a😀é".as_bytes().to_vec();
+    bytes.extend_from_slice(
+        &crate::emacs_core::emacs_char::EmacsChar::from_byte8(255).to_emacs_bytes(),
+    );
+    let s = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes));
+    let r = builtin_find_charset_string(vec![s]).unwrap();
     let items = list_to_vec(&r).unwrap();
     assert_eq!(items.len(), 4);
     assert!(items[0].is_symbol_named("ascii"));
@@ -842,10 +849,13 @@ fn find_charset_string_mixed_order_matches_oracle() {
 #[test]
 fn find_charset_string_unibyte_ascii_and_eight_bit() {
     crate::test_utils::init_test_tracing();
-    let mut s = String::new();
-    s.push(char::from_u32(0xE341).expect("valid unibyte ascii sentinel"));
-    s.push(char::from_u32(0xE3FF).expect("valid unibyte 255 sentinel"));
-    let r = builtin_find_charset_string(vec![Value::string(s)]).unwrap();
+    // A unibyte string of raw bytes 0x41 ('A', ascii) and 0xFF (eight-bit).
+    // Issue #131: genuine unibyte bytes, not the in-Unicode storage sentinels
+    // U+E341 / U+E3FF the old representation packed them into.
+    let s = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        0x41, 0xFF,
+    ]));
+    let r = builtin_find_charset_string(vec![s]).unwrap();
     let items = list_to_vec(&r).unwrap();
     assert_eq!(items.len(), 2);
     assert!(items[0].is_symbol_named("ascii"));

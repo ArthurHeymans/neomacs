@@ -1527,11 +1527,8 @@ pub(crate) fn builtin_find_charset_region(
         return Ok(Value::list(vec![Value::symbol("ascii")]));
     }
 
-    let text = {
-        let string = buf.buffer_substring_lisp_string_range(byte_range);
-        super::builtins::runtime_string_from_lisp_string(&string)
-    };
-    let charsets = classify_string_charsets(&text);
+    let string = buf.buffer_substring_lisp_string_range(byte_range);
+    let charsets = classify_string_charsets(&string);
     if charsets.is_empty() {
         return Ok(Value::list(vec![Value::symbol("ascii")]));
     }
@@ -1648,14 +1645,14 @@ pub(crate) fn builtin_find_charset_string(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
-    let text = args[0].as_runtime_string_owned().ok_or_else(|| {
+    let string = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
 
-    let charsets = classify_string_charsets(&text);
+    let charsets = classify_string_charsets(string);
     if charsets.is_empty() {
         Ok(Value::NIL)
     } else {
@@ -1788,8 +1785,10 @@ pub(crate) fn builtin_charset_after(
     Ok(Value::symbol(charset))
 }
 
-fn classify_string_charsets(s: &str) -> Vec<&'static str> {
-    if s.is_empty() {
+fn classify_string_charsets(ls: &crate::heap_types::LispString) -> Vec<&'static str> {
+    use crate::emacs_core::emacs_char;
+    let bytes = ls.as_bytes();
+    if bytes.is_empty() {
         return Vec::new();
     }
 
@@ -1798,28 +1797,32 @@ fn classify_string_charsets(s: &str) -> Vec<&'static str> {
     let mut has_eight_bit = false;
     let mut has_unicode_bmp = false;
 
-    for ch in s.chars() {
-        let cp = ch as u32;
-        if (RAW_BYTE_SENTINEL_MIN..=RAW_BYTE_SENTINEL_MAX).contains(&cp) {
-            has_eight_bit = true;
-            continue;
+    // Issue #131: classify the string's real Emacs characters directly (an
+    // eight-bit raw byte is a byte8 char, a multibyte char is decoded from its
+    // extended encoding) rather than inspecting the retired in-Unicode storage
+    // sentinels.
+    if ls.is_multibyte() {
+        let mut pos = 0usize;
+        while pos < bytes.len() {
+            let (cp, len) = emacs_char::string_char(&bytes[pos..]);
+            pos += len;
+            if emacs_char::char_byte8_p(cp) {
+                has_eight_bit = true;
+            } else if cp <= 0x7F {
+                has_ascii = true;
+            } else if cp <= 0xFFFF {
+                has_unicode_bmp = true;
+            } else {
+                has_unicode = true;
+            }
         }
-        if (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&cp) {
-            let byte = cp - UNIBYTE_BYTE_SENTINEL_MIN;
-            if byte <= 0x7F {
+    } else {
+        for &b in bytes {
+            if b <= 0x7F {
                 has_ascii = true;
             } else {
                 has_eight_bit = true;
             }
-            continue;
-        }
-
-        if cp <= 0x7F {
-            has_ascii = true;
-        } else if cp <= 0xFFFF {
-            has_unicode_bmp = true;
-        } else {
-            has_unicode = true;
         }
     }
 
