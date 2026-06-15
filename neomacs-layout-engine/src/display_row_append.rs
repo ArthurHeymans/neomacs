@@ -8821,7 +8821,7 @@ pub(crate) struct BufferDisplayPropertyTextAppendContext<'a> {
     start_position: DisplayRowPosition,
 }
 
-pub(crate) struct DisplayPropertyReplacementResolveContext<'a, 'source> {
+pub(crate) struct DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     display_property: &'a DisplayPropertyClassification,
     source_event: BufferDisplayPropertyTextSourceEvent<'source>,
     active_face_state: &'a DisplayRowActiveFaceState,
@@ -8963,7 +8963,7 @@ impl BufferDisplayPropertyTextAppendAction {
     }
 }
 
-impl<'a, 'source> DisplayPropertyReplacementResolveContext<'a, 'source> {
+impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     #[allow(clippy::too_many_arguments)]
     fn new(
         display_property: &'a DisplayPropertyClassification,
@@ -8989,6 +8989,65 @@ impl<'a, 'source> DisplayPropertyReplacementResolveContext<'a, 'source> {
 
     fn face_metrics(&self) -> DisplayRowMeasuredFaceMetrics {
         self.active_face_state.metrics()
+    }
+
+    pub(crate) fn resolve(self) -> Option<DisplayPropertyReplacementSourceItem> {
+        let display_property = self.display_property;
+        let source_event = self.source_event;
+        let face_metrics = self.face_metrics();
+        let source_metrics = DisplayPropertyReplacementSourceMetrics::new(
+            face_metrics.char_width,
+            face_metrics.row_height,
+            face_metrics.ascent,
+        );
+        let source_inputs = match display_property.replacement()? {
+            DisplayReplacementProperty::String => {
+                let replacement = self.source_event.value().as_utf8_str()?;
+                let cursor_slot_width_px = replacement
+                    .chars()
+                    .next()
+                    .map(|ch| {
+                        self.active_face_state.advance_for_char(
+                            self.font_metrics,
+                            ch,
+                            face_metrics.char_width,
+                        )
+                    })
+                    .unwrap_or_else(|| face_metrics.char_width.max(1.0));
+                DisplayPropertyReplacementSourceInputs::empty()
+                    .with_string_cursor_slot_width_px(cursor_slot_width_px)
+            }
+            DisplayReplacementProperty::Stretch(_) => {
+                let (display_ch, _) = decode_utf8(self.source_event.source_text());
+                let display_char_width = self.active_face_state.advance_for_char(
+                    self.font_metrics,
+                    display_ch,
+                    face_metrics.char_width,
+                );
+                DisplayPropertyReplacementSourceInputs::empty()
+                    .with_stretch_display_char_width_px(display_char_width)
+            }
+            DisplayReplacementProperty::Media(media_replacement) => {
+                let media = DisplayReplacementMediaSourceItem::resolve_display_property(
+                    self.source_event.value(),
+                    media_replacement,
+                    self.display_host,
+                    self.active_face_state,
+                    face_metrics.char_width,
+                    face_metrics.row_height,
+                )?;
+                DisplayPropertyReplacementSourceInputs::empty().with_media(media)
+            }
+        };
+        DisplayPropertyReplacementSourceItem::from_display_property(
+            display_property,
+            source_event,
+            self.current_x,
+            self.content_x,
+            self.params,
+            source_metrics,
+            source_inputs,
+        )
     }
 }
 
@@ -9205,18 +9264,17 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         let context = self.context;
         let display_property = classify_display_property(self.source_event.value());
         let replacement_item = state.with_font_metrics_and_display_host(|font_metrics, host| {
-            DisplayPropertyReplacementSourceItem::resolve(
-                DisplayPropertyReplacementResolveContext::new(
-                    &display_property,
-                    self.source_event,
-                    context.active_face_state,
-                    font_metrics,
-                    context.current_x,
-                    context.content_x,
-                    context.params,
-                    host,
-                ),
+            DisplayPropertyReplacementSourceResolveRequest::new(
+                &display_property,
+                self.source_event,
+                context.active_face_state,
+                font_metrics,
+                context.current_x,
+                context.content_x,
+                context.params,
+                host,
             )
+            .resolve()
         });
         if let Some(item) = replacement_item {
             let replacement = DisplayPropertyReplacementAppendRequest::new(
@@ -9463,18 +9521,17 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
             0,
             0,
         );
-        let item = DisplayPropertyReplacementSourceItem::resolve(
-            DisplayPropertyReplacementResolveContext::new(
-                self.display_property,
-                source_event,
-                self.active_face_state,
-                font_metrics,
-                self.current_x,
-                self.content_x,
-                self.params,
-                display_host,
-            ),
-        )?;
+        let item = DisplayPropertyReplacementSourceResolveRequest::new(
+            self.display_property,
+            source_event,
+            self.active_face_state,
+            font_metrics,
+            self.current_x,
+            self.content_x,
+            self.params,
+            display_host,
+        )
+        .resolve()?;
         Some(DisplayPropertyReplacementAppendRequest::new(
             self.replacement_source,
             item,
@@ -9717,67 +9774,6 @@ impl DisplayPropertyReplacementSourceItem {
             Self::Stretch(item) => DisplayPropertyReplacementAppendPlanItem::Stretch(item),
             Self::Media(item) => DisplayPropertyReplacementAppendPlanItem::Media(item),
         }
-    }
-
-    pub(crate) fn resolve(
-        context: DisplayPropertyReplacementResolveContext<'_, '_>,
-    ) -> Option<Self> {
-        let display_property = context.display_property;
-        let source_event = context.source_event;
-        let face_metrics = context.face_metrics();
-        let source_metrics = DisplayPropertyReplacementSourceMetrics::new(
-            face_metrics.char_width,
-            face_metrics.row_height,
-            face_metrics.ascent,
-        );
-        let source_inputs = match display_property.replacement()? {
-            DisplayReplacementProperty::String => {
-                let replacement = context.source_event.value().as_utf8_str()?;
-                let cursor_slot_width_px = replacement
-                    .chars()
-                    .next()
-                    .map(|ch| {
-                        context.active_face_state.advance_for_char(
-                            context.font_metrics,
-                            ch,
-                            face_metrics.char_width,
-                        )
-                    })
-                    .unwrap_or_else(|| face_metrics.char_width.max(1.0));
-                DisplayPropertyReplacementSourceInputs::empty()
-                    .with_string_cursor_slot_width_px(cursor_slot_width_px)
-            }
-            DisplayReplacementProperty::Stretch(_) => {
-                let (display_ch, _) = decode_utf8(context.source_event.source_text());
-                let display_char_width = context.active_face_state.advance_for_char(
-                    context.font_metrics,
-                    display_ch,
-                    face_metrics.char_width,
-                );
-                DisplayPropertyReplacementSourceInputs::empty()
-                    .with_stretch_display_char_width_px(display_char_width)
-            }
-            DisplayReplacementProperty::Media(media_replacement) => {
-                let media = DisplayReplacementMediaSourceItem::resolve_display_property(
-                    context.source_event.value(),
-                    media_replacement,
-                    context.display_host,
-                    context.active_face_state,
-                    face_metrics.char_width,
-                    face_metrics.row_height,
-                )?;
-                DisplayPropertyReplacementSourceInputs::empty().with_media(media)
-            }
-        };
-        DisplayPropertyReplacementSourceItem::from_display_property(
-            display_property,
-            source_event,
-            context.current_x,
-            context.content_x,
-            context.params,
-            source_metrics,
-            source_inputs,
-        )
     }
 
     pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {

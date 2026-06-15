@@ -7746,8 +7746,8 @@ fn test_display_property_replacement_resolve_context<'a>(
     active_face: &'a DisplayRowActiveFaceState,
     font_metrics: &'a mut Option<FontMetricsService>,
     params: &'a WindowParams,
-) -> DisplayPropertyReplacementResolveContext<'a, 'static> {
-    DisplayPropertyReplacementResolveContext::new(
+) -> DisplayPropertyReplacementSourceResolveRequest<'a, 'static> {
+    DisplayPropertyReplacementSourceResolveRequest::new(
         classification,
         BufferDisplayPropertyTextSourceEvent::with_anchor(
             value,
@@ -7775,15 +7775,14 @@ fn display_property_replacement_append_item_resolves_string_replacement() {
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
 
-    let item = DisplayPropertyReplacementSourceItem::resolve(
-        test_display_property_replacement_resolve_context(
-            &classification,
-            value,
-            &active_face,
-            &mut font_metrics,
-            &params,
-        ),
+    let item = test_display_property_replacement_resolve_context(
+        &classification,
+        value,
+        &active_face,
+        &mut font_metrics,
+        &params,
     )
+    .resolve()
     .expect("string replacement append item");
 
     let DisplayPropertyReplacementSourceItem::String(item) = item else {
@@ -7808,15 +7807,14 @@ fn display_property_replacement_append_item_resolves_stretch_replacement() {
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
 
-    let item = DisplayPropertyReplacementSourceItem::resolve(
-        test_display_property_replacement_resolve_context(
-            &classification,
-            value,
-            &active_face,
-            &mut font_metrics,
-            &params,
-        ),
+    let item = test_display_property_replacement_resolve_context(
+        &classification,
+        value,
+        &active_face,
+        &mut font_metrics,
+        &params,
     )
+    .resolve()
     .expect("stretch replacement append item");
 
     let DisplayPropertyReplacementSourceItem::Stretch(item) = item else {
@@ -7844,15 +7842,14 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
     );
     let params = test_display_space_window_params();
 
-    let item = DisplayPropertyReplacementSourceItem::resolve(
-        test_display_property_replacement_resolve_context(
-            &classification,
-            Value::NIL,
-            &active_face,
-            &mut font_metrics,
-            &params,
-        ),
+    let item = test_display_property_replacement_resolve_context(
+        &classification,
+        Value::NIL,
+        &active_face,
+        &mut font_metrics,
+        &params,
     )
+    .resolve()
     .expect("media replacement append item");
 
     let DisplayPropertyReplacementSourceItem::Media(
@@ -7873,15 +7870,14 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     let value = Value::string("ab");
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
-    let string = DisplayPropertyReplacementSourceItem::resolve(
-        test_display_property_replacement_resolve_context(
-            &classification,
-            value,
-            &active_face,
-            &mut font_metrics,
-            &params,
-        ),
+    let string = test_display_property_replacement_resolve_context(
+        &classification,
+        value,
+        &active_face,
+        &mut font_metrics,
+        &params,
     )
+    .resolve()
     .expect("string replacement append item");
 
     assert_eq!(
