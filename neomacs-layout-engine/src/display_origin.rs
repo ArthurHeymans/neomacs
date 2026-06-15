@@ -1,5 +1,6 @@
 use crate::display_face_policy::BaseFacePolicy;
 use neomacs_display_protocol::face::BasicFaceId;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 
@@ -41,7 +42,9 @@ pub(crate) enum DisplayOrigin {
     HeaderLine,
     TabLine,
     TabBar,
+    Minibuffer,
     EchoArea,
+    Posframe,
 }
 
 impl DisplayOrigin {
@@ -50,13 +53,31 @@ impl DisplayOrigin {
             Self::BufferText { .. } => BaseFacePolicy::BufferFaceIncludingOverlays,
             Self::OverlayString { .. } => BaseFacePolicy::OverlayStringAtAnchor,
             Self::DisplayPropertyString { .. } => BaseFacePolicy::DisplayPropertyUnderlyingFace,
-            Self::LinePrefix { .. } | Self::WrapPrefix { .. } | Self::EchoArea => {
-                BaseFacePolicy::DefaultFace
-            }
+            Self::LinePrefix { .. }
+            | Self::WrapPrefix { .. }
+            | Self::Minibuffer
+            | Self::EchoArea
+            | Self::Posframe => BaseFacePolicy::DefaultFace,
             Self::ModeLine => BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
             Self::HeaderLine => BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineActive),
             Self::TabLine => BaseFacePolicy::FixedBasicFace(BasicFaceId::TabLine),
             Self::TabBar => BaseFacePolicy::FixedBasicFace(BasicFaceId::TabBar),
+        }
+    }
+
+    pub(crate) fn glyph_row_role(self) -> Option<GlyphRowRole> {
+        match self {
+            Self::ModeLine => Some(GlyphRowRole::ModeLine),
+            Self::HeaderLine => Some(GlyphRowRole::HeaderLine),
+            Self::TabLine => Some(GlyphRowRole::TabLine),
+            Self::TabBar => Some(GlyphRowRole::TabBar),
+            Self::Minibuffer | Self::EchoArea => Some(GlyphRowRole::Minibuffer),
+            Self::Posframe => Some(GlyphRowRole::Text),
+            Self::BufferText { .. }
+            | Self::OverlayString { .. }
+            | Self::DisplayPropertyString { .. }
+            | Self::LinePrefix { .. }
+            | Self::WrapPrefix { .. } => None,
         }
     }
 }
@@ -89,7 +110,9 @@ mod tests {
         let _ = DisplayOrigin::HeaderLine;
         let _ = DisplayOrigin::TabLine;
         let _ = DisplayOrigin::TabBar;
+        let _ = DisplayOrigin::Minibuffer;
         let _ = DisplayOrigin::EchoArea;
+        let _ = DisplayOrigin::Posframe;
     }
 
     #[test]
@@ -133,7 +156,15 @@ mod tests {
             BaseFacePolicy::DefaultFace
         );
         assert_eq!(
+            DisplayOrigin::Minibuffer.default_base_face_policy(),
+            BaseFacePolicy::DefaultFace
+        );
+        assert_eq!(
             DisplayOrigin::EchoArea.default_base_face_policy(),
+            BaseFacePolicy::DefaultFace
+        );
+        assert_eq!(
+            DisplayOrigin::Posframe.default_base_face_policy(),
             BaseFacePolicy::DefaultFace
         );
         assert_eq!(
@@ -151,6 +182,45 @@ mod tests {
         assert_eq!(
             DisplayOrigin::TabBar.default_base_face_policy(),
             BaseFacePolicy::FixedBasicFace(BasicFaceId::TabBar)
+        );
+    }
+
+    #[test]
+    fn display_origin_derives_chrome_row_roles() {
+        assert_eq!(
+            DisplayOrigin::ModeLine.glyph_row_role(),
+            Some(GlyphRowRole::ModeLine)
+        );
+        assert_eq!(
+            DisplayOrigin::HeaderLine.glyph_row_role(),
+            Some(GlyphRowRole::HeaderLine)
+        );
+        assert_eq!(
+            DisplayOrigin::TabLine.glyph_row_role(),
+            Some(GlyphRowRole::TabLine)
+        );
+        assert_eq!(
+            DisplayOrigin::TabBar.glyph_row_role(),
+            Some(GlyphRowRole::TabBar)
+        );
+        assert_eq!(
+            DisplayOrigin::Minibuffer.glyph_row_role(),
+            Some(GlyphRowRole::Minibuffer)
+        );
+        assert_eq!(
+            DisplayOrigin::EchoArea.glyph_row_role(),
+            Some(GlyphRowRole::Minibuffer)
+        );
+        assert_eq!(
+            DisplayOrigin::Posframe.glyph_row_role(),
+            Some(GlyphRowRole::Text)
+        );
+        assert_eq!(
+            DisplayOrigin::BufferText {
+                charpos: CharPos0::new(0),
+            }
+            .glyph_row_role(),
+            None
         );
     }
 }

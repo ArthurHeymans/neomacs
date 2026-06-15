@@ -19,6 +19,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
     DisplayRowLispStringSourceSessionRequest, DisplayRowLispStringSourceSessionRowRequest,
@@ -196,7 +197,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             self.char_width,
             self.ascent,
             DisplayTabPolicy::every(8),
-            GlyphRowRole::TabBar,
+            DisplayOrigin::TabBar,
             self.base_face,
             self.text,
         )
@@ -271,7 +272,7 @@ struct ChromeLispStringRowRequest<'face> {
     char_width: f32,
     ascent: f32,
     tab_policy: DisplayTabPolicy,
-    role: GlyphRowRole,
+    origin: DisplayOrigin,
     base_face: &'face ResolvedFace,
     text: Value,
     symbol_values: std::collections::HashMap<String, Value>,
@@ -286,7 +287,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
         char_width: f32,
         ascent: f32,
         tab_policy: DisplayTabPolicy,
-        role: GlyphRowRole,
+        origin: DisplayOrigin,
         base_face: &'face ResolvedFace,
         text: Value,
     ) -> Self {
@@ -297,7 +298,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             char_width,
             ascent,
             tab_policy,
-            role,
+            origin,
             base_face,
             text,
             symbol_values: std::collections::HashMap::new(),
@@ -322,11 +323,14 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             char_width,
             ascent,
             tab_policy,
-            role,
+            origin,
             base_face,
             text,
             symbol_values,
         } = self;
+        let role = origin
+            .glyph_row_role()
+            .expect("chrome Lisp string origin must map to a glyph row role");
         let policy = DisplayRowSourceRequestPolicy::new(
             y, width, row_height, char_width, ascent, tab_policy, role,
         )
@@ -655,7 +659,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             self.char_width,
             self.ascent,
             self.tab_policy.clone(),
-            window_chrome_glyph_row_role(self.kind),
+            window_chrome_display_origin(self.kind),
             self.base_face,
             self.text.value(),
         )
@@ -835,7 +839,7 @@ impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
             self.char_width,
             self.ascent,
             DisplayTabPolicy::every(8),
-            GlyphRowRole::Minibuffer,
+            DisplayOrigin::Minibuffer,
             self.base_face,
             Value::string(""),
         )
@@ -1144,7 +1148,9 @@ impl<'face> EchoMinibufferSourceRowRequest<'face> {
             self.char_width,
             self.ascent,
             DisplayTabPolicy::every(8),
-            GlyphRowRole::Minibuffer,
+            DisplayOrigin::EchoArea
+                .glyph_row_role()
+                .expect("echo-area origin must map to a glyph row role"),
         )
     }
 
@@ -1520,11 +1526,11 @@ pub(crate) fn minibuffer_resize_line_count(
     text_lines + overlay_lines + 1
 }
 
-fn window_chrome_glyph_row_role(kind: WindowChromeKind) -> GlyphRowRole {
+fn window_chrome_display_origin(kind: WindowChromeKind) -> DisplayOrigin {
     match kind {
-        WindowChromeKind::TabLine => GlyphRowRole::TabLine,
-        WindowChromeKind::HeaderLine => GlyphRowRole::HeaderLine,
-        WindowChromeKind::ModeLine => GlyphRowRole::ModeLine,
+        WindowChromeKind::TabLine => DisplayOrigin::TabLine,
+        WindowChromeKind::HeaderLine => DisplayOrigin::HeaderLine,
+        WindowChromeKind::ModeLine => DisplayOrigin::ModeLine,
     }
 }
 
