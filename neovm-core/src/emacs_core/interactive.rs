@@ -4068,7 +4068,7 @@ fn where_is_binding_prefix_keymap(obarray: &Obarray, binding: &Value) -> Option<
 }
 
 fn menu_label_prefix_keymap(binding: &Value) -> Option<Value> {
-    if !binding.is_cons() || binding.cons_car().as_runtime_string_owned().is_none() {
+    if !binding.is_cons() || !binding.cons_car().is_string() {
         return None;
     }
     let keymap = binding.cons_cdr();

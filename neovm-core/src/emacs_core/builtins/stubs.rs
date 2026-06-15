@@ -789,11 +789,9 @@ pub(crate) fn builtin_neomacs_clipboard_set(
     expect_args("neomacs-clipboard-set", &args, 1)?;
     let text = match args[0].kind() {
         ValueKind::Nil => None,
-        ValueKind::String => Some(
-            args[0]
-                .as_runtime_string_owned()
-                .expect("ValueKind::String must carry LispString payload"),
-        ),
+        ValueKind::String => args[0]
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
         _ => Some(format!("{}", args[0])),
     };
     set_cached_clipboard_text(text.clone());
@@ -828,11 +826,9 @@ pub(crate) fn builtin_neomacs_primary_selection_set(
     expect_args("neomacs-primary-selection-set", &args, 1)?;
     let text = match args[0].kind() {
         ValueKind::Nil => None,
-        ValueKind::String => Some(
-            args[0]
-                .as_runtime_string_owned()
-                .expect("ValueKind::String must carry LispString payload"),
-        ),
+        ValueKind::String => args[0]
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
         _ => Some(format!("{}", args[0])),
     };
     set_cached_primary_selection_text(text.clone());

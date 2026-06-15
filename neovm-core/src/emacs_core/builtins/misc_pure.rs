@@ -236,13 +236,9 @@ pub(crate) fn builtin_message_box(ctx: &mut super::eval::Context, args: Vec<Valu
     }
     // GNU Emacs: always calls format-message, even for single-arg.
     let formatted = super::strings::builtin_format_message(ctx, args.clone())?;
-    let msg = match formatted.kind() {
-        ValueKind::String => formatted
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload"),
-        _ => String::new(),
-    };
-    tracing::info!(msg = %msg);
+    if let Some(ls) = formatted.as_lisp_string() {
+        tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
+    }
     Ok(formatted)
 }
 
@@ -256,13 +252,9 @@ pub(crate) fn builtin_message_or_box(
     }
     // GNU Emacs: always calls format-message, even for single-arg.
     let formatted = super::strings::builtin_format_message(ctx, args.clone())?;
-    let msg = match formatted.kind() {
-        ValueKind::String => formatted
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload"),
-        _ => String::new(),
-    };
-    tracing::info!(msg = %msg);
+    if let Some(ls) = formatted.as_lisp_string() {
+        tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
+    }
     Ok(formatted)
 }
 
