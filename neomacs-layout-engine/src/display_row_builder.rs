@@ -397,10 +397,6 @@ pub(crate) fn pop_display_row_trailing_text_char(row: &mut GlyphRow, ch: char) -
     }
 }
 
-pub(crate) fn push_display_row_text_glyph(row: &mut GlyphRow, glyph: Glyph) {
-    row.glyphs[GlyphArea::Text.index()].push(glyph);
-}
-
 pub(crate) fn mark_display_row_truncated_left(row: &mut GlyphRow) {
     row.truncated_left = true;
 }

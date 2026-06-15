@@ -36,8 +36,7 @@ use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face}
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy, display_row_total_glyph_count,
-    pop_display_row_trailing_text_char, push_display_row_text_glyph,
-    trim_display_row_text_to_total_glyph_count,
+    pop_display_row_trailing_text_char, trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
@@ -6742,7 +6741,20 @@ fn install_right_border_from_source_request(
     }
 
     if let Some(glyph) = preserved_trailing {
-        push_display_row_text_glyph(row, glyph);
+        render_right_border_text(
+            row,
+            render_services,
+            RightBorderTextRenderRequest {
+                text: "$".into(),
+                area: GlyphArea::Text,
+                face_id: glyph.face_id,
+                base_face,
+                char_width: request.char_width,
+                matrix_cols,
+                source_offset,
+                start_col: display_row_total_glyph_count(row),
+            },
+        );
         source_offset = source_offset.saturating_add(preserved_cols);
     }
 
