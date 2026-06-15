@@ -50,13 +50,13 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource,
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath,
-    BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
-    BufferTextSourceItemRequest, BufferTextSourceNaturalAdvanceRequest,
-    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange,
-    BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent, BufferTextSourceTextItemRequest,
-    BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest, DisplayItemSource,
-    DisplayReplacementBox, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
-    SyntheticTextItemSource,
+    BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem, BufferTextSourceChar,
+    BufferTextSourceClusterState, BufferTextSourceItemRequest,
+    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
+    BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
+    BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
+    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementBox,
+    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -3834,7 +3834,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
-        request: BufferTextSourceAdvanceRequest<'_>,
+        request: BufferTextSourcePositionedAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
         state
             .advance_resolver()
@@ -4024,7 +4024,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourceAdvanceRequest<'_>,
+        request: BufferTextSourcePositionedAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
         let frame = self.active_face_context(geometry).active_face_frame();
         append_state
@@ -4044,7 +4044,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourceAdvanceRequest<'_>,
+        request: BufferTextSourcePositionedAdvanceRequest<'_>,
     ) -> BufferTextSourceCharAppendPlan {
         let resolved_advance = self.resolve_source_advance_request_to_text_row(
             geometry,
@@ -5373,7 +5373,7 @@ impl BufferTextSourceAdvanceResolver {
         buffer: &B,
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
-        request: BufferTextSourceAdvanceRequest<'_>,
+        request: BufferTextSourcePositionedAdvanceRequest<'_>,
     ) -> ResolvedBufferTextSourceAdvance {
         let ch = request.cluster().ch();
         match BufferTextSourceAdvancePath::for_cluster_state(request.cluster()) {
@@ -5449,14 +5449,11 @@ impl BufferTextSourceChar {
         byte_idx: usize,
         position: DisplayRowPosition,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourceAdvanceRequest<'text> {
-        BufferTextSourceAdvanceRequest {
-            text,
-            byte_idx,
-            range: self.range(),
+    ) -> BufferTextSourcePositionedAdvanceRequest<'text> {
+        BufferTextSourcePositionedAdvanceRequest::new(
+            self.advance_request(text, byte_idx, tail),
             position,
-            cluster: self.cluster_state(tail),
-        }
+        )
     }
 }
 
@@ -8412,25 +8409,26 @@ impl BufferTextSourceCharAppendPlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceAdvanceRequest<'text> {
-    text: &'text [u8],
-    byte_idx: usize,
-    range: BufferTextSourceRange,
+struct BufferTextSourcePositionedAdvanceRequest<'text> {
+    source: BufferTextSourceAdvanceRequest<'text>,
     position: DisplayRowPosition,
-    cluster: BufferTextSourceClusterState,
 }
 
-impl<'text> BufferTextSourceAdvanceRequest<'text> {
+impl<'text> BufferTextSourcePositionedAdvanceRequest<'text> {
+    fn new(source: BufferTextSourceAdvanceRequest<'text>, position: DisplayRowPosition) -> Self {
+        Self { source, position }
+    }
+
     fn text(self) -> &'text [u8] {
-        self.text
+        self.source.text()
     }
 
     fn byte_idx(self) -> usize {
-        self.byte_idx
+        self.source.byte_idx()
     }
 
     fn range(self) -> BufferTextSourceRange {
-        self.range
+        self.source.range()
     }
 
     fn position(self) -> DisplayRowPosition {
@@ -8438,7 +8436,7 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
     }
 
     fn cluster(self) -> BufferTextSourceClusterState {
-        self.cluster
+        self.source.cluster()
     }
 
     fn append_plan(
@@ -8446,10 +8444,7 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
         resolved_advance: ResolvedBufferTextSourceAdvance,
     ) -> BufferTextSourceCharAppendPlan {
         BufferTextSourceCharAppendPlan {
-            source_text: BufferTextSourceTextRequest::from_source_item(
-                BufferTextSourceTextItemRequest::for_range_and_cluster(self.range, self.cluster),
-                resolved_advance,
-            ),
+            source_text: self.source.into_text_request(resolved_advance),
             position: self.position,
         }
     }

@@ -31,7 +31,8 @@ use crate::display_row_walk_state::{
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::{
-    BufferTextDecodedSourceEvent, BufferTextSourceEventCursor, BufferTextSourceSpecialDisplay,
+    BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
+    BufferTextSourceSpecialDisplay,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
@@ -3463,13 +3464,15 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
             &face_resolver,
         ),
         &active_face,
-        BufferTextSourceAdvanceRequest {
-            text: b"x",
-            byte_idx: 0,
-            range: BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-            position: DisplayRowPosition { x_px: 0.0, col: 0 },
-            cluster: BufferTextSourceClusterState::for_char('x', None),
-        },
+        BufferTextSourcePositionedAdvanceRequest::new(
+            BufferTextSourceAdvanceRequest::new(
+                b"x",
+                0,
+                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+                BufferTextSourceClusterState::for_char('x', None),
+            ),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        ),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
@@ -3509,16 +3512,18 @@ fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
             &face_resolver,
         ),
         &active_face,
-        BufferTextSourceAdvanceRequest {
-            text: b"x",
-            byte_idx: 0,
-            range: BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-            position: DisplayRowPosition {
+        BufferTextSourcePositionedAdvanceRequest::new(
+            BufferTextSourceAdvanceRequest::new(
+                b"x",
+                0,
+                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+                BufferTextSourceClusterState::for_char('x', None),
+            ),
+            DisplayRowPosition {
                 x_px: 80.0,
                 col: 10,
             },
-            cluster: BufferTextSourceClusterState::for_char('x', None),
-        },
+        ),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
@@ -3558,13 +3563,15 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
             &face_resolver,
         ),
         &active_face,
-        BufferTextSourceAdvanceRequest {
-            text: "\u{0633}".as_bytes(),
-            byte_idx: 0,
-            range: BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-            position: DisplayRowPosition { x_px: 0.0, col: 0 },
-            cluster: BufferTextSourceClusterState::for_char('\u{0633}', None),
-        },
+        BufferTextSourcePositionedAdvanceRequest::new(
+            BufferTextSourceAdvanceRequest::new(
+                "\u{0633}".as_bytes(),
+                0,
+                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+                BufferTextSourceClusterState::for_char('\u{0633}', None),
+            ),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        ),
     );
 
     assert_eq!(resolved.advance_px(), 8.0);

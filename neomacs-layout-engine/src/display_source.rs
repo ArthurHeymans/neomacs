@@ -348,6 +348,15 @@ impl BufferTextSourceChar {
             .map(|display| self.special_request_for_display(display))
             .or_else(|| self.cluster_special_request(tail))
     }
+
+    pub(crate) fn advance_request<'text>(
+        &self,
+        text: &'text [u8],
+        byte_idx: usize,
+        tail: Option<(char, bool)>,
+    ) -> BufferTextSourceAdvanceRequest<'text> {
+        BufferTextSourceAdvanceRequest::new(text, byte_idx, self.range(), self.cluster_state(tail))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -713,6 +722,56 @@ impl BufferTextSourceClusterState {
 
     pub(crate) fn has_tail(self) -> bool {
         self.tail.is_some()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceAdvanceRequest<'text> {
+    text: &'text [u8],
+    byte_idx: usize,
+    range: BufferTextSourceRange,
+    cluster: BufferTextSourceClusterState,
+}
+
+impl<'text> BufferTextSourceAdvanceRequest<'text> {
+    pub(crate) fn new(
+        text: &'text [u8],
+        byte_idx: usize,
+        range: BufferTextSourceRange,
+        cluster: BufferTextSourceClusterState,
+    ) -> Self {
+        Self {
+            text,
+            byte_idx,
+            range,
+            cluster,
+        }
+    }
+
+    pub(crate) fn text(self) -> &'text [u8] {
+        self.text
+    }
+
+    pub(crate) fn byte_idx(self) -> usize {
+        self.byte_idx
+    }
+
+    pub(crate) fn range(self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    pub(crate) fn cluster(self) -> BufferTextSourceClusterState {
+        self.cluster
+    }
+
+    pub(crate) fn into_text_request(
+        self,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+    ) -> BufferTextSourceTextRequest {
+        BufferTextSourceTextRequest::from_source_item(
+            BufferTextSourceTextItemRequest::for_range_and_cluster(self.range, self.cluster),
+            resolved_advance,
+        )
     }
 }
 
