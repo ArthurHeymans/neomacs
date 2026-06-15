@@ -926,7 +926,7 @@ fn preserve_case_non_alpha_upper() {
 fn find_match_literal_forward() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
-    let result = find_match(text, "hello", 0, true, false, false);
+    let result = find_match(text.as_bytes(), "hello".as_bytes(), 0, true, false, false);
     assert_eq!(result, Some(MatchGroup::new(0, 5)));
 }
 
@@ -934,7 +934,7 @@ fn find_match_literal_forward() {
 fn find_match_literal_forward_from_offset() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
-    let result = find_match(text, "hello", 1, true, false, false);
+    let result = find_match(text.as_bytes(), "hello".as_bytes(), 1, true, false, false);
     assert_eq!(result, Some(MatchGroup::new(12, 17)));
 }
 
@@ -942,7 +942,14 @@ fn find_match_literal_forward_from_offset() {
 fn find_match_literal_backward() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
-    let result = find_match(text, "hello", text.len(), false, false, false);
+    let result = find_match(
+        text.as_bytes(),
+        "hello".as_bytes(),
+        text.len(),
+        false,
+        false,
+        false,
+    );
     assert_eq!(result, Some(MatchGroup::new(12, 17)));
 }
 
@@ -950,7 +957,7 @@ fn find_match_literal_backward() {
 fn find_match_literal_backward_from_middle() {
     crate::test_utils::init_test_tracing();
     let text = "hello world hello";
-    let result = find_match(text, "hello", 10, false, false, false);
+    let result = find_match(text.as_bytes(), "hello".as_bytes(), 10, false, false, false);
     assert_eq!(result, Some(MatchGroup::new(0, 5)));
 }
 
@@ -958,7 +965,7 @@ fn find_match_literal_backward_from_middle() {
 fn find_match_case_fold() {
     crate::test_utils::init_test_tracing();
     let text = "Hello World";
-    let result = find_match(text, "hello", 0, true, false, true);
+    let result = find_match(text.as_bytes(), "hello".as_bytes(), 0, true, false, true);
     assert_eq!(result, Some(MatchGroup::new(0, 5)));
 }
 
@@ -966,7 +973,7 @@ fn find_match_case_fold() {
 fn find_match_case_sensitive() {
     crate::test_utils::init_test_tracing();
     let text = "Hello World";
-    let result = find_match(text, "hello", 0, true, false, false);
+    let result = find_match(text.as_bytes(), "hello".as_bytes(), 0, true, false, false);
     assert!(result.is_none());
 }
 
@@ -974,7 +981,7 @@ fn find_match_case_sensitive() {
 fn find_match_regexp_forward() {
     crate::test_utils::init_test_tracing();
     let text = "foo 123 bar";
-    let result = find_match(text, "[0-9]+", 0, true, true, false);
+    let result = find_match(text.as_bytes(), "[0-9]+".as_bytes(), 0, true, true, false);
     assert_eq!(result, Some(MatchGroup::new(4, 7)));
 }
 
@@ -982,7 +989,14 @@ fn find_match_regexp_forward() {
 fn find_match_regexp_backward() {
     crate::test_utils::init_test_tracing();
     let text = "foo 123 bar 456";
-    let result = find_match(text, "[0-9]+", text.len(), false, true, false);
+    let result = find_match(
+        text.as_bytes(),
+        "[0-9]+".as_bytes(),
+        text.len(),
+        false,
+        true,
+        false,
+    );
     assert_eq!(result, Some(MatchGroup::new(12, 15)));
 }
 
@@ -990,21 +1004,21 @@ fn find_match_regexp_backward() {
 fn find_match_empty_pattern() {
     crate::test_utils::init_test_tracing();
     let text = "hello";
-    assert!(find_match(text, "", 0, true, false, false).is_none());
+    assert!(find_match(text.as_bytes(), "".as_bytes(), 0, true, false, false).is_none());
 }
 
 #[test]
 fn find_match_no_match() {
     crate::test_utils::init_test_tracing();
     let text = "hello world";
-    assert!(find_match(text, "zzz", 0, true, false, false).is_none());
+    assert!(find_match(text.as_bytes(), "zzz".as_bytes(), 0, true, false, false).is_none());
 }
 
 #[test]
 fn find_match_at_boundary() {
     crate::test_utils::init_test_tracing();
     let text = "abcdef";
-    let result = find_match(text, "def", 3, true, false, false);
+    let result = find_match(text.as_bytes(), "def".as_bytes(), 3, true, false, false);
     assert_eq!(result, Some(MatchGroup::new(3, 6)));
 }
 
@@ -1012,17 +1026,17 @@ fn find_match_at_boundary() {
 fn delimited_match_rejects_embedded_word() {
     crate::test_utils::init_test_tracing();
     let text = "foo1 1foo foo";
-    assert!(!is_delimited_match(text, 0, 3));
-    assert!(!is_delimited_match(text, 5, 8));
-    assert!(is_delimited_match(text, 10, 13));
+    assert!(!is_delimited_match_bytes(text.as_bytes(), 0, 3));
+    assert!(!is_delimited_match_bytes(text.as_bytes(), 5, 8));
+    assert!(is_delimited_match_bytes(text.as_bytes(), 10, 13));
 }
 
 #[test]
 fn delimited_match_treats_underscore_as_delimiter() {
     crate::test_utils::init_test_tracing();
     let text = "foo_foo";
-    assert!(is_delimited_match(text, 0, 3));
-    assert!(is_delimited_match(text, 4, 7));
+    assert!(is_delimited_match_bytes(text.as_bytes(), 0, 3));
+    assert!(is_delimited_match_bytes(text.as_bytes(), 4, 7));
 }
 
 // -----------------------------------------------------------------------

@@ -218,26 +218,6 @@ fn lisp_string_from_buffer_bytes(bytes: Vec<u8>, multibyte: bool) -> crate::heap
     }
 }
 
-fn buffer_region_storage_string(
-    buf: &Buffer,
-    range: EmacsByteRange,
-) -> (crate::heap_types::LispString, String) {
-    let text = buf.buffer_substring_lisp_string_range(range);
-    let storage = crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        text.as_bytes(),
-        text.is_multibyte(),
-    );
-    (text, storage)
-}
-
-fn storage_offset_to_region_byte(source: &str, storage_pos: usize) -> usize {
-    crate::emacs_core::string_escape::storage_byte_to_logical_byte(source, storage_pos)
-}
-
-fn storage_string_byte_len(source: &str) -> usize {
-    crate::emacs_core::string_escape::storage_byte_len(source)
-}
-
 fn storage_string_to_lisp_string(source: &str, multibyte: bool) -> crate::heap_types::LispString {
     let bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(source, multibyte);
     lisp_string_from_buffer_bytes(bytes, multibyte)
@@ -724,9 +704,14 @@ impl IsearchManager {
 
         let forward = state.direction == SearchDirection::Forward;
 
-        if let Some(range) =
-            find_match(text, &search_string, from, forward, state.regexp, case_fold)
-        {
+        if let Some(range) = find_match(
+            text.as_bytes(),
+            search_string.as_bytes(),
+            from,
+            forward,
+            state.regexp,
+            case_fold,
+        ) {
             state.success = true;
             state.match_start = Some(range.start());
             state.match_end = Some(range.end());
@@ -738,8 +723,8 @@ impl IsearchManager {
             state.wrapped = true;
             let wrap_from = if forward { 0 } else { text.len() };
             if let Some(range) = find_match(
-                text,
-                &search_string,
+                text.as_bytes(),
+                search_string.as_bytes(),
                 wrap_from,
                 forward,
                 state.regexp,
@@ -777,8 +762,8 @@ impl IsearchManager {
 
         // Search from origin first.
         if let Some(range) = find_match(
-            text,
-            &search_string,
+            text.as_bytes(),
+            search_string.as_bytes(),
             state.origin,
             forward,
             state.regexp,
@@ -794,8 +779,8 @@ impl IsearchManager {
         // Wrap around.
         let wrap_from = if forward { 0 } else { text.len() };
         if let Some(range) = find_match(
-            text,
-            &search_string,
+            text.as_bytes(),
+            search_string.as_bytes(),
             wrap_from,
             forward,
             state.regexp,
@@ -1184,7 +1169,14 @@ impl QueryReplaceManager {
 
         let from_string = runtime_string_from_lisp_string(&state.from_string);
         let case_fold = resolve_case_fold(state.case_fold, &from_string);
-        let result = find_match(text, &from_string, start, true, state.regexp, case_fold);
+        let result = find_match(
+            text.as_bytes(),
+            from_string.as_bytes(),
+            start,
+            true,
+            state.regexp,
+            case_fold,
+        );
 
         if let Some(range) = result {
             if range.end() <= limit {
@@ -1441,9 +1433,43 @@ fn build_regex_pattern(pattern: &str, case_fold: bool) -> String {
 /// - `case_fold`: perform case-insensitive matching.
 ///
 /// Returns the match byte range into `text`, or `None`.
+/// Forward byte-substring search: first index of `needle` in `hay`.
+fn byte_find(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    if needle.len() > hay.len() {
+        return None;
+    }
+    hay.windows(needle.len())
+        .position(|window| window == needle)
+}
+
+/// Backward byte-substring search: last index of `needle` in `hay`.
+fn byte_rfind(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(hay.len());
+    }
+    if needle.len() > hay.len() {
+        return None;
+    }
+    hay.windows(needle.len())
+        .rposition(|window| window == needle)
+}
+
+/// Emacs-downcase a run of Emacs bytes (issue #131): real char codes go through
+/// the Emacs case table, so eight-bit raw bytes and PUA glyphs are caseless and
+/// preserved rather than confused with the legacy storage sentinels.
+fn downcase_emacs_bytes(bytes: &[u8]) -> Vec<u8> {
+    let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
+    super::casefiddle::downcase_lisp_string_emacs_compat(&ls)
+        .as_bytes()
+        .to_vec()
+}
+
 fn find_match(
-    text: &str,
-    pattern: &str,
+    text: &[u8],
+    pattern: &[u8],
     from: usize,
     forward: bool,
     regexp: bool,
@@ -1456,11 +1482,12 @@ fn find_match(
     let text_len = text.len();
 
     if regexp {
+        let pattern_ls = crate::heap_types::LispString::from_emacs_bytes(pattern.to_vec());
         if forward {
             let start = from.min(text_len);
             let iterated = super::regex::iterate_string_matches_with_case_fold(
-                &LispString::from_utf8(pattern),
-                text.as_bytes(),
+                &pattern_ls,
+                text,
                 start,
                 case_fold,
             )
@@ -1472,8 +1499,8 @@ fn find_match(
         } else {
             let end = from.min(text_len);
             let iterated = super::regex::iterate_string_matches_with_case_fold(
-                &LispString::from_utf8(pattern),
-                &text.as_bytes()[..end],
+                &pattern_ls,
+                &text[..end],
                 0,
                 case_fold,
             )
@@ -1485,29 +1512,31 @@ fn find_match(
                 .last()
         }
     } else {
-        // Literal search.
+        // Literal search over Emacs bytes (issue #131): byte-exact when not
+        // folding; when folding, Emacs-downcase both sides and map the position
+        // back, mirroring the prior &str `to_lowercase`/`find` behavior.
         if forward {
             let start = from.min(text_len);
             let region = &text[start..];
             if case_fold {
-                let hay = region.to_lowercase();
-                let needle = pattern.to_lowercase();
-                let pos = hay.find(&needle)?;
+                let hay = downcase_emacs_bytes(region);
+                let needle = downcase_emacs_bytes(pattern);
+                let pos = byte_find(&hay, &needle)?;
                 Some(MatchGroup::new(start + pos, start + pos + needle.len()))
             } else {
-                let pos = region.find(pattern)?;
+                let pos = byte_find(region, pattern)?;
                 Some(MatchGroup::new(start + pos, start + pos + pattern.len()))
             }
         } else {
             let end = from.min(text_len);
             let region = &text[..end];
             if case_fold {
-                let hay = region.to_lowercase();
-                let needle = pattern.to_lowercase();
-                let pos = hay.rfind(&needle)?;
+                let hay = downcase_emacs_bytes(region);
+                let needle = downcase_emacs_bytes(pattern);
+                let pos = byte_rfind(&hay, &needle)?;
                 Some(MatchGroup::new(pos, pos + needle.len()))
             } else {
-                let pos = region.rfind(pattern)?;
+                let pos = byte_rfind(region, pattern)?;
                 Some(MatchGroup::new(pos, pos + pattern.len()))
             }
         }
@@ -1516,20 +1545,6 @@ fn find_match(
 
 fn is_delimited_word_char(ch: char) -> bool {
     ch.is_alphanumeric()
-}
-
-fn is_delimited_match(text: &str, start: usize, end: usize) -> bool {
-    let left = text.get(..start).and_then(|s| s.chars().next_back());
-    let right = text.get(end..).and_then(|s| s.chars().next());
-    let left_ok = match left {
-        Some(ch) => !is_delimited_word_char(ch),
-        None => true,
-    };
-    let right_ok = match right {
-        Some(ch) => !is_delimited_word_char(ch),
-        None => true,
-    };
-    left_ok && right_ok
 }
 
 // ---------------------------------------------------------------------------
@@ -1546,45 +1561,6 @@ fn is_delimited_match(text: &str, start: usize, end: usize) -> bool {
 /// - Otherwise return `replacement` unmodified.
 fn preserve_case(replacement: &str, matched: &str) -> String {
     super::casefiddle::apply_replace_match_case(replacement, matched)
-}
-
-fn expand_emacs_replacement(rep: &str, groups: &[Option<MatchGroup>], source: &str) -> String {
-    let mut out = String::with_capacity(rep.len());
-    let mut chars = rep.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        if ch != '\\' {
-            out.push(ch);
-            continue;
-        }
-
-        let Some(next) = chars.next() else {
-            out.push('\\');
-            break;
-        };
-
-        match next {
-            '&' => {
-                if let Some(Some(group)) = groups.first()
-                    && let Some(text) = source.get(group.start()..group.end())
-                {
-                    out.push_str(text);
-                }
-            }
-            '1'..='9' => {
-                let idx = next.to_digit(10).unwrap() as usize;
-                if let Some(Some(group)) = groups.get(idx)
-                    && let Some(text) = source.get(group.start()..group.end())
-                {
-                    out.push_str(text);
-                }
-            }
-            '\\' => out.push('\\'),
-            other => out.push(other),
-        }
-    }
-
-    out
 }
 
 // ---------------------------------------------------------------------------
@@ -1691,7 +1667,14 @@ fn replace_string_eval_impl(
 ) -> EvalResult {
     expect_min_max_args("replace-string", &args, 2, 7)?;
     let from = expect_sequence_string(&args[0])?;
-    let to = expect_string(&args[1])?;
+    let from_ls = args[0]
+        .as_lisp_string()
+        .expect("replace-string from-string is a string");
+    expect_string(&args[1])?;
+    let to_ls = args[1]
+        .as_lisp_string()
+        .expect("replace-string to-string is a string");
+    let to = to_ls.as_bytes();
     let delimited = args.get(2).is_some_and(|v| !v.is_nil());
     let backward = args.get(5).is_some_and(|v| !v.is_nil());
     let region_noncontiguous = args.get(6).is_some_and(|v| !v.is_nil());
@@ -1720,7 +1703,7 @@ fn replace_string_eval_impl(
             .goto_buffer_emacs_byte_pos(current_id, point_max);
         return Ok(Value::NIL);
     }
-    let (range, source_text, source, read_only, buffer_name) = {
+    let (range, source_text, read_only, buffer_name) = {
         let buf = eval
             .buffers
             .current_buffer()
@@ -1733,17 +1716,19 @@ fn replace_string_eval_impl(
             backward,
             region_noncontiguous,
         )?;
-        let (source_text, source) = buffer_region_storage_string(buf, range);
+        let source_text = buf.buffer_substring_lisp_string_range(range);
         (
             range,
             source_text,
-            source,
             buffer_read_only_active(eval, buf),
             buf.name_value(),
         )
     };
     let range_start = range.start();
     let source_multibyte = source_text.is_multibyte();
+    // Issue #131: operate on the region's Emacs bytes directly — match offsets are
+    // logical Emacs byte offsets, so the old storage->logical mapping is identity.
+    let source = source_text.as_bytes();
 
     if from.is_empty() {
         if source.is_empty() {
@@ -1752,27 +1737,37 @@ fn replace_string_eval_impl(
         if read_only {
             return Err(signal("buffer-read-only", vec![buffer_name]));
         }
-        let units = crate::emacs_core::string_escape::scan_storage_units_auto(&source);
-        let mut out = String::with_capacity(source.len() + to.len() * units.len());
+        // Issue #131: iterate the region's Emacs chars as (byte-start, byte-len)
+        // pairs instead of the storage-unit scan; for Emacs bytes the char's byte
+        // range is its logical byte range.
+        let mut units: Vec<(usize, usize)> = Vec::new();
+        let mut scan = 0usize;
+        while scan < source.len() {
+            let (_code, len) = crate::emacs_core::emacs_char::string_char(&source[scan..]);
+            let len = len.max(1);
+            units.push((scan, len));
+            scan += len;
+        }
+        let mut out: Vec<u8> = Vec::with_capacity(source.len() + to.len() * units.len());
         if backward {
-            for unit in &units {
-                out.push_str(&source[unit.storage_start..unit.storage_end]);
-                out.push_str(&to);
+            for &(start, len) in &units {
+                out.extend_from_slice(&source[start..start + len]);
+                out.extend_from_slice(to);
             }
         } else {
-            for unit in &units {
-                out.push_str(&to);
-                out.push_str(&source[unit.storage_start..unit.storage_end]);
+            for &(start, len) in &units {
+                out.extend_from_slice(to);
+                out.extend_from_slice(&source[start..start + len]);
             }
         }
-        if out == source {
+        if out.as_slice() == source {
             return Ok(Value::NIL);
         }
         let current_id = eval
             .buffers
             .current_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let out_text = storage_string_to_lisp_string(&out, source_multibyte);
+        let out_text = lisp_string_from_buffer_bytes(out, source_multibyte);
         let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
             &eval.buffers,
             current_id,
@@ -1792,10 +1787,10 @@ fn replace_string_eval_impl(
             .insert_lisp_string_into_buffer(current_id, &out_text);
         super::editfns::signal_after_text_change(eval, change)?;
         if backward {
-            if let Some(first) = units.first() {
+            if let Some(&(_, first_len)) = units.first() {
                 let _ = eval.buffers.goto_buffer_emacs_byte_pos(
                     current_id,
-                    range_start.add_len(EmacsByteLen::new(first.logical_byte_len)),
+                    range_start.add_len(EmacsByteLen::new(first_len)),
                 );
             } else {
                 let _ = eval
@@ -1803,12 +1798,10 @@ fn replace_string_eval_impl(
                     .goto_buffer_emacs_byte_pos(current_id, range_start);
             }
         } else if query_style_point {
-            if let Some(last) = units.last() {
+            if let Some(&(_, last_len)) = units.last() {
                 let _ = eval.buffers.goto_buffer_emacs_byte_pos(
                     current_id,
-                    range_start.add_len(EmacsByteLen::new(
-                        new_len.get().saturating_sub(last.logical_byte_len),
-                    )),
+                    range_start.add_len(EmacsByteLen::new(new_len.get().saturating_sub(last_len))),
                 );
             } else {
                 let _ = eval
@@ -1830,7 +1823,7 @@ fn replace_string_eval_impl(
     } else {
         None
     };
-    let mut out = String::with_capacity(source.len());
+    let mut out: Vec<u8> = Vec::with_capacity(source.len());
     let mut replaced = 0usize;
     let mut backward_point: Option<EmacsByteLen> = None;
     let mut query_forward_point: Option<EmacsByteLen> = None;
@@ -1839,7 +1832,7 @@ fn replace_string_eval_impl(
         let pattern = build_lax_whitespace_pattern(&from, &whitespace_regex);
         let iterated = super::regex::iterate_string_matches_with_case_fold(
             &LispString::from_utf8(&pattern),
-            source.as_bytes(),
+            source,
             0,
             case_fold,
         )
@@ -1851,53 +1844,51 @@ fn replace_string_eval_impl(
             };
             let m_start = group.start();
             let m_end = group.end();
-            if delimited && !is_delimited_match(&source, m_start, m_end) {
+            if delimited && !is_delimited_match_bytes(source, m_start, m_end) {
                 continue;
             }
-            out.push_str(&source[last..m_start]);
+            out.extend_from_slice(&source[last..m_start]);
             let matched = &source[m_start..m_end];
             if preserve_match_case {
-                out.push_str(&preserve_case(&to, matched));
+                out.extend_from_slice(&preserve_case_emacs_bytes(to, matched, source_multibyte));
             } else {
-                out.push_str(&to);
+                out.extend_from_slice(to);
             }
-            query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
+            query_forward_point = Some(EmacsByteLen::new(out.len()));
             if backward && backward_point.is_none() {
-                backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
-                    &source, m_start,
-                )));
+                backward_point = Some(EmacsByteLen::new(m_start));
             }
             replaced += 1;
             last = m_end;
         }
-        out.push_str(&source[last..]);
+        out.extend_from_slice(&source[last..]);
     } else {
         let mut cursor = 0usize;
-        while let Some(range) = find_match(&source, &from, cursor, true, false, case_fold) {
+        while let Some(range) =
+            find_match(source, from_ls.as_bytes(), cursor, true, false, case_fold)
+        {
             let m_start = range.start();
             let m_end = range.end();
-            if delimited && !is_delimited_match(&source, m_start, m_end) {
-                out.push_str(&source[cursor..m_end]);
+            if delimited && !is_delimited_match_bytes(source, m_start, m_end) {
+                out.extend_from_slice(&source[cursor..m_end]);
                 cursor = m_end;
                 continue;
             }
-            out.push_str(&source[cursor..m_start]);
+            out.extend_from_slice(&source[cursor..m_start]);
             let matched = &source[m_start..m_end];
             if preserve_match_case {
-                out.push_str(&preserve_case(&to, matched));
+                out.extend_from_slice(&preserve_case_emacs_bytes(to, matched, source_multibyte));
             } else {
-                out.push_str(&to);
+                out.extend_from_slice(to);
             }
-            query_forward_point = Some(EmacsByteLen::new(storage_string_byte_len(&out)));
+            query_forward_point = Some(EmacsByteLen::new(out.len()));
             if backward && backward_point.is_none() {
-                backward_point = Some(EmacsByteLen::new(storage_offset_to_region_byte(
-                    &source, m_start,
-                )));
+                backward_point = Some(EmacsByteLen::new(m_start));
             }
             replaced += 1;
             cursor = m_end;
         }
-        out.push_str(&source[cursor..]);
+        out.extend_from_slice(&source[cursor..]);
     }
 
     if replaced == 0 {
@@ -1911,7 +1902,7 @@ fn replace_string_eval_impl(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let out_text = storage_string_to_lisp_string(&out, source_multibyte);
+    let out_text = lisp_string_from_buffer_bytes(out, source_multibyte);
     let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
