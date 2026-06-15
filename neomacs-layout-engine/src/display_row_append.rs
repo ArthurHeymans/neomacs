@@ -4040,13 +4040,8 @@ pub(crate) struct BufferTextSourceCharRenderState<'a> {
 }
 
 impl<'a> BufferTextSourceCharRenderState<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
+        source_render: TextRowSourceRenderState<'a>,
         trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
         word_wrap: &'a mut WordWrapRenderState,
         x: &'a mut f32,
@@ -4054,13 +4049,7 @@ impl<'a> BufferTextSourceCharRenderState<'a> {
         charpos: &'a mut i64,
     ) -> Self {
         Self {
-            source_render: TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
+            source_render,
             trailing_whitespace,
             word_wrap,
             x,
@@ -4081,14 +4070,9 @@ pub(crate) struct BufferTextSpecialSourceCharRenderState<'a> {
 }
 
 impl<'a> BufferTextSpecialSourceCharRenderState<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         face_ids: &'a mut FrameFaceIdAllocator,
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
+        source_render: TextRowSourceRenderState<'a>,
         face_scan: &'a mut FaceScanCheckpoint,
         word_wrap: &'a mut WordWrapRenderState,
         x: &'a mut f32,
@@ -4097,13 +4081,7 @@ impl<'a> BufferTextSpecialSourceCharRenderState<'a> {
     ) -> Self {
         Self {
             face_ids,
-            source_render: TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
+            source_render,
             face_scan,
             word_wrap,
             x,
@@ -4381,11 +4359,13 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         } = state;
 
         let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
             x,
             col,
         );
@@ -4637,11 +4617,13 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                         self.params,
                         &mut BufferTextSpecialSourceCharRenderState::new(
                             face_ids,
-                            builder,
-                            output_emitter,
-                            evaluator,
-                            font_metrics,
-                            face_resolver,
+                            TextRowSourceRenderState::new(
+                                builder,
+                                output_emitter,
+                                evaluator,
+                                font_metrics,
+                                face_resolver,
+                            ),
                             face_scan,
                             word_wrap,
                             x,
@@ -4756,11 +4738,13 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 &append_geometry,
                 ch,
                 &mut BufferTextSourceCharRenderState::new(
-                    builder,
-                    output_emitter,
-                    evaluator,
-                    font_metrics,
-                    face_resolver,
+                    TextRowSourceRenderState::new(
+                        builder,
+                        output_emitter,
+                        evaluator,
+                        font_metrics,
+                        face_resolver,
+                    ),
                     trailing_whitespace,
                     word_wrap,
                     x,
@@ -6474,11 +6458,13 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         }
 
         let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            self.face_resolver,
+            TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                self.face_resolver,
+            ),
             x,
             col,
         );
@@ -6640,27 +6626,14 @@ pub(crate) struct BufferInvisibleTextRenderState<'a> {
 }
 
 impl<'a> BufferInvisibleTextRenderState<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
+        source_render: TextRowSourceRenderState<'a>,
         cursor_info: &'a mut CursorCaptureState,
         x: &'a mut f32,
         col: &'a mut usize,
     ) -> Self {
         Self {
-            synthetic_text: BufferSyntheticTextRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                x,
-                col,
-            ),
+            synthetic_text: BufferSyntheticTextRenderState::new(source_render, x, col),
             cursor_info,
         }
     }
@@ -6730,11 +6703,13 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         };
 
         let mut hidden_text_state = BufferInvisibleTextRenderState::new(
-            builder,
-            output_emitter,
-            evaluator,
-            font_metrics,
-            face_resolver,
+            TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
             cursor_info,
             x,
             col,
@@ -6784,24 +6759,13 @@ pub(crate) struct BufferSyntheticTextRenderState<'a> {
 }
 
 impl<'a> BufferSyntheticTextRenderState<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
+        source_render: TextRowSourceRenderState<'a>,
         x: &'a mut f32,
         col: &'a mut usize,
     ) -> Self {
         Self {
-            source_render: TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
+            source_render,
             x,
             col,
         }

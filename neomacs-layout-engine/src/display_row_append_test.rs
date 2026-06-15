@@ -1206,11 +1206,13 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     let mut x = 0.0;
     let mut col = 0;
     let mut render_state = BufferSyntheticTextRenderState::new(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        &mut font_metrics,
-        &face_resolver,
+        TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &mut x,
         &mut col,
     );
@@ -5366,11 +5368,13 @@ fn buffer_text_source_append_context_appends_source_char() {
         &geometry,
         ' ',
         &mut BufferTextSourceCharRenderState::new(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             &mut trailing_whitespace,
             &mut word_wrap,
             &mut end_x,
@@ -6841,11 +6845,13 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         &params,
         &mut BufferTextSpecialSourceCharRenderState::new(
             &mut policy_face_ids,
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
+            TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             &mut face_scan,
             &mut word_wrap,
             &mut end_x,
