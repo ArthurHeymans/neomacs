@@ -9753,6 +9753,11 @@ pub(crate) struct BufferDisplayPropertyTextSourceEvent<'a> {
 
 pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
     source_event: BufferDisplayPropertyTextSourceEvent<'a>,
+    context: BufferDisplayPropertyTextAppendContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferDisplayPropertyTextAppendContext<'a> {
     buffer_id: BufferId,
     active_face_state: &'a DisplayRowActiveFaceState,
     current_x: f32,
@@ -10068,14 +10073,16 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
         );
         BufferDisplayPropertyTextAppendRequest::for_source_event(
             source_event,
-            self.buffer_id,
-            self.active_face_state,
-            self.current_x,
-            self.content_x,
-            self.params,
-            self.glyph_y_offset,
-            self.default_row_height,
-            self.start_position,
+            BufferDisplayPropertyTextAppendContext {
+                buffer_id: self.buffer_id,
+                active_face_state: self.active_face_state,
+                current_x: self.current_x,
+                content_x: self.content_x,
+                params: self.params,
+                glyph_y_offset: self.glyph_y_offset,
+                default_row_height: self.default_row_height,
+                start_position: self.start_position,
+            },
         )
         .resolve_and_append_to_text_row(
             buffer,
@@ -10196,28 +10203,13 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
 }
 
 impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn for_source_event(
         source_event: BufferDisplayPropertyTextSourceEvent<'a>,
-        buffer_id: BufferId,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        current_x: f32,
-        content_x: f32,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        start_position: DisplayRowPosition,
+        context: BufferDisplayPropertyTextAppendContext<'a>,
     ) -> Self {
         Self {
             source_event,
-            buffer_id,
-            active_face_state,
-            current_x,
-            content_x,
-            params,
-            glyph_y_offset,
-            default_row_height,
-            start_position,
+            context,
         }
     }
 
@@ -10229,17 +10221,18 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
     ) -> BufferDisplayPropertyTextAppendAction {
+        let context = self.context;
         let display_property = classify_display_property(self.source_event.value());
         let replacement_item = state.with_font_metrics_and_display_host(|font_metrics, host| {
             DisplayPropertyReplacementAppendItem::resolve(
                 DisplayPropertyReplacementResolveContext::new(
                     &display_property,
                     self.source_event,
-                    self.active_face_state,
+                    context.active_face_state,
                     font_metrics,
-                    self.current_x,
-                    self.content_x,
-                    self.params,
+                    context.current_x,
+                    context.content_x,
+                    context.params,
                     host,
                 ),
             )
@@ -10247,14 +10240,14 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         if let Some(item) = replacement_item {
             let replacement = DisplayPropertyReplacementAppendRequest::new(
                 BufferDisplayReplacementSource::new(
-                    self.buffer_id,
+                    context.buffer_id,
                     self.source_event.anchor_charpos(),
                     self.source_event.anchor_bytepos(),
                 ),
                 item,
-                self.glyph_y_offset,
-                self.default_row_height,
-                self.start_position,
+                context.glyph_y_offset,
+                context.default_row_height,
+                context.start_position,
             )
             .append_to_text_row(
                 buffer,
@@ -10262,7 +10255,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
                 face_ids,
                 append_surface,
                 row_geometry,
-                self.active_face_state,
+                context.active_face_state,
             );
             return BufferDisplayPropertyTextAppendAction::Replacement(
                 BufferDisplayPropertyTextReplacementOutcome {
@@ -10274,7 +10267,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
 
         BufferDisplayPropertyTextModifierAction::for_display_property(
             &display_property,
-            self.default_row_height,
+            context.default_row_height,
             self.source_event.next_change(),
         )
         .map(BufferDisplayPropertyTextAppendAction::Modifiers)
