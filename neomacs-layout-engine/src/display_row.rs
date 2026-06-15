@@ -2052,35 +2052,9 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let Self { request, .. } = self;
-        let mut renderer = DisplayRowRenderer::new(state.font_metrics);
-        let (result, row_height_px, row_ascent_px) =
-            state.builder.with_current_row_mut(|row| {
-                let mut scratch_row = row.clone();
-                let mut context = DisplayRowRenderContext::new(
-                    state.face_resolver,
-                    state.evaluator.display_host.as_deref(),
-                    state.face_ids,
-                );
-                let result = DisplayRowItemSourceRenderRequest::new(request)
-                    .render_fragment_step_into_row_with_policy(
-                        &mut renderer,
-                        &mut scratch_row,
-                        source,
-                        source_state,
-                        &mut context,
-                        render_policy,
-                    )?;
-                Some((result, scratch_row.height_px, scratch_row.ascent_px))
-            })??;
-        let end = display_row_output_end_position(result.progress);
-        let source_slots = result.source_slots;
-        Some(CurrentTextRowRenderOutcome {
-            stop: result.stop,
-            source_slots,
-            end,
-            row_height_px,
-            row_ascent_px,
-        })
+        DisplayRowCurrentTextSourceRenderRequest::new(request, source, source_state, render_policy)
+            .measure_against_current_row(state)
+            .map(DisplayRowCurrentTextSourceStepResult::into_measure_outcome)
     }
 
     pub(crate) fn measure_owned_display_source_against_current_text_row<
@@ -2280,6 +2254,163 @@ fn display_row_append_progress_from_render_result(
     )
 }
 
+struct DisplayRowCurrentTextSourceRenderRequest<'row, 'source, 'state, 'policy, S, P> {
+    row_request: DisplayRowSourceRenderRequest<'row>,
+    source: &'source mut S,
+    source_state: &'state mut DisplayRowSourceState,
+    render_policy: &'policy mut P,
+}
+
+struct DisplayRowCurrentTextSourceStepResult {
+    role: GlyphRowRole,
+    result: DisplayRowRenderIntoRowResult,
+    row_height_px: f32,
+    row_ascent_px: f32,
+}
+
+struct DisplayRowCurrentSourceSlotBoundsMergeRequest<'a> {
+    slots: &'a [DisplayRowGlyphSlot],
+}
+
+impl<'a> DisplayRowCurrentSourceSlotBoundsMergeRequest<'a> {
+    fn new(slots: &'a [DisplayRowGlyphSlot]) -> Self {
+        Self { slots }
+    }
+
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        builder.with_current_row_mut(|row| {
+            merge_display_row_source_slot_bounds(row, self.slots);
+        });
+    }
+}
+
+impl<'row, 'source, 'state, 'policy, S, P>
+    DisplayRowCurrentTextSourceRenderRequest<'row, 'source, 'state, 'policy, S, P>
+where
+    S: DisplayItemSource,
+    P: DisplayRowRenderPolicy,
+{
+    fn new(
+        row_request: DisplayRowSourceRenderRequest<'row>,
+        source: &'source mut S,
+        source_state: &'state mut DisplayRowSourceState,
+        render_policy: &'policy mut P,
+    ) -> Self {
+        Self {
+            row_request,
+            source,
+            source_state,
+            render_policy,
+        }
+    }
+
+    fn render_into_current_row(
+        self,
+        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+    ) -> Option<DisplayRowCurrentTextSourceStepResult> {
+        let Self {
+            row_request,
+            source,
+            source_state,
+            render_policy,
+        } = self;
+        let role = row_request.role();
+        let mut renderer = DisplayRowRenderer::new(state.font_metrics);
+        let (result, row_height_px, row_ascent_px) =
+            state.builder.with_current_row_mut(|row| {
+                let mut context = DisplayRowRenderContext::new(
+                    state.face_resolver,
+                    state.evaluator.display_host.as_deref(),
+                    state.face_ids,
+                );
+                let result = DisplayRowItemSourceRenderRequest::new(row_request)
+                    .render_fragment_step_into_row_with_policy(
+                        &mut renderer,
+                        row,
+                        source,
+                        source_state,
+                        &mut context,
+                        render_policy,
+                    )?;
+                Some((result, row.height_px, row.ascent_px))
+            })??;
+        Some(DisplayRowCurrentTextSourceStepResult {
+            role,
+            result,
+            row_height_px,
+            row_ascent_px,
+        })
+    }
+
+    fn measure_against_current_row(
+        self,
+        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
+    ) -> Option<DisplayRowCurrentTextSourceStepResult> {
+        let Self {
+            row_request,
+            source,
+            source_state,
+            render_policy,
+        } = self;
+        let role = row_request.role();
+        let mut renderer = DisplayRowRenderer::new(state.font_metrics);
+        let (result, row_height_px, row_ascent_px) =
+            state.builder.with_current_row_mut(|row| {
+                let mut scratch_row = row.clone();
+                let mut context = DisplayRowRenderContext::new(
+                    state.face_resolver,
+                    state.evaluator.display_host.as_deref(),
+                    state.face_ids,
+                );
+                let result = DisplayRowItemSourceRenderRequest::new(row_request)
+                    .render_fragment_step_into_row_with_policy(
+                        &mut renderer,
+                        &mut scratch_row,
+                        source,
+                        source_state,
+                        &mut context,
+                        render_policy,
+                    )?;
+                Some((result, scratch_row.height_px, scratch_row.ascent_px))
+            })??;
+        Some(DisplayRowCurrentTextSourceStepResult {
+            role,
+            result,
+            row_height_px,
+            row_ascent_px,
+        })
+    }
+}
+
+impl DisplayRowCurrentTextSourceStepResult {
+    fn finish_and_emit(
+        self,
+        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+        output: TextRowOutput,
+    ) -> CurrentTextRowRenderOutcome {
+        finish_current_text_row_render(
+            state,
+            output,
+            self.role,
+            self.result,
+            self.row_height_px,
+            self.row_ascent_px,
+        )
+    }
+
+    fn into_measure_outcome(self) -> CurrentTextRowRenderOutcome {
+        let end = display_row_output_end_position(self.result.progress);
+        let source_slots = self.result.source_slots;
+        CurrentTextRowRenderOutcome {
+            stop: self.result.stop,
+            source_slots,
+            end,
+            row_height_px: self.row_height_px,
+            row_ascent_px: self.row_ascent_px,
+        }
+    }
+}
+
 fn render_display_item_source_into_current_text_row_and_emit<
     S: DisplayItemSource,
     P: DisplayRowRenderPolicy,
@@ -2291,33 +2422,9 @@ fn render_display_item_source_into_current_text_row_and_emit<
     output: TextRowOutput,
     render_policy: &mut P,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let role = request.role();
-    let mut renderer = DisplayRowRenderer::new(state.font_metrics);
-    let (result, row_height_px, row_ascent_px) = state.builder.with_current_row_mut(|row| {
-        let mut context = DisplayRowRenderContext::new(
-            state.face_resolver,
-            state.evaluator.display_host.as_deref(),
-            state.face_ids,
-        );
-        let result = DisplayRowItemSourceRenderRequest::new(request)
-            .render_fragment_step_into_row_with_policy(
-                &mut renderer,
-                row,
-                source,
-                source_state,
-                &mut context,
-                render_policy,
-            )?;
-        Some((result, row.height_px, row.ascent_px))
-    })??;
-    Some(finish_current_text_row_render(
-        state,
-        output,
-        role,
-        result,
-        row_height_px,
-        row_ascent_px,
-    ))
+    DisplayRowCurrentTextSourceRenderRequest::new(request, source, source_state, render_policy)
+        .render_into_current_row(state)
+        .map(|result| result.finish_and_emit(state, output))
 }
 
 fn finish_current_text_row_render(
@@ -2336,7 +2443,7 @@ fn finish_current_text_row_render(
         &result.faces,
         &result.media,
     );
-    merge_display_row_source_slot_bounds_to_current_row(state.builder, &result.source_slots);
+    DisplayRowCurrentSourceSlotBoundsMergeRequest::new(&result.source_slots).install(state.builder);
     let source_slots = result.source_slots;
     state
         .output_emitter
@@ -2460,15 +2567,6 @@ pub(crate) fn install_rendered_display_row_fragment_assets(
     for media in media {
         media.install(builder, role, matrix_row);
     }
-}
-
-pub(crate) fn merge_display_row_source_slot_bounds_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
-    slots: &[DisplayRowGlyphSlot],
-) {
-    builder.with_current_row_mut(|row| {
-        merge_display_row_source_slot_bounds(row, slots);
-    });
 }
 
 #[derive(Clone, Copy)]
