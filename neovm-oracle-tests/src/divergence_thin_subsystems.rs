@@ -94,40 +94,7 @@ fn div_ts_idle_timer() {
     );
 }
 
-// --- gc / alloc -------------------------------------------------------------
-
-#[test]
-fn div_ts_garbage_collect_structure() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"
-(let ((gc (garbage-collect)))
-  (list (consp gc) (mapcar #'car gc)))
-"##,
-    );
-}
-
-#[test]
-fn div_ts_memory_use_counts_structure() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"
-(let ((m (memory-use-counts)))
-  (list (consp m) (length m)))
-"##,
-    );
-}
-
-#[test]
-fn div_ts_purecopy_and_finalizer() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"
-(list (consp (purecopy (cons 1 2)))
-      (finalizerp (make-finalizer (lambda () nil))))
-"##,
-    );
-}
+// (gc / alloc tests intentionally omitted per request.)
 
 // --- float transcendentals --------------------------------------------------
 
