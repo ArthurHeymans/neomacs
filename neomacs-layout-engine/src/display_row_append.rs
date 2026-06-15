@@ -57,9 +57,8 @@ use crate::display_source::{
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
-    DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace, ResolvedDisplayReplacement,
-    display_string_base_face, display_string_base_face_for_active_row,
-    resolve_and_install_display_string_base_face, resolve_display_replacement,
+    DisplayStringBaseFace, ResolvedDisplayReplacement, display_string_base_face,
+    display_string_base_face_for_active_row, resolve_display_replacement,
 };
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
@@ -141,6 +140,7 @@ impl BufferLineNumberMarginRenderRequest {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn render_pending(
         self,
         line_numbers: &mut LineNumberRenderState,
@@ -169,6 +169,50 @@ impl BufferLineNumberMarginRenderRequest {
         let text = line_number_request.text();
         emit_text_window_line_number_margin(
             builder,
+            TextWindowLineNumberMargin {
+                text: &text,
+                cols: line_number_request.cols(),
+                face_id: line_number_face_id,
+                row_y: row_geometry.y(),
+                row_height: row_geometry.height(),
+                row_ascent: row_geometry.ascent(),
+                char_width,
+            },
+        );
+
+        face_scan.invalidate();
+        line_numbers.consume_render_request();
+        true
+    }
+
+    pub(crate) fn render_pending_with_source_state(
+        self,
+        line_numbers: &mut LineNumberRenderState,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        row_geometry: &DisplayRowGeometryState,
+        face_scan: &mut FaceScanCheckpoint,
+        char_width: f32,
+    ) -> bool {
+        let Some(line_number_request) = line_numbers.margin_render_request(
+            self.mode,
+            self.current_absolute,
+            self.offset,
+            self.major_tick,
+            self.cols,
+        ) else {
+            return false;
+        };
+
+        let line_number_face = source_render
+            .face_resolver()
+            .resolve_named_face(line_number_request.face().face_name());
+        let line_number_face_id = face_ids.allocate();
+        source_render.insert_resolved_face(line_number_face_id, &line_number_face);
+
+        let text = line_number_request.text();
+        emit_text_window_line_number_margin(
+            source_render.output_render().builder,
             TextWindowLineNumberMargin {
                 text: &text,
                 cols: line_number_request.cols(),
@@ -360,14 +404,47 @@ impl<'a> TextRowSourceRenderState<'a> {
         }
     }
 
-    pub(crate) fn builder_and_face_resolver(&mut self) -> (&mut GlyphMatrixBuilder, &FaceResolver) {
-        (self.output_render.builder, self.face_resolver)
-    }
-
     pub(crate) fn builder_and_font_metrics(
         &mut self,
     ) -> (&mut GlyphMatrixBuilder, &mut Option<FontMetricsService>) {
         (self.output_render.builder, self.font_metrics)
+    }
+
+    pub(crate) fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
+        insert_resolved_display_row_face(self.output_render.builder, face_id, face, None);
+    }
+
+    pub(crate) fn display_string_base_face<B: LayoutBufferView>(
+        &mut self,
+        buffer: &B,
+        origin: DisplayOrigin,
+        policy: BaseFacePolicy,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayStringBaseFace {
+        display_string_base_face(
+            buffer,
+            self.face_resolver,
+            origin,
+            policy,
+            face_ids,
+            self.output_render.builder,
+        )
+    }
+
+    pub(crate) fn display_property_replacement_append_plan<B: LayoutBufferView>(
+        &mut self,
+        request: DisplayPropertyReplacementAppendRequest,
+        buffer: &B,
+        active_face_state: &DisplayRowActiveFaceState,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayPropertyReplacementAppendPlan {
+        request.into_plan(
+            buffer,
+            self.face_resolver,
+            active_face_state,
+            face_ids,
+            self.output_render.builder,
+        )
     }
 
     pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
@@ -2087,15 +2164,11 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             return position;
         };
 
-        let (builder, _output_emitter, _evaluator, _font_metrics, face_resolver) =
-            state.reborrow().into_parts();
-        let prefix_base_face = display_string_base_face(
+        let prefix_base_face = state.display_string_base_face(
             buffer,
-            face_resolver,
             prefix_source.origin(),
             prefix_source.base_face_policy(),
             face_ids,
-            builder,
         );
         LispStringRowAppendContext::new(
             self.append_surface,
@@ -2674,16 +2747,11 @@ fn render_overlay_string<B: LayoutBufferView>(
         return;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
-    let (builder, face_resolver) = state.source_render.builder_and_face_resolver();
-    let base_face = resolve_and_install_display_string_base_face(
+    let base_face = state.source_render.display_string_base_face(
         buffer,
-        face_resolver,
         source_request.origin(),
         source_request.base_face_policy(),
-        None,
-        DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
         state.face_ids,
-        builder,
     );
     let max_x = row_context.right_edge();
     let row_limit = row_context.row_limit();
@@ -7062,6 +7130,38 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
         }
         true
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_at_checkpoint_with_source_state(
+        &self,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        face_scan: &mut FaceScanCheckpoint,
+        height_span: &mut ActiveDisplayPropertySpan<f32>,
+        face_ids: &mut FrameFaceIdAllocator,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        row_geometry: &mut DisplayRowGeometryState,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &mut BoxFaceRowState,
+        x: f32,
+        charpos: i64,
+    ) -> bool {
+        let (builder, font_metrics) = source_render.builder_and_font_metrics();
+        self.resolve_at_checkpoint(
+            &mut BufferCurrentFaceResolutionState::new(
+                face_scan,
+                height_span,
+                font_metrics,
+                face_ids,
+                builder,
+                active_face_state,
+                row_geometry,
+                row_extend,
+                box_face,
+                x,
+            ),
+            charpos,
+        )
+    }
 }
 
 pub(crate) struct BufferCurrentFaceResolutionState<'a> {
@@ -9903,22 +10003,19 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             self.charpos,
             self.params.window_start,
         );
-        let (builder, font_metrics) = source_render.builder_and_font_metrics();
-        self.face_resolution_context.resolve_at_checkpoint(
-            &mut BufferCurrentFaceResolutionState::new(
+        self.face_resolution_context
+            .resolve_at_checkpoint_with_source_state(
+                &mut source_render,
                 face_scan,
                 height_span,
-                font_metrics,
                 face_ids,
-                builder,
                 active_face_state,
                 row_geometry,
                 row_extend,
                 box_face,
                 *x,
-            ),
-            self.charpos,
-        );
+                self.charpos,
+            );
 
         let action = BufferDisplayPropertyTextRenderContext::new(
             self.buffer_id,
@@ -9958,22 +10055,19 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             face_scan,
         );
         if outcome.should_resolve_face() {
-            let (builder, font_metrics) = source_render.builder_and_font_metrics();
-            self.face_resolution_context.resolve_at_checkpoint(
-                &mut BufferCurrentFaceResolutionState::new(
+            self.face_resolution_context
+                .resolve_at_checkpoint_with_source_state(
+                    &mut source_render,
                     face_scan,
                     height_span,
-                    font_metrics,
                     face_ids,
-                    builder,
                     active_face_state,
                     row_geometry,
                     row_extend,
                     box_face,
                     *x,
-                ),
-                *charpos,
-            );
+                    *charpos,
+                );
         }
         outcome
     }
@@ -10039,7 +10133,6 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             )
         });
         if let Some(item) = replacement_item {
-            let face_resolver = state.face_resolver();
             let replacement = DisplayPropertyReplacementAppendRequest::new(
                 BufferDisplayReplacementSource::new(
                     self.buffer_id,
@@ -10054,7 +10147,6 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             .append_to_text_row(
                 buffer,
                 state,
-                face_resolver,
                 face_ids,
                 append_surface,
                 row_geometry,
@@ -10358,11 +10450,9 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
         let request = state.with_font_metrics_and_display_host(|font_metrics, host| {
             self.resolve(font_metrics, host)
         })?;
-        let face_resolver = state.face_resolver();
         Some(request.append_to_text_row(
             buffer,
             state,
-            face_resolver,
             face_ids,
             append_surface,
             row_geometry,
@@ -10434,7 +10524,6 @@ impl DisplayPropertyReplacementAppendRequest {
         self,
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
-        face_resolver: &FaceResolver,
         face_ids: &mut FrameFaceIdAllocator,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
@@ -10442,10 +10531,12 @@ impl DisplayPropertyReplacementAppendRequest {
     ) -> DisplayPropertyReplacementAppendOutcome {
         let start_position = self.start_position();
         let cursor_policy = self.cursor_policy();
-        let plan = {
-            let (builder, _face_resolver) = state.builder_and_face_resolver();
-            self.into_plan(buffer, face_resolver, active_face_state, face_ids, builder)
-        };
+        let plan = state.display_property_replacement_append_plan(
+            self,
+            buffer,
+            active_face_state,
+            face_ids,
+        );
         let end_position = plan.append_to_text_row(
             state,
             face_ids,

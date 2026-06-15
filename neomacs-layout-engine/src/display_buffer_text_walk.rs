@@ -1870,18 +1870,16 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {
-        {
-            let (builder, face_resolver) = self.source_render.builder_and_face_resolver();
-            context.line_number_margin_request().render_pending(
+        context
+            .line_number_margin_request()
+            .render_pending_with_source_state(
                 self.line_numbers,
-                face_resolver,
+                &mut self.source_render,
                 self.face_ids,
-                &mut *builder,
                 self.row_geometry,
                 self.face_scan,
                 context.char_width(),
             );
-        }
 
         context
             .line_prefix_request(
