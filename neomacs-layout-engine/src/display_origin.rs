@@ -11,15 +11,15 @@ pub(crate) enum OverlayStringKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)]
 pub(crate) enum DisplayPropertySource {
     TextProperty,
+    #[allow(dead_code)]
     Overlay,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)]
 pub(crate) enum DisplayOrigin {
+    #[allow(dead_code)]
     BufferText {
         charpos: CharPos0,
     },
@@ -44,6 +44,7 @@ pub(crate) enum DisplayOrigin {
     TabBar,
     Minibuffer,
     EchoArea,
+    #[allow(dead_code)]
     Posframe,
 }
 

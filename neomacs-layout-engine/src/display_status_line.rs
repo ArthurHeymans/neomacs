@@ -328,11 +328,8 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             text,
             symbol_values,
         } = self;
-        let role = origin
-            .glyph_row_role()
-            .expect("chrome Lisp string origin must map to a glyph row role");
-        let policy = DisplayRowSourceRequestPolicy::new(
-            y, width, row_height, char_width, ascent, tab_policy, role,
+        let policy = DisplayRowSourceRequestPolicy::from_origin(
+            y, width, row_height, char_width, ascent, tab_policy, origin,
         )
         .with_symbol_values(symbol_values);
         (policy, base_face, text)
@@ -1141,16 +1138,14 @@ impl<'face> EchoMinibufferSourceRowRequest<'face> {
     }
 
     fn source_request_policy(&self) -> DisplayRowSourceRequestPolicy {
-        DisplayRowSourceRequestPolicy::new(
+        DisplayRowSourceRequestPolicy::from_origin(
             self.y + self.row_index as f32 * self.row_height,
             self.wrap_width,
             self.row_height,
             self.char_width,
             self.ascent,
             DisplayTabPolicy::every(8),
-            DisplayOrigin::EchoArea
-                .glyph_row_role()
-                .expect("echo-area origin must map to a glyph row role"),
+            DisplayOrigin::EchoArea,
         )
     }
 

@@ -4,6 +4,7 @@ use crate::display_item::{
     DisplayMediaReplacementKind, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
     RenderFaceRef, SourceSpan,
 };
+use crate::display_origin::DisplayOrigin;
 use crate::display_property::parse_display_length_expr;
 #[cfg(test)]
 use crate::display_row_builder::display_row_text_is_empty;
@@ -1748,6 +1749,21 @@ impl DisplayRowSourceRequestPolicy {
             role,
             symbol_values: std::collections::HashMap::new(),
         }
+    }
+
+    pub(crate) fn from_origin(
+        y: f32,
+        width: f32,
+        height: f32,
+        char_width: f32,
+        ascent: f32,
+        tab_policy: DisplayTabPolicy,
+        origin: DisplayOrigin,
+    ) -> Self {
+        let role = origin
+            .glyph_row_role()
+            .expect("display row source origin must map to a glyph row role");
+        Self::new(y, width, height, char_width, ascent, tab_policy, role)
     }
 
     pub(crate) fn with_symbol_values(
