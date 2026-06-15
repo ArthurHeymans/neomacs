@@ -153,7 +153,8 @@ pub(crate) fn builtin_dbus_message_internal(ctx: &mut Context, args: Vec<Value>)
         ValueKind::Symbol(_) => Ok(Value::NIL),
         ValueKind::String => {
             let dest = args[1]
-                .as_runtime_string_owned()
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                 .expect("ValueKind::String must carry LispString payload");
             if !dest.contains(':') {
                 Err(signal(

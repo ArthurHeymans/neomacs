@@ -1743,11 +1743,16 @@ impl Frame {
     }
 
     pub fn name_runtime_string_owned(&self) -> String {
-        self.name.as_runtime_string_owned().unwrap_or_default()
+        self.name
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+            .unwrap_or_default()
     }
 
     pub fn title_runtime_string_owned(&self) -> Option<String> {
-        self.title.as_runtime_string_owned()
+        self.title
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
     }
 
     pub fn host_title_runtime_string_owned(&self) -> String {

@@ -918,7 +918,9 @@ fn is_remote_directory(dir: &str) -> bool {
 }
 
 fn mode_line_runtime_string(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 /// Compute GNU `percent99` — percentage capped at 99, rounded up.
@@ -2020,7 +2022,11 @@ fn expand_mode_line_percent_in_state(
     let buf_name = buf
         .map(|b| b.name_runtime_string_owned())
         .unwrap_or_else(|| "*scratch*".to_string());
-    let file_name_storage = buf.and_then(|b| b.file_name_value().as_runtime_string_owned());
+    let file_name_storage = buf.and_then(|b| {
+        b.file_name_value()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+    });
     let file_name = file_name_storage.as_deref().unwrap_or("");
     let modified = buf.map(|b| b.is_modified()).unwrap_or(false);
     let read_only = buf.is_some_and(|b| {

@@ -108,12 +108,15 @@ fn expect_number(value: &Value) -> Result<f64, Flow> {
 }
 
 fn expect_buffer_name_string(value: &Value) -> Result<String, Flow> {
-    value.as_runtime_string_owned().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )
-    })
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), *value],
+            )
+        })
 }
 
 fn find_buffer_by_name_arg(
@@ -6950,7 +6953,9 @@ fn make_frame_plain(
         fid,
         width,
         height,
-        name.as_runtime_string_owned().unwrap_or_default()
+        name.as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+            .unwrap_or_default()
     );
     Ok(Value::make_frame(fid.0))
 }

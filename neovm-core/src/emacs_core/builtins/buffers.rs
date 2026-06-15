@@ -35,12 +35,15 @@ pub(super) fn expect_buffer_id(value: &Value) -> Result<BufferId, Flow> {
 }
 
 fn expect_buffer_name_string(value: &Value) -> Result<String, Flow> {
-    value.as_runtime_string_owned().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )
-    })
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), *value],
+            )
+        })
 }
 
 fn find_buffer_by_name_arg(
@@ -4000,7 +4003,8 @@ fn other_buffer_designator(
         }
         ValueKind::String => {
             let name = v
-                .as_runtime_string_owned()
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                 .expect("ValueKind::String must carry LispString payload");
             buffers.find_buffer_by_name(&name)
         }

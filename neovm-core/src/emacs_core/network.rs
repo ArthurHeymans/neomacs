@@ -468,7 +468,8 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_string(value: &Value) -> Result<String, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
-            .as_runtime_string_owned()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
             .expect("ValueKind::String must carry LispString payload")),
         ValueKind::Symbol(id) => Ok(crate::emacs_core::intern::resolve_sym(id).to_owned()),
         ValueKind::Nil => Ok("nil".to_string()),
