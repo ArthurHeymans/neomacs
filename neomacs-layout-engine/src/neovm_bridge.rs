@@ -2629,7 +2629,7 @@ impl FaceResolver {
     ///
     /// `next_check` is set to the minimum of all property change positions
     /// so the caller can skip per-character lookups until that boundary.
-    pub(crate) fn face_at_pos<B: LayoutBufferView>(
+    fn face_at_pos<B: LayoutBufferView>(
         &self,
         buffer: &B,
         charpos: usize,

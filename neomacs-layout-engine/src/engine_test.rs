@@ -3731,7 +3731,14 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
             Some("neo".to_string()),
         );
         let mut next_check = buffer.point_max_char_pos().get();
-        let resolved = face_resolver.face_at_pos(buffer, 0, &mut next_check);
+        let resolved = face_resolver.base_face_for_origin(
+            Some(buffer),
+            &DisplayOrigin::BufferText {
+                charpos: neovm_core::buffer::CharPos0::new(0),
+            },
+            BaseFacePolicy::BufferFaceIncludingOverlays,
+            &mut next_check,
+        );
         assert_eq!(resolved.font_family, "JetBrains Mono");
         assert_eq!(resolved.font_weight, 800);
         assert!(
