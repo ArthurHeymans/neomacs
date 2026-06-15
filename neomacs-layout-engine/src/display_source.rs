@@ -4,7 +4,9 @@ use crate::display_item::{
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
     GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
-use crate::display_property::{DisplayReplacementProperty, classify_display_property};
+use crate::display_property::{
+    DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
+};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
@@ -1081,6 +1083,13 @@ pub(crate) struct BufferDisplayPropertyTextSourceEvent<'a> {
     skip_to: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferDisplayPropertyTextModifierAction {
+    raise_offset_px: Option<f32>,
+    height_factor: Option<f32>,
+    next_change: i64,
+}
+
 impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -1143,6 +1152,50 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
 
     pub(crate) fn skip_to(self) -> i64 {
         self.skip_to
+    }
+}
+
+impl BufferDisplayPropertyTextModifierAction {
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        raise_offset_px: Option<f32>,
+        height_factor: Option<f32>,
+        next_change: i64,
+    ) -> Self {
+        Self {
+            raise_offset_px,
+            height_factor,
+            next_change,
+        }
+    }
+
+    pub(crate) fn for_display_property(
+        display_property: &DisplayPropertyClassification,
+        row_height: f32,
+        next_change: i64,
+    ) -> Option<Self> {
+        let modifiers = display_property.modifiers();
+        let raise_offset_px = modifiers.raise.map(|factor| -(factor * row_height));
+        let height_factor = modifiers
+            .height
+            .filter(|factor| factor.is_finite() && *factor > 0.0);
+        (raise_offset_px.is_some() || height_factor.is_some()).then_some(Self {
+            raise_offset_px,
+            height_factor,
+            next_change,
+        })
+    }
+
+    pub(crate) fn raise_offset_px(self) -> Option<f32> {
+        self.raise_offset_px
+    }
+
+    pub(crate) fn height_factor(self) -> Option<f32> {
+        self.height_factor
+    }
+
+    pub(crate) fn next_change(self) -> i64 {
+        self.next_change
     }
 }
 

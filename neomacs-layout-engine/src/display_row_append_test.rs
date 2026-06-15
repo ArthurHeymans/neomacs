@@ -31,9 +31,10 @@ use crate::display_row_walk_state::{
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::{
-    BufferDisplayReplacementStringRequest, BufferTextDecodedSourceEvent,
-    BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor, BufferTextSourceSpecialDisplay,
-    DisplayReplacementAppendItem, DisplayReplacementSourceMappedTextItem,
+    BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
+    BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
+    BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem,
+    DisplayReplacementSourceMappedTextItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{

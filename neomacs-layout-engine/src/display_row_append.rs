@@ -48,16 +48,17 @@ use crate::display_row_walk_state::{
     skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
-    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource,
-    BufferDisplayReplacementStringRequest, BufferTextDecodedSourceChar,
-    BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath, BufferTextSourceAdvanceRequest,
-    BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
-    BufferTextSourceItemRequest, BufferTextSourceNaturalAdvanceRequest,
-    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange,
-    BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent, BufferTextSourceTextItemRequest,
-    BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest, DisplayItemSource,
-    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementSourceMappedTextItem,
-    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
+    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath,
+    BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem, BufferTextSourceChar,
+    BufferTextSourceClusterState, BufferTextSourceItemRequest,
+    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
+    BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
+    BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
+    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementAppendItem,
+    DisplayReplacementBox, DisplayReplacementSourceMappedTextItem, LispStringSourceCursor,
+    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -9344,13 +9345,6 @@ pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
     skip_to: i64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferDisplayPropertyTextModifierAction {
-    raise_offset_px: Option<f32>,
-    height_factor: Option<f32>,
-    next_change: i64,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferDisplayPropertyTextModifierStateOutcome {
     height_face_changed: bool,
@@ -9788,19 +9782,6 @@ impl BufferDisplayPropertyTextReplacementOutcome {
 }
 
 impl BufferDisplayPropertyTextModifierAction {
-    #[cfg(test)]
-    pub(crate) fn new_for_test(
-        raise_offset_px: Option<f32>,
-        height_factor: Option<f32>,
-        next_change: i64,
-    ) -> Self {
-        Self {
-            raise_offset_px,
-            height_factor,
-            next_change,
-        }
-    }
-
     pub(crate) fn clear_expired_raise_span(
         raise_span: &mut ActiveDisplayPropertySpan<f32>,
         charpos: i64,
@@ -9822,55 +9803,23 @@ impl BufferDisplayPropertyTextModifierAction {
         BufferDisplayPropertyTextModifierStateOutcome::new(height_face_changed)
     }
 
-    fn for_display_property(
-        display_property: &DisplayPropertyClassification,
-        row_height: f32,
-        next_change: i64,
-    ) -> Option<Self> {
-        let modifiers = display_property.modifiers();
-        let raise_offset_px = modifiers.raise.map(|factor| -(factor * row_height));
-        let height_factor = modifiers
-            .height
-            .filter(|factor| factor.is_finite() && *factor > 0.0);
-        (raise_offset_px.is_some() || height_factor.is_some()).then_some(Self {
-            raise_offset_px,
-            height_factor,
-            next_change,
-        })
-    }
-
     pub(crate) fn apply_to_walk_state(
         self,
         raise_span: &mut ActiveDisplayPropertySpan<f32>,
         height_span: &mut ActiveDisplayPropertySpan<f32>,
         face_scan: &mut FaceScanCheckpoint,
     ) -> BufferDisplayPropertyTextModifierStateOutcome {
-        if let Some(raise_offset_px) = self.raise_offset_px {
-            raise_span.set(raise_offset_px, self.next_change);
+        if let Some(raise_offset_px) = self.raise_offset_px() {
+            raise_span.set(raise_offset_px, self.next_change());
         }
-        let height_face_changed = if let Some(factor) = self.height_factor {
-            height_span.set(factor, self.next_change);
+        let height_face_changed = if let Some(factor) = self.height_factor() {
+            height_span.set(factor, self.next_change());
             face_scan.invalidate();
             true
         } else {
             false
         };
         BufferDisplayPropertyTextModifierStateOutcome::new(height_face_changed)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn raise_offset_px(self) -> Option<f32> {
-        self.raise_offset_px
-    }
-
-    #[cfg(test)]
-    pub(crate) fn height_factor(self) -> Option<f32> {
-        self.height_factor
-    }
-
-    #[cfg(test)]
-    pub(crate) fn next_change(self) -> i64 {
-        self.next_change
     }
 }
 
