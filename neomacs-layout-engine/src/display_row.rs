@@ -2285,14 +2285,14 @@ pub(crate) fn install_rendered_display_row(
     rendered: &RenderedDisplayRow,
     matrix_row: usize,
 ) {
-    for face in &rendered.faces {
-        builder.insert_face(face.id, face.clone());
-    }
+    install_rendered_display_row_faces(builder, rendered);
     let row = rendered_row_with_source_bounds(rendered);
     builder.install_prebuilt_row(matrix_row, &row);
-    for media in &rendered.media {
-        media.install(builder, rendered.row.role, matrix_row);
-    }
+    install_rendered_display_row_media(
+        builder,
+        rendered,
+        RenderedDisplayRowMediaInstallTarget::MatrixRow(matrix_row),
+    );
 }
 
 pub(crate) fn install_measured_window_display_row(
@@ -2307,23 +2307,21 @@ pub(crate) fn install_measured_window_display_row(
         kind,
         WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
     ));
-    for face in &measured.rendered.faces {
-        builder.insert_face(face.id, face.clone());
-    }
+    install_rendered_display_row_faces(builder, &measured.rendered);
     let matrix_row = measured.row_index as usize;
     let mut row = rendered_row_with_source_bounds(&measured.rendered);
     row.pixel_y = measured.bounds.y;
     row.height_px = measured.row_height();
     row.ascent_px = measured.row_ascent();
     builder.install_prebuilt_row(matrix_row, &row);
-    for media in &measured.rendered.media {
-        media.install_window_row(
-            builder,
-            measured.rendered.row.role,
-            measured.row_index,
-            measured.bounds,
-        );
-    }
+    install_rendered_display_row_media(
+        builder,
+        &measured.rendered,
+        RenderedDisplayRowMediaInstallTarget::WindowRow {
+            row_index: measured.row_index,
+            bounds: measured.bounds,
+        },
+    );
 }
 
 pub(crate) fn install_measured_frame_chrome_row(
@@ -2335,17 +2333,15 @@ pub(crate) fn install_measured_frame_chrome_row(
         panic!("window-owned rows must use install_measured_window_display_row");
     };
     debug_assert!(matches!(kind, FrameChromeKind::TabBar));
-    for face in &measured.rendered.faces {
-        builder.insert_face(face.id, face.clone());
-    }
-    for media in &measured.rendered.media {
-        media.install_frame_chrome(
-            builder,
-            measured.rendered.row.role,
-            measured.row_index,
-            measured.bounds,
-        );
-    }
+    install_rendered_display_row_faces(builder, &measured.rendered);
+    install_rendered_display_row_media(
+        builder,
+        &measured.rendered,
+        RenderedDisplayRowMediaInstallTarget::FrameChrome {
+            row_index: measured.row_index,
+            bounds: measured.bounds,
+        },
+    );
     let mut row = measured.rendered.row.clone();
     apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
     row.pixel_y = measured.bounds.y;
@@ -2380,6 +2376,42 @@ pub(crate) fn merge_display_row_source_slot_bounds_to_current_row(
     builder.with_current_row_mut(|row| {
         merge_display_row_source_slot_bounds(row, slots);
     });
+}
+
+#[derive(Clone, Copy)]
+enum RenderedDisplayRowMediaInstallTarget {
+    MatrixRow(usize),
+    WindowRow { row_index: u32, bounds: Rect },
+    FrameChrome { row_index: u32, bounds: Rect },
+}
+
+fn install_rendered_display_row_faces(
+    builder: &mut GlyphMatrixBuilder,
+    rendered: &RenderedDisplayRow,
+) {
+    for face in &rendered.faces {
+        builder.insert_face(face.id, face.clone());
+    }
+}
+
+fn install_rendered_display_row_media(
+    builder: &mut GlyphMatrixBuilder,
+    rendered: &RenderedDisplayRow,
+    target: RenderedDisplayRowMediaInstallTarget,
+) {
+    for media in &rendered.media {
+        match target {
+            RenderedDisplayRowMediaInstallTarget::MatrixRow(matrix_row) => {
+                media.install(builder, rendered.row.role, matrix_row);
+            }
+            RenderedDisplayRowMediaInstallTarget::WindowRow { row_index, bounds } => {
+                media.install_window_row(builder, rendered.row.role, row_index, bounds);
+            }
+            RenderedDisplayRowMediaInstallTarget::FrameChrome { row_index, bounds } => {
+                media.install_frame_chrome(builder, rendered.row.role, row_index, bounds);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
