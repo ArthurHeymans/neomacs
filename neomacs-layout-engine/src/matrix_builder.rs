@@ -16,6 +16,8 @@ use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::HashMap;
 
+const FRAME_CHROME_WINDOW_ID: i64 = 0;
+
 fn cursor_window_matches_current(cursor_window_id: i64, current_window_id: u64) -> bool {
     cursor_window_id >= 0 && cursor_window_id as u64 == current_window_id
 }
@@ -158,6 +160,170 @@ impl ResolvedPhysCursorPlacement {
             if let Some(x) = self.x {
                 cursor.x = x;
             }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum MatrixMediaInstallKind {
+    Image {
+        image_id: u32,
+    },
+    Video {
+        video_id: u32,
+        loop_count: i32,
+        autoplay: bool,
+    },
+    Xwidget {
+        xwidget_id: u32,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum MatrixCurrentWindowMediaClip {
+    TextBounds,
+    Explicit(Rect),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum MatrixMediaInstallTarget {
+    CurrentWindow {
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: MatrixCurrentWindowMediaClip,
+    },
+    FrameChrome {
+        role: GlyphRowRole,
+        row: u32,
+        col: u16,
+        clip: Rect,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixMediaInstallRequest {
+    target: MatrixMediaInstallTarget,
+    kind: MatrixMediaInstallKind,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ResolvedMatrixMediaTarget {
+    window_id: i64,
+    role: GlyphRowRole,
+    clip: Option<Rect>,
+    slot_id: DisplaySlotId,
+}
+
+impl MatrixMediaInstallRequest {
+    pub(crate) fn new(
+        target: MatrixMediaInstallTarget,
+        kind: MatrixMediaInstallKind,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) -> Self {
+        Self {
+            target,
+            kind,
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        let target = self.target.resolve(builder);
+        match self.kind {
+            MatrixMediaInstallKind::Image { image_id } => builder.images.push(ImageItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                image_id,
+                x: self.x,
+                y: self.y,
+                width: self.width,
+                height: self.height,
+            }),
+            MatrixMediaInstallKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => builder.videos.push(VideoItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                video_id,
+                x: self.x,
+                y: self.y,
+                width: self.width,
+                height: self.height,
+                loop_count,
+                autoplay,
+            }),
+            MatrixMediaInstallKind::Xwidget { xwidget_id } => builder.xwidgets.push(XwidgetItem {
+                window_id: target.window_id,
+                row_role: target.role,
+                clip_rect: target.clip,
+                slot_id: Some(target.slot_id),
+                xwidget_id,
+                x: self.x,
+                y: self.y,
+                width: self.width,
+                height: self.height,
+            }),
+        }
+    }
+}
+
+impl MatrixMediaInstallTarget {
+    fn resolve(self, builder: &GlyphMatrixBuilder) -> ResolvedMatrixMediaTarget {
+        match self {
+            Self::CurrentWindow {
+                role,
+                row,
+                col,
+                clip,
+            } => {
+                let window_id = builder.current_window_id as i64;
+                let clip = match clip {
+                    MatrixCurrentWindowMediaClip::TextBounds => builder.current_text_pixel_bounds,
+                    MatrixCurrentWindowMediaClip::Explicit(clip) => clip,
+                };
+                ResolvedMatrixMediaTarget {
+                    window_id,
+                    role,
+                    clip: Some(clip),
+                    slot_id: DisplaySlotId {
+                        window_id,
+                        row,
+                        col,
+                    },
+                }
+            }
+            Self::FrameChrome {
+                role,
+                row,
+                col,
+                clip,
+            } => ResolvedMatrixMediaTarget {
+                window_id: FRAME_CHROME_WINDOW_ID,
+                role,
+                clip: Some(clip),
+                slot_id: DisplaySlotId {
+                    window_id: FRAME_CHROME_WINDOW_ID,
+                    row,
+                    col,
+                },
+            },
         }
     }
 }
@@ -546,369 +712,8 @@ impl GlyphMatrixBuilder {
         });
     }
 
-    fn push_image_with_slot_id(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        self.images.push(ImageItem {
-            window_id,
-            row_role: role,
-            clip_rect: clip,
-            slot_id: Some(slot_id),
-            image_id,
-            x,
-            y,
-            width: w,
-            height: h,
-        });
-    }
-
-    pub(crate) fn push_current_window_image(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        let window_id = self.current_window_id as i64;
-        self.push_image_with_slot_id(
-            window_id,
-            role,
-            Some(self.current_text_pixel_bounds),
-            DisplaySlotId {
-                window_id,
-                row,
-                col,
-            },
-            image_id,
-            x,
-            y,
-            w,
-            h,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_current_window_image_with_clip(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: Rect,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        let window_id = self.current_window_id as i64;
-        self.push_image_with_slot_id(
-            window_id,
-            role,
-            Some(clip),
-            DisplaySlotId {
-                window_id,
-                row,
-                col,
-            },
-            image_id,
-            x,
-            y,
-            w,
-            h,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_frame_chrome_image(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: Rect,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        const FRAME_CHROME_WINDOW_ID: i64 = 0;
-        self.push_image_with_slot_id(
-            FRAME_CHROME_WINDOW_ID,
-            role,
-            Some(clip),
-            DisplaySlotId {
-                window_id: FRAME_CHROME_WINDOW_ID,
-                row,
-                col,
-            },
-            image_id,
-            x,
-            y,
-            w,
-            h,
-        );
-    }
-
-    fn push_video_with_slot_id(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        video_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        loop_count: i32,
-        autoplay: bool,
-    ) {
-        self.videos.push(VideoItem {
-            window_id,
-            row_role: role,
-            clip_rect: clip,
-            slot_id: Some(slot_id),
-            video_id,
-            x,
-            y,
-            width: w,
-            height: h,
-            loop_count,
-            autoplay,
-        });
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_current_window_video(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        video_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        loop_count: i32,
-        autoplay: bool,
-    ) {
-        let window_id = self.current_window_id as i64;
-        self.push_video_with_slot_id(
-            window_id,
-            role,
-            Some(self.current_text_pixel_bounds),
-            DisplaySlotId {
-                window_id,
-                row,
-                col,
-            },
-            video_id,
-            x,
-            y,
-            w,
-            h,
-            loop_count,
-            autoplay,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_current_window_video_with_clip(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: Rect,
-        video_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        loop_count: i32,
-        autoplay: bool,
-    ) {
-        let window_id = self.current_window_id as i64;
-        self.push_video_with_slot_id(
-            window_id,
-            role,
-            Some(clip),
-            DisplaySlotId {
-                window_id,
-                row,
-                col,
-            },
-            video_id,
-            x,
-            y,
-            w,
-            h,
-            loop_count,
-            autoplay,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_frame_chrome_video(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: Rect,
-        video_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        loop_count: i32,
-        autoplay: bool,
-    ) {
-        const FRAME_CHROME_WINDOW_ID: i64 = 0;
-        self.push_video_with_slot_id(
-            FRAME_CHROME_WINDOW_ID,
-            role,
-            Some(clip),
-            DisplaySlotId {
-                window_id: FRAME_CHROME_WINDOW_ID,
-                row,
-                col,
-            },
-            video_id,
-            x,
-            y,
-            w,
-            h,
-            loop_count,
-            autoplay,
-        );
-    }
-
-    fn push_xwidget_with_slot_id(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        self.xwidgets.push(XwidgetItem {
-            window_id,
-            row_role: role,
-            clip_rect: clip,
-            slot_id: Some(slot_id),
-            xwidget_id,
-            x,
-            y,
-            width: w,
-            height: h,
-        });
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_frame_chrome_xwidget(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: Rect,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        const FRAME_CHROME_WINDOW_ID: i64 = 0;
-        self.push_xwidget_with_slot_id(
-            FRAME_CHROME_WINDOW_ID,
-            role,
-            Some(clip),
-            DisplaySlotId {
-                window_id: FRAME_CHROME_WINDOW_ID,
-                row,
-                col,
-            },
-            xwidget_id,
-            x,
-            y,
-            w,
-            h,
-        );
-    }
-
-    pub(crate) fn push_current_window_xwidget(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        let window_id = self.current_window_id as i64;
-        self.push_xwidget_with_slot_id(
-            window_id,
-            role,
-            Some(self.current_text_pixel_bounds),
-            DisplaySlotId {
-                window_id,
-                row,
-                col,
-            },
-            xwidget_id,
-            x,
-            y,
-            w,
-            h,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn push_current_window_xwidget_with_clip(
-        &mut self,
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: Rect,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-    ) {
-        let window_id = self.current_window_id as i64;
-        self.push_xwidget_with_slot_id(
-            window_id,
-            role,
-            Some(clip),
-            DisplaySlotId {
-                window_id,
-                row,
-                col,
-            },
-            xwidget_id,
-            x,
-            y,
-            w,
-            h,
-        );
+    pub(crate) fn install_media(&mut self, request: MatrixMediaInstallRequest) {
+        request.install(self);
     }
 
     fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {

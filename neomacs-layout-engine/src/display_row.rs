@@ -29,7 +29,10 @@ use crate::display_text_run_measurement::{
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::glyph_row_writer;
-use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::matrix_builder::{
+    GlyphMatrixBuilder, MatrixCurrentWindowMediaClip, MatrixMediaInstallKind,
+    MatrixMediaInstallRequest, MatrixMediaInstallTarget,
+};
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
@@ -2540,45 +2543,15 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
 impl RenderedDisplayRowMedia {
     fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
         let row = matrix_row.min(u32::MAX as usize) as u32;
-        match self.kind {
-            RenderedDisplayRowMediaKind::Image { image_id } => builder.push_current_window_image(
+        self.install_with_target(
+            builder,
+            MatrixMediaInstallTarget::CurrentWindow {
                 role,
                 row,
-                self.col,
-                image_id,
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-            ),
-            RenderedDisplayRowMediaKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => builder.push_current_window_video(
-                role,
-                row,
-                self.col,
-                video_id,
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-                loop_count,
-                autoplay,
-            ),
-            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => builder
-                .push_current_window_xwidget(
-                    role,
-                    row,
-                    self.col,
-                    xwidget_id,
-                    self.x,
-                    self.y,
-                    self.width,
-                    self.height,
-                ),
-        }
+                col: self.col,
+                clip: MatrixCurrentWindowMediaClip::TextBounds,
+            },
+        );
     }
 
     fn install_window_row(
@@ -2588,49 +2561,15 @@ impl RenderedDisplayRowMedia {
         row: u32,
         clip: Rect,
     ) {
-        match self.kind {
-            RenderedDisplayRowMediaKind::Image { image_id } => builder
-                .push_current_window_image_with_clip(
-                    role,
-                    row,
-                    self.col,
-                    clip,
-                    image_id,
-                    self.x,
-                    self.y,
-                    self.width,
-                    self.height,
-                ),
-            RenderedDisplayRowMediaKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => builder.push_current_window_video_with_clip(
+        self.install_with_target(
+            builder,
+            MatrixMediaInstallTarget::CurrentWindow {
                 role,
                 row,
-                self.col,
-                clip,
-                video_id,
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-                loop_count,
-                autoplay,
-            ),
-            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => builder
-                .push_current_window_xwidget_with_clip(
-                    role,
-                    row,
-                    self.col,
-                    clip,
-                    xwidget_id,
-                    self.x,
-                    self.y,
-                    self.width,
-                    self.height,
-                ),
-        }
+                col: self.col,
+                clip: MatrixCurrentWindowMediaClip::Explicit(clip),
+            },
+        );
     }
 
     fn install_frame_chrome(
@@ -2640,47 +2579,49 @@ impl RenderedDisplayRowMedia {
         row: u32,
         clip: Rect,
     ) {
-        match self.kind {
-            RenderedDisplayRowMediaKind::Image { image_id } => builder.push_frame_chrome_image(
+        self.install_with_target(
+            builder,
+            MatrixMediaInstallTarget::FrameChrome {
                 role,
                 row,
-                self.col,
+                col: self.col,
                 clip,
-                image_id,
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-            ),
+            },
+        );
+    }
+
+    fn install_with_target(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        target: MatrixMediaInstallTarget,
+    ) {
+        builder.install_media(MatrixMediaInstallRequest::new(
+            target,
+            self.matrix_media_kind(),
+            self.x,
+            self.y,
+            self.width,
+            self.height,
+        ));
+    }
+
+    fn matrix_media_kind(&self) -> MatrixMediaInstallKind {
+        match self.kind {
+            RenderedDisplayRowMediaKind::Image { image_id } => {
+                MatrixMediaInstallKind::Image { image_id }
+            }
             RenderedDisplayRowMediaKind::Video {
                 video_id,
                 loop_count,
                 autoplay,
-            } => builder.push_frame_chrome_video(
-                role,
-                row,
-                self.col,
-                clip,
+            } => MatrixMediaInstallKind::Video {
                 video_id,
-                self.x,
-                self.y,
-                self.width,
-                self.height,
                 loop_count,
                 autoplay,
-            ),
-            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => builder
-                .push_frame_chrome_xwidget(
-                    role,
-                    row,
-                    self.col,
-                    clip,
-                    xwidget_id,
-                    self.x,
-                    self.y,
-                    self.width,
-                    self.height,
-                ),
+            },
+            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
+                MatrixMediaInstallKind::Xwidget { xwidget_id }
+            }
         }
     }
 }
