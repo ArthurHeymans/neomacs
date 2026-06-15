@@ -292,11 +292,16 @@ fn repertory_target_ranges_support_symbol_backed_charsets() {
 fn parse_font_spec_entry_preserves_raw_unibyte_string_names() {
     crate::test_utils::init_test_tracing();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    let expected = raw.as_runtime_string_owned().expect("runtime string");
     let entry = parse_font_spec_entry(&raw, None).expect("parse raw font spec");
     match entry {
         FontSpecEntry::Font(spec) => {
-            assert_eq!(spec.family.map(resolve_sym), Some(expected.as_str()));
+            // Issue #131: the family is interned faithfully, so its symbol name
+            // keeps the raw byte (0xFF) instead of the PUA-sentinel storage form.
+            let family = spec.family.expect("family symbol");
+            assert_eq!(
+                crate::emacs_core::intern::resolve_sym_lisp_string(family).as_bytes(),
+                &[0xFF]
+            );
             assert_eq!(spec.registry, None);
         }
         FontSpecEntry::ExplicitNone => panic!("expected font entry"),

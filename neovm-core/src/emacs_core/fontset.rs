@@ -826,7 +826,7 @@ fn parse_font_spec_entry(
             let pair_car = value.cons_car();
             let pair_cdr = value.cons_cdr();
             let mut spec = StoredFontSpec {
-                family: value_text(&pair_car).map(|family| intern(&family)),
+                family: intern_font_name_value(&pair_car),
                 registry: value_text(&pair_cdr)
                     .map(|registry| intern(&registry.to_ascii_lowercase())),
                 lang: None,
@@ -839,8 +839,7 @@ fn parse_font_spec_entry(
             Ok(FontSpecEntry::Font(spec))
         }
         ValueKind::String => {
-            let mut spec =
-                parse_font_name_string(&fontset_string_text(value).expect("checked string"));
+            let mut spec = parse_font_name_string(value.as_lisp_string().expect("checked string"));
             spec.repertory = resolve_font_repertory(&spec, font_encoding_alist);
             Ok(FontSpecEntry::Font(spec))
         }
@@ -859,12 +858,11 @@ fn parse_font_spec_entry(
 
 fn parse_font_vector(items: &[Value]) -> StoredFontSpec {
     let family = font_vector_get_flexible(items, "family")
-        .and_then(|value| value_text(&value))
-        .map(|family| intern(&family))
+        .and_then(|value| intern_font_name_value(&value))
         .or_else(|| {
             font_vector_get_flexible(items, "name")
-                .and_then(|value| value_text(&value))
-                .map(|name| parse_font_name_string(&name))
+                .and_then(|value| value.as_lisp_string())
+                .map(parse_font_name_string)
                 .and_then(|spec| spec.family)
         });
     let registry = font_vector_get_flexible(items, "registry")
@@ -872,8 +870,8 @@ fn parse_font_vector(items: &[Value]) -> StoredFontSpec {
         .map(|registry| intern(&registry.to_ascii_lowercase()))
         .or_else(|| {
             font_vector_get_flexible(items, "name")
-                .and_then(|value| value_text(&value))
-                .map(|name| parse_font_name_string(&name))
+                .and_then(|value| value.as_lisp_string())
+                .map(parse_font_name_string)
                 .and_then(|spec| spec.registry)
         });
     let lang = font_vector_get_flexible(items, "lang")
@@ -900,24 +898,57 @@ fn parse_font_vector(items: &[Value]) -> StoredFontSpec {
     }
 }
 
-fn parse_font_name_string(name: &str) -> StoredFontSpec {
-    let trimmed = name.trim();
-    if trimmed.starts_with('-') {
-        let parts: Vec<&str> = trimmed.split('-').collect();
+/// Issue #131: intern a font family/name Value faithfully. String values keep
+/// their real Emacs bytes (`intern_lisp_string`); symbol values are already
+/// interned, so reuse their id. Avoids the PUA-sentinel storage round-trip.
+fn intern_font_name_value(value: &Value) -> Option<crate::emacs_core::intern::SymId> {
+    match value.kind() {
+        ValueKind::String => value
+            .as_lisp_string()
+            .map(crate::emacs_core::intern::intern_lisp_string),
+        ValueKind::Symbol(id) => Some(id),
+        _ => None,
+    }
+}
+
+/// Issue #131: parse an XLFD/font-name string over its real Emacs bytes and
+/// intern the family/registry via `intern_lisp_string`, so a raw-unibyte family
+/// name keeps its bytes instead of going through the PUA-sentinel storage form.
+fn parse_font_name_string(name: &crate::heap_types::LispString) -> StoredFontSpec {
+    let multibyte = name.is_multibyte();
+    let intern_part = |bytes: &[u8]| -> crate::emacs_core::intern::SymId {
+        let ls = if multibyte {
+            crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec())
+        } else {
+            crate::heap_types::LispString::from_unibyte(bytes.to_vec())
+        };
+        crate::emacs_core::intern::intern_lisp_string(&ls)
+    };
+
+    let trimmed = name.as_bytes().trim_ascii();
+    if trimmed.first() == Some(&b'-') {
+        let parts: Vec<&[u8]> = trimmed.split(|&b| b == b'-').collect();
         if parts.len() >= 15 {
             let family = parts
                 .get(2)
                 .copied()
-                .filter(|value| !value.is_empty() && *value != "*");
+                .filter(|value| !value.is_empty() && *value != b"*");
             let registry = if parts.len() >= 3 {
-                let registry = format!("{}-{}", parts[parts.len() - 2], parts[parts.len() - 1]);
-                (!registry.contains('*')).then_some(registry.to_ascii_lowercase())
+                let mut registry = parts[parts.len() - 2].to_vec();
+                registry.push(b'-');
+                registry.extend_from_slice(parts[parts.len() - 1]);
+                if registry.contains(&b'*') {
+                    None
+                } else {
+                    registry.make_ascii_lowercase();
+                    Some(registry)
+                }
             } else {
                 None
             };
             return StoredFontSpec {
-                family: family.map(intern),
-                registry: registry.map(|registry| intern(&registry)),
+                family: family.map(intern_part),
+                registry: registry.map(|registry| intern_part(&registry)),
                 lang: None,
                 weight: None,
                 slant: None,
@@ -928,7 +959,7 @@ fn parse_font_name_string(name: &str) -> StoredFontSpec {
     }
 
     StoredFontSpec {
-        family: (!trimmed.is_empty()).then(|| intern(trimmed)),
+        family: (!trimmed.is_empty()).then(|| intern_part(trimmed)),
         registry: None,
         lang: None,
         weight: None,
