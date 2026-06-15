@@ -833,8 +833,8 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
 
 #[test]
 fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
-    // Direct contract for the one method that both the phys cursor and the
-    // redundant window cursor resolve through, so neither re-derives the column.
+    // Direct contract for the request that phys cursor installation resolves
+    // through, so display column policy stays outside the builder setter.
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -847,17 +847,37 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
     builder.end_row();
 
     // Matching window/row, point on 'l': 3 gutter columns + Text index 2 = 5.
-    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 102), Some(5));
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 102)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(5)
+    );
     // Point on the first buffer glyph lands just past the gutter at column 3.
-    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 100), Some(3));
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 100)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(3)
+    );
     // Point on hidden text (charpos 101 has a glyph here, but charpos 50 does
     // not) resolves to the first following visible glyph, never the captured
     // column: smallest charpos > 50 is 'H' at gutter column 3.
-    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 50), Some(3));
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 50)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(3)
+    );
     // A cursor reported against another window has no slot here -> decline.
-    assert_eq!(builder.resolve_cursor_visual_col(2, 0, 102), None);
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(2, 0, 102)
+            .resolve(builder.cursor_visual_column_context()),
+        None
+    );
     // An out-of-range row also declines rather than inventing a column.
-    assert_eq!(builder.resolve_cursor_visual_col(1, 99, 102), None);
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 99, 102)
+            .resolve(builder.cursor_visual_column_context()),
+        None
+    );
     builder.end_window();
 }
 
@@ -881,7 +901,11 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
 
     // The 4-column gutter (2 + 1 + 1) is fully walked; with no Text glyph the
     // cursor lands at column 4, the first cell of the empty text area.
-    assert_eq!(builder.resolve_cursor_visual_col(1, 0, 34), Some(4));
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 34)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(4)
+    );
 
     // A non-empty row whose point is past the last glyph (end of line) lands in
     // the same end-of-row cell rather than reverting to None.
@@ -893,7 +917,11 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
     write_char_to_current_row(&mut builder, 'i', 0, 41);
     builder.end_row();
     // Point at charpos 99 is past 'H'(40) and 'i'(41): 4 gutter + 2 text = col 6.
-    assert_eq!(builder.resolve_cursor_visual_col(1, 1, 99), Some(6));
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 1, 99)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(6)
+    );
     builder.end_window();
 }
 
