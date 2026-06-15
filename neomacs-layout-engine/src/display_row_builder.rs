@@ -551,7 +551,7 @@ impl DisplayTextSourceMapping {
 }
 
 #[cfg(test)]
-pub(crate) struct DisplayRowBuilder<'a> {
+struct DisplayRowBuilder<'a> {
     layout: DisplayRowLayout,
     row: GlyphRow,
     glyph_measurer: Option<&'a mut dyn DisplayGlyphMeasurer>,
@@ -573,23 +573,23 @@ pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayRowAppendCursor {
+struct DisplayRowAppendCursor {
     position: DisplayRowPosition,
     max_x_px: f32,
 }
 
 #[cfg(test)]
 impl DisplayRowAppendCursor {
-    pub(crate) fn new(position: DisplayRowPosition, max_x_px: f32) -> Self {
+    fn new(position: DisplayRowPosition, max_x_px: f32) -> Self {
         Self { position, max_x_px }
     }
 
-    pub(crate) fn position(&self) -> DisplayRowPosition {
+    fn position(&self) -> DisplayRowPosition {
         self.position
     }
 
     #[cfg(test)]
-    pub(crate) fn append_item_to_current_text_row(
+    fn append_item_to_current_text_row(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
         layout: &DisplayRowLayout,
@@ -606,7 +606,7 @@ impl DisplayRowAppendCursor {
         Some(progress)
     }
 
-    pub(crate) fn append_measured_item_to_current_text_row(
+    fn append_measured_item_to_current_text_row(
         &mut self,
         builder: &mut GlyphMatrixBuilder,
         layout: &DisplayRowLayout,
@@ -627,7 +627,7 @@ impl DisplayRowAppendCursor {
 }
 
 #[cfg(test)]
-pub(crate) fn append_display_item_to_current_text_row(
+fn append_display_item_to_current_text_row(
     builder: &mut GlyphMatrixBuilder,
     layout: &DisplayRowLayout,
     item: DisplayItem,
@@ -641,7 +641,7 @@ pub(crate) fn append_display_item_to_current_text_row(
 }
 
 #[cfg(test)]
-pub(crate) fn append_measured_display_item_to_current_text_row(
+fn append_measured_display_item_to_current_text_row(
     builder: &mut GlyphMatrixBuilder,
     layout: &DisplayRowLayout,
     item: DisplayItem,
@@ -663,7 +663,7 @@ pub(crate) fn append_measured_display_item_to_current_text_row(
 
 #[cfg(test)]
 impl DisplayRowBuilder<'_> {
-    pub(crate) fn new(layout: DisplayRowLayout) -> Self {
+    fn new(layout: DisplayRowLayout) -> Self {
         let row = new_display_row(&layout);
         Self {
             layout,
@@ -676,7 +676,7 @@ impl DisplayRowBuilder<'_> {
 #[cfg(test)]
 impl<'a> DisplayRowBuilder<'a> {
     #[cfg(test)]
-    pub(crate) fn with_glyph_measurer(
+    fn with_glyph_measurer(
         layout: DisplayRowLayout,
         glyph_measurer: &'a mut dyn DisplayGlyphMeasurer,
     ) -> Self {
@@ -685,7 +685,7 @@ impl<'a> DisplayRowBuilder<'a> {
         builder
     }
 
-    pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
+    fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
         if let Some(glyph_measurer) = self.glyph_measurer.as_deref_mut() {
             let mut writer =
                 DisplayRowWriter::with_glyph_measurer(&self.layout, &mut self.row, glyph_measurer);
@@ -696,7 +696,7 @@ impl<'a> DisplayRowBuilder<'a> {
         }
     }
 
-    pub(crate) fn push_measured_item(
+    fn push_measured_item(
         &mut self,
         item: DisplayItem,
         glyph_measurer: &mut dyn DisplayGlyphMeasurer,
@@ -706,7 +706,7 @@ impl<'a> DisplayRowBuilder<'a> {
         writer.push_item(item)
     }
 
-    pub(crate) fn push_source(
+    fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,
         context: &mut DisplaySourceContext<'_>,
@@ -721,7 +721,7 @@ impl<'a> DisplayRowBuilder<'a> {
         }
     }
 
-    pub(crate) fn finish(mut self) -> GlyphRow {
+    fn finish(mut self) -> GlyphRow {
         glyph_row_writer::normalize_external_row(&mut self.row);
         self.row
     }

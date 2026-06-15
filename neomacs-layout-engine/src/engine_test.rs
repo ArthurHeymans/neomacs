@@ -4,32 +4,34 @@ use crate::display_cursor::{
     CursorGeometryContext, CursorGeometrySource, VisualTextWindowCursorPublishContext,
     VisualTextWindowCursorPublishSummary, cursor_style_for_window,
 };
+use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGlyphMeasurer, DisplayRowMeasurementPolicy,
+    DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurer,
+    DisplayRowItemSourceRenderRequest, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
+    DisplayRowRenderer, DisplayRowSourceRequestPolicy,
 };
 use crate::display_row_append::{
     DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
     DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
     OverlayStringRenderBatchSource,
 };
-use crate::display_row_builder::DisplayGlyphMeasurer;
+use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos,
 };
-use crate::display_source::DisplayItemSource;
 use crate::display_status_line::{
     ChromeRowRenderServices, EchoMinibufferRowsRenderRequest, MinibufferDisplayRenderState,
     minibuffer_echo_message_for_window,
 };
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
-use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::VisualCursorSpec;
 use crate::window_output::WindowOutputEmitter;
 use neomacs_display_protocol::cursor::CursorBarWidth;
@@ -47,6 +49,7 @@ use neovm_core::emacs_core::load::{
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
+use neovm_core::face::FaceTable;
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorSnapshot, WindowVisibleBufferSpan,
@@ -1463,6 +1466,51 @@ fn glyphs_logical_text(glyphs: &[Glyph]) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+fn render_buffer_text_source_shadow_row(
+    buf_id: BufferId,
+    snapshot: &LayoutBufferSnapshot,
+    line_end: CharPos0,
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+    char_width_px: f32,
+) -> GlyphRow {
+    let mut source = crate::display_source::BufferTextSourceCursor::new(
+        buf_id,
+        snapshot,
+        CharPos0::ZERO,
+        line_end,
+        RenderFaceRef::FaceId(0),
+    );
+    let mut font_metrics = None;
+    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+        DisplayRowSourceRequestPolicy::from_display_row_geometry(
+            DisplayRowGeometry {
+                y: 0.0,
+                width: width_px,
+                height: height_px,
+                char_width: char_width_px,
+                ascent: ascent_px,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
+            GlyphRowRole::Text,
+        ),
+        0,
+        resolver.default_face(),
+        DisplayRowRenderBounds {
+            start: DisplayRowPosition { x_px: 0.0, col: 0 },
+            max_x_px: width_px,
+        },
+    )
+    .render(&mut renderer, &mut source, &resolver, &mut face_ids)
+    .expect("typed buffer text source row")
+    .row
 }
 
 fn expected_gui_glyph_advance(
@@ -8708,31 +8756,8 @@ fn buffer_text_source_shadow_matches_main_buffer_simple_unicode_row() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     let line_end = CharPos0::new("A中👨‍👩B".chars().count());
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
-        buf_id,
-        &snapshot,
-        CharPos0::ZERO,
-        line_end,
-        RenderFaceRef::FaceId(0),
-    );
-    let mut row_builder = crate::display_row_builder::DisplayRowBuilder::new(
-        crate::display_row_builder::DisplayRowLayout {
-            role: GlyphRowRole::Text,
-            y_px: 0.0,
-            width_px: 640.0,
-            height_px: 16.0,
-            ascent_px: 12.0,
-            char_width_px: 8.0,
-            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-            base_face: RenderFaceRef::FaceId(0),
-            symbol_values: std::collections::HashMap::new(),
-        },
-    );
-    let mut context = crate::display_source::DisplaySourceContext::empty();
-    while let Some(item) = source.next_item(&mut context) {
-        row_builder.push_item(item);
-    }
-    let shadow_row = row_builder.finish();
+    let shadow_row =
+        render_buffer_text_source_shadow_row(buf_id, &snapshot, line_end, 640.0, 16.0, 12.0, 8.0);
 
     assert_eq!(
         glyphs_logical_text(&shadow_row.glyphs[1]),
@@ -8806,31 +8831,15 @@ fn buffer_text_source_shadow_matches_main_buffer_tab_row() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     let line_end = CharPos0::new("a\tb".chars().count());
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
+    let shadow_row = render_buffer_text_source_shadow_row(
         buf_id,
         &snapshot,
-        CharPos0::ZERO,
         line_end,
-        RenderFaceRef::FaceId(0),
+        640.0,
+        frame.char_height,
+        frame.char_height,
+        frame.char_width,
     );
-    let mut row_builder = crate::display_row_builder::DisplayRowBuilder::new(
-        crate::display_row_builder::DisplayRowLayout {
-            role: GlyphRowRole::Text,
-            y_px: 0.0,
-            width_px: 640.0,
-            height_px: frame.char_height,
-            ascent_px: frame.char_height,
-            char_width_px: frame.char_width,
-            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-            base_face: RenderFaceRef::FaceId(0),
-            symbol_values: std::collections::HashMap::new(),
-        },
-    );
-    let mut context = crate::display_source::DisplaySourceContext::empty();
-    while let Some(item) = source.next_item(&mut context) {
-        row_builder.push_item(item);
-    }
-    let shadow_row = row_builder.finish();
 
     let main_glyphs = &main_row.glyphs[1];
     let shadow_glyphs = &shadow_row.glyphs[1];
