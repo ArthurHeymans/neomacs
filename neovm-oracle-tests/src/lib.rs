@@ -1968,6 +1968,7 @@ mod divergence_coding_plist_matrix;
 mod divergence_utf8_charset_coding_infra;
 mod divergence_utf8_charset_chars_matrix;
 mod divergence_charset_plist_matrix;
+mod divergence_combo_complex;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
