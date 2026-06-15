@@ -1023,6 +1023,63 @@ impl DisplayReplacementSourceMappedTextItem {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayReplacementMediaSourceItem {
+    media: DisplayMediaReplacement,
+    cursor_face_height: f32,
+    cursor_face_ascent: f32,
+}
+
+impl DisplayReplacementMediaSourceItem {
+    pub(crate) fn new(
+        media: DisplayMediaReplacement,
+        face_height: f32,
+        face_ascent: f32,
+        uses_xwidget_cursor_extents: bool,
+    ) -> Self {
+        let (cursor_face_height, cursor_face_ascent) = if uses_xwidget_cursor_extents {
+            (media.height.max(face_height), media.height.max(face_ascent))
+        } else {
+            (media.height, media.height)
+        };
+        Self {
+            media,
+            cursor_face_height,
+            cursor_face_ascent,
+        }
+    }
+
+    pub(crate) fn media(self) -> DisplayMediaReplacement {
+        self.media
+    }
+
+    pub(crate) fn width_px(self) -> f32 {
+        self.media.width
+    }
+
+    pub(crate) fn display_height_px(self) -> f32 {
+        self.media.height
+    }
+
+    pub(crate) fn display_ascent_px(self) -> f32 {
+        self.media.height
+    }
+
+    pub(crate) fn cursor_face_height_px(self) -> f32 {
+        self.cursor_face_height
+    }
+
+    pub(crate) fn cursor_face_ascent_px(self) -> f32 {
+        self.cursor_face_ascent
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DisplayReplacementMediaSourceResolution {
+    Media(DisplayReplacementMediaSourceItem),
+    Placeholder(DisplayReplacementSourceMappedTextItem),
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayReplacementStringSourceItem {
     value: Value,

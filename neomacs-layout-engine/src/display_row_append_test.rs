@@ -34,6 +34,7 @@ use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
     BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
     BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
     DisplayReplacementSourceMappedTextItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
@@ -7852,7 +7853,7 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
     .expect("media replacement append item");
 
     let DisplayPropertyReplacementAppendItem::Media(
-        DisplayReplacementMediaAppendResolution::Media(item),
+        DisplayReplacementMediaSourceResolution::Media(item),
     ) = item
     else {
         panic!("expected media replacement append item");
@@ -7900,13 +7901,14 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     );
 
     let media = DisplayPropertyReplacementAppendItem::Media(
-        DisplayReplacementMediaAppendResolution::Media(DisplayReplacementMediaAppendItem::new(
+        DisplayReplacementMediaSourceResolution::Media(DisplayReplacementMediaSourceItem::new(
             DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
                 xwidget_id: 17,
                 width: 42.0,
                 height: 11.0,
             }),
-            &active_face,
+            active_face.metrics().row_height,
+            active_face.metrics().ascent,
             true,
         )),
     );
@@ -7920,7 +7922,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     );
 
     let placeholder = DisplayPropertyReplacementAppendItem::Media(
-        DisplayReplacementMediaAppendResolution::Placeholder(
+        DisplayReplacementMediaSourceResolution::Placeholder(
             DisplayReplacementSourceMappedTextItem::new("[img]"),
         ),
     );
@@ -8854,14 +8856,24 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
         height: 10.0,
     });
 
-    let ordinary = DisplayReplacementMediaAppendItem::new(media, &active_face, false);
+    let ordinary = DisplayReplacementMediaSourceItem::new(
+        media,
+        active_face.metrics().row_height,
+        active_face.metrics().ascent,
+        false,
+    );
     assert_eq!(ordinary.width_px(), 64.0);
     assert_eq!(ordinary.display_height_px(), 10.0);
     assert_eq!(ordinary.display_ascent_px(), 10.0);
     assert_eq!(ordinary.cursor_face_height_px(), 10.0);
     assert_eq!(ordinary.cursor_face_ascent_px(), 10.0);
 
-    let xwidget_cursor = DisplayReplacementMediaAppendItem::new(media, &active_face, true);
+    let xwidget_cursor = DisplayReplacementMediaSourceItem::new(
+        media,
+        active_face.metrics().row_height,
+        active_face.metrics().ascent,
+        true,
+    );
     assert_eq!(xwidget_cursor.cursor_face_height_px(), 18.0);
     assert_eq!(xwidget_cursor.cursor_face_ascent_px(), 13.0);
 }
@@ -8876,7 +8888,7 @@ fn display_replacement_media_append_item_resolves_direct_media_property() {
     });
     let replacement = DisplayMediaReplacementProperty::Xwidget(media);
 
-    let resolved = DisplayReplacementMediaAppendItem::resolve_display_property(
+    let resolved = DisplayReplacementMediaSourceItem::resolve_display_property(
         Value::NIL,
         &replacement,
         None,
@@ -8887,12 +8899,12 @@ fn display_replacement_media_append_item_resolves_direct_media_property() {
     .expect("direct media replacement");
 
     match resolved {
-        DisplayReplacementMediaAppendResolution::Media(item) => {
+        DisplayReplacementMediaSourceResolution::Media(item) => {
             assert_eq!(item.width_px(), 42.0);
             assert_eq!(item.display_height_px(), 11.0);
             assert_eq!(item.cursor_face_height_px(), 18.0);
         }
-        DisplayReplacementMediaAppendResolution::Placeholder(_) => {
+        DisplayReplacementMediaSourceResolution::Placeholder(_) => {
             panic!("expected direct media item")
         }
     }
@@ -8902,7 +8914,7 @@ fn display_replacement_media_append_item_resolves_direct_media_property() {
 fn display_replacement_media_append_item_resolves_placeholder_item_without_host() {
     let active_face = test_active_face_state(7, 8.0);
 
-    let resolved = DisplayReplacementMediaAppendItem::resolve_display_property(
+    let resolved = DisplayReplacementMediaSourceItem::resolve_display_property(
         Value::NIL,
         &DisplayMediaReplacementProperty::Image,
         None,
@@ -8913,23 +8925,24 @@ fn display_replacement_media_append_item_resolves_placeholder_item_without_host(
     .expect("image placeholder");
 
     match resolved {
-        DisplayReplacementMediaAppendResolution::Placeholder(item) => {
+        DisplayReplacementMediaSourceResolution::Placeholder(item) => {
             assert_eq!(item, DisplayReplacementSourceMappedTextItem::new("[img]"));
         }
-        DisplayReplacementMediaAppendResolution::Media(_) => panic!("expected placeholder item"),
+        DisplayReplacementMediaSourceResolution::Media(_) => panic!("expected placeholder item"),
     }
 }
 
 #[test]
 fn display_replacement_media_append_item_names_row_extent_policy() {
     let active_face = test_active_face_state(7, 8.0);
-    let item = DisplayReplacementMediaAppendItem::new(
+    let item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
             width: 64.0,
             height: 10.0,
         }),
-        &active_face,
+        active_face.metrics().row_height,
+        active_face.metrics().ascent,
         false,
     );
     let mut progress = DisplayRowAppendProgress::from_positions(
@@ -9407,13 +9420,14 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     );
 
     let active_face = test_active_face_state(3, 8.0);
-    let media_item = DisplayReplacementMediaAppendItem::new(
+    let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
             xwidget_id: 1234,
             width: 96.0,
             height: 54.0,
         }),
-        &active_face,
+        active_face.metrics().row_height,
+        active_face.metrics().ascent,
         true,
     );
     let append_context = DisplayReplacementRowAppendContext::new(
@@ -9546,13 +9560,14 @@ fn display_replacement_append_context_installs_image_replacements() {
     );
 
     let active_face = test_active_face_state(3, 8.0);
-    let media_item = DisplayReplacementMediaAppendItem::new(
+    let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
             width: 64.0,
             height: 32.0,
         }),
-        &active_face,
+        active_face.metrics().row_height,
+        active_face.metrics().ascent,
         false,
     );
     let append_context =
@@ -9679,7 +9694,7 @@ fn display_replacement_append_context_installs_video_replacements() {
     );
 
     let active_face = test_active_face_state(3, 8.0);
-    let media_item = DisplayReplacementMediaAppendItem::new(
+    let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::video(DisplayVideoItem {
             video_id: 88,
             width: 80.0,
@@ -9687,7 +9702,8 @@ fn display_replacement_append_context_installs_video_replacements() {
             loop_count: -1,
             autoplay: true,
         }),
-        &active_face,
+        active_face.metrics().row_height,
+        active_face.metrics().ascent,
         false,
     );
     let append_context =

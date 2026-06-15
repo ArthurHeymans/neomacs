@@ -9,7 +9,7 @@ use crate::display_cursor::{
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
@@ -57,7 +57,8 @@ use crate::display_source::{
     BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
     BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
     BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementAppendItem,
-    DisplayReplacementBox, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementBox, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
     DisplayReplacementStringSourceItem, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
     SyntheticTextItemSource,
 };
@@ -9171,24 +9172,11 @@ impl DisplayReplacementStretchAppendItem {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayReplacementMediaAppendItem {
-    media: DisplayMediaReplacement,
-    cursor_face_height: f32,
-    cursor_face_ascent: f32,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum DisplayReplacementMediaAppendResolution {
-    Media(DisplayReplacementMediaAppendItem),
-    Placeholder(DisplayReplacementSourceMappedTextItem),
-}
-
 #[derive(Clone)]
 pub(crate) enum DisplayPropertyReplacementAppendItem {
     String(DisplayReplacementStringSourceItem),
     Stretch(DisplayReplacementStretchAppendItem),
-    Media(DisplayReplacementMediaAppendResolution),
+    Media(DisplayReplacementMediaSourceResolution),
 }
 
 pub(crate) enum BufferDisplayPropertyTextAppendAction {
@@ -10070,7 +10058,7 @@ impl DisplayPropertyReplacementAppendPlan {
 enum DisplayPropertyReplacementAppendPlanItem {
     String(DisplayReplacementStringAppendRequest),
     Stretch(DisplayReplacementStretchAppendItem),
-    Media(DisplayReplacementMediaAppendResolution),
+    Media(DisplayReplacementMediaSourceResolution),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -10161,7 +10149,7 @@ impl DisplayPropertyReplacementAppendItem {
                 ),
             )),
             DisplayReplacementProperty::Media(media_replacement) => {
-                DisplayReplacementMediaAppendItem::resolve_display_property(
+                DisplayReplacementMediaSourceItem::resolve_display_property(
                     context.source_event.value(),
                     media_replacement,
                     context.display_host,
@@ -10184,14 +10172,14 @@ impl DisplayPropertyReplacementAppendItem {
                 width_px: item.cursor_slot_width_px(),
                 stretch_like: true,
             },
-            Self::Media(DisplayReplacementMediaAppendResolution::Media(item)) => {
+            Self::Media(DisplayReplacementMediaSourceResolution::Media(item)) => {
                 DisplayPropertyReplacementCursorPolicy::DisplayBox {
                     width_px: item.width_px(),
                     cursor_face_height_px: item.cursor_face_height_px(),
                     cursor_face_ascent_px: item.cursor_face_ascent_px(),
                 }
             }
-            Self::Media(DisplayReplacementMediaAppendResolution::Placeholder(_)) => {
+            Self::Media(DisplayReplacementMediaSourceResolution::Placeholder(_)) => {
                 DisplayPropertyReplacementCursorPolicy::FaceChar
             }
         }
@@ -10246,7 +10234,7 @@ impl DisplayReplacementStretchAppendItem {
     }
 }
 
-impl DisplayReplacementMediaAppendResolution {
+impl DisplayReplacementMediaSourceResolution {
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
@@ -10268,7 +10256,7 @@ impl DisplayReplacementMediaAppendResolution {
     }
 }
 
-impl DisplayReplacementMediaAppendItem {
+impl DisplayReplacementMediaSourceItem {
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
@@ -10302,28 +10290,7 @@ impl DisplayReplacementSourceMappedTextItem {
     }
 }
 
-impl DisplayReplacementMediaAppendItem {
-    pub(crate) fn new(
-        media: DisplayMediaReplacement,
-        active_face_state: &DisplayRowActiveFaceState,
-        uses_xwidget_cursor_extents: bool,
-    ) -> Self {
-        let metrics = active_face_state.metrics();
-        let (cursor_face_height, cursor_face_ascent) = if uses_xwidget_cursor_extents {
-            (
-                media.height.max(metrics.row_height),
-                media.height.max(metrics.ascent),
-            )
-        } else {
-            (media.height, media.height)
-        };
-        Self {
-            media,
-            cursor_face_height,
-            cursor_face_ascent,
-        }
-    }
-
+impl DisplayReplacementMediaSourceItem {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_display_property(
         display_prop: Value,
@@ -10332,7 +10299,7 @@ impl DisplayReplacementMediaAppendItem {
         active_face_state: &DisplayRowActiveFaceState,
         fallback_char_width: f32,
         fallback_row_height: f32,
-    ) -> Option<DisplayReplacementMediaAppendResolution> {
+    ) -> Option<DisplayReplacementMediaSourceResolution> {
         match resolve_display_replacement(
             display_prop,
             replacement,
@@ -10342,42 +10309,19 @@ impl DisplayReplacementMediaAppendItem {
             fallback_row_height,
         )? {
             ResolvedDisplayReplacement::Media(media) => {
-                Some(DisplayReplacementMediaAppendResolution::Media(Self::new(
+                Some(DisplayReplacementMediaSourceResolution::Media(Self::new(
                     media,
-                    active_face_state,
+                    active_face_state.metrics().row_height,
+                    active_face_state.metrics().ascent,
                     replacement.uses_xwidget_cursor_extents(),
                 )))
             }
             ResolvedDisplayReplacement::Placeholder(placeholder) => {
-                Some(DisplayReplacementMediaAppendResolution::Placeholder(
+                Some(DisplayReplacementMediaSourceResolution::Placeholder(
                     DisplayReplacementSourceMappedTextItem::new(placeholder),
                 ))
             }
         }
-    }
-
-    pub(crate) fn media(self) -> DisplayMediaReplacement {
-        self.media
-    }
-
-    pub(crate) fn width_px(self) -> f32 {
-        self.media.width
-    }
-
-    pub(crate) fn display_height_px(self) -> f32 {
-        self.media.height
-    }
-
-    pub(crate) fn display_ascent_px(self) -> f32 {
-        self.media.height
-    }
-
-    pub(crate) fn cursor_face_height_px(self) -> f32 {
-        self.cursor_face_height
-    }
-
-    pub(crate) fn cursor_face_ascent_px(self) -> f32 {
-        self.cursor_face_ascent
     }
 
     pub(crate) fn row_extents_after_append(
