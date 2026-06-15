@@ -513,6 +513,30 @@ impl BufferTextSourceTextItemRequest {
     pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
         DisplayItemKind::TextRun(DisplayTextRun::new(self.ch.to_string()))
     }
+
+    pub(crate) fn into_display_item<B: LayoutBufferView + ?Sized>(
+        self,
+        buffer_id: BufferId,
+        buffer: &B,
+        face: RenderFaceRef,
+    ) -> Option<DisplayItem> {
+        let range = self.range();
+        if !range.is_single_char() {
+            return None;
+        }
+
+        let start = range.start();
+        let end = range.end();
+        Some(
+            BufferTextItemSource::single_char(
+                buffer_id,
+                start,
+                buffer.layout_char_pos_to_emacs_byte_pos(start),
+                buffer.layout_char_pos_to_emacs_byte_pos(end),
+            )
+            .item(face, self.into_display_item_kind()),
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -540,6 +564,31 @@ impl BufferTextSourceItemRequest {
 
     pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
         self.item.into_display_item_kind()
+    }
+
+    pub(crate) fn into_display_item<B: LayoutBufferView + ?Sized>(
+        self,
+        buffer_id: BufferId,
+        buffer: &B,
+        face: RenderFaceRef,
+    ) -> Option<DisplayItem> {
+        let range = self.range();
+        if range.is_empty_or_reversed() {
+            return None;
+        }
+
+        let start = range.start();
+        let end = range.end();
+        Some(
+            BufferTextItemSource::new(
+                buffer_id,
+                start,
+                buffer.layout_char_pos_to_emacs_byte_pos(start),
+                end,
+                buffer.layout_char_pos_to_emacs_byte_pos(end),
+            )
+            .item(face, self.into_display_item_kind()),
+        )
     }
 }
 

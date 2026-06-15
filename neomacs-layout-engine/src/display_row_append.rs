@@ -9,8 +9,6 @@ use crate::display_cursor::{
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
-#[cfg(test)]
-use crate::display_item::DisplayTextRun;
 use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -51,14 +49,13 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource,
-    BufferTextDecodedSourceChar, BufferTextItemSource, BufferTextLineBreakSourceEvent,
-    BufferTextSourceAdvancePath, BufferTextSourceAppendItem, BufferTextSourceChar,
-    BufferTextSourceClusterState, BufferTextSourceItemRequest,
-    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
-    BufferTextSourceRange, BufferTextSourceSpecialDisplay, BufferTextSourceTextEvent,
-    BufferTextSourceTextItemRequest, BufferTextSourceTextRequest, DisplayItemSource,
-    DisplayReplacementBox, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
-    SyntheticTextItemSource,
+    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath,
+    BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
+    BufferTextSourceItemRequest, BufferTextSourceNaturalAdvanceRequest,
+    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
+    BufferTextSourceTextEvent, BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
+    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -3780,15 +3777,9 @@ fn buffer_text_source_range_append_request<B: LayoutBufferView + ?Sized>(
         return None;
     }
 
-    let item = BufferTextItemSource::single_char(buffer_id, start, byte_start, byte_end).item(
-        RenderFaceRef::FaceId(face_id),
-        DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
-    );
-    let append_kind = if ch == '\t' {
-        DisplayRowAppendKind::Tab
-    } else {
-        DisplayRowAppendKind::SourceText
-    };
+    let source_item = BufferTextSourceTextItemRequest::new(range, ch);
+    let append_kind = source_item.append_kind();
+    let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;
     Some(BufferTextSourceRangeItemAppendRequest::new(
         item,
         append_kind,
@@ -3801,22 +3792,11 @@ fn buffer_text_source_text_item_append_request<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     face_id: u32,
 ) -> Option<BufferTextSourceRangeItemAppendRequest> {
-    let range = source_item.range();
-    if !range.is_single_char() {
-        return None;
-    }
-
-    let start = range.start();
-    let end = range.end();
-    let byte_start = buffer.layout_char_pos_to_emacs_byte_pos(start);
-    let byte_end = buffer.layout_char_pos_to_emacs_byte_pos(end);
-    let item = BufferTextItemSource::single_char(buffer_id, start, byte_start, byte_end).item(
-        RenderFaceRef::FaceId(face_id),
-        source_item.into_display_item_kind(),
-    );
+    let append_kind = source_item.append_kind();
+    let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;
     Some(BufferTextSourceRangeItemAppendRequest::new(
         item,
-        source_item.append_kind(),
+        append_kind,
     ))
 }
 
@@ -5435,26 +5415,8 @@ fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     face_id: u32,
 ) -> Option<BufferTextSourceRangeItemAppendRequest> {
-    let range = source_item.range();
-    if range.is_empty_or_reversed() {
-        return None;
-    }
-
-    let start = range.start();
-    let end = range.end();
-    let source = BufferTextItemSource::new(
-        buffer_id,
-        start,
-        buffer.layout_char_pos_to_emacs_byte_pos(start),
-        end,
-        buffer.layout_char_pos_to_emacs_byte_pos(end),
-    );
-
     let append_kind = source_item.append_kind();
-    let item = source.item(
-        RenderFaceRef::FaceId(face_id),
-        source_item.into_display_item_kind(),
-    );
+    let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;
     Some(BufferTextSourceRangeItemAppendRequest::new(
         item,
         append_kind,
