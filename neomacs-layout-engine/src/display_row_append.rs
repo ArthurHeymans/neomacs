@@ -332,6 +332,25 @@ impl<'a> TextRowSourceRenderState<'a> {
         self.output_render.reborrow()
     }
 
+    pub(crate) fn measure_state(&mut self) -> TextRowSourceMeasureState<'_> {
+        TextRowSourceMeasureState {
+            builder: self.output_render.builder,
+            evaluator: self.output_render.evaluator,
+            font_metrics: self.font_metrics,
+            face_resolver: self.face_resolver,
+        }
+    }
+
+    pub(crate) fn builder_and_face_resolver(&mut self) -> (&mut GlyphMatrixBuilder, &FaceResolver) {
+        (self.output_render.builder, self.face_resolver)
+    }
+
+    pub(crate) fn builder_and_font_metrics(
+        &mut self,
+    ) -> (&mut GlyphMatrixBuilder, &mut Option<FontMetricsService>) {
+        (self.output_render.builder, self.font_metrics)
+    }
+
     pub(crate) fn into_parts(
         self,
     ) -> (
@@ -392,6 +411,7 @@ pub(crate) struct TextRowSourceMeasureState<'a> {
 }
 
 impl<'a> TextRowSourceMeasureState<'a> {
+    #[cfg(test)]
     pub(crate) fn new(
         builder: &'a mut GlyphMatrixBuilder,
         evaluator: &'a mut Context,
@@ -1132,6 +1152,31 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
             hit_rows,
             output_render,
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_source_render(
+        defaults: DisplayRowGeometryDefaults,
+        row_base: usize,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        max_rows: usize,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        row_limit: DisplayRowLimit,
+        hit_rows: &'emit mut Vec<HitRow>,
+        source_render: &'emit mut TextRowSourceRenderState<'emit>,
+    ) -> Self {
+        Self::new(
+            defaults,
+            row_base,
+            row_y_positions,
+            max_rows,
+            row_geometry,
+            row_flags,
+            row_limit,
+            hit_rows,
+            source_render.output_render(),
+        )
     }
 
     pub(crate) fn emit_line_break(
@@ -2047,6 +2092,7 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     pub(crate) fn render_requested_to_text_row_and_apply<B: LayoutBufferView>(
         self,
         request: &mut DisplayRowPrefixRequest,
@@ -2070,6 +2116,28 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
                 font_metrics,
                 face_resolver,
             ),
+            buffer,
+            anchor_charpos,
+            face_ids,
+            self.position,
+        );
+        *x = position.x_px;
+        *col = position.col;
+    }
+
+    pub(crate) fn render_requested_with_source_state_and_apply<B: LayoutBufferView>(
+        self,
+        request: &mut DisplayRowPrefixRequest,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        buffer: &B,
+        anchor_charpos: i64,
+        face_ids: &mut FrameFaceIdAllocator,
+        x: &mut f32,
+        col: &mut usize,
+    ) {
+        let position = self.context.render_requested_to_text_row_and_emit(
+            request,
+            source_render,
             buffer,
             anchor_charpos,
             face_ids,
@@ -2248,6 +2316,7 @@ pub(crate) struct OverlayStringRenderState<'a> {
 
 impl<'a> OverlayStringRenderState<'a> {
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     pub(crate) fn new(
         evaluator: &'a mut Context,
         output_emitter: &'a mut WindowOutputEmitter,
@@ -2271,6 +2340,31 @@ impl<'a> OverlayStringRenderState<'a> {
                 font_metrics,
                 face_resolver,
             ),
+            x,
+            col,
+            geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_source_render(
+        source_render: TextRowSourceRenderState<'a>,
+        x: &'a mut f32,
+        col: &'a mut usize,
+        geometry: &'a mut DisplayRowGeometryState,
+        cursor_info: &'a mut CursorCaptureState,
+        hit_rows: &'a mut Vec<HitRow>,
+        hit_row_range: &'a mut HitRowRangeTracker,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        face_ids: &'a mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            source_render,
             x,
             col,
             geometry,
@@ -2551,8 +2645,7 @@ fn render_overlay_string<B: LayoutBufferView>(
         return;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
-    let (builder, _output_emitter, _evaluator, _font_metrics, face_resolver) =
-        state.source_render.reborrow().into_parts();
+    let (builder, face_resolver) = state.source_render.builder_and_face_resolver();
     let base_face = resolve_and_install_display_string_base_face(
         buffer,
         face_resolver,
@@ -3976,6 +4069,7 @@ pub(crate) struct BufferTextSourceCharPreparationState<'a> {
 }
 
 impl<'a> BufferTextSourceCharPreparationState<'a> {
+    #[cfg(test)]
     pub(crate) fn new(
         append_state: &'a mut BufferTextRowAppendState,
         builder: &'a mut GlyphMatrixBuilder,
@@ -3991,6 +4085,16 @@ impl<'a> BufferTextSourceCharPreparationState<'a> {
                 font_metrics,
                 face_resolver,
             ),
+        }
+    }
+
+    pub(crate) fn from_source_render(
+        append_state: &'a mut BufferTextRowAppendState,
+        source_render: &'a mut TextRowSourceRenderState<'_>,
+    ) -> Self {
+        Self {
+            append_state,
+            measure: source_render.measure_state(),
         }
     }
 }
@@ -4432,20 +4536,10 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             trailing_whitespace,
             row_y_positions,
         } = state;
-        let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-            source_render.into_parts();
+        let mut source_render = source_render;
 
-        let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
-            TextRowSourceRenderState::new(
-                &mut *builder,
-                &mut *output_emitter,
-                &mut *evaluator,
-                &mut *font_metrics,
-                face_resolver,
-            ),
-            x,
-            col,
-        );
+        let mut synthetic_text_state =
+            BufferSyntheticTextRenderState::new(source_render.reborrow(), x, col);
         marker.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 self.append_surface,
@@ -4472,7 +4566,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             x,
         );
         let line_break_transition = DisplayRowLineBreakTransitionPlan::hidden_line_break();
-        let row_transition = DisplayRowTextWindowEmitContext::new(
+        let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
             self.row_geometry_defaults,
             self.text_matrix_row_base,
             row_y_positions,
@@ -4481,7 +4575,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             row_flags,
             self.row_limit,
             hit_rows,
-            TextRowOutputRenderState::new(&mut *builder, &mut *output_emitter, &mut *evaluator),
+            &mut source_render,
         )
         .emit_line_break_then_row_start(
             line_break_transition,
@@ -4616,14 +4710,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let append_geometry = *row_geometry;
 
         let prepared_append = {
-            let (builder, _output_emitter, evaluator, font_metrics, face_resolver) =
-                source_render.reborrow().into_parts();
-            let mut preparation_state = BufferTextSourceCharPreparationState::new(
+            let mut preparation_state = BufferTextSourceCharPreparationState::from_source_render(
                 append_state,
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
+                &mut source_render,
             );
             buffer_row_append_context.prepare_source_char_for_current_text_row(
                 BufferTextSourceCharPreparationRequest::new(
@@ -4773,13 +4862,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         );
 
         {
-            let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-                source_render.reborrow().into_parts();
-            let mut overlay_state = OverlayStringRenderState::new(
-                evaluator,
-                output_emitter,
-                font_metrics,
-                face_resolver,
+            let mut overlay_state = OverlayStringRenderState::from_source_render(
+                source_render.reborrow(),
                 x,
                 col,
                 row_geometry,
@@ -4788,7 +4872,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
-                builder,
             );
             self.overlay_context.render_before_at(
                 buffer,
@@ -4818,13 +4901,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         }
 
         {
-            let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-                source_render.reborrow().into_parts();
-            let mut overlay_state = OverlayStringRenderState::new(
-                evaluator,
-                output_emitter,
-                font_metrics,
-                face_resolver,
+            let mut overlay_state = OverlayStringRenderState::from_source_render(
+                source_render.reborrow(),
                 x,
                 col,
                 row_geometry,
@@ -4833,7 +4911,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
-                builder,
             );
             self.overlay_context.render_after_at(
                 buffer,
@@ -4905,8 +4982,7 @@ impl BufferTextOverflowRenderRequest {
             face_scan,
             row_y_positions,
         } = state;
-        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
-            source_render.into_parts();
+        let mut source_render = source_render;
 
         match self.prepared_append.overflow_action(
             self.ch,
@@ -4926,7 +5002,7 @@ impl BufferTextOverflowRenderRequest {
                     x,
                     self.content_x,
                 );
-                let row_transition = DisplayRowTextWindowEmitContext::new(
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     self.row_geometry_defaults,
                     self.text_matrix_row_base,
                     row_y_positions,
@@ -4935,11 +5011,7 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    TextRowOutputRenderState::new(
-                        &mut *builder,
-                        &mut *output_emitter,
-                        &mut *evaluator,
-                    ),
+                    &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -4968,7 +5040,7 @@ impl BufferTextOverflowRenderRequest {
             } => {
                 let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
                 word_wrap_action.apply_before_row_transition(
-                    &mut *output_emitter,
+                    source_render.output_emitter(),
                     byte_idx,
                     charpos,
                     col,
@@ -4976,7 +5048,7 @@ impl BufferTextOverflowRenderRequest {
                     x,
                     self.content_x,
                 );
-                let row_transition = DisplayRowTextWindowEmitContext::new(
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     self.row_geometry_defaults,
                     self.text_matrix_row_base,
                     row_y_positions,
@@ -4985,11 +5057,7 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    TextRowOutputRenderState::new(
-                        &mut *builder,
-                        &mut *output_emitter,
-                        &mut *evaluator,
-                    ),
+                    &mut source_render,
                 )
                 .emit_overflow(
                     transition,
@@ -5024,7 +5092,7 @@ impl BufferTextOverflowRenderRequest {
                     self.decoded_source_char,
                 );
                 character_wrap_action.apply_before_row_transition(row_extend, x, self.content_x);
-                let row_transition = DisplayRowTextWindowEmitContext::new(
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     self.row_geometry_defaults,
                     self.text_matrix_row_base,
                     row_y_positions,
@@ -5033,11 +5101,7 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    TextRowOutputRenderState::new(
-                        &mut *builder,
-                        &mut *output_emitter,
-                        &mut *evaluator,
-                    ),
+                    &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -5943,13 +6007,8 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
         tail.capture_cursor_if_point(cursor_info, self.active_face_state, row_geometry, *x, *col);
 
         if tail.should_render_overlay_strings(row_geometry, self.row_limit) {
-            let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-                source_render.reborrow().into_parts();
-            let mut overlay_state = OverlayStringRenderState::new(
-                evaluator,
-                output_emitter,
-                font_metrics,
-                face_resolver,
+            let mut overlay_state = OverlayStringRenderState::from_source_render(
+                source_render.reborrow(),
                 x,
                 col,
                 row_geometry,
@@ -5958,7 +6017,6 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
-                builder,
             );
             tail.render_overlay_strings_at_eob(
                 buffer,
@@ -6469,11 +6527,9 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         };
 
         if hscroll_action.is_line_break() {
-            let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
-                source_render.reborrow().into_parts();
             hscroll_action.apply_line_break_before_row_transition(
                 row_extend,
-                &mut *output_emitter,
+                source_render.output_emitter(),
                 x,
                 self.content_x,
             );
@@ -6481,7 +6537,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             let hit_range = hscroll_action
                 .line_break_hit_range(hit_row_range)
                 .expect("hscroll line break hit range");
-            let row_transition = DisplayRowTextWindowEmitContext::new(
+            let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                 self.row_geometry_defaults,
                 self.text_matrix_row_base,
                 row_y_positions,
@@ -6490,7 +6546,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
                 row_flags,
                 self.row_limit,
                 hit_rows,
-                TextRowOutputRenderState::new(builder, output_emitter, evaluator),
+                &mut source_render,
             )
             .emit_line_break_then_row_start(
                 line_break_transition,
@@ -6770,13 +6826,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             &mut hidden_text_state,
         );
 
-        let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-            source_render.reborrow().into_parts();
-        let mut overlay_state = OverlayStringRenderState::new(
-            evaluator,
-            output_emitter,
-            font_metrics,
-            face_resolver,
+        let mut overlay_state = OverlayStringRenderState::from_source_render(
+            source_render.reborrow(),
             x,
             col,
             row_geometry,
@@ -6785,7 +6836,6 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
-            builder,
         );
         self.overlay_context.render_after_at(
             buffer,
@@ -7410,8 +7460,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
         } = state;
-        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
-            source_render.into_parts();
+        let mut source_render = source_render;
 
         let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
             buffer,
@@ -7432,14 +7481,14 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             trailing_whitespace,
             row_extend,
             box_face,
-            &mut *output_emitter,
+            source_render.output_emitter(),
             self.content_x,
             x,
             charpos,
         );
 
         let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
-        let row_transition = DisplayRowTextWindowEmitContext::new(
+        let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
             self.row_geometry_defaults,
             self.text_matrix_row_base,
             row_y_positions,
@@ -7448,7 +7497,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             row_flags,
             self.row_limit,
             hit_rows,
-            TextRowOutputRenderState::new(builder, output_emitter, evaluator),
+            &mut source_render,
         )
         .emit_line_break_then_row_start(
             line_break_transition,
@@ -8139,8 +8188,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             trailing_whitespace,
             row_y_positions,
         } = state;
-        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
-            source_render.into_parts();
+        let mut source_render = source_render;
 
         match self.prepared_append.overflow_action(
             self.x_px,
@@ -8161,7 +8209,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     x,
                     self.content_x,
                 );
-                let row_transition = DisplayRowTextWindowEmitContext::new(
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     self.row_geometry_defaults,
                     self.text_matrix_row_base,
                     row_y_positions,
@@ -8170,11 +8218,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    TextRowOutputRenderState::new(
-                        &mut *builder,
-                        &mut *output_emitter,
-                        &mut *evaluator,
-                    ),
+                    &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -8211,7 +8255,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 let special_wrap_action = BufferTextSpecialWrapSourceAction::new(*charpos);
                 special_wrap_action.apply_before_row_transition(row_extend, x, self.content_x);
                 let hit_range = special_wrap_action.hit_range_and_advance(hit_row_range);
-                let row_transition = DisplayRowTextWindowEmitContext::new(
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     self.row_geometry_defaults,
                     self.text_matrix_row_base,
                     row_y_positions,
@@ -8220,11 +8264,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    TextRowOutputRenderState::new(
-                        &mut *builder,
-                        &mut *output_emitter,
-                        &mut *evaluator,
-                    ),
+                    &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -9837,8 +9877,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             self.charpos,
             self.params.window_start,
         );
-        let (builder, _output_emitter, _evaluator, font_metrics, _face_resolver) =
-            source_render.reborrow().into_parts();
+        let (builder, font_metrics) = source_render.builder_and_font_metrics();
         self.face_resolution_context.resolve_at_checkpoint(
             &mut BufferCurrentFaceResolutionState::new(
                 face_scan,
@@ -9893,8 +9932,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             face_scan,
         );
         if outcome.should_resolve_face() {
-            let (builder, _output_emitter, _evaluator, font_metrics, _face_resolver) =
-                source_render.reborrow().into_parts();
+            let (builder, font_metrics) = source_render.builder_and_font_metrics();
             self.face_resolution_context.resolve_at_checkpoint(
                 &mut BufferCurrentFaceResolutionState::new(
                     face_scan,

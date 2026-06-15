@@ -1248,8 +1248,7 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
         charpos: i64,
         point_is_visible_eob: bool,
     ) -> BufferTextWindowTailFinalizeOutcome {
-        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
-            self.source_render.reborrow().into_parts();
+        let (builder, output_emitter, evaluator) = self.source_render.output_render().into_parts();
         tail_context
             .tail_finalize_request(text, charpos, point_is_visible_eob)
             .finalize_and_apply(BufferTextWindowTailFinalizeState {
@@ -1874,17 +1873,18 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {
-        let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-            self.source_render.reborrow().into_parts();
-        context.line_number_margin_request().render_pending(
-            self.line_numbers,
-            face_resolver,
-            self.face_ids,
-            &mut *builder,
-            self.row_geometry,
-            self.face_scan,
-            context.char_width(),
-        );
+        {
+            let (builder, face_resolver) = self.source_render.builder_and_face_resolver();
+            context.line_number_margin_request().render_pending(
+                self.line_numbers,
+                face_resolver,
+                self.face_ids,
+                &mut *builder,
+                self.row_geometry,
+                self.face_scan,
+                context.char_width(),
+            );
+        }
 
         context
             .line_prefix_request(
@@ -1897,16 +1897,12 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                     col: *self.col,
                 },
             )
-            .render_requested_to_text_row_and_apply(
+            .render_requested_with_source_state_and_apply(
                 self.prefix_request,
-                evaluator,
-                output_emitter,
+                &mut self.source_render,
                 buffer,
                 *self.charpos,
-                font_metrics,
-                face_resolver,
                 self.face_ids,
-                builder,
                 self.x,
                 self.col,
             );
