@@ -156,7 +156,7 @@ fn translate_backslash_w() {
 fn compile_search_pattern_uses_backref_engine_for_supported_captures() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("\\([a-z]+\\)-\\([0-9]+\\)", false),
+        compile_search_pattern(&lisp_pat("\\([a-z]+\\)-\\([0-9]+\\)"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -165,7 +165,7 @@ fn compile_search_pattern_uses_backref_engine_for_supported_captures() {
 fn compile_search_pattern_uses_backref_engine_for_noncapturing_groups() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("\\(?:foo\\|bar\\)+", false),
+        compile_search_pattern(&lisp_pat("\\(?:foo\\|bar\\)+"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -174,7 +174,7 @@ fn compile_search_pattern_uses_backref_engine_for_noncapturing_groups() {
 fn compile_search_pattern_routes_syntax_classes_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("\\(defun\\|defvar\\)\\s-+\\(\\w+\\)", false),
+        compile_search_pattern(&lisp_pat("\\(defun\\|defvar\\)\\s-+\\(\\w+\\)"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -183,7 +183,7 @@ fn compile_search_pattern_routes_syntax_classes_through_backref_engine() {
 fn compile_search_pattern_routes_category_classes_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("[ \t]\\|\\c|.\\|.\\c|", false),
+        compile_search_pattern(&lisp_pat("[ \t]\\|\\c|.\\|.\\c|"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -192,7 +192,7 @@ fn compile_search_pattern_routes_category_classes_through_backref_engine() {
 fn compile_search_pattern_routes_digit_classes_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("\\d+", false),
+        compile_search_pattern(&lisp_pat("\\d+"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -201,11 +201,11 @@ fn compile_search_pattern_routes_digit_classes_through_backref_engine() {
 fn compile_search_pattern_routes_char_class_escapes_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("[\\w-]+", false),
+        compile_search_pattern(&lisp_pat("[\\w-]+"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
     assert!(matches!(
-        compile_search_pattern("[\\s-]+", false),
+        compile_search_pattern(&lisp_pat("[\\s-]+"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -214,11 +214,11 @@ fn compile_search_pattern_routes_char_class_escapes_through_backref_engine() {
 fn compile_search_pattern_routes_lazy_quantifiers_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("a.*?b", false),
+        compile_search_pattern(&lisp_pat("a.*?b"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
     assert!(matches!(
-        compile_search_pattern("a\\{2,4\\}?b", false),
+        compile_search_pattern(&lisp_pat("a\\{2,4\\}?b"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -227,7 +227,7 @@ fn compile_search_pattern_routes_lazy_quantifiers_through_backref_engine() {
 fn compile_search_pattern_routes_open_interval_quantifiers_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("a\\{,2\\}b", false),
+        compile_search_pattern(&lisp_pat("a\\{,2\\}b"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -236,11 +236,11 @@ fn compile_search_pattern_routes_open_interval_quantifiers_through_backref_engin
 fn compile_search_pattern_routes_explicit_numbered_groups_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("\\(?1:[^}]*\\)", false),
+        compile_search_pattern(&lisp_pat("\\(?1:[^}]*\\)"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
     assert!(matches!(
-        compile_search_pattern("\\(?9:.*?\\)", false),
+        compile_search_pattern(&lisp_pat("\\(?9:.*?\\)"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -249,7 +249,7 @@ fn compile_search_pattern_routes_explicit_numbered_groups_through_backref_engine
 fn compile_search_pattern_routes_symbol_boundaries_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("\\_<foo\\_>", false),
+        compile_search_pattern(&lisp_pat("\\_<foo\\_>"), false),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -258,7 +258,7 @@ fn compile_search_pattern_routes_symbol_boundaries_through_backref_engine() {
 fn compile_search_pattern_routes_bracket_section_anchor_through_backref_engine() {
     crate::test_utils::init_test_tracing();
     assert!(matches!(
-        compile_search_pattern("\\`\\[\\([^]]+\\)\\]\\'", true),
+        compile_search_pattern(&lisp_pat("\\`\\[\\([^]]+\\)\\]\\'"), true),
         Ok(CompiledSearchPattern::Emacs(_))
     ));
 }
@@ -892,7 +892,7 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
 
     let mut md = None;
-    let matched = looking_at(&buf, "[[:word:]]+", false, &mut md).expect("compile ok");
+    let matched = looking_at(&buf, &lisp_pat("[[:word:]]+"), false, &mut md).expect("compile ok");
     assert!(matched, "[[:word:]]+ should match `foo_bar`");
     let md = md.unwrap();
     assert_eq!(
@@ -906,7 +906,7 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     let mut buf2 = make_test_buffer("foo_bar baz");
     buf2.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
-    let matched = looking_at(&buf2, "[[:word:]]+", false, &mut md).expect("compile ok");
+    let matched = looking_at(&buf2, &lisp_pat("[[:word:]]+"), false, &mut md).expect("compile ok");
     assert!(matched);
     assert_eq!(
         match_group(md.unwrap().groups[0]),
@@ -1320,12 +1320,12 @@ fn translate_multibyte_literals() {
 #[test]
 fn trivial_regexp_matches_gnu_meta_rules() {
     crate::test_utils::init_test_tracing();
-    assert!(trivial_regexp_p("hello\\.txt"));
-    assert!(trivial_regexp_p("\\😀"));
-    assert!(!trivial_regexp_p("he.*o"));
-    assert!(!trivial_regexp_p("\\(group\\)"));
-    assert!(!trivial_regexp_p("\\1"));
-    assert!(!trivial_regexp_p("trailing\\"));
+    assert!(trivial_regexp_p("hello\\.txt".as_bytes()));
+    assert!(trivial_regexp_p("\\😀".as_bytes()));
+    assert!(!trivial_regexp_p("he.*o".as_bytes()));
+    assert!(!trivial_regexp_p("\\(group\\)".as_bytes()));
+    assert!(!trivial_regexp_p("\\1".as_bytes()));
+    assert!(!trivial_regexp_p("trailing\\".as_bytes()));
 }
 
 // -----------------------------------------------------------------------
@@ -1432,7 +1432,7 @@ fn re_search_forward_backreference_word_boundary() {
     let mut md = None;
     let result = re_search_forward(
         &mut buf,
-        "\\b\\(\\w+\\) \\1\\b",
+        &lisp_pat("\\b\\(\\w+\\) \\1\\b"),
         None,
         false,
         false,
@@ -1677,7 +1677,7 @@ fn regex_search_backend_trace(
     let mut md = None;
     let result = re_search_forward(
         &mut buf,
-        "\\([^ \n]+\\) \\([0-9]+\\)",
+        &lisp_pat("\\([^ \n]+\\) \\([0-9]+\\)"),
         None,
         false,
         false,
@@ -1691,7 +1691,7 @@ fn regex_search_backend_trace(
     ));
     let result = re_search_backward(
         &mut buf,
-        "\\(foo\\)\\([0-9]+\\)",
+        &lisp_pat("\\(foo\\)\\([0-9]+\\)"),
         None,
         false,
         false,
@@ -1709,7 +1709,7 @@ fn regex_search_backend_trace(
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(narrow_start));
     let result = re_search_forward(
         &mut buf,
-        "^\\([^ ]+\\) \\([0-9]+\\)$",
+        &lisp_pat("^\\([^ ]+\\) \\([0-9]+\\)$"),
         None,
         false,
         false,
@@ -1727,12 +1727,12 @@ fn looking_at_backend_trace(kind: BufferTextBackendKind) -> Vec<BufferSearchSnap
     let mut md = None;
     let gamma_line = "α foo\nBeta 123\n".len();
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(gamma_line));
-    let result = looking_at(&buf, "\\(.\\) foo\\([0-9]+\\)", false, &mut md);
+    let result = looking_at(&buf, &lisp_pat("\\(.\\) foo\\([0-9]+\\)"), false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("α ".len()));
-    let result = looking_at(&buf, "foo", false, &mut md);
+    let result = looking_at(&buf, &lisp_pat("foo"), false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     snapshots
@@ -1743,7 +1743,7 @@ fn replace_match_backend_trace(kind: BufferTextBackendKind) -> BufferSearchSnaps
     let mut md = None;
     let result = re_search_forward(
         &mut buf,
-        "\\(foo\\)\\([0-9]+\\)",
+        &lisp_pat("\\(foo\\)\\([0-9]+\\)"),
         None,
         false,
         false,
@@ -1776,7 +1776,7 @@ fn unibyte_search_backend_trace(
     let mut snapshots = Vec::new();
 
     let mut md = None;
-    let result = re_search_forward(&mut buf, ".", None, false, false, &mut md);
+    let result = re_search_forward(&mut buf, &lisp_pat("."), None, false, false, &mut md);
     snapshots.push(buffer_search_snapshot(result, &buf, &md));
 
     md = None;
@@ -1948,7 +1948,7 @@ fn re_search_forward_trivial_regexp_follows_literal_case_fold_path() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("A.b");
     let mut md = None;
-    let result = re_search_forward(&mut buf, "a\\.", None, false, true, &mut md);
+    let result = re_search_forward(&mut buf, &lisp_pat("a\\."), None, false, true, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(2));
     let md = md.unwrap();
@@ -2039,7 +2039,7 @@ fn re_search_forward_basic() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("foo 123 bar");
     let mut md = None;
-    let result = re_search_forward(&mut buf, "[0-9]+", None, false, false, &mut md);
+    let result = re_search_forward(&mut buf, &lisp_pat("[0-9]+"), None, false, false, &mut md);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(7)); // end of "123"
     assert_eq!(buf.point_char_pos().get(), 0);
@@ -2055,7 +2055,7 @@ fn re_search_forward_with_groups() {
     // Emacs regex: \(\w+\): \(\w+\)
     let result = re_search_forward(
         &mut buf,
-        "\\(\\w+\\): \\(\\w+\\)",
+        &lisp_pat("\\(\\w+\\): \\(\\w+\\)"),
         None,
         false,
         false,
@@ -2076,7 +2076,7 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
 
     let first = re_search_forward(
         &mut buf,
-        "^\\([^=]+\\)=\\([0-9]+\\)$",
+        &lisp_pat("^\\([^=]+\\)=\\([0-9]+\\)$"),
         None,
         false,
         false,
@@ -2093,7 +2093,7 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
 
     let second = re_search_forward(
         &mut buf,
-        "^\\([^=]+\\)=\\([0-9]+\\)$",
+        &lisp_pat("^\\([^=]+\\)=\\([0-9]+\\)$"),
         None,
         false,
         false,
@@ -2123,7 +2123,14 @@ fn re_search_forward_bound_is_not_artificial_line_end() {
     // `re_search_2` and passes the search bound separately as STOP.
     // Therefore `$` does not match merely because the bound is just after
     // point; it only matches before a real newline or at the real string end.
-    let result = re_search_forward(&mut buf, "^[ \t]*$", Some(31), true, false, &mut md);
+    let result = re_search_forward(
+        &mut buf,
+        &lisp_pat("^[ \t]*$"),
+        Some(31),
+        true,
+        false,
+        &mut md,
+    );
 
     assert_eq!(result, Ok(None));
     assert_eq!(buf.point_emacs_byte_pos().get(), 30);
@@ -2140,7 +2147,7 @@ fn re_search_backward_basic() {
     let mut buf = make_test_buffer("abc 123 def 456");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(15)); // end
     let mut md = None;
-    let result = re_search_backward(&mut buf, "[0-9]+", None, false, false, &mut md);
+    let result = re_search_backward(&mut buf, &lisp_pat("[0-9]+"), None, false, false, &mut md);
     assert!(result.is_ok());
     // GNU re-search-backward scans positions backward and matches at the
     // first position where the regex succeeds.  From point-max (15/0-indexed=14),
@@ -2155,7 +2162,7 @@ fn re_search_backward_rejects_match_extending_past_point() {
     let mut buf = make_test_buffer("ab12cd");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2)); // point at the start of the current match
     let mut md = None;
-    let result = re_search_backward(&mut buf, "[0-9]+", Some(0), true, false, &mut md);
+    let result = re_search_backward(&mut buf, &lisp_pat("[0-9]+"), Some(0), true, false, &mut md);
     assert_eq!(result, Ok(None));
     assert!(md.is_none());
     assert_eq!(buf.point_char_pos().get(), 2);
@@ -2167,7 +2174,14 @@ fn re_search_backward_finds_nullable_match_at_point() {
     let mut buf = make_test_buffer("abc\n");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3)); // point before trailing newline
     let mut md = None;
-    let result = re_search_backward(&mut buf, "\\(?:$\\)\\=", Some(0), true, false, &mut md);
+    let result = re_search_backward(
+        &mut buf,
+        &lisp_pat("\\(?:$\\)\\="),
+        Some(0),
+        true,
+        false,
+        &mut md,
+    );
     assert_eq!(result, Ok(Some(3)));
     assert_eq!(buf.point_char_pos().get(), 3);
     let md = md.expect("match data");
@@ -2188,7 +2202,8 @@ fn re_search_backward_log_line_loop_progresses() {
     let mut positions = Vec::new();
 
     for _ in 0..4 {
-        let Some(pos) = re_search_backward(&mut buf, pattern, None, true, false, &mut md).unwrap()
+        let Some(pos) =
+            re_search_backward(&mut buf, &lisp_pat(pattern), None, true, false, &mut md).unwrap()
         else {
             break;
         };
@@ -2215,7 +2230,7 @@ fn re_search_forward_finds_nullable_match_at_buffer_end() {
     let mut buf = make_test_buffer("abc");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(3));
     let mut md = None;
-    let result = re_search_forward(&mut buf, "\\=", None, true, false, &mut md);
+    let result = re_search_forward(&mut buf, &lisp_pat("\\="), None, true, false, &mut md);
     assert_eq!(result, Ok(Some(3)));
     assert_eq!(buf.point_char_pos().get(), 3);
     let md = md.expect("match data");
@@ -2232,7 +2247,7 @@ fn looking_at_matches() {
     let mut buf = make_test_buffer("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
-    let result = looking_at(&buf, "hello", true, &mut md);
+    let result = looking_at(&buf, &lisp_pat("hello"), true, &mut md);
     assert!(result.is_ok());
     assert!(result.unwrap());
     assert!(md.is_some());
@@ -2244,7 +2259,7 @@ fn looking_at_no_match() {
     let mut buf = make_test_buffer("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
-    let result = looking_at(&buf, "world", true, &mut md);
+    let result = looking_at(&buf, &lisp_pat("world"), true, &mut md);
     assert!(result.is_ok());
     assert!(!result.unwrap());
 }
@@ -2255,7 +2270,7 @@ fn looking_at_from_middle() {
     let mut buf = make_test_buffer("hello world");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(6)); // "world"
     let mut md = None;
-    let result = looking_at(&buf, "world", true, &mut md);
+    let result = looking_at(&buf, &lisp_pat("world"), true, &mut md);
     assert!(result.is_ok());
     assert!(result.unwrap());
 }
@@ -2266,7 +2281,7 @@ fn looking_at_defaults_to_case_fold() {
     let mut buf = make_test_buffer("A");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
-    let result = looking_at(&buf, "a", true, &mut md);
+    let result = looking_at(&buf, &lisp_pat("a"), true, &mut md);
     assert!(result.is_ok());
     assert!(result.unwrap());
 }
@@ -2277,7 +2292,7 @@ fn looking_at_respects_case_fold_false() {
     let mut buf = make_test_buffer("A");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
-    let result = looking_at(&buf, "a", false, &mut md);
+    let result = looking_at(&buf, &lisp_pat("a"), false, &mut md);
     assert!(result.is_ok());
     assert!(!result.unwrap());
 }
@@ -2289,7 +2304,7 @@ fn looking_at_with_groups() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     // Emacs: \(\w+\)\([0-9]+\)
-    let result = looking_at(&buf, "\\(\\w+\\)\\([0-9]+\\)", true, &mut md);
+    let result = looking_at(&buf, &lisp_pat("\\(\\w+\\)\\([0-9]+\\)"), true, &mut md);
     assert!(result.is_ok());
     assert!(result.unwrap());
     let md = md.unwrap();
@@ -2304,18 +2319,24 @@ fn looking_at_character_class_backslash_range_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let buf = make_test_buffer("/");
-    let result = looking_at(&buf, "[+\\-*/=<>]", false, &mut md);
+    let result = looking_at(&buf, &lisp_pat("[+\\-*/=<>]"), false, &mut md);
     assert_eq!(result, Ok(true));
     let md = md.expect("match data");
     assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 1)));
 
     let mut md = None;
     let buf = make_test_buffer("*");
-    assert_eq!(looking_at(&buf, "[+\\-*/=<>]", false, &mut md), Ok(false));
+    assert_eq!(
+        looking_at(&buf, &lisp_pat("[+\\-*/=<>]"), false, &mut md),
+        Ok(false)
+    );
 
     let mut md = None;
     let buf = make_test_buffer("-");
-    assert_eq!(looking_at(&buf, "[+\\-*/=<>]", false, &mut md), Ok(false));
+    assert_eq!(
+        looking_at(&buf, &lisp_pat("[+\\-*/=<>]"), false, &mut md),
+        Ok(false)
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -2327,7 +2348,7 @@ fn replace_match_literal() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("hello world");
     let mut md = None;
-    let _ = re_search_forward(&mut buf, "world", None, false, false, &mut md);
+    let _ = re_search_forward(&mut buf, &lisp_pat("world"), None, false, false, &mut md);
     let result = replace_match_buffer(&mut buf, "rust", false, true, 0, &md);
     assert!(result.is_ok());
     let content = buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
@@ -2344,7 +2365,14 @@ fn replace_match_with_backref() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
     let mut md = None;
     // Match "hello" with a group
-    let _ = re_search_forward(&mut buf, "\\(hello\\)", None, false, false, &mut md);
+    let _ = re_search_forward(
+        &mut buf,
+        &lisp_pat("\\(hello\\)"),
+        None,
+        false,
+        false,
+        &mut md,
+    );
     let result = replace_match_buffer(&mut buf, "\\1 there", false, false, 0, &md);
     assert!(result.is_ok());
     let content = buf.buffer_substring_range(crate::buffer::EmacsByteRange::from_usize(
@@ -2363,7 +2391,7 @@ fn replace_match_buffer_preserves_unibyte_raw_bytes() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
 
     let mut md = None;
-    let result = re_search_forward(&mut buf, ".", None, false, false, &mut md);
+    let result = re_search_forward(&mut buf, &lisp_pat("."), None, false, false, &mut md);
     assert_eq!(result, Ok(Some(1)));
 
     let result = replace_match_buffer(&mut buf, "\\&", false, false, 0, &md);
@@ -2499,7 +2527,7 @@ fn search_forward_then_match_string() {
     let mut md = None;
     let _ = re_search_forward(
         &mut buf,
-        "\\(quick\\) \\(brown\\)",
+        &lisp_pat("\\(quick\\) \\(brown\\)"),
         None,
         false,
         false,

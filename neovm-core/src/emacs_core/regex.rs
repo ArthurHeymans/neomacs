@@ -154,8 +154,9 @@ fn gnu_single_group_vec(group: Option<MatchGroup>) -> Vec<Option<MatchGroup>> {
 enum CompiledSearchPattern {
     /// GNU-translated engine (primary path for all patterns).
     Emacs(Rc<CompiledPattern>),
-    /// Simple literal search (no regex engine needed).
-    Literal(String),
+    /// Simple literal search. Holds the literal as Emacs internal-encoding bytes
+    /// (issue #131: no storage round-trip).
+    Literal(Vec<u8>),
 }
 
 pub(crate) struct IteratedStringMatches {
@@ -197,7 +198,7 @@ thread_local! {
     // The cache key therefore tracks `(posix, case_fold, pattern)`
     // which is GNU-equivalent for the current feature set. When
     // audit #5 / #8 land, the key must be extended.
-    static SEARCH_PATTERN_CACHE: RefCell<Vec<(bool, bool, String, CompiledSearchPattern)>> =
+    static SEARCH_PATTERN_CACHE: RefCell<Vec<(bool, bool, bool, Vec<u8>, CompiledSearchPattern)>> =
         const { RefCell::new(Vec::new()) };
 
     static LISP_REGEX_PATTERN_CACHE: RefCell<Vec<(bool, bool, Option<usize>, bool, bool, Vec<u8>, Rc<CompiledPattern>)>> =
@@ -922,46 +923,77 @@ pub fn translate_emacs_regex(pattern: &str) -> String {
     out
 }
 
-fn trivial_regexp_p(pattern: &str) -> bool {
-    let mut chars = pattern.chars();
-    while let Some(ch) = chars.next() {
-        match ch {
-            '.' | '*' | '+' | '?' | '[' | '^' | '$' => return false,
-            '\\' => {
-                let Some(next) = chars.next() else {
+fn trivial_regexp_p(pattern: &[u8]) -> bool {
+    // Issue #131: pattern is Emacs internal-encoding bytes; every regex
+    // metacharacter is ASCII (< 0x80) and UTF-8 / eight-bit bytes are >= 0x80,
+    // so scanning raw bytes never false-matches a metacharacter.
+    let mut i = 0;
+    while i < pattern.len() {
+        match pattern[i] {
+            b'.' | b'*' | b'+' | b'?' | b'[' | b'^' | b'$' => return false,
+            b'\\' => {
+                i += 1;
+                let Some(&next) = pattern.get(i) else {
                     return false;
                 };
                 match next {
-                    '|' | '(' | ')' | '`' | '\'' | 'b' | 'B' | '<' | '>' | 'w' | 'W' | 's'
-                    | 'S' | '=' | '{' | '}' | '_' | 'c' | 'C' | '1' | '2' | '3' | '4' | '5'
-                    | '6' | '7' | '8' | '9' | 'n' | 't' | 'r' => return false,
+                    b'|' | b'(' | b')' | b'`' | b'\'' | b'b' | b'B' | b'<' | b'>' | b'w' | b'W'
+                    | b's' | b'S' | b'=' | b'{' | b'}' | b'_' | b'c' | b'C' | b'1' | b'2'
+                    | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9' | b'n' | b't' | b'r' => {
+                        return false;
+                    }
                     _ => {}
                 }
             }
             _ => {}
         }
+        i += 1;
     }
     true
 }
 
-fn literal_from_trivial_regexp(pattern: &str) -> Option<String> {
+fn literal_from_trivial_regexp(pattern: &[u8]) -> Option<Vec<u8>> {
     if !trivial_regexp_p(pattern) {
         return None;
     }
 
-    let mut out = String::with_capacity(pattern.len());
-    let mut chars = pattern.chars();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            out.push(chars.next()?);
+    let mut out = Vec::with_capacity(pattern.len());
+    let mut pos = 0;
+    while pos < pattern.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&pattern[pos..]);
+        if code == '\\' as u32 {
+            pos += len;
+            if pos >= pattern.len() {
+                return None;
+            }
+            let (_next, next_len) = crate::emacs_core::emacs_char::string_char(&pattern[pos..]);
+            out.extend_from_slice(&pattern[pos..pos + next_len]);
+            pos += next_len;
         } else {
-            out.push(ch);
+            out.extend_from_slice(&pattern[pos..pos + len]);
+            pos += len;
         }
     }
     Some(out)
 }
 
-fn compile_search_pattern(pattern: &str, case_fold: bool) -> Result<CompiledSearchPattern, String> {
+/// Issue #131: build the multibyte `LispString` to compile a search pattern from
+/// (GNU/the old `from_utf8` path always compiled multibyte; a unibyte pattern
+/// promotes its raw bytes to eight-bit characters).
+fn pattern_for_compile(pattern: &LispString) -> LispString {
+    if pattern.is_multibyte() {
+        LispString::from_emacs_bytes(pattern.as_bytes().to_vec())
+    } else {
+        LispString::from_emacs_bytes(crate::emacs_core::emacs_char::str_to_multibyte(
+            pattern.as_bytes(),
+        ))
+    }
+}
+
+fn compile_search_pattern(
+    pattern: &LispString,
+    case_fold: bool,
+) -> Result<CompiledSearchPattern, String> {
     compile_search_pattern_with_posix(pattern, case_fold, false)
 }
 
@@ -982,7 +1014,7 @@ fn compile_search_pattern(pattern: &str, case_fold: bool) -> Result<CompiledSear
 /// keyed on `(posix, case_fold, pattern)` so a non-POSIX entry never
 /// satisfies a POSIX request or vice versa.
 fn compile_search_pattern_with_posix(
-    pattern: &str,
+    pattern: &LispString,
     case_fold: bool,
     posix: bool,
 ) -> Result<CompiledSearchPattern, String> {
@@ -992,15 +1024,16 @@ fn compile_search_pattern_with_posix(
             SEARCH_PATTERN_CACHE.with(|cache| {
                 let mut cache = cache.borrow_mut();
                 let index = cache.iter().position(
-                    |(cached_posix, cached_case_fold, cached_pattern, _)| {
+                    |(cached_posix, cached_case_fold, cached_multibyte, cached_pattern, _)| {
                         *cached_posix == posix
                             && *cached_case_fold == case_fold
-                            && cached_pattern == pattern
+                            && *cached_multibyte == pattern.is_multibyte()
+                            && cached_pattern.as_slice() == pattern.as_bytes()
                     },
                 )?;
                 let entry = cache.remove(index);
                 cache.insert(0, entry.clone());
-                Some(entry.3)
+                Some(entry.4)
             })
         },
     ) {
@@ -1016,12 +1049,12 @@ fn compile_search_pattern_with_posix(
             // semantics because there is nothing to backtrack over,
             // so we can keep the Literal fast-path even when posix
             // is requested.
-            if let Some(literal) = literal_from_trivial_regexp(pattern)
+            if let Some(literal) = literal_from_trivial_regexp(pattern.as_bytes())
                 && (!case_fold || literal.is_ascii())
             {
                 Ok(CompiledSearchPattern::Literal(literal))
             } else {
-                regex_emacs::regex_compile(pattern, posix, case_fold)
+                regex_emacs::regex_compile_lisp(pattern, posix, case_fold)
                     .map(Rc::new)
                     .map(CompiledSearchPattern::Emacs)
                     .map_err(|e| e.message)
@@ -1031,7 +1064,16 @@ fn compile_search_pattern_with_posix(
 
     SEARCH_PATTERN_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
-        cache.insert(0, (posix, case_fold, pattern.to_string(), compiled.clone()));
+        cache.insert(
+            0,
+            (
+                posix,
+                case_fold,
+                pattern.is_multibyte(),
+                pattern.as_bytes().to_vec(),
+                compiled.clone(),
+            ),
+        );
         if cache.len() > SEARCH_PATTERN_CACHE_SIZE {
             cache.truncate(SEARCH_PATTERN_CACHE_SIZE);
         }
@@ -1146,7 +1188,8 @@ fn find_forward_match_data_compiled(
 ) -> Option<MatchData> {
     match compiled {
         CompiledSearchPattern::Literal(literal) => {
-            let matched = literal_find(&text[start..limit], literal, case_fold)?;
+            let matched =
+                literal_find_emacs_bytes(&text.as_bytes()[start..limit], literal, true, case_fold)?;
             let matched = matched.shift(offset + start);
             Some(MatchData::none(gnu_single_group_vec(Some(matched))))
         }
@@ -1167,7 +1210,10 @@ pub(crate) fn iterate_string_matches_with_case_fold(
     start: usize,
     case_fold: bool,
 ) -> Result<IteratedStringMatches, String> {
-    let compiled = compile_search_pattern(pattern, case_fold)?;
+    let compiled = compile_search_pattern(
+        &crate::heap_types::LispString::from_utf8(pattern),
+        case_fold,
+    )?;
     let capture_count = compiled_capture_count(&compiled);
     if start > string.len() {
         return Ok(IteratedStringMatches {
@@ -1710,7 +1756,7 @@ fn coerce_pattern_to_buffer_bytes(
 /// Updates match data with capture groups.
 pub fn re_search_forward(
     buf: &mut Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     bound: Option<usize>,
     noerror: bool,
     case_fold: bool,
@@ -1723,7 +1769,7 @@ pub fn re_search_forward(
 /// `posix-search-forward`. See GNU `src/search.c:Fposix_search_forward`.
 pub fn re_search_forward_with_posix(
     buf: &mut Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     bound: Option<usize>,
     noerror: bool,
     case_fold: bool,
@@ -1741,7 +1787,10 @@ pub fn re_search_forward_with_posix(
         if noerror {
             return Ok(None);
         }
-        return Err(format!("Search failed: \"{}\"", pattern));
+        return Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ));
     }
 
     let region_start = accessible.start();
@@ -1749,26 +1798,19 @@ pub fn re_search_forward_with_posix(
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
-    let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
+    let compiled =
+        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix)?;
     let syn = buffer_syntax_lookup(buf);
 
     let md_opt = with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
-            let literal_bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
-                literal, multibyte,
-            );
-            literal_find_emacs_bytes(
-                &text[start_rel..limit_rel],
-                &literal_bytes,
-                multibyte,
-                case_fold,
-            )
-            .map(|matched| {
-                MatchData::buffer_bytes(
-                    gnu_single_group_vec(Some(matched.shift(start.get()))),
-                    Some(buffer_id),
-                )
-            })
+            literal_find_emacs_bytes(&text[start_rel..limit_rel], literal, multibyte, case_fold)
+                .map(|matched| {
+                    MatchData::buffer_bytes(
+                        gnu_single_group_vec(Some(matched.shift(start.get()))),
+                        Some(buffer_id),
+                    )
+                })
         }
         CompiledSearchPattern::Emacs(cp) => {
             let range = (limit_rel - start_rel) as isize;
@@ -1789,7 +1831,10 @@ pub fn re_search_forward_with_posix(
     } else if noerror {
         Ok(None)
     } else {
-        Err(format!("Search failed: \"{}\"", pattern))
+        Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ))
     }
 }
 
@@ -1800,7 +1845,7 @@ pub fn re_search_forward_with_posix(
 /// Updates match data with capture groups.
 pub fn re_search_backward(
     buf: &mut Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     bound: Option<usize>,
     noerror: bool,
     case_fold: bool,
@@ -1813,7 +1858,7 @@ pub fn re_search_backward(
 /// `posix-search-backward`. See GNU `src/search.c:Fposix_search_backward`.
 pub fn re_search_backward_with_posix(
     buf: &mut Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     bound: Option<usize>,
     noerror: bool,
     case_fold: bool,
@@ -1831,7 +1876,10 @@ pub fn re_search_backward_with_posix(
         if noerror {
             return Ok(None);
         }
-        return Err(format!("Search failed: \"{}\"", pattern));
+        return Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ));
     }
 
     let region_start = accessible.start();
@@ -1839,26 +1887,19 @@ pub fn re_search_backward_with_posix(
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
-    let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
+    let compiled =
+        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix)?;
     let syn = buffer_syntax_lookup(buf);
 
     let md_opt = with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
-            let literal_bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
-                literal, multibyte,
-            );
-            literal_rfind_emacs_bytes(
-                &text[limit_rel..start_rel],
-                &literal_bytes,
-                multibyte,
-                case_fold,
-            )
-            .map(|matched| {
-                MatchData::buffer_bytes(
-                    gnu_single_group_vec(Some(matched.shift(region_start.get() + limit_rel))),
-                    Some(buffer_id),
-                )
-            })
+            literal_rfind_emacs_bytes(&text[limit_rel..start_rel], literal, multibyte, case_fold)
+                .map(|matched| {
+                    MatchData::buffer_bytes(
+                        gnu_single_group_vec(Some(matched.shift(region_start.get() + limit_rel))),
+                        Some(buffer_id),
+                    )
+                })
         }
         CompiledSearchPattern::Emacs(cp) => {
             // Backward search: negative range means search backward.
@@ -1880,7 +1921,10 @@ pub fn re_search_backward_with_posix(
     } else if noerror {
         Ok(None)
     } else {
-        Err(format!("Search failed: \"{}\"", pattern))
+        Err(format!(
+            "Search failed: \"{}\"",
+            crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes())
+        ))
     }
 }
 
@@ -1999,7 +2043,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
 /// updates match data.
 pub fn looking_at(
     buf: &Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     case_fold: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<bool, String> {
@@ -2010,7 +2054,7 @@ pub fn looking_at(
 /// `posix-looking-at`. See GNU `src/search.c:Fposix_looking_at`.
 pub fn looking_at_with_posix(
     buf: &Buffer,
-    pattern: &str,
+    pattern: &crate::heap_types::LispString,
     case_fold: bool,
     posix: bool,
     match_data: &mut Option<MatchData>,
@@ -2025,21 +2069,19 @@ pub fn looking_at_with_posix(
     let start_rel = start.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
-    let compiled = compile_search_pattern_with_posix(pattern, case_fold, posix)?;
+    let compiled =
+        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix)?;
     let syn = buffer_syntax_lookup(buf);
 
     match with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
-            let literal_bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
-                literal, multibyte,
-            );
             let tail = &text[start_rel..];
-            let matched = literal_find_emacs_bytes(tail, &literal_bytes, multibyte, case_fold)
+            let matched = literal_find_emacs_bytes(tail, literal, multibyte, case_fold)
                 .is_some_and(|matched| matched.start() == 0);
             if !matched {
                 return Ok(false);
             }
-            let full_match = MatchGroup::new(start.get(), start.get() + literal_bytes.len());
+            let full_match = MatchGroup::new(start.get(), start.get() + literal.len());
             *match_data = Some(MatchData::buffer_bytes(
                 gnu_single_group_vec(Some(full_match)),
                 Some(buffer_id),
@@ -2121,9 +2163,12 @@ pub fn looking_at_string(
     case_fold: bool,
     match_data: &mut Option<MatchData>,
 ) -> Result<bool, String> {
-    match compile_search_pattern(pattern, case_fold)? {
+    match compile_search_pattern(
+        &crate::heap_types::LispString::from_utf8(pattern),
+        case_fold,
+    )? {
         CompiledSearchPattern::Literal(literal) => {
-            let matched = literal_find(string, &literal, case_fold)
+            let matched = literal_find_emacs_bytes(string.as_bytes(), &literal, true, case_fold)
                 .is_some_and(|matched| matched.start() == 0);
             if !matched {
                 return Ok(false);
@@ -2332,7 +2377,11 @@ pub(crate) fn string_match_full_with_case_fold_source_posix(
     }
 
     string_match_full_with_case_fold_source_compiled_syntax(
-        compile_search_pattern_with_posix(pattern, case_fold, posix)?,
+        compile_search_pattern_with_posix(
+            &crate::heap_types::LispString::from_utf8(pattern),
+            case_fold,
+            posix,
+        )?,
         string,
         searched_string,
         start,
@@ -2353,8 +2402,9 @@ fn string_match_full_with_case_fold_source_compiled_syntax(
 ) -> Result<Option<usize>, String> {
     match compiled {
         CompiledSearchPattern::Literal(literal) => {
-            let byte_match = literal_find(&string[start..], &literal, _case_fold)
-                .map(|matched| matched.shift(start));
+            let byte_match =
+                literal_find_emacs_bytes(&string.as_bytes()[start..], &literal, true, _case_fold)
+                    .map(|matched| matched.shift(start));
             if let Some(byte_match) = byte_match {
                 let char_md = string_char_match_data(
                     searched_string,
