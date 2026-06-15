@@ -19,9 +19,7 @@ use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, classify_display_property,
 };
 #[cfg(test)]
-use crate::display_row::RenderedDisplayRow;
-#[cfg(test)]
-use crate::display_row::append_rendered_display_row_fragment_to_current_row;
+use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
     DisplayRowCurrentTextMeasureState, DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics,
@@ -71,8 +69,6 @@ use crate::neovm_bridge::{
 };
 use crate::types::WindowParams;
 use crate::unicode::{decode_utf8, is_wide_char};
-#[cfg(test)]
-use crate::window_output::TextRowOutput;
 use crate::window_output::{
     TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
     TextMatrixRowTransition, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
@@ -708,19 +704,6 @@ impl BufferTextSourceNaturalFallbackAdvance {
             }
         }
     }
-}
-
-#[cfg(test)]
-pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    rendered: &RenderedDisplayRow,
-    output: TextRowOutput,
-) -> DisplayRowPosition {
-    let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
-    output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
-    end
 }
 
 pub(crate) struct DisplayRowBoundaryTransitionRequest<'a> {

@@ -2258,6 +2258,24 @@ fn render_display_item_source_into_current_text_row_and_emit<
             )?;
         Some((result, row.height_px, row.ascent_px))
     })??;
+    Some(finish_current_text_row_render(
+        state,
+        output,
+        role,
+        result,
+        row_height_px,
+        row_ascent_px,
+    ))
+}
+
+fn finish_current_text_row_render(
+    state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+    output: TextRowOutput,
+    role: GlyphRowRole,
+    result: DisplayRowRenderIntoRowResult,
+    row_height_px: f32,
+    row_ascent_px: f32,
+) -> CurrentTextRowRenderOutcome {
     let end = display_row_output_end_position(result.progress);
     install_rendered_display_row_fragment_assets(
         state.builder,
@@ -2271,13 +2289,13 @@ fn render_display_item_source_into_current_text_row_and_emit<
     state
         .output_emitter
         .emit_text_source_slots(state.evaluator, output, &source_slots, end);
-    Some(CurrentTextRowRenderOutcome {
+    CurrentTextRowRenderOutcome {
         stop: result.stop,
         source_slots,
         end,
         row_height_px,
         row_ascent_px,
-    })
+    }
 }
 
 pub(crate) fn install_rendered_display_row(
@@ -2442,6 +2460,19 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
         media.install(builder, rendered.row.role, matrix_row);
     }
     display_row_output_end_position(rendered.progress)
+}
+
+#[cfg(test)]
+pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
+    builder: &mut GlyphMatrixBuilder,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut Context,
+    rendered: &RenderedDisplayRow,
+    output: TextRowOutput,
+) -> DisplayRowPosition {
+    let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
+    output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
+    end
 }
 
 impl RenderedDisplayRowMedia {
