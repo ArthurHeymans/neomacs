@@ -322,15 +322,6 @@ pub(crate) fn storage_string_from_lisp_string(string: &crate::heap_types::LispSt
     )
 }
 
-fn storage_string_to_lisp_string(text: &str, multibyte: bool) -> crate::heap_types::LispString {
-    let bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte);
-    if multibyte {
-        crate::heap_types::LispString::from_emacs_bytes(bytes)
-    } else {
-        crate::heap_types::LispString::from_unibyte(bytes)
-    }
-}
-
 fn translate_match_data_to_substring(
     match_data: &super::regex::MatchData,
     delta: i64,
@@ -627,14 +618,12 @@ fn replace_match_lisp_string_with_syntax_and_properties(
         let matched = source
             .slice(byte_start, byte_end)
             .expect("validated replace-match matched slice");
-        let cased = crate::emacs_core::casefiddle::apply_replace_match_case(
-            &storage_string_from_lisp_string(&replacement),
-            &storage_string_from_lisp_string(&matched),
-        );
-        let mut cased = storage_string_to_lisp_string(
-            &cased,
-            source.is_multibyte() || replacement.is_multibyte(),
-        );
+        // Issue #131: case-preserve over the real Emacs char codes of the
+        // matched/replacement LispStrings instead of round-tripping through the
+        // PUA-sentinel storage form, so eight-bit bytes and PUA glyphs are not
+        // confused.
+        let mut cased =
+            crate::emacs_core::casefiddle::apply_replace_match_case_lisp(&replacement, &matched);
         if cased.schars() == replacement.schars() {
             *cased.intervals_mut() = replacement.intervals().clone();
         }
