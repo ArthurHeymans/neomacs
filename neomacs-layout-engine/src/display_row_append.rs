@@ -75,15 +75,16 @@ use crate::unicode::{decode_utf8, is_wide_char};
 #[cfg(test)]
 use crate::window_output::TextRowOutput;
 use crate::window_output::{
-    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBegin,
-    TextWindowBodyOutputInstall, TextWindowCursorEffects, TextWindowLineNumberMargin,
-    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightBorder,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
-    close_text_window_output, current_text_window_cluster_tail, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, emit_text_window_line_number_margin,
-    finish_and_end_text_matrix_row_output, finish_pending_text_window_row,
-    install_last_window_right_border, install_text_window_body_output,
-    install_text_window_cursor_effects, mark_current_text_row_truncated_left,
+    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
+    TextMatrixRowTransition, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
+    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightBorder, TextWindowRightEdgeMarkers, WindowOutputEmitter,
+    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
+    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
+    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
+    finish_pending_text_window_row, install_last_window_right_border,
+    install_text_window_body_output, install_text_window_cursor_effects,
+    mark_current_text_row_truncated_left,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -297,6 +298,24 @@ impl<'a> TextRowOutputRenderState<'a> {
     ) {
         (self.builder, self.output_emitter, self.evaluator)
     }
+
+    fn finish_and_end_text_matrix_row_output(self, metrics: TextMatrixRowMetrics) {
+        finish_and_end_text_matrix_row_output(
+            self.builder,
+            self.output_emitter,
+            self.evaluator,
+            metrics,
+        );
+    }
+
+    fn emit_text_matrix_row_transition(self, transition: TextMatrixRowGeometryTransition) {
+        emit_text_matrix_row_transition(
+            self.builder,
+            self.output_emitter,
+            self.evaluator,
+            transition,
+        );
+    }
 }
 
 pub(crate) struct TextRowSourceRenderState<'a> {
@@ -349,6 +368,20 @@ impl<'a> TextRowSourceRenderState<'a> {
         &mut self,
     ) -> (&mut GlyphMatrixBuilder, &mut Option<FontMetricsService>) {
         (self.output_render.builder, self.font_metrics)
+    }
+
+    pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
+        mark_current_text_row_truncated_left(self.output_render.builder);
+    }
+
+    pub(crate) fn with_font_metrics_and_display_host<R>(
+        &mut self,
+        f: impl FnOnce(&mut Option<FontMetricsService>, Option<&dyn DisplayHost>) -> R,
+    ) -> R {
+        f(
+            self.font_metrics,
+            self.output_render.evaluator.display_host.as_deref(),
+        )
     }
 
     pub(crate) fn into_parts(
@@ -853,9 +886,7 @@ pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
     pub(crate) row_y_positions: &'a DisplayRowYPositions,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) output_render: TextRowOutputRenderState<'emit>,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallRequest<'a> {
@@ -2613,22 +2644,20 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
             .geometry
             .is_within_row_limit(self.row_context.row_limit())
         {
-            let (builder, output_emitter, evaluator) =
-                state.source_render.output_render().into_parts();
-            finish_and_end_text_matrix_row_output(
-                builder,
-                output_emitter,
-                evaluator,
-                geometry_transition.finished_row,
-            );
+            state
+                .source_render
+                .output_render()
+                .finish_and_end_text_matrix_row_output(geometry_transition.finished_row);
             return false;
         }
 
         state.geometry.record_current_row_y(state.row_y_positions);
         *state.x = content_x;
         *state.col = 0;
-        let (builder, output_emitter, evaluator) = state.source_render.output_render().into_parts();
-        emit_text_matrix_row_transition(builder, output_emitter, evaluator, geometry_transition);
+        state
+            .source_render
+            .output_render()
+            .emit_text_matrix_row_transition(geometry_transition);
         true
     }
 }
@@ -6078,10 +6107,9 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             row_y_positions,
             hit_row_range,
             hit_rows,
-            builder,
-            output_emitter,
-            evaluator,
+            output_render,
         } = state;
+        let (builder, output_emitter, evaluator) = output_render.into_parts();
 
         let cursor_requested = self.point_charpos >= self.window_start
             && (self.point_charpos <= self.charpos || self.point_is_visible_eob);
@@ -6899,9 +6927,7 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
     ) {
         let request = render_context.hscroll_truncation_request(face_resolver, content_x);
         self.append_request_to_text_row(render_context, row_geometry, request);
-        let (builder, _output_emitter, _evaluator) =
-            self.source_render.output_render().into_parts();
-        mark_current_text_row_truncated_left(builder);
+        self.source_render.mark_current_text_row_truncated_left();
     }
 }
 
@@ -9998,9 +10024,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         row_geometry: &mut DisplayRowGeometryState,
     ) -> BufferDisplayPropertyTextAppendAction {
         let display_property = classify_display_property(self.value);
-        let replacement_item = {
-            let (_builder, _output_emitter, evaluator, font_metrics, _face_resolver) =
-                state.reborrow().into_parts();
+        let replacement_item = state.with_font_metrics_and_display_host(|font_metrics, host| {
             DisplayPropertyReplacementAppendItem::resolve(
                 &display_property,
                 self.value,
@@ -10011,9 +10035,9 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
                 self.current_x,
                 self.content_x,
                 self.params,
-                evaluator.display_host.as_deref(),
+                host,
             )
-        };
+        });
         if let Some(item) = replacement_item {
             let face_resolver = state.face_resolver();
             let replacement = DisplayPropertyReplacementAppendRequest::new(
@@ -10331,11 +10355,9 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
         row_geometry: &mut DisplayRowGeometryState,
     ) -> Option<DisplayPropertyReplacementAppendOutcome> {
         let active_face_state = self.active_face_state;
-        let request = {
-            let (_builder, _output_emitter, evaluator, font_metrics, _face_resolver) =
-                state.reborrow().into_parts();
-            self.resolve(font_metrics, evaluator.display_host.as_deref())?
-        };
+        let request = state.with_font_metrics_and_display_host(|font_metrics, host| {
+            self.resolve(font_metrics, host)
+        })?;
         let face_resolver = state.face_resolver();
         Some(request.append_to_text_row(
             buffer,
@@ -10420,8 +10442,10 @@ impl DisplayPropertyReplacementAppendRequest {
     ) -> DisplayPropertyReplacementAppendOutcome {
         let start_position = self.start_position();
         let cursor_policy = self.cursor_policy();
-        let (builder, _output_emitter, _evaluator) = state.output_render().into_parts();
-        let plan = self.into_plan(buffer, face_resolver, active_face_state, face_ids, builder);
+        let plan = {
+            let (builder, _face_resolver) = state.builder_and_face_resolver();
+            self.into_plan(buffer, face_resolver, active_face_state, face_ids, builder)
+        };
         let end_position = plan.append_to_text_row(
             state,
             face_ids,

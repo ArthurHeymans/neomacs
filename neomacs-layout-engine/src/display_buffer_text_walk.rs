@@ -1248,7 +1248,6 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
         charpos: i64,
         point_is_visible_eob: bool,
     ) -> BufferTextWindowTailFinalizeOutcome {
-        let (builder, output_emitter, evaluator) = self.source_render.output_render().into_parts();
         tail_context
             .tail_finalize_request(text, charpos, point_is_visible_eob)
             .finalize_and_apply(BufferTextWindowTailFinalizeState {
@@ -1257,9 +1256,7 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
                 row_y_positions: self.row_y_positions,
                 hit_row_range: self.hit_row_range,
                 hit_rows: self.hit_rows,
-                builder,
-                output_emitter,
-                evaluator,
+                output_render: self.source_render.output_render(),
             })
     }
 

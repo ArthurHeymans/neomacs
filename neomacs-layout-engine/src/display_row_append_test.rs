@@ -5838,9 +5838,11 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         row_y_positions: &context.row_y_positions,
         hit_row_range: &mut hit_row_range,
         hit_rows: &mut context.hit_rows,
-        builder: &mut context.builder,
-        output_emitter: &mut context.output_emitter,
-        evaluator: &mut context.eval,
+        output_render: TextRowOutputRenderState::new(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+        ),
     });
 
     assert!(outcome.cursor_requested());
