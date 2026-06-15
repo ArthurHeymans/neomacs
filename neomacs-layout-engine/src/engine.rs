@@ -20,14 +20,13 @@ use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
-use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyPassOutcome,
     BufferTextWindowBodyPassState, BufferTextWindowBodyPlan, BufferTextWindowFinishInstallState,
     BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRedisplayPublishRequest,
-    BufferTextWindowRenderContexts, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRenderContexts, BufferTextWindowRetryPlan, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -1215,47 +1214,18 @@ impl LayoutEngine {
             buffer,
             &buf_access,
         );
-        let retry_outcome = post_loop_outcome.retry();
-        let rendered_rows_len = post_loop_outcome.rendered_rows_len();
-        if retry_outcome.scroll_down_window_start().is_some() {
-            tracing::debug!(
-                "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
-                layout_i64_char_pos_to_lisp_char_pos(point_charpos).as_i64(),
-                retry_outcome.visible_end_lisp(),
-                walk_setup.charpos,
-                rendered_rows_len,
-                retry_outcome.scroll_down_window_start()
-            );
-        }
-        if retry_outcome.point_row_window_start().is_some() {
-            tracing::debug!(
-                "layout_window_rust: point={} row partially visible within {}..{}, new_window_start={:?}",
-                point_charpos,
-                retry_bounds.text_area_top,
-                retry_bounds.text_area_bottom,
-                retry_outcome.point_row_window_start()
-            );
-        }
-        if retry_outcome.point_line_window_start().is_some() {
-            tracing::debug!(
-                "layout_window_rust: point={} line continues below final visible row, new_window_start={:?}",
-                point_charpos,
-                retry_outcome.point_line_window_start()
-            );
-        }
-        let retry_window_start = retry_outcome.retry_window_start();
+        let retry_plan = BufferTextWindowRetryPlan::from_post_loop(
+            params.window_id,
+            window_start,
+            point_charpos,
+            walk_setup.charpos,
+            retry_bounds,
+            post_loop_outcome,
+        );
+        retry_plan.log_visibility_adjustments();
 
-        if let Some(new_window_start) = retry_window_start
-            && remaining_visibility_retries > 0
-            && new_window_start > window_start
-        {
-            tracing::debug!(
-                "layout_window_rust: retrying window {} with adjusted window_start {} -> {} (remaining={})",
-                params.window_id,
-                window_start,
-                new_window_start,
-                remaining_visibility_retries
-            );
+        if let Some(new_window_start) = retry_plan.should_retry(remaining_visibility_retries) {
+            retry_plan.log_retry(new_window_start, remaining_visibility_retries);
             self.matrix_builder
                 .truncate_transition_hints(transition_hints_len_before);
             self.matrix_builder

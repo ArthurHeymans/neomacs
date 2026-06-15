@@ -1,3 +1,4 @@
+use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
@@ -304,6 +305,17 @@ pub(crate) struct BufferTextWindowBodyPassOutcome {
 pub(crate) struct BufferTextWindowPostLoopRenderOutcome {
     retry: BufferTextWindowVisibilityRetryOutcome,
     rendered_rows_len: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowRetryPlan {
+    window_id: i64,
+    window_start: i64,
+    point_charpos: i64,
+    charpos_end: i64,
+    rendered_rows_len: usize,
+    retry_bounds: BufferTextWindowRetryBounds,
+    retry: BufferTextWindowVisibilityRetryOutcome,
 }
 
 pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
@@ -2521,13 +2533,73 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     }
 }
 
-impl BufferTextWindowPostLoopRenderOutcome {
-    pub(crate) fn retry(self) -> BufferTextWindowVisibilityRetryOutcome {
-        self.retry
+impl BufferTextWindowRetryPlan {
+    pub(crate) fn from_post_loop(
+        window_id: i64,
+        window_start: i64,
+        point_charpos: i64,
+        charpos_end: i64,
+        retry_bounds: BufferTextWindowRetryBounds,
+        post_loop: BufferTextWindowPostLoopRenderOutcome,
+    ) -> Self {
+        Self {
+            window_id,
+            window_start,
+            point_charpos,
+            charpos_end,
+            rendered_rows_len: post_loop.rendered_rows_len,
+            retry_bounds,
+            retry: post_loop.retry,
+        }
     }
 
-    pub(crate) fn rendered_rows_len(self) -> usize {
-        self.rendered_rows_len
+    pub(crate) fn log_visibility_adjustments(self) {
+        if self.retry.scroll_down_window_start().is_some() {
+            tracing::debug!(
+                "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
+                layout_i64_char_pos_to_lisp_char_pos(self.point_charpos).as_i64(),
+                self.retry.visible_end_lisp(),
+                self.charpos_end,
+                self.rendered_rows_len,
+                self.retry.scroll_down_window_start()
+            );
+        }
+        if self.retry.point_row_window_start().is_some() {
+            tracing::debug!(
+                "layout_window_rust: point={} row partially visible within {}..{}, new_window_start={:?}",
+                self.point_charpos,
+                self.retry_bounds.text_area_top,
+                self.retry_bounds.text_area_bottom,
+                self.retry.point_row_window_start()
+            );
+        }
+        if self.retry.point_line_window_start().is_some() {
+            tracing::debug!(
+                "layout_window_rust: point={} line continues below final visible row, new_window_start={:?}",
+                self.point_charpos,
+                self.retry.point_line_window_start()
+            );
+        }
+    }
+
+    pub(crate) fn retry_window_start(self) -> Option<i64> {
+        self.retry.retry_window_start()
+    }
+
+    pub(crate) fn should_retry(self, remaining_visibility_retries: usize) -> Option<i64> {
+        self.retry_window_start().filter(|new_window_start| {
+            remaining_visibility_retries > 0 && *new_window_start > self.window_start
+        })
+    }
+
+    pub(crate) fn log_retry(self, new_window_start: i64, remaining_visibility_retries: usize) {
+        tracing::debug!(
+            "layout_window_rust: retrying window {} with adjusted window_start {} -> {} (remaining={})",
+            self.window_id,
+            self.window_start,
+            new_window_start,
+            remaining_visibility_retries
+        );
     }
 }
 
