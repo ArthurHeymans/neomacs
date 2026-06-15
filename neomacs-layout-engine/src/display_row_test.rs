@@ -2,7 +2,7 @@ use super::*;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -2826,6 +2826,36 @@ fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
     let row = &state.window_matrices[0].matrix.rows[0];
     assert!(row.reversed_p);
     assert_eq!(row_text_expanding_stretches(row), "בא");
+}
+
+#[test]
+fn prebuilt_display_row_install_preserves_row_metadata() {
+    let mut row = GlyphRow::new(GlyphRowRole::ModeLine);
+    row.enabled = true;
+    row.pixel_y = 40.0;
+    row.height_px = 18.0;
+    row.ascent_px = 13.0;
+    row.start_charpos = 7;
+    row.end_charpos = 8;
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('M', 3, 7));
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 2, 10, Rect::new(0.0, 16.0, 80.0, 40.0), true);
+    PrebuiltDisplayRowInstall::new(1, &row).install(&mut builder);
+    builder.end_window();
+
+    let state = builder.finish(10, 2, 8.0, 16.0);
+    let installed = &state.window_matrices[0].matrix.rows[1];
+    assert_eq!(installed.role, GlyphRowRole::ModeLine);
+    assert_eq!(installed.pixel_y, 24.0);
+    assert_eq!(installed.height_px, 18.0);
+    assert_eq!(installed.ascent_px, 13.0);
+    assert_eq!(installed.start_charpos, 7);
+    assert_eq!(installed.end_charpos, 8);
+    assert!(matches!(
+        installed.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        GlyphType::Char { ch: 'M' }
+    ));
 }
 
 #[test]

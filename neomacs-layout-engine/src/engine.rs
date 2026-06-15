@@ -53,7 +53,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
-use crate::display_row::{insert_resolved_display_row_face, install_prebuilt_display_row};
+use crate::display_row::{PrebuiltDisplayRowInstall, insert_resolved_display_row_face};
 use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
@@ -1385,7 +1385,7 @@ impl LayoutEngine {
                     Some(&lnum),
                     None,
                 );
-                install_prebuilt_display_row(&mut builder, row_idx, &row);
+                PrebuiltDisplayRowInstall::new(row_idx, &row).install(&mut builder);
             }
 
             // Mode-line pinned to window bottom.
@@ -1402,7 +1402,7 @@ impl LayoutEngine {
                 None,
                 Some((ml_ncols, 1)),
             );
-            install_prebuilt_display_row(&mut builder, mode_line_row, &row);
+            PrebuiltDisplayRowInstall::new(mode_line_row, &row).install(&mut builder);
 
             close_text_window_output(&mut builder);
         }
@@ -1439,7 +1439,7 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                install_prebuilt_display_row(&mut builder, row_idx, &row);
+                PrebuiltDisplayRowInstall::new(row_idx, &row).install(&mut builder);
             }
 
             if has_mode_line {
@@ -1456,7 +1456,7 @@ impl LayoutEngine {
                     None,
                     Some((mini_ncols, 1)),
                 );
-                install_prebuilt_display_row(&mut builder, mode_line_row, &row);
+                PrebuiltDisplayRowInstall::new(mode_line_row, &row).install(&mut builder);
             }
 
             close_text_window_output(&mut builder);
@@ -1515,7 +1515,7 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                install_prebuilt_display_row(&mut cb, ri, &row);
+                PrebuiltDisplayRowInstall::new(ri, &row).install(&mut cb);
             }
             close_text_window_output(&mut cb);
             let cs = cb.finish(
