@@ -55,7 +55,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SingleDisplayItemSource,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, OwnedDisplayItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -3885,7 +3885,7 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
         let start = request.start_position();
         let outcome = request.render_owned_display_source_into_current_text_row_and_emit(
             &mut current_text_render_state(state, &mut face_ids),
-            SingleDisplayItemSource::new(item),
+            OwnedDisplayItemSource::single(item),
             render_policy,
         )?;
         Some(outcome.into_append_progress_and_position(start))
@@ -3906,7 +3906,7 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
         let start = request.start_position();
         let outcome = request.measure_owned_display_source_against_current_text_row(
             &mut current_text_measure_state(state, &mut face_ids),
-            SingleDisplayItemSource::new(item),
+            OwnedDisplayItemSource::single(item),
             render_policy,
         )?;
         Some(outcome.into_append_progress(start))
@@ -6519,17 +6519,16 @@ fn current_row_marker_geometry(
     }
 }
 
-fn render_right_edge_marker_text(
+fn render_right_edge_marker_items(
     row: &mut GlyphRow,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
-    text: String,
+    items: Vec<DisplayItem>,
     face_id: u32,
     base_face: &ResolvedFace,
     char_width: f32,
     matrix_cols: usize,
-    source_offset: usize,
 ) {
-    if text.is_empty() {
+    if items.is_empty() {
         return;
     }
     let char_width = char_width.max(1.0);
@@ -6538,8 +6537,7 @@ fn render_right_edge_marker_text(
         x_px: start_col as f32 * char_width,
         col: start_col,
     };
-    let mut source =
-        SingleDisplayItemSource::new(right_edge_marker_text_item(text, face_id, source_offset));
+    let mut source = OwnedDisplayItemSource::new(items);
     let mut source_state = DisplayRowSourceState::default();
     let request = DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
         DisplayRowSourceRequestPolicy::from_display_row_geometry(
@@ -6579,29 +6577,29 @@ fn install_right_edge_marker_from_source_request(
     trim_display_row_text_to_total_glyph_count(row, clamped_col);
 
     let mut source_offset = 0usize;
+    let mut items = Vec::new();
     let padding_cols = clamped_col.saturating_sub(display_row_total_glyph_count(row));
     if padding_cols > 0 {
-        render_right_edge_marker_text(
-            row,
-            render_services,
+        items.push(right_edge_marker_text_item(
             " ".repeat(padding_cols),
             face_id,
-            base_face,
-            char_width,
-            matrix_cols,
             source_offset,
-        );
+        ));
         source_offset = source_offset.saturating_add(padding_cols);
     }
-    render_right_edge_marker_text(
+    items.push(right_edge_marker_text_item(
+        marker.to_string(),
+        face_id,
+        source_offset,
+    ));
+    render_right_edge_marker_items(
         row,
         render_services,
-        marker.to_string(),
+        items,
         face_id,
         base_face,
         char_width,
         matrix_cols,
-        source_offset,
     );
 }
 
@@ -6669,7 +6667,7 @@ fn render_right_border_text(
         x_px: request.start_col as f32 * char_width,
         col: request.start_col,
     };
-    let mut source = SingleDisplayItemSource::new(right_border_text_item(
+    let mut source = OwnedDisplayItemSource::single(right_border_text_item(
         request.text,
         request.face_id,
         request.source_offset,

@@ -37,7 +37,7 @@ use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayTabPolicy, display_row_text_glyph_count,
     display_row_text_is_empty, new_display_row,
 };
-use crate::display_source::SingleDisplayItemSource;
+use crate::display_source::{DisplayItemSource, OwnedDisplayItemSource};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{FrameParams, WindowParams};
@@ -104,7 +104,7 @@ fn append_synthetic_minibuffer_text(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     );
-    let mut source = SingleDisplayItemSource::new(item);
+    let mut source = OwnedDisplayItemSource::single(item);
     let start = DisplayRowPosition {
         x_px: source_offset as f32 * char_width.max(1.0),
         col: source_offset,
@@ -222,7 +222,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         &mut self,
         request: DisplayRowItemSourceRenderRequest<'_>,
         row: &mut GlyphRow,
-        source: &mut SingleDisplayItemSource,
+        source: &mut impl DisplayItemSource,
         source_state: &mut DisplayRowSourceState,
     ) -> Option<crate::display_row::DisplayRowRenderIntoRowResult> {
         let mut render_executor = DisplayRowRenderExecutor::new(
