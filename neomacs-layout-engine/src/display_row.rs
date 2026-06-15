@@ -15,7 +15,7 @@ use crate::display_row_builder::{
     new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
-use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
+use crate::display_source::{DisplayItemOnceSource, DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
@@ -2034,6 +2034,20 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         )
     }
 
+    pub(crate) fn render_display_item_into_current_text_row_and_emit<P: DisplayRowRenderPolicy>(
+        self,
+        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+        mut item: DisplayItem,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        item.face = RenderFaceRef::FaceId(self.request.base_face_id);
+        self.render_owned_display_source_into_current_text_row_and_emit(
+            state,
+            DisplayItemOnceSource::new(item),
+            render_policy,
+        )
+    }
+
     pub(crate) fn measure_display_source_against_current_text_row<
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
@@ -2064,6 +2078,20 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             state,
             &mut source,
             &mut source_state,
+            render_policy,
+        )
+    }
+
+    pub(crate) fn measure_display_item_against_current_text_row<P: DisplayRowRenderPolicy>(
+        self,
+        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
+        mut item: DisplayItem,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        item.face = RenderFaceRef::FaceId(self.request.base_face_id);
+        self.measure_owned_display_source_against_current_text_row(
+            state,
+            DisplayItemOnceSource::new(item),
             render_policy,
         )
     }

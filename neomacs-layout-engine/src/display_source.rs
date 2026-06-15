@@ -58,6 +58,22 @@ pub(crate) trait DisplayItemSource {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem>;
 }
 
+pub(crate) struct DisplayItemOnceSource {
+    item: Option<DisplayItem>,
+}
+
+impl DisplayItemOnceSource {
+    pub(crate) fn new(item: DisplayItem) -> Self {
+        Self { item: Some(item) }
+    }
+}
+
+impl DisplayItemSource for DisplayItemOnceSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.item.take()
+    }
+}
+
 pub(crate) trait DisplayItemFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef;
 

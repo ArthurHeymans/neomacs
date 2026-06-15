@@ -53,8 +53,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayItemSource, DisplayReplacementBox, DisplaySourceContext, LispStringSourceCursor,
-    SyntheticTextItemSource,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -3869,11 +3868,6 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
         )
     }
 
-    fn source_for_single_item(&self, mut item: DisplayItem) -> SingleAppendDisplayItemSource {
-        item.face = RenderFaceRef::FaceId(self.base_face_id);
-        SingleAppendDisplayItemSource::new(item)
-    }
-
     fn render_single_item_to_text_row_and_emit<P: DisplayRowRenderPolicy>(
         self,
         state: &mut TextRowSourceRenderState<'_>,
@@ -3883,9 +3877,9 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
         let request = self.request();
         let start = request.start_position();
         let mut face_ids = FrameFaceIdAllocator::new(self.base_face_id.saturating_add(1));
-        let outcome = request.render_owned_display_source_into_current_text_row_and_emit(
+        let outcome = request.render_display_item_into_current_text_row_and_emit(
             &mut current_text_render_state(state, &mut face_ids),
-            self.source_for_single_item(item),
+            item,
             render_policy,
         )?;
         Some(outcome.into_append_progress_and_position(start))
@@ -3902,9 +3896,9 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
             .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(self.position));
         let start = request.start_position();
         let mut face_ids = FrameFaceIdAllocator::new(self.base_face_id.saturating_add(1));
-        let outcome = request.measure_owned_display_source_against_current_text_row(
+        let outcome = request.measure_display_item_against_current_text_row(
             &mut current_text_measure_state(state, &mut face_ids),
-            self.source_for_single_item(item),
+            item,
             render_policy,
         )?;
         Some(outcome.into_append_progress(start))
@@ -3938,22 +3932,6 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
                 source,
                 source_state,
             )
-    }
-}
-
-struct SingleAppendDisplayItemSource {
-    item: Option<DisplayItem>,
-}
-
-impl SingleAppendDisplayItemSource {
-    fn new(item: DisplayItem) -> Self {
-        Self { item: Some(item) }
-    }
-}
-
-impl DisplayItemSource for SingleAppendDisplayItemSource {
-    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        self.item.take()
     }
 }
 
