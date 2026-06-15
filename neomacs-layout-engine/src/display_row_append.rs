@@ -84,8 +84,8 @@ use crate::window_output::{
     close_text_window_output, current_text_window_cluster_tail, emit_text_matrix_row_transition,
     emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
     finish_pending_text_window_row, install_text_window_body_output,
-    install_text_window_cursor_effects, install_text_window_row_decoration, right_border_text_item,
-    right_edge_marker_text_item,
+    install_text_window_cursor_effects, install_text_window_row_decoration,
+    right_border_text_source, right_edge_marker_text_item,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -6630,11 +6630,7 @@ fn render_right_border_text(
         x_px: request.start_col as f32 * char_width,
         col: request.start_col,
     };
-    let mut source = OwnedDisplayItemSource::single(right_border_text_item(
-        request.text,
-        request.face_id,
-        request.source_offset,
-    ));
+    let mut source = right_border_text_source(request.text, request.face_id, request.source_offset);
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
         DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(

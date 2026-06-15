@@ -20,7 +20,7 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
-use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
@@ -724,12 +724,17 @@ pub(crate) fn right_edge_marker_text_item(
     synthetic_window_marker_text_item(RIGHT_EDGE_MARKER_SOURCE_ID, text, face_id, start_offset)
 }
 
-pub(crate) fn right_border_text_item(
-    text: String,
+pub(crate) fn right_border_text_source(
+    text: impl Into<Box<str>>,
     face_id: u32,
     start_offset: usize,
-) -> DisplayItem {
-    synthetic_window_marker_text_item(RIGHT_BORDER_SOURCE_ID, text, face_id, start_offset)
+) -> SyntheticTextItemSource {
+    SyntheticTextItemSource::new(
+        RIGHT_BORDER_SOURCE_ID,
+        text,
+        RenderFaceRef::FaceId(face_id),
+        start_offset,
+    )
 }
 
 fn synthetic_window_marker_text_item(
