@@ -10,9 +10,8 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
-    DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
-    glyphless_method_for_char,
+    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayTextRun, GlyphlessJoinerPolicy,
+    RenderFaceRef, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -53,7 +52,8 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
+    BufferTextSourceAppendItem, DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
+    SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -5642,13 +5642,6 @@ fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Sized>(
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceAppendItem {
-    ControlChar { ch: char },
-    SourceMappedText { text: Box<str> },
-    Glyphless { ch: char, method: GlyphlessMethod },
-}
-
-#[derive(Clone, Debug, PartialEq)]
 struct BufferTextSourceItemRequest {
     range: BufferTextSourceRange,
     item: BufferTextSourceAppendItem,
@@ -9038,17 +9031,6 @@ impl BufferTextSourceClusterState {
 }
 
 impl BufferTextSourceAppendItem {
-    pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
-        let text = match (display_policy, ch) {
-            (1, '\u{00A0}') => " ",
-            (1, '\u{00AD}') => "-",
-            (2, '\u{00A0}') => "\\ ",
-            (2, '\u{00AD}') => "\\-",
-            _ => return None,
-        };
-        Some(Self::SourceMappedText { text: text.into() })
-    }
-
     pub(crate) fn glyphless_display(cluster: BufferTextSourceClusterState) -> Option<Self> {
         let ch = cluster.ch();
         if cluster.has_tail() && crate::composition::is_composition_joiner(ch) {
@@ -9063,30 +9045,6 @@ impl BufferTextSourceAppendItem {
             Self::ControlChar { .. } => DisplayRowAppendKind::ControlChar,
             Self::SourceMappedText { .. } => DisplayRowAppendKind::SourceMappedText,
             Self::Glyphless { .. } => DisplayRowAppendKind::Glyphless,
-        }
-    }
-
-    fn fallback_width_columns(&self) -> usize {
-        match self {
-            Self::ControlChar { .. } => 2,
-            Self::SourceMappedText { text } => text.chars().count().max(1),
-            Self::Glyphless { .. } => 1,
-        }
-    }
-
-    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
-        self.fallback_width_columns() as f32 * fallback_char_width.max(1.0)
-    }
-
-    fn into_display_item_kind(self) -> DisplayItemKind {
-        match self {
-            Self::ControlChar { ch } => DisplayItemKind::ControlChar { ch },
-            Self::SourceMappedText { text } => {
-                DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text))
-            }
-            Self::Glyphless { ch, method } => {
-                DisplayItemKind::Glyphless(DisplayGlyphless { ch, method })
-            }
         }
     }
 }

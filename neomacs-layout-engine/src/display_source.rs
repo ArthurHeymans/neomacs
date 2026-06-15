@@ -167,6 +167,50 @@ impl BufferTextItemSource {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferTextSourceAppendItem {
+    ControlChar { ch: char },
+    SourceMappedText { text: Box<str> },
+    Glyphless { ch: char, method: GlyphlessMethod },
+}
+
+impl BufferTextSourceAppendItem {
+    pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
+        let text = match (display_policy, ch) {
+            (1, '\u{00A0}') => " ",
+            (1, '\u{00AD}') => "-",
+            (2, '\u{00A0}') => "\\ ",
+            (2, '\u{00AD}') => "\\-",
+            _ => return None,
+        };
+        Some(Self::SourceMappedText { text: text.into() })
+    }
+
+    pub(crate) fn fallback_width_columns(&self) -> usize {
+        match self {
+            Self::ControlChar { .. } => 2,
+            Self::SourceMappedText { text } => text.chars().count().max(1),
+            Self::Glyphless { .. } => 1,
+        }
+    }
+
+    pub(crate) fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
+        self.fallback_width_columns() as f32 * fallback_char_width.max(1.0)
+    }
+
+    pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
+        match self {
+            Self::ControlChar { ch } => DisplayItemKind::ControlChar { ch },
+            Self::SourceMappedText { text } => {
+                DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text))
+            }
+            Self::Glyphless { ch, method } => {
+                DisplayItemKind::Glyphless(DisplayGlyphless { ch, method })
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DisplayReplacementBox {
     width_px: f32,
