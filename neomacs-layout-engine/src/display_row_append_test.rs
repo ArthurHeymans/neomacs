@@ -3874,23 +3874,35 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     let mut x = 0.0;
     let mut col = 0;
 
-    BufferLinePrefixRenderRequest::new(
-        BufferLinePrefixRenderContext::new(values, &surface, &geometry, &active_face, 0.0, 16.0),
-        DisplayRowPosition { x_px: x, col },
-    )
-    .render_requested_to_text_row_and_apply(
-        &mut prefix_request,
-        &mut eval,
-        &mut output_emitter,
-        &snapshot,
-        0,
-        &mut font_metrics,
-        &face_resolver,
-        &mut face_ids,
-        &mut builder,
-        &mut x,
-        &mut col,
-    );
+    {
+        let mut source_render = TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        BufferLinePrefixRenderRequest::new(
+            BufferLinePrefixRenderContext::new(
+                values,
+                &surface,
+                &geometry,
+                &active_face,
+                0.0,
+                16.0,
+            ),
+            DisplayRowPosition { x_px: x, col },
+        )
+        .render_requested_with_source_state_and_apply(
+            &mut prefix_request,
+            &mut source_render,
+            &snapshot,
+            0,
+            &mut face_ids,
+            &mut x,
+            &mut col,
+        );
+    }
 
     assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
     assert_eq!(x, 16.0);

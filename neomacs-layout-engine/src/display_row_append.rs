@@ -2212,40 +2212,6 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
         Self { context, position }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    #[cfg(test)]
-    pub(crate) fn render_requested_to_text_row_and_apply<B: LayoutBufferView>(
-        self,
-        request: &mut DisplayRowPrefixRequest,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        buffer: &B,
-        anchor_charpos: i64,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
-        x: &mut f32,
-        col: &mut usize,
-    ) {
-        let position = self.context.render_requested_to_text_row_and_emit(
-            request,
-            &mut TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
-            buffer,
-            anchor_charpos,
-            face_ids,
-            self.position,
-        );
-        *x = position.x_px;
-        *col = position.col;
-    }
-
     pub(crate) fn render_requested_with_source_state_and_apply<B: LayoutBufferView>(
         self,
         request: &mut DisplayRowPrefixRequest,
