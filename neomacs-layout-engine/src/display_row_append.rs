@@ -224,32 +224,33 @@ impl BufferLineNumberMarginRenderRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct ResolvedBufferTextSourceAdvance {
-    advance_px: f32,
-    append_measurement: DisplaySourceAppendMeasurement,
+enum ResolvedBufferTextSourceAdvance {
+    Natural { advance_px: f32 },
+    Resolved { advance_px: f32 },
 }
 
 impl ResolvedBufferTextSourceAdvance {
     fn natural(advance_px: f32) -> Self {
-        Self {
-            advance_px,
-            append_measurement: DisplaySourceAppendMeasurement::Natural,
-        }
+        Self::Natural { advance_px }
     }
 
     fn resolved(advance_px: f32) -> Self {
-        Self {
-            advance_px,
-            append_measurement: DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px },
-        }
+        Self::Resolved { advance_px }
     }
 
     fn advance_px(self) -> f32 {
-        self.advance_px
+        match self {
+            Self::Natural { advance_px } | Self::Resolved { advance_px } => advance_px,
+        }
     }
 
     fn append_measurement(self) -> DisplaySourceAppendMeasurement {
-        self.append_measurement
+        match self {
+            Self::Natural { .. } => DisplaySourceAppendMeasurement::Natural,
+            Self::Resolved { advance_px } => {
+                DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px }
+            }
+        }
     }
 }
 
