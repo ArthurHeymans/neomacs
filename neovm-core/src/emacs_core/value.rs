@@ -2976,17 +2976,11 @@ fn closure_to_equal_key(value: Value, depth: usize, seen: &mut Vec<usize>) -> Ha
         && !doc_value.is_nil()
     {
         slots.push(HashKey::Nil);
-        let doc = if doc_value.is_string() {
-            let string = doc_value.as_lisp_string().expect("string");
-            HashKey::Text(
-                crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-                    string.as_bytes(),
-                    string.is_multibyte(),
-                ),
-            )
-        } else {
-            doc_value.to_equal_key_depth(0, seen)
-        };
+        // Issue #131: key the docstring by content the same way as any other
+        // string value (valid UTF-8 -> text key, eight-bit -> eq key) instead of
+        // the retired storage form, whose in-Unicode sentinels would collide a
+        // real Private-Use glyph with a raw byte in the equal hash key.
+        let doc = doc_value.to_equal_key_depth(0, seen);
         slots.push(doc);
     }
 
