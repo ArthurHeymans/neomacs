@@ -22,11 +22,10 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyPassOutcome,
-    BufferTextWindowBodyPassState, BufferTextWindowBodyPlan, BufferTextWindowFinishOutputState,
-    BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowRedisplayPublishRequest,
-    BufferTextWindowRenderContexts, BufferTextWindowRetryPlan, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowBodyPassState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
+    BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowRedisplayPublishRequest, BufferTextWindowRenderedBodyFinishState,
+    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -1138,14 +1137,7 @@ impl LayoutEngine {
         )
         .into_setup(max_rows, &walk_setup);
 
-        let BufferTextWindowBodyPlan {
-            begin_request,
-            retry_bounds,
-            row_prelude_context: row_prelude_request_context,
-            loop_context: loop_request_context,
-            render_contexts,
-            tail_context: tail_request_context,
-        } = output_setup.into_body_plan(
+        let body_plan = output_setup.into_body_plan(
             &walk_setup,
             local_display_policy,
             lnum_cols,
@@ -1182,17 +1174,8 @@ impl LayoutEngine {
             header_line_height,
             tab_line_height,
         );
-        let BufferTextWindowRenderContexts {
-            has_overlays,
-            face_resolution: face_resolution_context,
-            overlay_text_row: overlay_text_row_context,
-        } = render_contexts;
-
-        let BufferTextWindowBodyPassOutcome {
-            mut output_emitter,
-            post_loop: post_loop_outcome,
-        } = walk_setup.begin_render_body_and_tail(
-            begin_request,
+        let mut rendered_body = body_plan.begin_render_body_and_tail(
+            &mut walk_setup,
             &mut BufferTextWindowBodyPassState {
                 builder: &mut self.matrix_builder,
                 evaluator,
@@ -1203,24 +1186,16 @@ impl LayoutEngine {
                 active_face_state: &mut active_face_state,
                 face_ids: &mut face_ids,
             },
-            row_prelude_request_context,
-            loop_request_context,
-            face_resolution_context,
-            &tail_request_context,
             text,
             params,
-            has_overlays,
-            overlay_text_row_context,
             buffer,
             &buf_access,
         );
-        let retry_plan = BufferTextWindowRetryPlan::from_post_loop(
+        let retry_plan = rendered_body.retry_plan(
             params.window_id,
             window_start,
             point_charpos,
             walk_setup.charpos,
-            retry_bounds,
-            post_loop_outcome,
         );
         retry_plan.log_visibility_adjustments();
 
@@ -1252,13 +1227,12 @@ impl LayoutEngine {
             return;
         }
 
-        let redisplay_positions = walk_setup.install_body_and_publish_redisplay(
-            BufferTextWindowBodyInstallPublishState {
+        let redisplay_positions = rendered_body.install_body_and_publish_redisplay(
+            &mut walk_setup,
+            BufferTextWindowRenderedBodyInstallPublishState {
                 builder: &mut self.matrix_builder,
-                output_emitter: &mut output_emitter,
                 evaluator,
             },
-            &tail_request_context,
             BufferTextWindowRedisplayPublishRequest::new(
                 frame_id,
                 neovm_core::window::WindowId(params.window_id as u64),
@@ -1290,7 +1264,7 @@ impl LayoutEngine {
         .render(&mut WindowChromeRowsRenderState {
             builder: &mut self.matrix_builder,
             evaluator,
-            output_emitter: &mut output_emitter,
+            output_emitter: rendered_body.output_emitter_mut(),
             render_services: ChromeRowRenderServices::new(
                 &mut self.font_metrics,
                 face_resolver,
@@ -1298,11 +1272,10 @@ impl LayoutEngine {
             ),
         });
 
-        walk_setup.finish_window_and_install(
-            &tail_request_context,
-            BufferTextWindowFinishOutputState {
+        rendered_body.finish_window_and_install(
+            &mut walk_setup,
+            BufferTextWindowRenderedBodyFinishState {
                 builder: &mut self.matrix_builder,
-                output_emitter,
                 evaluator,
                 hit_data: &mut self.hit_data,
                 display_snapshots: &mut self.display_snapshots,

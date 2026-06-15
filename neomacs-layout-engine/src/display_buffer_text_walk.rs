@@ -296,6 +296,11 @@ pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit> {
     pub(crate) evaluator: &'emit mut Context,
 }
 
+pub(crate) struct BufferTextWindowRenderedBodyInstallPublishState<'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowRedisplayPublishRequest {
     frame_id: FrameId,
@@ -307,6 +312,20 @@ pub(crate) struct BufferTextWindowRedisplayPublishRequest {
 pub(crate) struct BufferTextWindowBodyPassOutcome {
     pub(crate) output_emitter: WindowOutputEmitter,
     pub(crate) post_loop: BufferTextWindowPostLoopRenderOutcome,
+}
+
+pub(crate) struct BufferTextWindowRenderedBody<'a> {
+    output_emitter: WindowOutputEmitter,
+    post_loop: BufferTextWindowPostLoopRenderOutcome,
+    retry_bounds: BufferTextWindowRetryBounds,
+    tail_context: BufferTextWindowTailRequestContext<'a>,
+}
+
+pub(crate) struct BufferTextWindowRenderedBodyFinishState<'a> {
+    pub(crate) builder: &'a mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'a mut Context,
+    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
+    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -936,6 +955,108 @@ impl BufferTextWindowRedisplayPublishRequest {
             positions.window_end,
             positions.window_end_byte,
             positions.window_end_vpos,
+        );
+    }
+}
+
+impl<'a, 'surface, B> BufferTextWindowBodyPlan<'a, 'surface, B>
+where
+    B: LayoutBufferView,
+{
+    pub(crate) fn begin_render_body_and_tail<'buf>(
+        self,
+        walk_setup: &mut BufferTextWindowWalkSetup,
+        state: &mut BufferTextWindowBodyPassState<'_>,
+        text: &'a [u8],
+        params: &'a WindowParams,
+        buffer: &B,
+        buf_access: &RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowRenderedBody<'a> {
+        let BufferTextWindowRenderContexts {
+            has_overlays,
+            face_resolution,
+            overlay_text_row,
+        } = self.render_contexts;
+        let BufferTextWindowBodyPassOutcome {
+            output_emitter,
+            post_loop,
+        } = walk_setup.begin_render_body_and_tail(
+            self.begin_request,
+            state,
+            self.row_prelude_context,
+            self.loop_context,
+            face_resolution,
+            &self.tail_context,
+            text,
+            params,
+            has_overlays,
+            overlay_text_row,
+            buffer,
+            buf_access,
+        );
+
+        BufferTextWindowRenderedBody {
+            output_emitter,
+            post_loop,
+            retry_bounds: self.retry_bounds,
+            tail_context: self.tail_context,
+        }
+    }
+}
+
+impl<'a> BufferTextWindowRenderedBody<'a> {
+    pub(crate) fn retry_plan(
+        &self,
+        window_id: i64,
+        window_start: i64,
+        point_charpos: i64,
+        charpos_end: i64,
+    ) -> BufferTextWindowRetryPlan {
+        BufferTextWindowRetryPlan::from_post_loop(
+            window_id,
+            window_start,
+            point_charpos,
+            charpos_end,
+            self.retry_bounds,
+            self.post_loop,
+        )
+    }
+
+    pub(crate) fn install_body_and_publish_redisplay(
+        &mut self,
+        walk_setup: &mut BufferTextWindowWalkSetup,
+        state: BufferTextWindowRenderedBodyInstallPublishState<'_>,
+        publish_request: BufferTextWindowRedisplayPublishRequest,
+    ) -> TextWindowRedisplayPositions {
+        walk_setup.install_body_and_publish_redisplay(
+            BufferTextWindowBodyInstallPublishState {
+                builder: state.builder,
+                output_emitter: &mut self.output_emitter,
+                evaluator: state.evaluator,
+            },
+            &self.tail_context,
+            publish_request,
+        )
+    }
+
+    pub(crate) fn output_emitter_mut(&mut self) -> &mut WindowOutputEmitter {
+        &mut self.output_emitter
+    }
+
+    pub(crate) fn finish_window_and_install(
+        self,
+        walk_setup: &mut BufferTextWindowWalkSetup,
+        state: BufferTextWindowRenderedBodyFinishState<'_>,
+    ) {
+        walk_setup.finish_window_and_install(
+            &self.tail_context,
+            BufferTextWindowFinishOutputState {
+                builder: state.builder,
+                output_emitter: self.output_emitter,
+                evaluator: state.evaluator,
+                hit_data: state.hit_data,
+                display_snapshots: state.display_snapshots,
+            },
         );
     }
 }
