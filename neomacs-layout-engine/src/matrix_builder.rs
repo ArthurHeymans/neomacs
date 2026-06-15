@@ -533,17 +533,23 @@ pub(crate) struct MatrixRowCursorRequest {
     pub(crate) style: CursorStyle,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum MatrixRowLifecycleRequest {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct MatrixPrebuiltRowRequest<'row> {
+    pub(crate) source: &'row GlyphRow,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum MatrixRowLifecycleRequest<'row> {
     Begin(MatrixRowBeginRequest),
     EndIncremental,
     EndPrebuilt,
     CurrentMetrics(MatrixRowMetricsRequest),
     RowMetrics(MatrixIndexedRowMetricsRequest),
     CursorAt(MatrixRowCursorRequest),
+    PrebuiltCurrent(MatrixPrebuiltRowRequest<'row>),
 }
 
-impl MatrixRowLifecycleRequest {
+impl MatrixRowLifecycleRequest<'_> {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         match self {
             Self::Begin(begin) => {
@@ -596,6 +602,9 @@ impl MatrixRowLifecycleRequest {
                     matrix.rows[cursor.row].cursor_type = Some(cursor.style);
                 }
             }
+            Self::PrebuiltCurrent(prebuilt) => {
+                Self::install_prebuilt_current(builder, prebuilt.source);
+            }
         }
     }
 
@@ -606,6 +615,35 @@ impl MatrixRowLifecycleRequest {
             metrics.height_px,
             metrics.ascent_px,
         );
+    }
+
+    fn install_prebuilt_current(builder: &mut GlyphMatrixBuilder, source: &GlyphRow) {
+        if let Some(ref mut matrix) = builder.current_matrix
+            && builder.current_row < matrix.rows.len()
+        {
+            let row = &mut matrix.rows[builder.current_row];
+            row.glyphs = source.glyphs.clone();
+            row.hash = source.hash;
+            row.enabled = source.enabled;
+            row.role = source.role;
+            row.cursor_col = source.cursor_col;
+            row.cursor_type = source.cursor_type;
+            row.truncated_left = source.truncated_left;
+            row.continued = source.continued;
+            row.reversed_p = source.reversed_p;
+            row.displays_text = source.displays_text;
+            row.ends_at_zv = source.ends_at_zv;
+            row.mode_line = source.mode_line;
+            row.start_charpos = source.start_charpos;
+            row.end_charpos = source.end_charpos;
+            let pixel_y_rel = source.pixel_y - builder.current_pixel_bounds.y;
+            GlyphMatrixBuilder::write_row_metrics(
+                row,
+                pixel_y_rel,
+                source.height_px,
+                source.ascent_px,
+            );
+        }
     }
 }
 
@@ -804,7 +842,7 @@ impl GlyphMatrixBuilder {
         request.install(self);
     }
 
-    pub(crate) fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest) {
+    pub(crate) fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest<'_>) {
         request.install(self);
     }
 
@@ -857,39 +895,12 @@ impl GlyphMatrixBuilder {
         Some(f(row))
     }
 
-    /// Install a complete row whose glyph order and row-level metadata were
-    /// produced outside the matrix builder.
-    ///
-    /// The source row's `pixel_y` is frame-absolute; rows stored in a window
-    /// matrix use window-relative Y, matching GNU `struct glyph_row::y`.
-    pub(crate) fn install_prebuilt_current_row(&mut self, source: &GlyphRow) {
-        if let Some(ref mut matrix) = self.current_matrix {
-            if self.current_row < matrix.rows.len() {
-                let row = &mut matrix.rows[self.current_row];
-                row.glyphs = source.glyphs.clone();
-                row.hash = source.hash;
-                row.enabled = source.enabled;
-                row.role = source.role;
-                row.cursor_col = source.cursor_col;
-                row.cursor_type = source.cursor_type;
-                row.truncated_left = source.truncated_left;
-                row.continued = source.continued;
-                row.reversed_p = source.reversed_p;
-                row.displays_text = source.displays_text;
-                row.ends_at_zv = source.ends_at_zv;
-                row.mode_line = source.mode_line;
-                row.start_charpos = source.start_charpos;
-                row.end_charpos = source.end_charpos;
-                let pixel_y_rel = source.pixel_y - self.current_pixel_bounds.y;
-                Self::write_row_metrics(row, pixel_y_rel, source.height_px, source.ascent_px);
-            }
-        }
-    }
-
     #[cfg(test)]
     fn install_prebuilt_row(&mut self, row: usize, source: &GlyphRow) {
         self.begin_row(row, source.role);
-        self.install_prebuilt_current_row(source);
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::PrebuiltCurrent(
+            MatrixPrebuiltRowRequest { source },
+        ));
         self.end_prebuilt_row();
     }
 
