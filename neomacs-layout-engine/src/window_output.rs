@@ -26,7 +26,7 @@ use crate::display_row_geometry::{
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SingleDisplayItemSource};
 use crate::hit_test::HitRow;
-use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::matrix_builder::{GlyphMatrixBuilder, MatrixCursorInstallRequest};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
@@ -898,16 +898,16 @@ pub(crate) fn publish_text_window_cursor(
     cursor: TextWindowCursor,
 ) {
     if !cursor.selected {
-        builder.push_cursor(
-            cursor.window_id,
-            cursor.slot_id,
-            cursor.x,
-            cursor.y,
-            cursor.width,
-            cursor.height,
-            cursor.style,
-            cursor.color,
-        );
+        builder.install_cursor(MatrixCursorInstallRequest {
+            window_id: cursor.window_id,
+            slot_id: cursor.slot_id,
+            x: cursor.x,
+            y: cursor.y,
+            width: cursor.width,
+            height: cursor.height,
+            style: cursor.style,
+            color: cursor.color,
+        });
     }
     builder.set_cursor_at_row(cursor.row(), cursor.col(), cursor.style);
     output_emitter.set_phys_cursor(cursor.window_snapshot());
@@ -929,16 +929,16 @@ pub(crate) fn publish_text_window_decorative_cursor(
             },
         );
     }
-    builder.push_cursor(
-        cursor.window_id,
-        cursor.slot_id,
-        cursor.x,
-        cursor.y,
-        cursor.width,
-        cursor.height,
-        cursor.style,
-        cursor.color,
-    );
+    builder.install_cursor(MatrixCursorInstallRequest {
+        window_id: cursor.window_id,
+        slot_id: cursor.slot_id,
+        x: cursor.x,
+        y: cursor.y,
+        width: cursor.width,
+        height: cursor.height,
+        style: cursor.style,
+        color: cursor.color,
+    });
 }
 
 pub(crate) fn install_text_window_cursor_effects(

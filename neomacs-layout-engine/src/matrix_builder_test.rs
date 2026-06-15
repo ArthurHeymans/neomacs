@@ -787,16 +787,16 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
         row: 0,
         col: 2,
     };
-    builder.push_cursor(
-        1,
-        captured_slot,
-        0.0,
-        0.0,
-        8.0,
-        16.0,
-        CursorStyle::FilledBox,
-        neomacs_display_protocol::types::Color::WHITE,
-    );
+    builder.install_cursor(MatrixCursorInstallRequest {
+        window_id: 1,
+        slot_id: captured_slot,
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+    });
     builder.set_phys_cursor(PhysCursor {
         window_id: 1,
         charpos: 102,

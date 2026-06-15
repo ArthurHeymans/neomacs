@@ -328,6 +328,33 @@ impl MatrixMediaInstallTarget {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixCursorInstallRequest {
+    pub(crate) window_id: i64,
+    pub(crate) slot_id: DisplaySlotId,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) style: CursorStyle,
+    pub(crate) color: Color,
+}
+
+impl MatrixCursorInstallRequest {
+    fn cursor_item(self) -> CursorItem {
+        CursorItem {
+            window_id: self.window_id,
+            slot_id: self.slot_id,
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+            style: self.style,
+            color: self.color,
+        }
+    }
+}
+
 pub(crate) struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
@@ -689,27 +716,8 @@ impl GlyphMatrixBuilder {
         self.scroll_bars.push(item);
     }
 
-    pub(crate) fn push_cursor(
-        &mut self,
-        window_id: i64,
-        slot_id: DisplaySlotId,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        style: CursorStyle,
-        color: Color,
-    ) {
-        self.cursors.push(CursorItem {
-            window_id,
-            slot_id,
-            x,
-            y,
-            width: w,
-            height: h,
-            style,
-            color,
-        });
+    pub(crate) fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
+        self.cursors.push(request.cursor_item());
     }
 
     pub(crate) fn install_media(&mut self, request: MatrixMediaInstallRequest) {

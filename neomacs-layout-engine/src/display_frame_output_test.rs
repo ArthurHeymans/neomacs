@@ -177,20 +177,20 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     let mut curr_infos = std::collections::HashMap::new();
     curr_infos.insert(curr.window_id, curr);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.push_cursor(
-        params.window_id,
-        DisplaySlotId {
+    builder.install_cursor(crate::matrix_builder::MatrixCursorInstallRequest {
+        window_id: params.window_id,
+        slot_id: DisplaySlotId {
             window_id: params.window_id,
             row: 1,
             col: 2,
         },
-        24.0,
-        48.0,
-        8.0,
-        16.0,
-        CursorStyle::FilledBox,
-        Color::WHITE,
-    );
+        x: 24.0,
+        y: 48.0,
+        width: 8.0,
+        height: 16.0,
+        style: CursorStyle::FilledBox,
+        color: Color::WHITE,
+    });
 
     FrameLineAnimationHintsRenderRequest::new(&prev_infos, &curr_infos)
         .render_and_apply(&mut builder);
