@@ -57,6 +57,16 @@ struct DisplayRowTextCharState {
     kind: DisplayRowTextCharKind,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct DisplayRowTextCharAdvanceRequest<'a> {
+    char_state: DisplayRowTextCharState,
+    face_id: u32,
+    position: DisplayRowPosition,
+    char_offset: usize,
+    byte_offset: usize,
+    measurement: &'a DisplayTextRunMeasurement,
+}
+
 impl DisplayRowTextCharState {
     fn for_tail(ch: char, tail: Option<(char, bool)>) -> Self {
         let kind = if ch == '\t' {
@@ -79,6 +89,48 @@ impl DisplayRowTextCharState {
 
     fn kind(self) -> DisplayRowTextCharKind {
         self.kind
+    }
+}
+
+impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
+    fn new(
+        char_state: DisplayRowTextCharState,
+        face_id: u32,
+        position: DisplayRowPosition,
+        char_offset: usize,
+        byte_offset: usize,
+        measurement: &'a DisplayTextRunMeasurement,
+    ) -> Self {
+        Self {
+            char_state,
+            face_id,
+            position,
+            char_offset,
+            byte_offset,
+            measurement,
+        }
+    }
+
+    fn per_char(
+        char_state: DisplayRowTextCharState,
+        face_id: u32,
+        position: DisplayRowPosition,
+        measurement: &'a DisplayTextRunMeasurement,
+    ) -> Self {
+        Self::new(char_state, face_id, position, 0, 0, measurement)
+    }
+
+    fn ch(self) -> char {
+        self.char_state.ch()
+    }
+
+    fn kind(self) -> DisplayRowTextCharKind {
+        self.char_state.kind()
+    }
+
+    fn measured_advance(self) -> Option<f32> {
+        self.measurement
+            .advance_for(self.char_offset, self.byte_offset)
     }
 }
 
@@ -810,16 +862,15 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         let mut byte_offset = 0usize;
         for ch in text.chars() {
             let char_state = self.writer.text_char_state(ch);
-            let advance = self
-                .writer
-                .text_char_advance_px_at_position_with_measurement(
-                    char_state,
-                    face_id,
-                    self.position,
-                    char_offset,
-                    byte_offset,
-                    &measurement,
-                );
+            let advance_request = DisplayRowTextCharAdvanceRequest::new(
+                char_state,
+                face_id,
+                self.position,
+                char_offset,
+                byte_offset,
+                &measurement,
+            );
+            let advance = self.writer.text_char_advance_px(advance_request);
             if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
                 status = DisplayRowAppendStatus::Clipped;
                 break;
@@ -827,16 +878,10 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
 
             let before_len = self.text_area_len();
             let slot_start = self.position;
-            self.writer
-                .push_text_char_state_at_position_with_measurement(
-                    char_state,
-                    face_id,
-                    source_mapping.charpos(start_char, char_offset),
-                    self.position,
-                    char_offset,
-                    byte_offset,
-                    &measurement,
-                );
+            self.writer.push_text_char_state_with_advance_request(
+                source_mapping.charpos(start_char, char_offset),
+                advance_request,
+            );
             self.writer.apply_item_layout_since(before_len, item_layout);
             let written = self.metrics_since(before_len);
             slots.push(DisplayRowGlyphSlot {
@@ -1030,14 +1075,16 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         byte_offset: usize,
         measurement: &DisplayTextRunMeasurement,
     ) {
-        self.push_text_char_state_at_position_with_measurement(
-            char_state,
-            face_id,
+        self.push_text_char_state_with_advance_request(
             charpos,
-            self.current_text_position(),
-            char_offset,
-            byte_offset,
-            measurement,
+            DisplayRowTextCharAdvanceRequest::new(
+                char_state,
+                face_id,
+                self.current_text_position(),
+                char_offset,
+                byte_offset,
+                measurement,
+            ),
         );
     }
 
@@ -1048,91 +1095,61 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         charpos: usize,
         position: DisplayRowPosition,
     ) {
-        self.push_text_char_state_at_position_with_measurement(
-            char_state,
-            face_id,
+        let measurement = DisplayTextRunMeasurement::PerChar;
+        self.push_text_char_state_with_advance_request(
             charpos,
-            position,
-            0,
-            0,
-            &DisplayTextRunMeasurement::PerChar,
+            DisplayRowTextCharAdvanceRequest::per_char(char_state, face_id, position, &measurement),
         );
     }
 
-    fn push_text_char_state_at_position_with_measurement(
+    fn push_text_char_state_with_advance_request(
         &mut self,
-        char_state: DisplayRowTextCharState,
-        face_id: u32,
         charpos: usize,
-        position: DisplayRowPosition,
-        char_offset: usize,
-        byte_offset: usize,
-        measurement: &DisplayTextRunMeasurement,
+        advance_request: DisplayRowTextCharAdvanceRequest<'_>,
     ) {
-        let ch = char_state.ch();
-        match char_state.kind() {
+        let ch = advance_request.ch();
+        match advance_request.kind() {
             DisplayRowTextCharKind::Tab => {
-                self.push_tab_at_position(face_id, position);
+                self.push_tab_at_position(advance_request.face_id, advance_request.position);
             }
             DisplayRowTextCharKind::ClusterContinuation => {
                 glyph_row_writer::push_cluster_continuation_to_area(
                     &mut self.row,
                     self.area_index,
                     ch,
-                    face_id,
+                    advance_request.face_id,
                     charpos,
                 );
             }
             DisplayRowTextCharKind::ComplexRunMember => {
-                let advance = self.text_char_advance_px_at_position_with_measurement(
-                    char_state,
-                    face_id,
-                    position,
-                    char_offset,
-                    byte_offset,
-                    measurement,
-                );
+                let advance = self.text_char_advance_px(advance_request);
                 glyph_row_writer::push_run_member_to_area(
                     &mut self.row,
                     self.area_index,
                     ch,
-                    face_id,
+                    advance_request.face_id,
                     charpos,
                     advance,
                 );
             }
             DisplayRowTextCharKind::BaseGlyph { columns } if columns > 1 => {
-                let advance = self.text_char_advance_px_at_position_with_measurement(
-                    char_state,
-                    face_id,
-                    position,
-                    char_offset,
-                    byte_offset,
-                    measurement,
-                );
+                let advance = self.text_char_advance_px(advance_request);
                 glyph_row_writer::push_wide_char_to_area(
                     &mut self.row,
                     self.area_index,
                     ch,
-                    face_id,
+                    advance_request.face_id,
                     charpos,
                     advance,
                 );
             }
             DisplayRowTextCharKind::BaseGlyph { .. } => {
-                let advance = self.text_char_advance_px_at_position_with_measurement(
-                    char_state,
-                    face_id,
-                    position,
-                    char_offset,
-                    byte_offset,
-                    measurement,
-                );
+                let advance = self.text_char_advance_px(advance_request);
                 glyph_row_writer::push_char_to_area(
                     &mut self.row,
                     self.area_index,
                     ch,
-                    face_id,
+                    advance_request.face_id,
                     charpos,
                     advance,
                 );
@@ -1150,31 +1167,21 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    fn text_char_advance_px_at_position_with_measurement(
-        &mut self,
-        char_state: DisplayRowTextCharState,
-        face_id: u32,
-        position: DisplayRowPosition,
-        char_offset: usize,
-        byte_offset: usize,
-        measurement: &DisplayTextRunMeasurement,
-    ) -> f32 {
-        let ch = char_state.ch();
-
-        match char_state.kind() {
+    fn text_char_advance_px(&mut self, request: DisplayRowTextCharAdvanceRequest<'_>) -> f32 {
+        match request.kind() {
             DisplayRowTextCharKind::Tab => {
                 self.layout
                     .tab_policy
-                    .advance_from(position, self.layout.char_width_px)
+                    .advance_from(request.position, self.layout.char_width_px)
                     .pixel_width
             }
             DisplayRowTextCharKind::ClusterContinuation => 0.0,
-            DisplayRowTextCharKind::ComplexRunMember => measurement
-                .advance_for(char_offset, byte_offset)
-                .unwrap_or_else(|| self.glyph_advance_px(ch, face_id, 1)),
-            DisplayRowTextCharKind::BaseGlyph { columns } => measurement
-                .advance_for(char_offset, byte_offset)
-                .unwrap_or_else(|| self.glyph_advance_px(ch, face_id, columns)),
+            DisplayRowTextCharKind::ComplexRunMember => request
+                .measured_advance()
+                .unwrap_or_else(|| self.glyph_advance_px(request.ch(), request.face_id, 1)),
+            DisplayRowTextCharKind::BaseGlyph { columns } => request
+                .measured_advance()
+                .unwrap_or_else(|| self.glyph_advance_px(request.ch(), request.face_id, columns)),
         }
     }
 
