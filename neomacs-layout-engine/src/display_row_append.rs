@@ -939,23 +939,28 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
 
 pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
     source_event: BufferTextSourceTextEvent,
-    text: &'a [u8],
-    text_start_byte: usize,
-    buffer_id: BufferId,
-    append_surface: &'a DisplayRowAppendSurface,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-    active_face_state: &'a DisplayRowActiveFaceState,
-    params: &'a WindowParams,
-    glyph_y_offset: f32,
-    char_h: f32,
-    point_charpos: i64,
-    row_visibility_limit: DisplayRowVisibilityLimit,
-    content_x: f32,
-    has_prefix: bool,
-    row_geometry_defaults: DisplayRowGeometryDefaults,
-    text_matrix_row_base: usize,
-    max_rows: usize,
-    row_limit: DisplayRowLimit,
+    context: BufferTextSourceCharRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextSourceCharRenderContext<'a> {
+    pub(crate) text: &'a [u8],
+    pub(crate) text_start_byte: usize,
+    pub(crate) buffer_id: BufferId,
+    pub(crate) append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) params: &'a WindowParams,
+    pub(crate) glyph_y_offset: f32,
+    pub(crate) char_h: f32,
+    pub(crate) point_charpos: i64,
+    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
+    pub(crate) content_x: f32,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
@@ -4903,89 +4908,20 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
 
 impl<'a> BufferTextSourceCharRenderRequest<'a> {
     #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         decoded_source_char: BufferTextDecodedSourceChar,
-        text: &'a [u8],
-        text_start_byte: usize,
-        buffer_id: BufferId,
-        append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        char_h: f32,
-        point_charpos: i64,
-        row_visibility_limit: DisplayRowVisibilityLimit,
-        content_x: f32,
-        has_prefix: bool,
-        row_geometry_defaults: DisplayRowGeometryDefaults,
-        text_matrix_row_base: usize,
-        max_rows: usize,
-        row_limit: DisplayRowLimit,
+        context: BufferTextSourceCharRenderContext<'a>,
     ) -> Self {
-        Self::from_source_event(
-            BufferTextSourceTextEvent::new(decoded_source_char),
-            text,
-            text_start_byte,
-            buffer_id,
-            append_surface,
-            overlay_context,
-            active_face_state,
-            params,
-            glyph_y_offset,
-            char_h,
-            point_charpos,
-            row_visibility_limit,
-            content_x,
-            has_prefix,
-            row_geometry_defaults,
-            text_matrix_row_base,
-            max_rows,
-            row_limit,
-        )
+        Self::from_source_event(BufferTextSourceTextEvent::new(decoded_source_char), context)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_source_event(
         source_event: BufferTextSourceTextEvent,
-        text: &'a [u8],
-        text_start_byte: usize,
-        buffer_id: BufferId,
-        append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        char_h: f32,
-        point_charpos: i64,
-        row_visibility_limit: DisplayRowVisibilityLimit,
-        content_x: f32,
-        has_prefix: bool,
-        row_geometry_defaults: DisplayRowGeometryDefaults,
-        text_matrix_row_base: usize,
-        max_rows: usize,
-        row_limit: DisplayRowLimit,
+        context: BufferTextSourceCharRenderContext<'a>,
     ) -> Self {
         Self {
             source_event,
-            text,
-            text_start_byte,
-            buffer_id,
-            append_surface,
-            overlay_context,
-            active_face_state,
-            params,
-            glyph_y_offset,
-            char_h,
-            point_charpos,
-            row_visibility_limit,
-            content_x,
-            has_prefix,
-            row_geometry_defaults,
-            text_matrix_row_base,
-            max_rows,
-            row_limit,
+            context,
         }
     }
 
@@ -5018,6 +4954,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             raise_span,
         } = state;
         let mut source_render = source_render;
+        let context = self.context;
 
         let decoded_source_char = self.source_event.decoded_char();
         let ch = decoded_source_char.ch();
@@ -5025,14 +4962,14 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
 
         let buffer_source_char = self
             .source_event
-            .source_char(self.params.nobreak_char_display);
+            .source_char(context.params.nobreak_char_display);
         let buffer_row_append_context = BufferTextRowAppendContext::new(
             buffer,
-            self.buffer_id,
-            self.append_surface,
-            self.active_face_state,
-            self.glyph_y_offset,
-            self.char_h,
+            context.buffer_id,
+            context.append_surface,
+            context.active_face_state,
+            context.glyph_y_offset,
+            context.char_h,
         );
         let append_position = DisplayRowPosition {
             x_px: *x,
@@ -5049,7 +4986,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 BufferTextSourceCharPreparationRequest::new(
                     append_geometry,
                     &buffer_source_char,
-                    self.text,
+                    context.text,
                     decoded_source_char.start_byte_idx(),
                     append_position,
                 ),
@@ -5061,18 +4998,18 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
                 let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
                     &special_prepared_append,
-                    self.text,
-                    self.text_start_byte,
+                    context.text,
+                    context.text_start_byte,
                     *x,
-                    self.append_surface.full_text_right_edge(),
-                    self.params.truncate_lines,
-                    self.row_visibility_limit,
-                    self.content_x,
-                    self.has_prefix,
-                    self.row_geometry_defaults,
-                    self.text_matrix_row_base,
-                    self.max_rows,
-                    self.row_limit,
+                    context.append_surface.full_text_right_edge(),
+                    context.params.truncate_lines,
+                    context.row_visibility_limit,
+                    context.content_x,
+                    context.has_prefix,
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
+                    context.max_rows,
+                    context.row_limit,
                 )
                 .render_if_needed_and_apply(
                     buffer,
@@ -5106,7 +5043,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     .append_to_text_row_and_apply(
                         &buffer_row_append_context,
                         row_geometry,
-                        self.params,
+                        context.params,
                         &mut BufferTextSpecialSourceCharRenderState::new(
                             face_ids,
                             source_render.reborrow(),
@@ -5132,19 +5069,19 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             prepared_append,
             decoded_source_char,
             ch,
-            self.append_surface.right_edge(),
-            self.params.truncate_lines,
+            context.append_surface.right_edge(),
+            context.params.truncate_lines,
             *word_wrap,
-            self.row_visibility_limit,
-            self.content_x,
-            self.has_prefix,
-            self.row_geometry_defaults,
-            self.text_matrix_row_base,
-            self.max_rows,
-            self.row_limit,
+            context.row_visibility_limit,
+            context.content_x,
+            context.has_prefix,
+            context.row_geometry_defaults,
+            context.text_matrix_row_base,
+            context.max_rows,
+            context.row_limit,
         )
         .render_if_needed_and_apply(
-            self.text,
+            context.text,
             BufferTextOverflowRenderState {
                 byte_idx,
                 charpos,
@@ -5175,19 +5112,19 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(
             raise_span,
             *charpos,
-            self.params.window_start,
+            context.params.window_start,
         );
 
         prepared_append.capture_cursor_info_for_main_char_if_point(
             cursor_info,
-            self.active_face_state,
+            context.active_face_state,
             row_geometry,
             *x,
             decoded_source_char.start_byte_idx(),
             *col,
             ch == '\t',
             *charpos,
-            self.point_charpos,
+            context.point_charpos,
         );
 
         {
@@ -5202,10 +5139,10 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 row_y_positions,
                 face_ids,
             );
-            self.overlay_context.render_before_at(
+            context.overlay_context.render_before_at(
                 buffer,
                 *charpos,
-                self.active_face_state,
+                context.active_face_state,
                 &mut overlay_state,
             );
         }
@@ -5241,10 +5178,10 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 row_y_positions,
                 face_ids,
             );
-            self.overlay_context.render_after_at(
+            context.overlay_context.render_after_at(
                 buffer,
                 *charpos,
-                self.active_face_state,
+                context.active_face_state,
                 &mut overlay_state,
             );
         }
