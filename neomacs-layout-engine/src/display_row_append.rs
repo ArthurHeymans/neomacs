@@ -6485,7 +6485,6 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
                 window_start: context.window_start,
                 text_start_byte: context.text_start_byte,
                 byte_idx: context.byte_idx,
-                right_edge_markers: None,
             },
         );
         if let Some(markers) = right_edge_markers {

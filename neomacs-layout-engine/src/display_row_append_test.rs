@@ -6278,6 +6278,57 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
 }
 
 #[test]
+fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserves_marker() {
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for ch in "ABCD$".chars() {
+        write_char_to_current_row_with_width(&mut builder, ch, 0, 0, 8.0);
+    }
+    builder.end_row();
+    builder.begin_row(2, GlyphRowRole::Text);
+    write_char_to_current_row_with_width(&mut builder, 'Z', 0, 0, 8.0);
+    builder.end_row();
+    builder.end_window();
+
+    let mut face_ids = FrameFaceIdAllocator::new(10);
+    let mut font_metrics = None;
+    let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
+        &mut builder,
+        crate::display_status_line::ChromeRowRenderServices::new(
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+        ),
+    );
+
+    let state = builder.finish(5, 3, 8.0, 16.0);
+    let matrix = &state.window_matrices[0].matrix;
+    let row_text = |row: usize| -> String {
+        matrix.rows[row].glyphs[GlyphArea::Text.index()]
+            .iter()
+            .map(|glyph| match glyph.glyph_type {
+                GlyphType::Char { ch } => ch,
+                _ => '?',
+            })
+            .collect()
+    };
+
+    assert_eq!(row_text(0), "ABC$");
+    assert_eq!(row_text(1), "    ");
+    assert_eq!(row_text(2), "Z   ");
+    assert!(!matrix.rows[1].displays_text);
+    for row in 0..3 {
+        let right = &matrix.rows[row].glyphs[GlyphArea::RightMargin.index()];
+        assert_eq!(right.len(), 1);
+        assert_eq!(right[0].glyph_type, GlyphType::Char { ch: '|' });
+        assert_eq!(right[0].face_id, face_id);
+    }
+}
+
+#[test]
 fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifacts() {
     let mut eval = Context::new();
     let buf_id = eval
