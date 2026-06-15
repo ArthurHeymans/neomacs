@@ -52,6 +52,7 @@ use crate::display_frame_output::{
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_origin::DisplayOrigin;
 use crate::display_row::{insert_resolved_display_row_face, install_prebuilt_display_row};
 use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
@@ -1229,7 +1230,8 @@ impl LayoutEngine {
         };
 
         let width = frame_params.width;
-        let tab_bar_face = face_resolver.resolve_named_face("tab-bar");
+        let tab_bar_face =
+            face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabBar);
         let tab_bar_ascent = frame_params.char_height * 0.8;
         let chrome_before_tab = frame_params.menu_bar_height
             + frame_params.tool_bar_height

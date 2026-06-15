@@ -1149,13 +1149,10 @@ pub fn window_params_from_neovm_with_font_sizing(
     // GNU xdisp.c's estimate_mode_line_height starts from the frame line
     // height and lets realized face metrics grow from there.
     let mode_line_height = if wants_mode_line {
-        let mode_line_face_name = if is_selected {
-            "mode-line-active"
-        } else {
-            "mode-line-inactive"
-        };
         chrome_face_pixel_height(
-            &face_resolver.resolve_named_face(mode_line_face_name),
+            &face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
+                selected: is_selected,
+            }),
             char_height,
         )
     } else {
@@ -1182,13 +1179,12 @@ pub fn window_params_from_neovm_with_font_sizing(
     let fill_column_indicator = buffer_fill_column_indicator(buffer);
 
     let header_line_height = if wants_header_line {
-        let header_line_face_name = if is_selected {
-            "header-line-active"
-        } else {
-            "header-line-inactive"
-        };
         chrome_face_pixel_height(
-            &face_resolver.resolve_named_face(header_line_face_name),
+            &face_resolver.default_base_face_for_origin_without_buffer(
+                &DisplayOrigin::HeaderLine {
+                    selected: is_selected,
+                },
+            ),
             char_height,
         )
     } else {
@@ -1196,7 +1192,10 @@ pub fn window_params_from_neovm_with_font_sizing(
     };
 
     let tab_line_height = if wants_tab_line {
-        chrome_face_pixel_height(&face_resolver.resolve_named_face("tab-line"), char_height)
+        chrome_face_pixel_height(
+            &face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabLine),
+            char_height,
+        )
     } else {
         0.0
     };
@@ -2802,6 +2801,21 @@ impl FaceResolver {
             origin.default_base_face_policy(),
             next_check,
         )
+    }
+
+    pub(crate) fn default_base_face_for_origin_without_buffer(
+        &self,
+        origin: &DisplayOrigin,
+    ) -> ResolvedFace {
+        match origin.default_base_face_policy() {
+            BaseFacePolicy::DefaultFace => self.default_face.clone(),
+            BaseFacePolicy::FixedBasicFace(face_id) => self.resolve_named_face(face_id.name()),
+            policy => {
+                panic!(
+                    "display origin {origin:?} requires a buffer for base face policy {policy:?}"
+                )
+            }
+        }
     }
 
     /// Extract face name(s) from a Lisp Value.

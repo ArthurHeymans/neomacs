@@ -406,21 +406,18 @@ impl WindowChromeRowsPlan {
         fallback_row_height: f32,
     ) -> Self {
         let mode_line_face = (params.mode_line_height > 0.0).then(|| {
-            face_resolver.resolve_named_face(if params.selected {
-                "mode-line-active"
-            } else {
-                "mode-line-inactive"
+            face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
+                selected: params.selected,
             })
         });
         let header_line_face = (params.header_line_height > 0.0).then(|| {
-            face_resolver.resolve_named_face(if params.selected {
-                "header-line-active"
-            } else {
-                "header-line-inactive"
+            face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::HeaderLine {
+                selected: params.selected,
             })
         });
-        let tab_line_face =
-            (params.tab_line_height > 0.0).then(|| face_resolver.resolve_named_face("tab-line"));
+        let tab_line_face = (params.tab_line_height > 0.0).then(|| {
+            face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabLine)
+        });
 
         let mode_line_height = mode_line_face.as_ref().map_or(0.0, |face| {
             window_chrome_row_height_for_face(
