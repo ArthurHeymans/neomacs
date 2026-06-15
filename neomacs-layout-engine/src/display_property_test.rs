@@ -124,31 +124,28 @@ fn display_property_classification_names_replacement_accessors() {
         Value::make_float(0.25),
     ]));
 
-    assert!(string.is_string_replacement());
-    assert!(string.stretch_replacement().is_none());
-    assert!(string.media_replacement().is_none());
+    assert_eq!(
+        string.replacement(),
+        Some(&DisplayReplacementProperty::String)
+    );
 
-    assert!(!stretch.is_string_replacement());
     assert!(matches!(
-        stretch.stretch_replacement(),
-        Some(DisplayStretch {
+        stretch.replacement(),
+        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Em(3.0)),
             height: None,
             ascent: None,
-        })
+        }))
     ));
-    assert!(stretch.media_replacement().is_none());
 
-    assert!(!media.is_string_replacement());
-    assert!(media.stretch_replacement().is_none());
     assert_eq!(
-        media.media_replacement(),
-        Some(&DisplayMediaReplacementProperty::Image)
+        media.replacement(),
+        Some(&DisplayReplacementProperty::Media(
+            DisplayMediaReplacementProperty::Image
+        ))
     );
 
-    assert!(!modifier.is_string_replacement());
-    assert!(modifier.stretch_replacement().is_none());
-    assert!(modifier.media_replacement().is_none());
+    assert!(modifier.replacement().is_none());
 }
 
 #[test]

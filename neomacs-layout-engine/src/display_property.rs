@@ -14,22 +14,8 @@ pub(crate) struct DisplayPropertyClassification {
 }
 
 impl DisplayPropertyClassification {
-    pub(crate) fn is_string_replacement(&self) -> bool {
-        matches!(self.replacement, Some(DisplayReplacementProperty::String))
-    }
-
-    pub(crate) fn stretch_replacement(&self) -> Option<&DisplayStretch> {
-        match &self.replacement {
-            Some(DisplayReplacementProperty::Stretch(stretch)) => Some(stretch),
-            Some(DisplayReplacementProperty::String | DisplayReplacementProperty::Media(_))
-            | None => None,
-        }
-    }
-
-    pub(crate) fn media_replacement(&self) -> Option<&DisplayMediaReplacementProperty> {
-        self.replacement
-            .as_ref()
-            .and_then(DisplayReplacementProperty::media)
+    pub(crate) fn replacement(&self) -> Option<&DisplayReplacementProperty> {
+        self.replacement.as_ref()
     }
 }
 
@@ -46,15 +32,6 @@ pub(crate) enum DisplayMediaReplacementProperty {
     Video,
     Xwidget(DisplayMediaReplacement),
     Webkit,
-}
-
-impl DisplayReplacementProperty {
-    pub(crate) fn media(&self) -> Option<&DisplayMediaReplacementProperty> {
-        match self {
-            Self::Media(media) => Some(media),
-            Self::String | Self::Stretch(_) => None,
-        }
-    }
 }
 
 impl DisplayMediaReplacementProperty {

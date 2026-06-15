@@ -16,7 +16,8 @@ use crate::display_item::{
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
-    DisplayMediaReplacementProperty, DisplayPropertyClassification, classify_display_property,
+    DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
+    classify_display_property,
 };
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
@@ -11044,19 +11045,20 @@ impl DisplayPropertyReplacementAppendItem {
         context: DisplayPropertyReplacementResolveContext<'_, '_>,
     ) -> Option<Self> {
         let face_metrics = context.face_metrics();
-        if context.display_property.is_string_replacement() {
-            DisplayReplacementStringAppendItem::display_property_string(
-                context.source_event.value(),
-                context.source_event.anchor_charpos(),
-                DisplayPropertySource::TextProperty,
-                1,
-                context.active_face_state,
-                context.font_metrics,
-                face_metrics.char_width,
-            )
-            .map(Self::String)
-        } else if context.display_property.stretch_replacement().is_some() {
-            Some(Self::Stretch(
+        match context.display_property.replacement()? {
+            DisplayReplacementProperty::String => {
+                DisplayReplacementStringAppendItem::display_property_string(
+                    context.source_event.value(),
+                    context.source_event.anchor_charpos(),
+                    DisplayPropertySource::TextProperty,
+                    1,
+                    context.active_face_state,
+                    context.font_metrics,
+                    face_metrics.char_width,
+                )
+                .map(Self::String)
+            }
+            DisplayReplacementProperty::Stretch(_) => Some(Self::Stretch(
                 DisplayReplacementStretchAppendItem::from_display_space_property(
                     &context.source_event.value(),
                     context.source_event.source_text(),
@@ -11069,18 +11071,18 @@ impl DisplayPropertyReplacementAppendItem {
                     face_metrics.ascent,
                     context.params,
                 ),
-            ))
-        } else {
-            let media_replacement = context.display_property.media_replacement()?;
-            DisplayReplacementMediaAppendItem::resolve_display_property(
-                context.source_event.value(),
-                media_replacement,
-                context.display_host,
-                context.active_face_state,
-                face_metrics.char_width,
-                face_metrics.row_height,
-            )
-            .map(Self::Media)
+            )),
+            DisplayReplacementProperty::Media(media_replacement) => {
+                DisplayReplacementMediaAppendItem::resolve_display_property(
+                    context.source_event.value(),
+                    media_replacement,
+                    context.display_host,
+                    context.active_face_state,
+                    face_metrics.char_width,
+                    face_metrics.row_height,
+                )
+                .map(Self::Media)
+            }
         }
     }
 
