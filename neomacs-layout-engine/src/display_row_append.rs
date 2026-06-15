@@ -989,22 +989,27 @@ pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
 
 pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
     source_char: BufferTextDecodedSourceChar,
-    text: &'a [u8],
-    text_start_byte: usize,
-    selective_display: i32,
-    tab_width: i32,
-    append_surface: &'a DisplayRowAppendSurface,
-    active_face_state: &'a DisplayRowActiveFaceState,
-    glyph_y_offset: f32,
-    default_face_ascent: f32,
-    char_h: f32,
-    char_w: f32,
-    content_x: f32,
-    has_prefix: bool,
-    row_geometry_defaults: DisplayRowGeometryDefaults,
-    text_matrix_row_base: usize,
-    max_rows: usize,
-    row_limit: DisplayRowLimit,
+    context: BufferSelectiveDisplayTailRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
+    pub(crate) text: &'a [u8],
+    pub(crate) text_start_byte: usize,
+    pub(crate) selective_display: i32,
+    pub(crate) tab_width: i32,
+    pub(crate) append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) glyph_y_offset: f32,
+    pub(crate) default_face_ascent: f32,
+    pub(crate) char_h: f32,
+    pub(crate) char_w: f32,
+    pub(crate) content_x: f32,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
@@ -4757,44 +4762,13 @@ impl BufferTextOverflowRenderOutcome {
 }
 
 impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         source_char: BufferTextDecodedSourceChar,
-        text: &'a [u8],
-        text_start_byte: usize,
-        selective_display: i32,
-        tab_width: i32,
-        append_surface: &'a DisplayRowAppendSurface,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        glyph_y_offset: f32,
-        default_face_ascent: f32,
-        char_h: f32,
-        char_w: f32,
-        content_x: f32,
-        has_prefix: bool,
-        row_geometry_defaults: DisplayRowGeometryDefaults,
-        text_matrix_row_base: usize,
-        max_rows: usize,
-        row_limit: DisplayRowLimit,
+        context: BufferSelectiveDisplayTailRenderContext<'a>,
     ) -> Self {
         Self {
             source_char,
-            text,
-            text_start_byte,
-            selective_display,
-            tab_width,
-            append_surface,
-            active_face_state,
-            glyph_y_offset,
-            default_face_ascent,
-            char_h,
-            char_w,
-            content_x,
-            has_prefix,
-            row_geometry_defaults,
-            text_matrix_row_base,
-            max_rows,
-            row_limit,
+            context,
         }
     }
 
@@ -4803,9 +4777,14 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         buffer: &B,
         state: BufferSelectiveDisplayTailRenderState<'_, '_>,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
-        let context =
-            BufferSelectiveDisplayContext::new(self.text, self.selective_display, self.tab_width);
-        let Some(marker) = context.carriage_return_tail_marker(self.source_char.ch()) else {
+        let context = self.context;
+        let selective_display = BufferSelectiveDisplayContext::new(
+            context.text,
+            context.selective_display,
+            context.tab_width,
+        );
+        let Some(marker) = selective_display.carriage_return_tail_marker(self.source_char.ch())
+        else {
             return BufferSelectiveDisplayTailRenderOutcome::NotHidden;
         };
 
@@ -4834,18 +4813,19 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             BufferSyntheticTextRenderState::new(source_render.reborrow(), x, col);
         marker.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
-                self.append_surface,
-                self.active_face_state,
-                self.glyph_y_offset,
-                self.char_h,
-                self.default_face_ascent,
-                self.char_w,
+                context.append_surface,
+                context.active_face_state,
+                context.glyph_y_offset,
+                context.char_h,
+                context.default_face_ascent,
+                context.char_w,
             ),
             row_geometry,
             &mut synthetic_text_state,
         );
 
-        let tail_action = context.skip_rest_of_line_after_carriage_return(byte_idx, charpos);
+        let tail_action =
+            selective_display.skip_rest_of_line_after_carriage_return(byte_idx, charpos);
         if !tail_action.is_line_break() {
             return BufferSelectiveDisplayTailRenderOutcome::ContinueBufferWalk;
         }
@@ -4854,18 +4834,18 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             row_geometry,
             row_extend,
             box_face,
-            self.content_x,
+            context.content_x,
             x,
         );
         let line_break_transition = DisplayRowLineBreakTransitionPlan::hidden_line_break();
         let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
-            self.row_geometry_defaults,
-            self.text_matrix_row_base,
+            context.row_geometry_defaults,
+            context.text_matrix_row_base,
             row_y_positions,
-            self.max_rows,
+            context.max_rows,
             row_geometry,
             row_flags,
-            self.row_limit,
+            context.row_limit,
             hit_rows,
             &mut source_render,
         )
@@ -4879,7 +4859,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             0.0,
             DisplayRowTransitionRenderState::new(
                 prefix_request,
-                self.has_prefix,
+                context.has_prefix,
                 line_numbers,
                 hscroll_skip,
                 word_wrap,
@@ -4888,7 +4868,9 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             col,
         );
         let synced_charpos = buffer
-            .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(self.text_start_byte + *byte_idx))
+            .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+                context.text_start_byte + *byte_idx,
+            ))
             .get() as i64;
         if tail_action
             .apply_after_hidden_line_break_transition(
