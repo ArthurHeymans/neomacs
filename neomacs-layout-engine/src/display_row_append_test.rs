@@ -33,11 +33,12 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
     BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
-    BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem, DisplayReplacementBox,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
-    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
+    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
@@ -7774,7 +7775,7 @@ fn display_property_replacement_append_item_resolves_string_replacement() {
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
 
-    let item = DisplayPropertyReplacementAppendItem::resolve(
+    let item = DisplayPropertyReplacementSourceItem::resolve(
         test_display_property_replacement_resolve_context(
             &classification,
             value,
@@ -7785,7 +7786,7 @@ fn display_property_replacement_append_item_resolves_string_replacement() {
     )
     .expect("string replacement append item");
 
-    let DisplayPropertyReplacementAppendItem::String(item) = item else {
+    let DisplayPropertyReplacementSourceItem::String(item) = item else {
         panic!("expected string replacement append item");
     };
     assert_eq!(item.cursor_slot_width_px(), 8.0);
@@ -7807,7 +7808,7 @@ fn display_property_replacement_append_item_resolves_stretch_replacement() {
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
 
-    let item = DisplayPropertyReplacementAppendItem::resolve(
+    let item = DisplayPropertyReplacementSourceItem::resolve(
         test_display_property_replacement_resolve_context(
             &classification,
             value,
@@ -7818,7 +7819,7 @@ fn display_property_replacement_append_item_resolves_stretch_replacement() {
     )
     .expect("stretch replacement append item");
 
-    let DisplayPropertyReplacementAppendItem::Stretch(item) = item else {
+    let DisplayPropertyReplacementSourceItem::Stretch(item) = item else {
         panic!("expected stretch replacement append item");
     };
     assert_eq!(item.width_px(), 16.0);
@@ -7843,7 +7844,7 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
     );
     let params = test_display_space_window_params();
 
-    let item = DisplayPropertyReplacementAppendItem::resolve(
+    let item = DisplayPropertyReplacementSourceItem::resolve(
         test_display_property_replacement_resolve_context(
             &classification,
             Value::NIL,
@@ -7854,7 +7855,7 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
     )
     .expect("media replacement append item");
 
-    let DisplayPropertyReplacementAppendItem::Media(
+    let DisplayPropertyReplacementSourceItem::Media(
         DisplayReplacementMediaSourceResolution::Media(item),
     ) = item
     else {
@@ -7872,7 +7873,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     let value = Value::string("ab");
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
-    let string = DisplayPropertyReplacementAppendItem::resolve(
+    let string = DisplayPropertyReplacementSourceItem::resolve(
         test_display_property_replacement_resolve_context(
             &classification,
             value,
@@ -7891,7 +7892,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
         }
     );
 
-    let stretch = DisplayPropertyReplacementAppendItem::Stretch(
+    let stretch = DisplayPropertyReplacementSourceItem::Stretch(
         DisplayReplacementStretchSourceItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
     );
     assert_eq!(
@@ -7902,7 +7903,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
         }
     );
 
-    let media = DisplayPropertyReplacementAppendItem::Media(
+    let media = DisplayPropertyReplacementSourceItem::Media(
         DisplayReplacementMediaSourceResolution::Media(DisplayReplacementMediaSourceItem::new(
             DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
                 xwidget_id: 17,
@@ -7923,7 +7924,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
         }
     );
 
-    let placeholder = DisplayPropertyReplacementAppendItem::Media(
+    let placeholder = DisplayPropertyReplacementSourceItem::Media(
         DisplayReplacementMediaSourceResolution::Placeholder(
             DisplayReplacementSourceMappedTextItem::new("[img]"),
         ),
@@ -7936,7 +7937,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
 
 #[test]
 fn display_property_replacement_append_request_keeps_item_policy_and_start_position() {
-    let item = DisplayPropertyReplacementAppendItem::Stretch(
+    let item = DisplayPropertyReplacementSourceItem::Stretch(
         DisplayReplacementStretchSourceItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
     );
     let request = DisplayPropertyReplacementAppendRequest::new(
@@ -7962,7 +7963,7 @@ fn display_property_replacement_append_request_keeps_item_policy_and_start_posit
         request.start_position(),
         DisplayRowPosition { x_px: 24.0, col: 4 }
     );
-    let DisplayPropertyReplacementAppendItem::Stretch(item) = request.into_item() else {
+    let DisplayPropertyReplacementSourceItem::Stretch(item) = request.into_item() else {
         panic!("expected stretch replacement item");
     };
     assert_eq!(item.height_px(), 16.0);

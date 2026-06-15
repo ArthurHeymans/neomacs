@@ -1492,6 +1492,13 @@ impl DisplayReplacementStringSourceItem {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum DisplayPropertyReplacementSourceItem {
+    String(DisplayReplacementStringSourceItem),
+    Stretch(DisplayReplacementStretchSourceItem),
+    Media(DisplayReplacementMediaSourceResolution),
+}
+
 pub(crate) struct BufferDisplayReplacementStringSource<S> {
     replacement_source: BufferDisplayReplacementSource,
     source: S,

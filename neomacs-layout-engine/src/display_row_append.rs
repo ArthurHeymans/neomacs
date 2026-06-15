@@ -56,11 +56,11 @@ use crate::display_source::{
     BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
     BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
     BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
-    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementAppendItem,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
-    SyntheticTextItemSource,
+    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementAppendItem, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -8790,13 +8790,6 @@ impl DisplayReplacementStretchSourceItem {
     }
 }
 
-#[derive(Clone)]
-pub(crate) enum DisplayPropertyReplacementAppendItem {
-    String(DisplayReplacementStringSourceItem),
-    Stretch(DisplayReplacementStretchSourceItem),
-    Media(DisplayReplacementMediaSourceResolution),
-}
-
 pub(crate) enum BufferDisplayPropertyTextAppendAction {
     Replacement(BufferDisplayPropertyTextReplacementOutcome),
     Modifiers(BufferDisplayPropertyTextModifierAction),
@@ -9211,7 +9204,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         let context = self.context;
         let display_property = classify_display_property(self.source_event.value());
         let replacement_item = state.with_font_metrics_and_display_host(|font_metrics, host| {
-            DisplayPropertyReplacementAppendItem::resolve(
+            DisplayPropertyReplacementSourceItem::resolve(
                 DisplayPropertyReplacementResolveContext::new(
                     &display_property,
                     self.source_event,
@@ -9469,7 +9462,7 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
             0,
             0,
         );
-        let item = DisplayPropertyReplacementAppendItem::resolve(
+        let item = DisplayPropertyReplacementSourceItem::resolve(
             DisplayPropertyReplacementResolveContext::new(
                 self.display_property,
                 source_event,
@@ -9516,7 +9509,7 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
 #[derive(Clone)]
 pub(crate) struct DisplayPropertyReplacementAppendRequest {
     replacement_source: BufferDisplayReplacementSource,
-    item: DisplayPropertyReplacementAppendItem,
+    item: DisplayPropertyReplacementSourceItem,
     glyph_y_offset: f32,
     default_row_height: f32,
     start_position: DisplayRowPosition,
@@ -9525,7 +9518,7 @@ pub(crate) struct DisplayPropertyReplacementAppendRequest {
 impl DisplayPropertyReplacementAppendRequest {
     pub(crate) fn new(
         replacement_source: BufferDisplayReplacementSource,
-        item: DisplayPropertyReplacementAppendItem,
+        item: DisplayPropertyReplacementSourceItem,
         glyph_y_offset: f32,
         default_row_height: f32,
         start_position: DisplayRowPosition,
@@ -9567,7 +9560,7 @@ impl DisplayPropertyReplacementAppendRequest {
     }
 
     #[cfg(test)]
-    pub(crate) fn into_item(self) -> DisplayPropertyReplacementAppendItem {
+    pub(crate) fn into_item(self) -> DisplayPropertyReplacementSourceItem {
         self.item
     }
 
@@ -9693,7 +9686,7 @@ pub(crate) enum DisplayPropertyReplacementCursorPolicy {
     FaceChar,
 }
 
-impl DisplayPropertyReplacementAppendItem {
+impl DisplayPropertyReplacementSourceItem {
     #[allow(clippy::too_many_arguments)]
     fn into_plan_item<B: LayoutBufferView>(
         self,
