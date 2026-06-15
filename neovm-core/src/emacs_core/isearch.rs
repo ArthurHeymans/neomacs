@@ -52,9 +52,11 @@ fn empty_lisp_string(multibyte: bool) -> LispString {
 }
 
 fn promote_unibyte_lisp_string(value: &LispString) -> LispString {
-    let storage =
-        crate::emacs_core::string_escape::emacs_bytes_to_storage_string(value.as_bytes(), false);
-    storage_string_to_lisp_string(&storage, true)
+    // Promote a unibyte string to multibyte Emacs bytes directly (raw bytes
+    // become eight-bit chars), instead of round-tripping through a storage String.
+    LispString::from_emacs_bytes(crate::emacs_core::emacs_char::str_to_multibyte(
+        value.as_bytes(),
+    ))
 }
 
 fn append_char_to_lisp_string(value: &mut LispString, ch: char) {
