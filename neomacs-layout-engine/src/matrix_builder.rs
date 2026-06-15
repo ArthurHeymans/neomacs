@@ -39,7 +39,7 @@ fn glyph_cell_span(glyph: &Glyph) -> u16 {
     }
 }
 
-pub struct GlyphMatrixBuilder {
+pub(crate) struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
     current_window_id: u64,
@@ -90,7 +90,7 @@ impl GlyphMatrixBuilder {
         row.ascent_px = ascent_px.max(0.0).min(row.height_px.max(0.0));
     }
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             windows: Vec::new(),
             current_matrix: None,
@@ -139,7 +139,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.windows.clear();
         self.current_matrix = None;
         self.current_window_id = 0;
@@ -184,7 +184,7 @@ impl GlyphMatrixBuilder {
         self.no_accept_focus = false;
     }
 
-    pub fn begin_window(
+    pub(crate) fn begin_window(
         &mut self,
         window_id: u64,
         nrows: usize,
@@ -202,7 +202,7 @@ impl GlyphMatrixBuilder {
         );
     }
 
-    pub fn begin_window_with_text_bounds(
+    pub(crate) fn begin_window_with_text_bounds(
         &mut self,
         window_id: u64,
         nrows: usize,
@@ -220,7 +220,7 @@ impl GlyphMatrixBuilder {
         self.in_row = false;
     }
 
-    pub fn end_window(&mut self) {
+    pub(crate) fn end_window(&mut self) {
         if let Some(matrix) = self.current_matrix.take() {
             self.windows.push(WindowMatrixEntry {
                 window_id: self.current_window_id,
@@ -232,7 +232,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
+    pub(crate) fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
         self.current_row = row;
         self.in_row = true;
         if let Some(ref mut matrix) = self.current_matrix {
@@ -244,7 +244,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub fn end_row(&mut self) {
+    pub(crate) fn end_row(&mut self) {
         self.reorder_current_row_bidi();
         self.in_row = false;
     }
@@ -256,7 +256,7 @@ impl GlyphMatrixBuilder {
     /// the matrix builder. Rows produced by `DisplayRowBuilder` have already
     /// gone through the same normalization, so closing them must only update
     /// builder state.
-    pub fn end_prebuilt_row(&mut self) {
+    pub(crate) fn end_prebuilt_row(&mut self) {
         self.in_row = false;
     }
 
@@ -264,7 +264,7 @@ impl GlyphMatrixBuilder {
     ///
     /// `pixel_y` is frame-absolute; the builder stores rows
     /// window-relative to match GNU `struct glyph_row::y`.
-    pub fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
+    pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
         if let Some(ref mut matrix) = self.current_matrix
             && self.current_row < matrix.rows.len()
         {
@@ -281,7 +281,13 @@ impl GlyphMatrixBuilder {
     /// Record authoritative geometry for an explicit row in the current window.
     ///
     /// `pixel_y` is frame-absolute; the stored row value is window-relative.
-    pub fn set_row_metrics(&mut self, row: usize, pixel_y: f32, height_px: f32, ascent_px: f32) {
+    pub(crate) fn set_row_metrics(
+        &mut self,
+        row: usize,
+        pixel_y: f32,
+        height_px: f32,
+        ascent_px: f32,
+    ) {
         if let Some(ref mut matrix) = self.current_matrix
             && row < matrix.rows.len()
         {
@@ -338,13 +344,13 @@ impl GlyphMatrixBuilder {
         crate::composition::last_text_cluster_tail_in_row(row)
     }
 
-    pub fn last_text_cluster_tail(&self) -> Option<(char, bool)> {
+    pub(crate) fn last_text_cluster_tail(&self) -> Option<(char, bool)> {
         let matrix = self.current_matrix.as_ref()?;
         let row = matrix.rows.get(self.current_row)?;
         Self::last_text_cluster_tail_in_row(row)
     }
 
-    pub fn set_cursor_at_row(
+    pub(crate) fn set_cursor_at_row(
         &mut self,
         row: usize,
         col: u16,
@@ -362,11 +368,19 @@ impl GlyphMatrixBuilder {
     // Non-grid item push methods
     // -----------------------------------------------------------------------
 
-    pub fn push_background(&mut self, bounds: Rect, color: Color) {
+    pub(crate) fn push_background(&mut self, bounds: Rect, color: Color) {
         self.backgrounds.push(BackgroundItem { bounds, color });
     }
 
-    pub fn push_border(&mut self, window_id: i64, x: f32, y: f32, w: f32, h: f32, color: Color) {
+    pub(crate) fn push_border(
+        &mut self,
+        window_id: i64,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: Color,
+    ) {
         self.borders.push(BorderItem {
             window_id,
             x,
@@ -377,11 +391,14 @@ impl GlyphMatrixBuilder {
         });
     }
 
-    pub fn push_scroll_bar(&mut self, item: neomacs_display_protocol::glyph_matrix::ScrollBarItem) {
+    pub(crate) fn push_scroll_bar(
+        &mut self,
+        item: neomacs_display_protocol::glyph_matrix::ScrollBarItem,
+    ) {
         self.scroll_bars.push(item);
     }
 
-    pub fn push_cursor(
+    pub(crate) fn push_cursor(
         &mut self,
         window_id: i64,
         slot_id: DisplaySlotId,
@@ -833,7 +850,7 @@ impl GlyphMatrixBuilder {
         Some(nearest_after.map_or(col_acc, |(_, col)| col))
     }
 
-    pub fn set_phys_cursor(&mut self, cursor: PhysCursor) {
+    pub(crate) fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
         let visual_col =
             self.resolve_cursor_visual_col(cursor.window_id, cursor.row, cursor.charpos);
@@ -866,67 +883,67 @@ impl GlyphMatrixBuilder {
         self.phys_cursor = Some(cursor);
     }
 
-    pub fn set_window_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
+    pub(crate) fn set_window_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
         self.cursor_effects_by_window.insert(window_id, effects);
     }
 
-    pub fn set_faces(&mut self, faces: HashMap<u32, Face>) {
+    pub(crate) fn set_faces(&mut self, faces: HashMap<u32, Face>) {
         self.faces = faces;
     }
 
-    pub fn insert_face(&mut self, id: u32, face: Face) {
+    pub(crate) fn insert_face(&mut self, id: u32, face: Face) {
         self.faces.insert(id, face);
     }
 
-    pub fn push_window_info(&mut self, info: WindowInfo) {
+    pub(crate) fn push_window_info(&mut self, info: WindowInfo) {
         self.window_infos.push(info);
     }
 
-    pub fn push_transition_hint(&mut self, hint: WindowTransitionHint) {
+    pub(crate) fn push_transition_hint(&mut self, hint: WindowTransitionHint) {
         self.transition_hints.push(hint);
     }
 
-    pub fn push_effect_hint(&mut self, hint: WindowEffectHint) {
+    pub(crate) fn push_effect_hint(&mut self, hint: WindowEffectHint) {
         self.effect_hints.push(hint);
     }
 
-    pub fn set_background_color(&mut self, color: Color) {
+    pub(crate) fn set_background_color(&mut self, color: Color) {
         self.background_color = color;
     }
 
-    pub fn set_font_pixel_size(&mut self, size: f32) {
+    pub(crate) fn set_font_pixel_size(&mut self, size: f32) {
         self.font_pixel_size = size;
     }
 
-    pub fn windows(&self) -> &[WindowMatrixEntry] {
+    pub(crate) fn windows(&self) -> &[WindowMatrixEntry] {
         &self.windows
     }
 
-    pub fn window_infos(&self) -> &[WindowInfo] {
+    pub(crate) fn window_infos(&self) -> &[WindowInfo] {
         &self.window_infos
     }
 
-    pub fn window_infos_last_mut(&mut self) -> Option<&mut WindowInfo> {
+    pub(crate) fn window_infos_last_mut(&mut self) -> Option<&mut WindowInfo> {
         self.window_infos.last_mut()
     }
 
-    pub fn transition_hints(&self) -> &[WindowTransitionHint] {
+    pub(crate) fn transition_hints(&self) -> &[WindowTransitionHint] {
         &self.transition_hints
     }
 
-    pub fn effect_hints(&self) -> &[WindowEffectHint] {
+    pub(crate) fn effect_hints(&self) -> &[WindowEffectHint] {
         &self.effect_hints
     }
 
-    pub fn truncate_transition_hints(&mut self, len: usize) {
+    pub(crate) fn truncate_transition_hints(&mut self, len: usize) {
         self.transition_hints.truncate(len);
     }
 
-    pub fn truncate_effect_hints(&mut self, len: usize) {
+    pub(crate) fn truncate_effect_hints(&mut self, len: usize) {
         self.effect_hints.truncate(len);
     }
 
-    pub fn background_color(&self) -> &Color {
+    pub(crate) fn background_color(&self) -> &Color {
         &self.background_color
     }
 
@@ -935,15 +952,15 @@ impl GlyphMatrixBuilder {
         &self.faces
     }
 
-    pub fn cursors(&self) -> &[CursorItem] {
+    pub(crate) fn cursors(&self) -> &[CursorItem] {
         &self.cursors
     }
 
-    pub fn phys_cursor(&self) -> Option<&PhysCursor> {
+    pub(crate) fn phys_cursor(&self) -> Option<&PhysCursor> {
         self.phys_cursor.as_ref()
     }
 
-    pub fn set_frame_identity(
+    pub(crate) fn set_frame_identity(
         &mut self,
         frame_id: u64,
         parent_id: u64,
@@ -991,7 +1008,7 @@ impl GlyphMatrixBuilder {
         Some(f(&mut entry.matrix.rows, entry.matrix.ncols))
     }
 
-    pub fn finish(
+    pub(crate) fn finish(
         mut self,
         frame_cols: usize,
         frame_rows: usize,
@@ -1032,7 +1049,7 @@ impl GlyphMatrixBuilder {
         state
     }
 
-    pub fn finish_with_pixel_size(
+    pub(crate) fn finish_with_pixel_size(
         self,
         frame_cols: usize,
         frame_rows: usize,
