@@ -1848,6 +1848,7 @@ mod divergence_keymap_precedence;
 mod divergence_keymap_input_deep;
 mod divergence_keymap_syntax_category;
 mod divergence_kmacro_persistence;
+mod divergence_keyboard;
 mod divergence_lambda_apply_dispatch;
 mod divergence_list_manipulation_real;
 mod divergence_load_native_comp;
