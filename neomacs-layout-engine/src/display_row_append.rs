@@ -6614,20 +6614,25 @@ pub(crate) struct BufferHscrollSkipSourceChar {
 }
 
 pub(crate) struct BufferHscrollSkipRenderRequest<'a> {
-    text: &'a [u8],
-    tab_width: i32,
-    content_x: f32,
-    append_surface: &'a DisplayRowAppendSurface,
-    active_face_state: &'a DisplayRowActiveFaceState,
-    default_face_ascent: f32,
-    char_h: f32,
-    char_w: f32,
-    point_charpos: i64,
-    has_prefix: bool,
-    row_geometry_defaults: DisplayRowGeometryDefaults,
-    text_matrix_row_base: usize,
-    max_rows: usize,
-    row_limit: DisplayRowLimit,
+    context: BufferHscrollSkipRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferHscrollSkipRenderContext<'a> {
+    pub(crate) text: &'a [u8],
+    pub(crate) tab_width: i32,
+    pub(crate) content_x: f32,
+    pub(crate) append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) default_face_ascent: f32,
+    pub(crate) char_h: f32,
+    pub(crate) char_w: f32,
+    pub(crate) point_charpos: i64,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
 }
 
 impl BufferHscrollSkipSourceChar {
@@ -6692,39 +6697,8 @@ impl BufferHscrollSkipSourceChar {
 }
 
 impl<'a> BufferHscrollSkipRenderRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        text: &'a [u8],
-        tab_width: i32,
-        content_x: f32,
-        append_surface: &'a DisplayRowAppendSurface,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        default_face_ascent: f32,
-        char_h: f32,
-        char_w: f32,
-        point_charpos: i64,
-        has_prefix: bool,
-        row_geometry_defaults: DisplayRowGeometryDefaults,
-        text_matrix_row_base: usize,
-        max_rows: usize,
-        row_limit: DisplayRowLimit,
-    ) -> Self {
-        Self {
-            text,
-            tab_width,
-            content_x,
-            append_surface,
-            active_face_state,
-            default_face_ascent,
-            char_h,
-            char_w,
-            point_charpos,
-            has_prefix,
-            row_geometry_defaults,
-            text_matrix_row_base,
-            max_rows,
-            row_limit,
-        }
+    pub(crate) fn new(context: BufferHscrollSkipRenderContext<'a>) -> Self {
+        Self { context }
     }
 
     pub(crate) fn render_next_and_apply(
@@ -6751,13 +6725,14 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             row_y_positions,
         } = state;
         let mut source_render = source_render;
+        let context = self.context;
 
         let Some(hscroll_action) = BufferHscrollSkipSourceChar::consume_from_text(
-            self.text,
+            context.text,
             byte_idx,
             charpos,
             hscroll_skip,
-            self.tab_width,
+            context.tab_width,
         ) else {
             return DisplayRowTransitionContinuation::Exhausted;
         };
@@ -6767,20 +6742,20 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
                 row_extend,
                 source_render.output_emitter(),
                 x,
-                self.content_x,
+                context.content_x,
             );
             let line_break_transition = DisplayRowLineBreakTransitionPlan::hscroll_line_break();
             let hit_range = hscroll_action
                 .line_break_hit_range(hit_row_range)
                 .expect("hscroll line break hit range");
             let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
-                self.row_geometry_defaults,
-                self.text_matrix_row_base,
+                context.row_geometry_defaults,
+                context.text_matrix_row_base,
                 row_y_positions,
-                self.max_rows,
+                context.max_rows,
                 row_geometry,
                 row_flags,
-                self.row_limit,
+                context.row_limit,
                 hit_rows,
                 &mut source_render,
             )
@@ -6794,7 +6769,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
                 0.0,
                 DisplayRowTransitionRenderState::new(
                     prefix_request,
-                    self.has_prefix,
+                    context.has_prefix,
                     line_numbers,
                     hscroll_skip,
                     word_wrap,
@@ -6805,12 +6780,12 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             return hscroll_action.apply_after_line_break_row_transition(
                 row_transition,
                 cursor_info,
-                self.active_face_state,
+                context.active_face_state,
                 row_geometry,
-                self.point_charpos,
+                context.point_charpos,
                 *x,
                 *col,
-                self.char_h,
+                context.char_h,
             );
         }
 
@@ -6818,22 +6793,22 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             BufferSyntheticTextRenderState::new(source_render.reborrow(), x, col);
         hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
-                self.append_surface,
-                self.active_face_state,
+                context.append_surface,
+                context.active_face_state,
                 0.0,
-                self.char_h,
-                self.default_face_ascent,
-                self.char_w,
+                context.char_h,
+                context.default_face_ascent,
+                context.char_w,
             ),
             row_geometry,
             &mut synthetic_text_state,
-            self.content_x,
+            context.content_x,
         );
         hscroll_action.capture_text_cursor_if_point(
             cursor_info,
-            self.active_face_state,
+            context.active_face_state,
             row_geometry,
-            self.point_charpos,
+            context.point_charpos,
             *x,
             *col,
         );

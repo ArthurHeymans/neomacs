@@ -1017,22 +1017,22 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut font_metrics = None;
     let row_limit = context.row_limit;
 
-    let continuation = BufferHscrollSkipRenderRequest::new(
-        b"\tabc",
-        8,
-        0.0,
-        &surface,
-        &active_face,
-        12.0,
-        16.0,
-        8.0,
-        99,
-        false,
-        context.defaults,
-        0,
-        4,
+    let continuation = BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext {
+        text: b"\tabc",
+        tab_width: 8,
+        content_x: 0.0,
+        append_surface: &surface,
+        active_face_state: &active_face,
+        default_face_ascent: 12.0,
+        char_h: 16.0,
+        char_w: 8.0,
+        point_charpos: 99,
+        has_prefix: false,
+        row_geometry_defaults: context.defaults,
+        text_matrix_row_base: 0,
+        max_rows: 4,
         row_limit,
-    )
+    })
     .render_next_and_apply(BufferHscrollSkipRenderState {
         byte_idx: &mut byte_idx,
         charpos: &mut charpos,
