@@ -974,6 +974,45 @@ pub fn str_as_unibyte(src: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Downcase an Emacs char code for case-folded comparison. Unicode scalar
+/// values fold via their single-char lowercase; codes outside the scalar range
+/// (eight-bit raw bytes, extended codes) are caseless and returned verbatim —
+/// matching GNU, where raw bytes have no case.
+pub(crate) fn emacs_downcase_code(code: u32) -> u32 {
+    match char::from_u32(code) {
+        Some(c) => {
+            let mut lower = c.to_lowercase();
+            match (lower.next(), lower.next()) {
+                (Some(first), None) => first as u32,
+                _ => code,
+            }
+        }
+        None => code,
+    }
+}
+
+/// End offset into `hay` of a case-folded match of `needle` starting at byte
+/// `at`, comparing decoded Emacs char codes in place so offsets stay in `hay`'s
+/// own byte space (correct for unibyte and multibyte; raw bytes compare
+/// verbatim). Returns `None` if `needle` does not match at `at`.
+pub(crate) fn case_fold_match_len(hay: &[u8], at: usize, needle: &[u8]) -> Option<usize> {
+    let mut h = at;
+    let mut n = 0;
+    while n < needle.len() {
+        if h >= hay.len() {
+            return None;
+        }
+        let (hc, hl) = string_char(&hay[h..]);
+        let (nc, nl) = string_char(&needle[n..]);
+        if emacs_downcase_code(hc) != emacs_downcase_code(nc) {
+            return None;
+        }
+        h += hl.max(1);
+        n += nl.max(1);
+    }
+    Some(h)
+}
+
 // ---------------------------------------------------------------------------
 // Eight-bit byte counting and escaping (mirrors GNU character.c:742..839).
 // ---------------------------------------------------------------------------

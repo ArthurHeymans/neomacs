@@ -1471,41 +1471,6 @@ fn byte_rfind(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// Emacs-downcase a single char code for case-insensitive comparison (issue
 /// #131): codes outside the Unicode scalar range (eight-bit raw bytes, extended
 /// codes) are caseless; rare multi-char lowercase mappings leave the code as-is.
-fn emacs_downcase_code(code: u32) -> u32 {
-    match char::from_u32(code) {
-        Some(c) => {
-            let mut lower = c.to_lowercase();
-            match (lower.next(), lower.next()) {
-                (Some(first), None) => first as u32,
-                _ => code,
-            }
-        }
-        None => code,
-    }
-}
-
-/// End offset into `hay` of a case-folded match of `needle` starting at byte
-/// `at`, comparing decoded Emacs char codes in place so offsets stay in `hay`'s
-/// own byte space (correct for unibyte and multibyte; raw bytes compare
-/// verbatim). Returns `None` if `needle` does not match at `at`.
-fn case_fold_match_len(hay: &[u8], at: usize, needle: &[u8]) -> Option<usize> {
-    let mut h = at;
-    let mut n = 0;
-    while n < needle.len() {
-        if h >= hay.len() {
-            return None;
-        }
-        let (hc, hl) = crate::emacs_core::emacs_char::string_char(&hay[h..]);
-        let (nc, nl) = crate::emacs_core::emacs_char::string_char(&needle[n..]);
-        if emacs_downcase_code(hc) != emacs_downcase_code(nc) {
-            return None;
-        }
-        h += hl.max(1);
-        n += nl.max(1);
-    }
-    Some(h)
-}
-
 fn find_match(
     text: &[u8],
     pattern: &[u8],
@@ -1559,7 +1524,9 @@ fn find_match(
             if case_fold {
                 let mut p = start;
                 loop {
-                    if let Some(end) = case_fold_match_len(text, p, pattern) {
+                    if let Some(end) =
+                        crate::emacs_core::emacs_char::case_fold_match_len(text, p, pattern)
+                    {
                         return Some(MatchGroup::new(p, end));
                     }
                     if p >= text_len {
@@ -1580,7 +1547,9 @@ fn find_match(
                 let mut best = None;
                 let mut p = 0;
                 while p < end {
-                    if let Some(match_end) = case_fold_match_len(&text[..end], p, pattern) {
+                    if let Some(match_end) =
+                        crate::emacs_core::emacs_char::case_fold_match_len(&text[..end], p, pattern)
+                    {
                         best = Some(MatchGroup::new(p, match_end));
                     }
                     let (_code, len) = crate::emacs_core::emacs_char::string_char(&text[p..]);

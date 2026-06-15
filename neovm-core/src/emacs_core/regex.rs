@@ -1514,22 +1514,22 @@ fn literal_find_emacs_bytes(
                 return literal_find(text_utf8, literal_utf8, true);
             }
 
-            let text_storage =
-                crate::emacs_core::string_escape::emacs_bytes_to_storage_string(text, multibyte);
-            let literal_storage =
-                crate::emacs_core::string_escape::emacs_bytes_to_storage_string(literal, multibyte);
-            literal_find(&text_storage, &literal_storage, true).map(|matched| {
-                MatchGroup::new(
-                    crate::emacs_core::string_escape::storage_byte_to_logical_byte(
-                        &text_storage,
-                        matched.start(),
-                    ),
-                    crate::emacs_core::string_escape::storage_byte_to_logical_byte(
-                        &text_storage,
-                        matched.end(),
-                    ),
-                )
-            })
+            // Non-ASCII case-fold over raw Emacs bytes: compare Emacs-downcased
+            // char codes in place so offsets stay in the text's own byte space
+            // (eight-bit chars are caseless, matching GNU) — no storage round-trip.
+            let mut at = 0;
+            loop {
+                if let Some(end) =
+                    crate::emacs_core::emacs_char::case_fold_match_len(text, at, literal)
+                {
+                    return Some(MatchGroup::new(at, end));
+                }
+                if at >= text.len() {
+                    return None;
+                }
+                let (_code, len) = crate::emacs_core::emacs_char::string_char(&text[at..]);
+                at += len.max(1);
+            }
         },
     )
 }
@@ -1569,22 +1569,20 @@ fn literal_rfind_emacs_bytes(
                 return literal_rfind(text_utf8, literal_utf8, true);
             }
 
-            let text_storage =
-                crate::emacs_core::string_escape::emacs_bytes_to_storage_string(text, multibyte);
-            let literal_storage =
-                crate::emacs_core::string_escape::emacs_bytes_to_storage_string(literal, multibyte);
-            literal_rfind(&text_storage, &literal_storage, true).map(|matched| {
-                MatchGroup::new(
-                    crate::emacs_core::string_escape::storage_byte_to_logical_byte(
-                        &text_storage,
-                        matched.start(),
-                    ),
-                    crate::emacs_core::string_escape::storage_byte_to_logical_byte(
-                        &text_storage,
-                        matched.end(),
-                    ),
-                )
-            })
+            // Rightmost non-ASCII case-fold match over raw Emacs bytes, matching
+            // the prior rfind: compare Emacs-downcased char codes in place.
+            let mut best = None;
+            let mut at = 0;
+            while at < text.len() {
+                if let Some(end) =
+                    crate::emacs_core::emacs_char::case_fold_match_len(text, at, literal)
+                {
+                    best = Some(MatchGroup::new(at, end));
+                }
+                let (_code, len) = crate::emacs_core::emacs_char::string_char(&text[at..]);
+                at += len.max(1);
+            }
+            best
         },
     )
 }
