@@ -1,7 +1,9 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_row::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
+use crate::display_row::{
+    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
+};
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
     BufferDisplayPropertyCheckpointRenderState, BufferDisplayPropertyTextWalkOutcome,
@@ -282,9 +284,6 @@ pub(crate) struct BufferTextWindowBodyPassState<'emit> {
     pub(crate) evaluator: &'emit mut Context,
     pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
     pub(crate) face_resolver: &'emit FaceResolver,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
-    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
@@ -391,10 +390,20 @@ where
 {
     pub(crate) begin_request: BufferTextWindowBeginRequest,
     pub(crate) retry_bounds: BufferTextWindowRetryBounds,
+    pub(crate) local_display_policy: BufferTextWindowLocalDisplayPolicy,
+    pub(crate) initial_face_state: BufferTextWindowInitialFaceStateRequest<'a>,
     pub(crate) row_prelude_context: BufferTextWindowRowPreludeRequestContext,
     pub(crate) loop_context: BufferTextWindowLoopRequestContext,
     pub(crate) render_contexts: BufferTextWindowRenderContexts<'a, 'surface, B>,
     pub(crate) tail_context: BufferTextWindowTailRequestContext<'a>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferTextWindowInitialFaceStateRequest<'a> {
+    measurement_policy: DisplayRowMeasurementPolicy,
+    default_resolved: &'a ResolvedFace,
+    default_face_char_width: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -879,6 +888,9 @@ impl BufferTextWindowWalkSetup {
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
         state: &mut BufferTextWindowBodyPassState<'_>,
+        line_numbers: &mut LineNumberRenderState,
+        face_scan: &mut FaceScanCheckpoint,
+        active_face_state: &mut DisplayRowActiveFaceState,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -901,9 +913,9 @@ impl BufferTextWindowWalkSetup {
                 evaluator: state.evaluator,
                 font_metrics: state.font_metrics,
                 face_resolver: state.face_resolver,
-                line_numbers: state.line_numbers,
-                face_scan: state.face_scan,
-                active_face_state: state.active_face_state,
+                line_numbers,
+                face_scan,
+                active_face_state,
                 face_ids: state.face_ids,
             },
             row_prelude_context,
@@ -986,12 +998,24 @@ where
             face_resolution,
             overlay_text_row,
         } = self.render_contexts;
+        let mut line_numbers = self.local_display_policy.initial_line_numbers(
+            buf_access,
+            self.tail_context.window_start,
+            self.loop_context.point_charpos,
+        );
+        let mut face_scan = FaceScanCheckpoint::initial();
+        let mut active_face_state = self
+            .initial_face_state
+            .into_active_face_state(state.font_metrics);
         let BufferTextWindowBodyPassOutcome {
             output_emitter,
             post_loop,
         } = walk_setup.begin_render_body_and_tail(
             self.begin_request,
             state,
+            &mut line_numbers,
+            &mut face_scan,
+            &mut active_face_state,
             self.row_prelude_context,
             self.loop_context,
             face_resolution,
@@ -1268,6 +1292,16 @@ impl BufferTextWindowOutputSetup {
         );
         let row_prelude_context =
             local_display_policy.row_prelude_context(line_number_cols, char_width, char_height);
+        let initial_face_state = BufferTextWindowInitialFaceStateRequest::new(
+            measurement_policy,
+            default_resolved,
+            default_face_char_width,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                default_face_char_width,
+                default_face_height,
+                default_face_ascent,
+            ),
+        );
         let tail_context = BufferTextWindowTailRequestContext::new(
             params,
             window_start,
@@ -1299,11 +1333,44 @@ impl BufferTextWindowOutputSetup {
         BufferTextWindowBodyPlan {
             begin_request: self.begin_request,
             retry_bounds: self.retry_bounds,
+            local_display_policy,
+            initial_face_state,
             row_prelude_context,
             loop_context,
             render_contexts,
             tail_context,
         }
+    }
+}
+
+impl<'a> BufferTextWindowInitialFaceStateRequest<'a> {
+    pub(crate) fn new(
+        measurement_policy: DisplayRowMeasurementPolicy,
+        default_resolved: &'a ResolvedFace,
+        default_face_char_width: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+    ) -> Self {
+        Self {
+            measurement_policy,
+            default_resolved,
+            default_face_char_width,
+            fallback_metrics,
+        }
+    }
+
+    pub(crate) fn into_active_face_state(
+        self,
+        font_metrics: &mut Option<FontMetricsService>,
+    ) -> DisplayRowActiveFaceState {
+        let default_measured_face = self.measurement_policy.measured_face(
+            neomacs_display_protocol::face::BasicFaceId::Default.into(),
+            self.default_resolved,
+            None,
+            self.default_face_char_width,
+            self.fallback_metrics,
+            font_metrics,
+        );
+        DisplayRowActiveFaceState::new(self.default_resolved.clone(), default_measured_face)
     }
 }
 

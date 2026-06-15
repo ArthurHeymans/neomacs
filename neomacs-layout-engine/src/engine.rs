@@ -50,10 +50,7 @@ use crate::display_frame_output::{
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
-    insert_resolved_display_row_face,
-};
+use crate::display_row::{DisplayRowMeasurementPolicy, insert_resolved_display_row_face};
 use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
@@ -67,6 +64,7 @@ use crate::display_row_builder::{
 };
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
+#[cfg(test)]
 use crate::display_row_walk_state::FaceScanCheckpoint;
 #[cfg(test)]
 use crate::display_row_walk_state::WordWrapBreakCandidate;
@@ -996,13 +994,6 @@ impl LayoutEngine {
             return;
         }
 
-        let default_fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
-            default_face_char_w,
-            default_face_h,
-            default_face_ascent,
-        );
-        // Face resolution state
-        let mut face_scan = FaceScanCheckpoint::initial();
         // Load the frame-wide face-id counter so this window's
         // glyph/mode-line/header-line faces get IDs that do NOT
         // collide with earlier siblings' faces in the frame-scoped
@@ -1012,17 +1003,6 @@ impl LayoutEngine {
         // `init_frame_faces`.
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
         let measurement_policy = DisplayRowMeasurementPolicy::for_frame(frame_params.window_system);
-
-        let default_measured_face = measurement_policy.measured_face(
-            BasicFaceId::Default.into(),
-            default_resolved,
-            None,
-            char_w,
-            default_fallback_metrics,
-            &mut self.font_metrics,
-        );
-        let mut active_face_state =
-            DisplayRowActiveFaceState::new(default_resolved.clone(), default_measured_face);
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -1092,9 +1072,6 @@ impl LayoutEngine {
             face_ids.finish_into(&mut self.frame_face_id_counter);
             return;
         }
-
-        let mut line_numbers =
-            local_display_policy.initial_line_numbers(&buf_access, window_start, point_charpos);
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
@@ -1184,9 +1161,6 @@ impl LayoutEngine {
                 evaluator,
                 font_metrics: &mut self.font_metrics,
                 face_resolver,
-                line_numbers: &mut line_numbers,
-                face_scan: &mut face_scan,
-                active_face_state: &mut active_face_state,
                 face_ids: &mut face_ids,
             },
             text,
