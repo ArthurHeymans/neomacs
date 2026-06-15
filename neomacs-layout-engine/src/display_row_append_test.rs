@@ -31,8 +31,9 @@ use crate::display_row_walk_state::{
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::{
-    BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
-    BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem,
+    BufferDisplayReplacementStringRequest, BufferTextDecodedSourceEvent,
+    BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor, BufferTextSourceSpecialDisplay,
+    DisplayReplacementAppendItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
@@ -7667,9 +7668,9 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
     );
     let request =
         item.source_append_request(replacement_source, DisplayRowPosition { x_px: 2.0, col: 1 });
-    assert_eq!(request.value, value);
+    assert_eq!(request.value(), value);
     assert_eq!(
-        request.source_id,
+        request.source_id(),
         LispStringSourceId::display_replacement(9)
     );
     assert_eq!(request.position, DisplayRowPosition { x_px: 2.0, col: 1 });
@@ -9005,9 +9006,11 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let mut measurer = SourceMappedTextWidthByFace::new();
     let request = DisplayReplacementStringSourceAppendRequest::new(
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        LispStringSourceId::display_replacement(1),
-        value,
-        replacement_source,
+        BufferDisplayReplacementStringRequest::new(
+            LispStringSourceId::display_replacement(1).raw(),
+            value,
+            replacement_source,
+        ),
     );
 
     let append_context =

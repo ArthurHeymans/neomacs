@@ -48,7 +48,7 @@ use crate::display_row_walk_state::{
     skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath,
     BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem, BufferTextSourceChar,
     BufferTextSourceClusterState, BufferTextSourceItemRequest,
@@ -8672,9 +8672,11 @@ impl DisplayReplacementStringAppendItem {
     ) -> DisplayReplacementStringSourceAppendRequest {
         DisplayReplacementStringSourceAppendRequest::new(
             position,
-            self.source_id,
-            self.value,
-            replacement_source,
+            BufferDisplayReplacementStringRequest::new(
+                self.source_id.raw(),
+                self.value,
+                replacement_source,
+            ),
         )
     }
 }
@@ -8682,43 +8684,26 @@ impl DisplayReplacementStringAppendItem {
 #[derive(Clone, Copy, Debug)]
 struct DisplayReplacementStringSourceAppendRequest {
     position: DisplayRowPosition,
-    source_id: LispStringSourceId,
-    value: Value,
-    replacement_source: BufferDisplayReplacementSource,
+    source: BufferDisplayReplacementStringRequest,
 }
 
 impl DisplayReplacementStringSourceAppendRequest {
-    fn new(
-        position: DisplayRowPosition,
-        source_id: LispStringSourceId,
-        value: Value,
-        replacement_source: BufferDisplayReplacementSource,
-    ) -> Self {
-        Self {
-            position,
-            source_id,
-            value,
-            replacement_source,
-        }
+    fn new(position: DisplayRowPosition, source: BufferDisplayReplacementStringRequest) -> Self {
+        Self { position, source }
     }
 
     fn position(self) -> DisplayRowPosition {
         self.position
     }
 
-    fn into_source(
-        self,
-        fallback_face_id: u32,
-    ) -> Option<BufferDisplayReplacementStringSource<LispStringSourceCursor>> {
-        let string_source = LispStringSourceCursor::new(
-            self.source_id.raw(),
-            self.value,
-            RenderFaceRef::FaceId(fallback_face_id),
-        )?;
-        Some(BufferDisplayReplacementStringSource::new(
-            self.replacement_source,
-            string_source,
-        ))
+    #[cfg(test)]
+    fn source_id(self) -> LispStringSourceId {
+        LispStringSourceId(self.source.source_id())
+    }
+
+    #[cfg(test)]
+    fn value(self) -> Value {
+        self.source.value()
     }
 
     fn render_to_text_row_and_emit(
@@ -8729,7 +8714,7 @@ impl DisplayReplacementStringSourceAppendRequest {
         item_policy: &mut impl DisplayRowRenderPolicy,
     ) -> DisplayRowPosition {
         let position = self.position();
-        let Some(source) = self.into_source(append_context.face_id) else {
+        let Some(source) = self.source.into_source(append_context.face_id) else {
             return position;
         };
         let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };

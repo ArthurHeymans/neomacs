@@ -1010,6 +1010,52 @@ pub(crate) struct BufferDisplayReplacementStringSource<S> {
     source: S,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferDisplayReplacementStringRequest {
+    source_id: u64,
+    value: Value,
+    replacement_source: BufferDisplayReplacementSource,
+}
+
+impl BufferDisplayReplacementStringRequest {
+    pub(crate) fn new(
+        source_id: u64,
+        value: Value,
+        replacement_source: BufferDisplayReplacementSource,
+    ) -> Self {
+        Self {
+            source_id,
+            value,
+            replacement_source,
+        }
+    }
+
+    pub(crate) fn into_source(
+        self,
+        fallback_face_id: u32,
+    ) -> Option<BufferDisplayReplacementStringSource<LispStringSourceCursor>> {
+        let string_source = LispStringSourceCursor::new(
+            self.source_id,
+            self.value,
+            RenderFaceRef::FaceId(fallback_face_id),
+        )?;
+        Some(BufferDisplayReplacementStringSource::new(
+            self.replacement_source,
+            string_source,
+        ))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn source_id(self) -> u64 {
+        self.source_id
+    }
+
+    #[cfg(test)]
+    pub(crate) fn value(self) -> Value {
+        self.value
+    }
+}
+
 impl<S> BufferDisplayReplacementStringSource<S> {
     pub(crate) const fn new(replacement_source: BufferDisplayReplacementSource, source: S) -> Self {
         Self {
