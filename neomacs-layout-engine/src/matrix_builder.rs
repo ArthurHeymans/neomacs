@@ -464,6 +464,151 @@ impl MatrixFrameStateInstallRequest {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixWindowBeginRequest {
+    pub(crate) window_id: u64,
+    pub(crate) nrows: usize,
+    pub(crate) ncols: usize,
+    pub(crate) pixel_bounds: Rect,
+    pub(crate) text_pixel_bounds: Rect,
+    pub(crate) selected: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum MatrixWindowLifecycleRequest {
+    Begin(MatrixWindowBeginRequest),
+    End,
+}
+
+impl MatrixWindowLifecycleRequest {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        match self {
+            Self::Begin(begin) => {
+                builder.current_matrix = Some(GlyphMatrix::new(begin.nrows, begin.ncols));
+                builder.current_window_id = begin.window_id;
+                builder.current_pixel_bounds = begin.pixel_bounds;
+                builder.current_text_pixel_bounds = begin.text_pixel_bounds;
+                builder.current_selected = begin.selected;
+                builder.current_row = 0;
+                builder.in_row = false;
+            }
+            Self::End => {
+                if let Some(matrix) = builder.current_matrix.take() {
+                    builder.windows.push(WindowMatrixEntry {
+                        window_id: builder.current_window_id,
+                        matrix,
+                        pixel_bounds: builder.current_pixel_bounds,
+                        text_pixel_bounds: builder.current_text_pixel_bounds,
+                        selected: builder.current_selected,
+                    });
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MatrixRowBeginRequest {
+    pub(crate) row: usize,
+    pub(crate) role: GlyphRowRole,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixRowMetricsRequest {
+    pub(crate) pixel_y: f32,
+    pub(crate) height_px: f32,
+    pub(crate) ascent_px: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixIndexedRowMetricsRequest {
+    pub(crate) row: usize,
+    pub(crate) metrics: MatrixRowMetricsRequest,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixRowCursorRequest {
+    pub(crate) row: usize,
+    pub(crate) col: u16,
+    pub(crate) style: CursorStyle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum MatrixRowLifecycleRequest {
+    Begin(MatrixRowBeginRequest),
+    EndIncremental,
+    EndPrebuilt,
+    CurrentMetrics(MatrixRowMetricsRequest),
+    RowMetrics(MatrixIndexedRowMetricsRequest),
+    CursorAt(MatrixRowCursorRequest),
+}
+
+impl MatrixRowLifecycleRequest {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        match self {
+            Self::Begin(begin) => {
+                builder.current_row = begin.row;
+                builder.in_row = true;
+                if let Some(ref mut matrix) = builder.current_matrix
+                    && begin.row < matrix.rows.len()
+                {
+                    matrix.rows[begin.row].role = begin.role;
+                    matrix.rows[begin.row].enabled = true;
+                    matrix.rows[begin.row].mode_line = matches!(begin.role, GlyphRowRole::ModeLine);
+                }
+            }
+            Self::EndIncremental => {
+                builder.reorder_current_row_bidi();
+                builder.in_row = false;
+            }
+            Self::EndPrebuilt => {
+                builder.in_row = false;
+            }
+            Self::CurrentMetrics(metrics) => {
+                if let Some(ref mut matrix) = builder.current_matrix
+                    && builder.current_row < matrix.rows.len()
+                {
+                    let pixel_y_rel = metrics.pixel_y - builder.current_pixel_bounds.y;
+                    Self::write_metrics(
+                        &mut matrix.rows[builder.current_row],
+                        pixel_y_rel,
+                        metrics,
+                    );
+                }
+            }
+            Self::RowMetrics(indexed) => {
+                if let Some(ref mut matrix) = builder.current_matrix
+                    && indexed.row < matrix.rows.len()
+                {
+                    let pixel_y_rel = indexed.metrics.pixel_y - builder.current_pixel_bounds.y;
+                    Self::write_metrics(
+                        &mut matrix.rows[indexed.row],
+                        pixel_y_rel,
+                        indexed.metrics,
+                    );
+                }
+            }
+            Self::CursorAt(cursor) => {
+                if let Some(ref mut matrix) = builder.current_matrix
+                    && cursor.row < matrix.rows.len()
+                {
+                    matrix.rows[cursor.row].cursor_col = Some(cursor.col);
+                    matrix.rows[cursor.row].cursor_type = Some(cursor.style);
+                }
+            }
+        }
+    }
+
+    fn write_metrics(row: &mut GlyphRow, pixel_y_rel: f32, metrics: MatrixRowMetricsRequest) {
+        GlyphMatrixBuilder::write_row_metrics(
+            row,
+            pixel_y_rel,
+            metrics.height_px,
+            metrics.ascent_px,
+        );
+    }
+}
+
 pub(crate) struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
@@ -628,6 +773,7 @@ impl GlyphMatrixBuilder {
         );
     }
 
+    #[cfg(test)]
     pub(crate) fn begin_window_with_text_bounds(
         &mut self,
         window_id: u64,
@@ -637,42 +783,42 @@ impl GlyphMatrixBuilder {
         text_pixel_bounds: Rect,
         selected: bool,
     ) {
-        self.current_matrix = Some(GlyphMatrix::new(nrows, ncols));
-        self.current_window_id = window_id;
-        self.current_pixel_bounds = pixel_bounds;
-        self.current_text_pixel_bounds = text_pixel_bounds;
-        self.current_selected = selected;
-        self.current_row = 0;
-        self.in_row = false;
+        self.install_window_lifecycle(MatrixWindowLifecycleRequest::Begin(
+            MatrixWindowBeginRequest {
+                window_id,
+                nrows,
+                ncols,
+                pixel_bounds,
+                text_pixel_bounds,
+                selected,
+            },
+        ));
     }
 
+    #[cfg(test)]
     pub(crate) fn end_window(&mut self) {
-        if let Some(matrix) = self.current_matrix.take() {
-            self.windows.push(WindowMatrixEntry {
-                window_id: self.current_window_id,
-                matrix,
-                pixel_bounds: self.current_pixel_bounds,
-                text_pixel_bounds: self.current_text_pixel_bounds,
-                selected: self.current_selected,
-            });
-        }
+        self.install_window_lifecycle(MatrixWindowLifecycleRequest::End);
     }
 
+    pub(crate) fn install_window_lifecycle(&mut self, request: MatrixWindowLifecycleRequest) {
+        request.install(self);
+    }
+
+    pub(crate) fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest) {
+        request.install(self);
+    }
+
+    #[cfg(test)]
     pub(crate) fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
-        self.current_row = row;
-        self.in_row = true;
-        if let Some(ref mut matrix) = self.current_matrix {
-            if row < matrix.rows.len() {
-                matrix.rows[row].role = role;
-                matrix.rows[row].enabled = true;
-                matrix.rows[row].mode_line = matches!(role, GlyphRowRole::ModeLine);
-            }
-        }
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+            row,
+            role,
+        }));
     }
 
+    #[cfg(test)]
     pub(crate) fn end_row(&mut self) {
-        self.reorder_current_row_bidi();
-        self.in_row = false;
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
     }
 
     /// Close a row whose glyph ordering was already finalized before
@@ -682,44 +828,24 @@ impl GlyphMatrixBuilder {
     /// the matrix builder. Rows produced by `DisplayRowBuilder` have already
     /// gone through the same normalization, so closing them must only update
     /// builder state.
+    #[cfg(test)]
     pub(crate) fn end_prebuilt_row(&mut self) {
-        self.in_row = false;
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::EndPrebuilt);
     }
 
     /// Record authoritative geometry for the currently open row.
     ///
     /// `pixel_y` is frame-absolute; the builder stores rows
     /// window-relative to match GNU `struct glyph_row::y`.
+    #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        if let Some(ref mut matrix) = self.current_matrix
-            && self.current_row < matrix.rows.len()
-        {
-            let pixel_y_rel = pixel_y - self.current_pixel_bounds.y;
-            Self::write_row_metrics(
-                &mut matrix.rows[self.current_row],
-                pixel_y_rel,
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::CurrentMetrics(
+            MatrixRowMetricsRequest {
+                pixel_y,
                 height_px,
                 ascent_px,
-            );
-        }
-    }
-
-    /// Record authoritative geometry for an explicit row in the current window.
-    ///
-    /// `pixel_y` is frame-absolute; the stored row value is window-relative.
-    pub(crate) fn set_row_metrics(
-        &mut self,
-        row: usize,
-        pixel_y: f32,
-        height_px: f32,
-        ascent_px: f32,
-    ) {
-        if let Some(ref mut matrix) = self.current_matrix
-            && row < matrix.rows.len()
-        {
-            let pixel_y_rel = pixel_y - self.current_pixel_bounds.y;
-            Self::write_row_metrics(&mut matrix.rows[row], pixel_y_rel, height_px, ascent_px);
-        }
+            },
+        ));
     }
 
     pub(crate) fn with_current_row_mut<R>(
@@ -777,18 +903,16 @@ impl GlyphMatrixBuilder {
         Self::last_text_cluster_tail_in_row(row)
     }
 
+    #[cfg(test)]
     pub(crate) fn set_cursor_at_row(
         &mut self,
         row: usize,
         col: u16,
         style: neomacs_display_protocol::frame_glyphs::CursorStyle,
     ) {
-        if let Some(ref mut matrix) = self.current_matrix {
-            if row < matrix.rows.len() {
-                matrix.rows[row].cursor_col = Some(col);
-                matrix.rows[row].cursor_type = Some(style);
-            }
-        }
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::CursorAt(
+            MatrixRowCursorRequest { row, col, style },
+        ));
     }
 
     // -----------------------------------------------------------------------

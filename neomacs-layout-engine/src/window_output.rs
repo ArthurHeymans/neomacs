@@ -28,6 +28,9 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext, SingleDispl
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
+    MatrixIndexedRowMetricsRequest, MatrixRowBeginRequest, MatrixRowCursorRequest,
+    MatrixRowLifecycleRequest, MatrixRowMetricsRequest, MatrixWindowBeginRequest,
+    MatrixWindowLifecycleRequest,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
@@ -408,21 +411,32 @@ impl<'a> TextMatrixRowOutput<'a> {
     }
 
     pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) {
-        self.builder.begin_row(begin.matrix_row, GlyphRowRole::Text);
+        self.builder
+            .install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+                row: begin.matrix_row,
+                role: GlyphRowRole::Text,
+            }));
         self.output_emitter
             .begin_text_row(self.evaluator, begin.row, begin.col, begin.y, begin.x);
     }
 
     pub(crate) fn finish(&mut self, metrics: TextMatrixRowMetrics) {
         self.builder
-            .set_current_row_metrics(metrics.y, metrics.height, metrics.ascent);
+            .install_row_lifecycle(MatrixRowLifecycleRequest::CurrentMetrics(
+                MatrixRowMetricsRequest {
+                    pixel_y: metrics.y,
+                    height_px: metrics.height,
+                    ascent_px: metrics.ascent,
+                },
+            ));
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
     }
 
     pub(crate) fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) {
         self.finish(metrics);
-        self.builder.end_row();
+        self.builder
+            .install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
     }
 
     pub(crate) fn emit(&mut self, transition: TextMatrixRowGeometryTransition) {
@@ -459,14 +473,16 @@ pub(crate) fn begin_text_window_matrix(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowMatrixBegin,
 ) {
-    builder.begin_window_with_text_bounds(
-        request.window_id,
-        request.rows,
-        request.cols,
-        request.bounds,
-        request.text_bounds,
-        request.selected,
-    );
+    builder.install_window_lifecycle(MatrixWindowLifecycleRequest::Begin(
+        MatrixWindowBeginRequest {
+            window_id: request.window_id,
+            nrows: request.rows,
+            ncols: request.cols,
+            pixel_bounds: request.bounds,
+            text_pixel_bounds: request.text_bounds,
+            selected: request.selected,
+        },
+    ));
 }
 
 pub(crate) fn record_text_window_display_range(
@@ -528,7 +544,7 @@ pub(crate) fn record_text_window_redisplay_positions(
 }
 
 pub(crate) fn close_text_window_output(builder: &mut GlyphMatrixBuilder) {
-    builder.end_window();
+    builder.install_window_lifecycle(MatrixWindowLifecycleRequest::End);
 }
 
 pub(crate) fn finish_text_matrix_row_output(
@@ -911,7 +927,13 @@ pub(crate) fn publish_text_window_cursor(
             color: cursor.color,
         });
     }
-    builder.set_cursor_at_row(cursor.row(), cursor.col(), cursor.style);
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::CursorAt(
+        MatrixRowCursorRequest {
+            row: cursor.row(),
+            col: cursor.col(),
+            style: cursor.style,
+        },
+    ));
     output_emitter.set_phys_cursor(cursor.window_snapshot());
     if cursor.selected {
         builder.set_phys_cursor(cursor.phys_cursor());
@@ -964,9 +986,18 @@ pub(crate) fn finish_text_window_output_rows(
     output_emitter: &WindowOutputEmitter,
 ) {
     for metric in output_emitter.row_metrics() {
-        builder.set_row_metrics(metric.row, metric.pixel_y, metric.height, metric.ascent);
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::RowMetrics(
+            MatrixIndexedRowMetricsRequest {
+                row: metric.row,
+                metrics: MatrixRowMetricsRequest {
+                    pixel_y: metric.pixel_y,
+                    height_px: metric.height,
+                    ascent_px: metric.ascent,
+                },
+            },
+        ));
     }
-    builder.end_row();
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
 }
 
 pub(crate) fn install_text_window_output(

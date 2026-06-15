@@ -32,6 +32,7 @@ use crate::glyph_row_writer;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCurrentWindowMediaClip, MatrixFrameStateInstallRequest,
     MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixMediaInstallTarget,
+    MatrixRowBeginRequest, MatrixRowLifecycleRequest,
 };
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
@@ -2375,9 +2376,12 @@ impl<'row> PrebuiltDisplayRowInstall<'row> {
     }
 
     pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
-        builder.begin_row(self.matrix_row, self.row.role);
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+            row: self.matrix_row,
+            role: self.row.role,
+        }));
         builder.install_prebuilt_current_row(self.row);
-        builder.end_prebuilt_row();
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndPrebuilt);
     }
 }
 
