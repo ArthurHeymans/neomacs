@@ -840,7 +840,8 @@ fn process_name_lisp_value(name: &LispString) -> Value {
 }
 
 fn process_name_runtime(name: Value) -> String {
-    name.as_runtime_string_owned()
+    name.as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .unwrap_or_else(|| "<invalid-process-name>".to_string())
 }
 

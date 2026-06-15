@@ -79,7 +79,10 @@ pub(crate) fn parse_gnutls_boot_parameters(
         i += 2;
     }
 
-    let Some(hostname) = hostname.and_then(Value::as_runtime_string_owned) else {
+    let Some(hostname) = hostname.and_then(|v| {
+        v.as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+    }) else {
         return Err(signal(
             "error",
             vec![Value::string(

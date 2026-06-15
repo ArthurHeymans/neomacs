@@ -130,12 +130,15 @@ fn coding_symbol_name(val: &Value) -> Result<String, Flow> {
 }
 
 fn coding_runtime_string(value: &Value) -> Result<String, Flow> {
-    value.as_runtime_string_owned().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )
-    })
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), *value],
+            )
+        })
 }
 
 // ---------------------------------------------------------------------------

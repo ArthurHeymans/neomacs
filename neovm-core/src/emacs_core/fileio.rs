@@ -4916,11 +4916,11 @@ fn auto_coding_system_name(
     eval: &super::eval::Context,
     value: Value,
 ) -> Result<Option<String>, Flow> {
-    let Some(name) = value
-        .as_symbol_name()
-        .map(str::to_owned)
-        .or_else(|| value.as_runtime_string_owned())
-    else {
+    let Some(name) = value.as_symbol_name().map(str::to_owned).or_else(|| {
+        value
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+    }) else {
         return Ok(None);
     };
     if eval.coding_systems.is_known_or_derived(&name) {
