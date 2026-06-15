@@ -21,11 +21,11 @@ use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyPassState, BufferTextWindowContentRowsRequest,
-    BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
-    BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderedBodyChromeState, BufferTextWindowRenderedBodyFinishState,
-    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowRetryRenderCheckpoint,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry, BufferTextWindowGeometryPlan,
+    BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderedBodyChromeState,
+    BufferTextWindowRenderedBodyFinishState, BufferTextWindowRenderedBodyInstallPublishState,
+    BufferTextWindowRetryRenderCheckpoint, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -870,12 +870,15 @@ impl LayoutEngine {
             header_line_height,
             tab_line_height,
         );
-        let lnum_cols = local_display_policy
-            .line_number_columns(&buf_access, geometry_request.line_number_row_capacity());
-
-        let minibuffer_content_rows =
-            BufferTextWindowContentRowsRequest::new(params, frame_params.height, char_h)
-                .resolve(evaluator);
+        let BufferTextWindowGeometryPlan {
+            geometry,
+            line_number_columns: lnum_cols,
+        } = geometry_request.into_window_plan(
+            &local_display_policy,
+            &buf_access,
+            BufferTextWindowContentRowsRequest::new(params, frame_params.height, char_h),
+            evaluator,
+        );
         let BufferTextWindowGeometry {
             text_x,
             text_y,
@@ -889,7 +892,7 @@ impl LayoutEngine {
             cols,
             line_number_pixel_width: lnum_pixel_width,
             content_x,
-        } = geometry_request.into_geometry(lnum_cols, minibuffer_content_rows);
+        } = geometry;
 
         // GNU Emacs redisplay advances iterators until the visible window is
         // fully resolved; it does not stop at an arbitrary "rows * cols"

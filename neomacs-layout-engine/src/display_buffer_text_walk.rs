@@ -85,6 +85,11 @@ pub(crate) struct BufferTextWindowGeometry {
     pub(crate) content_x: f32,
 }
 
+pub(crate) struct BufferTextWindowGeometryPlan {
+    pub(crate) geometry: BufferTextWindowGeometry,
+    pub(crate) line_number_columns: i32,
+}
+
 pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
     window_start: i64,
     content_x: f32,
@@ -611,6 +616,22 @@ impl BufferTextWindowGeometryRequest {
             1
         } else {
             max_rows
+        }
+    }
+
+    pub(crate) fn into_window_plan<B: LayoutBufferView>(
+        self,
+        local_display_policy: &BufferTextWindowLocalDisplayPolicy,
+        buffer_access: &RustBufferAccess<'_, B>,
+        content_rows: BufferTextWindowContentRowsRequest<'_>,
+        evaluator: &Context,
+    ) -> BufferTextWindowGeometryPlan {
+        let line_number_columns = local_display_policy
+            .line_number_columns(buffer_access, self.line_number_row_capacity());
+        let geometry = self.into_geometry(line_number_columns, content_rows.resolve(evaluator));
+        BufferTextWindowGeometryPlan {
+            geometry,
+            line_number_columns,
         }
     }
 }
