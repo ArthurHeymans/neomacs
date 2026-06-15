@@ -33,6 +33,7 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
+use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{
@@ -249,6 +250,18 @@ pub(crate) struct BufferTextWindowWalkRenderState<'emit> {
 
 pub(crate) struct BufferTextWindowPostLoopRenderState<'emit> {
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+pub(crate) struct BufferTextWindowBodyRenderState<'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'emit FaceResolver,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
+    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
@@ -690,6 +703,66 @@ impl BufferTextWindowWalkSetup {
                 builder: state.builder,
                 output_emitter: state.output_emitter,
             })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
+        &mut self,
+        state: &mut BufferTextWindowBodyRenderState<'_>,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        loop_context: BufferTextWindowLoopRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        has_overlays: bool,
+        overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
+        buffer: &B,
+        buf_access: &RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowPostLoopRenderOutcome {
+        self.render_visible_steps(
+            &mut BufferTextWindowWalkRenderState {
+                source_render: TextRowSourceRenderState::new(
+                    state.builder,
+                    state.output_emitter,
+                    state.evaluator,
+                    state.font_metrics,
+                    state.face_resolver,
+                ),
+                line_numbers: state.line_numbers,
+                face_scan: state.face_scan,
+                active_face_state: state.active_face_state,
+                face_ids: state.face_ids,
+            },
+            row_prelude_context,
+            loop_context,
+            face_resolution_context,
+            text,
+            params,
+            overlay_text_row_context,
+            buffer,
+        );
+
+        self.render_tail_and_decide_retry(
+            &mut BufferTextWindowPostLoopRenderState {
+                source_render: TextRowSourceRenderState::new(
+                    state.builder,
+                    state.output_emitter,
+                    state.evaluator,
+                    state.font_metrics,
+                    state.face_resolver,
+                ),
+                face_ids: state.face_ids,
+            },
+            loop_context,
+            tail_context,
+            text,
+            has_overlays,
+            overlay_text_row_context,
+            state.active_face_state,
+            buffer,
+            buf_access,
+        )
     }
 }
 

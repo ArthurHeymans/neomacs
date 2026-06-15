@@ -23,13 +23,12 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyInstallRenderState, BufferTextWindowFinishInstallState,
-    BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowPostLoopRenderState,
+    BufferTextWindowBodyInstallRenderState, BufferTextWindowBodyRenderState,
+    BufferTextWindowFinishInstallState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
+    BufferTextWindowLocalDisplayPolicy, BufferTextWindowLoopRequestContext,
+    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest,
     BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
-    BufferTextWindowTailRequestContext, BufferTextWindowWalkRenderState,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -63,9 +62,7 @@ use crate::display_row_append::DisplayRowPrefixRequest;
 use crate::display_row_append::DisplayRowPrefixValues;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
-use crate::display_row_append::{
-    BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest, TextRowSourceRenderState,
-};
+use crate::display_row_append::{BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest};
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
     new_display_row,
@@ -1225,15 +1222,13 @@ impl LayoutEngine {
             evaluator,
         });
 
-        walk_setup.render_visible_steps(
-            &mut BufferTextWindowWalkRenderState {
-                source_render: TextRowSourceRenderState::new(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                ),
+        let post_loop_outcome = walk_setup.render_body_and_tail(
+            &mut BufferTextWindowBodyRenderState {
+                builder: &mut self.matrix_builder,
+                output_emitter: &mut output_emitter,
+                evaluator,
+                font_metrics: &mut self.font_metrics,
+                face_resolver,
                 line_numbers: &mut line_numbers,
                 face_scan: &mut face_scan,
                 active_face_state: &mut active_face_state,
@@ -1241,30 +1236,12 @@ impl LayoutEngine {
             },
             row_prelude_request_context,
             loop_request_context,
-            face_resolution_context.clone(),
-            text,
-            params,
-            overlay_text_row_context,
-            buffer,
-        );
-
-        let post_loop_outcome = walk_setup.render_tail_and_decide_retry(
-            &mut BufferTextWindowPostLoopRenderState {
-                source_render: TextRowSourceRenderState::new(
-                    &mut self.matrix_builder,
-                    &mut output_emitter,
-                    evaluator,
-                    &mut self.font_metrics,
-                    face_resolver,
-                ),
-                face_ids: &mut face_ids,
-            },
-            loop_request_context,
+            face_resolution_context,
             &tail_request_context,
             text,
+            params,
             has_overlays,
             overlay_text_row_context,
-            &active_face_state,
             buffer,
             &buf_access,
         );
