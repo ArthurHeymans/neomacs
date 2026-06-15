@@ -10,8 +10,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayTextRun, GlyphlessJoinerPolicy,
-    RenderFaceRef, glyphless_method_for_char,
+    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayTextRun, RenderFaceRef,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -52,8 +51,8 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    BufferTextSourceAppendItem, DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
-    SyntheticTextItemSource,
+    BufferTextSourceAppendItem, BufferTextSourceClusterState, DisplayItemSource,
+    DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -9001,45 +9000,7 @@ impl BufferTextSourceSpecialDisplay {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextSourceClusterState {
-    ch: char,
-    tail: Option<(char, bool)>,
-    is_cluster_continuation: bool,
-}
-
-impl BufferTextSourceClusterState {
-    pub(crate) fn for_char(ch: char, tail: Option<(char, bool)>) -> Self {
-        Self {
-            ch,
-            tail,
-            is_cluster_continuation: crate::composition::continues_cluster(ch, tail),
-        }
-    }
-
-    pub(crate) fn is_cluster_continuation(self) -> bool {
-        self.is_cluster_continuation
-    }
-
-    fn ch(self) -> char {
-        self.ch
-    }
-
-    fn has_tail(self) -> bool {
-        self.tail.is_some()
-    }
-}
-
 impl BufferTextSourceAppendItem {
-    pub(crate) fn glyphless_display(cluster: BufferTextSourceClusterState) -> Option<Self> {
-        let ch = cluster.ch();
-        if cluster.has_tail() && crate::composition::is_composition_joiner(ch) {
-            return None;
-        }
-        let method = glyphless_method_for_char(ch, GlyphlessJoinerPolicy::ClassifyAsGlyphless)?;
-        Some(Self::Glyphless { ch, method })
-    }
-
     fn append_kind(&self) -> DisplayRowAppendKind {
         match self {
             Self::ControlChar { .. } => DisplayRowAppendKind::ControlChar,

@@ -174,6 +174,35 @@ pub(crate) enum BufferTextSourceAppendItem {
     Glyphless { ch: char, method: GlyphlessMethod },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSourceClusterState {
+    ch: char,
+    tail: Option<(char, bool)>,
+    is_cluster_continuation: bool,
+}
+
+impl BufferTextSourceClusterState {
+    pub(crate) fn for_char(ch: char, tail: Option<(char, bool)>) -> Self {
+        Self {
+            ch,
+            tail,
+            is_cluster_continuation: crate::composition::continues_cluster(ch, tail),
+        }
+    }
+
+    pub(crate) fn is_cluster_continuation(self) -> bool {
+        self.is_cluster_continuation
+    }
+
+    pub(crate) fn ch(self) -> char {
+        self.ch
+    }
+
+    pub(crate) fn has_tail(self) -> bool {
+        self.tail.is_some()
+    }
+}
+
 impl BufferTextSourceAppendItem {
     pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
         let text = match (display_policy, ch) {
@@ -184,6 +213,15 @@ impl BufferTextSourceAppendItem {
             _ => return None,
         };
         Some(Self::SourceMappedText { text: text.into() })
+    }
+
+    pub(crate) fn glyphless_display(cluster: BufferTextSourceClusterState) -> Option<Self> {
+        let ch = cluster.ch();
+        if cluster.has_tail() && crate::composition::is_composition_joiner(ch) {
+            return None;
+        }
+        let method = glyphless_method_for_char(ch, GlyphlessJoinerPolicy::ClassifyAsGlyphless)?;
+        Some(Self::Glyphless { ch, method })
     }
 
     pub(crate) fn fallback_width_columns(&self) -> usize {
