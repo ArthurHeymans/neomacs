@@ -368,6 +368,14 @@ pub(crate) struct BufferTextWindowRenderedBodyChromeState<'emit, 'face> {
     pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
+pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    pub(crate) hit_data: &'emit mut Vec<WindowHitData>,
+    pub(crate) display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowPostLoopRenderOutcome {
     retry: BufferTextWindowVisibilityRetryOutcome,
@@ -1239,6 +1247,39 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
                 display_snapshots: state.display_snapshots,
             },
         );
+    }
+
+    pub(crate) fn install_body_chrome_and_finish(
+        mut self,
+        walk_setup: &mut BufferTextWindowWalkSetup,
+        chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
+        state: BufferTextWindowRenderedBodyCompleteState<'_, '_>,
+    ) -> TextWindowRedisplayPositions {
+        let redisplay_positions = self.install_body_and_publish_redisplay(
+            walk_setup,
+            BufferTextWindowRenderedBodyInstallPublishState {
+                builder: &mut *state.builder,
+                evaluator: &mut *state.evaluator,
+            },
+        );
+        self.render_chrome_rows(
+            chrome_request,
+            BufferTextWindowRenderedBodyChromeState {
+                builder: &mut *state.builder,
+                evaluator: &mut *state.evaluator,
+                render_services: state.render_services,
+            },
+        );
+        self.finish_window_and_install(
+            walk_setup,
+            BufferTextWindowRenderedBodyFinishState {
+                builder: state.builder,
+                evaluator: state.evaluator,
+                hit_data: state.hit_data,
+                display_snapshots: state.display_snapshots,
+            },
+        );
+        redisplay_positions
     }
 }
 

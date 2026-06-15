@@ -24,8 +24,7 @@ use crate::display_buffer_text_walk::{
     BufferTextWindowContentRowsRequest, BufferTextWindowDefaultFacePlan,
     BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
     BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderedBodyChromeState, BufferTextWindowRenderedBodyFinishState,
-    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowRetryRenderCheckpoint,
+    BufferTextWindowRenderedBodyCompleteState, BufferTextWindowRetryRenderCheckpoint,
     BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
@@ -984,7 +983,7 @@ impl LayoutEngine {
             reserve_right_special_col,
             reserve_right_border_col,
         );
-        let mut rendered_body = body_plan.begin_render_body_and_tail(
+        let rendered_body = body_plan.begin_render_body_and_tail(
             &mut walk_setup,
             &mut BufferTextWindowBodyPassState {
                 builder: &mut self.matrix_builder,
@@ -1023,21 +1022,8 @@ impl LayoutEngine {
             return;
         }
 
-        let redisplay_positions = rendered_body.install_body_and_publish_redisplay(
+        let redisplay_positions = rendered_body.install_body_chrome_and_finish(
             &mut walk_setup,
-            BufferTextWindowRenderedBodyInstallPublishState {
-                builder: &mut self.matrix_builder,
-                evaluator,
-            },
-        );
-
-        tracing::debug!(
-            "  layout_window_rust: window_start={} window_end={}",
-            redisplay_positions.window_start.as_i64(),
-            redisplay_positions.window_end.as_i64()
-        );
-
-        rendered_body.render_chrome_rows(
             chrome_plan.render_request(
                 params,
                 geometry.mode_line_matrix_row,
@@ -1046,7 +1032,7 @@ impl LayoutEngine {
                 font_ascent,
                 &buffer_name,
             ),
-            BufferTextWindowRenderedBodyChromeState {
+            BufferTextWindowRenderedBodyCompleteState {
                 builder: &mut self.matrix_builder,
                 evaluator,
                 render_services: ChromeRowRenderServices::new(
@@ -1054,17 +1040,15 @@ impl LayoutEngine {
                     face_resolver,
                     &mut face_ids,
                 ),
-            },
-        );
-
-        rendered_body.finish_window_and_install(
-            &mut walk_setup,
-            BufferTextWindowRenderedBodyFinishState {
-                builder: &mut self.matrix_builder,
-                evaluator,
                 hit_data: &mut self.hit_data,
                 display_snapshots: &mut self.display_snapshots,
             },
+        );
+
+        tracing::debug!(
+            "  layout_window_rust: window_start={} window_end={}",
+            redisplay_positions.window_start.as_i64(),
+            redisplay_positions.window_end.as_i64()
         );
 
         face_ids.finish_into(&mut self.frame_face_id_counter);
