@@ -33,9 +33,11 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
     BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
-    BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem,
+    BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem, DisplayReplacementBox,
     DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementStringSourceItem,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
+    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
@@ -7890,7 +7892,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     );
 
     let stretch = DisplayPropertyReplacementAppendItem::Stretch(
-        DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
+        DisplayReplacementStretchSourceItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
     );
     assert_eq!(
         stretch.cursor_policy(),
@@ -7935,7 +7937,7 @@ fn display_property_replacement_append_item_names_cursor_policy() {
 #[test]
 fn display_property_replacement_append_request_keeps_item_policy_and_start_position() {
     let item = DisplayPropertyReplacementAppendItem::Stretch(
-        DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
+        DisplayReplacementStretchSourceItem::from_space_extents(13.0, 16.0, 12.0, 8.0),
     );
     let request = DisplayPropertyReplacementAppendRequest::new(
         crate::display_source::BufferDisplayReplacementSource::new(
@@ -8620,17 +8622,17 @@ fn buffer_display_property_text_modifier_action_clears_expired_spans() {
 
 #[test]
 fn display_replacement_stretch_append_item_names_cursor_and_extent_policy() {
-    let item = DisplayReplacementStretchAppendItem::from_space_extents(13.0, 16.0, 12.0, 8.0);
+    let item = DisplayReplacementStretchSourceItem::from_space_extents(13.0, 16.0, 12.0, 8.0);
     assert_eq!(item.width_px(), 13.0);
     assert_eq!(item.height_px(), 16.0);
     assert_eq!(item.ascent_px(), 12.0);
     assert_eq!(item.cursor_slot_width_px(), 13.0);
 
-    let narrow = DisplayReplacementStretchAppendItem::from_space_extents(3.0, 10.0, 7.0, 8.0);
+    let narrow = DisplayReplacementStretchSourceItem::from_space_extents(3.0, 10.0, 7.0, 8.0);
     assert_eq!(narrow.width_px(), 3.0);
     assert_eq!(narrow.cursor_slot_width_px(), 8.0);
 
-    let clamped = DisplayReplacementStretchAppendItem::from_extents(-1.0, -2.0, -3.0);
+    let clamped = DisplayReplacementStretchSourceItem::from_extents(-1.0, -2.0, -3.0);
     assert_eq!(clamped.width_px(), 0.0);
     assert_eq!(clamped.height_px(), 0.0);
     assert_eq!(clamped.ascent_px(), 0.0);
@@ -8828,16 +8830,16 @@ fn display_replacement_stretch_append_item_resolves_display_space_property() {
         Value::fixnum(40),
     ]);
 
-    let item = DisplayReplacementStretchAppendItem::from_display_space_property(
+    let display_char_width = active_face.advance_for_char(&mut font_metrics, 'x', 8.0);
+    let item = DisplayReplacementStretchSourceItem::from_display_space_spec(
         &spec,
-        "x".as_bytes(),
-        &active_face,
-        &mut font_metrics,
         0.0,
         0.0,
         8.0,
+        display_char_width,
         18.0,
         13.0,
+        8.0,
         &test_display_space_window_params(),
     );
 
@@ -9173,7 +9175,7 @@ fn display_replacement_append_context_advances_stretch_output() {
         0.0,
         16.0,
     );
-    let request = DisplayReplacementStretchAppendItem::from_extents(13.0, 16.0, 12.0)
+    let request = DisplayReplacementStretchSourceItem::from_extents(13.0, 16.0, 12.0)
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 })
         .expect("stretch append request");
     let (_progress, end) = append_context

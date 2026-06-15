@@ -14,7 +14,6 @@ use crate::display_row::{
     DisplayRowRenderer, DisplayRowSourceRequestPolicy,
 };
 use crate::display_row_append::{
-    DisplayReplacementSpaceGeometry, DisplayReplacementStretchAppendItem,
     DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
     OverlayStringRenderBatchSource,
 };
@@ -25,6 +24,7 @@ use crate::display_row_walk_state::{
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     skip_text_to_charpos,
 };
+use crate::display_source::{DisplayReplacementSpaceGeometry, DisplayReplacementStretchSourceItem};
 use crate::display_status_line::{
     ChromeRowRenderServices, EchoMinibufferRowsRenderRequest, MinibufferDisplayRenderState,
     minibuffer_echo_message_for_window,
@@ -6155,7 +6155,7 @@ fn display_space_relative_height_spec(factor: i64, ascent_percent: i64) -> Value
 fn display_space_relative_width_uses_displayed_character_width() {
     let _eval = Context::new();
     let params = test_window_params();
-    let geometry = DisplayReplacementStretchAppendItem::display_space_geometry(
+    let geometry = DisplayReplacementStretchSourceItem::display_space_geometry(
         &display_space_relative_width_spec(2),
         0.0,
         0.0,
@@ -6173,7 +6173,7 @@ fn display_space_relative_width_uses_displayed_character_width() {
 fn display_space_geometry_uses_relative_height_and_percent_ascent() {
     let _eval = Context::new();
     let params = test_window_params();
-    let geometry = DisplayReplacementStretchAppendItem::display_space_geometry(
+    let geometry = DisplayReplacementStretchSourceItem::display_space_geometry(
         &display_space_relative_height_spec(2, 25),
         0.0,
         0.0,
@@ -6205,7 +6205,7 @@ fn display_space_geometry_accepts_pixel_ascent_expression() {
         Value::keyword("ascent"),
         Value::list(vec![Value::fixnum(3)]),
     ]);
-    let geometry = DisplayReplacementStretchAppendItem::display_space_geometry(
+    let geometry = DisplayReplacementStretchSourceItem::display_space_geometry(
         &spec, 0.0, 0.0, 8.0, 8.0, 10.0, 7.0, &params,
     );
 

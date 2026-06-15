@@ -8,13 +8,15 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
+use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
+use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange, text_props::TextPropertyTable,
 };
 use neovm_core::emacs_core::Value;
-use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
+use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 
 pub(crate) struct DisplaySourceContext<'a> {
     face_resolver: Option<&'a mut dyn DisplayItemFaceResolver>,
@@ -1020,6 +1022,360 @@ impl DisplayReplacementSourceMappedTextItem {
 
     pub(crate) fn into_text(self) -> Box<str> {
         self.text
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DisplayReplacementStretchSourceItem {
+    geometry: DisplayReplacementBox,
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+    cursor_slot_width_px: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayReplacementSpaceGeometry {
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) ascent: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum DisplayReplacementSpaceWidthPolicy {
+    Explicit(Value),
+    Relative { factor: f32 },
+    AlignTo(Value),
+    Default,
+}
+
+impl DisplayReplacementSpaceWidthPolicy {
+    pub(crate) fn from_items(items: &[Value]) -> Self {
+        if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::Width)
+            && !prop.is_nil()
+        {
+            Self::Explicit(prop)
+        } else if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::RelativeWidth)
+            && let Some(factor) = display_space_positive_number(prop)
+        {
+            Self::Relative { factor }
+        } else if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::AlignTo)
+            && !prop.is_nil()
+        {
+            Self::AlignTo(prop)
+        } else {
+            Self::Default
+        }
+    }
+
+    fn zero_width_allowed(self) -> bool {
+        matches!(self, Self::AlignTo(_))
+    }
+
+    fn resolve(
+        self,
+        pctx: &crate::display_pixel_calc::PixelCalcContext,
+        current_x: f32,
+        content_x: f32,
+        display_char_width: f32,
+        default_width: f32,
+    ) -> f32 {
+        use crate::display_pixel_calc::calc_pixel_width_or_height;
+
+        match self {
+            Self::Explicit(prop) => calc_pixel_width_or_height(pctx, &prop, true, None)
+                .map(|pixels| pixels as f32)
+                .unwrap_or(default_width),
+            Self::Relative { factor } => factor * display_char_width.max(0.0),
+            Self::AlignTo(prop) => {
+                let mut align_to: i32 = -1;
+                if let Some(pixels) =
+                    calc_pixel_width_or_height(pctx, &prop, true, Some(&mut align_to))
+                {
+                    let target_x = if align_to >= 0 {
+                        align_to as f32 + pixels as f32
+                    } else {
+                        content_x + pixels as f32
+                    };
+                    (target_x - current_x).max(0.0)
+                } else {
+                    default_width
+                }
+            }
+            Self::Default => default_width,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum DisplayReplacementSpaceHeightPolicy {
+    Explicit(Value),
+    Relative { factor: f32 },
+    Default,
+}
+
+impl DisplayReplacementSpaceHeightPolicy {
+    pub(crate) fn from_items(items: &[Value]) -> Self {
+        if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::Height)
+            && !prop.is_nil()
+        {
+            Self::Explicit(prop)
+        } else if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::RelativeHeight)
+            && let Some(factor) = display_space_positive_number(prop)
+        {
+            Self::Relative { factor }
+        } else {
+            Self::Default
+        }
+    }
+
+    fn zero_height_allowed(self) -> bool {
+        matches!(self, Self::Explicit(_))
+    }
+
+    fn resolve(
+        self,
+        pctx: &crate::display_pixel_calc::PixelCalcContext,
+        default_height: f32,
+    ) -> f32 {
+        use crate::display_pixel_calc::calc_pixel_width_or_height;
+
+        match self {
+            Self::Explicit(prop) => calc_pixel_width_or_height(pctx, &prop, false, None)
+                .map(|pixels| pixels as f32)
+                .unwrap_or(default_height),
+            Self::Relative { factor } => default_height * factor,
+            Self::Default => default_height,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum DisplayReplacementSpaceAscentPolicy {
+    Percent { percent: f32 },
+    Pixel(Value),
+    Default,
+}
+
+impl DisplayReplacementSpaceAscentPolicy {
+    pub(crate) fn from_items(items: &[Value]) -> Self {
+        let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::Ascent) else {
+            return Self::Default;
+        };
+        if let Some(percent) = display_space_positive_number(prop)
+            && percent <= 100.0
+        {
+            Self::Percent { percent }
+        } else if !prop.is_nil() {
+            Self::Pixel(prop)
+        } else {
+            Self::Default
+        }
+    }
+
+    fn resolve(
+        self,
+        pctx: &crate::display_pixel_calc::PixelCalcContext,
+        height: f32,
+        default_ascent: f32,
+        default_height: f32,
+    ) -> f32 {
+        use crate::display_pixel_calc::calc_pixel_width_or_height;
+
+        match self {
+            Self::Percent { percent } => height * percent / 100.0,
+            Self::Pixel(prop) => calc_pixel_width_or_height(pctx, &prop, false, None)
+                .map(|pixels| (pixels as f32).max(0.0).min(height))
+                .unwrap_or_else(|| Self::default_ascent(height, default_ascent, default_height)),
+            Self::Default => Self::default_ascent(height, default_ascent, default_height),
+        }
+    }
+
+    fn default_ascent(height: f32, default_ascent: f32, default_height: f32) -> f32 {
+        height * default_ascent / default_height
+    }
+}
+
+fn display_space_plist_value(items: &[Value], wanted: DisplaySpaceKey) -> Option<Value> {
+    let mut i = 1;
+    while i + 1 < items.len() {
+        if DisplaySpaceKey::from_lisp_value(items[i]) == Some(wanted) {
+            return Some(items[i + 1]);
+        }
+        i += 2;
+    }
+    None
+}
+
+impl DisplayReplacementStretchSourceItem {
+    pub(crate) fn from_extents(width_px: f32, height_px: f32, ascent_px: f32) -> Self {
+        let width_px = width_px.max(0.0);
+        let height_px = height_px.max(0.0);
+        let ascent_px = ascent_px.max(0.0);
+        Self {
+            geometry: DisplayReplacementBox::new(width_px, height_px, ascent_px),
+            width_px,
+            height_px,
+            ascent_px,
+            cursor_slot_width_px: width_px,
+        }
+    }
+
+    pub(crate) fn from_space_extents(
+        width_px: f32,
+        height_px: f32,
+        ascent_px: f32,
+        fallback_cursor_width_px: f32,
+    ) -> Self {
+        let mut item = Self::from_extents(width_px, height_px, ascent_px);
+        item.cursor_slot_width_px = item.width_px.max(fallback_cursor_width_px);
+        item
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn display_space_geometry(
+        spec: &Value,
+        current_x: f32,
+        content_x: f32,
+        face_char_w: f32,
+        display_char_width: f32,
+        default_height: f32,
+        default_ascent: f32,
+        params: &WindowParams,
+    ) -> DisplayReplacementSpaceGeometry {
+        use crate::display_pixel_calc::PixelCalcContext;
+
+        let default_width = params.char_width.max(1.0);
+        let default_height = if params.window_system {
+            default_height.max(1.0)
+        } else {
+            params.char_height.max(1.0)
+        };
+        let default_ascent = if params.window_system {
+            default_ascent.max(0.0).min(default_height)
+        } else {
+            default_height
+        };
+        let Some(items) = list_to_vec(spec) else {
+            return DisplayReplacementSpaceGeometry {
+                width: default_width,
+                height: default_height,
+                ascent: default_ascent,
+            };
+        };
+
+        let pctx = PixelCalcContext {
+            frame_column_width: params.char_width.max(1.0) as f64,
+            frame_line_height: params.char_height.max(1.0) as f64,
+            frame_res_x: 96.0,
+            frame_res_y: 96.0,
+            face_font_height: default_height as f64,
+            face_font_width: face_char_w.round().max(1.0) as f64,
+            text_area_left: params.text_bounds.x as f64,
+            text_area_right: (params.text_bounds.x + params.text_bounds.width) as f64,
+            text_area_width: params.text_bounds.width as f64,
+            left_margin_left: (params.text_bounds.x
+                - params.left_fringe_width
+                - params.left_margin_width) as f64,
+            left_margin_width: params.left_margin_width as f64,
+            right_margin_left: (params.text_bounds.x
+                + params.text_bounds.width
+                + params.right_fringe_width) as f64,
+            right_margin_width: params.right_margin_width as f64,
+            left_fringe_width: params.left_fringe_width as f64,
+            right_fringe_width: params.right_fringe_width as f64,
+            fringes_outside_margins: false,
+            scroll_bar_width: 0.0,
+            scroll_bar_on_left: false,
+            line_number_pixel_width: 0.0,
+            symbol_values: std::collections::HashMap::new(),
+        };
+
+        let width_policy = DisplayReplacementSpaceWidthPolicy::from_items(&items);
+        let mut width = width_policy.resolve(
+            &pctx,
+            current_x,
+            content_x,
+            display_char_width,
+            default_width,
+        );
+        if width <= 0.0 && (width < 0.0 || !width_policy.zero_width_allowed()) {
+            width = 1.0;
+        }
+
+        let (height, ascent) = if params.window_system {
+            let height_policy = DisplayReplacementSpaceHeightPolicy::from_items(&items);
+            let mut height = height_policy.resolve(&pctx, default_height);
+            if height <= 0.0 && (height < 0.0 || !height_policy.zero_height_allowed()) {
+                height = 1.0;
+            }
+
+            let ascent = DisplayReplacementSpaceAscentPolicy::from_items(&items).resolve(
+                &pctx,
+                height,
+                default_ascent,
+                default_height,
+            );
+            (height, ascent)
+        } else {
+            (1.0, 1.0)
+        };
+
+        DisplayReplacementSpaceGeometry {
+            width,
+            height,
+            ascent: ascent.max(0.0).min(height),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_display_space_spec(
+        spec: &Value,
+        current_x: f32,
+        content_x: f32,
+        face_char_w: f32,
+        display_char_width: f32,
+        default_height: f32,
+        default_ascent: f32,
+        fallback_cursor_width_px: f32,
+        params: &WindowParams,
+    ) -> Self {
+        let geometry = Self::display_space_geometry(
+            spec,
+            current_x,
+            content_x,
+            face_char_w,
+            display_char_width,
+            default_height,
+            default_ascent,
+            params,
+        );
+        Self::from_space_extents(
+            geometry.width,
+            geometry.height,
+            geometry.ascent,
+            fallback_cursor_width_px,
+        )
+    }
+
+    pub(crate) fn width_px(self) -> f32 {
+        self.width_px
+    }
+
+    pub(crate) fn height_px(self) -> f32 {
+        self.height_px
+    }
+
+    pub(crate) fn ascent_px(self) -> f32 {
+        self.ascent_px
+    }
+
+    pub(crate) fn cursor_slot_width_px(self) -> f32 {
+        self.cursor_slot_width_px
+    }
+
+    pub(crate) fn geometry(self) -> DisplayReplacementBox {
+        self.geometry
     }
 }
 
