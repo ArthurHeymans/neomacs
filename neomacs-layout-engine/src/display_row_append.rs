@@ -29,8 +29,7 @@ use crate::display_row::{
     DisplayRowRenderBounds, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
     DisplayRowResolvedMeasuredFace, DisplayRowSourceAppendRequest,
     DisplayRowSourceAppendRequestPolicy, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
-    DisplaySourceAppendMeasurement, DisplaySourceAppendRenderPolicy,
-    NaturalDisplayRowAppendRenderPolicy,
+    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face};
 use crate::display_row_builder::{
@@ -244,11 +243,11 @@ impl ResolvedBufferTextSourceAdvance {
         }
     }
 
-    fn append_measurement(self) -> DisplaySourceAppendMeasurement {
+    fn append_render_policy(self) -> DisplaySourceAppendRenderPolicy {
         match self {
-            Self::Natural { .. } => DisplaySourceAppendMeasurement::Natural,
+            Self::Natural { .. } => DisplaySourceAppendRenderPolicy::natural(),
             Self::Resolved { advance_px } => {
-                DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px }
+                DisplaySourceAppendRenderPolicy::resolved_advance(advance_px)
             }
         }
     }
@@ -283,8 +282,8 @@ impl BufferTextSourceTextRequest {
         }
     }
 
-    fn append_measurement(self) -> DisplaySourceAppendMeasurement {
-        self.resolved_advance.append_measurement()
+    fn append_render_policy(self) -> DisplaySourceAppendRenderPolicy {
+        self.resolved_advance.append_render_policy()
     }
 
     fn advance_px(self) -> f32 {
@@ -3774,8 +3773,7 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         self,
         state: &mut TextRowSourceMeasureState<'_>,
     ) -> Option<f32> {
-        let mut render_policy =
-            DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
+        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
         Some(
             self.measure_to_text_row(state, &mut render_policy)?
                 .metrics
@@ -4087,8 +4085,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
             self.frame.clone(),
             position,
         )?;
-        let mut render_policy =
-            DisplaySourceAppendRenderPolicy::new(source_text.append_measurement());
+        let mut render_policy = source_text.append_render_policy();
         operation.render_to_text_row_and_emit(state, &mut render_policy)
     }
 
@@ -4366,8 +4363,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             frame,
             position,
         )?;
-        let mut render_policy =
-            DisplaySourceAppendRenderPolicy::new(source_text.append_measurement());
+        let mut render_policy = source_text.append_render_policy();
         operation.render_to_text_row_and_emit(state, &mut render_policy)
     }
 

@@ -1206,27 +1206,18 @@ impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum DisplaySourceAppendMeasurement {
-    Natural,
-    ResolvedAdvance { advance_px: f32 },
-}
-
 pub(crate) enum DisplaySourceAppendRenderPolicy {
     Natural(NaturalDisplayRowAppendRenderPolicy),
     Resolved(ResolvedSourceAdvanceRenderPolicy),
 }
 
 impl DisplaySourceAppendRenderPolicy {
-    pub(crate) fn new(measurement: DisplaySourceAppendMeasurement) -> Self {
-        match measurement {
-            DisplaySourceAppendMeasurement::Natural => {
-                Self::Natural(NaturalDisplayRowAppendRenderPolicy)
-            }
-            DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px } => {
-                Self::Resolved(ResolvedSourceAdvanceRenderPolicy::new(advance_px))
-            }
-        }
+    pub(crate) fn natural() -> Self {
+        Self::Natural(NaturalDisplayRowAppendRenderPolicy)
+    }
+
+    pub(crate) fn resolved_advance(advance_px: f32) -> Self {
+        Self::Resolved(ResolvedSourceAdvanceRenderPolicy::new(advance_px))
     }
 }
 

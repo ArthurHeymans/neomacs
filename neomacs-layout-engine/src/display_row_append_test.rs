@@ -3295,7 +3295,7 @@ fn buffer_text_source_natural_advance_request_names_source_and_fallback() {
 }
 
 #[test]
-fn buffer_text_source_advance_path_names_append_measurement_policy() {
+fn buffer_text_source_advance_path_names_measurement_mode() {
     assert_eq!(
         BufferTextSourceAdvancePath::for_cluster_state(BufferTextSourceClusterState::for_char(
             'x', None,
@@ -3470,10 +3470,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
-    assert_eq!(
-        resolved.append_measurement(),
-        DisplaySourceAppendMeasurement::Natural
-    );
+    assert_eq!(resolved, ResolvedBufferTextSourceAdvance::natural(8.0));
 }
 
 #[test]
@@ -3522,10 +3519,7 @@ fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
-    assert_eq!(
-        resolved.append_measurement(),
-        DisplaySourceAppendMeasurement::Natural
-    );
+    assert_eq!(resolved, ResolvedBufferTextSourceAdvance::natural(8.0));
 }
 
 #[test]
@@ -3571,10 +3565,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     );
 
     assert_eq!(resolved.advance_px(), 8.0);
-    assert_eq!(
-        resolved.append_measurement(),
-        DisplaySourceAppendMeasurement::ResolvedAdvance { advance_px: 8.0 }
-    );
+    assert_eq!(resolved, ResolvedBufferTextSourceAdvance::resolved(8.0));
 }
 
 #[test]
