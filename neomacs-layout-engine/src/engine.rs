@@ -50,7 +50,7 @@ use crate::display_frame_output::{
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
@@ -78,7 +78,7 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
-use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use crate::display_source::OwnedDisplayItemSource;
 use crate::fontconfig::FontSizing;
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use neomacs_display_protocol::face::{BasicFaceId, Face, FaceAttributes};
@@ -1102,30 +1102,6 @@ impl LayoutEngine {
 
 const MOCK_DISPLAY_SOURCE_ID: u64 = 0x6d6f_636b;
 
-struct MockDisplayItemSource {
-    items: std::vec::IntoIter<DisplayItem>,
-    source_position: DisplaySourcePosition,
-}
-
-impl MockDisplayItemSource {
-    fn new(items: Vec<DisplayItem>) -> Self {
-        Self {
-            items: items.into_iter(),
-            source_position: DisplaySourcePosition::synthetic(MOCK_DISPLAY_SOURCE_ID, 0),
-        }
-    }
-}
-
-impl DisplayItemSource for MockDisplayItemSource {
-    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        self.items.next()
-    }
-
-    fn source_position(&self) -> DisplaySourcePosition {
-        self.source_position.clone()
-    }
-}
-
 fn protocol_color_to_pixel(color: Color) -> u32 {
     let color = color.linear_to_srgb();
     let channel = |component: f32| -> u32 { (component.clamp(0.0, 1.0) * 255.0).round() as u32 };
@@ -1261,7 +1237,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
         return;
     }
     let render_width = geometry.width;
-    let mut source = MockDisplayItemSource::new(items);
+    let mut source = OwnedDisplayItemSource::new(items);
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
         DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
