@@ -25,7 +25,7 @@ use crate::display_buffer_text_walk::{
     BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRenderedBodyChromeState,
     BufferTextWindowRenderedBodyFinishState, BufferTextWindowRenderedBodyInstallPublishState,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRetryRenderCheckpoint, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -940,8 +940,8 @@ impl LayoutEngine {
         } else {
             &[]
         };
-        let transition_hints_len_before = self.matrix_builder.transition_hints().len();
-        let effect_hints_len_before = self.matrix_builder.effect_hints().len();
+        let retry_render_checkpoint =
+            BufferTextWindowRetryRenderCheckpoint::capture(&self.matrix_builder);
 
         tracing::debug!(
             "  layout_window_rust id={}: text_y={:.1} text_h={:.1} max_rows={} bytes_read={}",
@@ -1125,10 +1125,7 @@ impl LayoutEngine {
 
         if let Some(new_window_start) = retry_plan.should_retry(remaining_visibility_retries) {
             retry_plan.log_retry(new_window_start, remaining_visibility_retries);
-            self.matrix_builder
-                .truncate_transition_hints(transition_hints_len_before);
-            self.matrix_builder
-                .truncate_effect_hints(effect_hints_len_before);
+            retry_render_checkpoint.restore(&mut self.matrix_builder);
 
             let mut retry_params = params.clone();
             retry_params.window_start = new_window_start;

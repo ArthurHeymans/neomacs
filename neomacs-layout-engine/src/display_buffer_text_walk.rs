@@ -364,6 +364,12 @@ pub(crate) struct BufferTextWindowRetryPlan {
     retry: BufferTextWindowVisibilityRetryOutcome,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowRetryRenderCheckpoint {
+    transition_hints_len: usize,
+    effect_hints_len: usize,
+}
+
 pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
 where
     B: LayoutBufferView,
@@ -2894,6 +2900,20 @@ impl BufferTextWindowRetryPlan {
             new_window_start,
             remaining_visibility_retries
         );
+    }
+}
+
+impl BufferTextWindowRetryRenderCheckpoint {
+    pub(crate) fn capture(builder: &GlyphMatrixBuilder) -> Self {
+        Self {
+            transition_hints_len: builder.transition_hints().len(),
+            effect_hints_len: builder.effect_hints().len(),
+        }
+    }
+
+    pub(crate) fn restore(self, builder: &mut GlyphMatrixBuilder) {
+        builder.truncate_transition_hints(self.transition_hints_len);
+        builder.truncate_effect_hints(self.effect_hints_len);
     }
 }
 
