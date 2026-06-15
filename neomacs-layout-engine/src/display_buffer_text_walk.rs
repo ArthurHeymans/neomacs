@@ -15,8 +15,8 @@ use crate::display_row_append::{
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
     BufferSelectiveDisplayTailRenderState, BufferTextDecodedSourceChar,
-    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
-    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
+    BufferTextDecodedSourceEvent, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
+    BufferTextRowAppendState, BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
     BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
     BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
@@ -2650,37 +2650,39 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        if decoded_source_char.ch() == '\n' {
-            if self
-                .render_line_break_for_context(
+        match decoded_source_char.into_event() {
+            BufferTextDecodedSourceEvent::LineBreak(decoded_source_char) => {
+                if self
+                    .render_line_break_for_context(
+                        loop_context,
+                        decoded_source_char,
+                        text,
+                        active_face_state,
+                        buffer,
+                    )
+                    .should_break()
+                {
+                    return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+                }
+            }
+            BufferTextDecodedSourceEvent::Text(decoded_source_char) => {
+                let char_render_outcome = self.render_source_char_for_context(
                     loop_context,
                     decoded_source_char,
                     text,
+                    append_surface,
+                    overlay_context,
                     active_face_state,
+                    params,
                     buffer,
-                )
-                .should_break()
-            {
-                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+                );
+                if char_render_outcome.should_break() {
+                    return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+                }
+                if char_render_outcome.should_continue_buffer_walk() {
+                    return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+                }
             }
-            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
-        }
-
-        let char_render_outcome = self.render_source_char_for_context(
-            loop_context,
-            decoded_source_char,
-            text,
-            append_surface,
-            overlay_context,
-            active_face_state,
-            params,
-            buffer,
-        );
-        if char_render_outcome.should_break() {
-            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-        }
-        if char_render_outcome.should_continue_buffer_walk() {
-            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
         BufferTextWindowLoopStepOutcome::ContinueBufferWalk
@@ -2751,7 +2753,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         );
         self.render_invisible_text_at_checkpoint(request, buffer)
     }
-
     pub(crate) fn render_hscroll_skip_for_context<'request>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,

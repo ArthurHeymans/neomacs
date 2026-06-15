@@ -221,6 +221,7 @@ struct BufferTextSourceTextRequest {
 }
 
 impl BufferTextSourceTextRequest {
+    #[cfg(test)]
     fn new(
         range: BufferTextSourceRange,
         source_char: char,
@@ -228,6 +229,16 @@ impl BufferTextSourceTextRequest {
     ) -> Self {
         Self {
             source_item: BufferTextSourceTextItemRequest::new(range, source_char),
+            resolved_advance,
+        }
+    }
+
+    fn from_source_item(
+        source_item: BufferTextSourceTextItemRequest,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+    ) -> Self {
+        Self {
+            source_item,
             resolved_advance,
         }
     }
@@ -259,6 +270,13 @@ struct BufferTextSourceTextItemRequest {
 impl BufferTextSourceTextItemRequest {
     fn new(range: BufferTextSourceRange, ch: char) -> Self {
         Self { range, ch }
+    }
+
+    fn for_range_and_cluster(
+        range: BufferTextSourceRange,
+        cluster: BufferTextSourceClusterState,
+    ) -> Self {
+        Self::new(range, cluster.ch())
     }
 
     fn range(self) -> BufferTextSourceRange {
@@ -5529,7 +5547,10 @@ impl BufferTextSourceAdvanceResolver {
             BufferTextSourceAdvancePath::NaturalRenderedSource => {
                 let advance_px = resolve_buffer_text_source_item_natural_advance_to_text_row(
                     state,
-                    BufferTextSourceTextItemRequest::new(request.range(), ch),
+                    BufferTextSourceTextItemRequest::for_range_and_cluster(
+                        request.range(),
+                        request.cluster(),
+                    ),
                     buffer_id,
                     buffer,
                     active_face_state,
@@ -5626,6 +5647,12 @@ pub(crate) struct BufferTextDecodedSourceChar {
     start_charpos: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextDecodedSourceEvent {
+    LineBreak(BufferTextDecodedSourceChar),
+    Text(BufferTextDecodedSourceChar),
+}
+
 impl BufferTextDecodedSourceChar {
     pub(crate) fn consume_from_text(
         text: &[u8],
@@ -5662,12 +5689,20 @@ impl BufferTextDecodedSourceChar {
         self.start_charpos
     }
 
+    pub(crate) fn source_range(self) -> BufferTextSourceRange {
+        BufferTextSourceRange::single_char(CharPos0::new(self.start_charpos as usize))
+    }
+
+    pub(crate) fn into_event(self) -> BufferTextDecodedSourceEvent {
+        if self.ch == '\n' {
+            BufferTextDecodedSourceEvent::LineBreak(self)
+        } else {
+            BufferTextDecodedSourceEvent::Text(self)
+        }
+    }
+
     pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
-        BufferTextSourceChar::new(
-            self.ch,
-            CharPos0::new(self.start_charpos as usize),
-            nobreak_display_policy,
-        )
+        BufferTextSourceChar::new(self.ch, self.source_range().start(), nobreak_display_policy)
     }
 
     pub(crate) fn record_word_wrap_candidate(
@@ -8648,9 +8683,8 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
         resolved_advance: ResolvedBufferTextSourceAdvance,
     ) -> BufferTextSourceCharAppendPlan {
         BufferTextSourceCharAppendPlan {
-            source_text: BufferTextSourceTextRequest::new(
-                self.range,
-                self.cluster.ch(),
+            source_text: BufferTextSourceTextRequest::from_source_item(
+                BufferTextSourceTextItemRequest::for_range_and_cluster(self.range, self.cluster),
                 resolved_advance,
             ),
             position: self.position,
