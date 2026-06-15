@@ -3618,51 +3618,6 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         Some(Self::new(append_item, base_face, face_id, frame, position))
     }
 
-    fn request(&self) -> DisplayRowSourceAppendRequest<'face> {
-        self.frame.source_append_request(
-            self.position,
-            self.face_id,
-            self.base_face,
-            self.append_item.append_kind(),
-        )
-    }
-
-    fn render_to_text_row_and_emit<P: DisplayRowRenderPolicy>(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        render_policy: &mut P,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let mut face_ids = FrameFaceIdAllocator::new(self.face_id.saturating_add(1));
-        let position = self.position;
-        let request = self.request();
-        let source = SingleDisplayItemSource::new(self.append_item.into_item());
-        let outcome = request.render_owned_display_source_into_current_text_row_and_emit(
-            &mut current_text_render_state(state, &mut face_ids),
-            source,
-            render_policy,
-        )?;
-        Some(outcome.into_append_progress_and_position(position))
-    }
-
-    fn measure_to_text_row<P: DisplayRowRenderPolicy>(
-        self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        render_policy: &mut P,
-    ) -> Option<DisplayRowAppendProgress> {
-        let mut face_ids = FrameFaceIdAllocator::new(self.face_id.saturating_add(1));
-        let position = self.position;
-        let request = self
-            .request()
-            .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
-        let source = SingleDisplayItemSource::new(self.append_item.into_item());
-        let outcome = request.measure_owned_display_source_against_current_text_row(
-            &mut current_text_measure_state(state, &mut face_ids),
-            source,
-            render_policy,
-        )?;
-        Some(outcome.into_append_progress(position))
-    }
-
     fn measure_natural_width_to_text_row(
         self,
         state: &mut TextRowSourceMeasureState<'_>,
@@ -3674,6 +3629,37 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
                 .metrics
                 .width_px,
         )
+    }
+
+    fn into_single_item_operation(self) -> DisplayRowSingleItemAppendOperation<'face> {
+        let kind = self.append_item.append_kind();
+        let item = self.append_item.into_item();
+        DisplayRowSingleItemAppendOperation::new(
+            item,
+            self.base_face,
+            self.face_id,
+            self.frame,
+            self.position,
+            kind,
+        )
+    }
+
+    fn render_to_text_row_and_emit<P: DisplayRowRenderPolicy>(
+        self,
+        state: &mut TextRowSourceRenderState<'_>,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        self.into_single_item_operation()
+            .render_to_text_row_and_emit(state, render_policy)
+    }
+
+    fn measure_to_text_row<P: DisplayRowRenderPolicy>(
+        self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        render_policy: &mut P,
+    ) -> Option<DisplayRowAppendProgress> {
+        self.into_single_item_operation()
+            .measure_to_text_row(state, render_policy)
     }
 }
 
@@ -3735,6 +3721,27 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
             render_policy,
         )?;
         Some(outcome.into_append_progress_and_position(start))
+    }
+
+    fn measure_to_text_row<P: DisplayRowRenderPolicy>(
+        self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        render_policy: &mut P,
+    ) -> Option<DisplayRowAppendProgress> {
+        let request = self
+            .request()
+            .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(self.position));
+        let base_face_id = request.base_face_id();
+        let mut item = self.item;
+        item.face = RenderFaceRef::FaceId(base_face_id);
+        let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
+        let start = request.start_position();
+        let outcome = request.measure_owned_display_source_against_current_text_row(
+            &mut current_text_measure_state(state, &mut face_ids),
+            SingleDisplayItemSource::new(item),
+            render_policy,
+        )?;
+        Some(outcome.into_append_progress(start))
     }
 }
 
