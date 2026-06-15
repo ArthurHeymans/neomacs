@@ -241,6 +241,14 @@ pub(crate) struct BufferTextWindowFinishInstallState<'a> {
     pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
+pub(crate) struct BufferTextWindowFinishOutputState<'a> {
+    pub(crate) builder: &'a mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: WindowOutputEmitter,
+    pub(crate) evaluator: &'a mut Context,
+    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
+    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+}
+
 pub(crate) struct BufferTextWindowWalkRenderState<'emit> {
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
@@ -885,6 +893,21 @@ impl BufferTextWindowWalkSetup {
             output_emitter,
             post_loop,
         }
+    }
+
+    pub(crate) fn finish_window_and_install(
+        &mut self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        state: BufferTextWindowFinishOutputState<'_>,
+    ) {
+        tail_context.finish_and_install(BufferTextWindowFinishInstallState {
+            builder: state.builder,
+            output_emitter: state.output_emitter,
+            evaluator: state.evaluator,
+            hit_rows: std::mem::take(&mut self.hit_rows),
+            hit_data: state.hit_data,
+            display_snapshots: state.display_snapshots,
+        });
     }
 }
 

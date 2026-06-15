@@ -23,7 +23,7 @@ use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyPassOutcome,
-    BufferTextWindowBodyPassState, BufferTextWindowBodyPlan, BufferTextWindowFinishInstallState,
+    BufferTextWindowBodyPassState, BufferTextWindowBodyPlan, BufferTextWindowFinishOutputState,
     BufferTextWindowGeometry, BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
     BufferTextWindowOutputSetupRequest, BufferTextWindowRedisplayPublishRequest,
     BufferTextWindowRenderContexts, BufferTextWindowRetryPlan, BufferTextWindowWalkSetupRequest,
@@ -1298,14 +1298,16 @@ impl LayoutEngine {
             ),
         });
 
-        tail_request_context.finish_and_install(BufferTextWindowFinishInstallState {
-            builder: &mut self.matrix_builder,
-            output_emitter,
-            evaluator,
-            hit_rows: walk_setup.hit_rows,
-            hit_data: &mut self.hit_data,
-            display_snapshots: &mut self.display_snapshots,
-        });
+        walk_setup.finish_window_and_install(
+            &tail_request_context,
+            BufferTextWindowFinishOutputState {
+                builder: &mut self.matrix_builder,
+                output_emitter,
+                evaluator,
+                hit_data: &mut self.hit_data,
+                display_snapshots: &mut self.display_snapshots,
+            },
+        );
 
         // Persist the face-id counter back to the frame-wide
         // slot so the NEXT window in this frame starts allocating
