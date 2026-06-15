@@ -150,19 +150,29 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut line_numbers = LineNumberRenderState::new(true, 12, 9);
     let mut face_scan = FaceScanCheckpoint::initial();
+    let mut font_metrics = None;
     *face_scan.next_check_mut() = 99;
 
-    assert!(
-        BufferLineNumberMarginRenderRequest::new(1, false, 0, 4, 4).render_pending(
-            &mut line_numbers,
-            &face_resolver,
-            &mut face_ids,
+    {
+        let mut source_render = TextRowSourceRenderState::new(
             &mut context.builder,
-            &context.geometry,
-            &mut face_scan,
-            8.0,
-        )
-    );
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        assert!(
+            BufferLineNumberMarginRenderRequest::new(1, false, 0, 4, 4)
+                .render_pending_with_source_state(
+                    &mut line_numbers,
+                    &mut source_render,
+                    &mut face_ids,
+                    &context.geometry,
+                    &mut face_scan,
+                    8.0,
+                )
+        );
+    }
 
     context.builder.end_row();
     context.builder.end_window();

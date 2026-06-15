@@ -140,51 +140,6 @@ impl BufferLineNumberMarginRenderRequest {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn render_pending(
-        self,
-        line_numbers: &mut LineNumberRenderState,
-        face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
-        builder: &mut GlyphMatrixBuilder,
-        row_geometry: &DisplayRowGeometryState,
-        face_scan: &mut FaceScanCheckpoint,
-        char_width: f32,
-    ) -> bool {
-        let Some(line_number_request) = line_numbers.margin_render_request(
-            self.mode,
-            self.current_absolute,
-            self.offset,
-            self.major_tick,
-            self.cols,
-        ) else {
-            return false;
-        };
-
-        let line_number_face =
-            face_resolver.resolve_named_face(line_number_request.face().face_name());
-        let line_number_face_id = face_ids.allocate();
-        insert_resolved_display_row_face(builder, line_number_face_id, &line_number_face, None);
-
-        let text = line_number_request.text();
-        emit_text_window_line_number_margin(
-            builder,
-            TextWindowLineNumberMargin {
-                text: &text,
-                cols: line_number_request.cols(),
-                face_id: line_number_face_id,
-                row_y: row_geometry.y(),
-                row_height: row_geometry.height(),
-                row_ascent: row_geometry.ascent(),
-                char_width,
-            },
-        );
-
-        face_scan.invalidate();
-        line_numbers.consume_render_request();
-        true
-    }
-
     pub(crate) fn render_pending_with_source_state(
         self,
         line_numbers: &mut LineNumberRenderState,
