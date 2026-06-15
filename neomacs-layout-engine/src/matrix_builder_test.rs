@@ -295,6 +295,36 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
 }
 
 #[test]
+fn builder_install_prebuilt_row_preserves_row_and_relative_metrics() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 80, Rect::new(0.0, 20.0, 640.0, 60.0), true);
+
+    let mut row = prebuilt_text_row(GlyphRowRole::Text, vec![Glyph::char('z', 7, 42)]);
+    row.pixel_y = 44.0;
+    row.height_px = 18.0;
+    row.ascent_px = 13.0;
+    row.start_charpos = 42;
+    row.end_charpos = 43;
+
+    builder.install_prebuilt_row(1, &row);
+    builder.end_window();
+
+    let state = builder.finish(80, 3, 8.0, 16.0);
+    let installed = &state.window_matrices[0].matrix.rows[1];
+    assert_eq!(installed.role, GlyphRowRole::Text);
+    assert!(installed.enabled);
+    assert_eq!(installed.pixel_y, 24.0);
+    assert_eq!(installed.height_px, 18.0);
+    assert_eq!(installed.ascent_px, 13.0);
+    assert_eq!(installed.start_charpos, 42);
+    assert_eq!(installed.end_charpos, 43);
+    let glyphs = &installed.glyphs[GlyphArea::Text as usize];
+    assert_eq!(glyphs.len(), 1);
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'z' });
+    assert_eq!(glyphs[0].face_id, 7);
+}
+
+#[test]
 fn builder_status_line_empty_row_when_no_chars_pushed() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 40, Rect::new(0.0, 0.0, 320.0, 48.0), true);
