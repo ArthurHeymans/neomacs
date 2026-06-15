@@ -14,7 +14,7 @@ use crate::display_row_builder::{
     new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
-use crate::display_source::{DisplayItemSource, LispStringSourceCursor, SingleDisplayItemSource};
+use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
@@ -1985,21 +1985,6 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             state,
             &mut source,
             &mut source_state,
-            render_policy,
-        )
-    }
-
-    pub(crate) fn render_single_display_item_into_current_text_row_and_emit<
-        P: DisplayRowRenderPolicy,
-    >(
-        self,
-        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
-        item: DisplayItem,
-        render_policy: &mut P,
-    ) -> Option<CurrentTextRowRenderOutcome> {
-        self.render_owned_display_source_into_current_text_row_and_emit(
-            state,
-            SingleDisplayItemSource::new(item),
             render_policy,
         )
     }

@@ -3715,9 +3715,9 @@ impl<'face> DisplayRowSingleItemAppendOperation<'face> {
         item.face = RenderFaceRef::FaceId(base_face_id);
         let mut face_ids = FrameFaceIdAllocator::new(base_face_id.saturating_add(1));
         let start = request.start_position();
-        let outcome = request.render_single_display_item_into_current_text_row_and_emit(
+        let outcome = request.render_owned_display_source_into_current_text_row_and_emit(
             &mut current_text_render_state(state, &mut face_ids),
-            item,
+            SingleDisplayItemSource::new(item),
             render_policy,
         )?;
         Some(outcome.into_append_progress_and_position(start))
