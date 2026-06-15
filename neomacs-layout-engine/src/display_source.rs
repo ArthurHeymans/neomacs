@@ -1500,6 +1500,45 @@ pub(crate) enum DisplayPropertyReplacementSourceItem {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayPropertyReplacementCursorPolicy {
+    TextSlot {
+        width_px: f32,
+        stretch_like: bool,
+    },
+    DisplayBox {
+        width_px: f32,
+        cursor_face_height_px: f32,
+        cursor_face_ascent_px: f32,
+    },
+    FaceChar,
+}
+
+impl DisplayPropertyReplacementSourceItem {
+    pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
+        match self {
+            Self::String(item) => DisplayPropertyReplacementCursorPolicy::TextSlot {
+                width_px: item.cursor_slot_width_px(),
+                stretch_like: false,
+            },
+            Self::Stretch(item) => DisplayPropertyReplacementCursorPolicy::TextSlot {
+                width_px: item.cursor_slot_width_px(),
+                stretch_like: true,
+            },
+            Self::Media(DisplayReplacementMediaSourceResolution::Media(item)) => {
+                DisplayPropertyReplacementCursorPolicy::DisplayBox {
+                    width_px: item.width_px(),
+                    cursor_face_height_px: item.cursor_face_height_px(),
+                    cursor_face_ascent_px: item.cursor_face_ascent_px(),
+                }
+            }
+            Self::Media(DisplayReplacementMediaSourceResolution::Placeholder(_)) => {
+                DisplayPropertyReplacementCursorPolicy::FaceChar
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayPropertyReplacementSourceMetrics {
     char_width: f32,
     row_height: f32,

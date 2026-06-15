@@ -56,12 +56,13 @@ use crate::display_source::{
     BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
     BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
     BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
-    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayPropertyReplacementSourceInputs,
-    DisplayPropertyReplacementSourceItem, DisplayPropertyReplacementSourceMetrics,
-    DisplayReplacementAppendItem, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
-    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayPropertyReplacementCursorPolicy,
+    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
+    DisplayPropertyReplacementSourceMetrics, DisplayReplacementAppendItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
+    SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -9730,20 +9731,6 @@ enum DisplayPropertyReplacementAppendPlanItem {
     Media(DisplayReplacementMediaSourceResolution),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum DisplayPropertyReplacementCursorPolicy {
-    TextSlot {
-        width_px: f32,
-        stretch_like: bool,
-    },
-    DisplayBox {
-        width_px: f32,
-        cursor_face_height_px: f32,
-        cursor_face_ascent_px: f32,
-    },
-    FaceChar,
-}
-
 impl DisplayPropertyReplacementSourceItem {
     #[allow(clippy::too_many_arguments)]
     fn into_plan_item<B: LayoutBufferView>(
@@ -9773,29 +9760,6 @@ impl DisplayPropertyReplacementSourceItem {
             }
             Self::Stretch(item) => DisplayPropertyReplacementAppendPlanItem::Stretch(item),
             Self::Media(item) => DisplayPropertyReplacementAppendPlanItem::Media(item),
-        }
-    }
-
-    pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
-        match self {
-            Self::String(item) => DisplayPropertyReplacementCursorPolicy::TextSlot {
-                width_px: item.cursor_slot_width_px(),
-                stretch_like: false,
-            },
-            Self::Stretch(item) => DisplayPropertyReplacementCursorPolicy::TextSlot {
-                width_px: item.cursor_slot_width_px(),
-                stretch_like: true,
-            },
-            Self::Media(DisplayReplacementMediaSourceResolution::Media(item)) => {
-                DisplayPropertyReplacementCursorPolicy::DisplayBox {
-                    width_px: item.width_px(),
-                    cursor_face_height_px: item.cursor_face_height_px(),
-                    cursor_face_ascent_px: item.cursor_face_ascent_px(),
-                }
-            }
-            Self::Media(DisplayReplacementMediaSourceResolution::Placeholder(_)) => {
-                DisplayPropertyReplacementCursorPolicy::FaceChar
-            }
         }
     }
 }

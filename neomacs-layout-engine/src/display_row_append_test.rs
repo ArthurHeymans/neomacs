@@ -33,12 +33,12 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
     BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
-    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
-    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem,
+    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementAppendItem, DisplayReplacementBox,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
+    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{

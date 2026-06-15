@@ -1,7 +1,7 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_row::DisplayRowActiveFaceState;
-use crate::display_row_append::DisplayPropertyReplacementCursorPolicy;
 use crate::display_row_geometry::DisplayRowTextPosition;
+use crate::display_source::DisplayPropertyReplacementCursorPolicy;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
