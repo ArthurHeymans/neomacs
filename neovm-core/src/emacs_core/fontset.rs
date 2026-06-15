@@ -16,7 +16,13 @@ pub const DEFAULT_FONTSET_NAME: &str = "-*-*-*-*-*-*-*-*-*-*-*-*-fontset-default
 pub const DEFAULT_FONTSET_ALIAS: &str = "fontset-default";
 
 fn fontset_string_text(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    // Issue #131: read the value's real Emacs bytes (lossy UTF-8 view) rather than
+    // the PUA-sentinel storage form. The remaining callers handle ASCII content
+    // (XLFD fontset names, registry/lang/style codes), where this is exact; raw
+    // font-family names are interned faithfully via intern_font_name_value.
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn fontset_name_lisp_string(name: &str) -> LispString {
