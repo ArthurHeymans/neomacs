@@ -4172,7 +4172,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
-    fn measure_item_source_request_width_or_active_face_fallback_to_text_row(
+    fn measure_item_source_request_width_or_item_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceMeasureState<'_>,
@@ -4180,21 +4180,17 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
     ) -> f32 {
         self.item_active_face(geometry)
-            .measure_source_request_width_or_active_face_fallback_to_text_row(
-                state,
-                source_item,
-                position,
-            )
+            .measure_source_request_width_or_item_fallback_to_text_row(state, source_item, position)
     }
 
-    fn measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
+    fn measure_special_source_char_request_width_or_item_fallback_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceMeasureState<'_>,
         request: BufferTextSpecialSourceCharMeasureRequest,
     ) -> f32 {
         let position = request.position();
-        self.measure_item_source_request_width_or_active_face_fallback_to_text_row(
+        self.measure_item_source_request_width_or_item_fallback_to_text_row(
             geometry,
             state,
             request.source_item(),
@@ -4210,7 +4206,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
     ) -> BufferTextSpecialSourceCharPreparedAppend {
         let measured_width_px = request.requires_overflow_measurement().then(|| {
-            self.measure_special_source_char_request_width_or_active_face_fallback_to_text_row(
+            self.measure_special_source_char_request_width_or_item_fallback_to_text_row(
                 geometry,
                 state,
                 request.measure_at(position),
@@ -5734,6 +5730,10 @@ impl BufferTextSourceItemRequest {
 
     fn append_kind(&self) -> DisplayRowAppendKind {
         self.item.append_kind()
+    }
+
+    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
+        self.item.fallback_width_px(fallback_char_width)
     }
 
     fn into_display_item_kind(self) -> DisplayItemKind {
@@ -9074,54 +9074,6 @@ impl BufferTextSourceSpecialDisplay {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BufferTextSourceFallbackWidthPolicy {
-    Columns(usize),
-}
-
-impl BufferTextSourceFallbackWidthPolicy {
-    fn for_append_item(item: &BufferTextSourceAppendItem) -> Self {
-        match item {
-            BufferTextSourceAppendItem::ControlChar { .. } => Self::Columns(2),
-            BufferTextSourceAppendItem::SourceMappedText { text } => {
-                Self::Columns(text.chars().count().max(1))
-            }
-            BufferTextSourceAppendItem::Glyphless { .. } => Self::Columns(1),
-        }
-    }
-
-    fn width_px(self, fallback_char_width: f32) -> f32 {
-        self.columns() as f32 * fallback_char_width.max(1.0)
-    }
-
-    fn columns(self) -> usize {
-        match self {
-            Self::Columns(columns) => columns,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceFallbackWidthResolver {
-    char_width: f32,
-}
-
-impl BufferTextSourceFallbackWidthResolver {
-    fn for_frame(frame: &DisplayRowAppendFrame) -> Self {
-        Self {
-            char_width: frame.geometry.char_width,
-        }
-    }
-
-    fn width_for_request(self, request: &BufferTextSourceItemRequest) -> f32 {
-        self.width_for_item(&request.item)
-    }
-
-    fn width_for_item(self, item: &BufferTextSourceAppendItem) -> f32 {
-        item.fallback_width_policy().width_px(self.char_width)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextSourceClusterState {
     ch: char,
     tail: Option<(char, bool)>,
@@ -9179,8 +9131,16 @@ impl BufferTextSourceAppendItem {
         }
     }
 
-    fn fallback_width_policy(&self) -> BufferTextSourceFallbackWidthPolicy {
-        BufferTextSourceFallbackWidthPolicy::for_append_item(self)
+    fn fallback_width_columns(&self) -> usize {
+        match self {
+            Self::ControlChar { .. } => 2,
+            Self::SourceMappedText { text } => text.chars().count().max(1),
+            Self::Glyphless { .. } => 1,
+        }
+    }
+
+    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
+        self.fallback_width_columns() as f32 * fallback_char_width.max(1.0)
     }
 
     fn into_display_item_kind(self) -> DisplayItemKind {
@@ -9258,14 +9218,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         operation.measure_natural_width_to_text_row(state)
     }
 
-    fn measure_source_request_width_or_active_face_fallback_to_text_row(
+    fn measure_source_request_width_or_item_fallback_to_text_row(
         &self,
         state: &mut TextRowSourceMeasureState<'_>,
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width = BufferTextSourceFallbackWidthResolver::for_frame(&self.frame)
-            .width_for_request(&source_item);
+        let fallback_width = source_item.fallback_width_px(self.frame.geometry.char_width);
         self.measure_source_request_width_to_text_row(state, source_item, position)
             .unwrap_or(fallback_width)
     }

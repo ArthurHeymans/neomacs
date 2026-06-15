@@ -6800,34 +6800,32 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     builder
         .with_current_row_mut(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
-    let fallback_width = append_context
-        .measure_source_request_width_or_active_face_fallback_to_text_row(
-            &mut TextRowSourceMeasureState::new(
-                &mut builder,
-                &mut eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
-            BufferTextSourceItemRequest::new(
-                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
-                item.clone(),
-            ),
-            DisplayRowPosition { x_px: 0.0, col: 0 },
-        );
-    let edge_width = append_context
-        .measure_source_request_width_or_active_face_fallback_to_text_row(
-            &mut TextRowSourceMeasureState::new(
-                &mut builder,
-                &mut eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
-            source_item.clone(),
-            DisplayRowPosition {
-                x_px: 80.0,
-                col: 10,
-            },
-        );
+    let fallback_width = append_context.measure_source_request_width_or_item_fallback_to_text_row(
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        BufferTextSourceItemRequest::new(
+            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
+            item.clone(),
+        ),
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+    );
+    let edge_width = append_context.measure_source_request_width_or_item_fallback_to_text_row(
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        source_item.clone(),
+        DisplayRowPosition {
+            x_px: 80.0,
+            col: 10,
+        },
+    );
 
     let (progress, end) = append_context
         .append_source_request_to_text_row_and_emit(
@@ -7010,8 +7008,7 @@ fn buffer_text_source_char_names_cluster_policy() {
 }
 
 #[test]
-fn buffer_text_source_fallback_width_resolver_names_policy_and_pixels() {
-    let resolver = BufferTextSourceFallbackWidthResolver { char_width: 8.0 };
+fn buffer_text_source_append_item_names_fallback_columns_and_pixels() {
     let empty_source_mapped = BufferTextSourceAppendItem::SourceMappedText { text: "".into() };
     let glyphless = BufferTextSourceAppendItem::Glyphless {
         ch: '\u{200E}',
@@ -7019,27 +7016,30 @@ fn buffer_text_source_fallback_width_resolver_names_policy_and_pixels() {
     };
 
     assert_eq!(
-        BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_policy(),
-        BufferTextSourceFallbackWidthPolicy::Columns(2)
+        BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_columns(),
+        2
     );
     assert_eq!(
-        BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }.fallback_width_policy(),
-        BufferTextSourceFallbackWidthPolicy::Columns(2)
+        BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }
+            .fallback_width_columns(),
+        2
     );
-    assert_eq!(resolver.width_for_item(&empty_source_mapped), 8.0);
-    assert_eq!(resolver.width_for_item(&glyphless), 8.0);
+    assert_eq!(empty_source_mapped.fallback_width_px(8.0), 8.0);
+    assert_eq!(glyphless.fallback_width_px(8.0), 8.0);
     assert_eq!(
-        resolver.width_for_request(&BufferTextSourceItemRequest::new(
+        BufferTextSourceItemRequest::new(
             BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
             empty_source_mapped,
-        )),
+        )
+        .fallback_width_px(8.0),
         8.0
     );
     assert_eq!(
-        resolver.width_for_request(&BufferTextSourceItemRequest::new(
+        BufferTextSourceItemRequest::new(
             BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
             glyphless,
-        )),
+        )
+        .fallback_width_px(8.0),
         8.0
     );
 }
