@@ -875,7 +875,7 @@ pub fn file_executable_p(filename: &str) -> bool {
 /// Return true if FILENAME is currently locked by Emacs lockfiles.
 ///
 /// NeoVM currently does not implement lockfile probing, so this returns nil.
-pub fn file_locked_p(_filename: &str) -> bool {
+pub fn file_locked_p(_filename: &crate::heap_types::LispString) -> bool {
     false
 }
 
@@ -1414,23 +1414,6 @@ fn empty_file_name_lisp_string() -> crate::heap_types::LispString {
     crate::heap_types::LispString::from_unibyte(Vec::new())
 }
 
-/// `file-name-as-directory` on a Lisp file name, preserving raw file-name bytes
-/// (GNU keeps file names as Lisp strings; only ASCII separators are inspected).
-fn file_name_as_directory_lisp(
-    dir: &crate::heap_types::LispString,
-) -> crate::heap_types::LispString {
-    let bytes = dir.as_bytes();
-    if bytes.is_empty() {
-        return file_name_lisp_from_bytes(b"./".to_vec(), dir.is_multibyte());
-    }
-    if bytes.last() == Some(&b'/') {
-        return dir.clone();
-    }
-    let mut out = bytes.to_vec();
-    out.push(b'/');
-    file_name_lisp_from_bytes(out, dir.is_multibyte())
-}
-
 fn fallback_root_default_directory() -> crate::heap_types::LispString {
     crate::heap_types::LispString::from_utf8("/")
 }
@@ -1899,7 +1882,7 @@ fn temp_file_absolute_prefix(
     if lisp_file_name_to_path_buf(prefix).is_absolute() {
         prefix.clone()
     } else {
-        file_name_as_directory_lisp(temp_dir).concat(prefix)
+        lisp_file_name_as_directory(temp_dir).concat(prefix)
     }
 }
 
@@ -2162,11 +2145,8 @@ pub(crate) fn builtin_next_read_file_uses_dialog_p(args: Vec<Value>) -> EvalResu
 /// (unhandled-file-name-directory FILENAME) -> directory string
 pub(crate) fn builtin_unhandled_file_name_directory(args: Vec<Value>) -> EvalResult {
     expect_args("unhandled-file-name-directory", &args, 1)?;
-    let filename = expect_string_strict(&args[0])?;
-    Ok(file_name_runtime_result_value(
-        &file_name_as_directory(&filename),
-        args[0].string_is_multibyte(),
-    ))
+    let filename = expect_lisp_string_strict(&args[0])?;
+    Ok(Value::heap_string(lisp_file_name_as_directory(&filename)))
 }
 
 /// (unhandled-file-name-directory FILENAME) -> directory string
@@ -2364,15 +2344,19 @@ pub(crate) fn builtin_file_name_concat(args: Vec<Value>) -> EvalResult {
 /// (file-name-absolute-p FILENAME) -> t or nil
 pub(crate) fn builtin_file_name_absolute_p(args: Vec<Value>) -> EvalResult {
     expect_args("file-name-absolute-p", &args, 1)?;
-    let filename = expect_string_strict(&args[0])?;
-    Ok(Value::bool_val(file_name_absolute_p(&filename)))
+    let filename = expect_lisp_string_strict(&args[0])?;
+    Ok(Value::bool_val(file_name_absolute_bytes_p(
+        filename.as_bytes(),
+    )))
 }
 
 /// (directory-name-p NAME) -> t or nil
 pub(crate) fn builtin_directory_name_p(args: Vec<Value>) -> EvalResult {
     expect_args("directory-name-p", &args, 1)?;
-    let name = expect_string_strict(&args[0])?;
-    Ok(Value::bool_val(directory_name_p(&name)))
+    let name = expect_lisp_string_strict(&args[0])?;
+    Ok(Value::bool_val(name.as_bytes().last().is_some_and(
+        |&byte| file_name_directory_separator_byte(byte),
+    )))
 }
 
 /// (substitute-in-file-name FILENAME) -> string
@@ -3068,7 +3052,9 @@ pub(crate) fn builtin_access_file(eval: &mut Context, args: Vec<Value>) -> EvalR
     expect_lisp_string_strict(&args[0])?;
     let expanded = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
     let resolved = expect_lisp_filename_string_strict(&expanded)?;
-    let operation = expect_string_strict(&args[1])?;
+    // The STRING argument is a human-readable operation description (ASCII).
+    let operation = expect_lisp_string_strict(&args[1])?;
+    let operation = crate::emacs_core::emacs_char::to_utf8_lossy(operation.as_bytes());
     if let Some(result) = maybe_dispatch_resolved_file_handler(
         eval,
         "access-file",
@@ -3186,8 +3172,8 @@ pub(crate) fn builtin_file_locked_p(eval: &mut Context, args: Vec<Value>) -> Eva
         return Ok(result);
     }
     expect_args("file-locked-p", &args, 1)?;
-    let filename = expect_string_strict(&args[0])?;
-    let filename = resolve_filename_for_eval(eval, &filename);
+    let filename = expect_lisp_string_strict(&args[0])?;
+    let filename = resolve_filename_lisp_for_eval(eval, &filename);
     Ok(Value::bool_val(file_locked_p(&filename)))
 }
 
@@ -3198,8 +3184,8 @@ pub(crate) fn builtin_file_selinux_context(eval: &mut Context, args: Vec<Value>)
         return Ok(result);
     }
     expect_args("file-selinux-context", &args, 1)?;
-    let filename = expect_string_strict(&args[0])?;
-    let _filename = resolve_filename_for_eval(eval, &filename);
+    let filename = expect_lisp_string_strict(&args[0])?;
+    let _filename = resolve_filename_lisp_for_eval(eval, &filename);
     Ok(Value::list(vec![
         Value::NIL,
         Value::NIL,
