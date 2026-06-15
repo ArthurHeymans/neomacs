@@ -9483,27 +9483,6 @@ impl DisplayReplacementStringAppendRequest {
     }
 }
 
-#[cfg(test)]
-fn append_raw_display_replacement_item_to_text_row_and_emit(
-    state: &mut TextRowSourceRenderState<'_>,
-    item: DisplayItem,
-    base_face: &ResolvedFace,
-    fallback_face_id: u32,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-    DisplayRowSingleItemAppendOperation::new(
-        item,
-        base_face,
-        fallback_face_id,
-        frame,
-        position,
-        DisplayRowAppendKind::DisplayReplacement,
-    )
-    .render_to_text_row_and_emit(state, &mut render_policy)
-}
-
 #[derive(Clone, Debug)]
 enum DisplayReplacementAppendItem {
     Media(DisplayMediaReplacement),

@@ -3,9 +3,8 @@ use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
-    DisplayImageItem, DisplayItemKind, DisplayLength, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
-    DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
+    DisplayImageItem, DisplayItemKind, DisplayMediaReplacement, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -8968,7 +8967,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
 }
 
 #[test]
-fn append_raw_display_replacement_item_to_text_row_and_emit_uses_face_fallback() {
+fn display_replacement_append_context_uses_face_fallback() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -8997,31 +8996,27 @@ fn append_raw_display_replacement_item_to_text_row_and_emit_uses_face_fallback()
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(9, 0, 1),
-        RenderFaceRef::Inherit,
-        DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
-            height: Some(DisplayLength::Pixels(16.0)),
-            ascent: Some(DisplayLength::Pixels(12.0)),
-        }),
+    let replacement_source = crate::display_source::BufferDisplayReplacementSource::new(
+        buf_id,
+        CharPos0::new(0),
+        EmacsBytePos::new(0),
     );
+    let append_context =
+        DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
 
-    let (progress, end) = append_raw_display_replacement_item_to_text_row_and_emit(
-        &mut TextRowSourceRenderState::new(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        item,
-        base_face,
-        7,
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    )
-    .expect("append progress");
+    let (progress, end) = append_context
+        .append_replacement_item_to_text_row_and_emit(
+            &mut TextRowSourceRenderState::new(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
+            DisplayReplacementAppendItem::Stretch(DisplayReplacementBox::new(13.0, 16.0, 12.0)),
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+        .expect("append progress");
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
