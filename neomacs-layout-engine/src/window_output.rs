@@ -24,6 +24,7 @@ use crate::display_row_geometry::{
     DisplayRowYPositions,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -621,6 +622,57 @@ fn line_number_margin_stretch_item(
     )
 }
 
+struct LineNumberMarginItemSource {
+    items: std::vec::IntoIter<DisplayItem>,
+    source_position: DisplaySourcePosition,
+}
+
+impl LineNumberMarginItemSource {
+    fn new(request: &TextWindowLineNumberMargin<'_>) -> Self {
+        let mut items = Vec::new();
+        let mut source_offset = 0usize;
+        let padding = (request.cols - 1) - request.text.chars().count() as i32;
+        if padding > 0 {
+            let cols = padding.min(i32::from(u16::MAX)) as u16;
+            items.push(line_number_margin_stretch_item(
+                cols,
+                request.face_id,
+                request.char_width,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(usize::from(cols));
+        }
+        if !request.text.is_empty() {
+            items.push(line_number_margin_text_item(
+                request.text,
+                request.face_id,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(request.text.chars().count());
+        }
+        items.push(line_number_margin_stretch_item(
+            1,
+            request.face_id,
+            request.char_width,
+            source_offset,
+        ));
+        Self {
+            items: items.into_iter(),
+            source_position: DisplaySourcePosition::synthetic(LINE_NUMBER_MARGIN_SOURCE_ID, 0),
+        }
+    }
+}
+
+impl DisplayItemSource for LineNumberMarginItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.items.next()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
+}
+
 fn current_row_text_layout(
     row: &GlyphRow,
     width_cols: usize,
@@ -796,34 +848,13 @@ pub(crate) fn emit_text_window_line_number_margin(
     request: TextWindowLineNumberMargin<'_>,
 ) {
     let layout = line_number_margin_layout(&request);
+    let mut source = LineNumberMarginItemSource::new(&request);
+    let mut source_context = DisplaySourceContext::empty();
     builder.with_current_row_mut(|row| {
         let mut writer = DisplayRowWriter::for_area(&layout, row, GlyphArea::LeftMargin);
-        let mut source_offset = 0usize;
-        let padding = (request.cols - 1) - request.text.chars().count() as i32;
-        if padding > 0 {
-            let cols = padding.min(i32::from(u16::MAX)) as u16;
-            writer.push_item(line_number_margin_stretch_item(
-                cols,
-                request.face_id,
-                request.char_width,
-                source_offset,
-            ));
-            source_offset = source_offset.saturating_add(usize::from(cols));
+        while let Some(item) = source.next_item(&mut source_context) {
+            writer.push_item(item);
         }
-        if !request.text.is_empty() {
-            writer.push_item(line_number_margin_text_item(
-                request.text,
-                request.face_id,
-                source_offset,
-            ));
-            source_offset = source_offset.saturating_add(request.text.chars().count());
-        }
-        writer.push_item(line_number_margin_stretch_item(
-            1,
-            request.face_id,
-            request.char_width,
-            source_offset,
-        ));
     });
 }
 
