@@ -1996,6 +1996,7 @@ mod divergence_combo_complex25;
 mod divergence_combo_complex26;
 mod divergence_combo_complex27;
 mod divergence_combo_complex28;
+mod divergence_combo_complex29;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
