@@ -2699,21 +2699,23 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
 
     let outcome = BufferTextSpecialOverflowRenderRequest::new(
         &prepared_append,
-        text,
-        0,
-        x,
-        80.0,
-        false,
-        DisplayRowVisibilityLimit {
+        BufferTextSpecialOverflowRenderContext {
+            text,
+            text_start_byte: 0,
+            x_px: x,
+            right_edge_px: 80.0,
+            truncate_lines: false,
+            row_visibility_limit: DisplayRowVisibilityLimit {
+                max_rows: 4,
+                bottom_y: 64.0,
+            },
+            content_x: 0.0,
+            has_prefix: false,
+            row_geometry_defaults: context.defaults,
+            text_matrix_row_base: 0,
             max_rows: 4,
-            bottom_y: 64.0,
+            row_limit,
         },
-        0.0,
-        false,
-        context.defaults,
-        0,
-        4,
-        row_limit,
     )
     .render_if_needed_and_apply(
         &snapshot,
@@ -2932,20 +2934,22 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let outcome = BufferTextOverflowRenderRequest::new(
         prepared_append,
         decoded_source_char,
-        'a',
-        80.0,
-        false,
-        word_wrap,
-        DisplayRowVisibilityLimit {
+        BufferTextOverflowRenderContext {
+            ch: 'a',
+            right_edge_px: 80.0,
+            truncate_lines: false,
+            word_wrap,
+            row_visibility_limit: DisplayRowVisibilityLimit {
+                max_rows: 4,
+                bottom_y: 64.0,
+            },
+            content_x: 0.0,
+            has_prefix: false,
+            row_geometry_defaults: context.defaults,
+            text_matrix_row_base: 0,
             max_rows: 4,
-            bottom_y: 64.0,
+            row_limit,
         },
-        0.0,
-        false,
-        context.defaults,
-        0,
-        4,
-        row_limit,
     )
     .render_if_needed_and_apply(
         text,

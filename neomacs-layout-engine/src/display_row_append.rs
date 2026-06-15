@@ -4472,17 +4472,22 @@ pub(crate) struct BufferTextSourceCharPreparedAppend {
 pub(crate) struct BufferTextOverflowRenderRequest {
     prepared_append: BufferTextSourceCharPreparedAppend,
     decoded_source_char: BufferTextDecodedSourceChar,
-    ch: char,
-    right_edge_px: f32,
-    truncate_lines: bool,
-    word_wrap: WordWrapRenderState,
-    row_visibility_limit: DisplayRowVisibilityLimit,
-    content_x: f32,
-    has_prefix: bool,
-    row_geometry_defaults: DisplayRowGeometryDefaults,
-    text_matrix_row_base: usize,
-    max_rows: usize,
-    row_limit: DisplayRowLimit,
+    context: BufferTextOverflowRenderContext,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextOverflowRenderContext {
+    pub(crate) ch: char,
+    pub(crate) right_edge_px: f32,
+    pub(crate) truncate_lines: bool,
+    pub(crate) word_wrap: WordWrapRenderState,
+    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
+    pub(crate) content_x: f32,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -5000,18 +5005,20 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
                 let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
                     &special_prepared_append,
-                    context.text,
-                    context.text_start_byte,
-                    *x,
-                    context.append_surface.full_text_right_edge(),
-                    context.params.truncate_lines,
-                    context.row_visibility_limit,
-                    context.content_x,
-                    context.has_prefix,
-                    context.row_geometry_defaults,
-                    context.text_matrix_row_base,
-                    context.max_rows,
-                    context.row_limit,
+                    BufferTextSpecialOverflowRenderContext {
+                        text: context.text,
+                        text_start_byte: context.text_start_byte,
+                        x_px: *x,
+                        right_edge_px: context.append_surface.full_text_right_edge(),
+                        truncate_lines: context.params.truncate_lines,
+                        row_visibility_limit: context.row_visibility_limit,
+                        content_x: context.content_x,
+                        has_prefix: context.has_prefix,
+                        row_geometry_defaults: context.row_geometry_defaults,
+                        text_matrix_row_base: context.text_matrix_row_base,
+                        max_rows: context.max_rows,
+                        row_limit: context.row_limit,
+                    },
                 )
                 .render_if_needed_and_apply(
                     buffer,
@@ -5070,17 +5077,19 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let overflow_outcome = BufferTextOverflowRenderRequest::new(
             prepared_append,
             decoded_source_char,
-            ch,
-            context.append_surface.right_edge(),
-            context.params.truncate_lines,
-            *word_wrap,
-            context.row_visibility_limit,
-            context.content_x,
-            context.has_prefix,
-            context.row_geometry_defaults,
-            context.text_matrix_row_base,
-            context.max_rows,
-            context.row_limit,
+            BufferTextOverflowRenderContext {
+                ch,
+                right_edge_px: context.append_surface.right_edge(),
+                truncate_lines: context.params.truncate_lines,
+                word_wrap: *word_wrap,
+                row_visibility_limit: context.row_visibility_limit,
+                content_x: context.content_x,
+                has_prefix: context.has_prefix,
+                row_geometry_defaults: context.row_geometry_defaults,
+                text_matrix_row_base: context.text_matrix_row_base,
+                max_rows: context.max_rows,
+                row_limit: context.row_limit,
+            },
         )
         .render_if_needed_and_apply(
             context.text,
@@ -5193,36 +5202,15 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
 }
 
 impl BufferTextOverflowRenderRequest {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         prepared_append: BufferTextSourceCharPreparedAppend,
         decoded_source_char: BufferTextDecodedSourceChar,
-        ch: char,
-        right_edge_px: f32,
-        truncate_lines: bool,
-        word_wrap: WordWrapRenderState,
-        row_visibility_limit: DisplayRowVisibilityLimit,
-        content_x: f32,
-        has_prefix: bool,
-        row_geometry_defaults: DisplayRowGeometryDefaults,
-        text_matrix_row_base: usize,
-        max_rows: usize,
-        row_limit: DisplayRowLimit,
+        context: BufferTextOverflowRenderContext,
     ) -> Self {
         Self {
             prepared_append,
             decoded_source_char,
-            ch,
-            right_edge_px,
-            truncate_lines,
-            word_wrap,
-            row_visibility_limit,
-            content_x,
-            has_prefix,
-            row_geometry_defaults,
-            text_matrix_row_base,
-            max_rows,
-            row_limit,
+            context,
         }
     }
 
@@ -5251,12 +5239,13 @@ impl BufferTextOverflowRenderRequest {
             row_y_positions,
         } = state;
         let mut source_render = source_render;
+        let context = self.context;
 
         match self.prepared_append.overflow_action(
-            self.ch,
-            self.right_edge_px,
-            self.truncate_lines,
-            self.word_wrap,
+            context.ch,
+            context.right_edge_px,
+            context.truncate_lines,
+            context.word_wrap,
         ) {
             BufferTextSourceCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
             BufferTextSourceCharOverflowAction::Truncate { transition } => {
@@ -5268,16 +5257,16 @@ impl BufferTextOverflowRenderRequest {
                     line_numbers,
                     row_extend,
                     x,
-                    self.content_x,
+                    context.content_x,
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
-                    self.row_geometry_defaults,
-                    self.text_matrix_row_base,
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
                     row_y_positions,
-                    self.max_rows,
+                    context.max_rows,
                     row_geometry,
                     row_flags,
-                    self.row_limit,
+                    context.row_limit,
                     hit_rows,
                     &mut source_render,
                 )
@@ -5290,7 +5279,7 @@ impl BufferTextOverflowRenderRequest {
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
-                        self.has_prefix,
+                        context.has_prefix,
                         line_numbers,
                         hscroll_skip,
                         word_wrap,
@@ -5314,16 +5303,16 @@ impl BufferTextOverflowRenderRequest {
                     col,
                     row_extend,
                     x,
-                    self.content_x,
+                    context.content_x,
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
-                    self.row_geometry_defaults,
-                    self.text_matrix_row_base,
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
                     row_y_positions,
-                    self.max_rows,
+                    context.max_rows,
                     row_geometry,
                     row_flags,
-                    self.row_limit,
+                    context.row_limit,
                     hit_rows,
                     &mut source_render,
                 )
@@ -5343,10 +5332,10 @@ impl BufferTextOverflowRenderRequest {
                         hit_row_range,
                         face_scan,
                         row_geometry,
-                        self.row_visibility_limit,
+                        context.row_visibility_limit,
                         DisplayRowTransitionRenderState::new(
                             prefix_request,
-                            self.has_prefix,
+                            context.has_prefix,
                             line_numbers,
                             hscroll_skip,
                             word_wrap,
@@ -5359,15 +5348,15 @@ impl BufferTextOverflowRenderRequest {
                 let character_wrap_action = BufferTextCharacterWrapSourceAction::from_decoded_char(
                     self.decoded_source_char,
                 );
-                character_wrap_action.apply_before_row_transition(row_extend, x, self.content_x);
+                character_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
-                    self.row_geometry_defaults,
-                    self.text_matrix_row_base,
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
                     row_y_positions,
-                    self.max_rows,
+                    context.max_rows,
                     row_geometry,
                     row_flags,
-                    self.row_limit,
+                    context.row_limit,
                     hit_rows,
                     &mut source_render,
                 )
@@ -5380,7 +5369,7 @@ impl BufferTextOverflowRenderRequest {
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
-                        self.has_prefix,
+                        context.has_prefix,
                         line_numbers,
                         hscroll_skip,
                         word_wrap,
@@ -5396,7 +5385,7 @@ impl BufferTextOverflowRenderRequest {
                         hit_row_range,
                         face_scan,
                         row_geometry,
-                        self.row_visibility_limit,
+                        context.row_visibility_limit,
                     ),
                 )
             }
@@ -8257,18 +8246,23 @@ pub(crate) struct BufferTextSpecialSourceCharPreparedAppend {
 
 pub(crate) struct BufferTextSpecialOverflowRenderRequest<'a> {
     prepared_append: &'a BufferTextSpecialSourceCharPreparedAppend,
-    text: &'a [u8],
-    text_start_byte: usize,
-    x_px: f32,
-    right_edge_px: f32,
-    truncate_lines: bool,
-    row_visibility_limit: DisplayRowVisibilityLimit,
-    content_x: f32,
-    has_prefix: bool,
-    row_geometry_defaults: DisplayRowGeometryDefaults,
-    text_matrix_row_base: usize,
-    max_rows: usize,
-    row_limit: DisplayRowLimit,
+    context: BufferTextSpecialOverflowRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextSpecialOverflowRenderContext<'a> {
+    pub(crate) text: &'a [u8],
+    pub(crate) text_start_byte: usize,
+    pub(crate) x_px: f32,
+    pub(crate) right_edge_px: f32,
+    pub(crate) truncate_lines: bool,
+    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
+    pub(crate) content_x: f32,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -8330,36 +8324,13 @@ impl BufferTextSpecialOverflowRenderOutcome {
 }
 
 impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         prepared_append: &'a BufferTextSpecialSourceCharPreparedAppend,
-        text: &'a [u8],
-        text_start_byte: usize,
-        x_px: f32,
-        right_edge_px: f32,
-        truncate_lines: bool,
-        row_visibility_limit: DisplayRowVisibilityLimit,
-        content_x: f32,
-        has_prefix: bool,
-        row_geometry_defaults: DisplayRowGeometryDefaults,
-        text_matrix_row_base: usize,
-        max_rows: usize,
-        row_limit: DisplayRowLimit,
+        context: BufferTextSpecialOverflowRenderContext<'a>,
     ) -> Self {
         Self {
             prepared_append,
-            text,
-            text_start_byte,
-            x_px,
-            right_edge_px,
-            truncate_lines,
-            row_visibility_limit,
-            content_x,
-            has_prefix,
-            row_geometry_defaults,
-            text_matrix_row_base,
-            max_rows,
-            row_limit,
+            context,
         }
     }
 
@@ -8387,11 +8358,12 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             row_y_positions,
         } = state;
         let mut source_render = source_render;
+        let context = self.context;
 
         match self.prepared_append.overflow_action(
-            self.x_px,
-            self.right_edge_px,
-            self.truncate_lines,
+            context.x_px,
+            context.right_edge_px,
+            context.truncate_lines,
         ) {
             None | Some(BufferTextSpecialSourceCharOverflowAction::Fits) => {
                 BufferTextSpecialOverflowRenderOutcome::Fits
@@ -8399,22 +8371,24 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             Some(BufferTextSpecialSourceCharOverflowAction::Truncate { transition }) => {
                 let truncation_skip =
                     BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
-                        self.text, byte_idx, charpos,
+                        context.text,
+                        byte_idx,
+                        charpos,
                     );
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,
                     x,
-                    self.content_x,
+                    context.content_x,
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
-                    self.row_geometry_defaults,
-                    self.text_matrix_row_base,
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
                     row_y_positions,
-                    self.max_rows,
+                    context.max_rows,
                     row_geometry,
                     row_flags,
-                    self.row_limit,
+                    context.row_limit,
                     hit_rows,
                     &mut source_render,
                 )
@@ -8427,7 +8401,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
-                        self.has_prefix,
+                        context.has_prefix,
                         line_numbers,
                         hscroll_skip,
                         word_wrap,
@@ -8437,7 +8411,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 );
                 let synced_charpos = buffer
                     .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-                        self.text_start_byte + *byte_idx,
+                        context.text_start_byte + *byte_idx,
                     ))
                     .get() as i64;
                 BufferTextSpecialOverflowRenderOutcome::ContinueBufferWalk(
@@ -8451,16 +8425,16 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             }
             Some(BufferTextSpecialSourceCharOverflowAction::Wrap { transition }) => {
                 let special_wrap_action = BufferTextSpecialWrapSourceAction::new(*charpos);
-                special_wrap_action.apply_before_row_transition(row_extend, x, self.content_x);
+                special_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
                 let hit_range = special_wrap_action.hit_range_and_advance(hit_row_range);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
-                    self.row_geometry_defaults,
-                    self.text_matrix_row_base,
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
                     row_y_positions,
-                    self.max_rows,
+                    context.max_rows,
                     row_geometry,
                     row_flags,
-                    self.row_limit,
+                    context.row_limit,
                     hit_rows,
                     &mut source_render,
                 )
@@ -8473,7 +8447,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     },
                     DisplayRowTransitionRenderState::new(
                         prefix_request,
-                        self.has_prefix,
+                        context.has_prefix,
                         line_numbers,
                         hscroll_skip,
                         word_wrap,
@@ -8485,7 +8459,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     special_wrap_action.transition_continuation(
                         row_transition,
                         row_geometry,
-                        self.row_visibility_limit,
+                        context.row_visibility_limit,
                     ),
                 )
             }
