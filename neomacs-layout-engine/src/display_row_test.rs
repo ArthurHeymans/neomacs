@@ -279,14 +279,14 @@ fn display_row_source_request_policy_builds_chrome_request() {
     let mut symbol_values = std::collections::HashMap::new();
     symbol_values.insert("tab-bar-tab-hscroll".to_string(), Value::fixnum(2));
 
-    let request = DisplayRowSourceRequestPolicy::new(
+    let request = DisplayRowSourceRequestPolicy::from_origin(
         6.0,
         144.0,
         22.0,
         11.0,
         16.0,
         DisplayTabPolicy::every(8),
-        GlyphRowRole::TabBar,
+        crate::display_origin::DisplayOrigin::TabBar,
     )
     .with_symbol_values(symbol_values.clone())
     .source_request_from_base_face(&mut face_ids, &face);
@@ -2563,14 +2563,14 @@ fn display_row_render_executor_renders_lisp_string_session_rows() {
     );
     let mut session =
         DisplayRowLispStringSourceSession::new(session_request).expect("lisp string session");
-    let row_policy = DisplayRowSourceRequestPolicy::new(
+    let row_policy = DisplayRowSourceRequestPolicy::from_origin(
         0.0,
         240.0,
         16.0,
         8.0,
         12.0,
         crate::display_row_builder::DisplayTabPolicy::every(8),
-        GlyphRowRole::Minibuffer,
+        crate::display_origin::DisplayOrigin::Minibuffer,
     );
     let row_request = session.row_request(row_policy, resolver.default_face());
     let mut executor =

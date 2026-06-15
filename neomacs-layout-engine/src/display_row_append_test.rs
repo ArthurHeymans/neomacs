@@ -4399,13 +4399,15 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
         let mut source_state = DisplayRowSourceState::default();
         DisplayRowItemSourceRenderRequest::new(
-            DisplayRowSourceRequestPolicy::new(
-                0.0,
-                160.0,
-                16.0,
-                8.0,
-                12.0,
-                DisplayTabPolicy::every(8),
+            DisplayRowSourceRequestPolicy::from_display_row_geometry(
+                DisplayRowGeometry {
+                    y: 0.0,
+                    width: 160.0,
+                    height: 16.0,
+                    char_width: 8.0,
+                    ascent: 12.0,
+                    tab_policy: DisplayTabPolicy::every(8),
+                },
                 GlyphRowRole::Text,
             )
             .source_request_for_base_face_id(7, &base_face)

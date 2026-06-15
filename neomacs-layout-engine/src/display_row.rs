@@ -1722,7 +1722,7 @@ pub(crate) struct DisplayRowSourceRequestPolicy {
 }
 
 impl DisplayRowSourceRequestPolicy {
-    pub(crate) fn new(
+    fn new(
         y: f32,
         width: f32,
         height: f32,
