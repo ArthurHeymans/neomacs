@@ -50,10 +50,14 @@ use crate::display_frame_output::{
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
-use crate::display_row::{PrebuiltDisplayRowInstall, insert_resolved_display_row_face};
+use crate::display_row::{
+    DisplayRowGeometry, DisplayRowItemSourceRenderRequest, DisplayRowRenderBounds,
+    DisplayRowRenderExecutor, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
+    PrebuiltDisplayRowInstall, insert_resolved_display_row_face,
+};
 use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
@@ -61,10 +65,7 @@ use crate::display_row_append::DisplayRowPrefixRequest;
 use crate::display_row_append::DisplayRowPrefixValues;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
-use crate::display_row_builder::{
-    DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
-    new_display_row,
-};
+use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
@@ -77,9 +78,10 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
-use crate::display_source::{DisplaySourceContext, SingleDisplayItemSource};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::fontconfig::FontSizing;
-use neomacs_display_protocol::face::BasicFaceId;
+use crate::neovm_bridge::{FaceResolver, ResolvedFace};
+use neomacs_display_protocol::face::{BasicFaceId, Face, FaceAttributes};
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 use neomacs_display_protocol::frame_glyphs::{GlyphRowRole, WindowInfo};
@@ -87,6 +89,7 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
+use neovm_core::face::FaceTable;
 use neovm_core::window::WindowDisplaySnapshot;
 
 /// Bound redisplay convergence work when point begins outside the visible span.
@@ -1099,25 +1102,108 @@ impl LayoutEngine {
 
 const MOCK_DISPLAY_SOURCE_ID: u64 = 0x6d6f_636b;
 
-fn mock_display_row_layout(
-    role: GlyphRowRole,
+struct MockDisplayItemSource {
+    items: std::vec::IntoIter<DisplayItem>,
+    source_position: DisplaySourcePosition,
+}
+
+impl MockDisplayItemSource {
+    fn new(items: Vec<DisplayItem>) -> Self {
+        Self {
+            items: items.into_iter(),
+            source_position: DisplaySourcePosition::synthetic(MOCK_DISPLAY_SOURCE_ID, 0),
+        }
+    }
+}
+
+impl DisplayItemSource for MockDisplayItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.items.next()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
+}
+
+fn protocol_color_to_pixel(color: Color) -> u32 {
+    let color = color.linear_to_srgb();
+    let channel = |component: f32| -> u32 { (component.clamp(0.0, 1.0) * 255.0).round() as u32 };
+    (channel(color.r) << 16) | (channel(color.g) << 8) | channel(color.b)
+}
+
+fn resolved_mock_face(face: Option<&Face>, char_w: f32, char_h: f32, ascent: f32) -> ResolvedFace {
+    let mut resolved = ResolvedFace::default();
+    if let Some(face) = face {
+        resolved.face_id = face.id;
+        resolved.fg = protocol_color_to_pixel(face.foreground);
+        resolved.bg = protocol_color_to_pixel(face.background);
+        resolved.use_default_foreground = face.use_default_foreground;
+        resolved.use_default_background = face.use_default_background;
+        resolved.font_family = face.font_family.clone();
+        resolved.font_weight = face.font_weight;
+        resolved.italic = face.attributes.contains(FaceAttributes::ITALIC);
+        resolved.font_size = crate::fontconfig::points_to_pixels(face.font_size);
+        resolved.underline_style = face.underline_style.gnu_code();
+        resolved.underline_color = face
+            .underline_color
+            .map(protocol_color_to_pixel)
+            .unwrap_or(0);
+        resolved.strike_through = face.attributes.contains(FaceAttributes::STRIKE_THROUGH);
+        resolved.strike_through_color = face
+            .strike_through_color
+            .map(protocol_color_to_pixel)
+            .unwrap_or(0);
+        resolved.overline = face.attributes.contains(FaceAttributes::OVERLINE);
+        resolved.overline_color = face
+            .overline_color
+            .map(protocol_color_to_pixel)
+            .unwrap_or(0);
+        resolved.box_type = face.box_type.gnu_code();
+        resolved.box_color = face.box_color.map(protocol_color_to_pixel).unwrap_or(0);
+        resolved.box_line_width = face.box_line_width;
+        resolved.font_ascent = face.font_ascent as f32;
+        resolved.font_line_height = (face.font_ascent + face.font_descent).max(0) as f32;
+    }
+    resolved.font_char_width = char_w.max(1.0);
+    if resolved.font_ascent <= 0.0 {
+        resolved.font_ascent = ascent.max(0.0).min(char_h.max(1.0));
+    }
+    if resolved.font_line_height <= 0.0 {
+        resolved.font_line_height = char_h.max(1.0);
+    }
+    resolved
+}
+
+fn mock_display_row_geometry(
     pixel_y: f32,
     width_px: f32,
     char_w: f32,
     char_h: f32,
     ascent: f32,
-) -> DisplayRowLayout {
-    DisplayRowLayout {
-        role,
-        y_px: pixel_y,
-        width_px: width_px.max(1.0),
-        height_px: char_h.max(1.0),
-        ascent_px: ascent.max(0.0).min(char_h.max(1.0)),
-        char_width_px: char_w.max(1.0),
+) -> DisplayRowGeometry {
+    DisplayRowGeometry {
+        y: pixel_y,
+        width: width_px.max(1.0),
+        height: char_h.max(1.0),
+        char_width: char_w.max(1.0),
+        ascent: ascent.max(0.0).min(char_h.max(1.0)),
         tab_policy: DisplayTabPolicy::every(8),
-        base_face: RenderFaceRef::FaceId(0),
-        symbol_values: std::collections::HashMap::new(),
     }
+}
+
+fn new_empty_mock_display_row(
+    role: GlyphRowRole,
+    geometry: &DisplayRowGeometry,
+    base_face: &ResolvedFace,
+) -> GlyphRow {
+    new_display_row(&geometry.to_layout(
+        role,
+        geometry.char_width.max(1.0),
+        geometry.ascent.max(0.0).min(geometry.height.max(1.0)),
+        RenderFaceRef::FaceId(base_face.face_id),
+        std::collections::HashMap::new(),
+    ))
 }
 
 fn mock_display_text_item(text: String, face_id: u32, source_offset: usize) -> DisplayItem {
@@ -1133,8 +1219,8 @@ fn mock_display_text_item(text: String, face_id: u32, source_offset: usize) -> D
     )
 }
 
-fn push_mock_display_text(
-    writer: &mut DisplayRowWriter<'_, '_, '_>,
+fn push_mock_display_text_item(
+    items: &mut Vec<DisplayItem>,
     text: String,
     face_id: u32,
     source_offset: &mut usize,
@@ -1143,11 +1229,53 @@ fn push_mock_display_text(
     if char_len == 0 {
         return;
     }
-    let mut source =
-        SingleDisplayItemSource::new(mock_display_text_item(text, face_id, *source_offset));
-    let mut source_context = DisplaySourceContext::empty();
-    writer.push_source(&mut source, &mut source_context);
+    items.push(mock_display_text_item(text, face_id, *source_offset));
     *source_offset = source_offset.saturating_add(char_len);
+}
+
+struct MockDisplayAreaRenderRequest<'a> {
+    role: GlyphRowRole,
+    area: GlyphArea,
+    items: Vec<DisplayItem>,
+    row: &'a mut GlyphRow,
+    geometry: DisplayRowGeometry,
+    base_face: &'a ResolvedFace,
+    face_resolver: &'a FaceResolver,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_ids: &'a mut FrameFaceIdAllocator,
+}
+
+fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
+    let MockDisplayAreaRenderRequest {
+        role,
+        area,
+        items,
+        row,
+        geometry,
+        base_face,
+        face_resolver,
+        font_metrics,
+        face_ids,
+    } = request;
+    if items.is_empty() {
+        return;
+    }
+    let render_width = geometry.width;
+    let mut source = MockDisplayItemSource::new(items);
+    let mut source_state = DisplayRowSourceState::default();
+    let row_request =
+        DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+            DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role),
+            base_face.face_id,
+            base_face,
+            DisplayRowRenderBounds {
+                start: DisplayRowPosition { x_px: 0.0, col: 0 },
+                max_x_px: render_width,
+            },
+        )
+        .with_glyph_area(area);
+    let mut executor = DisplayRowRenderExecutor::new(font_metrics, face_resolver, None, face_ids);
+    executor.render_item_source_fragment_into_row(row_request, row, &mut source, &mut source_state);
 }
 
 fn mock_display_row_from_line(
@@ -1160,64 +1288,96 @@ fn mock_display_row_from_line(
     ascent: f32,
     left_margin: Option<&str>,
     fill_to_cols: Option<(usize, u32)>,
+    base_face: &ResolvedFace,
+    face_resolver: &FaceResolver,
+    font_metrics: &mut Option<FontMetricsService>,
+    face_ids: &mut FrameFaceIdAllocator,
 ) -> GlyphRow {
     use super::mock_frame::MockDisplayProperty;
 
-    let layout = mock_display_row_layout(role, pixel_y, width_px, char_w, char_h, ascent);
-    let mut row = new_display_row(&layout);
+    let geometry = mock_display_row_geometry(pixel_y, width_px, char_w, char_h, ascent);
+    let mut row = new_empty_mock_display_row(role, &geometry, base_face);
     if let Some(left_margin) = left_margin {
-        let mut writer = DisplayRowWriter::for_area(&layout, &mut row, GlyphArea::LeftMargin);
         let mut margin_source_offset = 0usize;
-        push_mock_display_text(
-            &mut writer,
+        let mut margin_items = Vec::new();
+        push_mock_display_text_item(
+            &mut margin_items,
             left_margin.to_owned(),
             2,
             &mut margin_source_offset,
         );
+        render_mock_display_area(MockDisplayAreaRenderRequest {
+            role,
+            area: GlyphArea::LeftMargin,
+            items: margin_items,
+            row: &mut row,
+            geometry: geometry.clone(),
+            base_face,
+            face_resolver,
+            font_metrics,
+            face_ids,
+        });
     }
-    let mut writer = DisplayRowWriter::new(&layout, &mut row);
     let mut source_offset = 0usize;
+    let mut visible_cols = 0usize;
+    let mut text_items = Vec::new();
     for glyph in &line.glyphs {
         match &glyph.display {
             Some(MockDisplayProperty::Invisible) => {
                 source_offset = source_offset.saturating_add(1);
             }
             Some(MockDisplayProperty::Replace(text, face_id)) => {
-                push_mock_display_text(&mut writer, text.clone(), *face_id, &mut source_offset);
+                push_mock_display_text_item(
+                    &mut text_items,
+                    text.clone(),
+                    *face_id,
+                    &mut source_offset,
+                );
+                visible_cols = visible_cols.saturating_add(text.chars().count());
             }
             Some(MockDisplayProperty::Composition(composed)) => {
                 for composed_glyph in composed {
-                    push_mock_display_text(
-                        &mut writer,
+                    push_mock_display_text_item(
+                        &mut text_items,
                         composed_glyph.ch.to_string(),
                         composed_glyph.face_id,
                         &mut source_offset,
                     );
+                    visible_cols = visible_cols.saturating_add(1);
                 }
             }
             None => {
-                push_mock_display_text(
-                    &mut writer,
+                push_mock_display_text_item(
+                    &mut text_items,
                     glyph.ch.to_string(),
                     glyph.face_id,
                     &mut source_offset,
                 );
+                visible_cols = visible_cols.saturating_add(1);
             }
         }
     }
-    drop(writer);
     if let Some((target_cols, face_id)) = fill_to_cols {
-        let current_cols = display_row_text_glyph_count(&row);
-        if current_cols < target_cols {
-            let mut writer = DisplayRowWriter::new(&layout, &mut row);
-            push_mock_display_text(
-                &mut writer,
-                " ".repeat(target_cols - current_cols),
+        if visible_cols < target_cols {
+            push_mock_display_text_item(
+                &mut text_items,
+                " ".repeat(target_cols - visible_cols),
                 face_id,
                 &mut source_offset,
             );
         }
     }
+    render_mock_display_area(MockDisplayAreaRenderRequest {
+        role,
+        area: GlyphArea::Text,
+        items: text_items,
+        row: &mut row,
+        geometry,
+        base_face,
+        face_resolver,
+        font_metrics,
+        face_ids,
+    });
     crate::glyph_row_writer::normalize_external_row(&mut row);
     row
 }
@@ -1311,10 +1471,8 @@ impl LayoutEngine {
         char_h: f32,
     ) -> Vec<neomacs_display_protocol::glyph_matrix::FrameDisplayState> {
         use super::matrix_builder::GlyphMatrixBuilder;
-        use neomacs_display_protocol::face::FaceAttributes;
         use neomacs_display_protocol::types::Color;
 
-        let font_metrics = self.font_metrics.as_mut();
         let mut builder = GlyphMatrixBuilder::new();
 
         builder.install_frame_state(
@@ -1364,13 +1522,34 @@ impl LayoutEngine {
             .map(|f| f.attributes.contains(FaceAttributes::ITALIC))
             .unwrap_or(false);
 
-        let ascent = font_metrics
-            .and_then(|fm| {
-                let m =
-                    fm.font_metrics(default_family, default_weight, default_italic, default_size);
-                Some(m.ascent)
-            })
-            .unwrap_or(char_h * 0.8);
+        let ascent = {
+            let font_metrics = self.font_metrics.as_mut();
+            font_metrics
+                .and_then(|fm| {
+                    let m = fm.font_metrics(
+                        default_family,
+                        default_weight,
+                        default_italic,
+                        default_size,
+                    );
+                    Some(m.ascent)
+                })
+                .unwrap_or(char_h * 0.8)
+        };
+        let mock_face_table = FaceTable::new();
+        let mock_face_resolver = FaceResolver::new(
+            &mock_face_table,
+            default_face
+                .map(|face| protocol_color_to_pixel(face.foreground))
+                .unwrap_or(0x00ffffff),
+            default_face
+                .map(|face| protocol_color_to_pixel(face.background))
+                .unwrap_or(0x00000000),
+            default_size,
+            None,
+        );
+        let mock_base_face = resolved_mock_face(default_face, char_w, char_h, ascent);
+        let mut mock_face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
         tracing::info!(
             "layout_mock_frame: default_size={:.1} family={} weight={} italic={} char_w={:.1} char_h={:.1}",
             default_size,
@@ -1413,6 +1592,10 @@ impl LayoutEngine {
                     ascent,
                     Some(&lnum),
                     None,
+                    &mock_base_face,
+                    &mock_face_resolver,
+                    &mut self.font_metrics,
+                    &mut mock_face_ids,
                 );
                 PrebuiltDisplayRowInstall::new(row_idx, &row).install(&mut builder);
             }
@@ -1430,6 +1613,10 @@ impl LayoutEngine {
                 ascent,
                 None,
                 Some((ml_ncols, 1)),
+                &mock_base_face,
+                &mock_face_resolver,
+                &mut self.font_metrics,
+                &mut mock_face_ids,
             );
             PrebuiltDisplayRowInstall::new(mode_line_row, &row).install(&mut builder);
 
@@ -1467,6 +1654,10 @@ impl LayoutEngine {
                     ascent,
                     None,
                     None,
+                    &mock_base_face,
+                    &mock_face_resolver,
+                    &mut self.font_metrics,
+                    &mut mock_face_ids,
                 );
                 PrebuiltDisplayRowInstall::new(row_idx, &row).install(&mut builder);
             }
@@ -1484,6 +1675,10 @@ impl LayoutEngine {
                     ascent,
                     None,
                     Some((mini_ncols, 1)),
+                    &mock_base_face,
+                    &mock_face_resolver,
+                    &mut self.font_metrics,
+                    &mut mock_face_ids,
                 );
                 PrebuiltDisplayRowInstall::new(mode_line_row, &row).install(&mut builder);
             }
@@ -1553,6 +1748,10 @@ impl LayoutEngine {
                     ascent,
                     None,
                     None,
+                    &mock_base_face,
+                    &mock_face_resolver,
+                    &mut self.font_metrics,
+                    &mut mock_face_ids,
                 );
                 PrebuiltDisplayRowInstall::new(ri, &row).install(&mut cb);
             }
