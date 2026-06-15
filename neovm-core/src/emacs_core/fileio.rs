@@ -3469,10 +3469,14 @@ pub(crate) fn builtin_verify_visited_file_modtime(
     let Some((ref sec, ref nsec)) = buf.modtime_sec.zip(buf.modtime_nsec) else {
         return Ok(Value::T); // unknown modtime — never complain (GNU: UNKNOWN_MODTIME_NSECS)
     };
-    let Some(file_name) = buf.file_name_value().as_runtime_string_owned() else {
+    let Some(file_name) = buf.file_name_value().as_lisp_string() else {
         return Ok(Value::T);
     };
-    match std::fs::metadata(&file_name) {
+    // Issue #131: encode the visited file name to its real OS path bytes via the
+    // filesystem-boundary helper, not the PUA-sentinel storage string, so a
+    // non-UTF-8 file name still stats the right file.
+    let path = lisp_file_name_to_path_buf(file_name);
+    match std::fs::metadata(&path) {
         Ok(meta) => {
             if let Ok(mtime) = meta.modified() {
                 let dur = mtime
@@ -3524,17 +3528,18 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
     }
 
     // No arg — stat the visited file
-    let file_name = eval
+    let path = eval
         .buffers
         .current_buffer()
-        .and_then(|b| b.file_name_value().as_runtime_string_owned());
-    let Some(fname) = file_name else {
+        .and_then(|b| b.file_name_value().as_lisp_string())
+        .map(lisp_file_name_to_path_buf);
+    let Some(path) = path else {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), Value::NIL],
         ));
     };
-    match std::fs::metadata(&fname) {
+    match std::fs::metadata(&path) {
         Ok(meta) => {
             let buf = eval
                 .buffers
