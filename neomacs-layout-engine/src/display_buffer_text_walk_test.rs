@@ -104,6 +104,8 @@ fn geometry_request_derives_text_area_and_matrix_rows() {
     assert_eq!(geometry.text_y, 48.0);
     assert_eq!(geometry.text_width, 160.0);
     assert_eq!(geometry.text_height, 92.0);
+    assert_eq!(geometry.char_width, 8.0);
+    assert_eq!(geometry.char_height, 16.0);
     assert_eq!(geometry.max_rows, 5);
     assert_eq!(geometry.text_matrix_row_base, 2);
     assert_eq!(geometry.text_matrix_rows, 5);

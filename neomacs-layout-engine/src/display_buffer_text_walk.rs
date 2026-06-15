@@ -75,6 +75,8 @@ pub(crate) struct BufferTextWindowGeometry {
     pub(crate) text_y: f32,
     pub(crate) text_width: f32,
     pub(crate) text_height: f32,
+    pub(crate) char_width: f32,
+    pub(crate) char_height: f32,
     pub(crate) max_rows: usize,
     pub(crate) text_matrix_row_base: usize,
     pub(crate) text_matrix_rows: usize,
@@ -88,6 +90,13 @@ pub(crate) struct BufferTextWindowGeometry {
 pub(crate) struct BufferTextWindowGeometryPlan {
     pub(crate) geometry: BufferTextWindowGeometry,
     pub(crate) line_number_columns: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextWindowChromeHeights {
+    pub(crate) mode_line: f32,
+    pub(crate) header_line: f32,
+    pub(crate) tab_line: f32,
 }
 
 pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
@@ -590,6 +599,8 @@ impl BufferTextWindowGeometryRequest {
             text_y: self.text_y,
             text_width: self.text_width,
             text_height: self.text_height,
+            char_width: self.char_width,
+            char_height: self.char_height,
             max_rows,
             text_matrix_row_base,
             text_matrix_rows,
@@ -632,6 +643,16 @@ impl BufferTextWindowGeometryRequest {
         BufferTextWindowGeometryPlan {
             geometry,
             line_number_columns,
+        }
+    }
+}
+
+impl BufferTextWindowChromeHeights {
+    pub(crate) const fn new(mode_line: f32, header_line: f32, tab_line: f32) -> Self {
+        Self {
+            mode_line,
+            header_line,
+            tab_line,
         }
     }
 }
@@ -1359,29 +1380,21 @@ impl BufferTextWindowOutputSetup {
         walk_setup: &BufferTextWindowWalkSetup,
         local_display_policy: BufferTextWindowLocalDisplayPolicy,
         line_number_cols: i32,
+        geometry: &BufferTextWindowGeometry,
+        chrome_heights: BufferTextWindowChromeHeights,
         buffer: &'a B,
         buffer_id: BufferId,
         source: BufferTextWindowSource,
         params: &'a WindowParams,
         face_resolver: &'a FaceResolver,
         default_face: &'a BufferTextWindowDefaultFacePlan,
-        char_width: f32,
-        char_height: f32,
         font_ascent: f32,
         window_system: bool,
         matrix_window_id: u64,
         append_surface: &'surface DisplayRowAppendSurface,
-        text_y: f32,
-        text_height: f32,
-        content_x: f32,
         has_prefix: bool,
-        cols: usize,
-        max_rows: usize,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
-        mode_line_height: f32,
-        header_line_height: f32,
-        tab_line_height: f32,
     ) -> BufferTextWindowBodyPlan<'a, 'surface, B>
     where
         B: LayoutBufferView,
@@ -1394,15 +1407,15 @@ impl BufferTextWindowOutputSetup {
             default_face.char_width(),
             default_face.ascent(),
             default_face.row_height(),
-            char_width,
-            char_height,
+            geometry.char_width,
+            geometry.char_height,
             font_ascent,
             window_system,
             matrix_window_id,
             append_surface,
-            text_y,
+            geometry.text_y,
             self.body_install_context.text_matrix_row_base,
-            max_rows,
+            geometry.max_rows,
         )
         .into_contexts();
         let loop_context = BufferTextWindowLoopRequestContext::new(
@@ -1411,19 +1424,22 @@ impl BufferTextWindowOutputSetup {
             source.accessible_end(),
             source.point_charpos(),
             params,
-            content_x,
+            geometry.content_x,
             has_prefix,
             default_face.ascent(),
-            char_height,
-            char_width,
+            geometry.char_height,
+            geometry.char_width,
             self.row_visibility_limit,
             walk_setup.row_geometry_defaults,
             self.body_install_context.text_matrix_row_base,
-            max_rows,
+            geometry.max_rows,
             self.row_limit,
         );
-        let row_prelude_context =
-            local_display_policy.row_prelude_context(line_number_cols, char_width, char_height);
+        let row_prelude_context = local_display_policy.row_prelude_context(
+            line_number_cols,
+            geometry.char_width,
+            geometry.char_height,
+        );
         let initial_face_state = BufferTextWindowInitialFaceStateRequest::new(
             default_face.measurement_policy(),
             default_face.face(),
@@ -1443,23 +1459,23 @@ impl BufferTextWindowOutputSetup {
             self.body_install_context.text_matrix_row_base,
             walk_setup.text_area_left,
             walk_setup.window_top,
-            text_y,
-            text_height,
-            content_x,
-            cols,
-            char_width,
-            char_height,
+            geometry.text_y,
+            geometry.text_height,
+            geometry.content_x,
+            geometry.cols,
+            geometry.char_width,
+            geometry.char_height,
             default_face.foreground(),
-            max_rows,
+            geometry.max_rows,
             self.row_limit,
             walk_setup.row_geometry_defaults,
             self.retry_bounds,
             self.body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
-            mode_line_height,
-            header_line_height,
-            tab_line_height,
+            chrome_heights.mode_line,
+            chrome_heights.header_line,
+            chrome_heights.tab_line,
         );
         let publish_request = BufferTextWindowRedisplayPublishRequest::new(
             self.begin_request.frame_id(),

@@ -20,12 +20,13 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyPassState, BufferTextWindowContentRowsRequest,
-    BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry, BufferTextWindowGeometryPlan,
-    BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderedBodyChromeState,
-    BufferTextWindowRenderedBodyFinishState, BufferTextWindowRenderedBodyInstallPublishState,
-    BufferTextWindowRetryRenderCheckpoint, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowBodyPassState, BufferTextWindowChromeHeights,
+    BufferTextWindowContentRowsRequest, BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry,
+    BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
+    BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowRenderedBodyChromeState, BufferTextWindowRenderedBodyFinishState,
+    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowRetryRenderCheckpoint,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -862,6 +863,11 @@ impl LayoutEngine {
         let mode_line_height = chrome_plan.mode_line_height();
         let header_line_height = chrome_plan.header_line_height();
         let tab_line_height = chrome_plan.tab_line_height();
+        let chrome_heights = BufferTextWindowChromeHeights::new(
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        );
         let geometry_request = BufferTextWindowGeometryRequest::new(
             params,
             char_w,
@@ -892,6 +898,7 @@ impl LayoutEngine {
             cols,
             line_number_pixel_width: lnum_pixel_width,
             content_x,
+            ..
         } = geometry;
 
         // GNU Emacs redisplay advances iterators until the visible window is
@@ -1005,29 +1012,21 @@ impl LayoutEngine {
             &walk_setup,
             local_display_policy,
             lnum_cols,
+            &geometry,
+            chrome_heights,
             buffer,
             buf_id,
             text_source,
             params,
             face_resolver,
             &default_face,
-            char_w,
-            char_h,
             font_ascent,
             frame_params.window_system,
             params.window_id as u64,
             &text_append_surface,
-            text_y,
-            text_height,
-            content_x,
             has_prefix,
-            cols,
-            max_rows,
             reserve_right_special_col,
             reserve_right_border_col,
-            mode_line_height,
-            header_line_height,
-            tab_line_height,
         );
         let mut rendered_body = body_plan.begin_render_body_and_tail(
             &mut walk_setup,
