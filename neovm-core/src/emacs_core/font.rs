@@ -229,10 +229,9 @@ pub fn alternative_font_registries(registry: &str) -> Vec<String> {
                     registries
                         .iter()
                         .map(|text| {
-                            crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-                                text.as_bytes(),
-                                text.is_multibyte(),
-                            )
+                            // Issue #131: font registry names are ASCII identifiers; render the
+                            // string's Emacs bytes faithfully rather than via storage sentinels.
+                            crate::emacs_core::emacs_char::to_utf8_lossy(text.as_bytes())
                         })
                         .collect()
                 })

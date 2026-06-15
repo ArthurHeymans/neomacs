@@ -886,23 +886,21 @@ fn lisp_string_from_bytes(bytes: &[u8], multibyte: bool) -> LispString {
     }
 }
 
-fn lisp_bytes_to_os_string(bytes: &[u8], multibyte: bool) -> OsString {
+fn lisp_bytes_to_os_string(bytes: &[u8], _multibyte: bool) -> OsString {
+    // Issue #131: on Unix the OS path is the string's bytes verbatim — for a
+    // unibyte string those are the raw bytes, for a multibyte string they are the
+    // Emacs internal encoding (valid UTF-8 for ordinary text), matching the
+    // byte-faithful boundary in `fileio::lisp_file_name_to_path_buf`. A raw
+    // eight-bit byte therefore reaches the kernel as itself rather than as an
+    // in-Unicode storage sentinel.
     #[cfg(unix)]
     {
-        if multibyte {
-            OsString::from(
-                crate::emacs_core::string_escape::emacs_bytes_to_storage_string(bytes, true),
-            )
-        } else {
-            OsString::from_vec(bytes.to_vec())
-        }
+        OsString::from_vec(bytes.to_vec())
     }
 
     #[cfg(not(unix))]
     {
-        OsString::from(
-            crate::emacs_core::string_escape::emacs_bytes_to_storage_string(bytes, multibyte),
-        )
+        OsString::from(crate::emacs_core::emacs_char::to_utf8_lossy(bytes))
     }
 }
 
@@ -1009,7 +1007,9 @@ fn resolve_async_process_program(
                 }
                 #[cfg(not(unix))]
                 {
-                    os.push(super::builtins::runtime_string_from_lisp_string(suffix));
+                    os.push(crate::emacs_core::emacs_char::to_utf8_lossy(
+                        suffix.as_bytes(),
+                    ));
                 }
                 candidate = PathBuf::from(os);
             }

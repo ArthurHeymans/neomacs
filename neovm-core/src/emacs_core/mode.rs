@@ -176,10 +176,10 @@ fn mode_symbol_name(value: Value) -> &'static str {
 }
 
 fn mode_display_text(value: &LispString) -> String {
-    crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        value.as_bytes(),
-        value.is_multibyte(),
-    )
+    // Issue #131: mode-line display text is a faithful UTF-8 rendering of the
+    // string's Emacs bytes (a real glyph survives; eight-bit becomes U+FFFD),
+    // not the retired in-Unicode storage sentinels.
+    crate::emacs_core::emacs_char::to_utf8_lossy(value.as_bytes())
 }
 
 /// Individual element in a mode-line format.
