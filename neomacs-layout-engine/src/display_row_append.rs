@@ -487,6 +487,15 @@ impl<'a> TextRowSourceRenderState<'a> {
         )
     }
 
+    pub(crate) fn default_display_string_base_face<B: LayoutBufferView>(
+        &mut self,
+        buffer: &B,
+        origin: DisplayOrigin,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayStringBaseFace {
+        self.display_string_base_face(buffer, origin, origin.default_base_face_policy(), face_ids)
+    }
+
     pub(crate) fn display_string_base_face_for_active_row<B: LayoutBufferView>(
         &mut self,
         buffer: &B,
@@ -503,6 +512,22 @@ impl<'a> TextRowSourceRenderState<'a> {
             active_face_state,
             face_ids,
             self.output_render.builder,
+        )
+    }
+
+    pub(crate) fn default_display_string_base_face_for_active_row<B: LayoutBufferView>(
+        &mut self,
+        buffer: &B,
+        origin: DisplayOrigin,
+        active_face_state: &DisplayRowActiveFaceState,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> DisplayStringBaseFace {
+        self.display_string_base_face_for_active_row(
+            buffer,
+            origin,
+            origin.default_base_face_policy(),
+            active_face_state,
+            face_ids,
         )
     }
 
@@ -2209,6 +2234,7 @@ impl BufferAnchoredLispStringSource {
         }
     }
 
+    #[cfg(test)]
     fn base_face_policy(self) -> BaseFacePolicy {
         self.origin().default_base_face_policy()
     }
@@ -2237,6 +2263,7 @@ impl DisplayRowPrefixSource {
         self.source.origin()
     }
 
+    #[cfg(test)]
     pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
         self.source.base_face_policy()
     }
@@ -2291,12 +2318,8 @@ impl<'a> BufferLinePrefixRenderContext<'a> {
             return position;
         };
 
-        let prefix_base_face = state.display_string_base_face(
-            buffer,
-            prefix_source.origin(),
-            prefix_source.base_face_policy(),
-            face_ids,
-        );
+        let prefix_base_face =
+            state.default_display_string_base_face(buffer, prefix_source.origin(), face_ids);
         LispStringRowAppendContext::new(
             self.append_surface,
             self.row_geometry,
@@ -2378,6 +2401,7 @@ impl OverlayStringRenderSource {
         self.source.origin()
     }
 
+    #[cfg(test)]
     pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
         self.source.base_face_policy()
     }
@@ -2795,10 +2819,9 @@ fn render_overlay_string<B: LayoutBufferView>(
         return;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
-    let base_face = state.source_render.display_string_base_face(
+    let base_face = state.source_render.default_display_string_base_face(
         buffer,
         source_request.origin(),
-        source_request.base_face_policy(),
         state.face_ids,
     );
     let max_x = row_context.right_edge();
@@ -7275,10 +7298,9 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
         let origin = DisplayOrigin::BufferText {
             charpos: neovm_core::buffer::CharPos0::new(charpos as usize),
         };
-        let mut resolved = self.face_resolver.base_face_for_origin(
+        let mut resolved = self.face_resolver.default_base_face_for_origin(
             Some(self.buffer),
             &origin,
-            BaseFacePolicy::BufferFaceIncludingOverlays,
             state.face_scan.next_check_mut(),
         );
         if let Some(factor) = state.height_span.value()
@@ -9257,6 +9279,7 @@ impl DisplayReplacementStringAppendItem {
         self.origin
     }
 
+    #[cfg(test)]
     pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
         self.origin.default_base_face_policy()
     }
@@ -10985,10 +11008,9 @@ impl DisplayPropertyReplacementAppendItem {
         match self {
             Self::String(item) => {
                 let replacement_base_face = (!item.is_empty()).then(|| {
-                    state.display_string_base_face_for_active_row(
+                    state.default_display_string_base_face_for_active_row(
                         buffer,
                         item.origin(),
-                        item.base_face_policy(),
                         active_face_state,
                         face_ids,
                     )

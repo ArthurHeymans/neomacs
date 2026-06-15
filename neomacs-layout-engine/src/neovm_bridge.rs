@@ -2790,6 +2790,20 @@ impl FaceResolver {
         }
     }
 
+    pub(crate) fn default_base_face_for_origin<B: LayoutBufferView>(
+        &self,
+        buffer: Option<&B>,
+        origin: &DisplayOrigin,
+        next_check: &mut usize,
+    ) -> ResolvedFace {
+        self.base_face_for_origin(
+            buffer,
+            origin,
+            origin.default_base_face_policy(),
+            next_check,
+        )
+    }
+
     /// Extract face name(s) from a Lisp Value.
     ///
     /// Face property values can be:
