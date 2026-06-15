@@ -32,6 +32,7 @@ use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
     display_row_text_is_empty, new_display_row,
 };
+use crate::display_source::{DisplaySourceContext, SingleDisplayItemSource};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{FrameParams, WindowParams};
@@ -107,7 +108,9 @@ fn append_synthetic_minibuffer_text(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     );
-    DisplayRowWriter::new(&layout, row).push_item(item);
+    let mut source = SingleDisplayItemSource::new(item);
+    let mut source_context = DisplaySourceContext::empty();
+    DisplayRowWriter::new(&layout, row).push_source(&mut source, &mut source_context);
 }
 
 pub(crate) enum FrameTabBarDisplayRowRender {

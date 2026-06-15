@@ -6,7 +6,6 @@ use crate::display_item::{
     DisplayLengthExpr, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod,
     RenderFaceRef, SourceSpan, control_char_caret_char,
 };
-#[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::glyph_row_writer;
 #[cfg(test)]
@@ -1017,7 +1016,6 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         )
     }
 
-    #[cfg(test)]
     pub(crate) fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,

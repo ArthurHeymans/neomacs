@@ -678,9 +678,7 @@ fn push_item_source_to_writer(
     source: &mut impl DisplayItemSource,
 ) {
     let mut source_context = DisplaySourceContext::empty();
-    while let Some(item) = source.next_item(&mut source_context) {
-        writer.push_item(item);
-    }
+    writer.push_source(source, &mut source_context);
 }
 
 fn current_row_text_layout(
