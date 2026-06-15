@@ -1349,7 +1349,6 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
         Self { row_request }
     }
 
-    #[cfg(test)]
     pub(crate) fn from_base_face_id_policy_with_render_bounds(
         policy: DisplayRowSourceRequestPolicy,
         base_face_id: u32,
@@ -3010,6 +3009,23 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
         request: DisplayRowLispStringSourceSessionRowRequest<'_>,
     ) -> Option<DisplayRowRenderResult> {
         session.render_next_row_with_context(&mut self.renderer, request, &mut self.context)
+    }
+
+    pub(crate) fn render_item_source_fragment_into_row<S: DisplayItemSource>(
+        &mut self,
+        request: DisplayRowItemSourceRenderRequest<'_>,
+        row: &mut GlyphRow,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+    ) -> Option<DisplayRowRenderIntoRowResult> {
+        request.render_fragment_step_into_row_with_policy(
+            &mut self.renderer,
+            row,
+            source,
+            source_state,
+            &mut self.context,
+            &mut NaturalDisplayRowRenderPolicy,
+        )
     }
 }
 

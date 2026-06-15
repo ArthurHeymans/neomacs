@@ -24,19 +24,20 @@ use crate::display_item::{
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowLispStringSourceSession,
-    DisplayRowLispStringSourceSessionRequest, DisplayRowLispStringSourceSessionRowRequest,
-    DisplayRowOwner, DisplayRowRenderExecutor, DisplayRowRenderStop, DisplayRowSourceRequestPolicy,
-    FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow, WindowChromeKind,
-    install_measured_frame_chrome_row, install_measured_window_display_row,
+    DisplayRowBoundsPolicy, DisplayRowItemSourceRenderRequest, DisplayRowLispStringRenderRequest,
+    DisplayRowLispStringSourceSession, DisplayRowLispStringSourceSessionRequest,
+    DisplayRowLispStringSourceSessionRowRequest, DisplayRowOwner, DisplayRowRenderBounds,
+    DisplayRowRenderExecutor, DisplayRowRenderStop, DisplayRowSourceRequestPolicy,
+    DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
+    WindowChromeKind, install_measured_frame_chrome_row, install_measured_window_display_row,
     install_rendered_display_row,
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{
-    DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
+    DisplayRowLayout, DisplayRowPosition, DisplayTabPolicy, display_row_text_glyph_count,
     display_row_text_is_empty, new_display_row,
 };
-use crate::display_source::{DisplaySourceContext, SingleDisplayItemSource};
+use crate::display_source::SingleDisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{FrameParams, WindowParams};
@@ -81,9 +82,11 @@ fn empty_minibuffer_echo_row(y: f32, ascent: f32, row_height: f32) -> Vec<Render
 }
 
 fn append_synthetic_minibuffer_text(
-    row: &mut GlyphRow,
+    render_services: &mut ChromeRowRenderServices<'_, '_>,
+    rendered: &mut RenderedDisplayRow,
     text: impl Into<String>,
     face_id: u32,
+    base_face: &ResolvedFace,
     y: f32,
     width: f32,
     char_width: f32,
@@ -96,25 +99,50 @@ fn append_synthetic_minibuffer_text(
     if char_len == 0 {
         return;
     }
-    let layout = DisplayRowLayout {
-        role: GlyphRowRole::Minibuffer,
-        y_px: y,
-        width_px: width.max(1.0),
-        height_px: row_height.max(1.0),
-        ascent_px: ascent.max(0.0).min(row_height.max(1.0)),
-        char_width_px: char_width.max(1.0),
-        tab_policy: DisplayTabPolicy::every(8),
-        base_face: RenderFaceRef::FaceId(face_id),
-        symbol_values: std::collections::HashMap::new(),
-    };
     let item = DisplayItem::new(
         SourceSpan::synthetic(0, source_offset, source_offset + char_len),
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     );
     let mut source = SingleDisplayItemSource::new(item);
-    let mut source_context = DisplaySourceContext::empty();
-    DisplayRowWriter::new(&layout, row).push_source(&mut source, &mut source_context);
+    let start = DisplayRowPosition {
+        x_px: source_offset as f32 * char_width.max(1.0),
+        col: source_offset,
+    };
+    let request = DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+        DisplayRowSourceRequestPolicy::from_origin(
+            y,
+            width,
+            row_height,
+            char_width,
+            ascent,
+            DisplayTabPolicy::every(8),
+            DisplayOrigin::EchoArea,
+        ),
+        face_id,
+        base_face,
+        DisplayRowRenderBounds {
+            start,
+            max_x_px: width.max(0.0),
+        },
+    );
+    let mut source_state = DisplayRowSourceState::default();
+    let Some(result) = render_services.render_item_source_fragment_into_row(
+        request,
+        &mut rendered.row,
+        &mut source,
+        &mut source_state,
+    ) else {
+        return;
+    };
+    rendered.progress = result.progress;
+    rendered.source_slots.extend(result.source_slots);
+    for face in result.faces {
+        if !rendered.faces.iter().any(|existing| existing.id == face.id) {
+            rendered.faces.push(face);
+        }
+    }
+    rendered.media.extend(result.media);
 }
 
 pub(crate) enum FrameTabBarDisplayRowRender {
@@ -176,6 +204,22 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
             &mut *self.face_ids,
         );
         render_executor.render_lisp_string_session_row(session, request)
+    }
+
+    fn render_item_source_fragment_into_row(
+        &mut self,
+        request: DisplayRowItemSourceRenderRequest<'_>,
+        row: &mut GlyphRow,
+        source: &mut SingleDisplayItemSource,
+        source_state: &mut DisplayRowSourceState,
+    ) -> Option<crate::display_row::DisplayRowRenderIntoRowResult> {
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut *self.font_metrics,
+            self.face_resolver,
+            None,
+            &mut *self.face_ids,
+        );
+        render_executor.render_item_source_fragment_into_row(request, row, source, source_state)
     }
 }
 
@@ -1064,13 +1108,16 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
             rendered.row.mode_line = false;
             if self.reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
                 let ch = if self.truncate_lines { '$' } else { '\\' };
+                let row_y = rendered.progress.y;
                 let current_cols = display_row_text_glyph_count(&rendered.row);
                 if current_cols < special_col {
                     append_synthetic_minibuffer_text(
-                        &mut rendered.row,
+                        &mut state.render_services,
+                        &mut rendered,
                         " ".repeat(special_col - current_cols),
                         special_face_id,
-                        rendered.progress.y,
+                        &base_face,
+                        row_y,
                         self.text_width,
                         char_width,
                         self.ascent,
@@ -1079,10 +1126,12 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
                     );
                 }
                 append_synthetic_minibuffer_text(
-                    &mut rendered.row,
+                    &mut state.render_services,
+                    &mut rendered,
                     ch.to_string(),
                     special_face_id,
-                    rendered.progress.y,
+                    &base_face,
+                    row_y,
                     self.text_width,
                     char_width,
                     self.ascent,
