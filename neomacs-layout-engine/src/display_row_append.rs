@@ -48,16 +48,16 @@ use crate::display_row_walk_state::{
     skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
-    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath,
-    BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem, BufferTextSourceChar,
-    BufferTextSourceClusterState, BufferTextSourceItemRequest,
-    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
-    BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
-    BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
-    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementAppendItem,
-    DisplayReplacementBox, DisplayReplacementSourceMappedTextItem, LispStringSourceCursor,
-    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource,
+    BufferDisplayReplacementStringRequest, BufferTextDecodedSourceChar,
+    BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath, BufferTextSourceAdvanceRequest,
+    BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
+    BufferTextSourceItemRequest, BufferTextSourceNaturalAdvanceRequest,
+    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange,
+    BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent, BufferTextSourceTextItemRequest,
+    BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest, DisplayItemSource,
+    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementSourceMappedTextItem,
+    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -9257,16 +9257,6 @@ pub(crate) enum BufferDisplayPropertyTextWalkOutcome {
     FaceStateChanged,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct BufferDisplayPropertyTextSourceEvent<'a> {
-    value: Value,
-    anchor_charpos: CharPos0,
-    anchor_bytepos: EmacsBytePos,
-    source_text: &'a [u8],
-    next_change: i64,
-    skip_to: i64,
-}
-
 pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
     source_event: BufferDisplayPropertyTextSourceEvent<'a>,
     context: BufferDisplayPropertyTextAppendContext<'a>,
@@ -9430,71 +9420,6 @@ impl BufferDisplayPropertyTextAppendAction {
             }
             Self::None => BufferDisplayPropertyTextWalkOutcome::Continue,
         }
-    }
-}
-
-impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        value: Value,
-        text_start_byte: usize,
-        text: &'a [u8],
-        charpos: i64,
-        byte_idx: usize,
-        next_change: i64,
-        skip_to: i64,
-    ) -> Self {
-        Self {
-            value,
-            anchor_charpos: CharPos0::new(charpos.max(0) as usize),
-            anchor_bytepos: EmacsBytePos::new(text_start_byte + byte_idx),
-            source_text: text.get(byte_idx..).unwrap_or(&[]),
-            next_change,
-            skip_to,
-        }
-    }
-
-    #[cfg(test)]
-    fn with_anchor(
-        value: Value,
-        anchor_charpos: CharPos0,
-        anchor_bytepos: EmacsBytePos,
-        source_text: &'a [u8],
-        next_change: i64,
-        skip_to: i64,
-    ) -> Self {
-        Self {
-            value,
-            anchor_charpos,
-            anchor_bytepos,
-            source_text,
-            next_change,
-            skip_to,
-        }
-    }
-
-    fn value(self) -> Value {
-        self.value
-    }
-
-    fn anchor_charpos(self) -> CharPos0 {
-        self.anchor_charpos
-    }
-
-    fn anchor_bytepos(self) -> EmacsBytePos {
-        self.anchor_bytepos
-    }
-
-    fn source_text(self) -> &'a [u8] {
-        self.source_text
-    }
-
-    fn next_change(self) -> i64 {
-        self.next_change
-    }
-
-    fn skip_to(self) -> i64 {
-        self.skip_to
     }
 }
 

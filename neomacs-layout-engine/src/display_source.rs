@@ -1071,6 +1071,81 @@ impl BufferDisplayReplacementStringRequest {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferDisplayPropertyTextSourceEvent<'a> {
+    value: Value,
+    anchor_charpos: CharPos0,
+    anchor_bytepos: EmacsBytePos,
+    source_text: &'a [u8],
+    next_change: i64,
+    skip_to: i64,
+}
+
+impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        value: Value,
+        text_start_byte: usize,
+        text: &'a [u8],
+        charpos: i64,
+        byte_idx: usize,
+        next_change: i64,
+        skip_to: i64,
+    ) -> Self {
+        Self {
+            value,
+            anchor_charpos: CharPos0::new(charpos.max(0) as usize),
+            anchor_bytepos: EmacsBytePos::new(text_start_byte + byte_idx),
+            source_text: text.get(byte_idx..).unwrap_or(&[]),
+            next_change,
+            skip_to,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_anchor(
+        value: Value,
+        anchor_charpos: CharPos0,
+        anchor_bytepos: EmacsBytePos,
+        source_text: &'a [u8],
+        next_change: i64,
+        skip_to: i64,
+    ) -> Self {
+        Self {
+            value,
+            anchor_charpos,
+            anchor_bytepos,
+            source_text,
+            next_change,
+            skip_to,
+        }
+    }
+
+    pub(crate) fn value(self) -> Value {
+        self.value
+    }
+
+    pub(crate) fn anchor_charpos(self) -> CharPos0 {
+        self.anchor_charpos
+    }
+
+    pub(crate) fn anchor_bytepos(self) -> EmacsBytePos {
+        self.anchor_bytepos
+    }
+
+    pub(crate) fn source_text(self) -> &'a [u8] {
+        self.source_text
+    }
+
+    pub(crate) fn next_change(self) -> i64 {
+        self.next_change
+    }
+
+    pub(crate) fn skip_to(self) -> i64 {
+        self.skip_to
+    }
+}
+
 impl<S> BufferDisplayReplacementStringSource<S> {
     pub(crate) const fn new(replacement_source: BufferDisplayReplacementSource, source: S) -> Self {
         Self {
