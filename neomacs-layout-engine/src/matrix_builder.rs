@@ -184,6 +184,7 @@ impl GlyphMatrixBuilder {
         self.no_accept_focus = false;
     }
 
+    #[cfg(test)]
     pub(crate) fn begin_window(
         &mut self,
         window_id: u64,

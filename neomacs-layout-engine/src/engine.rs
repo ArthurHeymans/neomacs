@@ -18,6 +18,9 @@ use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
+use super::window_output::{
+    TextWindowMatrixBegin, begin_text_window_matrix, close_text_window_output,
+};
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyPassState, BufferTextWindowChromeHeights,
@@ -75,7 +78,6 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{DisplaySourceContext, SingleDisplayItemSource};
 use crate::fontconfig::FontSizing;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
@@ -1200,10 +1202,6 @@ fn mock_display_row_from_line(
     row
 }
 
-fn install_mock_display_row(builder: &mut GlyphMatrixBuilder, row_index: usize, row: &GlyphRow) {
-    install_prebuilt_display_row(builder, row_index, row);
-}
-
 impl LayoutEngine {
     /// Render the frame-level tab-bar from GNU Lisp keymap output on the Rust path.
     ///
@@ -1360,12 +1358,16 @@ impl LayoutEngine {
         for window in &content.windows {
             let nrows = window.lines.len() + 1;
             let ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
-            builder.begin_window(
-                window.window_id,
-                nrows,
-                ncols,
-                window.pixel_bounds,
-                window.selected,
+            begin_text_window_matrix(
+                &mut builder,
+                TextWindowMatrixBegin {
+                    window_id: window.window_id,
+                    rows: nrows,
+                    cols: ncols,
+                    bounds: window.pixel_bounds,
+                    text_bounds: window.pixel_bounds,
+                    selected: window.selected,
+                },
             );
             for (row_idx, line) in window.lines.iter().enumerate() {
                 let row_y = window.pixel_bounds.y + row_idx as f32 * char_h;
@@ -1381,7 +1383,7 @@ impl LayoutEngine {
                     Some(&lnum),
                     None,
                 );
-                install_mock_display_row(&mut builder, row_idx, &row);
+                install_prebuilt_display_row(&mut builder, row_idx, &row);
             }
 
             // Mode-line pinned to window bottom.
@@ -1398,9 +1400,9 @@ impl LayoutEngine {
                 None,
                 Some((ml_ncols, 1)),
             );
-            install_mock_display_row(&mut builder, mode_line_row, &row);
+            install_prebuilt_display_row(&mut builder, mode_line_row, &row);
 
-            builder.end_window();
+            close_text_window_output(&mut builder);
         }
 
         // Minibuffer at frame bottom — a real window with text rows
@@ -1410,12 +1412,16 @@ impl LayoutEngine {
             let has_mode_line = !mini.mode_line.glyphs.is_empty();
             let nrows = mini.lines.len() + usize::from(has_mode_line);
             let ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
-            builder.begin_window(
-                mini.window_id,
-                nrows,
-                ncols,
-                mini.pixel_bounds,
-                mini.selected,
+            begin_text_window_matrix(
+                &mut builder,
+                TextWindowMatrixBegin {
+                    window_id: mini.window_id,
+                    rows: nrows,
+                    cols: ncols,
+                    bounds: mini.pixel_bounds,
+                    text_bounds: mini.pixel_bounds,
+                    selected: mini.selected,
+                },
             );
 
             for (row_idx, line) in mini.lines.iter().enumerate() {
@@ -1431,7 +1437,7 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                install_mock_display_row(&mut builder, row_idx, &row);
+                install_prebuilt_display_row(&mut builder, row_idx, &row);
             }
 
             if has_mode_line {
@@ -1448,10 +1454,10 @@ impl LayoutEngine {
                     None,
                     Some((mini_ncols, 1)),
                 );
-                install_mock_display_row(&mut builder, mode_line_row, &row);
+                install_prebuilt_display_row(&mut builder, mode_line_row, &row);
             }
 
-            builder.end_window();
+            close_text_window_output(&mut builder);
         }
 
         let main_state = builder.finish(
@@ -1484,12 +1490,16 @@ impl LayoutEngine {
             cb.set_faces(cfm);
             let nrows = cf.window.lines.len();
             let ncols = (cf.window.pixel_bounds.width / char_w.max(1.0)) as usize;
-            cb.begin_window(
-                cf.window.window_id,
-                nrows,
-                ncols,
-                cf.window.pixel_bounds,
-                false,
+            begin_text_window_matrix(
+                &mut cb,
+                TextWindowMatrixBegin {
+                    window_id: cf.window.window_id,
+                    rows: nrows,
+                    cols: ncols,
+                    bounds: cf.window.pixel_bounds,
+                    text_bounds: cf.window.pixel_bounds,
+                    selected: false,
+                },
             );
             for (ri, line) in cf.window.lines.iter().enumerate() {
                 let row = mock_display_row_from_line(
@@ -1503,9 +1513,9 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                install_mock_display_row(&mut cb, ri, &row);
+                install_prebuilt_display_row(&mut cb, ri, &row);
             }
-            cb.end_window();
+            close_text_window_output(&mut cb);
             let cs = cb.finish(
                 (cf.window.pixel_bounds.width / char_w.max(1.0)) as usize,
                 cf.window.lines.len().max(1),
