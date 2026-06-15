@@ -286,6 +286,77 @@ pub(crate) struct TextWindowLineNumberMargin<'a> {
     pub(crate) char_width: f32,
 }
 
+pub(crate) enum TextWindowRowDecorationRequest<'a> {
+    MarkCurrentTruncatedLeft,
+    LineNumberMargin(TextWindowLineNumberMargin<'a>),
+    RightEdgeMarkers(TextWindowRightEdgeMarkers<'a>),
+    LastWindowRightBorder(TextWindowRightBorder),
+}
+
+impl<'a> TextWindowRowDecorationRequest<'a> {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        match self {
+            Self::MarkCurrentTruncatedLeft => {
+                builder.with_current_row_mut(|glyph_row| {
+                    mark_display_row_truncated_left(glyph_row);
+                });
+            }
+            Self::LineNumberMargin(request) => {
+                let layout = line_number_margin_layout(&request);
+                let mut source = LineNumberMarginItemSource::new(&request);
+                builder.with_current_row_mut(|row| {
+                    let mut writer =
+                        DisplayRowWriter::for_area(&layout, row, GlyphArea::LeftMargin);
+                    push_item_source_to_writer(&mut writer, &mut source);
+                });
+            }
+            Self::RightEdgeMarkers(request) => {
+                let target_col = request.column.target_col(request.matrix_cols);
+                for row_idx in 0..request.row_flags.len() {
+                    let matrix_row = request.text_matrix_row_base + row_idx;
+                    let marker = if request
+                        .row_flags
+                        .is_set(row_idx, DisplayRowFlagKind::Truncated)
+                    {
+                        Some('$')
+                    } else if request
+                        .row_flags
+                        .is_set(row_idx, DisplayRowFlagKind::Continued)
+                    {
+                        Some('\\')
+                    } else {
+                        None
+                    };
+                    let Some(marker) = marker else {
+                        continue;
+                    };
+                    builder.with_current_window_row_mut(matrix_row, |row, matrix_cols| {
+                        install_right_edge_marker_into_row(
+                            row,
+                            target_col,
+                            marker,
+                            request.face_id,
+                            request.char_width,
+                            matrix_cols,
+                        );
+                    });
+                }
+            }
+            Self::LastWindowRightBorder(request) => {
+                builder.with_last_window_rows_mut(|rows, matrix_cols| {
+                    if matrix_cols == 0 {
+                        return;
+                    }
+                    let target_col = matrix_cols - 1;
+                    for row in rows {
+                        install_right_border_into_row(row, target_col, request, matrix_cols);
+                    }
+                });
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowCursor {
     pub(crate) selected: bool,
@@ -618,10 +689,12 @@ pub(crate) fn emit_text_matrix_row_transition_with_limit(
         .emit_with_row_limit(transition, max_rows)
 }
 
+#[cfg(test)]
 pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuilder) {
-    builder.with_current_row_mut(|glyph_row| {
-        mark_display_row_truncated_left(glyph_row);
-    });
+    install_text_window_row_decoration(
+        builder,
+        TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft,
+    );
 }
 
 fn line_number_margin_layout(request: &TextWindowLineNumberMargin<'_>) -> DisplayRowLayout {
@@ -898,16 +971,15 @@ fn install_right_border_into_row(
     row.displays_text = prior_displays_text;
 }
 
+#[cfg(test)]
 pub(crate) fn emit_text_window_line_number_margin(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowLineNumberMargin<'_>,
 ) {
-    let layout = line_number_margin_layout(&request);
-    let mut source = LineNumberMarginItemSource::new(&request);
-    builder.with_current_row_mut(|row| {
-        let mut writer = DisplayRowWriter::for_area(&layout, row, GlyphArea::LeftMargin);
-        push_item_source_to_writer(&mut writer, &mut source);
-    });
+    install_text_window_row_decoration(
+        builder,
+        TextWindowRowDecorationRequest::LineNumberMargin(request),
+    );
 }
 
 pub(crate) fn publish_text_window_cursor(
@@ -1007,7 +1079,10 @@ pub(crate) fn install_text_window_output(
 ) {
     finish_text_window_output_rows(builder, output_emitter);
     if let Some(markers) = request.right_edge_markers {
-        install_text_window_right_edge_markers(builder, markers);
+        install_text_window_row_decoration(
+            builder,
+            TextWindowRowDecorationRequest::RightEdgeMarkers(markers),
+        );
     }
 }
 
@@ -1033,55 +1108,33 @@ pub(crate) fn install_text_window_body_output(
     redisplay_positions
 }
 
+#[cfg(test)]
 pub(crate) fn install_text_window_right_edge_markers(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowRightEdgeMarkers<'_>,
 ) {
-    let target_col = request.column.target_col(request.matrix_cols);
-    for row_idx in 0..request.row_flags.len() {
-        let matrix_row = request.text_matrix_row_base + row_idx;
-        let marker = if request
-            .row_flags
-            .is_set(row_idx, DisplayRowFlagKind::Truncated)
-        {
-            Some('$')
-        } else if request
-            .row_flags
-            .is_set(row_idx, DisplayRowFlagKind::Continued)
-        {
-            Some('\\')
-        } else {
-            None
-        };
-        let Some(marker) = marker else {
-            continue;
-        };
-        builder.with_current_window_row_mut(matrix_row, |row, matrix_cols| {
-            install_right_edge_marker_into_row(
-                row,
-                target_col,
-                marker,
-                request.face_id,
-                request.char_width,
-                matrix_cols,
-            );
-        });
-    }
+    install_text_window_row_decoration(
+        builder,
+        TextWindowRowDecorationRequest::RightEdgeMarkers(request),
+    );
 }
 
+#[cfg(test)]
 pub(crate) fn install_last_window_right_border(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowRightBorder,
 ) {
-    builder.with_last_window_rows_mut(|rows, matrix_cols| {
-        if matrix_cols == 0 {
-            return;
-        }
-        let target_col = matrix_cols - 1;
-        for row in rows {
-            install_right_border_into_row(row, target_col, request, matrix_cols);
-        }
-    });
+    install_text_window_row_decoration(
+        builder,
+        TextWindowRowDecorationRequest::LastWindowRightBorder(request),
+    );
+}
+
+pub(crate) fn install_text_window_row_decoration(
+    builder: &mut GlyphMatrixBuilder,
+    request: TextWindowRowDecorationRequest<'_>,
+) {
+    request.install(builder);
 }
 
 pub(crate) trait DisplayProgressSink {

@@ -74,13 +74,12 @@ use crate::window_output::{
     TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
     TextMatrixRowTransition, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
     TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightBorder, TextWindowRightEdgeMarkers, WindowOutputEmitter,
-    begin_text_window_output, close_text_window_output, current_text_window_cluster_tail,
-    emit_text_matrix_row_transition, emit_text_matrix_row_transition_with_limit,
-    emit_text_window_line_number_margin, finish_and_end_text_matrix_row_output,
-    finish_pending_text_window_row, install_last_window_right_border,
-    install_text_window_body_output, install_text_window_cursor_effects,
-    mark_current_text_row_truncated_left,
+    TextWindowRightBorder, TextWindowRightEdgeMarkers, TextWindowRowDecorationRequest,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
+    finish_pending_text_window_row, install_text_window_body_output,
+    install_text_window_cursor_effects, install_text_window_row_decoration,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -162,9 +161,9 @@ impl BufferLineNumberMarginRenderRequest {
         source_render.insert_resolved_face(line_number_face_id, &line_number_face);
 
         let text = line_number_request.text();
-        emit_text_window_line_number_margin(
+        install_text_window_row_decoration(
             source_render.output_render().builder,
-            TextWindowLineNumberMargin {
+            TextWindowRowDecorationRequest::LineNumberMargin(TextWindowLineNumberMargin {
                 text: &text,
                 cols: line_number_request.cols(),
                 face_id: line_number_face_id,
@@ -172,7 +171,7 @@ impl BufferLineNumberMarginRenderRequest {
                 row_height: row_geometry.height(),
                 row_ascent: row_geometry.ascent(),
                 char_width,
-            },
+            }),
         );
 
         face_scan.invalidate();
@@ -547,7 +546,10 @@ impl<'a> TextRowSourceRenderState<'a> {
     }
 
     pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
-        mark_current_text_row_truncated_left(self.output_render.builder);
+        install_text_window_row_decoration(
+            self.output_render.builder,
+            TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft,
+        );
     }
 
     pub(crate) fn with_font_metrics_and_display_host<R>(
@@ -4755,13 +4757,13 @@ impl BufferTextWindowTerminalRightBorderRequest {
         let border_face = face_resolver.resolve_named_face(self.face_name);
         let border_face_id = border_face.face_id;
         insert_resolved_display_row_face(builder, border_face_id, &border_face, None);
-        install_last_window_right_border(
+        install_text_window_row_decoration(
             builder,
-            TextWindowRightBorder {
+            TextWindowRowDecorationRequest::LastWindowRightBorder(TextWindowRightBorder {
                 ch: self.ch,
                 face_id: border_face_id,
                 char_width: self.char_width,
-            },
+            }),
         );
         border_face_id
     }
