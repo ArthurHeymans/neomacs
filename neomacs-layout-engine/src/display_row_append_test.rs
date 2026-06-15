@@ -4011,11 +4011,15 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     {
-        let mut state = OverlayStringRenderState::new(
-            &mut ctx.eval,
+        let source_render = TextRowSourceRenderState::new(
+            &mut ctx.builder,
             &mut ctx.output_emitter,
+            &mut ctx.eval,
             &mut font_metrics,
             &face_resolver,
+        );
+        let mut state = OverlayStringRenderState::from_source_render(
+            source_render,
             &mut x,
             &mut col,
             &mut ctx.geometry,
@@ -4024,7 +4028,6 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &mut hit_row_range,
             &mut ctx.row_y_positions,
             &mut face_ids,
-            &mut ctx.builder,
         );
         render_context.render_before_at(&buffer, 5, &active_face, &mut state);
     }
@@ -4062,11 +4065,15 @@ fn overlay_string_row_break_context_finishes_current_row() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     {
-        let mut state = OverlayStringRenderState::new(
-            &mut ctx.eval,
+        let source_render = TextRowSourceRenderState::new(
+            &mut ctx.builder,
             &mut ctx.output_emitter,
+            &mut ctx.eval,
             &mut font_metrics,
             &face_resolver,
+        );
+        let mut state = OverlayStringRenderState::from_source_render(
+            source_render,
             &mut x,
             &mut col,
             &mut ctx.geometry,
@@ -4075,7 +4082,6 @@ fn overlay_string_row_break_context_finishes_current_row() {
             &mut hit_row_range,
             &mut ctx.row_y_positions,
             &mut face_ids,
-            &mut ctx.builder,
         );
 
         assert!(OverlayStringRowBreakRenderContext::new(5, row_context).finish_row(&mut state));
@@ -4123,11 +4129,15 @@ fn overlay_string_render_batch_empty_keeps_render_state() {
     let overlay_strings: [OverlayDisplayString; 0] = [];
 
     {
-        let mut state = OverlayStringRenderState::new(
-            &mut ctx.eval,
+        let source_render = TextRowSourceRenderState::new(
+            &mut ctx.builder,
             &mut ctx.output_emitter,
+            &mut ctx.eval,
             &mut font_metrics,
             &face_resolver,
+        );
+        let mut state = OverlayStringRenderState::from_source_render(
+            source_render,
             &mut x,
             &mut col,
             &mut ctx.geometry,
@@ -4136,7 +4146,6 @@ fn overlay_string_render_batch_empty_keeps_render_state() {
             &mut hit_row_range,
             &mut ctx.row_y_positions,
             &mut face_ids,
-            &mut ctx.builder,
         );
         render_overlay_string_batch(
             &buffer,
@@ -5627,6 +5636,14 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
         .current_buffer()
         .expect("current buffer")
         .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("buffer-text-prepares-source-char", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
     {
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buffer.insert("ab");
@@ -5642,6 +5659,8 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea {
             content_x: 0.0,
@@ -5656,6 +5675,17 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
     let mut append_state = BufferTextRowAppendState::default();
+    let mut source_render = TextRowSourceRenderState::new(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+    );
+    let mut preparation_state = BufferTextSourceCharPreparationState::from_source_render(
+        &mut append_state,
+        &mut source_render,
+    );
 
     let prepared_append = append_context
         .prepare_source_char_for_current_text_row(
@@ -5666,13 +5696,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
                 0,
                 DisplayRowPosition { x_px: 0.0, col: 0 },
             ),
-            &mut BufferTextSourceCharPreparationState::new(
-                &mut append_state,
-                &mut builder,
-                &mut eval,
-                &mut font_metrics,
-                &face_resolver,
-            ),
+            &mut preparation_state,
         )
         .into_text()
         .expect("ordinary buffer char should prepare text append");

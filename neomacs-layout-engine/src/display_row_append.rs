@@ -2403,42 +2403,6 @@ pub(crate) struct OverlayStringRenderState<'a> {
 
 impl<'a> OverlayStringRenderState<'a> {
     #[allow(clippy::too_many_arguments)]
-    #[cfg(test)]
-    pub(crate) fn new(
-        evaluator: &'a mut Context,
-        output_emitter: &'a mut WindowOutputEmitter,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
-        x: &'a mut f32,
-        col: &'a mut usize,
-        geometry: &'a mut DisplayRowGeometryState,
-        cursor_info: &'a mut CursorCaptureState,
-        hit_rows: &'a mut Vec<HitRow>,
-        hit_row_range: &'a mut HitRowRangeTracker,
-        row_y_positions: &'a mut DisplayRowYPositions,
-        face_ids: &'a mut FrameFaceIdAllocator,
-        builder: &'a mut GlyphMatrixBuilder,
-    ) -> Self {
-        Self {
-            source_render: TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_source_render(
         source_render: TextRowSourceRenderState<'a>,
         x: &'a mut f32,
@@ -4133,25 +4097,6 @@ pub(crate) struct BufferTextSourceCharPreparationState<'a> {
 }
 
 impl<'a> BufferTextSourceCharPreparationState<'a> {
-    #[cfg(test)]
-    pub(crate) fn new(
-        append_state: &'a mut BufferTextRowAppendState,
-        builder: &'a mut GlyphMatrixBuilder,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
-    ) -> Self {
-        Self {
-            append_state,
-            measure: TextRowSourceMeasureState::new(
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
-        }
-    }
-
     pub(crate) fn from_source_render(
         append_state: &'a mut BufferTextRowAppendState,
         source_render: &'a mut TextRowSourceRenderState<'_>,
