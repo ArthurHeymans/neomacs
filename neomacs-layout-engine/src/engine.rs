@@ -140,7 +140,7 @@ pub struct LayoutEngine {
     /// Previous frame background for theme-transition detection.
     prev_background: Option<(f32, f32, f32, f32)>,
     /// Authoritative glyph-matrix builder for the current frame layout pass.
-    pub matrix_builder: crate::matrix_builder::GlyphMatrixBuilder,
+    pub(crate) matrix_builder: crate::matrix_builder::GlyphMatrixBuilder,
     /// The last completed `FrameDisplayState`, produced by `layout_frame_rust()`.
     /// Used by the TTY redisplay path to drive `TtyRif` on the evaluator thread.
     pub last_frame_display_state: Option<neomacs_display_protocol::glyph_matrix::FrameDisplayState>,

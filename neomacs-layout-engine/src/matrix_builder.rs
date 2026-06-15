@@ -344,14 +344,6 @@ impl GlyphMatrixBuilder {
         Self::last_text_cluster_tail_in_row(row)
     }
 
-    pub fn set_cursor(
-        &mut self,
-        col: u16,
-        style: neomacs_display_protocol::frame_glyphs::CursorStyle,
-    ) {
-        self.set_cursor_at_row(self.current_row, col, style);
-    }
-
     pub fn set_cursor_at_row(
         &mut self,
         row: usize,
@@ -362,15 +354,6 @@ impl GlyphMatrixBuilder {
             if row < matrix.rows.len() {
                 matrix.rows[row].cursor_col = Some(col);
                 matrix.rows[row].cursor_type = Some(style);
-            }
-        }
-    }
-
-    pub fn set_row_charpos(&mut self, start: usize, end: usize) {
-        if let Some(ref mut matrix) = self.current_matrix {
-            if self.current_row < matrix.rows.len() {
-                matrix.rows[self.current_row].start_charpos = start;
-                matrix.rows[self.current_row].end_charpos = end;
             }
         }
     }
@@ -895,10 +878,6 @@ impl GlyphMatrixBuilder {
         self.faces.insert(id, face);
     }
 
-    pub fn set_stipple_patterns(&mut self, patterns: HashMap<i32, StipplePattern>) {
-        self.stipple_patterns = patterns;
-    }
-
     pub fn push_window_info(&mut self, info: WindowInfo) {
         self.window_infos.push(info);
     }
@@ -951,7 +930,8 @@ impl GlyphMatrixBuilder {
         &self.background_color
     }
 
-    pub fn faces(&self) -> &HashMap<u32, Face> {
+    #[cfg(test)]
+    pub(crate) fn faces(&self) -> &HashMap<u32, Face> {
         &self.faces
     }
 
@@ -988,27 +968,6 @@ impl GlyphMatrixBuilder {
         self.no_accept_focus = no_accept_focus;
     }
 
-    /// Record authoritative geometry for the last row in the currently
-    /// open window.
-    ///
-    /// `pixel_y` is frame-absolute; the stored row value is window-relative.
-    pub fn set_current_window_last_row_metrics(
-        &mut self,
-        pixel_y: f32,
-        height_px: f32,
-        ascent_px: f32,
-    ) {
-        let window_y = self.current_pixel_bounds.y;
-        let Some(ref mut matrix) = self.current_matrix else {
-            return;
-        };
-        let Some(row) = matrix.rows.last_mut() else {
-            return;
-        };
-        let pixel_y_rel = pixel_y - window_y;
-        Self::write_row_metrics(row, pixel_y_rel, height_px, ascent_px);
-    }
-
     pub(crate) fn with_current_window_row_mut<R>(
         &mut self,
         row_idx: usize,
@@ -1030,50 +989,6 @@ impl GlyphMatrixBuilder {
     ) -> Option<R> {
         let entry = self.windows.last_mut()?;
         Some(f(&mut entry.matrix.rows, entry.matrix.ncols))
-    }
-
-    pub fn current_window_row_enabled(&self, row_idx: usize) -> bool {
-        self.current_matrix
-            .as_ref()
-            .and_then(|matrix| matrix.rows.get(row_idx))
-            .is_some_and(|row| row.enabled)
-    }
-
-    pub fn enable_current_window_row(&mut self, row_idx: usize) {
-        let Some(matrix) = self.current_matrix.as_mut() else {
-            return;
-        };
-        let Some(row) = matrix.rows.get_mut(row_idx) else {
-            return;
-        };
-        row.enabled = true;
-    }
-
-    pub fn set_current_window_row_role(&mut self, row_idx: usize, role: GlyphRowRole) {
-        let Some(matrix) = self.current_matrix.as_mut() else {
-            return;
-        };
-        let Some(row) = matrix.rows.get_mut(row_idx) else {
-            return;
-        };
-        row.role = role;
-    }
-
-    pub fn set_current_window_row_metrics(
-        &mut self,
-        row_idx: usize,
-        pixel_y: f32,
-        height_px: f32,
-        ascent_px: f32,
-    ) {
-        let Some(matrix) = self.current_matrix.as_mut() else {
-            return;
-        };
-        let Some(row) = matrix.rows.get_mut(row_idx) else {
-            return;
-        };
-        let pixel_y_rel = pixel_y - self.current_pixel_bounds.y;
-        Self::write_row_metrics(row, pixel_y_rel, height_px, ascent_px);
     }
 
     pub fn finish(
