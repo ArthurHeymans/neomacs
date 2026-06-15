@@ -55,8 +55,9 @@ use crate::display_source::{
     BufferTextSourceAdvancePath, BufferTextSourceAppendItem, BufferTextSourceChar,
     BufferTextSourceClusterState, BufferTextSourceItemRequest,
     BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
-    BufferTextSourceTextEvent, BufferTextSourceTextItemRequest, DisplayItemSource,
-    DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
+    BufferTextSourceTextEvent, BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
+    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -224,27 +225,7 @@ impl BufferLineNumberMarginRenderRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum ResolvedBufferTextSourceAdvance {
-    Natural { advance_px: f32 },
-    Resolved { advance_px: f32 },
-}
-
 impl ResolvedBufferTextSourceAdvance {
-    fn natural(advance_px: f32) -> Self {
-        Self::Natural { advance_px }
-    }
-
-    fn resolved(advance_px: f32) -> Self {
-        Self::Resolved { advance_px }
-    }
-
-    fn advance_px(self) -> f32 {
-        match self {
-            Self::Natural { advance_px } | Self::Resolved { advance_px } => advance_px,
-        }
-    }
-
     fn append_render_policy(self) -> DisplaySourceAppendRenderPolicy {
         match self {
             Self::Natural { .. } => DisplaySourceAppendRenderPolicy::natural(),
@@ -255,41 +236,9 @@ impl ResolvedBufferTextSourceAdvance {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceTextRequest {
-    source_item: BufferTextSourceTextItemRequest,
-    resolved_advance: ResolvedBufferTextSourceAdvance,
-}
-
 impl BufferTextSourceTextRequest {
-    #[cfg(test)]
-    fn new(
-        range: BufferTextSourceRange,
-        source_char: char,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
-    ) -> Self {
-        Self {
-            source_item: BufferTextSourceTextItemRequest::new(range, source_char),
-            resolved_advance,
-        }
-    }
-
-    fn from_source_item(
-        source_item: BufferTextSourceTextItemRequest,
-        resolved_advance: ResolvedBufferTextSourceAdvance,
-    ) -> Self {
-        Self {
-            source_item,
-            resolved_advance,
-        }
-    }
-
     fn append_render_policy(self) -> DisplaySourceAppendRenderPolicy {
-        self.resolved_advance.append_render_policy()
-    }
-
-    fn advance_px(self) -> f32 {
-        self.resolved_advance.advance_px()
+        self.resolved_advance().append_render_policy()
     }
 
     fn append_request<B: LayoutBufferView + ?Sized>(
@@ -298,7 +247,7 @@ impl BufferTextSourceTextRequest {
         buffer: &B,
         face_id: u32,
     ) -> Option<BufferTextSourceRangeItemAppendRequest> {
-        buffer_text_source_text_item_append_request(self.source_item, buffer_id, buffer, face_id)
+        buffer_text_source_text_item_append_request(self.source_item(), buffer_id, buffer, face_id)
     }
 }
 

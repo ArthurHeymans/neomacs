@@ -426,6 +426,70 @@ pub(crate) struct BufferTextSourceTextItemRequest {
     ch: char,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum ResolvedBufferTextSourceAdvance {
+    Natural { advance_px: f32 },
+    Resolved { advance_px: f32 },
+}
+
+impl ResolvedBufferTextSourceAdvance {
+    pub(crate) fn natural(advance_px: f32) -> Self {
+        Self::Natural { advance_px }
+    }
+
+    pub(crate) fn resolved(advance_px: f32) -> Self {
+        Self::Resolved { advance_px }
+    }
+
+    pub(crate) fn advance_px(self) -> f32 {
+        match self {
+            Self::Natural { advance_px } | Self::Resolved { advance_px } => advance_px,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceTextRequest {
+    source_item: BufferTextSourceTextItemRequest,
+    resolved_advance: ResolvedBufferTextSourceAdvance,
+}
+
+impl BufferTextSourceTextRequest {
+    #[cfg(test)]
+    pub(crate) fn new(
+        range: BufferTextSourceRange,
+        source_char: char,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+    ) -> Self {
+        Self {
+            source_item: BufferTextSourceTextItemRequest::new(range, source_char),
+            resolved_advance,
+        }
+    }
+
+    pub(crate) fn from_source_item(
+        source_item: BufferTextSourceTextItemRequest,
+        resolved_advance: ResolvedBufferTextSourceAdvance,
+    ) -> Self {
+        Self {
+            source_item,
+            resolved_advance,
+        }
+    }
+
+    pub(crate) fn source_item(self) -> BufferTextSourceTextItemRequest {
+        self.source_item
+    }
+
+    pub(crate) fn resolved_advance(self) -> ResolvedBufferTextSourceAdvance {
+        self.resolved_advance
+    }
+
+    pub(crate) fn advance_px(self) -> f32 {
+        self.resolved_advance.advance_px()
+    }
+}
+
 impl BufferTextSourceTextItemRequest {
     pub(crate) fn new(range: BufferTextSourceRange, ch: char) -> Self {
         Self { range, ch }
