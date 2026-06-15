@@ -405,6 +405,49 @@ impl<'a> TextRowSourceMeasureState<'a> {
             face_resolver,
         }
     }
+
+    pub(crate) fn reborrow(&mut self) -> TextRowSourceMeasureState<'_> {
+        TextRowSourceMeasureState {
+            builder: self.builder,
+            evaluator: self.evaluator,
+            font_metrics: self.font_metrics,
+            face_resolver: self.face_resolver,
+        }
+    }
+
+    fn into_parts(
+        self,
+    ) -> (
+        &'a mut GlyphMatrixBuilder,
+        &'a mut Context,
+        &'a mut Option<FontMetricsService>,
+        &'a FaceResolver,
+    ) {
+        (
+            self.builder,
+            self.evaluator,
+            self.font_metrics,
+            self.face_resolver,
+        )
+    }
+
+    fn font_metrics(&mut self) -> &mut Option<FontMetricsService> {
+        self.font_metrics
+    }
+}
+
+fn current_text_measure_state<'emit>(
+    state: &'emit mut TextRowSourceMeasureState<'_>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+) -> DisplayRowCurrentTextMeasureState<'emit, 'emit> {
+    let (builder, evaluator, font_metrics, face_resolver) = state.reborrow().into_parts();
+    DisplayRowCurrentTextMeasureState {
+        builder,
+        evaluator,
+        font_metrics,
+        face_resolver,
+        face_ids,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3364,13 +3407,7 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
             .request()
             .with_measurement_bounds(DisplayRowRenderBounds::unbounded_from(position));
         let outcome = request.measure_single_display_item_against_current_text_row(
-            &mut DisplayRowCurrentTextMeasureState {
-                builder: state.builder,
-                evaluator: state.evaluator,
-                font_metrics: state.font_metrics,
-                face_resolver: state.face_resolver,
-                face_ids: &mut face_ids,
-            },
+            &mut current_text_measure_state(state, &mut face_ids),
             self.append_item.into_item(),
             render_policy,
         )?;
@@ -5253,7 +5290,7 @@ fn resolve_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     }
 
     fallback_buffer_text_source_range_natural_advance_to_text_row(
-        state.font_metrics,
+        state.font_metrics(),
         active_face_state,
         &frame,
         position,
@@ -5293,7 +5330,7 @@ impl BufferTextSourceAdvanceResolver {
             BufferTextSourceAdvancePath::ResolvedComplexRun => {
                 let mut policy = DisplayRowComplexTextRunAdvancePolicy::new(
                     active_face_state,
-                    state.font_metrics,
+                    state.font_metrics(),
                 );
                 let advance_px = self.complex_run.advance_for_char(
                     request.text(),

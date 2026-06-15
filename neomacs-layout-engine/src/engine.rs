@@ -7,7 +7,7 @@
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
-    EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
+    ChromeRowRenderServices, EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
     InactiveMinibufferDisplayRowRequest, MinibufferDisplayRenderState, ResizeMiniWindowsMode,
     ScratchGcRootScope, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
@@ -1059,10 +1059,12 @@ impl LayoutEngine {
             }
             .render_window(&mut MinibufferDisplayRenderState {
                 builder: &mut self.matrix_builder,
-                font_metrics: &mut self.font_metrics,
-                face_resolver,
+                render_services: ChromeRowRenderServices::new(
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut face_ids,
+                ),
                 display_host: evaluator.display_host.as_deref(),
-                face_ids: &mut face_ids,
             });
             return;
         }
@@ -1085,10 +1087,12 @@ impl LayoutEngine {
             }
             .render_window(&mut MinibufferDisplayRenderState {
                 builder: &mut self.matrix_builder,
-                font_metrics: &mut self.font_metrics,
-                face_resolver,
+                render_services: ChromeRowRenderServices::new(
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut face_ids,
+                ),
                 display_host: evaluator.display_host.as_deref(),
-                face_ids: &mut face_ids,
             });
             return;
         }
@@ -1377,11 +1381,13 @@ impl LayoutEngine {
         }
         .render(&mut WindowChromeRowsRenderState {
             builder: &mut self.matrix_builder,
-            font_metrics: &mut self.font_metrics,
             evaluator,
             output_emitter: &mut output_emitter,
-            face_resolver,
-            face_ids: &mut face_ids,
+            render_services: ChromeRowRenderServices::new(
+                &mut self.font_metrics,
+                face_resolver,
+                &mut face_ids,
+            ),
         });
 
         tail_request_context.finish_and_install(BufferTextWindowFinishInstallState {
@@ -1602,10 +1608,12 @@ impl LayoutEngine {
         .render(&mut FrameTabBarDisplayRowRenderState {
             builder: &mut self.matrix_builder,
             pending_frame_chrome_rows: &mut self.pending_frame_chrome_rows,
-            font_metrics: &mut self.font_metrics,
-            face_resolver,
+            render_services: ChromeRowRenderServices::new(
+                &mut self.font_metrics,
+                face_resolver,
+                &mut face_ids,
+            ),
             display_host: evaluator.display_host.as_deref(),
-            face_ids: &mut face_ids,
         }) else {
             return None;
         };

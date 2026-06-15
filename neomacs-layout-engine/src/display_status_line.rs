@@ -116,6 +116,63 @@ pub(crate) enum FrameTabBarDisplayRowRender {
     Measured(MeasuredDisplayRow),
 }
 
+pub(crate) struct ChromeRowRenderServices<'emit, 'face> {
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
+    pub(crate) fn new(
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            font_metrics,
+            face_resolver,
+            face_ids,
+        }
+    }
+
+    fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
+        self.face_ids
+    }
+
+    fn face_realizer(&mut self) -> DisplayRowFaceRealizer<'_> {
+        DisplayRowFaceRealizer::new(&mut *self.font_metrics)
+    }
+
+    fn render_lisp_string_request(
+        &mut self,
+        request: DisplayRowLispStringRenderRequest<'_>,
+        display_host: Option<&dyn DisplayHost>,
+    ) -> Option<RenderedDisplayRow> {
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut *self.font_metrics,
+            self.face_resolver,
+            display_host,
+            &mut *self.face_ids,
+        );
+        render_executor.render_lisp_string_request(request)
+    }
+
+    fn render_lisp_string_session_row(
+        &mut self,
+        session: &mut DisplayRowLispStringSourceSession,
+        request: DisplayRowLispStringSourceSessionRowRequest<'_>,
+        display_host: Option<&dyn DisplayHost>,
+    ) -> Option<crate::display_row::DisplayRowRenderResult> {
+        let mut render_executor = DisplayRowRenderExecutor::new(
+            &mut *self.font_metrics,
+            self.face_resolver,
+            display_host,
+            &mut *self.face_ids,
+        );
+        render_executor.render_lisp_string_session_row(session, request)
+    }
+}
+
 pub(crate) struct FrameTabBarDisplayRowRequest<'face> {
     pub(crate) row_index: u32,
     pub(crate) y: f32,
@@ -158,14 +215,10 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
         self,
         state: &mut FrameTabBarDisplayRowRenderState<'_, '_>,
     ) -> Option<FrameTabBarDisplayRowRender> {
-        let render_request = self.render_request(&mut *state.face_ids);
-        let mut render_executor = DisplayRowRenderExecutor::new(
-            &mut *state.font_metrics,
-            state.face_resolver,
-            state.display_host,
-            &mut *state.face_ids,
-        );
-        let rendered = render_executor.render_lisp_string_request(render_request)?;
+        let render_request = self.render_request(state.render_services.face_ids());
+        let rendered = state
+            .render_services
+            .render_lisp_string_request(render_request, state.display_host)?;
         if display_row_text_is_empty(&rendered.row) {
             return Some(FrameTabBarDisplayRowRender::Empty);
         }
@@ -190,10 +243,8 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
 pub(crate) struct FrameTabBarDisplayRowRenderState<'emit, 'face> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
     pub(crate) display_host: Option<&'emit dyn DisplayHost>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 #[derive(Clone, Copy)]
@@ -520,11 +571,9 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
 
 pub(crate) struct WindowChromeRowsRenderState<'emit, 'face> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
     pub(crate) evaluator: &'emit mut Context,
     pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) face_resolver: &'face FaceResolver,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 impl WindowChromeRowsRenderState<'_, '_> {
@@ -532,18 +581,13 @@ impl WindowChromeRowsRenderState<'_, '_> {
         &mut self,
         request: WindowChromeDisplayRowRequest<'_>,
     ) -> Option<MeasuredDisplayRow> {
-        let parts = request.into_render_parts(&mut *self.face_ids);
+        let parts = request.into_render_parts(self.render_services.face_ids());
         self.output_emitter
             .begin_chrome_progress(self.evaluator, parts.output);
-        let rendered_row = {
-            let mut render_executor = DisplayRowRenderExecutor::new(
-                &mut *self.font_metrics,
-                self.face_resolver,
-                self.evaluator.display_host.as_deref(),
-                &mut *self.face_ids,
-            );
-            render_executor.render_lisp_string_request(parts.render_request)
-        };
+        let rendered_row = self.render_services.render_lisp_string_request(
+            parts.render_request,
+            self.evaluator.display_host.as_deref(),
+        );
         let measured_row = rendered_row.map(|rendered| {
             MeasuredDisplayRow::new(
                 parts.owner,
@@ -611,15 +655,10 @@ impl<'face> InactiveMinibufferDisplayRowRequest<'face> {
             self.text_bounds,
             self.selected,
         );
-        let render_request = self.render_request(&mut *state.face_ids);
-        let mut render_executor = DisplayRowRenderExecutor::new(
-            &mut *state.font_metrics,
-            state.face_resolver,
-            state.display_host,
-            &mut *state.face_ids,
-        );
-        let rendered = render_executor
-            .render_lisp_string_request(render_request)
+        let render_request = self.render_request(state.render_services.face_ids());
+        let rendered = state
+            .render_services
+            .render_lisp_string_request(render_request, state.display_host)
             .expect("empty Lisp string should render an inactive minibuffer row");
         install_rendered_display_row(&mut *state.builder, &rendered, 0);
         state.builder.end_window();
@@ -763,7 +802,7 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
         state: &mut MinibufferDisplayRenderState<'_, '_>,
     ) -> Vec<RenderedDisplayRow> {
         let base_face = self.base_face.clone();
-        let row_face = DisplayRowFaceRealizer::new(&mut *state.font_metrics).realize_face(
+        let row_face = state.render_services.face_realizer().realize_face(
             0,
             &base_face,
             self.char_width,
@@ -771,36 +810,33 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
             self.row_height,
         );
         let base_render_face = row_face.render_face();
-        let char_width = DisplayRowFaceRealizer::new(&mut *state.font_metrics)
+        let char_width = state
+            .render_services
+            .face_realizer()
             .char_width(&row_face, self.char_width);
         let wrap_width = self.wrap_width(char_width);
         let matrix_cols = self.matrix_cols();
         let special_col = matrix_cols.saturating_sub(1);
         let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
             self.message,
-            &mut *state.face_ids,
+            state.render_services.face_ids(),
             &base_face,
         );
         let Some(mut source_session) = DisplayRowLispStringSourceSession::new(session_request)
         else {
             return empty_minibuffer_echo_row(self.y, self.ascent, self.row_height);
         };
-        let mut render_executor = DisplayRowRenderExecutor::new(
-            &mut *state.font_metrics,
-            state.face_resolver,
-            state.display_host,
-            &mut *state.face_ids,
-        );
-
         let mut rows = Vec::new();
         let max_rows = self.max_rows();
         while rows.len() < max_rows {
             let row_request = self
                 .source_row_request(rows.len(), wrap_width)
                 .source_session_row_request(&source_session);
-            let Some(result) =
-                render_executor.render_lisp_string_session_row(&mut source_session, row_request)
-            else {
+            let Some(result) = state.render_services.render_lisp_string_session_row(
+                &mut source_session,
+                row_request,
+                state.display_host,
+            ) else {
                 break;
             };
             let stop = result.stop;
@@ -862,10 +898,8 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
 
 pub(crate) struct MinibufferDisplayRenderState<'emit, 'face> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
     pub(crate) display_host: Option<&'emit dyn DisplayHost>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 struct EchoMinibufferSourceRowRequest<'face> {

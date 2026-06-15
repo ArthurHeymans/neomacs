@@ -155,10 +155,8 @@ fn echo_minibuffer_clipped_row_appends_reserved_marker_through_text_row() {
     }
     .render_rows(&mut MinibufferDisplayRenderState {
         builder: &mut builder,
-        font_metrics: &mut font_metrics,
-        face_resolver: &resolver,
+        render_services: ChromeRowRenderServices::new(&mut font_metrics, &resolver, &mut face_ids),
         display_host: None,
-        face_ids: &mut face_ids,
     });
 
     assert_eq!(rows.len(), 1);

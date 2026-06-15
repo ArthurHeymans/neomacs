@@ -23,7 +23,9 @@ use crate::display_row_walk_state::{
     skip_text_to_charpos,
 };
 use crate::display_source::DisplayItemSource;
-use crate::display_status_line::{EchoMinibufferRowsRenderRequest, MinibufferDisplayRenderState};
+use crate::display_status_line::{
+    ChromeRowRenderServices, EchoMinibufferRowsRenderRequest, MinibufferDisplayRenderState,
+};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferSnapshot, RustBufferAccess};
@@ -2659,10 +2661,8 @@ fn minibuffer_echo_rows_continue_after_display_property_clips() {
     }
     .render_rows(&mut MinibufferDisplayRenderState {
         builder: &mut builder,
-        font_metrics: &mut font_metrics,
-        face_resolver: &resolver,
+        render_services: ChromeRowRenderServices::new(&mut font_metrics, &resolver, &mut face_ids),
         display_host: None,
-        face_ids: &mut face_ids,
     });
     let rendered = rows
         .iter()
