@@ -3667,6 +3667,19 @@ impl<'face> BufferTextSourceAppendOperation<'face> {
         )?;
         Some(outcome.into_append_progress(position))
     }
+
+    fn measure_natural_width_to_text_row(
+        self,
+        state: &mut TextRowSourceMeasureState<'_>,
+    ) -> Option<f32> {
+        let mut render_policy =
+            DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
+        Some(
+            self.measure_to_text_row(state, &mut render_policy)?
+                .metrics
+                .width_px,
+        )
+    }
 }
 
 struct DisplayRowSingleItemAppendOperation<'face> {
@@ -5541,14 +5554,7 @@ fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferV
     let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
         range, buffer_id, buffer, face_id, base_face, frame, position,
     )?;
-    let mut render_policy =
-        DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
-    Some(
-        operation
-            .measure_to_text_row(state, &mut render_policy)?
-            .metrics
-            .width_px,
-    )
+    operation.measure_natural_width_to_text_row(state)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5571,14 +5577,7 @@ fn measure_buffer_text_source_item_natural_advance_to_text_row<B: LayoutBufferVi
         frame,
         position,
     )?;
-    let mut render_policy =
-        DisplaySourceAppendRenderPolicy::new(DisplaySourceAppendMeasurement::Natural);
-    Some(
-        operation
-            .measure_to_text_row(state, &mut render_policy)?
-            .metrics
-            .width_px,
-    )
+    operation.measure_natural_width_to_text_row(state)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -9114,13 +9113,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
             self.frame.clone(),
             position,
         )?;
-        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-        Some(
-            operation
-                .measure_to_text_row(state, &mut render_policy)?
-                .metrics
-                .width_px,
-        )
+        operation.measure_natural_width_to_text_row(state)
     }
 
     fn measure_source_request_width_or_active_face_fallback_to_text_row(
@@ -9869,12 +9862,9 @@ impl DisplayReplacementStretchAppendItem {
         params: &WindowParams,
     ) -> Self {
         let (display_ch, _) = decode_utf8(source_text);
-        let display_char_width = Self::source_char_width_px(
-            active_face_state,
-            font_metrics,
-            display_ch,
-            default_char_width,
-        );
+        let display_char_width =
+            DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state)
+                .source_char_width_px(font_metrics, display_ch, default_char_width);
         Self::from_display_space_spec(
             spec,
             current_x,
@@ -9886,16 +9876,6 @@ impl DisplayReplacementStretchAppendItem {
             default_char_width,
             params,
         )
-    }
-
-    fn source_char_width_px(
-        active_face_state: &DisplayRowActiveFaceState,
-        font_metrics: &mut Option<FontMetricsService>,
-        ch: char,
-        fallback_advance_px: f32,
-    ) -> f32 {
-        DisplayReplacementActiveFaceMeasurer::from_active_face_state(active_face_state)
-            .source_char_width_px(font_metrics, ch, fallback_advance_px)
     }
 
     pub(crate) fn width_px(self) -> f32 {
