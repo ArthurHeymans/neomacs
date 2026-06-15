@@ -308,7 +308,7 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
 
 #[test]
 fn buffer_current_face_resolution_context_skips_before_checkpoint() {
-    let eval = Context::new();
+    let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
         .current_buffer()
@@ -334,9 +334,26 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     let height_span = ActiveDisplayPropertySpan::inactive();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("face-resolution-not-due", 80, 40, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
+    let mut source_render = TextRowSourceRenderState::new(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+    );
 
     let resolved = BufferCurrentFaceResolutionContext::new(
         &buffer,
@@ -353,11 +370,10 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     )
     .resolve_at_checkpoint(
         &mut BufferCurrentFaceResolutionState::new(
+            &mut source_render,
             &mut face_scan,
             &height_span,
-            &mut font_metrics,
             &mut face_ids,
-            &mut builder,
             &mut active_face,
             &mut row_geometry,
             &mut row_extend,
@@ -374,7 +390,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
 
 #[test]
 fn buffer_current_face_resolution_context_resolves_due_face() {
-    let eval = Context::new();
+    let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
         .current_buffer()
@@ -399,9 +415,26 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     let height_span = ActiveDisplayPropertySpan::inactive();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("face-resolution-due", 80, 40, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 8.0, 6.0);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
+    let mut source_render = TextRowSourceRenderState::new(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+    );
 
     let resolved = BufferCurrentFaceResolutionContext::new(
         &buffer,
@@ -418,11 +451,10 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     )
     .resolve_at_checkpoint(
         &mut BufferCurrentFaceResolutionState::new(
+            &mut source_render,
             &mut face_scan,
             &height_span,
-            &mut font_metrics,
             &mut face_ids,
-            &mut builder,
             &mut active_face,
             &mut row_geometry,
             &mut row_extend,

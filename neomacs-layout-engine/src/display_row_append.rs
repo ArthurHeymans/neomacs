@@ -27,9 +27,9 @@ use crate::display_row::{
     DisplayRowCurrentTextMeasureState, DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics,
     DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
     DisplayRowRenderBounds, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
-    DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState,
-    DisplaySourceAppendMeasurement, DisplaySourceAppendRenderPolicy,
-    NaturalDisplayRowAppendRenderPolicy,
+    DisplayRowResolvedMeasuredFace, DisplayRowSourceAppendRequest,
+    DisplayRowSourceAppendRequestPolicy, DisplayRowSourceState, DisplaySourceAppendMeasurement,
+    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face};
 use crate::display_row_builder::{
@@ -403,14 +403,60 @@ impl<'a> TextRowSourceRenderState<'a> {
         }
     }
 
-    pub(crate) fn builder_and_font_metrics(
-        &mut self,
-    ) -> (&mut GlyphMatrixBuilder, &mut Option<FontMetricsService>) {
-        (self.output_render.builder, self.font_metrics)
-    }
-
     pub(crate) fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
         insert_resolved_display_row_face(self.output_render.builder, face_id, face, None);
+    }
+
+    fn resolved_measured_face(
+        &mut self,
+        measurement_policy: DisplayRowMeasurementPolicy,
+        face_id: u32,
+        face: ResolvedFace,
+        window_system: bool,
+        fallback_char_width: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+    ) -> DisplayRowResolvedMeasuredFace {
+        let metrics = if window_system {
+            self.font_metrics.as_mut().map(|svc| {
+                svc.font_metrics(
+                    &face.font_family,
+                    face.font_weight,
+                    face.italic,
+                    face.font_size,
+                )
+            })
+        } else {
+            None
+        };
+        measurement_policy.resolved_measured_face(
+            face_id,
+            face,
+            metrics,
+            fallback_char_width,
+            fallback_metrics,
+            self.font_metrics,
+        )
+    }
+
+    pub(crate) fn resolve_and_install_measured_face(
+        &mut self,
+        measurement_policy: DisplayRowMeasurementPolicy,
+        face_id: u32,
+        face: ResolvedFace,
+        window_system: bool,
+        fallback_char_width: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+    ) -> DisplayRowActiveFaceState {
+        let resolved_face = self.resolved_measured_face(
+            measurement_policy,
+            face_id,
+            face,
+            window_system,
+            fallback_char_width,
+            fallback_metrics,
+        );
+        resolved_face.install_into(self.output_render.builder);
+        resolved_face.into_active_face_state()
     }
 
     pub(crate) fn resolve_named_face(&self, face_name: &str) -> ResolvedFace {
@@ -7045,7 +7091,7 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
 
     pub(crate) fn resolve_at_checkpoint(
         &self,
-        state: &mut BufferCurrentFaceResolutionState<'_>,
+        state: &mut BufferCurrentFaceResolutionState<'_, '_>,
         charpos: i64,
     ) -> bool {
         if !state.face_scan.should_resolve_at(charpos as usize) {
@@ -7074,48 +7120,37 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
         }
 
         let face_id = state.face_ids.allocate();
-        let metrics = if self.window_system {
-            state.font_metrics.as_mut().map(|svc| {
-                svc.font_metrics(
-                    &resolved.font_family,
-                    resolved.font_weight,
-                    resolved.italic,
-                    resolved.font_size,
-                )
-            })
-        } else {
-            None
-        };
-        let resolved_measured_face = self.measurement_policy.resolved_measured_face(
+        let resolved_extend = resolved.extend;
+        let resolved_bg = resolved.bg;
+        let resolved_box_type = resolved.box_type;
+        *state.active_face_state = state.source_render.resolve_and_install_measured_face(
+            self.measurement_policy,
             face_id,
-            resolved.clone(),
-            metrics,
+            resolved,
+            self.window_system,
             self.char_w,
             DisplayRowFallbackMetrics::from_default_face_extents(
                 self.char_w,
                 self.char_h,
                 self.font_ascent,
             ),
-            state.font_metrics,
         );
-        resolved_measured_face.install_into(state.builder);
-        *state.active_face_state = resolved_measured_face.into_active_face_state();
         let face_metrics = state.active_face_state.metrics();
         state
             .row_geometry
             .include_row_extents(face_metrics.row_height, face_metrics.ascent);
 
-        if resolved.extend {
-            let ext_bg = Color::from_pixel(resolved.bg);
+        if resolved_extend {
+            let ext_bg = Color::from_pixel(resolved_bg);
             state
                 .row_extend
                 .activate(state.row_geometry.current_row_marker(), (ext_bg, face_id));
         }
 
-        if state.box_face.is_active() && resolved.box_type == 0 {
+        if state.box_face.is_active() && resolved_box_type == 0 {
             state.box_face.clear();
         }
-        if resolved.box_type > 0 {
+        if resolved_box_type > 0 {
             state
                 .box_face
                 .activate(state.row_geometry.current_row_marker(), state.x);
@@ -7137,14 +7172,12 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
         x: f32,
         charpos: i64,
     ) -> bool {
-        let (builder, font_metrics) = source_render.builder_and_font_metrics();
         self.resolve_at_checkpoint(
             &mut BufferCurrentFaceResolutionState::new(
+                source_render,
                 face_scan,
                 height_span,
-                font_metrics,
                 face_ids,
-                builder,
                 active_face_state,
                 row_geometry,
                 row_extend,
@@ -7156,12 +7189,11 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
     }
 }
 
-pub(crate) struct BufferCurrentFaceResolutionState<'a> {
+pub(crate) struct BufferCurrentFaceResolutionState<'a, 'source> {
+    source_render: &'a mut TextRowSourceRenderState<'source>,
     face_scan: &'a mut FaceScanCheckpoint,
     height_span: &'a ActiveDisplayPropertySpan<f32>,
-    font_metrics: &'a mut Option<FontMetricsService>,
     face_ids: &'a mut FrameFaceIdAllocator,
-    builder: &'a mut GlyphMatrixBuilder,
     active_face_state: &'a mut DisplayRowActiveFaceState,
     row_geometry: &'a mut DisplayRowGeometryState,
     row_extend: &'a mut DisplayRowScopedValue<(Color, u32)>,
@@ -7169,14 +7201,13 @@ pub(crate) struct BufferCurrentFaceResolutionState<'a> {
     x: f32,
 }
 
-impl<'a> BufferCurrentFaceResolutionState<'a> {
+impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
+        source_render: &'a mut TextRowSourceRenderState<'source>,
         face_scan: &'a mut FaceScanCheckpoint,
         height_span: &'a ActiveDisplayPropertySpan<f32>,
-        font_metrics: &'a mut Option<FontMetricsService>,
         face_ids: &'a mut FrameFaceIdAllocator,
-        builder: &'a mut GlyphMatrixBuilder,
         active_face_state: &'a mut DisplayRowActiveFaceState,
         row_geometry: &'a mut DisplayRowGeometryState,
         row_extend: &'a mut DisplayRowScopedValue<(Color, u32)>,
@@ -7184,11 +7215,10 @@ impl<'a> BufferCurrentFaceResolutionState<'a> {
         x: f32,
     ) -> Self {
         Self {
+            source_render,
             face_scan,
             height_span,
-            font_metrics,
             face_ids,
-            builder,
             active_face_state,
             row_geometry,
             row_extend,
