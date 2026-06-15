@@ -1780,6 +1780,7 @@ mod divergence_diff_merge_vcs;
 mod divergence_dired_file_mgmt;
 mod divergence_display_engine;
 mod divergence_display_table_glyph;
+mod divergence_dired_ops;
 mod divergence_eieio_advanced_real;
 mod divergence_eieio_keymap_real;
 mod divergence_eieio_method_deep;
