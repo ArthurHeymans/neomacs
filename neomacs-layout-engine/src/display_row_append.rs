@@ -35,7 +35,8 @@ use crate::display_row::{
 use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face};
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
-    DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
+    DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy, display_row_total_glyph_count,
+    trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
@@ -62,6 +63,7 @@ use crate::display_source_resolver::{
     display_string_base_face_for_active_row, resolve_display_replacement,
 };
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
+use crate::display_status_line::ChromeRowRenderServices;
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
@@ -82,10 +84,12 @@ use crate::window_output::{
     emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
     finish_pending_text_window_row, install_text_window_body_output,
     install_text_window_cursor_effects, install_text_window_row_decoration,
+    right_edge_marker_text_item,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
-use neomacs_display_protocol::glyph_matrix::GlyphArea;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -1213,9 +1217,10 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
     pub(crate) char_w: f32,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallState<'a, 'emit> {
+pub(crate) struct BufferTextWindowBodyInstallState<'a, 'emit, 'face> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) output_emitter: &'a WindowOutputEmitter,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 pub(crate) struct BufferTextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView> {
@@ -6454,7 +6459,7 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
 
     pub(crate) fn install_and_apply(
         self,
-        state: BufferTextWindowBodyInstallState<'_, '_>,
+        state: BufferTextWindowBodyInstallState<'_, '_, '_>,
     ) -> TextWindowRedisplayPositions {
         let context = self.context;
         let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
@@ -6475,9 +6480,164 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
                 window_start: context.window_start,
                 text_start_byte: context.text_start_byte,
                 byte_idx: context.byte_idx,
-                right_edge_markers,
+                right_edge_markers: None,
             },
+        );
+        if let Some(markers) = right_edge_markers {
+            install_right_edge_markers_from_source_requests(
+                state.builder,
+                state.render_services,
+                markers,
+            );
+        }
+        TextWindowRedisplayPositions::from_output_rows(
+            state.output_emitter,
+            context.window_start,
+            context.text_start_byte,
+            context.byte_idx,
         )
+    }
+}
+
+fn current_row_marker_geometry(
+    row: &GlyphRow,
+    width_cols: usize,
+    char_width: f32,
+) -> DisplayRowGeometry {
+    let char_width = char_width.max(1.0);
+    DisplayRowGeometry {
+        y: row.pixel_y,
+        width: width_cols.max(1) as f32 * char_width,
+        height: row.height_px.max(1.0),
+        ascent: row.ascent_px.max(0.0).min(row.height_px.max(1.0)),
+        char_width,
+        tab_policy: DisplayTabPolicy::every(8),
+    }
+}
+
+fn render_right_edge_marker_text(
+    row: &mut GlyphRow,
+    render_services: &mut ChromeRowRenderServices<'_, '_>,
+    text: String,
+    face_id: u32,
+    base_face: &ResolvedFace,
+    char_width: f32,
+    matrix_cols: usize,
+    source_offset: usize,
+) {
+    if text.is_empty() {
+        return;
+    }
+    let char_width = char_width.max(1.0);
+    let start_col = display_row_total_glyph_count(row);
+    let start = DisplayRowPosition {
+        x_px: start_col as f32 * char_width,
+        col: start_col,
+    };
+    let mut source =
+        SingleDisplayItemSource::new(right_edge_marker_text_item(text, face_id, source_offset));
+    let mut source_state = DisplayRowSourceState::default();
+    let request = DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+        DisplayRowSourceRequestPolicy::from_display_row_geometry(
+            current_row_marker_geometry(row, matrix_cols, char_width),
+            GlyphRowRole::Text,
+        ),
+        face_id,
+        base_face,
+        DisplayRowRenderBounds {
+            start,
+            max_x_px: matrix_cols as f32 * char_width,
+        },
+    );
+    render_services.render_item_source_fragment_into_row(
+        request,
+        row,
+        &mut source,
+        &mut source_state,
+    );
+}
+
+fn install_right_edge_marker_from_source_request(
+    row: &mut GlyphRow,
+    target_col: usize,
+    marker: char,
+    face_id: u32,
+    base_face: &ResolvedFace,
+    char_width: f32,
+    matrix_cols: usize,
+    render_services: &mut ChromeRowRenderServices<'_, '_>,
+) {
+    if matrix_cols == 0 {
+        return;
+    }
+    row.enabled = true;
+    let clamped_col = target_col.min(matrix_cols - 1);
+    trim_display_row_text_to_total_glyph_count(row, clamped_col);
+
+    let mut source_offset = 0usize;
+    let padding_cols = clamped_col.saturating_sub(display_row_total_glyph_count(row));
+    if padding_cols > 0 {
+        render_right_edge_marker_text(
+            row,
+            render_services,
+            " ".repeat(padding_cols),
+            face_id,
+            base_face,
+            char_width,
+            matrix_cols,
+            source_offset,
+        );
+        source_offset = source_offset.saturating_add(padding_cols);
+    }
+    render_right_edge_marker_text(
+        row,
+        render_services,
+        marker.to_string(),
+        face_id,
+        base_face,
+        char_width,
+        matrix_cols,
+        source_offset,
+    );
+}
+
+fn install_right_edge_markers_from_source_requests(
+    builder: &mut GlyphMatrixBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightEdgeMarkers<'_>,
+) {
+    let base_face = render_services.face_resolver().default_face().clone();
+    let target_col = request.column.target_col(request.matrix_cols);
+    for row_idx in 0..request.row_flags.len() {
+        let matrix_row = request.text_matrix_row_base + row_idx;
+        let marker = if request
+            .row_flags
+            .is_set(row_idx, DisplayRowFlagKind::Truncated)
+        {
+            Some('$')
+        } else if request
+            .row_flags
+            .is_set(row_idx, DisplayRowFlagKind::Continued)
+        {
+            Some('\\')
+        } else {
+            None
+        };
+        let Some(marker) = marker else {
+            continue;
+        };
+        builder.with_current_window_row_mut(matrix_row, |row, matrix_cols| {
+            install_right_edge_marker_from_source_request(
+                row,
+                target_col,
+                marker,
+                request.face_id,
+                &base_face,
+                request.char_width,
+                matrix_cols,
+                &mut render_services,
+            );
+        });
     }
 }
 

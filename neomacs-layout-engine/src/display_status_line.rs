@@ -169,6 +169,18 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         }
     }
 
+    pub(crate) fn reborrow(&mut self) -> ChromeRowRenderServices<'_, 'face> {
+        ChromeRowRenderServices {
+            font_metrics: self.font_metrics,
+            face_resolver: self.face_resolver,
+            face_ids: self.face_ids,
+        }
+    }
+
+    pub(crate) fn face_resolver(&self) -> &'face FaceResolver {
+        self.face_resolver
+    }
+
     fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
         self.face_ids
     }
@@ -206,7 +218,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         render_executor.render_lisp_string_session_row(session, request)
     }
 
-    fn render_item_source_fragment_into_row(
+    pub(crate) fn render_item_source_fragment_into_row(
         &mut self,
         request: DisplayRowItemSourceRenderRequest<'_>,
         row: &mut GlyphRow,

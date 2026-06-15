@@ -6105,6 +6105,10 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
 
     let mut row_flags = DisplayRowFlags::new(1);
     row_flags.mark(0, DisplayRowFlagKind::Truncated);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut face_ids = FrameFaceIdAllocator::new(10);
+    let mut font_metrics = None;
     let positions =
         BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext {
             window_id: 41,
@@ -6122,6 +6126,11 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         .install_and_apply(BufferTextWindowBodyInstallState {
             builder: &mut builder,
             output_emitter: &output_emitter,
+            render_services: crate::display_status_line::ChromeRowRenderServices::new(
+                &mut font_metrics,
+                &face_resolver,
+                &mut face_ids,
+            ),
         });
 
     assert_eq!(positions.window_start, LispCharPos1::new(4));

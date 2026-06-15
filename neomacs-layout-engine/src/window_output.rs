@@ -195,7 +195,7 @@ pub(crate) enum TextWindowRightEdgeMarkerColumn {
 }
 
 impl TextWindowRightEdgeMarkerColumn {
-    fn target_col(self, matrix_cols: usize) -> usize {
+    pub(crate) fn target_col(self, matrix_cols: usize) -> usize {
         match self {
             Self::LastColumn => matrix_cols.saturating_sub(1),
             Self::BeforeRightBorder => matrix_cols.saturating_sub(2),
@@ -826,7 +826,11 @@ fn current_row_text_layout(
     }
 }
 
-fn right_edge_marker_text_item(text: String, face_id: u32, start_offset: usize) -> DisplayItem {
+pub(crate) fn right_edge_marker_text_item(
+    text: String,
+    face_id: u32,
+    start_offset: usize,
+) -> DisplayItem {
     synthetic_window_marker_text_item(RIGHT_EDGE_MARKER_SOURCE_ID, text, face_id, start_offset)
 }
 

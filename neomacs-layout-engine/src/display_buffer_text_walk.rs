@@ -323,20 +323,23 @@ pub(crate) struct BufferTextWindowBodyPassState<'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit> {
+pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'face> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit> {
+pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
     pub(crate) evaluator: &'emit mut Context,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-pub(crate) struct BufferTextWindowRenderedBodyInstallPublishState<'emit> {
+pub(crate) struct BufferTextWindowRenderedBodyInstallPublishState<'emit, 'face> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) evaluator: &'emit mut Context,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -948,7 +951,7 @@ impl BufferTextWindowWalkSetup {
 
     pub(crate) fn install_body(
         &mut self,
-        state: BufferTextWindowBodyInstallRenderState<'_>,
+        state: BufferTextWindowBodyInstallRenderState<'_, '_>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
     ) -> TextWindowRedisplayPositions {
         tail_context
@@ -956,12 +959,13 @@ impl BufferTextWindowWalkSetup {
             .install_and_apply(BufferTextWindowBodyInstallState {
                 builder: state.builder,
                 output_emitter: state.output_emitter,
+                render_services: state.render_services,
             })
     }
 
     pub(crate) fn install_body_and_publish_redisplay(
         &mut self,
-        state: BufferTextWindowBodyInstallPublishState<'_>,
+        state: BufferTextWindowBodyInstallPublishState<'_, '_>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
@@ -969,6 +973,7 @@ impl BufferTextWindowWalkSetup {
             BufferTextWindowBodyInstallRenderState {
                 builder: state.builder,
                 output_emitter: state.output_emitter,
+                render_services: state.render_services,
             },
             tail_context,
         );
@@ -1211,13 +1216,14 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
     pub(crate) fn install_body_and_publish_redisplay(
         &mut self,
         walk_setup: &mut BufferTextWindowWalkSetup,
-        state: BufferTextWindowRenderedBodyInstallPublishState<'_>,
+        state: BufferTextWindowRenderedBodyInstallPublishState<'_, '_>,
     ) -> TextWindowRedisplayPositions {
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
                 builder: state.builder,
                 output_emitter: &mut self.output_emitter,
                 evaluator: state.evaluator,
+                render_services: state.render_services,
             },
             &self.tail_context,
             self.publish_request,
@@ -1258,13 +1264,14 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         mut self,
         walk_setup: &mut BufferTextWindowWalkSetup,
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
-        state: BufferTextWindowRenderedBodyCompleteState<'_, '_>,
+        mut state: BufferTextWindowRenderedBodyCompleteState<'_, '_>,
     ) -> TextWindowRedisplayPositions {
         let redisplay_positions = self.install_body_and_publish_redisplay(
             walk_setup,
             BufferTextWindowRenderedBodyInstallPublishState {
                 builder: &mut *state.builder,
                 evaluator: &mut *state.evaluator,
+                render_services: state.render_services.reborrow(),
             },
         );
         self.render_chrome_rows(
