@@ -1985,6 +1985,7 @@ mod divergence_combo_complex14;
 mod divergence_combo_complex15;
 mod divergence_combo_complex16;
 mod divergence_combo_complex17;
+mod divergence_combo_complex18;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
