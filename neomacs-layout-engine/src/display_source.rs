@@ -1499,6 +1499,94 @@ pub(crate) enum DisplayPropertyReplacementSourceItem {
     Media(DisplayReplacementMediaSourceResolution),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayPropertyReplacementSourceMetrics {
+    char_width: f32,
+    row_height: f32,
+    ascent: f32,
+}
+
+impl DisplayPropertyReplacementSourceMetrics {
+    pub(crate) fn new(char_width: f32, row_height: f32, ascent: f32) -> Self {
+        Self {
+            char_width,
+            row_height,
+            ascent,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayPropertyReplacementSourceInputs {
+    string_cursor_slot_width_px: Option<f32>,
+    stretch_display_char_width_px: Option<f32>,
+    media: Option<DisplayReplacementMediaSourceResolution>,
+}
+
+impl DisplayPropertyReplacementSourceInputs {
+    pub(crate) const fn empty() -> Self {
+        Self {
+            string_cursor_slot_width_px: None,
+            stretch_display_char_width_px: None,
+            media: None,
+        }
+    }
+
+    pub(crate) fn with_string_cursor_slot_width_px(mut self, width_px: f32) -> Self {
+        self.string_cursor_slot_width_px = Some(width_px);
+        self
+    }
+
+    pub(crate) fn with_stretch_display_char_width_px(mut self, width_px: f32) -> Self {
+        self.stretch_display_char_width_px = Some(width_px);
+        self
+    }
+
+    pub(crate) fn with_media(mut self, media: DisplayReplacementMediaSourceResolution) -> Self {
+        self.media = Some(media);
+        self
+    }
+}
+
+impl DisplayPropertyReplacementSourceItem {
+    pub(crate) fn from_display_property(
+        display_property: &DisplayPropertyClassification,
+        source_event: BufferDisplayPropertyTextSourceEvent<'_>,
+        current_x: f32,
+        content_x: f32,
+        params: &WindowParams,
+        metrics: DisplayPropertyReplacementSourceMetrics,
+        inputs: DisplayPropertyReplacementSourceInputs,
+    ) -> Option<Self> {
+        match display_property.replacement()? {
+            DisplayReplacementProperty::String => {
+                DisplayReplacementStringSourceItem::display_property_string(
+                    source_event.value(),
+                    source_event.anchor_charpos(),
+                    DisplayPropertySource::TextProperty,
+                    1,
+                    inputs.string_cursor_slot_width_px?,
+                )
+                .map(Self::String)
+            }
+            DisplayReplacementProperty::Stretch(_) => Some(Self::Stretch(
+                DisplayReplacementStretchSourceItem::from_display_space_spec(
+                    &source_event.value(),
+                    current_x,
+                    content_x,
+                    metrics.char_width,
+                    inputs.stretch_display_char_width_px?,
+                    metrics.row_height,
+                    metrics.ascent,
+                    metrics.char_width,
+                    params,
+                ),
+            )),
+            DisplayReplacementProperty::Media(_) => inputs.media.map(Self::Media),
+        }
+    }
+}
+
 pub(crate) struct BufferDisplayReplacementStringSource<S> {
     replacement_source: BufferDisplayReplacementSource,
     source: S,
