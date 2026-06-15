@@ -10681,12 +10681,9 @@ impl BufferDisplayPropertyTextModifierAction {
         row_height: f32,
         next_change: i64,
     ) -> Option<Self> {
-        let raise_offset_px = display_property
-            .modifiers
-            .raise
-            .map(|factor| -(factor * row_height));
-        let height_factor = display_property
-            .modifiers
+        let modifiers = display_property.modifiers();
+        let raise_offset_px = modifiers.raise.map(|factor| -(factor * row_height));
+        let height_factor = modifiers
             .height
             .filter(|factor| factor.is_finite() && *factor > 0.0);
         (raise_offset_px.is_some() || height_factor.is_some()).then_some(Self {

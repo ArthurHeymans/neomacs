@@ -9,13 +9,28 @@ use neovm_core::emacs_core::value::list_to_vec;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct DisplayPropertyClassification {
-    pub(crate) replacement: Option<DisplayReplacementProperty>,
-    pub(crate) modifiers: DisplayTextPropertyModifiers,
+    replacement: Option<DisplayReplacementProperty>,
+    modifiers: DisplayTextPropertyModifiers,
 }
 
 impl DisplayPropertyClassification {
     pub(crate) fn replacement(&self) -> Option<&DisplayReplacementProperty> {
         self.replacement.as_ref()
+    }
+
+    pub(crate) fn modifiers(&self) -> DisplayTextPropertyModifiers {
+        self.modifiers
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        replacement: Option<DisplayReplacementProperty>,
+        modifiers: DisplayTextPropertyModifiers,
+    ) -> Self {
+        Self {
+            replacement,
+            modifiers,
+        }
     }
 }
 

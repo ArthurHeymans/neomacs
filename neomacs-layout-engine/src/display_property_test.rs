@@ -24,7 +24,9 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
     );
 
     assert_eq!(
-        classify_display_property(Value::string("replacement")).replacement,
+        classify_display_property(Value::string("replacement"))
+            .replacement()
+            .cloned(),
         Some(DisplayReplacementProperty::String)
     );
     assert_eq!(
@@ -37,7 +39,8 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
                 Value::fixnum(2),
             ]),
         ]))
-        .replacement,
+        .replacement()
+        .cloned(),
         Some(DisplayReplacementProperty::Stretch(DisplayStretch {
             width: DisplayStretchWidth::AlignTo(DisplayLengthExpr::Sub(vec![
                 DisplayLengthExpr::Symbol(DisplayLengthSymbol::Right),
@@ -48,19 +51,25 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
         }))
     );
     assert_eq!(
-        classify_display_property(Value::list(vec![Value::symbol("image")])).replacement,
+        classify_display_property(Value::list(vec![Value::symbol("image")]))
+            .replacement()
+            .cloned(),
         Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Image
         ))
     );
     assert_eq!(
-        classify_display_property(Value::list(vec![Value::symbol("video")])).replacement,
+        classify_display_property(Value::list(vec![Value::symbol("video")]))
+            .replacement()
+            .cloned(),
         Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Video
         ))
     );
     assert_eq!(
-        classify_display_property(Value::list(vec![Value::symbol("webkit")])).replacement,
+        classify_display_property(Value::list(vec![Value::symbol("webkit")]))
+            .replacement()
+            .cloned(),
         Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Webkit
         ))
@@ -71,7 +80,8 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             Value::keyword("xwidget"),
             xwidget,
         ]))
-        .replacement,
+        .replacement()
+        .cloned(),
         Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Xwidget(DisplayMediaReplacement::xwidget(
                 DisplayXwidgetItem {
@@ -88,7 +98,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             Value::symbol("raise"),
             Value::make_float(0.25),
         ]))
-        .modifiers,
+        .modifiers(),
         DisplayTextPropertyModifiers {
             raise: Some(0.25),
             height: None,
@@ -101,7 +111,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             Value::keyword(":height"),
             Value::make_float(1.4),
         ]))
-        .modifiers,
+        .modifiers(),
         DisplayTextPropertyModifiers {
             raise: Some(0.2),
             height: Some(1.4),
@@ -162,7 +172,8 @@ fn classify_display_property_parses_space_width_height_and_ascent() {
             Value::keyword(":ascent"),
             Value::fixnum(50),
         ]))
-        .replacement,
+        .replacement()
+        .cloned(),
         Some(DisplayReplacementProperty::Stretch(DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Em(3.0)),
             height: Some(DisplayLength::Em(2.0)),
@@ -181,7 +192,8 @@ fn classify_display_property_keeps_space_replacement_without_explicit_width() {
             Value::keyword(":height"),
             Value::fixnum(2),
         ]))
-        .replacement,
+        .replacement()
+        .cloned(),
         Some(DisplayReplacementProperty::Stretch(DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Em(1.0)),
             height: Some(DisplayLength::Em(2.0)),

@@ -785,13 +785,13 @@ impl DisplayPropertySourceReplacement {
     fn resolve(
         context: &mut DisplaySourceContext<'_>,
         display_prop: Value,
-        replacement: Option<DisplayReplacementProperty>,
+        replacement: Option<&DisplayReplacementProperty>,
         face: RenderFaceRef,
     ) -> Self {
         match replacement {
             Some(DisplayReplacementProperty::String) => Self::String(display_prop),
             Some(DisplayReplacementProperty::Stretch(stretch)) => {
-                Self::Item(DisplayItemKind::Stretch(stretch))
+                Self::Item(DisplayItemKind::Stretch(stretch.clone()))
             }
             Some(DisplayReplacementProperty::Media(replacement)) => replacement
                 .direct_replacement()
@@ -822,7 +822,7 @@ fn display_property_source_action(
     match DisplayPropertySourceReplacement::resolve(
         context,
         display_prop,
-        classification.replacement,
+        classification.replacement(),
         face,
     ) {
         DisplayPropertySourceReplacement::String(value) => {
@@ -833,10 +833,10 @@ fn display_property_source_action(
         }
         DisplayPropertySourceReplacement::Item(kind) => DisplayPropertySourceAction::Emit {
             kind,
-            layout: classification.modifiers,
+            layout: classification.modifiers(),
         },
         DisplayPropertySourceReplacement::Unresolved => DisplayPropertySourceAction::Ignore {
-            layout: classification.modifiers,
+            layout: classification.modifiers(),
         },
     }
 }

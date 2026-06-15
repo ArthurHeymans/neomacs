@@ -7761,12 +7761,12 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
         width: 42.0,
         height: 11.0,
     });
-    let classification = DisplayPropertyClassification {
-        replacement: Some(DisplayReplacementProperty::Media(
+    let classification = DisplayPropertyClassification::new_for_test(
+        Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Xwidget(media),
         )),
-        modifiers: Default::default(),
-    };
+        Default::default(),
+    );
     let params = test_display_space_window_params();
 
     let item = DisplayPropertyReplacementAppendItem::resolve(
