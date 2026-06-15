@@ -11,7 +11,6 @@ use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
-use super::TextWindowLineNumberMargin;
 use super::TextWindowOutputInstall;
 use super::TextWindowPendingRowFinish;
 use super::TextWindowRedisplayPositions;
@@ -20,7 +19,6 @@ use super::close_text_window_output;
 use super::current_text_window_cluster_tail;
 use super::emit_text_matrix_row_transition;
 use super::emit_text_matrix_row_transition_with_limit;
-use super::emit_text_window_line_number_margin;
 use super::finish_and_end_text_matrix_row_output;
 use super::finish_pending_text_window_row;
 use super::finish_text_matrix_row_output;
@@ -662,39 +660,6 @@ fn close_text_window_output_closes_active_matrix_window() {
 
     assert_eq!(builder.windows().len(), 1);
     assert_eq!(builder.windows()[0].window_id, 9);
-}
-
-#[test]
-fn emit_text_window_line_number_margin_right_aligns_text_and_trailing_separator() {
-    let mut builder = GlyphMatrixBuilder::new();
-    builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
-    builder.begin_row(0, GlyphRowRole::Text);
-
-    emit_text_window_line_number_margin(
-        &mut builder,
-        TextWindowLineNumberMargin {
-            text: "42",
-            cols: 4,
-            face_id: 7,
-            row_y: 0.0,
-            row_height: 16.0,
-            row_ascent: 12.0,
-            char_width: 8.0,
-        },
-    );
-
-    builder.end_row();
-    builder.end_window();
-
-    let state = builder.finish(5, 1, 8.0, 16.0);
-    let margin = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::LeftMargin as usize];
-
-    assert_eq!(margin.len(), 4);
-    assert_eq!(margin[0].glyph_type, GlyphType::Stretch { width_cols: 1 });
-    assert_char_glyph(&margin[1], '4', 7);
-    assert_char_glyph(&margin[2], '2', 7);
-    assert_eq!(margin[3].glyph_type, GlyphType::Stretch { width_cols: 1 });
-    assert!(margin.iter().all(|glyph| glyph.face_id == 7));
 }
 
 #[test]

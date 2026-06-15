@@ -16,8 +16,6 @@ use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{
     DisplayRowGlyphSlot, DisplayRowPosition, mark_display_row_truncated_left,
 };
-#[cfg(test)]
-use crate::display_row_builder::{DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
@@ -34,8 +32,6 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
-#[cfg(test)]
-use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -43,8 +39,6 @@ use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot,
 };
-#[cfg(test)]
-use std::collections::HashMap;
 
 const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
 const RIGHT_EDGE_MARKER_SOURCE_ID: u64 = 0x7265_6467;
@@ -283,15 +277,11 @@ pub(crate) struct TextWindowLineNumberMargin<'a> {
     pub(crate) char_width: f32,
 }
 
-pub(crate) enum TextWindowRowDecorationRequest<'a> {
+pub(crate) enum TextWindowRowDecorationRequest {
     MarkCurrentTruncatedLeft,
-    #[cfg(test)]
-    LineNumberMargin(TextWindowLineNumberMargin<'a>),
-    #[cfg(not(test))]
-    _Lifetime(std::marker::PhantomData<&'a ()>),
 }
 
-impl<'a> TextWindowRowDecorationRequest<'a> {
+impl TextWindowRowDecorationRequest {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         match self {
             Self::MarkCurrentTruncatedLeft => {
@@ -299,18 +289,6 @@ impl<'a> TextWindowRowDecorationRequest<'a> {
                     mark_display_row_truncated_left(glyph_row);
                 });
             }
-            #[cfg(test)]
-            Self::LineNumberMargin(request) => {
-                let layout = line_number_margin_layout(&request);
-                let mut source = LineNumberMarginItemSource::new(&request);
-                builder.with_current_row_mut(|row| {
-                    let mut writer =
-                        DisplayRowWriter::for_area(&layout, row, GlyphArea::LeftMargin);
-                    push_item_source_to_writer(&mut writer, &mut source);
-                });
-            }
-            #[cfg(not(test))]
-            Self::_Lifetime(_) => {}
         }
     }
 }
@@ -655,23 +633,6 @@ pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuil
     );
 }
 
-#[cfg(test)]
-#[cfg(test)]
-fn line_number_margin_layout(request: &TextWindowLineNumberMargin<'_>) -> DisplayRowLayout {
-    let char_width = request.char_width.max(1.0);
-    DisplayRowLayout {
-        role: GlyphRowRole::Text,
-        y_px: request.row_y,
-        width_px: (request.cols.max(1) as f32 + 1.0) * char_width,
-        height_px: request.row_height.max(1.0),
-        ascent_px: request.row_ascent.max(0.0).min(request.row_height.max(1.0)),
-        char_width_px: char_width,
-        tab_policy: DisplayTabPolicy::every(8),
-        base_face: RenderFaceRef::FaceId(request.face_id),
-        symbol_values: HashMap::new(),
-    }
-}
-
 fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -> DisplayItem {
     let end_offset = start_offset.saturating_add(text.chars().count());
     DisplayItem::new(
@@ -755,15 +716,6 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
-#[cfg(test)]
-fn push_item_source_to_writer(
-    writer: &mut DisplayRowWriter<'_, '_, '_>,
-    source: &mut impl DisplayItemSource,
-) {
-    let mut source_context = DisplaySourceContext::empty();
-    writer.push_source(source, &mut source_context);
-}
-
 pub(crate) fn right_edge_marker_text_item(
     text: String,
     face_id: u32,
@@ -792,17 +744,6 @@ fn synthetic_window_marker_text_item(
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     )
-}
-
-#[cfg(test)]
-pub(crate) fn emit_text_window_line_number_margin(
-    builder: &mut GlyphMatrixBuilder,
-    request: TextWindowLineNumberMargin<'_>,
-) {
-    install_text_window_row_decoration(
-        builder,
-        TextWindowRowDecorationRequest::LineNumberMargin(request),
-    );
 }
 
 pub(crate) fn publish_text_window_cursor(
@@ -921,7 +862,7 @@ pub(crate) fn install_text_window_body_output(
 
 pub(crate) fn install_text_window_row_decoration(
     builder: &mut GlyphMatrixBuilder,
-    request: TextWindowRowDecorationRequest<'_>,
+    request: TextWindowRowDecorationRequest,
 ) {
     request.install(builder);
 }
