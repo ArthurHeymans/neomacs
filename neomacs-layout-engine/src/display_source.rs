@@ -167,11 +167,102 @@ impl BufferTextItemSource {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BufferTextSourceRange {
+    start: CharPos0,
+    end: CharPos0,
+}
+
+impl BufferTextSourceRange {
+    pub(crate) fn new(start: CharPos0, end: CharPos0) -> Self {
+        Self { start, end }
+    }
+
+    pub(crate) fn single_char(start: CharPos0) -> Self {
+        Self::new(start, start.add_len(CharLen::new(1)))
+    }
+
+    pub(crate) fn start(self) -> CharPos0 {
+        self.start
+    }
+
+    pub(crate) fn end(self) -> CharPos0 {
+        self.end
+    }
+
+    pub(crate) fn is_single_char(self) -> bool {
+        self.end == self.start.add_len(CharLen::new(1))
+    }
+
+    pub(crate) fn is_empty_or_reversed(self) -> bool {
+        self.end <= self.start
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceAppendItem {
     ControlChar { ch: char },
     SourceMappedText { text: Box<str> },
     Glyphless { ch: char, method: GlyphlessMethod },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceTextItemRequest {
+    range: BufferTextSourceRange,
+    ch: char,
+}
+
+impl BufferTextSourceTextItemRequest {
+    pub(crate) fn new(range: BufferTextSourceRange, ch: char) -> Self {
+        Self { range, ch }
+    }
+
+    pub(crate) fn for_range_and_cluster(
+        range: BufferTextSourceRange,
+        cluster: BufferTextSourceClusterState,
+    ) -> Self {
+        Self::new(range, cluster.ch())
+    }
+
+    pub(crate) fn range(self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    pub(crate) fn source_char(self) -> char {
+        self.ch
+    }
+
+    pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
+        DisplayItemKind::TextRun(DisplayTextRun::new(self.ch.to_string()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceItemRequest {
+    range: BufferTextSourceRange,
+    item: BufferTextSourceAppendItem,
+}
+
+impl BufferTextSourceItemRequest {
+    pub(crate) fn new(range: BufferTextSourceRange, item: BufferTextSourceAppendItem) -> Self {
+        Self { range, item }
+    }
+
+    pub(crate) fn range(&self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    pub(crate) fn item(&self) -> &BufferTextSourceAppendItem {
+        &self.item
+    }
+
+    pub(crate) fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
+        self.item.fallback_width_px(fallback_char_width)
+    }
+
+    pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
+        self.item.into_display_item_kind()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

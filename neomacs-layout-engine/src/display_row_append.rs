@@ -9,9 +9,9 @@ use crate::display_cursor::{
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplayTextRun, RenderFaceRef,
-};
+#[cfg(test)]
+use crate::display_item::DisplayTextRun;
+use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
@@ -51,7 +51,8 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    BufferTextSourceAppendItem, BufferTextSourceClusterState, DisplayItemSource,
+    BufferTextSourceAppendItem, BufferTextSourceClusterState, BufferTextSourceItemRequest,
+    BufferTextSourceRange, BufferTextSourceTextItemRequest, DisplayItemSource,
     DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
 };
 #[cfg(test)]
@@ -90,7 +91,7 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
-use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, LispCharPos1};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 use neovm_core::emacs_core::{Context, Value};
@@ -295,45 +296,6 @@ impl BufferTextSourceTextRequest {
         face_id: u32,
     ) -> Option<BufferTextSourceRangeItemAppendRequest> {
         buffer_text_source_text_item_append_request(self.source_item, buffer_id, buffer, face_id)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceTextItemRequest {
-    range: BufferTextSourceRange,
-    ch: char,
-}
-
-impl BufferTextSourceTextItemRequest {
-    fn new(range: BufferTextSourceRange, ch: char) -> Self {
-        Self { range, ch }
-    }
-
-    fn for_range_and_cluster(
-        range: BufferTextSourceRange,
-        cluster: BufferTextSourceClusterState,
-    ) -> Self {
-        Self::new(range, cluster.ch())
-    }
-
-    fn range(self) -> BufferTextSourceRange {
-        self.range
-    }
-
-    fn source_char(self) -> char {
-        self.ch
-    }
-
-    fn append_kind(self) -> DisplayRowAppendKind {
-        if self.ch == '\t' {
-            DisplayRowAppendKind::Tab
-        } else {
-            DisplayRowAppendKind::SourceText
-        }
-    }
-
-    fn into_display_item_kind(self) -> DisplayItemKind {
-        DisplayItemKind::TextRun(DisplayTextRun::new(self.ch.to_string()))
     }
 }
 
@@ -3634,38 +3596,6 @@ pub(crate) fn append_lisp_string_to_text_row(
         .unwrap_or(position)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct BufferTextSourceRange {
-    start: CharPos0,
-    end: CharPos0,
-}
-
-impl BufferTextSourceRange {
-    pub(crate) fn new(start: CharPos0, end: CharPos0) -> Self {
-        Self { start, end }
-    }
-
-    pub(crate) fn single_char(start: CharPos0) -> Self {
-        Self::new(start, start.add_len(CharLen::new(1)))
-    }
-
-    fn start(self) -> CharPos0 {
-        self.start
-    }
-
-    fn end(self) -> CharPos0 {
-        self.end
-    }
-
-    fn is_single_char(self) -> bool {
-        self.end == self.start.add_len(CharLen::new(1))
-    }
-
-    fn is_empty_or_reversed(self) -> bool {
-        self.end <= self.start
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 struct BufferTextSourceRangeItemAppendRequest {
     item: DisplayItem,
@@ -5638,34 +5568,6 @@ fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Sized>(
         item,
         append_kind,
     ))
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct BufferTextSourceItemRequest {
-    range: BufferTextSourceRange,
-    item: BufferTextSourceAppendItem,
-}
-
-impl BufferTextSourceItemRequest {
-    fn new(range: BufferTextSourceRange, item: BufferTextSourceAppendItem) -> Self {
-        Self { range, item }
-    }
-
-    fn range(&self) -> BufferTextSourceRange {
-        self.range
-    }
-
-    fn append_kind(&self) -> DisplayRowAppendKind {
-        self.item.append_kind()
-    }
-
-    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
-        self.item.fallback_width_px(fallback_char_width)
-    }
-
-    fn into_display_item_kind(self) -> DisplayItemKind {
-        self.item.into_display_item_kind()
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -9007,6 +8909,22 @@ impl BufferTextSourceAppendItem {
             Self::SourceMappedText { .. } => DisplayRowAppendKind::SourceMappedText,
             Self::Glyphless { .. } => DisplayRowAppendKind::Glyphless,
         }
+    }
+}
+
+impl BufferTextSourceTextItemRequest {
+    fn append_kind(self) -> DisplayRowAppendKind {
+        if self.source_char() == '\t' {
+            DisplayRowAppendKind::Tab
+        } else {
+            DisplayRowAppendKind::SourceText
+        }
+    }
+}
+
+impl BufferTextSourceItemRequest {
+    fn append_kind(&self) -> DisplayRowAppendKind {
+        self.item().append_kind()
     }
 }
 
