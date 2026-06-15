@@ -13,7 +13,6 @@
 //! display-engine unification plan merged it into the backend
 //! trait and renamed the file to reflect its new role.
 
-use super::engine::LayoutEngine;
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -378,6 +377,117 @@ pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
     pub(crate) char_width: f32,
     pub(crate) font_ascent: f32,
     pub(crate) buffer_name: &'params str,
+}
+
+pub(crate) struct WindowChromeRowsPlan {
+    tab_line_face: Option<ResolvedFace>,
+    header_line_face: Option<ResolvedFace>,
+    mode_line_face: Option<ResolvedFace>,
+    tab_line_height: f32,
+    header_line_height: f32,
+    mode_line_height: f32,
+}
+
+impl WindowChromeRowsPlan {
+    pub(crate) fn new(
+        params: &WindowParams,
+        face_resolver: &FaceResolver,
+        font_metrics: &mut Option<FontMetricsService>,
+        char_width: f32,
+        fallback_ascent: f32,
+        fallback_row_height: f32,
+    ) -> Self {
+        let mode_line_face = (params.mode_line_height > 0.0).then(|| {
+            face_resolver.resolve_named_face(if params.selected {
+                "mode-line-active"
+            } else {
+                "mode-line-inactive"
+            })
+        });
+        let header_line_face = (params.header_line_height > 0.0).then(|| {
+            face_resolver.resolve_named_face(if params.selected {
+                "header-line-active"
+            } else {
+                "header-line-inactive"
+            })
+        });
+        let tab_line_face =
+            (params.tab_line_height > 0.0).then(|| face_resolver.resolve_named_face("tab-line"));
+
+        let mode_line_height = mode_line_face.as_ref().map_or(0.0, |face| {
+            window_chrome_row_height_for_face(
+                font_metrics,
+                face,
+                char_width,
+                fallback_ascent,
+                fallback_row_height,
+            )
+        });
+        let header_line_height = header_line_face.as_ref().map_or(0.0, |face| {
+            window_chrome_row_height_for_face(
+                font_metrics,
+                face,
+                char_width,
+                fallback_ascent,
+                fallback_row_height,
+            )
+        });
+        let tab_line_height = tab_line_face.as_ref().map_or(0.0, |face| {
+            window_chrome_row_height_for_face(
+                font_metrics,
+                face,
+                char_width,
+                fallback_ascent,
+                fallback_row_height,
+            )
+        });
+
+        Self {
+            tab_line_face,
+            header_line_face,
+            mode_line_face,
+            tab_line_height,
+            header_line_height,
+            mode_line_height,
+        }
+    }
+
+    pub(crate) fn mode_line_height(&self) -> f32 {
+        self.mode_line_height
+    }
+
+    pub(crate) fn header_line_height(&self) -> f32 {
+        self.header_line_height
+    }
+
+    pub(crate) fn tab_line_height(&self) -> f32 {
+        self.tab_line_height
+    }
+
+    pub(crate) fn render_request<'face, 'params>(
+        &'face self,
+        params: &'params WindowParams,
+        mode_line_matrix_row: usize,
+        reserve_right_border_col: bool,
+        char_width: f32,
+        font_ascent: f32,
+        buffer_name: &'params str,
+    ) -> WindowChromeRowsRenderRequest<'face, 'params> {
+        WindowChromeRowsRenderRequest {
+            params,
+            tab_line_face: self.tab_line_face.as_ref(),
+            header_line_face: self.header_line_face.as_ref(),
+            mode_line_face: self.mode_line_face.as_ref(),
+            tab_line_height: self.tab_line_height,
+            header_line_height: self.header_line_height,
+            mode_line_height: self.mode_line_height,
+            mode_line_matrix_row,
+            reserve_right_border_col,
+            char_width,
+            font_ascent,
+            buffer_name,
+        }
+    }
 }
 
 impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
@@ -1331,21 +1441,19 @@ fn window_chrome_target_cols(width: f32, char_width: f32, reserve_right_border_c
         .max(1)
 }
 
-impl LayoutEngine {
-    pub(crate) fn display_row_height_for_face(
-        &mut self,
-        face: &ResolvedFace,
-        char_w: f32,
-        fallback_ascent: f32,
-        fallback_row_height: f32,
-    ) -> f32 {
-        DisplayRowFaceRealizer::new(&mut self.font_metrics).row_height_for_face(
-            face,
-            char_w,
-            fallback_ascent,
-            fallback_row_height,
-        )
-    }
+pub(crate) fn window_chrome_row_height_for_face(
+    font_metrics: &mut Option<FontMetricsService>,
+    face: &ResolvedFace,
+    char_width: f32,
+    fallback_ascent: f32,
+    fallback_row_height: f32,
+) -> f32 {
+    DisplayRowFaceRealizer::new(font_metrics).row_height_for_face(
+        face,
+        char_width,
+        fallback_ascent,
+        fallback_row_height,
+    )
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ fn row_text(row: &GlyphRow) -> String {
 
 #[test]
 fn display_row_height_for_face_uses_realized_line_height_and_box() {
-    let mut engine = LayoutEngine::new();
+    let mut font_metrics = None;
     let mut face = ResolvedFace::default();
     face.font_family = "monospace".to_string();
     face.font_size = 14.0;
@@ -29,7 +29,7 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
     face.box_line_width = 1;
 
     assert_eq!(
-        engine.display_row_height_for_face(&face, 8.0, 12.0, 20.0),
+        window_chrome_row_height_for_face(&mut font_metrics, &face, 8.0, 12.0, 20.0),
         20.0
     );
 }

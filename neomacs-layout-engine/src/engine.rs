@@ -10,9 +10,8 @@ use super::display_status_line::{
     ChromeRowRenderServices, EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
     InactiveMinibufferDisplayRowRequest, MinibufferDisplayRenderState, ResizeMiniWindowsMode,
-    ScratchGcRootScope, WindowChromeRowsRenderRequest, build_tab_bar_display,
-    max_mini_window_lines, message_truncate_lines, minibuffer_echo_message_for_window,
-    minibuffer_resize_line_count,
+    ScratchGcRootScope, WindowChromeRowsPlan, build_tab_bar_display, max_mini_window_lines,
+    message_truncate_lines, minibuffer_echo_message_for_window, minibuffer_resize_line_count,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -867,39 +866,17 @@ impl LayoutEngine {
             char_h,
         );
 
-        let mode_line_face = if params.mode_line_height > 0.0 {
-            Some(face_resolver.resolve_named_face(if params.selected {
-                "mode-line-active"
-            } else {
-                "mode-line-inactive"
-            }))
-        } else {
-            None
-        };
-        let header_line_face = if params.header_line_height > 0.0 {
-            Some(face_resolver.resolve_named_face(if params.selected {
-                "header-line-active"
-            } else {
-                "header-line-inactive"
-            }))
-        } else {
-            None
-        };
-        let tab_line_face = if params.tab_line_height > 0.0 {
-            Some(face_resolver.resolve_named_face("tab-line"))
-        } else {
-            None
-        };
-
-        let mode_line_height = mode_line_face.as_ref().map_or(0.0, |face| {
-            self.display_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
-        });
-        let header_line_height = header_line_face.as_ref().map_or(0.0, |face| {
-            self.display_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
-        });
-        let tab_line_height = tab_line_face.as_ref().map_or(0.0, |face| {
-            self.display_row_height_for_face(face, char_w, default_face_ascent, default_face_h)
-        });
+        let chrome_plan = WindowChromeRowsPlan::new(
+            params,
+            face_resolver,
+            &mut self.font_metrics,
+            char_w,
+            default_face_ascent,
+            default_face_h,
+        );
+        let mode_line_height = chrome_plan.mode_line_height();
+        let header_line_height = chrome_plan.header_line_height();
+        let tab_line_height = chrome_plan.tab_line_height();
         let geometry_request = BufferTextWindowGeometryRequest::new(
             params,
             char_w,
@@ -1205,20 +1182,14 @@ impl LayoutEngine {
         );
 
         rendered_body.render_chrome_rows(
-            WindowChromeRowsRenderRequest {
+            chrome_plan.render_request(
                 params,
-                tab_line_face: tab_line_face.as_ref(),
-                header_line_face: header_line_face.as_ref(),
-                mode_line_face: mode_line_face.as_ref(),
-                tab_line_height,
-                header_line_height,
-                mode_line_height,
                 mode_line_matrix_row,
                 reserve_right_border_col,
-                char_width: char_w,
+                char_w,
                 font_ascent,
-                buffer_name: &buffer_name,
-            },
+                &buffer_name,
+            ),
             BufferTextWindowRenderedBodyChromeState {
                 builder: &mut self.matrix_builder,
                 evaluator,
