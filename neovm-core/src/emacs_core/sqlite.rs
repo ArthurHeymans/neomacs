@@ -926,13 +926,16 @@ pub(crate) fn builtin_sqlite_load_extension(
     }
 
     let expanded = super::fileio::builtin_expand_file_name(eval, vec![args[1], Value::NIL])?;
-    let expanded = expanded.as_runtime_string_owned().ok_or_else(|| {
-        signal(
+    let Some(expanded_ls) = expanded.as_lisp_string() else {
+        return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), expanded],
-        )
-    })?;
-    let Ok(ext_fn) = CString::new(expanded) else {
+        ));
+    };
+    // Issue #131: build the extension path CString from the real Emacs/OS bytes
+    // (on Unix this is the file-name byte sequence), not the PUA-sentinel storage
+    // string, so a non-UTF-8 path is preserved.
+    let Ok(ext_fn) = CString::new(expanded_ls.as_bytes()) else {
         return Ok(Value::NIL);
     };
 

@@ -79,11 +79,6 @@ fn expect_wholenump(val: &Value) -> Result<i64, Flow> {
     }
 }
 
-fn expect_string(val: &Value) -> Result<String, Flow> {
-    val.as_runtime_string_owned()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
-}
-
 fn expect_character_code(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
@@ -299,9 +294,25 @@ pub(crate) fn builtin_make_list(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 pub(crate) fn builtin_string_repeat(args: Vec<Value>) -> EvalResult {
     expect_args("string-repeat", &args, 2)?;
-    let s = expect_string(&args[0])?;
-    let count = expect_wholenump(&args[1])?;
-    Ok(Value::string(s.repeat(count as usize)))
+    let ls = args[0].as_lisp_string().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        )
+    })?;
+    let count = expect_wholenump(&args[1])? as usize;
+    // Issue #131: repeat the real Emacs bytes so raw-unibyte content round-trips,
+    // instead of the PUA-sentinel storage string.
+    let mut bytes = Vec::with_capacity(ls.as_bytes().len() * count);
+    for _ in 0..count {
+        bytes.extend_from_slice(ls.as_bytes());
+    }
+    let repeated = if ls.is_multibyte() {
+        crate::heap_types::LispString::from_emacs_bytes(bytes)
+    } else {
+        crate::heap_types::LispString::from_unibyte(bytes)
+    };
+    Ok(Value::heap_string(repeated))
 }
 
 /// `(safe-length LIST)` -- return the length of LIST without signaling.
