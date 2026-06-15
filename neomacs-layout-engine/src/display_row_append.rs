@@ -2027,10 +2027,24 @@ enum DisplayRowPrefixKind {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct DisplayRowPrefixSource {
+enum BufferAnchoredLispStringSourceKind {
+    OverlayString {
+        overlay_id: Value,
+        kind: OverlayStringKind,
+    },
+    Prefix(DisplayRowPrefixKind),
+}
+
+#[derive(Clone, Copy)]
+struct BufferAnchoredLispStringSource {
     value: Value,
     anchor_charpos: CharPos0,
-    kind: DisplayRowPrefixKind,
+    kind: BufferAnchoredLispStringSourceKind,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct DisplayRowPrefixSource {
+    source: BufferAnchoredLispStringSource,
 }
 
 pub(crate) struct BufferLinePrefixRenderContext<'a> {
@@ -2097,9 +2111,7 @@ impl DisplayRowPrefixRequest {
             Self::None => return None,
         };
         Some(DisplayRowPrefixSource {
-            value,
-            anchor_charpos,
-            kind,
+            source: BufferAnchoredLispStringSource::prefix(value, anchor_charpos, kind),
         })
     }
 
@@ -2162,29 +2174,97 @@ impl DisplayRowPrefixValues {
     }
 }
 
-impl DisplayRowPrefixSource {
-    #[cfg(test)]
-    pub(crate) fn value(self) -> Value {
-        self.value
-    }
-
-    pub(crate) fn origin(self) -> DisplayOrigin {
-        match self.kind {
-            DisplayRowPrefixKind::Line => DisplayOrigin::LinePrefix {
-                anchor_charpos: self.anchor_charpos,
-            },
-            DisplayRowPrefixKind::Wrap => DisplayOrigin::WrapPrefix {
-                anchor_charpos: self.anchor_charpos,
-            },
+impl BufferAnchoredLispStringSource {
+    fn prefix(value: Value, anchor_charpos: CharPos0, kind: DisplayRowPrefixKind) -> Self {
+        Self {
+            value,
+            anchor_charpos,
+            kind: BufferAnchoredLispStringSourceKind::Prefix(kind),
         }
     }
 
-    pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
-        BaseFacePolicy::DefaultFace
+    fn overlay_string(
+        value: Value,
+        overlay_id: Value,
+        anchor_charpos: CharPos0,
+        kind: OverlayStringKind,
+    ) -> Self {
+        Self {
+            value,
+            anchor_charpos,
+            kind: BufferAnchoredLispStringSourceKind::OverlayString { overlay_id, kind },
+        }
+    }
+
+    fn anchor_i64(self) -> i64 {
+        self.anchor_charpos.get() as i64
+    }
+
+    fn value(self) -> Value {
+        self.value
+    }
+
+    fn origin(self) -> DisplayOrigin {
+        match self.kind {
+            BufferAnchoredLispStringSourceKind::OverlayString { overlay_id, kind } => {
+                DisplayOrigin::OverlayString {
+                    overlay_id,
+                    anchor_charpos: self.anchor_charpos,
+                    kind,
+                }
+            }
+            BufferAnchoredLispStringSourceKind::Prefix(DisplayRowPrefixKind::Line) => {
+                DisplayOrigin::LinePrefix {
+                    anchor_charpos: self.anchor_charpos,
+                }
+            }
+            BufferAnchoredLispStringSourceKind::Prefix(DisplayRowPrefixKind::Wrap) => {
+                DisplayOrigin::WrapPrefix {
+                    anchor_charpos: self.anchor_charpos,
+                }
+            }
+        }
+    }
+
+    fn base_face_policy(self) -> BaseFacePolicy {
+        match self.kind {
+            BufferAnchoredLispStringSourceKind::OverlayString { .. } => {
+                BaseFacePolicy::OverlayStringAtAnchor
+            }
+            BufferAnchoredLispStringSourceKind::Prefix(_) => BaseFacePolicy::DefaultFace,
+        }
+    }
+
+    fn source_id(self) -> LispStringSourceId {
+        match self.kind {
+            BufferAnchoredLispStringSourceKind::OverlayString { .. } => {
+                LispStringSourceId::OVERLAY_STRING
+            }
+            BufferAnchoredLispStringSourceKind::Prefix(_) => LispStringSourceId::PREFIX,
+        }
     }
 
     fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
-        LispStringSourceAppendRequest::new(position, LispStringSourceId::PREFIX, self.value)
+        LispStringSourceAppendRequest::new(position, self.source_id(), self.value)
+    }
+}
+
+impl DisplayRowPrefixSource {
+    #[cfg(test)]
+    pub(crate) fn value(self) -> Value {
+        self.source.value()
+    }
+
+    pub(crate) fn origin(self) -> DisplayOrigin {
+        self.source.origin()
+    }
+
+    pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
+        self.source.base_face_policy()
+    }
+
+    fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
+        self.source.append_request(position)
     }
 }
 
@@ -2289,10 +2369,7 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct OverlayStringRenderSource {
-    string: Value,
-    overlay_id: Value,
-    anchor_charpos: CharPos0,
-    kind: OverlayStringKind,
+    source: BufferAnchoredLispStringSource,
 }
 
 impl OverlayStringRenderSource {
@@ -2302,39 +2379,33 @@ impl OverlayStringRenderSource {
         kind: OverlayStringKind,
     ) -> Self {
         Self {
-            string: overlay_string.string,
-            overlay_id: overlay_string.overlay_id,
-            anchor_charpos,
-            kind,
+            source: BufferAnchoredLispStringSource::overlay_string(
+                overlay_string.string,
+                overlay_string.overlay_id,
+                anchor_charpos,
+                kind,
+            ),
         }
     }
 
     pub(crate) fn anchor_i64(self) -> i64 {
-        self.anchor_charpos.get() as i64
+        self.source.anchor_i64()
     }
 
     pub(crate) fn value(self) -> Value {
-        self.string
+        self.source.value()
     }
 
     pub(crate) fn origin(self) -> DisplayOrigin {
-        DisplayOrigin::OverlayString {
-            overlay_id: self.overlay_id,
-            anchor_charpos: self.anchor_charpos,
-            kind: self.kind,
-        }
+        self.source.origin()
     }
 
     pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
-        BaseFacePolicy::OverlayStringAtAnchor
+        self.source.base_face_policy()
     }
 
     fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
-        LispStringSourceAppendRequest::new(
-            position,
-            LispStringSourceId::OVERLAY_STRING,
-            self.value(),
-        )
+        self.source.append_request(position)
     }
 }
 
