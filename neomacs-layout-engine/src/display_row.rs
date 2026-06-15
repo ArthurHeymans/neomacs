@@ -2321,12 +2321,22 @@ pub(crate) fn install_rendered_display_row(
 ) {
     install_rendered_display_row_faces(builder, rendered);
     let row = rendered_row_with_source_bounds(rendered);
-    builder.install_prebuilt_row(matrix_row, &row);
+    install_prebuilt_display_row(builder, matrix_row, &row);
     install_rendered_display_row_media(
         builder,
         rendered,
         RenderedDisplayRowMediaInstallTarget::MatrixRow(matrix_row),
     );
+}
+
+pub(crate) fn install_prebuilt_display_row(
+    builder: &mut GlyphMatrixBuilder,
+    matrix_row: usize,
+    row: &GlyphRow,
+) {
+    builder.begin_row(matrix_row, row.role);
+    builder.install_prebuilt_current_row(row);
+    builder.end_prebuilt_row();
 }
 
 pub(crate) fn install_measured_window_display_row(
@@ -2347,7 +2357,7 @@ pub(crate) fn install_measured_window_display_row(
     row.pixel_y = measured.bounds.y;
     row.height_px = measured.row_height();
     row.ascent_px = measured.row_ascent();
-    builder.install_prebuilt_row(matrix_row, &row);
+    install_prebuilt_display_row(builder, matrix_row, &row);
     install_rendered_display_row_media(
         builder,
         &measured.rendered,

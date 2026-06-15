@@ -334,7 +334,8 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub(crate) fn install_prebuilt_row(&mut self, row: usize, source: &GlyphRow) {
+    #[cfg(test)]
+    fn install_prebuilt_row(&mut self, row: usize, source: &GlyphRow) {
         self.begin_row(row, source.role);
         self.install_prebuilt_current_row(source);
         self.end_prebuilt_row();

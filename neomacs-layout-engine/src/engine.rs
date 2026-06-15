@@ -49,7 +49,7 @@ use crate::display_frame_output::{
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::insert_resolved_display_row_face;
+use crate::display_row::{insert_resolved_display_row_face, install_prebuilt_display_row};
 use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
@@ -1201,7 +1201,7 @@ fn mock_display_row_from_line(
 }
 
 fn install_mock_display_row(builder: &mut GlyphMatrixBuilder, row_index: usize, row: &GlyphRow) {
-    builder.install_prebuilt_row(row_index, row);
+    install_prebuilt_display_row(builder, row_index, row);
 }
 
 impl LayoutEngine {
