@@ -73,6 +73,7 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
+use crate::display_source::{DisplaySourceContext, SingleDisplayItemSource};
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;
 #[cfg(test)]
@@ -1119,7 +1120,10 @@ fn push_mock_display_text(
     if char_len == 0 {
         return;
     }
-    writer.push_item(mock_display_text_item(text, face_id, *source_offset));
+    let mut source =
+        SingleDisplayItemSource::new(mock_display_text_item(text, face_id, *source_offset));
+    let mut source_context = DisplaySourceContext::empty();
+    writer.push_source(&mut source, &mut source_context);
     *source_offset = source_offset.saturating_add(char_len);
 }
 
