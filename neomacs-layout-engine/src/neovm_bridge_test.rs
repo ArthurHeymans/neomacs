@@ -1950,7 +1950,7 @@ fn face_policy_resolves_display_origin_base_faces() {
     let mut next_check = buf.point_max_char_pos().get();
     let fixed_face = resolver.base_face_for_origin(
         Some(buf),
-        &DisplayOrigin::ModeLine,
+        &DisplayOrigin::ModeLine { selected: true },
         BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
         &mut next_check,
     );

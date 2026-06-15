@@ -73,7 +73,7 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
         8.0,
         12.0,
         DisplayTabPolicy::every(4),
-        DisplayOrigin::ModeLine,
+        DisplayOrigin::ModeLine { selected: true },
         &base_face,
         Value::string("mode"),
     )

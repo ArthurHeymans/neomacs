@@ -360,6 +360,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
 pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) window_id: u64,
     pub(crate) kind: WindowChromeKind,
+    pub(crate) selected: bool,
     pub(crate) matrix_row: usize,
     pub(crate) output: ChromeRowOutput,
     pub(crate) bounds: Rect,
@@ -537,6 +538,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             state.render_display_row(WindowChromeDisplayRowRequest {
                 window_id: params.window_id as u64,
                 kind: WindowChromeKind::TabLine,
+                selected: params.selected,
                 matrix_row: 0,
                 output: ChromeRowOutput {
                     row: 0,
@@ -572,6 +574,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             state.render_display_row(WindowChromeDisplayRowRequest {
                 window_id: params.window_id as u64,
                 kind: WindowChromeKind::HeaderLine,
+                selected: params.selected,
                 matrix_row: usize::from(self.tab_line_height > 0.0),
                 output: ChromeRowOutput {
                     row: i64::from(self.tab_line_height > 0.0),
@@ -618,6 +621,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             state.render_display_row(WindowChromeDisplayRowRequest {
                 window_id: params.window_id as u64,
                 kind: WindowChromeKind::ModeLine,
+                selected: params.selected,
                 matrix_row: self.mode_line_matrix_row,
                 output: ChromeRowOutput {
                     row: self.mode_line_matrix_row as i64,
@@ -659,7 +663,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             self.char_width,
             self.ascent,
             self.tab_policy.clone(),
-            window_chrome_display_origin(self.kind),
+            window_chrome_display_origin(self.kind, self.selected),
             self.base_face,
             self.text.value(),
         )
@@ -1530,11 +1534,11 @@ pub(crate) fn minibuffer_resize_line_count(
     text_lines + overlay_lines + 1
 }
 
-fn window_chrome_display_origin(kind: WindowChromeKind) -> DisplayOrigin {
+fn window_chrome_display_origin(kind: WindowChromeKind, selected: bool) -> DisplayOrigin {
     match kind {
         WindowChromeKind::TabLine => DisplayOrigin::TabLine,
-        WindowChromeKind::HeaderLine => DisplayOrigin::HeaderLine,
-        WindowChromeKind::ModeLine => DisplayOrigin::ModeLine,
+        WindowChromeKind::HeaderLine => DisplayOrigin::HeaderLine { selected },
+        WindowChromeKind::ModeLine => DisplayOrigin::ModeLine { selected },
     }
 }
 

@@ -663,7 +663,7 @@ mod tests {
         let base_face = resolve_display_string_base_face(
             &buffer,
             &resolver,
-            DisplayOrigin::ModeLine,
+            DisplayOrigin::ModeLine { selected: true },
             BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
             None,
             DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,

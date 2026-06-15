@@ -37,8 +37,12 @@ pub(crate) enum DisplayOrigin {
     WrapPrefix {
         anchor_charpos: CharPos0,
     },
-    ModeLine,
-    HeaderLine,
+    ModeLine {
+        selected: bool,
+    },
+    HeaderLine {
+        selected: bool,
+    },
     TabLine,
     TabBar,
     Minibuffer,
@@ -58,8 +62,16 @@ impl DisplayOrigin {
             | Self::Minibuffer
             | Self::EchoArea
             | Self::Posframe => BaseFacePolicy::DefaultFace,
-            Self::ModeLine => BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
-            Self::HeaderLine => BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineActive),
+            Self::ModeLine { selected } => BaseFacePolicy::FixedBasicFace(if selected {
+                BasicFaceId::ModeLineActive
+            } else {
+                BasicFaceId::ModeLineInactive
+            }),
+            Self::HeaderLine { selected } => BaseFacePolicy::FixedBasicFace(if selected {
+                BasicFaceId::HeaderLineActive
+            } else {
+                BasicFaceId::HeaderLineInactive
+            }),
             Self::TabLine => BaseFacePolicy::FixedBasicFace(BasicFaceId::TabLine),
             Self::TabBar => BaseFacePolicy::FixedBasicFace(BasicFaceId::TabBar),
         }
@@ -67,8 +79,8 @@ impl DisplayOrigin {
 
     pub(crate) fn glyph_row_role(self) -> Option<GlyphRowRole> {
         match self {
-            Self::ModeLine => Some(GlyphRowRole::ModeLine),
-            Self::HeaderLine => Some(GlyphRowRole::HeaderLine),
+            Self::ModeLine { .. } => Some(GlyphRowRole::ModeLine),
+            Self::HeaderLine { .. } => Some(GlyphRowRole::HeaderLine),
             Self::TabLine => Some(GlyphRowRole::TabLine),
             Self::TabBar => Some(GlyphRowRole::TabBar),
             Self::Minibuffer | Self::EchoArea => Some(GlyphRowRole::Minibuffer),
@@ -106,8 +118,8 @@ mod tests {
         let _ = DisplayOrigin::WrapPrefix {
             anchor_charpos: CharPos0::new(0),
         };
-        let _ = DisplayOrigin::ModeLine;
-        let _ = DisplayOrigin::HeaderLine;
+        let _ = DisplayOrigin::ModeLine { selected: true };
+        let _ = DisplayOrigin::HeaderLine { selected: true };
         let _ = DisplayOrigin::TabLine;
         let _ = DisplayOrigin::TabBar;
         let _ = DisplayOrigin::Minibuffer;
@@ -168,12 +180,20 @@ mod tests {
             BaseFacePolicy::DefaultFace
         );
         assert_eq!(
-            DisplayOrigin::ModeLine.default_base_face_policy(),
+            DisplayOrigin::ModeLine { selected: true }.default_base_face_policy(),
             BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive)
         );
         assert_eq!(
-            DisplayOrigin::HeaderLine.default_base_face_policy(),
+            DisplayOrigin::ModeLine { selected: false }.default_base_face_policy(),
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineInactive)
+        );
+        assert_eq!(
+            DisplayOrigin::HeaderLine { selected: true }.default_base_face_policy(),
             BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineActive)
+        );
+        assert_eq!(
+            DisplayOrigin::HeaderLine { selected: false }.default_base_face_policy(),
+            BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineInactive)
         );
         assert_eq!(
             DisplayOrigin::TabLine.default_base_face_policy(),
@@ -188,11 +208,11 @@ mod tests {
     #[test]
     fn display_origin_derives_chrome_row_roles() {
         assert_eq!(
-            DisplayOrigin::ModeLine.glyph_row_role(),
+            DisplayOrigin::ModeLine { selected: true }.glyph_row_role(),
             Some(GlyphRowRole::ModeLine)
         );
         assert_eq!(
-            DisplayOrigin::HeaderLine.glyph_row_role(),
+            DisplayOrigin::HeaderLine { selected: true }.glyph_row_role(),
             Some(GlyphRowRole::HeaderLine)
         );
         assert_eq!(
