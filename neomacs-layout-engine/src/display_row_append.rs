@@ -55,8 +55,9 @@ use crate::display_source::{
     BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
     BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
     BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
-    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementBox,
-    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayReplacementAppendItem,
+    DisplayReplacementBox, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
+    SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -8805,41 +8806,6 @@ impl DisplayReplacementStringAppendRequest {
 }
 
 #[derive(Clone, Debug)]
-enum DisplayReplacementAppendItem {
-    Media(DisplayMediaReplacement),
-    Stretch(DisplayReplacementBox),
-    SourceMappedText(Box<str>),
-}
-
-impl DisplayReplacementAppendItem {
-    fn stretch(item: DisplayReplacementStretchAppendItem) -> Self {
-        Self::Stretch(item.geometry())
-    }
-
-    fn media(item: DisplayReplacementMediaAppendItem) -> Self {
-        Self::Media(item.media())
-    }
-
-    fn source_mapped_text(item: DisplayReplacementSourceMappedTextAppendItem) -> Self {
-        Self::SourceMappedText(item.text())
-    }
-
-    fn into_display_item(
-        self,
-        replacement_source: BufferDisplayReplacementSource,
-        face_id: u32,
-    ) -> DisplayItem {
-        match self {
-            Self::Media(media) => replacement_source.media_item(face_id, media),
-            Self::Stretch(geometry) => replacement_source.stretch_item(face_id, geometry),
-            Self::SourceMappedText(text) => {
-                replacement_source.source_mapped_text_item(face_id, text)
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
 struct DisplayReplacementItemAppendRequest {
     item: DisplayReplacementAppendItem,
     frame: DisplayReplacementItemAppendFrame,
@@ -9266,7 +9232,7 @@ impl DisplayReplacementStretchAppendItem {
     ) -> Option<DisplayReplacementItemAppendRequest> {
         (self.width_px() > 0.0).then(|| {
             DisplayReplacementItemAppendRequest::active_face(
-                DisplayReplacementAppendItem::stretch(self),
+                DisplayReplacementAppendItem::stretch(self.geometry()),
                 position,
             )
         })
@@ -10608,7 +10574,7 @@ impl DisplayReplacementMediaAppendItem {
 
     fn append_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest::display_box(
-            DisplayReplacementAppendItem::media(self),
+            DisplayReplacementAppendItem::media(self.media()),
             self.display_height_px(),
             self.display_ascent_px(),
             position,
@@ -10632,7 +10598,7 @@ impl DisplayReplacementSourceMappedTextAppendItem {
 
     fn append_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest::active_face(
-            DisplayReplacementAppendItem::source_mapped_text(self),
+            DisplayReplacementAppendItem::source_mapped_text(self.text()),
             position,
         )
     }

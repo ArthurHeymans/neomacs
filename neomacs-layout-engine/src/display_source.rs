@@ -970,6 +970,41 @@ impl BufferDisplayReplacementSource {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum DisplayReplacementAppendItem {
+    Media(DisplayMediaReplacement),
+    Stretch(DisplayReplacementBox),
+    SourceMappedText(Box<str>),
+}
+
+impl DisplayReplacementAppendItem {
+    pub(crate) fn media(media: DisplayMediaReplacement) -> Self {
+        Self::Media(media)
+    }
+
+    pub(crate) fn stretch(geometry: DisplayReplacementBox) -> Self {
+        Self::Stretch(geometry)
+    }
+
+    pub(crate) fn source_mapped_text(text: impl Into<Box<str>>) -> Self {
+        Self::SourceMappedText(text.into())
+    }
+
+    pub(crate) fn into_display_item(
+        self,
+        replacement_source: BufferDisplayReplacementSource,
+        face_id: u32,
+    ) -> DisplayItem {
+        match self {
+            Self::Media(media) => replacement_source.media_item(face_id, media),
+            Self::Stretch(geometry) => replacement_source.stretch_item(face_id, geometry),
+            Self::SourceMappedText(text) => {
+                replacement_source.source_mapped_text_item(face_id, text)
+            }
+        }
+    }
+}
+
 pub(crate) struct BufferDisplayReplacementStringSource<S> {
     replacement_source: BufferDisplayReplacementSource,
     source: S,

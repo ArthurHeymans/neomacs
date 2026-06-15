@@ -32,7 +32,7 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
-    BufferTextSourceSpecialDisplay,
+    BufferTextSourceSpecialDisplay, DisplayReplacementAppendItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
@@ -9570,7 +9570,7 @@ fn display_replacement_append_context_installs_image_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayReplacementAppendItem::media(media_item),
+            DisplayReplacementAppendItem::media(media_item.media()),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
@@ -9705,7 +9705,7 @@ fn display_replacement_append_context_installs_video_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayReplacementAppendItem::media(media_item),
+            DisplayReplacementAppendItem::media(media_item.media()),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
