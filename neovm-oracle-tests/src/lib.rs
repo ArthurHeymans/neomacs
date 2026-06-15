@@ -1941,6 +1941,7 @@ mod divergence_thread_elisp_deep;
 mod divergence_time_process_final;
 mod divergence_timer_eventloop;
 mod divergence_treesit_deep;
+mod divergence_thin_subsystems;
 mod divergence_ui_interaction;
 mod divergence_undo_buffer_deep;
 mod divergence_undo_deep_2;
