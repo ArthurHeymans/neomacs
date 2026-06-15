@@ -8,8 +8,9 @@ use crate::display_row::{
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderRequest,
     BufferDisplayPropertyCheckpointRenderState, BufferDisplayPropertyTextWalkOutcome,
-    BufferEndOfBufferTailRenderRequest, BufferEndOfBufferTailRenderState,
-    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderOutcome,
+    BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
+    BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
+    BufferInvisibleTextRenderContext, BufferInvisibleTextRenderOutcome,
     BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
     BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
@@ -20,13 +21,14 @@ use crate::display_row_append::{
     BufferTextLineBreakSourceEvent, BufferTextRowAppendState, BufferTextSourceCharRenderContext,
     BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextSourceEventCursor, BufferTextSourceTextEvent,
-    BufferTextWindowBeginRequest, BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
+    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
     BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeOutcome, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
-    BufferTextWindowVisibilityRetryRequest, DisplayRowAppendSurface, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTransitionContinuation, TextRowSourceRenderState,
-    TextWindowAppendSurfaceRequest,
+    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
+    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
+    DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTransitionContinuation, TextRowSourceRenderState, TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -1394,19 +1396,19 @@ impl BufferTextWindowBodyInstallContext {
         row_flags: &DisplayRowFlags,
         char_width: f32,
     ) -> BufferTextWindowBodyInstallRequest<'_> {
-        BufferTextWindowBodyInstallRequest::new(
-            self.matrix_window_id,
+        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext {
+            window_id: self.matrix_window_id,
             window_start,
             text_start_byte,
             byte_idx,
             reserve_right_special_col,
             reserve_right_border_col,
-            self.text_matrix_row_base,
-            self.matrix_cols,
+            text_matrix_row_base: self.text_matrix_row_base,
+            matrix_cols: self.matrix_cols,
             row_flags,
-            0,
-            char_width,
-        )
+            right_edge_face_id: 0,
+            char_w: char_width,
+        })
     }
 
     #[cfg(test)]
@@ -1888,22 +1890,22 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
         charpos: i64,
         point_is_visible_eob: bool,
     ) -> BufferTextWindowTailFinalizeRequest<'request> {
-        BufferTextWindowTailFinalizeRequest::new(
-            self.params,
+        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
+            params: self.params,
             text,
-            self.text_matrix_row_base,
-            self.text_area_left,
-            self.window_top,
-            self.text_y,
-            self.text_height,
-            self.char_width,
-            self.char_height,
-            self.window_start,
-            self.params.point_charpos().get(),
+            text_matrix_row_base: self.text_matrix_row_base,
+            text_area_left: self.text_area_left,
+            window_top: self.window_top,
+            text_y: self.text_y,
+            text_height: self.text_height,
+            char_w: self.char_width,
+            char_h: self.char_height,
+            window_start: self.window_start,
+            point_charpos: self.params.point_charpos().get(),
             charpos,
             point_is_visible_eob,
-            self.row_limit,
-        )
+            row_limit: self.row_limit,
+        })
     }
 
     pub(crate) fn visibility_retry_request<'rows, 'buf, B>(
@@ -2271,18 +2273,18 @@ impl BufferTextWindowLoopRequestContext {
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
     ) -> BufferInvisibleTextRenderRequest<'a> {
-        BufferInvisibleTextRenderRequest::new(
+        BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext {
             text,
-            self.accessible_end,
-            self.point_charpos,
+            accessible_end: self.accessible_end,
+            point_charpos: self.point_charpos,
             append_surface,
             overlay_context,
             active_face_state,
             glyph_y_offset,
-            self.default_face_ascent,
-            self.char_height,
-            self.char_width,
-        )
+            default_face_ascent: self.default_face_ascent,
+            char_h: self.char_height,
+            char_w: self.char_width,
+        })
     }
 
     pub(crate) fn hscroll_skip_request<'a>(
@@ -2440,16 +2442,16 @@ impl BufferTextWindowLoopRequestContext {
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferEndOfBufferTailRenderRequest<'a> {
-        BufferEndOfBufferTailRenderRequest::new(
+        BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext {
             byte_idx,
             charpos,
-            self.accessible_end,
-            self.point_charpos,
+            accessible_end: self.accessible_end,
+            point_charpos: self.point_charpos,
             has_overlays,
             overlay_context,
             active_face_state,
-            self.row_limit,
-        )
+            row_limit: self.row_limit,
+        })
     }
 
     #[cfg(test)]

@@ -1542,18 +1542,18 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut font_metrics = None;
 
-    let outcome = BufferInvisibleTextRenderRequest::new(
-        b"folded rest",
-        11,
-        2,
-        &surface,
+    let outcome = BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext {
+        text: b"folded rest",
+        accessible_end: 11,
+        point_charpos: 2,
+        append_surface: &surface,
         overlay_context,
-        &active_face,
-        0.0,
-        12.0,
-        16.0,
-        8.0,
-    )
+        active_face_state: &active_face,
+        glyph_y_offset: 0.0,
+        default_face_ascent: 12.0,
+        char_h: 16.0,
+        char_w: 8.0,
+    })
     .render_at_checkpoint_and_apply(
         &snapshot,
         BufferInvisibleTextRenderRequestState {
@@ -5925,16 +5925,16 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut font_metrics = None;
 
-    let outcome = BufferEndOfBufferTailRenderRequest::new(
-        3,
-        3,
-        3,
-        3,
-        true,
+    let outcome = BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext {
+        byte_idx: 3,
+        charpos: 3,
+        accessible_end: 3,
+        point_charpos: 3,
+        has_overlays: true,
         overlay_context,
-        &active_face,
-        context.row_limit,
-    )
+        active_face_state: &active_face,
+        row_limit: context.row_limit,
+    })
     .render_and_apply(
         &snapshot,
         BufferEndOfBufferTailRenderState {
@@ -6008,22 +6008,22 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);
 
-    let outcome = BufferTextWindowTailFinalizeRequest::new(
-        &params,
-        b"abc",
-        0,
-        0.0,
-        0.0,
-        0.0,
-        48.0,
-        8.0,
-        16.0,
-        0,
-        0,
-        3,
-        false,
-        context.row_limit,
-    )
+    let outcome = BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
+        params: &params,
+        text: b"abc",
+        text_matrix_row_base: 0,
+        text_area_left: 0.0,
+        window_top: 0.0,
+        text_y: 0.0,
+        text_height: 48.0,
+        char_w: 8.0,
+        char_h: 16.0,
+        window_start: 0,
+        point_charpos: 0,
+        charpos: 3,
+        point_is_visible_eob: false,
+        row_limit: context.row_limit,
+    })
     .finalize_and_apply(BufferTextWindowTailFinalizeState {
         cursor_info: &mut cursor_info,
         row_geometry: &context.geometry,
@@ -6101,13 +6101,24 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
 
     let mut row_flags = DisplayRowFlags::new(1);
     row_flags.mark(0, DisplayRowFlagKind::Truncated);
-    let positions = BufferTextWindowBodyInstallRequest::new(
-        41, 3, 100, 4, true, false, 0, 5, &row_flags, 9, 8.0,
-    )
-    .install_and_apply(BufferTextWindowBodyInstallState {
-        builder: &mut builder,
-        output_emitter: &output_emitter,
-    });
+    let positions =
+        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext {
+            window_id: 41,
+            window_start: 3,
+            text_start_byte: 100,
+            byte_idx: 4,
+            reserve_right_special_col: true,
+            reserve_right_border_col: false,
+            text_matrix_row_base: 0,
+            matrix_cols: 5,
+            row_flags: &row_flags,
+            right_edge_face_id: 9,
+            char_w: 8.0,
+        })
+        .install_and_apply(BufferTextWindowBodyInstallState {
+            builder: &mut builder,
+            output_emitter: &output_emitter,
+        });
 
     assert_eq!(positions.window_start, LispCharPos1::new(4));
     assert_eq!(positions.window_end, LispCharPos1::new(8));

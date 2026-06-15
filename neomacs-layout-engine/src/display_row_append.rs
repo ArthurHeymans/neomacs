@@ -1033,16 +1033,21 @@ pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequest<'a> {
-    text: &'a [u8],
-    accessible_end: i64,
-    point_charpos: i64,
-    append_surface: &'a DisplayRowAppendSurface,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-    active_face_state: &'a DisplayRowActiveFaceState,
-    glyph_y_offset: f32,
-    default_face_ascent: f32,
-    char_h: f32,
-    char_w: f32,
+    context: BufferInvisibleTextRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferInvisibleTextRenderContext<'a> {
+    pub(crate) text: &'a [u8],
+    pub(crate) accessible_end: i64,
+    pub(crate) point_charpos: i64,
+    pub(crate) append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) glyph_y_offset: f32,
+    pub(crate) default_face_ascent: f32,
+    pub(crate) char_h: f32,
+    pub(crate) char_w: f32,
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
@@ -1061,14 +1066,19 @@ pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
-    byte_idx: usize,
-    charpos: i64,
-    accessible_end: i64,
-    point_charpos: i64,
-    has_overlays: bool,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-    active_face_state: &'a DisplayRowActiveFaceState,
-    row_limit: DisplayRowLimit,
+    context: BufferEndOfBufferTailRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
+    pub(crate) byte_idx: usize,
+    pub(crate) charpos: i64,
+    pub(crate) accessible_end: i64,
+    pub(crate) point_charpos: i64,
+    pub(crate) has_overlays: bool,
+    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
@@ -1115,20 +1125,25 @@ pub(crate) struct BufferTextWindowTerminalRightBorderRequest {
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
-    params: &'a WindowParams,
-    text: &'a [u8],
-    text_matrix_row_base: usize,
-    text_area_left: f32,
-    window_top: f32,
-    text_y: f32,
-    text_height: f32,
-    char_w: f32,
-    char_h: f32,
-    window_start: i64,
-    point_charpos: i64,
-    charpos: i64,
-    point_is_visible_eob: bool,
-    row_limit: DisplayRowLimit,
+    context: BufferTextWindowTailFinalizeContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextWindowTailFinalizeContext<'a> {
+    pub(crate) params: &'a WindowParams,
+    pub(crate) text: &'a [u8],
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) text_area_left: f32,
+    pub(crate) window_top: f32,
+    pub(crate) text_y: f32,
+    pub(crate) text_height: f32,
+    pub(crate) char_w: f32,
+    pub(crate) char_h: f32,
+    pub(crate) window_start: i64,
+    pub(crate) point_charpos: i64,
+    pub(crate) charpos: i64,
+    pub(crate) point_is_visible_eob: bool,
+    pub(crate) row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
@@ -1141,17 +1156,22 @@ pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
 }
 
 pub(crate) struct BufferTextWindowBodyInstallRequest<'a> {
-    window_id: u64,
-    window_start: i64,
-    text_start_byte: usize,
-    byte_idx: usize,
-    reserve_right_special_col: bool,
-    reserve_right_border_col: bool,
-    text_matrix_row_base: usize,
-    matrix_cols: usize,
-    row_flags: &'a DisplayRowFlags,
-    right_edge_face_id: u32,
-    char_w: f32,
+    context: BufferTextWindowBodyInstallRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
+    pub(crate) window_id: u64,
+    pub(crate) window_start: i64,
+    pub(crate) text_start_byte: usize,
+    pub(crate) byte_idx: usize,
+    pub(crate) reserve_right_special_col: bool,
+    pub(crate) reserve_right_border_col: bool,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) matrix_cols: usize,
+    pub(crate) row_flags: &'a DisplayRowFlags,
+    pub(crate) right_edge_face_id: u32,
+    pub(crate) char_w: f32,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallState<'a, 'emit> {
@@ -6241,27 +6261,8 @@ impl BufferEndOfBufferTailAction {
 }
 
 impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        byte_idx: usize,
-        charpos: i64,
-        accessible_end: i64,
-        point_charpos: i64,
-        has_overlays: bool,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        row_limit: DisplayRowLimit,
-    ) -> Self {
-        Self {
-            byte_idx,
-            charpos,
-            accessible_end,
-            point_charpos,
-            has_overlays,
-            overlay_context,
-            active_face_state,
-            row_limit,
-        }
+    pub(crate) fn new(context: BufferEndOfBufferTailRenderContext<'a>) -> Self {
+        Self { context }
     }
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
@@ -6281,18 +6282,25 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
             face_ids,
         } = state;
         let mut source_render = source_render;
+        let context = self.context;
 
         let tail = BufferEndOfBufferTailAction::new(
-            self.byte_idx,
-            self.charpos,
-            self.accessible_end,
-            self.point_charpos,
-            self.has_overlays,
+            context.byte_idx,
+            context.charpos,
+            context.accessible_end,
+            context.point_charpos,
+            context.has_overlays,
         );
         let point_is_visible_eob = tail.point_is_visible_eob();
-        tail.capture_cursor_if_point(cursor_info, self.active_face_state, row_geometry, *x, *col);
+        tail.capture_cursor_if_point(
+            cursor_info,
+            context.active_face_state,
+            row_geometry,
+            *x,
+            *col,
+        );
 
-        if tail.should_render_overlay_strings(row_geometry, self.row_limit) {
+        if tail.should_render_overlay_strings(row_geometry, context.row_limit) {
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
                 x,
@@ -6306,8 +6314,8 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
             );
             tail.render_overlay_strings_at_eob(
                 buffer,
-                self.overlay_context,
-                self.active_face_state,
+                context.overlay_context,
+                context.active_face_state,
                 &mut overlay_state,
             );
         }
@@ -6319,39 +6327,8 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
 }
 
 impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        params: &'a WindowParams,
-        text: &'a [u8],
-        text_matrix_row_base: usize,
-        text_area_left: f32,
-        window_top: f32,
-        text_y: f32,
-        text_height: f32,
-        char_w: f32,
-        char_h: f32,
-        window_start: i64,
-        point_charpos: i64,
-        charpos: i64,
-        point_is_visible_eob: bool,
-        row_limit: DisplayRowLimit,
-    ) -> Self {
-        Self {
-            params,
-            text,
-            text_matrix_row_base,
-            text_area_left,
-            window_top,
-            text_y,
-            text_height,
-            char_w,
-            char_h,
-            window_start,
-            point_charpos,
-            charpos,
-            point_is_visible_eob,
-            row_limit,
-        }
+    pub(crate) fn new(context: BufferTextWindowTailFinalizeContext<'a>) -> Self {
+        Self { context }
     }
 
     pub(crate) fn finalize_and_apply(
@@ -6367,31 +6344,32 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             output_render,
         } = state;
         let (builder, output_emitter, evaluator) = output_render.into_parts();
+        let context = self.context;
 
-        let cursor_requested = self.point_charpos >= self.window_start
-            && (self.point_charpos <= self.charpos || self.point_is_visible_eob);
+        let cursor_requested = context.point_charpos >= context.window_start
+            && (context.point_charpos <= context.charpos || context.point_is_visible_eob);
         let mut cursor_published = false;
 
         if cursor_requested {
             if let Some(cursor) = cursor_info.captured() {
                 let cursor_row_metrics = output_emitter.row_metrics().to_vec();
                 CapturedTextWindowCursorPublishContext::new(
-                    self.params,
-                    self.text,
-                    self.text_matrix_row_base,
-                    self.text_area_left,
-                    self.window_top,
-                    self.text_y,
-                    self.text_height,
-                    self.char_w,
-                    self.char_h,
-                    self.point_charpos,
-                    self.point_is_visible_eob,
+                    context.params,
+                    context.text,
+                    context.text_matrix_row_base,
+                    context.text_area_left,
+                    context.window_top,
+                    context.text_y,
+                    context.text_height,
+                    context.char_w,
+                    context.char_h,
+                    context.point_charpos,
+                    context.point_is_visible_eob,
                 )
                 .publish_captured_cursor(
                     cursor,
                     &cursor_row_metrics,
-                    row_geometry.row_metrics_snapshot(self.text_matrix_row_base),
+                    row_geometry.row_metrics_snapshot(context.text_matrix_row_base),
                     builder,
                     output_emitter,
                 );
@@ -6399,9 +6377,9 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             } else {
                 tracing::debug!(
                     "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",
-                    self.point_charpos,
-                    self.window_start,
-                    self.charpos
+                    context.point_charpos,
+                    context.window_start,
+                    context.charpos
                 );
             }
         }
@@ -6412,23 +6390,23 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             evaluator,
             TextWindowPendingRowFinish {
                 row_geometry,
-                row_limit: self.row_limit,
+                row_limit: context.row_limit,
                 row_y_positions,
-                text_y: self.text_y,
-                char_height: self.char_h,
-                charpos: self.charpos,
+                text_y: context.text_y,
+                char_height: context.char_h,
+                charpos: context.charpos,
                 hit_row_range,
                 hit_rows,
             },
         );
 
         let visual_cursor_summary = VisualTextWindowCursorPublishContext::new(
-            self.params,
-            self.text_area_left,
-            self.window_top,
-            self.text_y,
-            self.text_height,
-            self.char_w,
+            context.params,
+            context.text_area_left,
+            context.window_top,
+            context.text_y,
+            context.text_height,
+            context.char_w,
         )
         .publish_visual_cursors(builder, output_emitter);
 
@@ -6442,57 +6420,33 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
 }
 
 impl<'a> BufferTextWindowBodyInstallRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        window_id: u64,
-        window_start: i64,
-        text_start_byte: usize,
-        byte_idx: usize,
-        reserve_right_special_col: bool,
-        reserve_right_border_col: bool,
-        text_matrix_row_base: usize,
-        matrix_cols: usize,
-        row_flags: &'a DisplayRowFlags,
-        right_edge_face_id: u32,
-        char_w: f32,
-    ) -> Self {
-        Self {
-            window_id,
-            window_start,
-            text_start_byte,
-            byte_idx,
-            reserve_right_special_col,
-            reserve_right_border_col,
-            text_matrix_row_base,
-            matrix_cols,
-            row_flags,
-            right_edge_face_id,
-            char_w,
-        }
+    pub(crate) fn new(context: BufferTextWindowBodyInstallRenderContext<'a>) -> Self {
+        Self { context }
     }
 
     pub(crate) fn install_and_apply(
         self,
         state: BufferTextWindowBodyInstallState<'_, '_>,
     ) -> TextWindowRedisplayPositions {
+        let context = self.context;
         let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
-            self.reserve_right_special_col,
-            self.reserve_right_border_col,
-            self.text_matrix_row_base,
-            self.matrix_cols,
-            self.row_flags,
-            self.right_edge_face_id,
-            self.char_w,
+            context.reserve_right_special_col,
+            context.reserve_right_border_col,
+            context.text_matrix_row_base,
+            context.matrix_cols,
+            context.row_flags,
+            context.right_edge_face_id,
+            context.char_w,
         );
 
         install_text_window_body_output(
             state.builder,
             state.output_emitter,
             TextWindowBodyOutputInstall {
-                window_id: self.window_id,
-                window_start: self.window_start,
-                text_start_byte: self.text_start_byte,
-                byte_idx: self.byte_idx,
+                window_id: context.window_id,
+                window_start: context.window_start,
+                text_start_byte: context.text_start_byte,
+                byte_idx: context.byte_idx,
                 right_edge_markers,
             },
         )
@@ -7033,31 +6987,8 @@ impl<'a> BufferInvisibleTextRenderState<'a> {
 }
 
 impl<'a> BufferInvisibleTextRenderRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        text: &'a [u8],
-        accessible_end: i64,
-        point_charpos: i64,
-        append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        glyph_y_offset: f32,
-        default_face_ascent: f32,
-        char_h: f32,
-        char_w: f32,
-    ) -> Self {
-        Self {
-            text,
-            accessible_end,
-            point_charpos,
-            append_surface,
-            overlay_context,
-            active_face_state,
-            glyph_y_offset,
-            default_face_ascent,
-            char_h,
-            char_w,
-        }
+    pub(crate) fn new(context: BufferInvisibleTextRenderContext<'a>) -> Self {
+        Self { context }
     }
 
     pub(crate) fn render_at_checkpoint_and_apply<B: LayoutBufferView>(
@@ -7080,11 +7011,12 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             face_ids,
         } = state;
         let mut source_render = source_render;
+        let context = self.context;
 
         let action = BufferInvisibleTextScanContext::new(
-            self.text,
-            self.accessible_end,
-            self.point_charpos,
+            context.text,
+            context.accessible_end,
+            context.point_charpos,
             cursor_info.is_missing(),
         )
         .consume_at_checkpoint(buffer, checkpoints, byte_idx, charpos);
@@ -7096,12 +7028,12 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             BufferInvisibleTextRenderState::new(source_render.reborrow(), cursor_info, x, col);
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
-                self.append_surface,
-                self.active_face_state,
-                self.glyph_y_offset,
-                self.char_h,
-                self.default_face_ascent,
-                self.char_w,
+                context.append_surface,
+                context.active_face_state,
+                context.glyph_y_offset,
+                context.char_h,
+                context.default_face_ascent,
+                context.char_w,
             ),
             row_geometry,
             &mut hidden_text_state,
@@ -7118,10 +7050,10 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             row_y_positions,
             face_ids,
         );
-        self.overlay_context.render_after_at(
+        context.overlay_context.render_after_at(
             buffer,
             *charpos,
-            self.active_face_state,
+            context.active_face_state,
             &mut overlay_state,
         );
         BufferInvisibleTextRenderOutcome::ContinueBufferWalk
