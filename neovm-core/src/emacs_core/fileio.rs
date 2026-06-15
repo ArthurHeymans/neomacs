@@ -1496,6 +1496,30 @@ fn concat_file_name_lisp(
     file_name_lisp_from_bytes(bytes, file_name_concat_result_multibyte(&[left, right]))
 }
 
+/// `file-name-concat` over Lisp file names, preserving raw file-name bytes
+/// (skips empty components and inserts `/` separators, like the &str
+/// `file_name_concat` but without the storage-String round-trip).
+fn file_name_concat_lisp(
+    parts: &[&crate::heap_types::LispString],
+) -> crate::heap_types::LispString {
+    let non_empty: Vec<&crate::heap_types::LispString> = parts
+        .iter()
+        .copied()
+        .filter(|part| !part.as_bytes().is_empty())
+        .collect();
+    let Some((first, rest)) = non_empty.split_first() else {
+        return empty_file_name_lisp_string();
+    };
+    let mut out = first.as_bytes().to_vec();
+    for part in rest {
+        if out.last() != Some(&b'/') {
+            out.push(b'/');
+        }
+        out.extend_from_slice(part.as_bytes());
+    }
+    file_name_lisp_from_bytes(out, file_name_concat_result_multibyte(&non_empty))
+}
+
 fn lisp_file_name_directory(
     filename: &crate::heap_types::LispString,
 ) -> Option<crate::heap_types::LispString> {
@@ -2311,13 +2335,16 @@ pub(crate) fn builtin_directory_file_name(eval: &mut Context, args: Vec<Value>) 
 pub(crate) fn builtin_file_name_concat(args: Vec<Value>) -> EvalResult {
     expect_min_args("file-name-concat", &args, 1)?;
 
-    let mut parts = Vec::new();
+    let mut parts: Vec<crate::heap_types::LispString> = Vec::new();
     for value in args {
         match value.kind() {
             ValueKind::Nil => {}
             ValueKind::String => {
-                let s = fileio_owned_runtime_string(value);
-                if !s.is_empty() {
+                let s = value
+                    .as_lisp_string()
+                    .expect("ValueKind::String must carry LispString payload")
+                    .clone();
+                if !s.as_bytes().is_empty() {
                     parts.push(s);
                 }
             }
@@ -2330,8 +2357,8 @@ pub(crate) fn builtin_file_name_concat(args: Vec<Value>) -> EvalResult {
         }
     }
 
-    let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
-    Ok(Value::string(file_name_concat(&refs)))
+    let refs: Vec<&crate::heap_types::LispString> = parts.iter().collect();
+    Ok(Value::heap_string(file_name_concat_lisp(&refs)))
 }
 
 /// (file-name-absolute-p FILENAME) -> t or nil
@@ -5092,7 +5119,10 @@ pub(crate) fn builtin_insert_file_contents(
     let coding_system_for_read: Option<String> = match coding_val.kind() {
         ValueKind::Nil => None,
         ValueKind::Symbol(id) => Some(resolve_sym(id).to_owned()),
-        ValueKind::String => Some(fileio_owned_runtime_string(coding_val)),
+        // Coding-system names are ASCII protocol identifiers; decode lossily.
+        ValueKind::String => coding_val
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
         _ => None,
     };
     let source_load_context = eval
@@ -5339,7 +5369,11 @@ fn coding_system_value_to_name(val: &Value) -> Option<String> {
             if name == "nil" { None } else { Some(name) }
         }
         ValueKind::String => {
-            let name = fileio_owned_runtime_string(*val);
+            // Coding-system names are ASCII protocol identifiers; decode lossily.
+            let name = val
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+                .unwrap_or_default();
             if name.is_empty() || name == "nil" {
                 None
             } else {
