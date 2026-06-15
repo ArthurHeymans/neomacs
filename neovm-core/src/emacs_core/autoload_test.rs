@@ -399,8 +399,8 @@ fn obsolete_function_tracking() {
     mgr.make_obsolete("old-fn", "new-fn", "28.1");
     assert!(mgr.is_function_obsolete("old-fn"));
     let info = mgr.get_obsolete_function("old-fn").unwrap();
-    assert_eq!(info.0, "new-fn");
-    assert_eq!(info.1, "28.1");
+    assert_eq!(info.0.as_utf8_str(), Some("new-fn"));
+    assert_eq!(info.1.as_utf8_str(), Some("28.1"));
 }
 
 #[test]
@@ -411,8 +411,8 @@ fn obsolete_variable_tracking() {
     mgr.make_variable_obsolete("old-var", "new-var", "27.1");
     assert!(mgr.is_variable_obsolete("old-var"));
     let info = mgr.get_obsolete_variable("old-var").unwrap();
-    assert_eq!(info.0, "new-var");
-    assert_eq!(info.1, "27.1");
+    assert_eq!(info.0.as_utf8_str(), Some("new-var"));
+    assert_eq!(info.1.as_utf8_str(), Some("27.1"));
 }
 
 // -----------------------------------------------------------------------

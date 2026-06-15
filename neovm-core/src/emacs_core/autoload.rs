@@ -45,9 +45,15 @@ impl AfterLoadKey {
     }
 
     pub(crate) fn from_lisp_string(text: &LispString) -> Self {
-        Self(runtime_string_to_autoload_string(
-            &autoload_string_to_runtime_string(text),
-        ))
+        // Normalize to multibyte so keys match `from_runtime` (which decodes to
+        // a multibyte string) — without round-tripping through a storage String.
+        Self(if text.is_multibyte() {
+            text.clone()
+        } else {
+            LispString::from_emacs_bytes(crate::emacs_core::emacs_char::str_to_multibyte(
+                text.as_bytes(),
+            ))
+        })
     }
 
     pub(crate) fn as_lisp_string(&self) -> &LispString {
@@ -247,17 +253,14 @@ impl AutoloadManager {
     }
 
     /// Get obsolete function info: (new-name, when).
-    pub fn get_obsolete_function(&self, name: &str) -> Option<(String, String)> {
+    pub fn get_obsolete_function(&self, name: &str) -> Option<(LispString, LispString)> {
         self.get_obsolete_function_symbol(intern(name))
     }
 
-    pub fn get_obsolete_function_symbol(&self, name: SymId) -> Option<(String, String)> {
-        self.obsolete_functions.get(&name).map(|(new_name, when)| {
-            (
-                autoload_string_to_runtime_string(new_name),
-                autoload_string_to_runtime_string(when),
-            )
-        })
+    pub fn get_obsolete_function_symbol(&self, name: SymId) -> Option<(LispString, LispString)> {
+        self.obsolete_functions
+            .get(&name)
+            .map(|(new_name, when)| (new_name.clone(), when.clone()))
     }
 
     /// Mark a variable as obsolete.
@@ -288,17 +291,14 @@ impl AutoloadManager {
     }
 
     /// Get obsolete variable info: (new-name, when).
-    pub fn get_obsolete_variable(&self, name: &str) -> Option<(String, String)> {
+    pub fn get_obsolete_variable(&self, name: &str) -> Option<(LispString, LispString)> {
         self.get_obsolete_variable_symbol(intern(name))
     }
 
-    pub fn get_obsolete_variable_symbol(&self, name: SymId) -> Option<(String, String)> {
-        self.obsolete_variables.get(&name).map(|(new_name, when)| {
-            (
-                autoload_string_to_runtime_string(new_name),
-                autoload_string_to_runtime_string(when),
-            )
-        })
+    pub fn get_obsolete_variable_symbol(&self, name: SymId) -> Option<(LispString, LispString)> {
+        self.obsolete_variables
+            .get(&name)
+            .map(|(new_name, when)| (new_name.clone(), when.clone()))
     }
 
     // pdump accessors
@@ -336,13 +336,6 @@ impl AutoloadManager {
 
 fn runtime_string_to_autoload_string(text: &str) -> LispString {
     super::builtins::runtime_string_to_lisp_string(text, true)
-}
-
-fn autoload_string_to_runtime_string(text: &LispString) -> String {
-    crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        text.as_bytes(),
-        text.is_multibyte(),
-    )
 }
 
 // ---------------------------------------------------------------------------
