@@ -52,8 +52,8 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
     BufferTextSourceAppendItem, BufferTextSourceClusterState, BufferTextSourceItemRequest,
-    BufferTextSourceRange, BufferTextSourceTextItemRequest, DisplayItemSource,
-    DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
+    BufferTextSourceRange, BufferTextSourceSpecialDisplay, BufferTextSourceTextItemRequest,
+    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -5570,13 +5570,6 @@ fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Sized>(
     ))
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceSpecialDisplay {
-    Control(BufferTextSourceAppendItem),
-    Nobreak(BufferTextSourceAppendItem),
-    Glyphless(BufferTextSourceAppendItem),
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextDecodedSourceChar {
     ch: char,
@@ -8859,46 +8852,12 @@ impl<'text> BufferTextSourceAdvanceRequest<'text> {
 }
 
 impl BufferTextSourceSpecialDisplay {
-    pub(crate) fn for_precluster_char(ch: char, nobreak_display_policy: i32) -> Option<Self> {
-        if Self::is_control_char(ch) {
-            Some(Self::Control(BufferTextSourceAppendItem::ControlChar {
-                ch,
-            }))
-        } else {
-            BufferTextSourceAppendItem::nobreak_display(ch, nobreak_display_policy)
-                .map(Self::Nobreak)
-        }
-    }
-
-    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Option<Self> {
-        BufferTextSourceAppendItem::glyphless_display(cluster).map(Self::Glyphless)
-    }
-
-    pub(crate) fn into_append_item(self) -> BufferTextSourceAppendItem {
-        match self {
-            Self::Control(item) | Self::Nobreak(item) | Self::Glyphless(item) => item,
-        }
-    }
-
-    fn is_control(&self) -> bool {
-        matches!(self, Self::Control(_))
-    }
-
-    #[cfg(test)]
-    fn is_nobreak(&self) -> bool {
-        matches!(self, Self::Nobreak(_))
-    }
-
     fn kind(&self) -> BufferTextSourceSpecialDisplayKind {
         match self {
             Self::Control(_) => BufferTextSourceSpecialDisplayKind::Control,
             Self::Nobreak(_) => BufferTextSourceSpecialDisplayKind::Nobreak,
             Self::Glyphless(_) => BufferTextSourceSpecialDisplayKind::Glyphless,
         }
-    }
-
-    fn is_control_char(ch: char) -> bool {
-        (ch < ' ' && ch != '\n' && ch != '\t') || ch == '\x7F'
     }
 }
 

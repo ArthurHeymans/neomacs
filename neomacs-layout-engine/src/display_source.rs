@@ -206,6 +206,49 @@ pub(crate) enum BufferTextSourceAppendItem {
     Glyphless { ch: char, method: GlyphlessMethod },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferTextSourceSpecialDisplay {
+    Control(BufferTextSourceAppendItem),
+    Nobreak(BufferTextSourceAppendItem),
+    Glyphless(BufferTextSourceAppendItem),
+}
+
+impl BufferTextSourceSpecialDisplay {
+    pub(crate) fn for_precluster_char(ch: char, nobreak_display_policy: i32) -> Option<Self> {
+        if Self::is_control_char(ch) {
+            Some(Self::Control(BufferTextSourceAppendItem::ControlChar {
+                ch,
+            }))
+        } else {
+            BufferTextSourceAppendItem::nobreak_display(ch, nobreak_display_policy)
+                .map(Self::Nobreak)
+        }
+    }
+
+    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Option<Self> {
+        BufferTextSourceAppendItem::glyphless_display(cluster).map(Self::Glyphless)
+    }
+
+    pub(crate) fn into_append_item(self) -> BufferTextSourceAppendItem {
+        match self {
+            Self::Control(item) | Self::Nobreak(item) | Self::Glyphless(item) => item,
+        }
+    }
+
+    pub(crate) fn is_control(&self) -> bool {
+        matches!(self, Self::Control(_))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_nobreak(&self) -> bool {
+        matches!(self, Self::Nobreak(_))
+    }
+
+    fn is_control_char(ch: char) -> bool {
+        (ch < ' ' && ch != '\n' && ch != '\t') || ch == '\x7F'
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceTextItemRequest {
     range: BufferTextSourceRange,
