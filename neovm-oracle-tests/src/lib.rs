@@ -1219,6 +1219,7 @@ mod divergence_cllib_deep;
 mod divergence_cllib_seq_map;
 mod divergence_coding_charset_deep;
 mod divergence_coding_process;
+mod divergence_compile;
 mod divergence_combo_abbrev_completion_syntax;
 mod divergence_combo_abbrev_marker_overlay_undo;
 mod divergence_combo_abbrev_table_marker_overlay_undo;
