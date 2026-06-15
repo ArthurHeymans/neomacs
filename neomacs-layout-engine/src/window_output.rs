@@ -24,7 +24,7 @@ use crate::display_row_geometry::{
     DisplayRowYPositions,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
-use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext, SingleDisplayItemSource};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -673,6 +673,16 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
+fn push_item_source_to_writer(
+    writer: &mut DisplayRowWriter<'_, '_, '_>,
+    source: &mut impl DisplayItemSource,
+) {
+    let mut source_context = DisplaySourceContext::empty();
+    while let Some(item) = source.next_item(&mut source_context) {
+        writer.push_item(item);
+    }
+}
+
 fn current_row_text_layout(
     row: &GlyphRow,
     width_cols: usize,
@@ -725,11 +735,10 @@ fn append_right_edge_marker_text(
     if text.is_empty() {
         return;
     }
-    DisplayRowWriter::new(layout, row).push_item(right_edge_marker_text_item(
-        text,
-        face_id,
-        source_offset,
-    ));
+    let mut writer = DisplayRowWriter::new(layout, row);
+    let mut source =
+        SingleDisplayItemSource::new(right_edge_marker_text_item(text, face_id, source_offset));
+    push_item_source_to_writer(&mut writer, &mut source);
 }
 
 fn append_right_border_text(
@@ -743,11 +752,10 @@ fn append_right_border_text(
     if text.is_empty() {
         return;
     }
-    DisplayRowWriter::for_area(layout, row, area).push_item(right_border_text_item(
-        text,
-        face_id,
-        source_offset,
-    ));
+    let mut writer = DisplayRowWriter::for_area(layout, row, area);
+    let mut source =
+        SingleDisplayItemSource::new(right_border_text_item(text, face_id, source_offset));
+    push_item_source_to_writer(&mut writer, &mut source);
 }
 
 fn install_right_edge_marker_into_row(
@@ -849,12 +857,9 @@ pub(crate) fn emit_text_window_line_number_margin(
 ) {
     let layout = line_number_margin_layout(&request);
     let mut source = LineNumberMarginItemSource::new(&request);
-    let mut source_context = DisplaySourceContext::empty();
     builder.with_current_row_mut(|row| {
         let mut writer = DisplayRowWriter::for_area(&layout, row, GlyphArea::LeftMargin);
-        while let Some(item) = source.next_item(&mut source_context) {
-            writer.push_item(item);
-        }
+        push_item_source_to_writer(&mut writer, &mut source);
     });
 }
 
