@@ -15,7 +15,6 @@ use crate::heap_types::LispString;
 use super::builtins::runtime_string_to_lisp_string;
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::print::print_value;
-use super::string_escape::emacs_bytes_to_storage_string;
 use super::value::{Value, ValueKind, VecLikeType};
 
 // ---------------------------------------------------------------------------
@@ -210,7 +209,9 @@ impl Default for DebugState {
 }
 
 fn debug_text(text: &LispString) -> String {
-    emacs_bytes_to_storage_string(text.as_bytes(), text.is_multibyte())
+    // Issue #131: debugger display text renders the string's Emacs bytes
+    // faithfully rather than via the retired in-Unicode storage sentinels.
+    crate::emacs_core::emacs_char::to_utf8_lossy(text.as_bytes())
 }
 
 impl DebugState {
@@ -390,7 +391,7 @@ impl DocStore {
     pub fn get_function_doc_symbol(&self, name: SymId) -> Option<String> {
         self.function_docs
             .get(&name)
-            .map(|s| emacs_bytes_to_storage_string(s.as_bytes(), s.is_multibyte()))
+            .map(|s| crate::emacs_core::emacs_char::to_utf8_lossy(s.as_bytes()))
     }
 
     /// Get the documentation string for a variable.
@@ -402,7 +403,7 @@ impl DocStore {
     pub fn get_variable_doc_symbol(&self, name: SymId) -> Option<String> {
         self.variable_docs
             .get(&name)
-            .map(|s| emacs_bytes_to_storage_string(s.as_bytes(), s.is_multibyte()))
+            .map(|s| crate::emacs_core::emacs_char::to_utf8_lossy(s.as_bytes()))
     }
 
     /// Search for symbols whose names contain `pattern` (case-insensitive substring).
@@ -527,7 +528,7 @@ impl HelpFormatter {
                 value
                     .closure_docstring()
                     .flatten()
-                    .map(|doc| emacs_bytes_to_storage_string(doc.as_bytes(), doc.is_multibyte()))
+                    .map(|doc| crate::emacs_core::emacs_char::to_utf8_lossy(doc.as_bytes()))
             }
             _ => None,
         };
