@@ -188,12 +188,22 @@ pub fn alternative_font_families(family: &str) -> Vec<String> {
     alist
         .iter()
         .find_map(|(name, families)| {
-            resolve_sym(*name).eq_ignore_ascii_case(lookup).then(|| {
-                families
-                    .iter()
-                    .map(|sym| resolve_sym(*sym).to_string())
-                    .collect()
-            })
+            // Issue #131: compare/return font-family names over their real Emacs
+            // bytes (resolve_sym_lisp_string), so raw-unibyte families are not
+            // confused with the PUA-sentinel storage form.
+            crate::emacs_core::intern::resolve_sym_lisp_string(*name)
+                .as_bytes()
+                .eq_ignore_ascii_case(lookup.as_bytes())
+                .then(|| {
+                    families
+                        .iter()
+                        .map(|sym| {
+                            crate::emacs_core::emacs_char::to_utf8_lossy(
+                                crate::emacs_core::intern::resolve_sym_lisp_string(*sym).as_bytes(),
+                            )
+                        })
+                        .collect()
+                })
         })
         .unwrap_or_else(|| vec![lookup.to_string()])
 }
@@ -295,7 +305,12 @@ fn frame_id_from_designator(value: &Value) -> Option<FrameId> {
 }
 
 fn font_string_text(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    // Issue #131: read the value's real Emacs bytes (lossy UTF-8 view) rather than
+    // the PUA-sentinel storage form. Font/color/property names are ASCII, where
+    // this is exact; raw-byte family names are interned faithfully elsewhere.
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn font_value_text(value: &Value) -> Option<String> {
@@ -5714,8 +5729,11 @@ pub(crate) fn builtin_internal_set_alternative_font_family_alist(args: Vec<Value
         for member in members {
             match member.kind() {
                 ValueKind::String => {
-                    let name = font_string_text(&member).expect("checked string");
-                    let sym = intern(&name);
+                    // Issue #131: intern the family name faithfully (real Emacs
+                    // bytes) rather than via the PUA-sentinel storage form.
+                    let sym = crate::emacs_core::intern::intern_lisp_string(
+                        member.as_lisp_string().expect("checked string"),
+                    );
                     converted.push(Value::from_sym_id(sym));
                     names.push(sym);
                 }

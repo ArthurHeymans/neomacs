@@ -3027,7 +3027,15 @@ fn internal_set_alternative_font_family_alist_accepts_raw_unibyte_strings() {
     let result = builtin_internal_set_alternative_font_family_alist(vec![input]).unwrap();
     let outer = list_to_vec(&result).expect("outer list");
     let inner = list_to_vec(&outer[0]).expect("inner list");
-    assert_eq!(inner[0].as_symbol_name(), Some(expected.as_str()));
+    // Issue #131: the family is interned faithfully, so its symbol name keeps the
+    // raw byte (0xFF) instead of the PUA-sentinel storage form.
+    let crate::emacs_core::value::ValueKind::Symbol(sym_id) = inner[0].kind() else {
+        panic!("expected interned symbol");
+    };
+    assert_eq!(
+        crate::emacs_core::intern::resolve_sym_lisp_string(sym_id).as_bytes(),
+        &[0xFF]
+    );
     assert_eq!(alternative_font_families(&expected), vec![expected]);
 }
 
