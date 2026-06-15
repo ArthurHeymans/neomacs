@@ -240,7 +240,11 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.set_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
+    builder.install_frame_state(
+        crate::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(Color::new(
+            0.2, 0.0, 0.0, 1.0,
+        )),
+    );
     builder.install_frame_artifact(
         crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
     );

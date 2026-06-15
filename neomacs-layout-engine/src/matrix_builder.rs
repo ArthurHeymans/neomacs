@@ -406,6 +406,64 @@ impl MatrixFrameArtifactInstallRequest {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct MatrixFrameIdentityInstallRequest {
+    pub(crate) frame_id: u64,
+    pub(crate) parent_id: u64,
+    pub(crate) parent_x: f32,
+    pub(crate) parent_y: f32,
+    pub(crate) z_order: i32,
+    pub(crate) undecorated: bool,
+    pub(crate) border_width: f32,
+    pub(crate) border_color: Color,
+    pub(crate) background_alpha: f32,
+    pub(crate) no_accept_focus: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum MatrixFrameStateInstallRequest {
+    Identity(MatrixFrameIdentityInstallRequest),
+    BackgroundColor(Color),
+    FontPixelSize(f32),
+    Faces(HashMap<u32, Face>),
+    Face {
+        id: u32,
+        face: Face,
+    },
+    CursorEffects {
+        window_id: i64,
+        effects: EffectsConfig,
+    },
+}
+
+impl MatrixFrameStateInstallRequest {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        match self {
+            Self::Identity(identity) => {
+                builder.frame_id = identity.frame_id;
+                builder.parent_id = identity.parent_id;
+                builder.parent_x = identity.parent_x;
+                builder.parent_y = identity.parent_y;
+                builder.z_order = identity.z_order;
+                builder.undecorated = identity.undecorated;
+                builder.border_width = identity.border_width;
+                builder.border_color = identity.border_color;
+                builder.background_alpha = identity.background_alpha;
+                builder.no_accept_focus = identity.no_accept_focus;
+            }
+            Self::BackgroundColor(color) => builder.background_color = color,
+            Self::FontPixelSize(size) => builder.font_pixel_size = size,
+            Self::Faces(faces) => builder.faces = faces,
+            Self::Face { id, face } => {
+                builder.faces.insert(id, face);
+            }
+            Self::CursorEffects { window_id, effects } => {
+                builder.cursor_effects_by_window.insert(window_id, effects);
+            }
+        }
+    }
+}
+
 pub(crate) struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
@@ -781,24 +839,8 @@ impl GlyphMatrixBuilder {
         self.phys_cursor = Some(cursor);
     }
 
-    pub(crate) fn set_window_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
-        self.cursor_effects_by_window.insert(window_id, effects);
-    }
-
-    pub(crate) fn set_faces(&mut self, faces: HashMap<u32, Face>) {
-        self.faces = faces;
-    }
-
-    pub(crate) fn insert_face(&mut self, id: u32, face: Face) {
-        self.faces.insert(id, face);
-    }
-
-    pub(crate) fn set_background_color(&mut self, color: Color) {
-        self.background_color = color;
-    }
-
-    pub(crate) fn set_font_pixel_size(&mut self, size: f32) {
-        self.font_pixel_size = size;
+    pub(crate) fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+        request.install(self);
     }
 
     pub(crate) fn windows(&self) -> &[WindowMatrixEntry] {
@@ -844,31 +886,6 @@ impl GlyphMatrixBuilder {
 
     pub(crate) fn phys_cursor(&self) -> Option<&PhysCursor> {
         self.phys_cursor.as_ref()
-    }
-
-    pub(crate) fn set_frame_identity(
-        &mut self,
-        frame_id: u64,
-        parent_id: u64,
-        parent_x: f32,
-        parent_y: f32,
-        z_order: i32,
-        undecorated: bool,
-        border_width: f32,
-        border_color: Color,
-        background_alpha: f32,
-        no_accept_focus: bool,
-    ) {
-        self.frame_id = frame_id;
-        self.parent_id = parent_id;
-        self.parent_x = parent_x;
-        self.parent_y = parent_y;
-        self.z_order = z_order;
-        self.undecorated = undecorated;
-        self.border_width = border_width;
-        self.border_color = border_color;
-        self.background_alpha = background_alpha;
-        self.no_accept_focus = no_accept_focus;
     }
 
     pub(crate) fn with_current_window_row_mut<R>(

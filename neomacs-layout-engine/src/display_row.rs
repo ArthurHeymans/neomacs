@@ -30,8 +30,8 @@ use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::glyph_row_writer;
 use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCurrentWindowMediaClip, MatrixMediaInstallKind,
-    MatrixMediaInstallRequest, MatrixMediaInstallTarget,
+    GlyphMatrixBuilder, MatrixCurrentWindowMediaClip, MatrixFrameStateInstallRequest,
+    MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixMediaInstallTarget,
 };
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
@@ -214,7 +214,10 @@ pub(crate) fn insert_resolved_display_row_face(
 ) {
     let render_face = resolved_display_row_face(face_id, face, metrics);
     let rendered = render_face.render_face();
-    builder.insert_face(render_face.face_id, rendered);
+    builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
+        id: render_face.face_id,
+        face: rendered,
+    });
 }
 
 pub(crate) struct DisplayRowFaceRealizer<'a> {
@@ -2445,7 +2448,10 @@ pub(crate) fn install_rendered_display_row_fragment_assets(
     media: &[RenderedDisplayRowMedia],
 ) {
     for face in faces {
-        builder.insert_face(face.id, face.clone());
+        builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
+            id: face.id,
+            face: face.clone(),
+        });
     }
     for media in media {
         media.install(builder, role, matrix_row);
@@ -2473,7 +2479,10 @@ fn install_rendered_display_row_faces(
     rendered: &RenderedDisplayRow,
 ) {
     for face in &rendered.faces {
-        builder.insert_face(face.id, face.clone());
+        builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
+            id: face.id,
+            face: face.clone(),
+        });
     }
 }
 
@@ -2504,7 +2513,10 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     matrix_row: usize,
 ) -> DisplayRowPosition {
     for face in &rendered.faces {
-        builder.insert_face(face.id, face.clone());
+        builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
+            id: face.id,
+            face: face.clone(),
+        });
     }
     builder.with_current_row_mut(|row| {
         row.enabled = true;

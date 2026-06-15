@@ -26,7 +26,9 @@ use crate::display_row_geometry::{
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SingleDisplayItemSource};
 use crate::hit_test::HitRow;
-use crate::matrix_builder::{GlyphMatrixBuilder, MatrixCursorInstallRequest};
+use crate::matrix_builder::{
+    GlyphMatrixBuilder, MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
+};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
@@ -945,7 +947,10 @@ pub(crate) fn install_text_window_cursor_effects(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowCursorEffects,
 ) {
-    builder.set_window_cursor_effects(request.window_id, request.effects);
+    builder.install_frame_state(MatrixFrameStateInstallRequest::CursorEffects {
+        window_id: request.window_id,
+        effects: request.effects,
+    });
 }
 
 pub(crate) fn current_text_window_cluster_tail(

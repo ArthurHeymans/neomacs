@@ -397,23 +397,33 @@ impl LayoutEngine {
                     .frame_manager()
                     .frame_origin_in_root(frame_id)
                     .unwrap_or((frame.left_pos as f32, frame.top_pos as f32));
-                self.matrix_builder.set_frame_identity(
-                    frame.id.0,
-                    frame.parent_frame.as_frame_id().unwrap_or(0),
-                    origin_x,
-                    origin_y,
-                    frame.z_order,
-                    frame.undecorated,
-                    frame.internal_border_width() as f32,
-                    Color::BLACK,
-                    1.0,
-                    frame.no_accept_focus,
+                self.matrix_builder.install_frame_state(
+                    crate::matrix_builder::MatrixFrameStateInstallRequest::Identity(
+                        crate::matrix_builder::MatrixFrameIdentityInstallRequest {
+                            frame_id: frame.id.0,
+                            parent_id: frame.parent_frame.as_frame_id().unwrap_or(0),
+                            parent_x: origin_x,
+                            parent_y: origin_y,
+                            z_order: frame.z_order,
+                            undecorated: frame.undecorated,
+                            border_width: frame.internal_border_width() as f32,
+                            border_color: Color::BLACK,
+                            background_alpha: 1.0,
+                            no_accept_focus: frame.no_accept_focus,
+                        },
+                    ),
                 );
             }
-            self.matrix_builder
-                .set_background_color(Color::from_pixel(frame_params.background));
-            self.matrix_builder
-                .set_font_pixel_size(frame_params.font_pixel_size);
+            self.matrix_builder.install_frame_state(
+                crate::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(
+                    Color::from_pixel(frame_params.background),
+                ),
+            );
+            self.matrix_builder.install_frame_state(
+                crate::matrix_builder::MatrixFrameStateInstallRequest::FontPixelSize(
+                    frame_params.font_pixel_size,
+                ),
+            );
 
             // Clear hit-test data for new frame
             self.hit_data.clear();
@@ -1298,19 +1308,27 @@ impl LayoutEngine {
         let font_metrics = self.font_metrics.as_mut();
         let mut builder = GlyphMatrixBuilder::new();
 
-        builder.set_frame_identity(
-            content.frame_id,
-            0,
-            0.0,
-            0.0,
-            0,
-            false,
-            0.0,
-            Color::BLACK,
-            1.0,
-            false,
+        builder.install_frame_state(
+            super::matrix_builder::MatrixFrameStateInstallRequest::Identity(
+                super::matrix_builder::MatrixFrameIdentityInstallRequest {
+                    frame_id: content.frame_id,
+                    parent_id: 0,
+                    parent_x: 0.0,
+                    parent_y: 0.0,
+                    z_order: 0,
+                    undecorated: false,
+                    border_width: 0.0,
+                    border_color: Color::BLACK,
+                    background_alpha: 1.0,
+                    no_accept_focus: false,
+                },
+            ),
         );
-        builder.set_background_color(content.background);
+        builder.install_frame_state(
+            super::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(
+                content.background,
+            ),
+        );
 
         let mut face_map = std::collections::HashMap::new();
         for face in &content.faces {
@@ -1320,7 +1338,9 @@ impl LayoutEngine {
             f.font_size = crate::fontconfig::points_to_pixels(f.font_size);
             face_map.insert(f.id, f);
         }
-        builder.set_faces(face_map);
+        builder.install_frame_state(
+            super::matrix_builder::MatrixFrameStateInstallRequest::Faces(face_map),
+        );
 
         let default_face = content.faces.first();
         // Face.font_size is in points (matching GNU Emacs).  Convert to
@@ -1472,24 +1492,34 @@ impl LayoutEngine {
         let mut child_frames = Vec::new();
         for cf in &content.child_frames {
             let mut cb = GlyphMatrixBuilder::new();
-            cb.set_frame_identity(
-                cf.frame_id,
-                content.frame_id,
-                cf.parent_x,
-                cf.parent_y,
-                cf.z_order,
-                true,
-                0.0,
-                Color::BLACK,
-                1.0,
-                false,
+            cb.install_frame_state(
+                super::matrix_builder::MatrixFrameStateInstallRequest::Identity(
+                    super::matrix_builder::MatrixFrameIdentityInstallRequest {
+                        frame_id: cf.frame_id,
+                        parent_id: content.frame_id,
+                        parent_x: cf.parent_x,
+                        parent_y: cf.parent_y,
+                        z_order: cf.z_order,
+                        undecorated: true,
+                        border_width: 0.0,
+                        border_color: Color::BLACK,
+                        background_alpha: 1.0,
+                        no_accept_focus: false,
+                    },
+                ),
             );
-            cb.set_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
+            cb.install_frame_state(
+                super::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(Color::new(
+                    0.0, 0.0, 0.0, 0.0,
+                )),
+            );
             let mut cfm = std::collections::HashMap::new();
             for face in &content.faces {
                 cfm.insert(face.id, face.clone());
             }
-            cb.set_faces(cfm);
+            cb.install_frame_state(
+                super::matrix_builder::MatrixFrameStateInstallRequest::Faces(cfm),
+            );
             let nrows = cf.window.lines.len();
             let ncols = (cf.window.pixel_bounds.width / char_w.max(1.0)) as usize;
             begin_text_window_matrix(
