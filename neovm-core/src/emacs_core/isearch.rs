@@ -202,9 +202,9 @@ fn line_operation_region_bounds(
     Ok(EmacsByteRange::ordered(start, end))
 }
 
-fn line_start_at_or_before(source: &str, at: usize) -> usize {
+fn line_start_at_or_before(source: &[u8], at: usize) -> usize {
     let pos = at.min(source.len());
-    match source[..pos].rfind('\n') {
+    match source[..pos].iter().rposition(|&b| b == b'\n') {
         Some(idx) => idx + 1,
         None => 0,
     }
@@ -360,11 +360,27 @@ fn build_lax_whitespace_pattern(pattern: &str, whitespace_regex: &str) -> String
     raw
 }
 
-fn string_matches_regexp(text: &str, pattern: &str, case_fold: bool) -> Result<bool, Flow> {
+fn string_matches_regexp(
+    line: &[u8],
+    multibyte: bool,
+    pattern: &crate::heap_types::LispString,
+    case_fold: bool,
+) -> Result<bool, Flow> {
+    // Issue #131: match the line's Emacs bytes against the faithful LispString
+    // pattern, no storage round-trip.
     let mut match_data = None;
-    super::regex::string_match_full_with_case_fold(pattern, text, 0, case_fold, &mut match_data)
-        .map(|matched| matched.is_some())
-        .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))
+    let text = lisp_string_from_buffer_bytes(line.to_vec(), multibyte);
+    super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+        pattern,
+        &text,
+        super::regex::SearchedString::Owned(text.clone()),
+        0,
+        case_fold,
+        false,
+        &mut match_data,
+    )
+    .map(|matched| matched.is_some())
+    .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))
 }
 
 fn delete_line_operation_byte_range(
@@ -2084,18 +2100,25 @@ pub(crate) fn builtin_query_replace_regexp(
 pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("keep-lines", &args, 1, 4)?;
     let regexp = expect_sequence_string(&args[0])?;
+    let regexp_ls = args[0]
+        .as_lisp_string()
+        .expect("keep-lines regexp is a string");
 
-    let (point_min, range, source_text, source) = {
+    let (point_min, range, source_text) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
         let accessible = buf.accessible_emacs_byte_region();
-        let (source_text, source) = buffer_region_storage_string(buf, accessible.range());
-        (accessible.start(), range, source_text, source)
+        let source_text = buf.buffer_substring_lisp_string_range(accessible.range());
+        (accessible.start(), range, source_text)
     };
-    let source_byte_len = source_text.sbytes();
+    // Issue #131: iterate the region's Emacs bytes directly — offsets are logical
+    // Emacs byte offsets, so the old storage->logical mapping is the identity.
+    let source = source_text.as_bytes();
+    let source_multibyte = source_text.is_multibyte();
+    let source_byte_len = source.len();
 
     let case_fold = case_fold_for_pattern(eval, &regexp);
 
@@ -2110,32 +2133,28 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
         .get()
         .min(source_byte_len);
     let end_pos = point_min.add_len(EmacsByteLen::new(rel_end));
-    let rel_start_storage =
-        crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(&source, rel_start);
-    let mut rel_cursor = line_start_at_or_before(&source, rel_start_storage);
+    let mut rel_cursor = line_start_at_or_before(source, rel_start);
     let mut delete_ranges: Vec<EmacsByteRange> = Vec::new();
 
     while rel_cursor < source.len() {
-        let abs_line_start = point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
-            &source, rel_cursor,
-        )));
+        let abs_line_start = point_min.add_len(EmacsByteLen::new(rel_cursor));
         if abs_line_start >= end_pos {
             break;
         }
 
         let line_tail = &source[rel_cursor..];
-        let line_len = match line_tail.find('\n') {
+        let line_len = match line_tail.iter().position(|&b| b == b'\n') {
             Some(idx) => idx + 1,
             None => line_tail.len(),
         };
         let rel_line_end = rel_cursor + line_len;
-        let line = if source.as_bytes().get(rel_line_end.wrapping_sub(1)) == Some(&b'\n') {
+        let line = if source.get(rel_line_end.wrapping_sub(1)) == Some(&b'\n') {
             &source[rel_cursor..rel_line_end - 1]
         } else {
             &source[rel_cursor..rel_line_end]
         };
 
-        let keep_line = match string_matches_regexp(line, &regexp, case_fold) {
+        let keep_line = match string_matches_regexp(line, source_multibyte, regexp_ls, case_fold) {
             Ok(matched) => matched,
             Err(Flow::Signal(sig)) if sig.symbol_name() == "invalid-regexp" => {
                 return Ok(Value::NIL);
@@ -2144,13 +2163,8 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
         };
         if !keep_line {
             delete_ranges.push(EmacsByteRange::new(
-                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
-                    &source, rel_cursor,
-                ))),
-                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
-                    &source,
-                    rel_line_end,
-                ))),
+                point_min.add_len(EmacsByteLen::new(rel_cursor)),
+                point_min.add_len(EmacsByteLen::new(rel_line_end)),
             ));
         }
         rel_cursor = rel_line_end;
@@ -2175,18 +2189,25 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
 pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("flush-lines", &args, 1, 4)?;
     let regexp = expect_sequence_string(&args[0])?;
+    let regexp_ls = args[0]
+        .as_lisp_string()
+        .expect("flush-lines regexp is a string");
 
-    let (point_min, range, source_text, source) = {
+    let (point_min, range, source_text) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
         let accessible = buf.accessible_emacs_byte_region();
-        let (source_text, source) = buffer_region_storage_string(buf, accessible.range());
-        (accessible.start(), range, source_text, source)
+        let source_text = buf.buffer_substring_lisp_string_range(accessible.range());
+        (accessible.start(), range, source_text)
     };
-    let source_byte_len = source_text.sbytes();
+    // Issue #131: iterate the region's Emacs bytes directly — offsets are logical
+    // Emacs byte offsets, so the old storage->logical mapping is the identity.
+    let source = source_text.as_bytes();
+    let source_multibyte = source_text.is_multibyte();
+    let source_byte_len = source.len();
 
     let case_fold = case_fold_for_pattern(eval, &regexp);
 
@@ -2201,40 +2222,31 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
         .get()
         .min(source_byte_len);
     let end_pos = point_min.add_len(EmacsByteLen::new(rel_end));
-    let rel_start_storage =
-        crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(&source, rel_start);
-    let mut rel_cursor = line_start_at_or_before(&source, rel_start_storage);
+    let mut rel_cursor = line_start_at_or_before(source, rel_start);
     let mut delete_ranges: Vec<EmacsByteRange> = Vec::new();
 
     while rel_cursor < source.len() {
-        let abs_line_start = point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
-            &source, rel_cursor,
-        )));
+        let abs_line_start = point_min.add_len(EmacsByteLen::new(rel_cursor));
         if abs_line_start >= end_pos {
             break;
         }
 
         let line_tail = &source[rel_cursor..];
-        let line_len = match line_tail.find('\n') {
+        let line_len = match line_tail.iter().position(|&b| b == b'\n') {
             Some(idx) => idx + 1,
             None => line_tail.len(),
         };
         let rel_line_end = rel_cursor + line_len;
-        let line = if source.as_bytes().get(rel_line_end.wrapping_sub(1)) == Some(&b'\n') {
+        let line = if source.get(rel_line_end.wrapping_sub(1)) == Some(&b'\n') {
             &source[rel_cursor..rel_line_end - 1]
         } else {
             &source[rel_cursor..rel_line_end]
         };
 
-        if string_matches_regexp(line, &regexp, case_fold)? {
+        if string_matches_regexp(line, source_multibyte, regexp_ls, case_fold)? {
             delete_ranges.push(EmacsByteRange::new(
-                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
-                    &source, rel_cursor,
-                ))),
-                point_min.add_len(EmacsByteLen::new(storage_offset_to_region_byte(
-                    &source,
-                    rel_line_end,
-                ))),
+                point_min.add_len(EmacsByteLen::new(rel_cursor)),
+                point_min.add_len(EmacsByteLen::new(rel_line_end)),
             ));
         }
         rel_cursor = rel_line_end;
