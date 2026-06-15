@@ -96,8 +96,8 @@ fn temporary_file_directory_for_eval_accepts_raw_unibyte_string() {
 
     assert_eq!(
         temporary_file_directory_for_eval(&eval),
-        Some(crate::emacs_core::builtins::lisp_string_to_runtime_string(
-            raw
+        Some(crate::heap_types::LispString::from_unibyte(
+            b"/tmp/neomacs-\xFF".to_vec()
         ))
     );
 }

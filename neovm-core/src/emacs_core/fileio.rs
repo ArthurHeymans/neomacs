@@ -1410,6 +1410,27 @@ fn file_name_lisp_from_bytes(bytes: Vec<u8>, multibyte: bool) -> crate::heap_typ
     }
 }
 
+fn empty_file_name_lisp_string() -> crate::heap_types::LispString {
+    crate::heap_types::LispString::from_unibyte(Vec::new())
+}
+
+/// `file-name-as-directory` on a Lisp file name, preserving raw file-name bytes
+/// (GNU keeps file names as Lisp strings; only ASCII separators are inspected).
+fn file_name_as_directory_lisp(
+    dir: &crate::heap_types::LispString,
+) -> crate::heap_types::LispString {
+    let bytes = dir.as_bytes();
+    if bytes.is_empty() {
+        return file_name_lisp_from_bytes(b"./".to_vec(), dir.is_multibyte());
+    }
+    if bytes.last() == Some(&b'/') {
+        return dir.clone();
+    }
+    let mut out = bytes.to_vec();
+    out.push(b'/');
+    file_name_lisp_from_bytes(out, dir.is_multibyte())
+}
+
 fn fallback_root_default_directory() -> crate::heap_types::LispString {
     crate::heap_types::LispString::from_utf8("/")
 }
@@ -1713,9 +1734,12 @@ fn lisp_files_splice_dirname_file(
     }
 }
 
-fn expect_temp_prefix(value: &Value) -> Result<String, Flow> {
+fn expect_temp_prefix(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     match value.kind() {
-        ValueKind::String => Ok(fileio_owned_runtime_string(*value)),
+        ValueKind::String => Ok(value
+            .as_lisp_string()
+            .expect("ValueKind::String must carry LispString payload")
+            .clone()),
         ValueKind::Nil | ValueKind::Cons | ValueKind::Veclike(VecLikeType::Vector) => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
@@ -1820,18 +1844,18 @@ fn validate_file_truename_counter(counter: &Value) -> Result<(), Flow> {
     Ok(())
 }
 
-fn temporary_file_directory_for_eval(eval: &Context) -> Option<String> {
+fn temporary_file_directory_for_eval(eval: &Context) -> Option<crate::heap_types::LispString> {
     let val = eval.obarray.symbol_value("temporary-file-directory")?;
-    fileio_owned_runtime_string_opt(val)
+    val.as_lisp_string().cloned()
 }
 
 fn make_temp_file_impl(
-    temp_dir: &str,
-    prefix: &str,
+    temp_dir: &crate::heap_types::LispString,
+    prefix: &crate::heap_types::LispString,
     dir_flag: bool,
-    suffix: &str,
-    text: Option<&str>,
-) -> Result<String, Flow> {
+    suffix: &crate::heap_types::LispString,
+    text: Option<&[u8]>,
+) -> Result<crate::heap_types::LispString, Flow> {
     let absolute_prefix = temp_file_absolute_prefix(temp_dir, prefix);
     make_temp_file_internal_impl(
         &absolute_prefix,
@@ -1841,16 +1865,17 @@ fn make_temp_file_impl(
     )
 }
 
-fn temp_file_absolute_prefix(temp_dir: &str, prefix: &str) -> String {
-    if Path::new(prefix).is_absolute() {
-        prefix.to_string()
-    } else if prefix.is_empty() || prefix == "." || prefix == ".." {
-        format!("{}{}", file_name_as_directory(temp_dir), prefix)
+fn temp_file_absolute_prefix(
+    temp_dir: &crate::heap_types::LispString,
+    prefix: &crate::heap_types::LispString,
+) -> crate::heap_types::LispString {
+    // A non-absolute PREFIX is resolved against `temporary-file-directory`;
+    // `lisp_file_name_to_path_buf().is_absolute()` mirrors the old
+    // `Path::new(prefix).is_absolute()` check while keeping raw bytes intact.
+    if lisp_file_name_to_path_buf(prefix).is_absolute() {
+        prefix.clone()
     } else {
-        PathBuf::from(temp_dir)
-            .join(prefix)
-            .to_string_lossy()
-            .into_owned()
+        file_name_as_directory_lisp(temp_dir).concat(prefix)
     }
 }
 
@@ -1880,28 +1905,34 @@ impl TempCreateKind {
 }
 
 fn make_temp_file_internal_impl(
-    prefix: &str,
+    prefix: &crate::heap_types::LispString,
     kind: TempCreateKind,
-    suffix: &str,
-    text: Option<&str>,
-) -> Result<String, Flow> {
+    suffix: &crate::heap_types::LispString,
+    text: Option<&[u8]>,
+) -> Result<crate::heap_types::LispString, Flow> {
     const TEMP_FILE_ATTEMPTS: usize = 62 * 62 * 62;
 
     for _ in 0..TEMP_FILE_ATTEMPTS {
-        let candidate_str = format!("{prefix}{}{suffix}", make_temp_name_suffix());
-        let candidate = PathBuf::from(&candidate_str);
+        // GNU `Fmake_temp_file_internal` builds PREFIX + "XXXXXX" + SUFFIX as the
+        // candidate name; keep the raw file-name bytes intact (the random nonce
+        // is ASCII) instead of round-tripping through a UTF-8 String.
+        let nonce =
+            crate::heap_types::LispString::from_unibyte(make_temp_name_suffix().into_bytes());
+        let candidate = prefix.concat(&nonce).concat(suffix);
+        let candidate_path = lisp_file_name_to_path_buf(&candidate);
+        let candidate_display = crate::emacs_core::emacs_char::to_utf8_lossy(candidate.as_bytes());
 
         match kind {
-            TempCreateKind::Directory => match fs::create_dir(&candidate) {
+            TempCreateKind::Directory => match fs::create_dir(&candidate_path) {
                 Ok(()) => {
-                    return Ok(candidate_str);
+                    return Ok(candidate);
                 }
                 Err(err) if err.kind() == ErrorKind::AlreadyExists => continue,
                 Err(err) => {
                     return Err(signal_file_io_path(
                         err,
                         kind.error_action(),
-                        &candidate_str,
+                        &candidate_display,
                     ));
                 }
             },
@@ -1909,34 +1940,34 @@ fn make_temp_file_internal_impl(
                 match fs::OpenOptions::new()
                     .write(true)
                     .create_new(true)
-                    .open(&candidate)
+                    .open(&candidate_path)
                 {
                     Ok(mut file) => {
                         if let Some(contents) = text {
-                            file.write_all(contents.as_bytes()).map_err(|err| {
-                                signal_file_io_path(err, "Writing to", &candidate_str)
+                            file.write_all(contents).map_err(|err| {
+                                signal_file_io_path(err, "Writing to", &candidate_display)
                             })?;
                         }
-                        return Ok(candidate_str);
+                        return Ok(candidate);
                     }
                     Err(err) if err.kind() == ErrorKind::AlreadyExists => continue,
                     Err(err) => {
                         return Err(signal_file_io_path(
                             err,
                             kind.error_action(),
-                            &candidate_str,
+                            &candidate_display,
                         ));
                     }
                 }
             }
-            TempCreateKind::NoCreate => match fs::symlink_metadata(&candidate) {
+            TempCreateKind::NoCreate => match fs::symlink_metadata(&candidate_path) {
                 Ok(_) => continue,
-                Err(err) if err.kind() == ErrorKind::NotFound => return Ok(candidate_str),
+                Err(err) if err.kind() == ErrorKind::NotFound => return Ok(candidate),
                 Err(err) => {
                     return Err(signal_file_io_path(
                         err,
                         kind.error_action(),
-                        &candidate_str,
+                        &candidate_display,
                     ));
                 }
             },
@@ -1951,8 +1982,8 @@ fn make_temp_file_internal_impl(
 
 pub(crate) fn builtin_make_temp_file_internal(args: Vec<Value>) -> EvalResult {
     expect_args("make-temp-file-internal", &args, 4)?;
-    let prefix = expect_string_strict(&args[0])?;
-    let suffix = expect_string_strict(&args[2])?;
+    let prefix = expect_lisp_string_strict(&args[0])?;
+    let suffix = expect_lisp_string_strict(&args[2])?;
     let kind = if args[1].is_nil() {
         TempCreateKind::File
     } else if args[1].as_int() == Some(0) {
@@ -1961,20 +1992,23 @@ pub(crate) fn builtin_make_temp_file_internal(args: Vec<Value>) -> EvalResult {
         TempCreateKind::Directory
     };
     let text = if args[3].is_string() {
-        Some(fileio_owned_runtime_string(args[3]))
+        args[3].as_lisp_string().cloned()
     } else {
         None
     };
-    let path = make_temp_file_internal_impl(&prefix, kind, &suffix, text.as_deref())?;
-    Ok(Value::string(path))
+    let path =
+        make_temp_file_internal_impl(&prefix, kind, &suffix, text.as_ref().map(|t| t.as_bytes()))?;
+    Ok(Value::heap_string(path))
 }
 
-fn split_nearby_temp_prefix(prefix: &str) -> Option<(String, String)> {
-    let path = Path::new(prefix);
+fn split_nearby_temp_prefix(
+    prefix: &crate::heap_types::LispString,
+) -> Option<(crate::heap_types::LispString, crate::heap_types::LispString)> {
+    let path = lisp_file_name_to_path_buf(prefix);
     if !path.is_absolute() {
         return None;
     }
-    let file_name = path.file_name()?.to_string_lossy().into_owned();
+    let file_name = path.file_name()?;
     if file_name.is_empty() {
         return None;
     }
@@ -1982,7 +2016,10 @@ fn split_nearby_temp_prefix(prefix: &str) -> Option<(String, String)> {
     if parent.as_os_str().is_empty() || parent == Path::new(".") {
         return None;
     }
-    Some((parent.to_string_lossy().into_owned(), file_name))
+    Some((
+        path_to_lisp_file_name(parent),
+        path_to_lisp_file_name(Path::new(file_name)),
+    ))
 }
 
 fn make_temp_name_suffix() -> String {
@@ -2082,9 +2119,14 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
 /// (make-temp-name PREFIX) -> string
 pub(crate) fn builtin_make_temp_name(args: Vec<Value>) -> EvalResult {
     expect_args("make-temp-name", &args, 1)?;
-    let prefix = expect_string_strict(&args[0])?;
-    let path = make_temp_file_internal_impl(&prefix, TempCreateKind::NoCreate, "", None)?;
-    Ok(Value::string(path))
+    let prefix = expect_lisp_string_strict(&args[0])?;
+    let path = make_temp_file_internal_impl(
+        &prefix,
+        TempCreateKind::NoCreate,
+        &empty_file_name_lisp_string(),
+        None,
+    )?;
+    Ok(Value::heap_string(path))
 }
 
 /// (next-read-file-uses-dialog-p) -> nil
@@ -2139,21 +2181,27 @@ pub(crate) fn builtin_make_temp_file(eval: &mut Context, args: Vec<Value>) -> Ev
     let prefix = expect_temp_prefix(&args[0])?;
     let dir_flag = args.get(1).is_some_and(|value| value.is_truthy());
     let suffix = match args.get(2) {
-        None => String::new(),
-        Some(v) if v.is_nil() => String::new(),
-        Some(value) => expect_string_strict(value)?,
+        None => empty_file_name_lisp_string(),
+        Some(v) if v.is_nil() => empty_file_name_lisp_string(),
+        Some(value) => expect_lisp_string_strict(value)?,
     };
     let text = match args.get(3) {
         None => None,
         Some(v) if v.is_nil() => None,
-        Some(v) if v.is_string() => Some(fileio_owned_runtime_string(*v)),
+        Some(v) if v.is_string() => v.as_lisp_string().cloned(),
         Some(_) => None,
     };
     let temp_dir = temporary_file_directory_for_eval(eval)
-        .unwrap_or_else(|| std::env::temp_dir().to_string_lossy().into_owned());
+        .unwrap_or_else(|| path_to_lisp_file_name(&std::env::temp_dir()));
 
-    let path = make_temp_file_impl(&temp_dir, &prefix, dir_flag, &suffix, text.as_deref())?;
-    Ok(Value::string(path))
+    let path = make_temp_file_impl(
+        &temp_dir,
+        &prefix,
+        dir_flag,
+        &suffix,
+        text.as_ref().map(|t| t.as_bytes()),
+    )?;
+    Ok(Value::heap_string(path))
 }
 
 /// Context-aware variant of `make-nearby-temp-file` that resolves relative
@@ -2174,17 +2222,17 @@ pub(crate) fn builtin_make_nearby_temp_file(eval: &mut Context, args: Vec<Value>
     let prefix = expect_temp_prefix(&args[0])?;
     let dir_flag = args.get(1).is_some_and(|value| value.is_truthy());
     let suffix = match args.get(2) {
-        None => String::new(),
-        Some(v) if v.is_nil() => String::new(),
-        Some(value) => expect_string_strict(value)?,
+        None => empty_file_name_lisp_string(),
+        Some(v) if v.is_nil() => empty_file_name_lisp_string(),
+        Some(value) => expect_lisp_string_strict(value)?,
     };
     let fallback_temp_dir = temporary_file_directory_for_eval(eval)
-        .unwrap_or_else(|| std::env::temp_dir().to_string_lossy().into_owned());
+        .unwrap_or_else(|| path_to_lisp_file_name(&std::env::temp_dir()));
     let (temp_dir, file_prefix) =
         split_nearby_temp_prefix(&prefix).unwrap_or_else(|| (fallback_temp_dir, prefix.clone()));
 
     let path = make_temp_file_impl(&temp_dir, &file_prefix, dir_flag, &suffix, None)?;
-    Ok(Value::string(path))
+    Ok(Value::heap_string(path))
 }
 
 /// `(file-truename FILENAME)` — resolves FILENAME against
