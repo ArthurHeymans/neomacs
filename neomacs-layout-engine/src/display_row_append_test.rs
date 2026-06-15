@@ -998,7 +998,13 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         charpos: &mut charpos,
         hscroll_skip: &mut hscroll_skip,
         row_extend: &mut row_extend,
-        output_emitter: &mut context.output_emitter,
+        source_render: TextRowSourceRenderState::new(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         x: &mut x,
         col: &mut col,
         prefix_request: &mut prefix_request,
@@ -1011,9 +1017,6 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         hit_row_range: &mut hit_row_range,
         cursor_info: &mut cursor_info,
         row_y_positions: &mut context.row_y_positions,
-        builder: &mut context.builder,
-        evaluator: &mut context.eval,
-        font_metrics: &mut font_metrics,
     });
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
@@ -1518,7 +1521,13 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
             checkpoints: &mut checkpoints,
             byte_idx: &mut byte_idx,
             charpos: &mut charpos,
-            output_emitter: &mut context.output_emitter,
+            source_render: TextRowSourceRenderState::new(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             x: &mut x,
             col: &mut col,
             row_geometry: &mut context.geometry,
@@ -1527,10 +1536,6 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
             hit_row_range: &mut hit_row_range,
             row_y_positions: &mut context.row_y_positions,
             face_ids: &mut face_ids,
-            builder: &mut context.builder,
-            evaluator: &mut context.eval,
-            font_metrics: &mut font_metrics,
-            face_resolver: &face_resolver,
         },
     );
 
@@ -2025,6 +2030,9 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let row_limit = context.row_limit;
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
 
     let continuation = BufferTextLineBreakRenderRequest::new(
         source_char,
@@ -2053,7 +2061,13 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
             trailing_whitespace: &mut trailing_whitespace,
             row_extend: &mut row_extend,
             box_face: &mut box_face,
-            output_emitter: &mut context.output_emitter,
+            source_render: TextRowSourceRenderState::new(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             x: &mut x,
             col: &mut col,
             prefix_request: &mut prefix_request,
@@ -2064,8 +2078,6 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
             hit_rows: &mut context.hit_rows,
             hit_row_range: &mut hit_row_range,
             row_y_positions: &mut context.row_y_positions,
-            builder: &mut context.builder,
-            evaluator: &mut context.eval,
         },
     );
 
@@ -2210,7 +2222,13 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
             byte_idx: &mut byte_idx,
             charpos: &mut charpos,
             col: &mut col,
-            output_emitter: &mut context.output_emitter,
+            source_render: TextRowSourceRenderState::new(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             row_extend: &mut row_extend,
             box_face: &mut box_face,
             x: &mut x,
@@ -2219,15 +2237,11 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
             row_flags: &mut context.row_flags,
             hit_rows: &mut context.hit_rows,
             hit_row_range: &mut hit_row_range,
-            builder: &mut context.builder,
-            evaluator: &mut context.eval,
             prefix_request: &mut prefix_request,
             hscroll_skip: &mut hscroll_skip,
             word_wrap: &mut word_wrap,
             trailing_whitespace: &mut trailing_whitespace,
             row_y_positions: &mut context.row_y_positions,
-            font_metrics: &mut font_metrics,
-            face_resolver: &face_resolver,
         },
     );
 
@@ -2597,6 +2611,9 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let row_limit = context.row_limit;
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
 
     let outcome = BufferTextSpecialOverflowRenderRequest::new(
         &prepared_append,
@@ -2622,7 +2639,13 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
             byte_idx: &mut byte_idx,
             charpos: &mut charpos,
             col: &mut col,
-            output_emitter: &mut context.output_emitter,
+            source_render: TextRowSourceRenderState::new(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             row_extend: &mut row_extend,
             x: &mut x,
             line_numbers: &mut line_numbers,
@@ -2630,8 +2653,6 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
             row_flags: &mut context.row_flags,
             hit_rows: &mut context.hit_rows,
             hit_row_range: &mut hit_row_range,
-            builder: &mut context.builder,
-            evaluator: &mut context.eval,
             prefix_request: &mut prefix_request,
             hscroll_skip: &mut hscroll_skip,
             word_wrap: &mut word_wrap,
@@ -2821,6 +2842,9 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
     let row_limit = context.row_limit;
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut font_metrics = None;
 
     let outcome = BufferTextOverflowRenderRequest::new(
         prepared_append,
@@ -2846,7 +2870,13 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
             byte_idx: &mut byte_idx,
             charpos: &mut charpos,
             col: &mut col,
-            output_emitter: &mut context.output_emitter,
+            source_render: TextRowSourceRenderState::new(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             row_extend: &mut row_extend,
             x: &mut x,
             line_numbers: &mut line_numbers,
@@ -2854,8 +2884,6 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
             row_flags: &mut context.row_flags,
             hit_rows: &mut context.hit_rows,
             hit_row_range: &mut hit_row_range,
-            builder: &mut context.builder,
-            evaluator: &mut context.eval,
             prefix_request: &mut prefix_request,
             hscroll_skip: &mut hscroll_skip,
             word_wrap: &mut word_wrap,
@@ -5490,7 +5518,13 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
             byte_idx: &mut byte_idx,
             charpos: &mut charpos,
             col: &mut col,
-            output_emitter: &mut context.output_emitter,
+            source_render: TextRowSourceRenderState::new(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             row_extend: &mut row_extend,
             x: &mut x,
             line_numbers: &mut line_numbers,
@@ -5498,16 +5532,12 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
             row_flags: &mut context.row_flags,
             hit_rows: &mut context.hit_rows,
             hit_row_range: &mut hit_row_range,
-            builder: &mut context.builder,
-            evaluator: &mut context.eval,
             prefix_request: &mut prefix_request,
             hscroll_skip: &mut hscroll_skip,
             word_wrap: &mut word_wrap,
             trailing_whitespace: &mut trailing_whitespace,
             face_scan: &mut face_scan,
             row_y_positions: &mut context.row_y_positions,
-            font_metrics: &mut font_metrics,
-            face_resolver: &face_resolver,
             cursor_info: &mut cursor_info,
             face_ids: &mut face_ids,
             raise_span: &mut raise_span,
@@ -5716,7 +5746,13 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     .render_and_apply(
         &snapshot,
         BufferEndOfBufferTailRenderState {
-            output_emitter: &mut context.output_emitter,
+            source_render: TextRowSourceRenderState::new(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
             x: &mut x,
             col: &mut col,
             row_geometry: &mut context.geometry,
@@ -5725,10 +5761,6 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
             hit_row_range: &mut hit_row_range,
             row_y_positions: &mut context.row_y_positions,
             face_ids: &mut face_ids,
-            builder: &mut context.builder,
-            evaluator: &mut context.eval,
-            font_metrics: &mut font_metrics,
-            face_resolver: &face_resolver,
         },
     );
 

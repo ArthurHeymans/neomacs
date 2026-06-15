@@ -285,6 +285,50 @@ impl<'a> TextRowSourceRenderState<'a> {
             face_resolver,
         }
     }
+
+    pub(crate) fn reborrow(&mut self) -> TextRowSourceRenderState<'_> {
+        TextRowSourceRenderState {
+            builder: self.builder,
+            output_emitter: self.output_emitter,
+            evaluator: self.evaluator,
+            font_metrics: self.font_metrics,
+            face_resolver: self.face_resolver,
+        }
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        &'a mut GlyphMatrixBuilder,
+        &'a mut WindowOutputEmitter,
+        &'a mut Context,
+        &'a mut Option<FontMetricsService>,
+        &'a FaceResolver,
+    ) {
+        (
+            self.builder,
+            self.output_emitter,
+            self.evaluator,
+            self.font_metrics,
+            self.face_resolver,
+        )
+    }
+
+    pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
+        self.output_emitter
+    }
+
+    pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {
+        self.output_emitter.rows()
+    }
+
+    pub(crate) fn output_rows_len(&self) -> usize {
+        self.output_emitter.rows().len()
+    }
+
+    pub(crate) fn face_resolver(&self) -> &'a FaceResolver {
+        self.face_resolver
+    }
 }
 
 pub(crate) struct TextRowSourceMeasureState<'a> {
@@ -430,7 +474,7 @@ pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) charpos: &'emit mut i64,
     pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) x: &'emit mut f32,
     pub(crate) col: &'emit mut usize,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
@@ -443,9 +487,6 @@ pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
 }
 
 pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
@@ -456,7 +497,7 @@ pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
     pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) box_face: &'emit mut BoxFaceRowState,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) x: &'emit mut f32,
     pub(crate) col: &'emit mut usize,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
@@ -467,15 +508,13 @@ pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
 }
 
 pub(crate) struct BufferTextOverflowRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
     pub(crate) col: &'emit mut usize,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) x: &'emit mut f32,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
@@ -483,8 +522,6 @@ pub(crate) struct BufferTextOverflowRenderState<'a, 'emit> {
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
     pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
     pub(crate) word_wrap: &'emit mut WordWrapRenderState,
@@ -497,7 +534,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
     pub(crate) col: &'emit mut usize,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) x: &'emit mut f32,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
@@ -505,8 +542,6 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
     pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
     pub(crate) word_wrap: &'emit mut WordWrapRenderState,
@@ -540,7 +575,7 @@ pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
     pub(crate) col: &'emit mut usize,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) x: &'emit mut f32,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
@@ -548,16 +583,12 @@ pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
     pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
     pub(crate) word_wrap: &'emit mut WordWrapRenderState,
     pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
     pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'a FaceResolver,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
     pub(crate) raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
@@ -587,7 +618,7 @@ pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
     pub(crate) col: &'emit mut usize,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     pub(crate) box_face: &'emit mut BoxFaceRowState,
     pub(crate) x: &'emit mut f32,
@@ -596,15 +627,11 @@ pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
     pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
     pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
     pub(crate) word_wrap: &'emit mut WordWrapRenderState,
     pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'a FaceResolver,
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequest<'a> {
@@ -624,7 +651,7 @@ pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
     pub(crate) checkpoints: &'emit mut TextPropertyScanCheckpoints,
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) x: &'emit mut f32,
     pub(crate) col: &'emit mut usize,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
@@ -633,10 +660,6 @@ pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'a FaceResolver,
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
@@ -650,8 +673,8 @@ pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferEndOfBufferTailRenderState<'a, 'emit> {
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) x: &'emit mut f32,
     pub(crate) col: &'emit mut usize,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
@@ -660,10 +683,6 @@ pub(crate) struct BufferEndOfBufferTailRenderState<'a, 'emit> {
     pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
     pub(crate) row_y_positions: &'emit mut DisplayRowYPositions,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'a FaceResolver,
 }
 
 pub(crate) struct BufferTextWindowBeginRequest {
@@ -4338,7 +4357,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             byte_idx,
             charpos,
             col,
-            output_emitter,
+            source_render,
             row_extend,
             box_face,
             x,
@@ -4347,23 +4366,21 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             row_flags,
             hit_rows,
             hit_row_range,
-            builder,
-            evaluator,
             prefix_request,
             hscroll_skip,
             word_wrap,
             trailing_whitespace,
             row_y_positions,
-            font_metrics,
-            face_resolver,
         } = state;
+        let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
+            source_render.into_parts();
 
         let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
             TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
+                &mut *builder,
+                &mut *output_emitter,
+                &mut *evaluator,
+                &mut *font_metrics,
                 face_resolver,
             ),
             x,
@@ -4404,9 +4421,9 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             row_flags,
             self.row_limit,
             hit_rows,
-            builder,
-            output_emitter,
-            evaluator,
+            &mut *builder,
+            &mut *output_emitter,
+            &mut *evaluator,
         )
         .emit_line_break_then_row_start(
             line_break_transition,
@@ -4499,7 +4516,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             byte_idx,
             charpos,
             col,
-            output_emitter,
+            source_render,
             row_extend,
             x,
             line_numbers,
@@ -4507,24 +4524,21 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             row_flags,
             hit_rows,
             hit_row_range,
-            builder,
-            evaluator,
             prefix_request,
             hscroll_skip,
             word_wrap,
             trailing_whitespace,
             face_scan,
             row_y_positions,
-            font_metrics,
-            face_resolver,
             cursor_info,
             face_ids,
             raise_span,
         } = state;
+        let mut source_render = source_render;
 
         let ch = self.decoded_source_char.ch();
         self.decoded_source_char
-            .record_word_wrap_candidate(word_wrap, output_emitter);
+            .record_word_wrap_candidate(word_wrap, source_render.output_emitter());
 
         let buffer_source_char = self
             .decoded_source_char
@@ -4544,6 +4558,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let append_geometry = *row_geometry;
 
         let prepared_append = {
+            let (builder, _output_emitter, evaluator, font_metrics, face_resolver) =
+                source_render.reborrow().into_parts();
             let mut preparation_state = BufferTextSourceCharPreparationState::new(
                 append_state,
                 builder,
@@ -4586,7 +4602,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                         byte_idx,
                         charpos,
                         col,
-                        output_emitter,
+                        source_render: source_render.reborrow(),
                         row_extend,
                         x,
                         line_numbers,
@@ -4594,8 +4610,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                         row_flags,
                         hit_rows,
                         hit_row_range,
-                        builder,
-                        evaluator,
                         prefix_request,
                         hscroll_skip,
                         word_wrap,
@@ -4617,13 +4631,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                         self.params,
                         &mut BufferTextSpecialSourceCharRenderState::new(
                             face_ids,
-                            TextRowSourceRenderState::new(
-                                builder,
-                                output_emitter,
-                                evaluator,
-                                font_metrics,
-                                face_resolver,
-                            ),
+                            source_render.reborrow(),
                             face_scan,
                             word_wrap,
                             x,
@@ -4665,7 +4673,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 byte_idx,
                 charpos,
                 col,
-                output_emitter,
+                source_render: source_render.reborrow(),
                 row_extend,
                 x,
                 line_numbers,
@@ -4673,8 +4681,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 row_flags,
                 hit_rows,
                 hit_row_range,
-                builder,
-                evaluator,
                 prefix_request,
                 hscroll_skip,
                 word_wrap,
@@ -4709,6 +4715,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         );
 
         {
+            let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
+                source_render.reborrow().into_parts();
             let mut overlay_state = OverlayStringRenderState::new(
                 evaluator,
                 output_emitter,
@@ -4738,13 +4746,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 &append_geometry,
                 ch,
                 &mut BufferTextSourceCharRenderState::new(
-                    TextRowSourceRenderState::new(
-                        builder,
-                        output_emitter,
-                        evaluator,
-                        font_metrics,
-                        face_resolver,
-                    ),
+                    source_render.reborrow(),
                     trailing_whitespace,
                     word_wrap,
                     x,
@@ -4758,6 +4760,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         }
 
         {
+            let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
+                source_render.reborrow().into_parts();
             let mut overlay_state = OverlayStringRenderState::new(
                 evaluator,
                 output_emitter,
@@ -4828,7 +4832,7 @@ impl BufferTextOverflowRenderRequest {
             byte_idx,
             charpos,
             col,
-            output_emitter,
+            source_render,
             row_extend,
             x,
             line_numbers,
@@ -4836,8 +4840,6 @@ impl BufferTextOverflowRenderRequest {
             row_flags,
             hit_rows,
             hit_row_range,
-            builder,
-            evaluator,
             prefix_request,
             hscroll_skip,
             word_wrap,
@@ -4845,6 +4847,8 @@ impl BufferTextOverflowRenderRequest {
             face_scan,
             row_y_positions,
         } = state;
+        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
+            source_render.into_parts();
 
         match self.prepared_append.overflow_action(
             self.ch,
@@ -4873,9 +4877,9 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    builder,
-                    output_emitter,
-                    evaluator,
+                    &mut *builder,
+                    &mut *output_emitter,
+                    &mut *evaluator,
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -4904,7 +4908,7 @@ impl BufferTextOverflowRenderRequest {
             } => {
                 let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
                 word_wrap_action.apply_before_row_transition(
-                    output_emitter,
+                    &mut *output_emitter,
                     byte_idx,
                     charpos,
                     col,
@@ -4921,9 +4925,9 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    builder,
-                    output_emitter,
-                    evaluator,
+                    &mut *builder,
+                    &mut *output_emitter,
+                    &mut *evaluator,
                 )
                 .emit_overflow(
                     transition,
@@ -4967,9 +4971,9 @@ impl BufferTextOverflowRenderRequest {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    builder,
-                    output_emitter,
-                    evaluator,
+                    &mut *builder,
+                    &mut *output_emitter,
+                    &mut *evaluator,
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -5849,10 +5853,10 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         self,
         buffer: &B,
-        state: BufferEndOfBufferTailRenderState<'_, '_>,
+        state: BufferEndOfBufferTailRenderState<'_>,
     ) -> BufferEndOfBufferTailRenderOutcome {
         let BufferEndOfBufferTailRenderState {
-            output_emitter,
+            source_render,
             x,
             col,
             row_geometry,
@@ -5861,11 +5865,8 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
         } = state;
+        let mut source_render = source_render;
 
         let tail = BufferEndOfBufferTailAction::new(
             self.byte_idx,
@@ -5878,6 +5879,8 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
         tail.capture_cursor_if_point(cursor_info, self.active_face_state, row_geometry, *x, *col);
 
         if tail.should_render_overlay_strings(row_geometry, self.row_limit) {
+            let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
+                source_render.reborrow().into_parts();
             let mut overlay_state = OverlayStringRenderState::new(
                 evaluator,
                 output_emitter,
@@ -6375,7 +6378,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             charpos,
             hscroll_skip,
             row_extend,
-            output_emitter,
+            source_render,
             x,
             col,
             prefix_request,
@@ -6388,10 +6391,8 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             hit_row_range,
             cursor_info,
             row_y_positions,
-            builder,
-            evaluator,
-            font_metrics,
         } = state;
+        let mut source_render = source_render;
 
         let Some(hscroll_action) = BufferHscrollSkipSourceChar::consume_from_text(
             self.text,
@@ -6404,9 +6405,11 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         };
 
         if hscroll_action.is_line_break() {
+            let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
+                source_render.reborrow().into_parts();
             hscroll_action.apply_line_break_before_row_transition(
                 row_extend,
-                output_emitter,
+                &mut *output_emitter,
                 x,
                 self.content_x,
             );
@@ -6457,17 +6460,8 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             );
         }
 
-        let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
-            TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                self.face_resolver,
-            ),
-            x,
-            col,
-        );
+        let mut synthetic_text_state =
+            BufferSyntheticTextRenderState::new(source_render.reborrow(), x, col);
         hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 self.append_surface,
@@ -6676,7 +6670,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             checkpoints,
             byte_idx,
             charpos,
-            output_emitter,
+            source_render,
             x,
             col,
             row_geometry,
@@ -6685,11 +6679,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
         } = state;
+        let mut source_render = source_render;
 
         let action = BufferInvisibleTextScanContext::new(
             self.text,
@@ -6702,18 +6693,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             return BufferInvisibleTextRenderOutcome::Visible;
         };
 
-        let mut hidden_text_state = BufferInvisibleTextRenderState::new(
-            TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
-            cursor_info,
-            x,
-            col,
-        );
+        let mut hidden_text_state =
+            BufferInvisibleTextRenderState::new(source_render.reborrow(), cursor_info, x, col);
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 self.append_surface,
@@ -6727,6 +6708,8 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             &mut hidden_text_state,
         );
 
+        let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
+            source_render.reborrow().into_parts();
         let mut overlay_state = OverlayStringRenderState::new(
             evaluator,
             output_emitter,
@@ -7351,7 +7334,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             trailing_whitespace,
             row_extend,
             box_face,
-            output_emitter,
+            source_render,
             x,
             col,
             prefix_request,
@@ -7362,9 +7345,9 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             hit_rows,
             hit_row_range,
             row_y_positions,
-            builder,
-            evaluator,
         } = state;
+        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
+            source_render.into_parts();
 
         let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
             buffer,
@@ -7385,7 +7368,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             trailing_whitespace,
             row_extend,
             box_face,
-            output_emitter,
+            &mut *output_emitter,
             self.content_x,
             x,
             charpos,
@@ -8080,7 +8063,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             byte_idx,
             charpos,
             col,
-            output_emitter,
+            source_render,
             row_extend,
             x,
             line_numbers,
@@ -8088,14 +8071,14 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             row_flags,
             hit_rows,
             hit_row_range,
-            builder,
-            evaluator,
             prefix_request,
             hscroll_skip,
             word_wrap,
             trailing_whitespace,
             row_y_positions,
         } = state;
+        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
+            source_render.into_parts();
 
         match self.prepared_append.overflow_action(
             self.x_px,
@@ -8125,9 +8108,9 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    builder,
-                    output_emitter,
-                    evaluator,
+                    &mut *builder,
+                    &mut *output_emitter,
+                    &mut *evaluator,
                 )
                 .emit_overflow_then_row_start(
                     transition,
@@ -8173,9 +8156,9 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                     row_flags,
                     self.row_limit,
                     hit_rows,
-                    builder,
-                    output_emitter,
-                    evaluator,
+                    &mut *builder,
+                    &mut *output_emitter,
+                    &mut *evaluator,
                 )
                 .emit_overflow_then_row_start(
                     transition,

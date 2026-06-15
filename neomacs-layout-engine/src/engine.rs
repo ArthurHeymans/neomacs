@@ -63,7 +63,9 @@ use crate::display_row_append::DisplayRowPrefixRequest;
 use crate::display_row_append::DisplayRowPrefixValues;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
-use crate::display_row_append::{BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest};
+use crate::display_row_append::{
+    BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest, TextRowSourceRenderState,
+};
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
     new_display_row,
@@ -1221,15 +1223,17 @@ impl LayoutEngine {
 
         walk_setup.render_visible_steps(
             &mut BufferTextWindowWalkRenderState {
-                output_emitter: &mut output_emitter,
+                source_render: TextRowSourceRenderState::new(
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                ),
                 line_numbers: &mut line_numbers,
                 face_scan: &mut face_scan,
                 active_face_state: &mut active_face_state,
                 face_ids: &mut face_ids,
-                builder: &mut self.matrix_builder,
-                evaluator,
-                font_metrics: &mut self.font_metrics,
-                face_resolver,
             },
             row_prelude_request_context,
             loop_request_context,
@@ -1242,12 +1246,14 @@ impl LayoutEngine {
 
         let post_loop_outcome = walk_setup.render_tail_and_decide_retry(
             &mut BufferTextWindowPostLoopRenderState {
-                output_emitter: &mut output_emitter,
+                source_render: TextRowSourceRenderState::new(
+                    &mut self.matrix_builder,
+                    &mut output_emitter,
+                    evaluator,
+                    &mut self.font_metrics,
+                    face_resolver,
+                ),
                 face_ids: &mut face_ids,
-                builder: &mut self.matrix_builder,
-                evaluator,
-                font_metrics: &mut self.font_metrics,
-                face_resolver,
             },
             loop_request_context,
             &tail_request_context,

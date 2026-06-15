@@ -33,7 +33,6 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
-use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{
@@ -216,8 +215,8 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     tab_line_height: f32,
 }
 
-pub(crate) struct BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
-    output_emitter: &'emit mut WindowOutputEmitter,
+pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit> {
+    source_render: TextRowSourceRenderState<'emit>,
     x: &'emit mut f32,
     col: &'emit mut usize,
     row_geometry: &'emit mut DisplayRowGeometryState,
@@ -226,10 +225,6 @@ pub(crate) struct BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
     hit_row_range: &'emit mut HitRowRangeTracker,
     row_y_positions: &'rows mut DisplayRowYPositions,
     face_ids: &'emit mut FrameFaceIdAllocator,
-    builder: &'emit mut GlyphMatrixBuilder,
-    evaluator: &'emit mut Context,
-    font_metrics: &'emit mut Option<FontMetricsService>,
-    face_resolver: &'face FaceResolver,
     row_flags: &'emit DisplayRowFlags,
     row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
     box_face: &'emit BoxFaceRowState,
@@ -244,25 +239,17 @@ pub(crate) struct BufferTextWindowFinishInstallState<'a> {
     pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
-pub(crate) struct BufferTextWindowWalkRenderState<'face, 'emit> {
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+pub(crate) struct BufferTextWindowWalkRenderState<'emit> {
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
     pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
 }
 
-pub(crate) struct BufferTextWindowPostLoopRenderState<'face, 'emit> {
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+pub(crate) struct BufferTextWindowPostLoopRenderState<'emit> {
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit> {
@@ -328,13 +315,13 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
+pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
     append_state: &'emit mut BufferTextRowAppendState,
     text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
     byte_idx: &'emit mut usize,
     charpos: &'emit mut i64,
     col: &'emit mut usize,
-    output_emitter: &'emit mut WindowOutputEmitter,
+    source_render: TextRowSourceRenderState<'emit>,
     row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     box_face: &'emit mut BoxFaceRowState,
     x: &'emit mut f32,
@@ -343,16 +330,12 @@ pub(crate) struct BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
     row_flags: &'emit mut DisplayRowFlags,
     hit_rows: &'emit mut Vec<HitRow>,
     hit_row_range: &'emit mut HitRowRangeTracker,
-    builder: &'emit mut GlyphMatrixBuilder,
-    evaluator: &'emit mut Context,
     prefix_request: &'emit mut DisplayRowPrefixRequest,
     hscroll_skip: &'emit mut HorizontalScrollSkipState,
     word_wrap: &'emit mut WordWrapRenderState,
     trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
     face_scan: &'emit mut FaceScanCheckpoint,
     row_y_positions: &'rows mut DisplayRowYPositions,
-    font_metrics: &'emit mut Option<FontMetricsService>,
-    face_resolver: &'face FaceResolver,
     cursor_info: &'emit mut CursorCaptureState,
     face_ids: &'emit mut FrameFaceIdAllocator,
     raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
@@ -606,7 +589,7 @@ impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
-        state: &mut BufferTextWindowWalkRenderState<'_, '_>,
+        state: &mut BufferTextWindowWalkRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -621,7 +604,7 @@ impl BufferTextWindowWalkSetup {
             &mut self.byte_idx,
             &mut self.charpos,
             &mut self.col,
-            state.output_emitter,
+            state.source_render.reborrow(),
             &mut self.row_extend,
             &mut self.box_face,
             &mut self.x,
@@ -630,16 +613,12 @@ impl BufferTextWindowWalkSetup {
             &mut self.row_flags,
             &mut self.hit_rows,
             &mut self.hit_row_range,
-            state.builder,
-            state.evaluator,
             &mut self.prefix_request,
             &mut self.hscroll_skip,
             &mut self.word_wrap,
             &mut self.trailing_whitespace,
             state.face_scan,
             &mut self.row_y_positions,
-            state.font_metrics,
-            state.face_resolver,
             &mut self.cursor_info,
             state.face_ids,
             &mut self.raise_span,
@@ -661,7 +640,7 @@ impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
         &mut self,
-        state: &mut BufferTextWindowPostLoopRenderState<'_, '_>,
+        state: &mut BufferTextWindowPostLoopRenderState<'_>,
         loop_context: BufferTextWindowLoopRequestContext,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
@@ -672,7 +651,7 @@ impl BufferTextWindowWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowPostLoopRenderOutcome {
         BufferTextWindowPostLoopState::new(
-            state.output_emitter,
+            state.source_render.reborrow(),
             &mut self.x,
             &mut self.col,
             &mut self.row_geometry,
@@ -681,10 +660,6 @@ impl BufferTextWindowWalkSetup {
             &mut self.hit_row_range,
             &mut self.row_y_positions,
             state.face_ids,
-            state.builder,
-            state.evaluator,
-            state.font_metrics,
-            state.face_resolver,
             &self.row_flags,
             &self.row_extend,
             &self.box_face,
@@ -1181,10 +1156,10 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
     }
 }
 
-impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
+impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        output_emitter: &'emit mut WindowOutputEmitter,
+        source_render: TextRowSourceRenderState<'emit>,
         x: &'emit mut f32,
         col: &'emit mut usize,
         row_geometry: &'emit mut DisplayRowGeometryState,
@@ -1193,16 +1168,12 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
         hit_row_range: &'emit mut HitRowRangeTracker,
         row_y_positions: &'rows mut DisplayRowYPositions,
         face_ids: &'emit mut FrameFaceIdAllocator,
-        builder: &'emit mut GlyphMatrixBuilder,
-        evaluator: &'emit mut Context,
-        font_metrics: &'emit mut Option<FontMetricsService>,
-        face_resolver: &'face FaceResolver,
         row_flags: &'emit DisplayRowFlags,
         row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
         box_face: &'emit BoxFaceRowState,
     ) -> Self {
         Self {
-            output_emitter,
+            source_render,
             x,
             col,
             row_geometry,
@@ -1211,10 +1182,6 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
             hit_row_range,
             row_y_positions,
             face_ids,
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
             row_flags,
             row_extend,
             box_face,
@@ -1242,7 +1209,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
             .render_and_apply(
                 buffer,
                 BufferEndOfBufferTailRenderState {
-                    output_emitter: self.output_emitter,
+                    source_render: self.source_render.reborrow(),
                     x: self.x,
                     col: self.col,
                     row_geometry: self.row_geometry,
@@ -1251,10 +1218,6 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
                     hit_row_range: self.hit_row_range,
                     row_y_positions: self.row_y_positions,
                     face_ids: self.face_ids,
-                    builder: self.builder,
-                    evaluator: self.evaluator,
-                    font_metrics: self.font_metrics,
-                    face_resolver: self.face_resolver,
                 },
             )
             .point_is_visible_eob()
@@ -1285,6 +1248,8 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
         charpos: i64,
         point_is_visible_eob: bool,
     ) -> BufferTextWindowTailFinalizeOutcome {
+        let (builder, output_emitter, evaluator, _font_metrics, _face_resolver) =
+            self.source_render.reborrow().into_parts();
         tail_context
             .tail_finalize_request(text, charpos, point_is_visible_eob)
             .finalize_and_apply(BufferTextWindowTailFinalizeState {
@@ -1293,9 +1258,9 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
                 row_y_positions: self.row_y_positions,
                 hit_row_range: self.hit_row_range,
                 hit_rows: self.hit_rows,
-                builder: self.builder,
-                output_emitter: self.output_emitter,
-                evaluator: self.evaluator,
+                builder,
+                output_emitter,
+                evaluator,
             })
     }
 
@@ -1308,7 +1273,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
     ) -> BufferTextWindowVisibilityRetryOutcome {
         tail_context
             .visibility_retry_request(
-                self.output_emitter.rows(),
+                self.source_render.output_rows(),
                 charpos,
                 point_is_visible_eob,
                 buf_access,
@@ -1317,7 +1282,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowPostLoopState<'face, 'rows, 'emit> {
     }
 
     pub(crate) fn rendered_rows_len(&self) -> usize {
-        self.output_emitter.rows().len()
+        self.source_render.output_rows_len()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1691,7 +1656,7 @@ impl BufferTextWindowLoopRequestContext {
     }
 }
 
-impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
+impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         append_state: &'emit mut BufferTextRowAppendState,
@@ -1699,7 +1664,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         byte_idx: &'emit mut usize,
         charpos: &'emit mut i64,
         col: &'emit mut usize,
-        output_emitter: &'emit mut WindowOutputEmitter,
+        source_render: TextRowSourceRenderState<'emit>,
         row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
         box_face: &'emit mut BoxFaceRowState,
         x: &'emit mut f32,
@@ -1708,16 +1673,12 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         row_flags: &'emit mut DisplayRowFlags,
         hit_rows: &'emit mut Vec<HitRow>,
         hit_row_range: &'emit mut HitRowRangeTracker,
-        builder: &'emit mut GlyphMatrixBuilder,
-        evaluator: &'emit mut Context,
         prefix_request: &'emit mut DisplayRowPrefixRequest,
         hscroll_skip: &'emit mut HorizontalScrollSkipState,
         word_wrap: &'emit mut WordWrapRenderState,
         trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
         face_scan: &'emit mut FaceScanCheckpoint,
         row_y_positions: &'rows mut DisplayRowYPositions,
-        font_metrics: &'emit mut Option<FontMetricsService>,
-        face_resolver: &'face FaceResolver,
         cursor_info: &'emit mut CursorCaptureState,
         face_ids: &'emit mut FrameFaceIdAllocator,
         raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
@@ -1729,7 +1690,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
             byte_idx,
             charpos,
             col,
-            output_emitter,
+            source_render,
             row_extend,
             box_face,
             x,
@@ -1738,16 +1699,12 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
             row_flags,
             hit_rows,
             hit_row_range,
-            builder,
-            evaluator,
             prefix_request,
             hscroll_skip,
             word_wrap,
             trailing_whitespace,
             face_scan,
             row_y_positions,
-            font_metrics,
-            face_resolver,
             cursor_info,
             face_ids,
             raise_span,
@@ -1770,9 +1727,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &B,
-    ) where
-        'face: 'request,
-    {
+    ) {
         while *self.byte_idx < text.len()
             && self
                 .row_geometry
@@ -1808,10 +1763,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome
-    where
-        'face: 'request,
-    {
+    ) -> BufferTextWindowLoopStepOutcome {
         self.render_row_prelude(
             row_prelude_context,
             append_surface,
@@ -1922,11 +1874,13 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {
+        let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
+            self.source_render.reborrow().into_parts();
         context.line_number_margin_request().render_pending(
             self.line_numbers,
-            self.face_resolver,
+            face_resolver,
             self.face_ids,
-            self.builder,
+            &mut *builder,
             self.row_geometry,
             self.face_scan,
             context.char_width(),
@@ -1945,14 +1899,14 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
             )
             .render_requested_to_text_row_and_apply(
                 self.prefix_request,
-                self.evaluator,
-                self.output_emitter,
+                evaluator,
+                output_emitter,
                 buffer,
                 *self.charpos,
-                self.font_metrics,
-                self.face_resolver,
+                font_metrics,
+                face_resolver,
                 self.face_ids,
-                self.builder,
+                builder,
                 self.x,
                 self.col,
             );
@@ -1990,15 +1944,12 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         text: &'request [u8],
         append_surface: &'request DisplayRowAppendSurface,
         active_face_state: &'request DisplayRowActiveFaceState,
-    ) -> DisplayRowTransitionContinuation
-    where
-        'face: 'request,
-    {
+    ) -> DisplayRowTransitionContinuation {
         let request = context.hscroll_skip_request(
             text,
             append_surface,
             active_face_state,
-            self.face_resolver,
+            self.source_render.face_resolver(),
         );
         self.render_hscroll_skip(request)
     }
@@ -2095,7 +2046,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 checkpoints: self.text_property_checkpoints,
                 byte_idx: self.byte_idx,
                 charpos: self.charpos,
-                output_emitter: self.output_emitter,
+                source_render: self.source_render.reborrow(),
                 x: self.x,
                 col: self.col,
                 row_geometry: self.row_geometry,
@@ -2104,10 +2055,6 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 hit_row_range: self.hit_row_range,
                 row_y_positions: self.row_y_positions,
                 face_ids: self.face_ids,
-                builder: self.builder,
-                evaluator: self.evaluator,
-                font_metrics: self.font_metrics,
-                face_resolver: self.face_resolver,
             },
         )
     }
@@ -2121,7 +2068,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
             charpos: self.charpos,
             hscroll_skip: self.hscroll_skip,
             row_extend: self.row_extend,
-            output_emitter: self.output_emitter,
+            source_render: self.source_render.reborrow(),
             x: self.x,
             col: self.col,
             prefix_request: self.prefix_request,
@@ -2134,9 +2081,6 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
             hit_row_range: self.hit_row_range,
             cursor_info: self.cursor_info,
             row_y_positions: self.row_y_positions,
-            builder: self.builder,
-            evaluator: self.evaluator,
-            font_metrics: self.font_metrics,
         })
     }
 
@@ -2148,13 +2092,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         point_charpos: i64,
     ) -> BufferDisplayPropertyTextWalkOutcome {
         request.render_and_apply(BufferDisplayPropertyCheckpointRenderState {
-            source_render: TextRowSourceRenderState::new(
-                self.builder,
-                self.output_emitter,
-                self.evaluator,
-                self.font_metrics,
-                self.face_resolver,
-            ),
+            source_render: self.source_render.reborrow(),
             face_ids: self.face_ids,
             append_surface,
             row_geometry: self.row_geometry,
@@ -2185,7 +2123,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 byte_idx: self.byte_idx,
                 charpos: self.charpos,
                 col: self.col,
-                output_emitter: self.output_emitter,
+                source_render: self.source_render.reborrow(),
                 row_extend: self.row_extend,
                 box_face: self.box_face,
                 x: self.x,
@@ -2194,15 +2132,11 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 row_flags: self.row_flags,
                 hit_rows: self.hit_rows,
                 hit_row_range: self.hit_row_range,
-                builder: self.builder,
-                evaluator: self.evaluator,
                 prefix_request: self.prefix_request,
                 hscroll_skip: self.hscroll_skip,
                 word_wrap: self.word_wrap,
                 trailing_whitespace: self.trailing_whitespace,
                 row_y_positions: self.row_y_positions,
-                font_metrics: self.font_metrics,
-                face_resolver: self.face_resolver,
             },
         )
     }
@@ -2222,7 +2156,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 trailing_whitespace: self.trailing_whitespace,
                 row_extend: self.row_extend,
                 box_face: self.box_face,
-                output_emitter: self.output_emitter,
+                source_render: self.source_render.reborrow(),
                 x: self.x,
                 col: self.col,
                 prefix_request: self.prefix_request,
@@ -2233,8 +2167,6 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 hit_rows: self.hit_rows,
                 hit_row_range: self.hit_row_range,
                 row_y_positions: self.row_y_positions,
-                builder: self.builder,
-                evaluator: self.evaluator,
             },
         )
     }
@@ -2251,7 +2183,7 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 byte_idx: self.byte_idx,
                 charpos: self.charpos,
                 col: self.col,
-                output_emitter: self.output_emitter,
+                source_render: self.source_render.reborrow(),
                 row_extend: self.row_extend,
                 x: self.x,
                 line_numbers: self.line_numbers,
@@ -2259,16 +2191,12 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
                 row_flags: self.row_flags,
                 hit_rows: self.hit_rows,
                 hit_row_range: self.hit_row_range,
-                builder: self.builder,
-                evaluator: self.evaluator,
                 prefix_request: self.prefix_request,
                 hscroll_skip: self.hscroll_skip,
                 word_wrap: self.word_wrap,
                 trailing_whitespace: self.trailing_whitespace,
                 face_scan: self.face_scan,
                 row_y_positions: self.row_y_positions,
-                font_metrics: self.font_metrics,
-                face_resolver: self.face_resolver,
                 cursor_info: self.cursor_info,
                 face_ids: self.face_ids,
                 raise_span: self.raise_span,
