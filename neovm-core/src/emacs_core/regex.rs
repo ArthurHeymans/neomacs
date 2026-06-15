@@ -1180,7 +1180,7 @@ fn compiled_capture_count(compiled: &CompiledSearchPattern) -> usize {
 
 fn find_forward_match_data_compiled(
     compiled: &CompiledSearchPattern,
-    text: &str,
+    text: &[u8],
     start: usize,
     limit: usize,
     offset: usize,
@@ -1188,14 +1188,13 @@ fn find_forward_match_data_compiled(
 ) -> Option<MatchData> {
     match compiled {
         CompiledSearchPattern::Literal(literal) => {
-            let matched =
-                literal_find_emacs_bytes(&text.as_bytes()[start..limit], literal, true, case_fold)?;
+            let matched = literal_find_emacs_bytes(&text[start..limit], literal, true, case_fold)?;
             let matched = matched.shift(offset + start);
             Some(MatchData::none(gnu_single_group_vec(Some(matched))))
         }
         CompiledSearchPattern::Emacs(cp) => {
             let syn = DefaultSyntaxLookup;
-            let text_bytes = text.as_bytes();
+            let text_bytes = text;
             let range = (limit - start) as isize;
             let result =
                 regex_emacs::re_search(cp, &text_bytes[..limit], start, range, &syn, start);
@@ -1205,15 +1204,12 @@ fn find_forward_match_data_compiled(
 }
 
 pub(crate) fn iterate_string_matches_with_case_fold(
-    pattern: &str,
-    string: &str,
+    pattern: &LispString,
+    string: &[u8],
     start: usize,
     case_fold: bool,
 ) -> Result<IteratedStringMatches, String> {
-    let compiled = compile_search_pattern(
-        &crate::heap_types::LispString::from_utf8(pattern),
-        case_fold,
-    )?;
+    let compiled = compile_search_pattern(pattern, case_fold)?;
     let capture_count = compiled_capture_count(&compiled);
     if start > string.len() {
         return Ok(IteratedStringMatches {
@@ -1593,11 +1589,12 @@ fn literal_rfind_emacs_bytes(
     )
 }
 
-fn next_search_char_boundary(text: &str, pos: usize) -> Option<usize> {
+fn next_search_char_boundary(text: &[u8], pos: usize) -> Option<usize> {
     if pos >= text.len() {
         return None;
     }
-    text[pos..].chars().next().map(|ch| pos + ch.len_utf8())
+    let (_code, len) = crate::emacs_core::emacs_char::string_char(&text[pos..]);
+    Some(pos + len)
 }
 
 // ---------------------------------------------------------------------------

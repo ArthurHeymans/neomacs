@@ -445,7 +445,11 @@ fn delete_line_operation_ranges(
     Ok(deleted_ranges)
 }
 
-fn count_string_regexp_matches(text: &str, pattern: &str, case_fold: bool) -> Result<i64, Flow> {
+fn count_string_regexp_matches(
+    text: &[u8],
+    pattern: &LispString,
+    case_fold: bool,
+) -> Result<i64, Flow> {
     let iterated = super::regex::iterate_string_matches_with_case_fold(pattern, text, 0, case_fold)
         .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
     Ok(iterated
@@ -838,8 +842,8 @@ impl IsearchManager {
 
         if state.regexp {
             if let Ok(iterated) = super::regex::iterate_string_matches_with_case_fold(
-                &search_string,
-                region,
+                &LispString::from_utf8(&search_string),
+                region.as_bytes(),
                 0,
                 case_fold,
             ) {
@@ -1455,7 +1459,10 @@ fn find_match(
         if forward {
             let start = from.min(text_len);
             let iterated = super::regex::iterate_string_matches_with_case_fold(
-                pattern, text, start, case_fold,
+                &LispString::from_utf8(pattern),
+                text.as_bytes(),
+                start,
+                case_fold,
             )
             .ok()?;
             iterated
@@ -1465,8 +1472,8 @@ fn find_match(
         } else {
             let end = from.min(text_len);
             let iterated = super::regex::iterate_string_matches_with_case_fold(
-                pattern,
-                &text[..end],
+                &LispString::from_utf8(pattern),
+                &text.as_bytes()[..end],
                 0,
                 case_fold,
             )
@@ -1737,9 +1744,13 @@ fn replace_string_eval_impl(
 
     if let Some(whitespace_regex) = lax_whitespace_regex {
         let pattern = build_lax_whitespace_pattern(&from, &whitespace_regex);
-        let iterated =
-            super::regex::iterate_string_matches_with_case_fold(&pattern, &source, 0, case_fold)
-                .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
+        let iterated = super::regex::iterate_string_matches_with_case_fold(
+            &LispString::from_utf8(&pattern),
+            source.as_bytes(),
+            0,
+            case_fold,
+        )
+        .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
         let mut last = 0usize;
         for groups in iterated.matches {
             let Some(group) = groups.first().and_then(|group| *group) else {
@@ -1928,9 +1939,13 @@ fn replace_regexp_eval_impl(
 
     let case_fold = case_fold_for_pattern(eval, &from);
     let preserve_match_case = case_fold && case_replace_enabled(eval);
-    let iterated =
-        super::regex::iterate_string_matches_with_case_fold(&from, &source, 0, case_fold)
-            .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
+    let iterated = super::regex::iterate_string_matches_with_case_fold(
+        &LispString::from_utf8(&from),
+        source.as_bytes(),
+        0,
+        case_fold,
+    )
+    .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
 
     let mut out = String::with_capacity(source.len());
     let mut last = 0usize;
@@ -2272,23 +2287,30 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
 pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("how-many", &args, 1, 4)?;
     let regexp = expect_sequence_string(&args[0])?;
+    let regexp_ls = args[0]
+        .as_lisp_string()
+        .expect("how-many regexp is a string");
 
-    let (source_text, source) = {
+    let source_text = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
-        buffer_region_storage_string(buf, range)
+        buf.buffer_substring_lisp_string_range(range)
     };
 
     if regexp.is_empty() {
         return Ok(Value::fixnum(source_text.schars() as i64));
     }
 
+    // Issue #131: match over the region's Emacs bytes with the real pattern
+    // LispString, instead of the PUA-sentinel storage form.
     let case_fold = case_fold_for_pattern(eval, &regexp);
     Ok(Value::fixnum(count_string_regexp_matches(
-        &source, &regexp, case_fold,
+        source_text.as_bytes(),
+        regexp_ls,
+        case_fold,
     )?))
 }
 
@@ -2300,23 +2322,30 @@ pub(crate) fn builtin_count_matches(
 ) -> EvalResult {
     expect_min_max_args("count-matches", &args, 1, 4)?;
     let regexp = expect_sequence_string(&args[0])?;
+    let regexp_ls = args[0]
+        .as_lisp_string()
+        .expect("count-matches regexp is a string");
 
-    let (source_text, source) = {
+    let source_text = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let range = line_operation_region_bounds(&eval.buffers, buf, args.get(1), args.get(2))?;
-        buffer_region_storage_string(buf, range)
+        buf.buffer_substring_lisp_string_range(range)
     };
 
     if regexp.is_empty() {
         return Ok(Value::fixnum(source_text.schars() as i64));
     }
 
+    // Issue #131: match over the region's Emacs bytes with the real pattern
+    // LispString, instead of the PUA-sentinel storage form.
     let case_fold = case_fold_for_pattern(eval, &regexp);
     Ok(Value::fixnum(count_string_regexp_matches(
-        &source, &regexp, case_fold,
+        source_text.as_bytes(),
+        regexp_ls,
+        case_fold,
     )?))
 }
 
