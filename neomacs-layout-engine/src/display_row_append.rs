@@ -51,8 +51,9 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
-    BufferTextSourceItemRequest, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
+    BufferTextSourceAdvancePath, BufferTextSourceAppendItem, BufferTextSourceChar,
+    BufferTextSourceClusterState, BufferTextSourceItemRequest,
+    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
     BufferTextSourceTextItemRequest, DisplayItemSource, DisplayReplacementBox,
     LispStringSourceCursor, SyntheticTextItemSource,
 };
@@ -681,43 +682,7 @@ fn current_text_measure_state<'emit>(
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BufferTextSourceAdvancePath {
-    NaturalRenderedSource,
-    ResolvedComplexRun,
-}
-
-impl BufferTextSourceAdvancePath {
-    fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
-        if crate::composition::needs_complex_shaping(cluster.ch()) {
-            Self::ResolvedComplexRun
-        } else {
-            Self::NaturalRenderedSource
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BufferTextSourceNaturalFallbackAdvance {
-    Tab,
-    ClusterContinuation,
-    FaceColumns { columns: usize },
-}
-
 impl BufferTextSourceNaturalFallbackAdvance {
-    fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
-        let ch = cluster.ch();
-        if ch == '\t' {
-            Self::Tab
-        } else if cluster.is_cluster_continuation() {
-            Self::ClusterContinuation
-        } else {
-            Self::FaceColumns {
-                columns: crate::composition::base_width_cols(ch) as usize,
-            }
-        }
-    }
-
     fn resolve_to_text_row(
         self,
         font_metrics: &mut Option<FontMetricsService>,

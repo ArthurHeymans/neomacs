@@ -376,6 +376,44 @@ impl BufferTextSourceClusterState {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceAdvancePath {
+    NaturalRenderedSource,
+    ResolvedComplexRun,
+}
+
+impl BufferTextSourceAdvancePath {
+    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
+        if crate::composition::needs_complex_shaping(cluster.ch()) {
+            Self::ResolvedComplexRun
+        } else {
+            Self::NaturalRenderedSource
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceNaturalFallbackAdvance {
+    Tab,
+    ClusterContinuation,
+    FaceColumns { columns: usize },
+}
+
+impl BufferTextSourceNaturalFallbackAdvance {
+    pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
+        let ch = cluster.ch();
+        if ch == '\t' {
+            Self::Tab
+        } else if cluster.is_cluster_continuation() {
+            Self::ClusterContinuation
+        } else {
+            Self::FaceColumns {
+                columns: crate::composition::base_width_cols(ch) as usize,
+            }
+        }
+    }
+}
+
 impl BufferTextSourceAppendItem {
     pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
         let text = match (display_policy, ch) {
