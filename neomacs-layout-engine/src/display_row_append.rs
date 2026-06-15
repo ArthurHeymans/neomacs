@@ -2227,12 +2227,7 @@ impl BufferAnchoredLispStringSource {
     }
 
     fn base_face_policy(self) -> BaseFacePolicy {
-        match self.kind {
-            BufferAnchoredLispStringSourceKind::OverlayString { .. } => {
-                BaseFacePolicy::OverlayStringAtAnchor
-            }
-            BufferAnchoredLispStringSourceKind::Prefix(_) => BaseFacePolicy::DefaultFace,
-        }
+        self.origin().default_base_face_policy()
     }
 
     fn source_id(self) -> LispStringSourceId {
@@ -9219,7 +9214,6 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
 pub(crate) struct DisplayReplacementStringAppendItem {
     value: Value,
     origin: DisplayOrigin,
-    base_face_policy: BaseFacePolicy,
     source_id: LispStringSourceId,
     active_face_state: DisplayRowActiveFaceState,
     cursor_slot_width_px: f32,
@@ -9246,7 +9240,6 @@ impl DisplayReplacementStringAppendItem {
                 anchor_charpos,
                 source,
             },
-            base_face_policy: BaseFacePolicy::DisplayPropertyUnderlyingFace,
             source_id: LispStringSourceId::display_replacement(source_id),
             active_face_state: active_face_state.clone(),
             cursor_slot_width_px: measurer.replacement_string_cursor_slot_width_px(
@@ -9271,7 +9264,7 @@ impl DisplayReplacementStringAppendItem {
     }
 
     pub(crate) fn base_face_policy(&self) -> BaseFacePolicy {
-        self.base_face_policy
+        self.origin.default_base_face_policy()
     }
 
     fn string_item_measurer(&self) -> DisplayReplacementStringItemMeasurer {
