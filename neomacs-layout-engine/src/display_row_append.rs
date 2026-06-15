@@ -50,12 +50,13 @@ use crate::display_row_walk_state::{
     skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
+    BufferDisplayReplacementSource, BufferDisplayReplacementStringSource,
+    BufferTextDecodedSourceChar, BufferTextItemSource, BufferTextLineBreakSourceEvent,
     BufferTextSourceAdvancePath, BufferTextSourceAppendItem, BufferTextSourceChar,
     BufferTextSourceClusterState, BufferTextSourceItemRequest,
     BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
-    BufferTextSourceTextItemRequest, DisplayItemSource, DisplayReplacementBox,
-    LispStringSourceCursor, SyntheticTextItemSource,
+    BufferTextSourceTextEvent, BufferTextSourceTextItemRequest, DisplayItemSource,
+    DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -5536,147 +5537,17 @@ fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Sized>(
     ))
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextDecodedSourceChar {
-    ch: char,
-    start_byte_idx: usize,
-    start_charpos: i64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextDecodedSourceEvent {
-    LineBreak(BufferTextLineBreakSourceEvent),
-    Text(BufferTextSourceTextEvent),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextLineBreakSourceEvent {
-    source_char: BufferTextDecodedSourceChar,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextSourceTextEvent {
-    source_char: BufferTextDecodedSourceChar,
-}
-
-pub(crate) struct BufferTextSourceEventCursor<'text, 'state> {
-    text: &'text [u8],
-    byte_idx: &'state mut usize,
-    charpos: i64,
-}
-
-impl BufferTextDecodedSourceEvent {
-    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
-        match self {
-            Self::LineBreak(source_event) => source_event.decoded_char(),
-            Self::Text(source_event) => source_event.decoded_char(),
-        }
-    }
-}
-
-impl BufferTextLineBreakSourceEvent {
-    fn new(source_char: BufferTextDecodedSourceChar) -> Self {
-        debug_assert_eq!(source_char.ch(), '\n');
-        Self { source_char }
-    }
-
-    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
-        self.source_char
-    }
-}
-
-impl BufferTextSourceTextEvent {
-    fn new(source_char: BufferTextDecodedSourceChar) -> Self {
-        debug_assert_ne!(source_char.ch(), '\n');
-        Self { source_char }
-    }
-
-    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
-        self.source_char
-    }
-
-    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
-        self.source_char.source_char(nobreak_display_policy)
-    }
-}
-
-impl<'text, 'state> BufferTextSourceEventCursor<'text, 'state> {
-    pub(crate) fn new(text: &'text [u8], byte_idx: &'state mut usize, charpos: i64) -> Self {
-        Self {
-            text,
-            byte_idx,
-            charpos,
-        }
-    }
-
-    pub(crate) fn next_event(&mut self) -> Option<BufferTextDecodedSourceEvent> {
-        BufferTextDecodedSourceChar::consume_from_text(self.text, self.byte_idx, self.charpos)
-            .map(BufferTextDecodedSourceChar::into_event)
-    }
-}
-
 impl BufferTextDecodedSourceChar {
-    pub(crate) fn consume_from_text(
-        text: &[u8],
-        byte_idx: &mut usize,
-        charpos: i64,
-    ) -> Option<Self> {
-        if *byte_idx >= text.len() {
-            return None;
-        }
-
-        let start_byte_idx = *byte_idx;
-        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
-        if ch_len == 0 {
-            return None;
-        }
-        *byte_idx += ch_len;
-
-        Some(Self {
-            ch,
-            start_byte_idx,
-            start_charpos: charpos,
-        })
-    }
-
-    pub(crate) fn ch(self) -> char {
-        self.ch
-    }
-
-    pub(crate) fn start_byte_idx(self) -> usize {
-        self.start_byte_idx
-    }
-
-    pub(crate) fn start_charpos(self) -> i64 {
-        self.start_charpos
-    }
-
-    pub(crate) fn source_range(self) -> BufferTextSourceRange {
-        BufferTextSourceRange::single_char(CharPos0::new(self.start_charpos as usize))
-    }
-
-    pub(crate) fn into_event(self) -> BufferTextDecodedSourceEvent {
-        if self.ch == '\n' {
-            BufferTextDecodedSourceEvent::LineBreak(BufferTextLineBreakSourceEvent::new(self))
-        } else {
-            BufferTextDecodedSourceEvent::Text(BufferTextSourceTextEvent::new(self))
-        }
-    }
-
-    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
-        BufferTextSourceChar::new(self.ch, self.source_range().start(), nobreak_display_policy)
-    }
-
     pub(crate) fn record_word_wrap_candidate(
         self,
         word_wrap: &mut WordWrapRenderState,
         output_emitter: &WindowOutputEmitter,
     ) {
-        if word_wrap.can_record_candidate(self.ch) {
+        if word_wrap.can_record_candidate(self.ch()) {
             word_wrap.record_candidate(
-                self.ch,
-                self.start_byte_idx,
-                self.start_charpos,
+                self.ch(),
+                self.start_byte_idx(),
+                self.start_charpos(),
                 output_emitter.display_point_len(),
                 output_emitter.current_row_display_positions(),
             );

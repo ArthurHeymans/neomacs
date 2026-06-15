@@ -17,14 +17,13 @@ use crate::display_row_append::{
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
     BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderOutcome,
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakRenderContext,
-    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
-    BufferTextLineBreakSourceEvent, BufferTextRowAppendState, BufferTextSourceCharRenderContext,
+    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
+    BufferTextLineBreakRenderState, BufferTextRowAppendState, BufferTextSourceCharRenderContext,
     BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, BufferTextSourceEventCursor, BufferTextSourceTextEvent,
-    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
-    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
+    BufferTextWindowBeginState, BufferTextWindowBodyInstallRenderContext,
+    BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
     BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
@@ -41,6 +40,10 @@ use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
+};
+use crate::display_source::{
+    BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakSourceEvent,
+    BufferTextSourceEventCursor, BufferTextSourceTextEvent,
 };
 use crate::display_status_line::{
     ChromeRowRenderServices, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
