@@ -5194,20 +5194,26 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
         }],
     );
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-
-    let end = append_lisp_string_to_text_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        value,
-        1,
-        &face_resolver,
-        base_face,
-        0,
-        &mut face_ids,
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    );
+    let end = {
+        let mut font_metrics = None;
+        let mut source_render = TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        append_lisp_string_to_text_row(
+            &mut source_render,
+            value,
+            1,
+            base_face,
+            0,
+            &mut face_ids,
+            frame,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+    };
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(face_ids.finish(), 21);
@@ -7098,20 +7104,26 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-
-    let end = append_lisp_string_to_text_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        Value::string("a\nb"),
-        1,
-        &face_resolver,
-        base_face,
-        7,
-        &mut face_ids,
-        frame,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
-    );
+    let end = {
+        let mut font_metrics = None;
+        let mut source_render = TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        append_lisp_string_to_text_row(
+            &mut source_render,
+            Value::string("a\nb"),
+            1,
+            base_face,
+            7,
+            &mut face_ids,
+            frame,
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+        )
+    };
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
@@ -7312,20 +7324,26 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
         },
         DisplayTabPolicy::every(8),
     );
-
-    let end = append_lisp_string_to_text_row(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-        value,
-        1,
-        &face_resolver,
-        base_face,
-        7,
-        &mut face_ids,
-        frame,
-        DisplayRowPosition { x_px: 16.0, col: 2 },
-    );
+    let end = {
+        let mut font_metrics = None;
+        let mut source_render = TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        );
+        append_lisp_string_to_text_row(
+            &mut source_render,
+            value,
+            1,
+            base_face,
+            7,
+            &mut face_ids,
+            frame,
+            DisplayRowPosition { x_px: 16.0, col: 2 },
+        )
+    };
 
     assert_eq!(
         end,

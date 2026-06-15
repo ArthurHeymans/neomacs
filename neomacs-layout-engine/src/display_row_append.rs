@@ -3381,12 +3381,9 @@ pub(crate) fn apply_pending_display_source_faces(
 
 #[cfg(test)]
 pub(crate) fn append_lisp_string_to_text_row(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
+    state: &mut TextRowSourceRenderState<'_>,
     text_value: Value,
     source_id: u64,
-    face_resolver: &FaceResolver,
     base_face: &ResolvedFace,
     base_face_id: u32,
     face_ids: &mut FrameFaceIdAllocator,
@@ -3400,20 +3397,8 @@ pub(crate) fn append_lisp_string_to_text_row(
     else {
         return position;
     };
-    let mut font_metrics = None;
     source_session
-        .render_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                &mut font_metrics,
-                face_resolver,
-            ),
-            face_ids,
-            frame,
-            position,
-        )
+        .render_to_text_row_and_emit(state, face_ids, frame, position)
         .map(|outcome| outcome.end_position())
         .unwrap_or(position)
 }
