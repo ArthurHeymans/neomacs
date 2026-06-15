@@ -557,7 +557,7 @@ pub(crate) struct DisplayRowBuilder<'a> {
     glyph_measurer: Option<&'a mut dyn DisplayGlyphMeasurer>,
 }
 
-pub(crate) struct DisplayRowWriter<'layout, 'row, 'measurer> {
+struct DisplayRowWriter<'layout, 'row, 'measurer> {
     layout: &'layout DisplayRowLayout,
     row: &'row mut GlyphRow,
     glyph_measurer: Option<&'measurer mut dyn DisplayGlyphMeasurer>,
@@ -968,11 +968,11 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
 
 impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     #[cfg(test)]
-    pub(crate) fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
+    fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
         Self::for_area(layout, row, GlyphArea::Text)
     }
 
-    pub(crate) fn for_area(
+    fn for_area(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
         area: GlyphArea,
@@ -992,7 +992,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     #[cfg(test)]
-    pub(crate) fn with_glyph_measurer(
+    fn with_glyph_measurer(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
         glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
@@ -1000,7 +1000,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         Self::with_glyph_measurer_for_area(layout, row, glyph_measurer, GlyphArea::Text)
     }
 
-    pub(crate) fn with_glyph_measurer_for_area(
+    fn with_glyph_measurer_for_area(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
         glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
@@ -1020,7 +1020,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    pub(crate) fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
+    fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
         let item_layout = item.layout;
         let face_id = self.face_id(item.face);
         let area_index = self.area_index;
@@ -1064,7 +1064,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     #[cfg(test)]
-    pub(crate) fn push_source(
+    fn push_source(
         &mut self,
         source: &mut impl DisplayItemSource,
         context: &mut DisplaySourceContext<'_>,
