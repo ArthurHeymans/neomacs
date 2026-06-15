@@ -2848,7 +2848,10 @@ pub(crate) fn builtin_unicode_property_table_internal(
 
     let table = cell.cons_cdr();
     if table.is_string() {
-        let Some(file_name) = table.as_runtime_string_owned() else {
+        let Some(file_name) = table
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        else {
             return Ok(table);
         };
         let load_name = Value::string(format!("international/{file_name}"));

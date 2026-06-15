@@ -224,7 +224,11 @@ fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result
     if eval
         .buffers
         .current_buffer()
-        .and_then(|b| b.file_name_value().as_runtime_string_owned())
+        .and_then(|b| {
+            b.file_name_value()
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        })
         .is_some_and(|fname| fname == filename)
         && eval
             .apply(Value::symbol("verify-visited-file-modtime"), vec![])

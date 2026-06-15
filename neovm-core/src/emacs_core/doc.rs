@@ -129,9 +129,10 @@ fn documentation_plan(
 ) -> Result<(DocumentationPlan, Option<String>), Flow> {
     expect_min_max_args("documentation", &args, 1, 2)?;
     let obarray = eval.obarray();
-    let lisp_directory = obarray
-        .symbol_value("lisp-directory")
-        .and_then(|v| v.as_runtime_string_owned());
+    let lisp_directory = obarray.symbol_value("lisp-directory").and_then(|v| {
+        v.as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+    });
 
     // GNU doc.c:Fdocumentation calls Fget on the original symbol before
     // looking at the function cell.  Keep that exact object identity so
@@ -8018,9 +8019,10 @@ fn documentation_property_plan(
 ) -> Result<DocumentationPlan, Flow> {
     expect_min_max_args("documentation-property", &args, 2, 3)?;
     let obarray = eval.obarray();
-    let lisp_directory = obarray
-        .symbol_value("lisp-directory")
-        .and_then(|v| v.as_runtime_string_owned());
+    let lisp_directory = obarray.symbol_value("lisp-directory").and_then(|v| {
+        v.as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+    });
 
     let prop = args[1];
     let (symbol_id, mut property_value) =
