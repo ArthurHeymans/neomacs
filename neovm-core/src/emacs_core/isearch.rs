@@ -223,10 +223,20 @@ fn storage_string_to_lisp_string(source: &str, multibyte: bool) -> crate::heap_t
     lisp_string_from_buffer_bytes(bytes, multibyte)
 }
 
-fn pattern_has_special_storage_units(pattern: &str) -> bool {
-    crate::emacs_core::string_escape::scan_storage_units_auto(pattern)
-        .into_iter()
-        .any(|unit| (unit.storage_end - unit.storage_start) != unit.logical_byte_len)
+/// Whether PATTERN contains an uppercase letter, scanning real Emacs char codes
+/// (issue #131). Mirrors GNU `isearch-no-upper-case-p`: eight-bit raw bytes and
+/// PUA glyphs are caseless and never count as uppercase.
+fn lisp_pattern_has_uppercase(pattern: &crate::heap_types::LispString) -> bool {
+    let bytes = pattern.as_bytes();
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+        pos += len.max(1);
+        if char::from_u32(code).is_some_and(char::is_uppercase) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Route symbol-value reads through the full GNU lookup path so
@@ -253,10 +263,10 @@ fn buffer_read_only_active(eval: &super::eval::Context, buf: &Buffer) -> bool {
         .is_some_and(|value| value.is_truthy())
 }
 
-fn case_fold_for_pattern(eval: &super::eval::Context, pattern: &str) -> bool {
-    if pattern_has_special_storage_units(pattern) {
-        return false;
-    }
+fn case_fold_for_pattern(
+    eval: &super::eval::Context,
+    pattern: &crate::heap_types::LispString,
+) -> bool {
     let case_fold_search_enabled = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|value| !value.is_nil())
         .unwrap_or(true);
@@ -271,7 +281,8 @@ fn case_fold_for_pattern(eval: &super::eval::Context, pattern: &str) -> bool {
     if !smart_case_enabled {
         return true;
     }
-    resolve_case_fold(None, pattern)
+    // GNU `isearch-no-upper-case-p`: fold unless PATTERN has an uppercase letter.
+    !lisp_pattern_has_uppercase(pattern)
 }
 
 fn case_replace_enabled(eval: &super::eval::Context) -> bool {
@@ -1457,14 +1468,42 @@ fn byte_rfind(hay: &[u8], needle: &[u8]) -> Option<usize> {
         .rposition(|window| window == needle)
 }
 
-/// Emacs-downcase a run of Emacs bytes (issue #131): real char codes go through
-/// the Emacs case table, so eight-bit raw bytes and PUA glyphs are caseless and
-/// preserved rather than confused with the legacy storage sentinels.
-fn downcase_emacs_bytes(bytes: &[u8]) -> Vec<u8> {
-    let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
-    super::casefiddle::downcase_lisp_string_emacs_compat(&ls)
-        .as_bytes()
-        .to_vec()
+/// Emacs-downcase a single char code for case-insensitive comparison (issue
+/// #131): codes outside the Unicode scalar range (eight-bit raw bytes, extended
+/// codes) are caseless; rare multi-char lowercase mappings leave the code as-is.
+fn emacs_downcase_code(code: u32) -> u32 {
+    match char::from_u32(code) {
+        Some(c) => {
+            let mut lower = c.to_lowercase();
+            match (lower.next(), lower.next()) {
+                (Some(first), None) => first as u32,
+                _ => code,
+            }
+        }
+        None => code,
+    }
+}
+
+/// End offset into `hay` of a case-folded match of `needle` starting at byte
+/// `at`, comparing decoded Emacs char codes in place so offsets stay in `hay`'s
+/// own byte space (correct for unibyte and multibyte; raw bytes compare
+/// verbatim). Returns `None` if `needle` does not match at `at`.
+fn case_fold_match_len(hay: &[u8], at: usize, needle: &[u8]) -> Option<usize> {
+    let mut h = at;
+    let mut n = 0;
+    while n < needle.len() {
+        if h >= hay.len() {
+            return None;
+        }
+        let (hc, hl) = crate::emacs_core::emacs_char::string_char(&hay[h..]);
+        let (nc, nl) = crate::emacs_core::emacs_char::string_char(&needle[n..]);
+        if emacs_downcase_code(hc) != emacs_downcase_code(nc) {
+            return None;
+        }
+        h += hl.max(1);
+        n += nl.max(1);
+    }
+    Some(h)
 }
 
 fn find_match(
@@ -1513,29 +1552,43 @@ fn find_match(
         }
     } else {
         // Literal search over Emacs bytes (issue #131): byte-exact when not
-        // folding; when folding, Emacs-downcase both sides and map the position
-        // back, mirroring the prior &str `to_lowercase`/`find` behavior.
+        // folding; when folding, compare Emacs-downcased char codes in place so
+        // match offsets stay in the text's own byte space.
         if forward {
             let start = from.min(text_len);
-            let region = &text[start..];
             if case_fold {
-                let hay = downcase_emacs_bytes(region);
-                let needle = downcase_emacs_bytes(pattern);
-                let pos = byte_find(&hay, &needle)?;
-                Some(MatchGroup::new(start + pos, start + pos + needle.len()))
+                let mut p = start;
+                loop {
+                    if let Some(end) = case_fold_match_len(text, p, pattern) {
+                        return Some(MatchGroup::new(p, end));
+                    }
+                    if p >= text_len {
+                        return None;
+                    }
+                    let (_code, len) = crate::emacs_core::emacs_char::string_char(&text[p..]);
+                    p += len.max(1);
+                }
             } else {
+                let region = &text[start..];
                 let pos = byte_find(region, pattern)?;
                 Some(MatchGroup::new(start + pos, start + pos + pattern.len()))
             }
         } else {
             let end = from.min(text_len);
-            let region = &text[..end];
             if case_fold {
-                let hay = downcase_emacs_bytes(region);
-                let needle = downcase_emacs_bytes(pattern);
-                let pos = byte_rfind(&hay, &needle)?;
-                Some(MatchGroup::new(pos, pos + needle.len()))
+                // Rightmost match within text[..end], matching the prior `rfind`.
+                let mut best = None;
+                let mut p = 0;
+                while p < end {
+                    if let Some(match_end) = case_fold_match_len(&text[..end], p, pattern) {
+                        best = Some(MatchGroup::new(p, match_end));
+                    }
+                    let (_code, len) = crate::emacs_core::emacs_char::string_char(&text[p..]);
+                    p += len.max(1);
+                }
+                best
             } else {
+                let region = &text[..end];
                 let pos = byte_rfind(region, pattern)?;
                 Some(MatchGroup::new(pos, pos + pattern.len()))
             }
@@ -1816,7 +1869,7 @@ fn replace_string_eval_impl(
         return Ok(Value::NIL);
     }
 
-    let case_fold = case_fold_for_pattern(eval, &from);
+    let case_fold = case_fold_for_pattern(eval, from_ls);
     let preserve_match_case = case_fold && case_replace_enabled(eval);
     let lax_whitespace_regex = if replace_lax_whitespace_enabled(eval) && from.contains(' ') {
         resolve_search_whitespace_regexp(eval)
@@ -1965,7 +2018,7 @@ fn replace_regexp_eval_impl(
     query_style_point: bool,
 ) -> EvalResult {
     expect_min_max_args("replace-regexp", &args, 2, 7)?;
-    let from = expect_sequence_string(&args[0])?;
+    expect_sequence_string(&args[0])?;
     let from_ls = args[0]
         .as_lisp_string()
         .expect("replace-regexp regexp is a string");
@@ -2030,7 +2083,7 @@ fn replace_regexp_eval_impl(
     // logical Emacs byte offsets, so the old storage->logical mapping is identity.
     let source = source_text.as_bytes();
 
-    let case_fold = case_fold_for_pattern(eval, &from);
+    let case_fold = case_fold_for_pattern(eval, from_ls);
     let preserve_match_case = case_fold && case_replace_enabled(eval);
     let iterated =
         super::regex::iterate_string_matches_with_case_fold(from_ls, source, 0, case_fold)
@@ -2205,7 +2258,7 @@ pub(crate) fn builtin_query_replace_regexp(
 /// evaluator-backed non-interactive line filtering subset.
 pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("keep-lines", &args, 1, 4)?;
-    let regexp = expect_sequence_string(&args[0])?;
+    expect_sequence_string(&args[0])?;
     let regexp_ls = args[0]
         .as_lisp_string()
         .expect("keep-lines regexp is a string");
@@ -2226,7 +2279,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
     let source_multibyte = source_text.is_multibyte();
     let source_byte_len = source.len();
 
-    let case_fold = case_fold_for_pattern(eval, &regexp);
+    let case_fold = case_fold_for_pattern(eval, regexp_ls);
 
     let rel_start = range
         .start()
@@ -2294,7 +2347,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
 /// evaluator-backed non-interactive line filtering subset.
 pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("flush-lines", &args, 1, 4)?;
-    let regexp = expect_sequence_string(&args[0])?;
+    expect_sequence_string(&args[0])?;
     let regexp_ls = args[0]
         .as_lisp_string()
         .expect("flush-lines regexp is a string");
@@ -2315,7 +2368,7 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
     let source_multibyte = source_text.is_multibyte();
     let source_byte_len = source.len();
 
-    let case_fold = case_fold_for_pattern(eval, &regexp);
+    let case_fold = case_fold_for_pattern(eval, regexp_ls);
 
     let rel_start = range
         .start()
@@ -2397,7 +2450,7 @@ pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>
 
     // Issue #131: match over the region's Emacs bytes with the real pattern
     // LispString, instead of the PUA-sentinel storage form.
-    let case_fold = case_fold_for_pattern(eval, &regexp);
+    let case_fold = case_fold_for_pattern(eval, regexp_ls);
     Ok(Value::fixnum(count_string_regexp_matches(
         source_text.as_bytes(),
         regexp_ls,
@@ -2432,7 +2485,7 @@ pub(crate) fn builtin_count_matches(
 
     // Issue #131: match over the region's Emacs bytes with the real pattern
     // LispString, instead of the PUA-sentinel storage form.
-    let case_fold = case_fold_for_pattern(eval, &regexp);
+    let case_fold = case_fold_for_pattern(eval, regexp_ls);
     Ok(Value::fixnum(count_string_regexp_matches(
         source_text.as_bytes(),
         regexp_ls,

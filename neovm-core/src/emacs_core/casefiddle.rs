@@ -239,7 +239,7 @@ fn ascii_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte >= 0x80
 }
 
-pub(crate) fn downcase_lisp_string_emacs_compat(text: &LispString) -> LispString {
+fn downcase_lisp_string_emacs_compat(text: &LispString) -> LispString {
     if !text.is_multibyte() {
         let bytes = text
             .as_bytes()
