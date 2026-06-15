@@ -9915,6 +9915,17 @@ pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
     start_position: DisplayRowPosition,
 }
 
+pub(crate) struct DisplayPropertyReplacementResolveContext<'a, 'source> {
+    display_property: &'a DisplayPropertyClassification,
+    source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    current_x: f32,
+    content_x: f32,
+    params: &'a WindowParams,
+    display_host: Option<&'a dyn DisplayHost>,
+}
+
 pub(crate) struct BufferDisplayPropertyTextRenderContext<'a> {
     buffer_id: BufferId,
     text_start_byte: usize,
@@ -10070,6 +10081,25 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
         }
     }
 
+    #[cfg(test)]
+    fn with_anchor(
+        value: Value,
+        anchor_charpos: CharPos0,
+        anchor_bytepos: EmacsBytePos,
+        source_text: &'a [u8],
+        next_change: i64,
+        skip_to: i64,
+    ) -> Self {
+        Self {
+            value,
+            anchor_charpos,
+            anchor_bytepos,
+            source_text,
+            next_change,
+            skip_to,
+        }
+    }
+
     fn value(self) -> Value {
         self.value
     }
@@ -10092,6 +10122,35 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
 
     fn skip_to(self) -> i64 {
         self.skip_to
+    }
+}
+
+impl<'a, 'source> DisplayPropertyReplacementResolveContext<'a, 'source> {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        display_property: &'a DisplayPropertyClassification,
+        source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        current_x: f32,
+        content_x: f32,
+        params: &'a WindowParams,
+        display_host: Option<&'a dyn DisplayHost>,
+    ) -> Self {
+        Self {
+            display_property,
+            source_event,
+            active_face_state,
+            font_metrics,
+            current_x,
+            content_x,
+            params,
+            display_host,
+        }
+    }
+
+    fn face_metrics(&self) -> DisplayRowMeasuredFaceMetrics {
+        self.active_face_state.metrics()
     }
 }
 
@@ -10347,16 +10406,16 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         let display_property = classify_display_property(self.source_event.value());
         let replacement_item = state.with_font_metrics_and_display_host(|font_metrics, host| {
             DisplayPropertyReplacementAppendItem::resolve(
-                &display_property,
-                self.source_event.value(),
-                self.source_event.anchor_charpos(),
-                self.source_event.source_text(),
-                self.active_face_state,
-                font_metrics,
-                self.current_x,
-                self.content_x,
-                self.params,
-                host,
+                DisplayPropertyReplacementResolveContext::new(
+                    &display_property,
+                    self.source_event,
+                    self.active_face_state,
+                    font_metrics,
+                    self.current_x,
+                    self.content_x,
+                    self.params,
+                    host,
+                ),
             )
         });
         if let Some(item) = replacement_item {
@@ -10644,17 +10703,25 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
         font_metrics: &mut Option<FontMetricsService>,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<DisplayPropertyReplacementAppendRequest> {
-        let item = DisplayPropertyReplacementAppendItem::resolve(
-            self.display_property,
+        let source_event = BufferDisplayPropertyTextSourceEvent::with_anchor(
             self.value,
             self.anchor_charpos,
+            self.replacement_source.byte_pos(),
             self.source_text,
-            self.active_face_state,
-            font_metrics,
-            self.current_x,
-            self.content_x,
-            self.params,
-            display_host,
+            0,
+            0,
+        );
+        let item = DisplayPropertyReplacementAppendItem::resolve(
+            DisplayPropertyReplacementResolveContext::new(
+                self.display_property,
+                source_event,
+                self.active_face_state,
+                font_metrics,
+                self.current_x,
+                self.content_x,
+                self.params,
+                display_host,
+            ),
         )?;
         Some(DisplayPropertyReplacementAppendRequest::new(
             self.replacement_source,
@@ -10897,53 +10964,43 @@ impl DisplayPropertyReplacementAppendItem {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve(
-        display_property: &DisplayPropertyClassification,
-        value: Value,
-        anchor_charpos: CharPos0,
-        source_text: &[u8],
-        active_face_state: &DisplayRowActiveFaceState,
-        font_metrics: &mut Option<FontMetricsService>,
-        current_x: f32,
-        content_x: f32,
-        params: &WindowParams,
-        display_host: Option<&dyn DisplayHost>,
+        context: DisplayPropertyReplacementResolveContext<'_, '_>,
     ) -> Option<Self> {
-        let face_metrics = active_face_state.metrics();
-        if display_property.is_string_replacement() {
+        let face_metrics = context.face_metrics();
+        if context.display_property.is_string_replacement() {
             DisplayReplacementStringAppendItem::display_property_string(
-                value,
-                anchor_charpos,
+                context.source_event.value(),
+                context.source_event.anchor_charpos(),
                 DisplayPropertySource::TextProperty,
                 1,
-                active_face_state,
-                font_metrics,
+                context.active_face_state,
+                context.font_metrics,
                 face_metrics.char_width,
             )
             .map(Self::String)
-        } else if display_property.stretch_replacement().is_some() {
+        } else if context.display_property.stretch_replacement().is_some() {
             Some(Self::Stretch(
                 DisplayReplacementStretchAppendItem::from_display_space_property(
-                    &value,
-                    source_text,
-                    active_face_state,
-                    font_metrics,
-                    current_x,
-                    content_x,
+                    &context.source_event.value(),
+                    context.source_event.source_text(),
+                    context.active_face_state,
+                    context.font_metrics,
+                    context.current_x,
+                    context.content_x,
                     face_metrics.char_width,
                     face_metrics.row_height,
                     face_metrics.ascent,
-                    params,
+                    context.params,
                 ),
             ))
         } else {
-            let media_replacement = display_property.media_replacement()?;
+            let media_replacement = context.display_property.media_replacement()?;
             DisplayReplacementMediaAppendItem::resolve_display_property(
-                value,
+                context.source_event.value(),
                 media_replacement,
-                display_host,
-                active_face_state,
+                context.display_host,
+                context.active_face_state,
                 face_metrics.char_width,
                 face_metrics.row_height,
             )

@@ -7625,6 +7625,32 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
     );
 }
 
+fn test_display_property_replacement_resolve_context<'a>(
+    classification: &'a DisplayPropertyClassification,
+    value: Value,
+    active_face: &'a DisplayRowActiveFaceState,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    params: &'a WindowParams,
+) -> DisplayPropertyReplacementResolveContext<'a, 'static> {
+    DisplayPropertyReplacementResolveContext::new(
+        classification,
+        BufferDisplayPropertyTextSourceEvent::with_anchor(
+            value,
+            CharPos0::new(4),
+            EmacsBytePos::new(4),
+            b"x",
+            0,
+            0,
+        ),
+        active_face,
+        font_metrics,
+        0.0,
+        0.0,
+        params,
+        None,
+    )
+}
+
 #[test]
 fn display_property_replacement_append_item_resolves_string_replacement() {
     let _eval = Context::new();
@@ -7632,18 +7658,16 @@ fn display_property_replacement_append_item_resolves_string_replacement() {
     let mut font_metrics = None;
     let value = Value::string("ab");
     let classification = classify_display_property(value);
+    let params = test_display_space_window_params();
 
     let item = DisplayPropertyReplacementAppendItem::resolve(
-        &classification,
-        value,
-        CharPos0::new(4),
-        b"x",
-        &active_face,
-        &mut font_metrics,
-        0.0,
-        0.0,
-        &test_display_space_window_params(),
-        None,
+        test_display_property_replacement_resolve_context(
+            &classification,
+            value,
+            &active_face,
+            &mut font_metrics,
+            &params,
+        ),
     )
     .expect("string replacement append item");
 
@@ -7667,18 +7691,16 @@ fn display_property_replacement_append_item_resolves_stretch_replacement() {
         Value::fixnum(3),
     ]);
     let classification = classify_display_property(value);
+    let params = test_display_space_window_params();
 
     let item = DisplayPropertyReplacementAppendItem::resolve(
-        &classification,
-        value,
-        CharPos0::new(4),
-        b"x",
-        &active_face,
-        &mut font_metrics,
-        0.0,
-        0.0,
-        &test_display_space_window_params(),
-        None,
+        test_display_property_replacement_resolve_context(
+            &classification,
+            value,
+            &active_face,
+            &mut font_metrics,
+            &params,
+        ),
     )
     .expect("stretch replacement append item");
 
@@ -7705,18 +7727,16 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
         )),
         modifiers: Default::default(),
     };
+    let params = test_display_space_window_params();
 
     let item = DisplayPropertyReplacementAppendItem::resolve(
-        &classification,
-        Value::NIL,
-        CharPos0::new(4),
-        b"x",
-        &active_face,
-        &mut font_metrics,
-        0.0,
-        0.0,
-        &test_display_space_window_params(),
-        None,
+        test_display_property_replacement_resolve_context(
+            &classification,
+            Value::NIL,
+            &active_face,
+            &mut font_metrics,
+            &params,
+        ),
     )
     .expect("media replacement append item");
 
@@ -7737,17 +7757,15 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     let mut font_metrics = None;
     let value = Value::string("ab");
     let classification = classify_display_property(value);
+    let params = test_display_space_window_params();
     let string = DisplayPropertyReplacementAppendItem::resolve(
-        &classification,
-        value,
-        CharPos0::new(4),
-        b"x",
-        &active_face,
-        &mut font_metrics,
-        0.0,
-        0.0,
-        &test_display_space_window_params(),
-        None,
+        test_display_property_replacement_resolve_context(
+            &classification,
+            value,
+            &active_face,
+            &mut font_metrics,
+            &params,
+        ),
     )
     .expect("string replacement append item");
 
