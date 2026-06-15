@@ -19,7 +19,8 @@ use crate::display_row_append::{
     BufferTextWindowTailFinalizeOutcome, BufferTextWindowTailFinalizeRequest,
     BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
     BufferTextWindowVisibilityRetryRequest, DisplayRowAppendSurface, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTransitionContinuation, TextWindowAppendSurfaceRequest,
+    DisplayRowPrefixValues, DisplayRowTransitionContinuation, TextRowSourceRenderState,
+    TextWindowAppendSurfaceRequest,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -2147,10 +2148,13 @@ impl<'face, 'rows, 'emit> BufferTextWindowLoopRenderState<'face, 'rows, 'emit> {
         point_charpos: i64,
     ) -> BufferDisplayPropertyTextWalkOutcome {
         request.render_and_apply(BufferDisplayPropertyCheckpointRenderState {
-            output_emitter: self.output_emitter,
-            builder: self.builder,
-            evaluator: self.evaluator,
-            font_metrics: self.font_metrics,
+            source_render: TextRowSourceRenderState::new(
+                self.builder,
+                self.output_emitter,
+                self.evaluator,
+                self.font_metrics,
+                self.face_resolver,
+            ),
             face_ids: self.face_ids,
             append_surface,
             row_geometry: self.row_geometry,

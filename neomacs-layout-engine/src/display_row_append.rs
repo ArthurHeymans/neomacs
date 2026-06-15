@@ -2122,10 +2122,7 @@ pub(crate) struct BufferOverlayStringRenderContext<'a> {
 }
 
 pub(crate) struct OverlayStringRenderState<'a> {
-    evaluator: &'a mut Context,
-    output_emitter: &'a mut WindowOutputEmitter,
-    font_metrics: &'a mut Option<FontMetricsService>,
-    face_resolver: &'a FaceResolver,
+    source_render: TextRowSourceRenderState<'a>,
     x: &'a mut f32,
     col: &'a mut usize,
     geometry: &'a mut DisplayRowGeometryState,
@@ -2134,7 +2131,6 @@ pub(crate) struct OverlayStringRenderState<'a> {
     hit_row_range: &'a mut HitRowRangeTracker,
     row_y_positions: &'a mut DisplayRowYPositions,
     face_ids: &'a mut FrameFaceIdAllocator,
-    builder: &'a mut GlyphMatrixBuilder,
 }
 
 impl<'a> OverlayStringRenderState<'a> {
@@ -2155,10 +2151,13 @@ impl<'a> OverlayStringRenderState<'a> {
         builder: &'a mut GlyphMatrixBuilder,
     ) -> Self {
         Self {
-            evaluator,
-            output_emitter,
-            font_metrics,
-            face_resolver,
+            source_render: TextRowSourceRenderState::new(
+                builder,
+                output_emitter,
+                evaluator,
+                font_metrics,
+                face_resolver,
+            ),
             x,
             col,
             geometry,
@@ -2167,7 +2166,6 @@ impl<'a> OverlayStringRenderState<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
-            builder,
         }
     }
 }
@@ -2409,9 +2407,9 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
             .is_within_row_limit(self.row_context.row_limit())
         {
             finish_and_end_text_matrix_row_output(
-                state.builder,
-                state.output_emitter,
-                state.evaluator,
+                state.source_render.builder,
+                state.source_render.output_emitter,
+                state.source_render.evaluator,
                 geometry_transition.finished_row,
             );
             return false;
@@ -2421,9 +2419,9 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
         *state.x = content_x;
         *state.col = 0;
         emit_text_matrix_row_transition(
-            state.builder,
-            state.output_emitter,
-            state.evaluator,
+            state.source_render.builder,
+            state.source_render.output_emitter,
+            state.source_render.evaluator,
             geometry_transition,
         );
         true
@@ -2444,13 +2442,13 @@ fn render_overlay_string<B: LayoutBufferView>(
     let text_props = get_string_text_properties_table_for_value(text_value);
     let base_face = resolve_and_install_display_string_base_face(
         buffer,
-        state.face_resolver,
+        state.source_render.face_resolver,
         source_request.origin(),
         source_request.base_face_policy(),
         None,
         DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
         state.face_ids,
-        state.builder,
+        state.source_render.builder,
     );
     let max_x = row_context.right_edge();
     let row_limit = row_context.row_limit();
@@ -2480,13 +2478,7 @@ fn render_overlay_string<B: LayoutBufferView>(
         }
 
         let Some(outcome) = source_context.render_to_text_row_and_emit(
-            &mut TextRowSourceRenderState::new(
-                state.builder,
-                state.output_emitter,
-                state.evaluator,
-                state.font_metrics,
-                state.face_resolver,
-            ),
+            &mut state.source_render,
             state.face_ids,
             state.geometry,
             DisplayRowPosition {
@@ -9587,10 +9579,7 @@ pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBuff
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
     pub(crate) append_surface: &'a DisplayRowAppendSurface,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
@@ -9722,15 +9711,10 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_and_append_at_checkpoint<B: LayoutBufferView>(
         self,
         buffer: &B,
-        evaluator: &mut Context,
-        output_emitter: &mut WindowOutputEmitter,
-        builder: &mut GlyphMatrixBuilder,
-        font_metrics: &mut Option<FontMetricsService>,
-        face_resolver: &FaceResolver,
+        state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
@@ -9768,13 +9752,7 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
         )
         .resolve_and_append_to_text_row(
             buffer,
-            &mut TextRowSourceRenderState::new(
-                builder,
-                output_emitter,
-                evaluator,
-                font_metrics,
-                face_resolver,
-            ),
+            state,
             face_ids,
             append_surface,
             row_geometry,
@@ -9821,10 +9799,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
         state: BufferDisplayPropertyCheckpointRenderState<'_, '_>,
     ) -> BufferDisplayPropertyTextWalkOutcome {
         let BufferDisplayPropertyCheckpointRenderState {
-            output_emitter,
-            builder,
-            evaluator,
-            font_metrics,
+            mut source_render,
             face_ids,
             append_surface,
             row_geometry,
@@ -9853,9 +9828,9 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             &mut BufferCurrentFaceResolutionState::new(
                 face_scan,
                 height_span,
-                font_metrics,
+                source_render.font_metrics,
                 face_ids,
-                builder,
+                source_render.builder,
                 active_face_state,
                 row_geometry,
                 row_extend,
@@ -9879,11 +9854,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
         )
         .resolve_and_append_at_checkpoint(
             self.face_resolution_context.buffer,
-            evaluator,
-            output_emitter,
-            builder,
-            font_metrics,
-            self.face_resolution_context.face_resolver,
+            &mut source_render,
             face_ids,
             append_surface,
             row_geometry,
@@ -9911,9 +9882,9 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
                 &mut BufferCurrentFaceResolutionState::new(
                     face_scan,
                     height_span,
-                    font_metrics,
+                    source_render.font_metrics,
                     face_ids,
-                    builder,
+                    source_render.builder,
                     active_face_state,
                     row_geometry,
                     row_extend,

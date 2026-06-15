@@ -7977,11 +7977,13 @@ fn buffer_display_property_render_context_returns_modifier_action_from_checkpoin
     )
     .resolve_and_append_at_checkpoint(
         &buffer,
-        &mut eval,
-        &mut output_emitter,
-        &mut builder,
-        &mut font_metrics,
-        &face_resolver,
+        &mut TextRowSourceRenderState::new(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         &mut face_ids,
         &surface,
         &mut row_geometry,
@@ -8094,10 +8096,13 @@ fn buffer_display_property_checkpoint_render_request_applies_modifier_and_resolv
         3,
     )
     .render_and_apply(BufferDisplayPropertyCheckpointRenderState {
-        output_emitter: &mut context.output_emitter,
-        builder: &mut context.builder,
-        evaluator: &mut context.eval,
-        font_metrics: &mut font_metrics,
+        source_render: TextRowSourceRenderState::new(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
         face_ids: &mut face_ids,
         append_surface: &surface,
         row_geometry: &mut context.geometry,
