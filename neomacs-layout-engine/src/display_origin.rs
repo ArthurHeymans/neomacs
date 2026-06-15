@@ -19,7 +19,6 @@ pub(crate) enum DisplayPropertySource {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayOrigin {
-    #[allow(dead_code)]
     BufferText {
         charpos: CharPos0,
     },

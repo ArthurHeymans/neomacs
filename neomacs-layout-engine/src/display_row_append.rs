@@ -7272,9 +7272,13 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
             return false;
         }
 
-        let mut resolved = self.face_resolver.face_at_pos(
-            self.buffer,
-            charpos as usize,
+        let origin = DisplayOrigin::BufferText {
+            charpos: neovm_core::buffer::CharPos0::new(charpos as usize),
+        };
+        let mut resolved = self.face_resolver.base_face_for_origin(
+            Some(self.buffer),
+            &origin,
+            BaseFacePolicy::BufferFaceIncludingOverlays,
             state.face_scan.next_check_mut(),
         );
         if let Some(factor) = state.height_span.value()
