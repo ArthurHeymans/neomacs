@@ -9606,9 +9606,12 @@ impl DisplayPropertyReplacementAppendRequest {
         active_face_state: &DisplayRowActiveFaceState,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayPropertyReplacementAppendPlan {
-        let item = self
-            .item
-            .into_plan_item(buffer, state, active_face_state, face_ids);
+        let item = DisplayPropertyReplacementAppendPlanItemRequest::new(self.item).resolve(
+            buffer,
+            state,
+            active_face_state,
+            face_ids,
+        );
         DisplayPropertyReplacementAppendPlan {
             replacement_source: self.replacement_source,
             item,
@@ -9731,17 +9734,24 @@ enum DisplayPropertyReplacementAppendPlanItem {
     Media(DisplayReplacementMediaSourceResolution),
 }
 
-impl DisplayPropertyReplacementSourceItem {
-    #[allow(clippy::too_many_arguments)]
-    fn into_plan_item<B: LayoutBufferView>(
+struct DisplayPropertyReplacementAppendPlanItemRequest {
+    item: DisplayPropertyReplacementSourceItem,
+}
+
+impl DisplayPropertyReplacementAppendPlanItemRequest {
+    fn new(item: DisplayPropertyReplacementSourceItem) -> Self {
+        Self { item }
+    }
+
+    fn resolve<B: LayoutBufferView>(
         self,
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayPropertyReplacementAppendPlanItem {
-        match self {
-            Self::String(item) => {
+        match self.item {
+            DisplayPropertyReplacementSourceItem::String(item) => {
                 let replacement_base_face = (!item.is_empty()).then(|| {
                     state.default_display_string_base_face_for_active_row(
                         buffer,
@@ -9758,8 +9768,12 @@ impl DisplayPropertyReplacementSourceItem {
                     ),
                 )
             }
-            Self::Stretch(item) => DisplayPropertyReplacementAppendPlanItem::Stretch(item),
-            Self::Media(item) => DisplayPropertyReplacementAppendPlanItem::Media(item),
+            DisplayPropertyReplacementSourceItem::Stretch(item) => {
+                DisplayPropertyReplacementAppendPlanItem::Stretch(item)
+            }
+            DisplayPropertyReplacementSourceItem::Media(item) => {
+                DisplayPropertyReplacementAppendPlanItem::Media(item)
+            }
         }
     }
 }
