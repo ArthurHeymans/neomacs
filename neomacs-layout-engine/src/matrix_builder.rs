@@ -355,6 +355,57 @@ impl MatrixCursorInstallRequest {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum MatrixFrameArtifactInstallRequest {
+    Background {
+        bounds: Rect,
+        color: Color,
+    },
+    Border {
+        window_id: i64,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: Color,
+    },
+    ScrollBar(ScrollBarItem),
+    WindowInfo(WindowInfo),
+    TransitionHint(WindowTransitionHint),
+    EffectHint(WindowEffectHint),
+}
+
+impl MatrixFrameArtifactInstallRequest {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        match self {
+            Self::Background { bounds, color } => {
+                builder.backgrounds.push(BackgroundItem { bounds, color });
+            }
+            Self::Border {
+                window_id,
+                x,
+                y,
+                width,
+                height,
+                color,
+            } => {
+                builder.borders.push(BorderItem {
+                    window_id,
+                    x,
+                    y,
+                    width,
+                    height,
+                    color,
+                });
+            }
+            Self::ScrollBar(item) => builder.scroll_bars.push(item),
+            Self::WindowInfo(info) => builder.window_infos.push(info),
+            Self::TransitionHint(hint) => builder.transition_hints.push(hint),
+            Self::EffectHint(hint) => builder.effect_hints.push(hint),
+        }
+    }
+}
+
 pub(crate) struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
@@ -683,37 +734,11 @@ impl GlyphMatrixBuilder {
     }
 
     // -----------------------------------------------------------------------
-    // Non-grid item push methods
+    // Non-grid item installation
     // -----------------------------------------------------------------------
 
-    pub(crate) fn push_background(&mut self, bounds: Rect, color: Color) {
-        self.backgrounds.push(BackgroundItem { bounds, color });
-    }
-
-    pub(crate) fn push_border(
-        &mut self,
-        window_id: i64,
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        color: Color,
-    ) {
-        self.borders.push(BorderItem {
-            window_id,
-            x,
-            y,
-            width: w,
-            height: h,
-            color,
-        });
-    }
-
-    pub(crate) fn push_scroll_bar(
-        &mut self,
-        item: neomacs_display_protocol::glyph_matrix::ScrollBarItem,
-    ) {
-        self.scroll_bars.push(item);
+    pub(crate) fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+        request.install(self);
     }
 
     pub(crate) fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
@@ -750,8 +775,8 @@ impl GlyphMatrixBuilder {
         }
 
         // The selected window is represented solely by the phys cursor: the
-        // engine no longer pushes a redundant per-window CursorItem for it (see
-        // the `!params.selected` guard around push_cursor in engine.rs), so
+        // window output no longer installs a redundant per-window CursorItem
+        // for it (see the `!cursor.selected` guard around install_cursor), so
         // there is nothing to keep in sync here.
         self.phys_cursor = Some(cursor);
     }
@@ -766,18 +791,6 @@ impl GlyphMatrixBuilder {
 
     pub(crate) fn insert_face(&mut self, id: u32, face: Face) {
         self.faces.insert(id, face);
-    }
-
-    pub(crate) fn push_window_info(&mut self, info: WindowInfo) {
-        self.window_infos.push(info);
-    }
-
-    pub(crate) fn push_transition_hint(&mut self, hint: WindowTransitionHint) {
-        self.transition_hints.push(hint);
-    }
-
-    pub(crate) fn push_effect_hint(&mut self, hint: WindowEffectHint) {
-        self.effect_hints.push(hint);
     }
 
     pub(crate) fn set_background_color(&mut self, color: Color) {

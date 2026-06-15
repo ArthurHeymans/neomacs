@@ -1,5 +1,5 @@
 use crate::display_row_append::BufferTextWindowTerminalRightBorderRequest;
-use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameArtifactInstallRequest};
 use crate::neovm_bridge::FaceResolver;
 use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::frame_glyphs::{
@@ -75,11 +75,11 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
     }
 
     pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
-        builder.push_background(
-            self.params.bounds,
-            Color::from_pixel(self.params.default_bg),
-        );
-        builder.push_window_info(WindowInfo {
+        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Background {
+            bounds: self.params.bounds,
+            color: Color::from_pixel(self.params.default_bg),
+        });
+        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(WindowInfo {
             window_id: self.params.window_id,
             buffer_id: self.params.buffer_id,
             window_start: self.params.window_start,
@@ -99,7 +99,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
             char_height: self.params.char_height,
             buffer_file_name: self.metadata.buffer_file_name,
             modified: self.metadata.modified,
-        });
+        }));
     }
 }
 
@@ -130,7 +130,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
             return;
         };
         if let Some(hint) = FrameGlyphBuffer::derive_transition_hint(prev, curr) {
-            builder.push_transition_hint(hint);
+            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(hint));
         }
     }
 
@@ -147,10 +147,12 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         }
 
         if prev.buffer_id != curr.buffer_id {
-            builder.push_effect_hint(WindowEffectHint::TextFadeIn {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-            });
+            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+                WindowEffectHint::TextFadeIn {
+                    window_id: curr.window_id,
+                    bounds: curr.bounds,
+                },
+            ));
             return;
         }
 
@@ -164,25 +166,33 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
             -1
         };
         let delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
-        builder.push_effect_hint(WindowEffectHint::TextFadeIn {
-            window_id: curr.window_id,
-            bounds: curr.bounds,
-        });
-        builder.push_effect_hint(WindowEffectHint::ScrollLineSpacing {
-            window_id: curr.window_id,
-            bounds: curr.bounds,
-            direction,
-        });
-        builder.push_effect_hint(WindowEffectHint::ScrollMomentum {
-            window_id: curr.window_id,
-            bounds: curr.bounds,
-            direction,
-        });
-        builder.push_effect_hint(WindowEffectHint::ScrollVelocityFade {
-            window_id: curr.window_id,
-            bounds: curr.bounds,
-            delta,
-        });
+        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+            WindowEffectHint::TextFadeIn {
+                window_id: curr.window_id,
+                bounds: curr.bounds,
+            },
+        ));
+        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+            WindowEffectHint::ScrollLineSpacing {
+                window_id: curr.window_id,
+                bounds: curr.bounds,
+                direction,
+            },
+        ));
+        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+            WindowEffectHint::ScrollMomentum {
+                window_id: curr.window_id,
+                bounds: curr.bounds,
+                direction,
+            },
+        ));
+        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+            WindowEffectHint::ScrollVelocityFade {
+                window_id: curr.window_id,
+                bounds: curr.bounds,
+                delta,
+            },
+        ));
     }
 }
 
@@ -226,12 +236,14 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
                 } else {
                     curr.char_height
                 };
-                builder.push_effect_hint(WindowEffectHint::LineAnimation {
-                    window_id: curr.window_id,
-                    bounds: curr.bounds,
-                    edit_y: edit_y + curr.char_height,
-                    offset,
-                });
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+                    WindowEffectHint::LineAnimation {
+                        window_id: curr.window_id,
+                        bounds: curr.bounds,
+                        edit_y: edit_y + curr.char_height,
+                        offset,
+                    },
+                ));
             }
         }
     }
@@ -256,7 +268,9 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
             .map(|info| (info.window_id, info.bounds));
         if let Some((window_id, bounds)) = new_selected {
             if *self.prev_selected_window_id != 0 && *self.prev_selected_window_id != window_id {
-                builder.push_effect_hint(WindowEffectHint::WindowSwitchFade { window_id, bounds });
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+                    WindowEffectHint::WindowSwitchFade { window_id, bounds },
+                ));
             }
             *self.prev_selected_window_id = window_id;
         }
@@ -289,9 +303,11 @@ impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
             && color_changed_for_theme_transition(old_bg, new_bg)
         {
             let full_h = frame_content_height_before_minibuffer(builder, self.frame_height);
-            builder.push_effect_hint(WindowEffectHint::ThemeTransition {
-                bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
-            });
+            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+                WindowEffectHint::ThemeTransition {
+                    bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
+                },
+            ));
         }
         *self.prev_background = Some(new_bg);
     }
@@ -338,13 +354,15 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
         }
 
         let full_h = frame_content_height_before_minibuffer(builder, self.frame_height);
-        builder.push_transition_hint(WindowTransitionHint {
-            window_id: 0,
-            bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
-            kind: WindowTransitionKind::Crossfade,
-            effect: None,
-            easing: None,
-        });
+        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(
+            WindowTransitionHint {
+                window_id: 0,
+                bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
+                kind: WindowTransitionKind::Crossfade,
+                effect: None,
+                easing: None,
+            },
+        ));
     }
 }
 
@@ -452,14 +470,14 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
         }
 
         if self.frame_params.window_system {
-            builder.push_border(
-                self.params.window_id,
-                self.geometry.right_edge - 1.0,
-                self.params.bounds.y,
-                1.0,
-                self.params.bounds.height.max(0.0),
-                Color::from_pixel(self.frame_params.vertical_border_fg),
-            );
+            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                window_id: self.params.window_id,
+                x: self.geometry.right_edge - 1.0,
+                y: self.params.bounds.y,
+                width: 1.0,
+                height: self.params.bounds.height.max(0.0),
+                color: Color::from_pixel(self.frame_params.vertical_border_fg),
+            });
         } else {
             BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
                 .install_and_apply(builder, self.face_resolver);
@@ -538,14 +556,14 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
 
         let inner = Color::from_pixel(self.frame_params.divider_fg);
         if self.primary_size() < 3.0 {
-            builder.push_border(
-                self.window_id,
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-                inner,
-            );
+            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                window_id: self.window_id,
+                x: self.x,
+                y: self.y,
+                width: self.width,
+                height: self.height,
+                color: inner,
+            });
             return;
         }
 
@@ -553,42 +571,56 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
         let last = Color::from_pixel(self.frame_params.divider_last_fg);
         match self.orientation {
             WindowDividerOrientation::Vertical => {
-                builder.push_border(self.window_id, self.x, self.y, 1.0, self.height, first);
-                builder.push_border(
-                    self.window_id,
-                    self.x + 1.0,
-                    self.y,
-                    (self.width - 2.0).max(0.0),
-                    self.height,
-                    inner,
-                );
-                builder.push_border(
-                    self.window_id,
-                    self.x + self.width - 1.0,
-                    self.y,
-                    1.0,
-                    self.height,
-                    last,
-                );
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                    window_id: self.window_id,
+                    x: self.x,
+                    y: self.y,
+                    width: 1.0,
+                    height: self.height,
+                    color: first,
+                });
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                    window_id: self.window_id,
+                    x: self.x + 1.0,
+                    y: self.y,
+                    width: (self.width - 2.0).max(0.0),
+                    height: self.height,
+                    color: inner,
+                });
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                    window_id: self.window_id,
+                    x: self.x + self.width - 1.0,
+                    y: self.y,
+                    width: 1.0,
+                    height: self.height,
+                    color: last,
+                });
             }
             WindowDividerOrientation::Horizontal => {
-                builder.push_border(self.window_id, self.x, self.y, self.width, 1.0, first);
-                builder.push_border(
-                    self.window_id,
-                    self.x,
-                    self.y + 1.0,
-                    self.width,
-                    (self.height - 2.0).max(0.0),
-                    inner,
-                );
-                builder.push_border(
-                    self.window_id,
-                    self.x,
-                    self.y + self.height - 1.0,
-                    self.width,
-                    1.0,
-                    last,
-                );
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                    window_id: self.window_id,
+                    x: self.x,
+                    y: self.y,
+                    width: self.width,
+                    height: 1.0,
+                    color: first,
+                });
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                    window_id: self.window_id,
+                    x: self.x,
+                    y: self.y + 1.0,
+                    width: self.width,
+                    height: (self.height - 2.0).max(0.0),
+                    color: inner,
+                });
+                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                    window_id: self.window_id,
+                    x: self.x,
+                    y: self.y + self.height - 1.0,
+                    width: self.width,
+                    height: 1.0,
+                    color: last,
+                });
             }
         }
     }
@@ -650,23 +682,25 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 track_height,
             );
 
-            builder.push_scroll_bar(ScrollBarItem {
-                window_id: self.params.window_id,
-                row_role: GlyphRowRole::Text,
-                clip_rect: Some(self.params.bounds),
-                horizontal: false,
-                x,
-                y,
-                width: track_width,
-                height: track_height,
-                position: metrics.position,
-                portion: metrics.portion,
-                whole: metrics.whole,
-                thumb_start: metrics.thumb_start,
-                thumb_size: metrics.thumb_size,
-                track_color,
-                thumb_color,
-            });
+            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
+                ScrollBarItem {
+                    window_id: self.params.window_id,
+                    row_role: GlyphRowRole::Text,
+                    clip_rect: Some(self.params.bounds),
+                    horizontal: false,
+                    x,
+                    y,
+                    width: track_width,
+                    height: track_height,
+                    position: metrics.position,
+                    portion: metrics.portion,
+                    whole: metrics.whole,
+                    thumb_start: metrics.thumb_start,
+                    thumb_size: metrics.thumb_size,
+                    track_color,
+                    thumb_color,
+                },
+            ));
         }
 
         if self.params.horizontal_scroll_bar {
@@ -691,23 +725,25 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 0.0
             };
 
-            builder.push_scroll_bar(ScrollBarItem {
-                window_id: self.params.window_id,
-                row_role: GlyphRowRole::Text,
-                clip_rect: Some(self.params.bounds),
-                horizontal: true,
-                x,
-                y,
-                width: track_width,
-                height: track_height,
-                position: self.params.hscroll as i64,
-                portion: visible_px.round().max(1.0) as i64,
-                whole: (visible_px + hscroll_px).round().max(1.0) as i64,
-                thumb_start,
-                thumb_size,
-                track_color,
-                thumb_color,
-            });
+            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
+                ScrollBarItem {
+                    window_id: self.params.window_id,
+                    row_role: GlyphRowRole::Text,
+                    clip_rect: Some(self.params.bounds),
+                    horizontal: true,
+                    x,
+                    y,
+                    width: track_width,
+                    height: track_height,
+                    position: self.params.hscroll as i64,
+                    portion: visible_px.round().max(1.0) as i64,
+                    whole: (visible_px + hscroll_px).round().max(1.0) as i64,
+                    thumb_start,
+                    thumb_size,
+                    track_color,
+                    thumb_color,
+                },
+            ));
         }
     }
 }

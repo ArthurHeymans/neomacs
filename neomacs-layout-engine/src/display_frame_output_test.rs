@@ -155,7 +155,9 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.push_window_info(curr);
+    builder.install_frame_artifact(
+        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(curr),
+    );
 
     WindowFrameInfoEffectsRenderRequest::new(&prev_infos)
         .render_latest_and_apply(&mut builder, &mut curr_infos);
@@ -214,7 +216,9 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let info = window_info(&params);
     let mut prev_selected = 7;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.push_window_info(info);
+    builder.install_frame_artifact(
+        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
+    );
 
     FrameWindowSwitchHintRenderRequest::new(&mut prev_selected).render_and_apply(&mut builder);
 
@@ -237,8 +241,12 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.set_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
-    builder.push_window_info(info);
-    builder.push_window_info(mini);
+    builder.install_frame_artifact(
+        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
+    );
+    builder.install_frame_artifact(
+        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(mini),
+    );
 
     FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
         .render_and_apply(&mut builder);

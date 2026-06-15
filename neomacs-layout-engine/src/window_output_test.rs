@@ -46,7 +46,7 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_status_line::DisplayRowOutputProgress;
-use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameArtifactInstallRequest};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, WindowInfo,
@@ -551,7 +551,9 @@ fn text_matrix_row_output_surface_begins_row() {
 #[test]
 fn record_text_window_display_range_updates_matching_last_window_info() {
     let mut builder = GlyphMatrixBuilder::new();
-    builder.push_window_info(window_info(41));
+    builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(window_info(
+        41,
+    )));
 
     record_text_window_display_range(
         &mut builder,
@@ -1144,7 +1146,9 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
         .selected_window;
 
     let mut builder = GlyphMatrixBuilder::new();
-    builder.push_window_info(window_info(41));
+    builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(window_info(
+        41,
+    )));
     builder.begin_window(41, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
