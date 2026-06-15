@@ -107,6 +107,42 @@ impl DisplayItemSource for OwnedDisplayItemSource {
     }
 }
 
+pub(crate) struct SyntheticTextItemSource {
+    source_position: DisplaySourcePosition,
+    item: Option<DisplayItem>,
+}
+
+impl SyntheticTextItemSource {
+    pub(crate) fn new(
+        source_id: u64,
+        text: impl Into<Box<str>>,
+        face: RenderFaceRef,
+        start_offset: usize,
+    ) -> Self {
+        let text = text.into();
+        let end_offset = start_offset.saturating_add(text.chars().count());
+        let item = DisplayItem::new(
+            SourceSpan::synthetic(source_id, start_offset, end_offset),
+            face,
+            DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+        );
+        Self {
+            source_position: item.span.start.clone(),
+            item: Some(item),
+        }
+    }
+}
+
+impl DisplayItemSource for SyntheticTextItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.item.take()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BufferTextItemSource {
     buffer_id: BufferId,

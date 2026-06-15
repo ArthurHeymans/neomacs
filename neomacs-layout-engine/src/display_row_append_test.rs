@@ -1471,8 +1471,8 @@ fn buffer_invisible_text_skip_builds_active_ellipsis_request() {
     let (request_position, source, face) = request.into_parts();
 
     assert_eq!(request_position, position);
-    assert_eq!(source.source_id(), SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS);
-    assert_eq!(source.into_text().as_ref(), "...");
+    assert_eq!(source.source_id, SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS);
+    assert_eq!(source.text.as_ref(), "...");
     assert!(matches!(face, SyntheticTextAppendFace::ActiveFace));
 }
 
@@ -1639,8 +1639,8 @@ fn buffer_selective_display_line_tail_marker_builds_active_ellipsis_request() {
     let (request_position, source, face) = request.into_parts();
 
     assert_eq!(request_position, position);
-    assert_eq!(source.source_id(), SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS);
-    assert_eq!(source.into_text().as_ref(), "...");
+    assert_eq!(source.source_id, SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS);
+    assert_eq!(source.text.as_ref(), "...");
     assert!(matches!(face, SyntheticTextAppendFace::ActiveFace));
 }
 
@@ -3579,7 +3579,11 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
 
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
-    let item = synthetic_display_text_item(SyntheticTextSource::new(9, "..."), 7);
+    let mut source =
+        crate::display_source::SyntheticTextItemSource::new(9, "...", RenderFaceRef::FaceId(7), 0);
+    let item = source
+        .next_item(&mut crate::display_source::DisplaySourceContext::empty())
+        .expect("synthetic item");
 
     assert_eq!(item.face, RenderFaceRef::FaceId(7));
     assert_eq!(item.span.start, DisplaySourcePosition::synthetic(9, 0));

@@ -19,9 +19,7 @@ use super::window_output::{
     begin_text_window_matrix, close_text_window_output,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
-};
+use crate::display_item::RenderFaceRef;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowItemSourceRenderRequest, DisplayRowLispStringRenderRequest,
@@ -37,7 +35,7 @@ use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayTabPolicy, display_row_text_glyph_count,
     display_row_text_is_empty, new_display_row,
 };
-use crate::display_source::{DisplayItemSource, OwnedDisplayItemSource};
+use crate::display_source::{DisplayItemSource, SyntheticTextItemSource};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{FrameParams, WindowParams};
@@ -99,12 +97,8 @@ fn append_synthetic_minibuffer_text(
     if char_len == 0 {
         return;
     }
-    let item = DisplayItem::new(
-        SourceSpan::synthetic(0, source_offset, source_offset + char_len),
-        RenderFaceRef::FaceId(face_id),
-        DisplayItemKind::TextRun(DisplayTextRun::new(text)),
-    );
-    let mut source = OwnedDisplayItemSource::single(item);
+    let mut source =
+        SyntheticTextItemSource::new(0, text, RenderFaceRef::FaceId(face_id), source_offset);
     let start = DisplayRowPosition {
         x_px: source_offset as f32 * char_width.max(1.0),
         col: source_offset,
