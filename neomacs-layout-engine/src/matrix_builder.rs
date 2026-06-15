@@ -328,6 +328,12 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    pub fn install_prebuilt_row(&mut self, row: usize, source: &GlyphRow) {
+        self.begin_row(row, source.role);
+        self.install_prebuilt_current_row(source);
+        self.end_prebuilt_row();
+    }
+
     pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {
         crate::composition::last_text_cluster_tail_in_row(row)
     }

@@ -1359,7 +1359,6 @@ impl LayoutEngine {
                 window.selected,
             );
             for (row_idx, line) in window.lines.iter().enumerate() {
-                builder.begin_row(row_idx, GlyphRowRole::Text);
                 let row_y = window.pixel_bounds.y + row_idx as f32 * char_h;
                 let lnum = format!("{:>3} ", row_idx + 1);
                 let row = mock_display_row_from_line(
@@ -1373,13 +1372,11 @@ impl LayoutEngine {
                     Some(&lnum),
                     None,
                 );
-                builder.install_prebuilt_current_row(&row);
-                builder.end_prebuilt_row();
+                builder.install_prebuilt_row(row_idx, &row);
             }
 
             // Mode-line pinned to window bottom.
             let mode_line_row = window.lines.len();
-            builder.begin_row(mode_line_row, GlyphRowRole::ModeLine);
             let ml_ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
             let row = mock_display_row_from_line(
                 GlyphRowRole::ModeLine,
@@ -1392,8 +1389,7 @@ impl LayoutEngine {
                 None,
                 Some((ml_ncols, 1)),
             );
-            builder.install_prebuilt_current_row(&row);
-            builder.end_prebuilt_row();
+            builder.install_prebuilt_row(mode_line_row, &row);
 
             builder.end_window();
         }
@@ -1414,7 +1410,6 @@ impl LayoutEngine {
             );
 
             for (row_idx, line) in mini.lines.iter().enumerate() {
-                builder.begin_row(row_idx, GlyphRowRole::Minibuffer);
                 let row_y = mini.pixel_bounds.y + row_idx as f32 * char_h;
                 let row = mock_display_row_from_line(
                     GlyphRowRole::Minibuffer,
@@ -1427,13 +1422,11 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                builder.install_prebuilt_current_row(&row);
-                builder.end_prebuilt_row();
+                builder.install_prebuilt_row(row_idx, &row);
             }
 
             if has_mode_line {
                 let mode_line_row = mini.lines.len();
-                builder.begin_row(mode_line_row, GlyphRowRole::ModeLine);
                 let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
                 let row = mock_display_row_from_line(
                     GlyphRowRole::ModeLine,
@@ -1446,8 +1439,7 @@ impl LayoutEngine {
                     None,
                     Some((mini_ncols, 1)),
                 );
-                builder.install_prebuilt_current_row(&row);
-                builder.end_prebuilt_row();
+                builder.install_prebuilt_row(mode_line_row, &row);
             }
 
             builder.end_window();
@@ -1491,7 +1483,6 @@ impl LayoutEngine {
                 false,
             );
             for (ri, line) in cf.window.lines.iter().enumerate() {
-                cb.begin_row(ri, GlyphRowRole::Text);
                 let row = mock_display_row_from_line(
                     GlyphRowRole::Text,
                     line,
@@ -1503,8 +1494,7 @@ impl LayoutEngine {
                     None,
                     None,
                 );
-                cb.install_prebuilt_current_row(&row);
-                cb.end_prebuilt_row();
+                cb.install_prebuilt_row(ri, &row);
             }
             cb.end_window();
             let cs = cb.finish(

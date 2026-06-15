@@ -266,15 +266,13 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
     write_char_to_current_row(&mut builder, 'a', 0, 0);
     builder.end_row();
 
-    builder.begin_row(3, GlyphRowRole::ModeLine);
     let glyphs = vec![
         Glyph::char('-', 5, 0),
         Glyph::char('U', 5, 0),
         Glyph::char(':', 5, 0),
     ];
     let row = prebuilt_text_row(GlyphRowRole::ModeLine, glyphs);
-    builder.install_prebuilt_current_row(&row);
-    builder.end_prebuilt_row();
+    builder.install_prebuilt_row(3, &row);
     builder.end_window();
 
     let state = builder.finish(80, 4, 8.0, 16.0);
@@ -301,10 +299,8 @@ fn builder_status_line_empty_row_when_no_chars_pushed() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 40, Rect::new(0.0, 0.0, 320.0, 48.0), true);
 
-    builder.begin_row(2, GlyphRowRole::ModeLine);
     let row = prebuilt_text_row(GlyphRowRole::ModeLine, Vec::new());
-    builder.install_prebuilt_current_row(&row);
-    builder.end_prebuilt_row();
+    builder.install_prebuilt_row(2, &row);
     builder.end_window();
 
     let state = builder.finish(40, 3, 8.0, 16.0);
@@ -315,10 +311,8 @@ fn builder_status_line_empty_row_when_no_chars_pushed() {
 #[test]
 fn builder_prebuilt_row_without_window_is_noop() {
     let mut builder = GlyphMatrixBuilder::new();
-    builder.begin_row(0, GlyphRowRole::ModeLine);
     let row = prebuilt_text_row(GlyphRowRole::ModeLine, vec![Glyph::char('x', 0, 0)]);
-    builder.install_prebuilt_current_row(&row);
-    builder.end_prebuilt_row();
+    builder.install_prebuilt_row(0, &row);
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert!(state.window_matrices.is_empty());
 }
@@ -878,13 +872,11 @@ fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
 
-    builder.begin_row(1, GlyphRowRole::ModeLine);
     let row = prebuilt_text_row(
         GlyphRowRole::ModeLine,
         vec![Glyph::char('א', 5, 0), Glyph::char('ב', 5, 1)],
     );
-    builder.install_prebuilt_current_row(&row);
-    builder.end_prebuilt_row();
+    builder.install_prebuilt_row(1, &row);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);

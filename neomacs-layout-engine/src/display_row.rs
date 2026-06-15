@@ -2303,10 +2303,8 @@ pub(crate) fn install_rendered_display_row(
     for face in &rendered.faces {
         builder.insert_face(face.id, face.clone());
     }
-    builder.begin_row(matrix_row, rendered.row.role);
     let row = rendered_row_with_source_bounds(rendered);
-    builder.install_prebuilt_current_row(&row);
-    builder.end_prebuilt_row();
+    builder.install_prebuilt_row(matrix_row, &row);
     for media in &rendered.media {
         media.install(builder, rendered.row.role, matrix_row);
     }
@@ -2328,13 +2326,11 @@ pub(crate) fn install_measured_window_display_row(
         builder.insert_face(face.id, face.clone());
     }
     let matrix_row = measured.row_index as usize;
-    builder.begin_row(matrix_row, measured.rendered.row.role);
     let mut row = rendered_row_with_source_bounds(&measured.rendered);
     row.pixel_y = measured.bounds.y;
     row.height_px = measured.row_height();
     row.ascent_px = measured.row_ascent();
-    builder.install_prebuilt_current_row(&row);
-    builder.end_prebuilt_row();
+    builder.install_prebuilt_row(matrix_row, &row);
     for media in &measured.rendered.media {
         media.install_window_row(
             builder,
