@@ -644,9 +644,23 @@ impl LispString {
     }
 
     pub fn concat(&self, other: &Self) -> Self {
-        let mut data = self.as_bytes().to_vec();
-        data.extend_from_slice(other.as_bytes());
         let multibyte = self.is_multibyte() || other.is_multibyte();
+        // Issue #131: when unifying a unibyte piece into a multibyte result,
+        // promote its raw bytes to the Emacs multibyte encoding (high bytes ->
+        // eight-bit chars) like GNU `concat`, rather than splicing raw bytes
+        // into a multibyte string and producing a malformed sequence.
+        let mut data = if multibyte && !self.is_multibyte() {
+            crate::emacs_core::emacs_char::str_to_multibyte(self.as_bytes())
+        } else {
+            self.as_bytes().to_vec()
+        };
+        if multibyte && !other.is_multibyte() {
+            data.extend_from_slice(&crate::emacs_core::emacs_char::str_to_multibyte(
+                other.as_bytes(),
+            ));
+        } else {
+            data.extend_from_slice(other.as_bytes());
+        }
         let mut result = if multibyte {
             Self::from_emacs_bytes(data)
         } else {

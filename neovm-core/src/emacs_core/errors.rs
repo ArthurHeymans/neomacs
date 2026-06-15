@@ -611,7 +611,7 @@ pub(crate) fn builtin_error_message_string(
             };
             (sym, rest)
         }
-        ValueKind::Nil => return Ok(runtime_string_result("peculiar error")),
+        ValueKind::Nil => return Ok(Value::heap_string(lisp_lit("peculiar error"))),
         _ => {
             return Err(signal(
                 "wrong-type-argument",
@@ -627,52 +627,54 @@ pub(crate) fn builtin_error_message_string(
     let Some(base_message) = eval
         .obarray
         .get_property(&sym_name, "error-message")
-        .and_then(|v| runtime_string_value(&v))
+        .and_then(|v| v.as_lisp_string().cloned())
     else {
         if data.is_empty() {
-            return Ok(runtime_string_result("peculiar error"));
+            return Ok(Value::heap_string(lisp_lit("peculiar error")));
         }
-        let data_strs: Vec<String> = data
-            .iter()
-            .map(|v| format_error_arg(eval, v, true))
-            .collect();
-        return Ok(runtime_string_result(format!(
-            "peculiar error: {}",
-            data_strs.join(", ")
-        )));
+        let detail = join_lisp(
+            data.iter().map(|v| error_arg_lisp(eval, v, true)).collect(),
+            ", ",
+        );
+        return Ok(Value::heap_string(
+            lisp_lit("peculiar error: ").concat(&detail),
+        ));
     };
 
     if data.is_empty() {
         if sym_name == "error" {
-            return Ok(runtime_string_result("peculiar error"));
+            return Ok(Value::heap_string(lisp_lit("peculiar error")));
         }
         if sym_name == "user-error" {
-            return Ok(runtime_string_result(""));
+            return Ok(Value::heap_string(lisp_lit("")));
         }
-        return Ok(runtime_string_result(base_message));
+        return Ok(Value::heap_string(base_message));
     }
 
     // `user-error` always renders payload data directly.
     if sym_name == "user-error" {
-        if let Some(first_str) = data.first().and_then(runtime_string_value) {
+        if let Some(first_str) = data.first().and_then(|v| v.as_lisp_string().cloned()) {
             let rest = &data[1..];
             if rest.is_empty() {
-                return Ok(runtime_string_result(first_str));
+                return Ok(Value::heap_string(first_str));
             }
-            let rest_strs: Vec<String> = rest
-                .iter()
-                .map(|v| format_error_arg(eval, v, false))
-                .collect();
-            return Ok(runtime_string_result(format!(
-                "{first_str}, {}",
-                rest_strs.join(", ")
-            )));
+            let rest_j = join_lisp(
+                rest.iter()
+                    .map(|v| error_arg_lisp(eval, v, false))
+                    .collect(),
+                ", ",
+            );
+            return Ok(Value::heap_string(
+                first_str.concat(&lisp_lit(", ")).concat(&rest_j),
+            ));
         }
-        let data_strs: Vec<String> = data
-            .iter()
-            .map(|v| format_error_arg(eval, v, false))
-            .collect();
-        return Ok(runtime_string_result(data_strs.join(", ")));
+        let detail = join_lisp(
+            data.iter()
+                .map(|v| error_arg_lisp(eval, v, false))
+                .collect(),
+            ", ",
+        );
+        return Ok(Value::heap_string(detail));
     }
 
     let is_file_error_family = signal_matches_hierarchical(&eval.obarray, &sym_name, "file-error");
@@ -681,84 +683,108 @@ pub(crate) fn builtin_error_message_string(
     // `file-locked` is an oddball in Emacs: it always reports "peculiar error"
     // with all payload elements, even if the first datum is a string.
     if is_file_locked {
-        let data_strs: Vec<String> = data
-            .iter()
-            .map(|v| format_error_arg(eval, v, true))
-            .collect();
-        return Ok(runtime_string_result(format!(
-            "peculiar error: {}",
-            data_strs.join(", ")
-        )));
+        let detail = join_lisp(
+            data.iter().map(|v| error_arg_lisp(eval, v, true)).collect(),
+            ", ",
+        );
+        return Ok(Value::heap_string(
+            lisp_lit("peculiar error: ").concat(&detail),
+        ));
     }
 
     // `error` and file-error-family conditions use a leading string for
     // user-facing detail.
     if sym_name == "error" || is_file_error_family {
-        if let Some(first_str) = data.first().and_then(runtime_string_value) {
+        if let Some(first_str) = data.first().and_then(|v| v.as_lisp_string().cloned()) {
             let rest = &data[1..];
             if rest.is_empty() {
-                return Ok(runtime_string_result(first_str));
+                return Ok(Value::heap_string(first_str));
             }
             let quote_strings = sym_name == "error";
-            let rest_strs: Vec<String> = rest
-                .iter()
-                .map(|v| format_error_arg(eval, v, quote_strings))
-                .collect();
-            return Ok(runtime_string_result(format!(
-                "{first_str}: {}",
-                rest_strs.join(", ")
-            )));
+            let rest_j = join_lisp(
+                rest.iter()
+                    .map(|v| error_arg_lisp(eval, v, quote_strings))
+                    .collect(),
+                ", ",
+            );
+            return Ok(Value::heap_string(
+                first_str.concat(&lisp_lit(": ")).concat(&rest_j),
+            ));
         }
 
         // `error` and most file-error-family members render peculiar payload
         // data from the second element onward when no leading message string
         // is present.
         if data.len() > 1 {
-            let detail: Vec<String> = data[1..]
-                .iter()
-                .map(|v| format_error_arg(eval, v, true))
-                .collect();
-            return Ok(runtime_string_result(format!(
-                "peculiar error: {}",
-                detail.join(", ")
-            )));
+            let detail = join_lisp(
+                data[1..]
+                    .iter()
+                    .map(|v| error_arg_lisp(eval, v, true))
+                    .collect(),
+                ", ",
+            );
+            return Ok(Value::heap_string(
+                lisp_lit("peculiar error: ").concat(&detail),
+            ));
         }
-        return Ok(runtime_string_result("peculiar error"));
+        return Ok(Value::heap_string(lisp_lit("peculiar error")));
     }
 
     let quote_strings = sym_name != "end-of-file";
-    let data_strs: Vec<String> = data
-        .iter()
-        .map(|v| format_error_arg(eval, v, quote_strings))
-        .collect();
-    Ok(runtime_string_result(format!(
-        "{}: {}",
-        base_message,
-        data_strs.join(", ")
-    )))
+    let detail = join_lisp(
+        data.iter()
+            .map(|v| error_arg_lisp(eval, v, quote_strings))
+            .collect(),
+        ", ",
+    );
+    Ok(Value::heap_string(
+        base_message.concat(&lisp_lit(": ")).concat(&detail),
+    ))
 }
 
-fn format_error_arg(eval: &super::eval::Context, value: &Value, quote_strings: bool) -> String {
+/// Issue #131: render an error-data argument as a faithful LispString (Emacs
+/// bytes) instead of the PUA-sentinel storage string. String arguments keep
+/// their real bytes; other objects go through the printer (still storage) and
+/// are decoded back at this boundary.
+fn error_arg_lisp(
+    eval: &super::eval::Context,
+    value: &Value,
+    quote_strings: bool,
+) -> crate::heap_types::LispString {
     if !quote_strings {
-        if let Some(s) = runtime_string_value(value) {
-            return s;
+        if let Some(ls) = value.as_lisp_string() {
+            return ls.clone();
         }
     }
-    super::error::print_value_with_eval(eval, value)
-}
-
-fn runtime_string_value(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
-}
-
-fn runtime_string_result(text: impl Into<String>) -> Value {
-    let text = text.into();
-    let multibyte = crate::emacs_core::string_escape::decode_storage_char_codes_auto(&text)
+    let printed = super::error::print_value_with_eval(eval, value);
+    let multibyte = crate::emacs_core::string_escape::decode_storage_char_codes_auto(&printed)
         .into_iter()
         .any(|code| code > 0xFF);
-    Value::heap_string(super::builtins::runtime_string_to_lisp_string(
-        &text, multibyte,
-    ))
+    super::builtins::runtime_string_to_lisp_string(&printed, multibyte)
+}
+
+/// A static ASCII message literal as a LispString piece. Built unibyte so it
+/// does not force the concatenated result multibyte; `concat` promotes it when a
+/// multibyte piece is present.
+fn lisp_lit(s: &str) -> crate::heap_types::LispString {
+    crate::heap_types::LispString::from_unibyte(s.as_bytes().to_vec())
+}
+
+/// Concatenate LispString `items` with `sep` between them, using Emacs string
+/// concatenation (which unifies unibyte/multibyte pieces correctly).
+fn join_lisp(
+    items: Vec<crate::heap_types::LispString>,
+    sep: &str,
+) -> crate::heap_types::LispString {
+    let sep_ls = lisp_lit(sep);
+    let mut iter = items.into_iter();
+    let Some(mut acc) = iter.next() else {
+        return crate::heap_types::LispString::from_unibyte(Vec::new());
+    };
+    for item in iter {
+        acc = acc.concat(&sep_ls).concat(&item);
+    }
+    acc
 }
 
 // ---------------------------------------------------------------------------
