@@ -716,14 +716,6 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
-pub(crate) fn right_edge_marker_text_item(
-    text: String,
-    face_id: u32,
-    start_offset: usize,
-) -> DisplayItem {
-    synthetic_window_marker_text_item(RIGHT_EDGE_MARKER_SOURCE_ID, text, face_id, start_offset)
-}
-
 pub(crate) fn right_border_text_source(
     text: impl Into<Box<str>>,
     face_id: u32,
@@ -737,12 +729,54 @@ pub(crate) fn right_border_text_source(
     )
 }
 
+pub(crate) struct RightEdgeMarkerItemSource {
+    items: std::vec::IntoIter<DisplayItem>,
+    source_position: DisplaySourcePosition,
+}
+
+impl RightEdgeMarkerItemSource {
+    pub(crate) fn new(padding_cols: usize, marker: char, face_id: u32) -> Self {
+        let mut source_offset = 0usize;
+        let mut items = Vec::with_capacity(usize::from(padding_cols > 0) + 1);
+        if padding_cols > 0 {
+            items.push(synthetic_window_marker_text_item(
+                RIGHT_EDGE_MARKER_SOURCE_ID,
+                " ".repeat(padding_cols),
+                face_id,
+                source_offset,
+            ));
+            source_offset = source_offset.saturating_add(padding_cols);
+        }
+        items.push(synthetic_window_marker_text_item(
+            RIGHT_EDGE_MARKER_SOURCE_ID,
+            marker.to_string(),
+            face_id,
+            source_offset,
+        ));
+        Self {
+            items: items.into_iter(),
+            source_position: DisplaySourcePosition::synthetic(RIGHT_EDGE_MARKER_SOURCE_ID, 0),
+        }
+    }
+}
+
+impl DisplayItemSource for RightEdgeMarkerItemSource {
+    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        self.items.next()
+    }
+
+    fn source_position(&self) -> DisplaySourcePosition {
+        self.source_position.clone()
+    }
+}
+
 fn synthetic_window_marker_text_item(
     source_id: u64,
-    text: String,
+    text: impl Into<Box<str>>,
     face_id: u32,
     start_offset: usize,
 ) -> DisplayItem {
+    let text = text.into();
     let end_offset = start_offset.saturating_add(text.chars().count());
     DisplayItem::new(
         SourceSpan::synthetic(source_id, start_offset, end_offset),

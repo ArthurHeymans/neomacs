@@ -76,16 +76,17 @@ use crate::neovm_bridge::{
 use crate::types::WindowParams;
 use crate::unicode::{decode_utf8, is_wide_char};
 use crate::window_output::{
-    LineNumberMarginItemSource, TextMatrixRowBegin, TextMatrixRowGeometryTransition,
-    TextMatrixRowMetrics, TextMatrixRowTransition, TextWindowBegin, TextWindowBodyOutputInstall,
-    TextWindowCursorEffects, TextWindowLineNumberMargin, TextWindowPendingRowFinish,
-    TextWindowRedisplayPositions, TextWindowRightBorder, TextWindowRightEdgeMarkers,
-    TextWindowRowDecorationRequest, WindowOutputEmitter, begin_text_window_output,
-    close_text_window_output, current_text_window_cluster_tail, emit_text_matrix_row_transition,
+    LineNumberMarginItemSource, RightEdgeMarkerItemSource, TextMatrixRowBegin,
+    TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition,
+    TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
+    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightBorder, TextWindowRightEdgeMarkers, TextWindowRowDecorationRequest,
+    WindowOutputEmitter, begin_text_window_output, close_text_window_output,
+    current_text_window_cluster_tail, emit_text_matrix_row_transition,
     emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
     finish_pending_text_window_row, install_text_window_body_output,
     install_text_window_cursor_effects, install_text_window_row_decoration,
-    right_border_text_source, right_edge_marker_text_item,
+    right_border_text_source,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -6482,25 +6483,21 @@ fn current_row_marker_geometry(
     }
 }
 
-fn render_right_edge_marker_items(
+fn render_right_edge_marker_source(
     row: &mut GlyphRow,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
-    items: Vec<DisplayItem>,
+    source: &mut RightEdgeMarkerItemSource,
     face_id: u32,
     base_face: &ResolvedFace,
     char_width: f32,
     matrix_cols: usize,
 ) {
-    if items.is_empty() {
-        return;
-    }
     let char_width = char_width.max(1.0);
     let start_col = display_row_total_glyph_count(row);
     let start = DisplayRowPosition {
         x_px: start_col as f32 * char_width,
         col: start_col,
     };
-    let mut source = OwnedDisplayItemSource::new(items);
     let mut source_state = DisplayRowSourceState::default();
     let request = DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
         DisplayRowSourceRequestPolicy::from_display_row_geometry(
@@ -6514,12 +6511,7 @@ fn render_right_edge_marker_items(
             max_x_px: matrix_cols as f32 * char_width,
         },
     );
-    render_services.render_item_source_fragment_into_row(
-        request,
-        row,
-        &mut source,
-        &mut source_state,
-    );
+    render_services.render_item_source_fragment_into_row(request, row, source, &mut source_state);
 }
 
 fn install_right_edge_marker_from_source_request(
@@ -6539,26 +6531,12 @@ fn install_right_edge_marker_from_source_request(
     let clamped_col = target_col.min(matrix_cols - 1);
     trim_display_row_text_to_total_glyph_count(row, clamped_col);
 
-    let mut source_offset = 0usize;
-    let mut items = Vec::new();
     let padding_cols = clamped_col.saturating_sub(display_row_total_glyph_count(row));
-    if padding_cols > 0 {
-        items.push(right_edge_marker_text_item(
-            " ".repeat(padding_cols),
-            face_id,
-            source_offset,
-        ));
-        source_offset = source_offset.saturating_add(padding_cols);
-    }
-    items.push(right_edge_marker_text_item(
-        marker.to_string(),
-        face_id,
-        source_offset,
-    ));
-    render_right_edge_marker_items(
+    let mut source = RightEdgeMarkerItemSource::new(padding_cols, marker, face_id);
+    render_right_edge_marker_source(
         row,
         render_services,
-        items,
+        &mut source,
         face_id,
         base_face,
         char_width,
