@@ -70,7 +70,10 @@ impl InteractiveSpec {
     pub fn string_code_runtime_owned(&self) -> Option<String> {
         match self.spec.kind() {
             ValueKind::Nil => Some(String::new()),
-            ValueKind::String => self.spec.as_runtime_string_owned(),
+            ValueKind::String => self
+                .spec
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
             _ => None,
         }
     }

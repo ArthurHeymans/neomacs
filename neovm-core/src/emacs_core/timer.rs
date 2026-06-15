@@ -434,7 +434,8 @@ fn parse_run_at_time_delay(value: &Value) -> Result<f64, Flow> {
     match value.kind() {
         ValueKind::String => {
             let rendered = value
-                .as_runtime_string_owned()
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                 .expect("ValueKind::String must carry LispString payload");
             let s_str = rendered.as_str();
             let spec = s_str.trim();

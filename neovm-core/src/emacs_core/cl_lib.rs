@@ -815,7 +815,8 @@ pub(crate) fn builtin_cl_gensym(args: Vec<Value>) -> EvalResult {
             CL_GENSYM_COUNTER.fetch_add(1, Ordering::Relaxed),
         ),
         Some(v) if v.is_string() => (
-            v.as_runtime_string_owned()
+            v.as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                 .expect("ValueKind::String must carry LispString payload"),
             CL_GENSYM_COUNTER.fetch_add(1, Ordering::Relaxed),
         ),

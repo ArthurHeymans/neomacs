@@ -702,7 +702,8 @@ pub(crate) fn builtin_user_full_name(
             }
             ValueKind::String => {
                 let login = target
-                    .as_runtime_string_owned()
+                    .as_lisp_string()
+                    .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                     .expect("ValueKind::String must carry LispString payload");
                 lookup_full_name_by_login(&login)
                     .map(Value::string)
