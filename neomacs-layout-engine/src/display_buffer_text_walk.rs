@@ -16,8 +16,9 @@ use crate::display_row_append::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
     BufferSelectiveDisplayTailRenderState, BufferTextDecodedSourceChar,
     BufferTextDecodedSourceEvent, BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
-    BufferTextRowAppendState, BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
+    BufferTextLineBreakSourceEvent, BufferTextRowAppendState, BufferTextSourceCharRenderOutcome,
+    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
+    BufferTextSourceEventCursor, BufferTextSourceTextEvent, BufferTextWindowBeginRequest,
     BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
     BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeOutcome, BufferTextWindowTailFinalizeRequest,
@@ -2369,12 +2370,12 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn line_break_request<'a>(
         self,
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_event: BufferTextLineBreakSourceEvent,
         text: &'a [u8],
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferTextLineBreakRenderRequest<'a> {
-        BufferTextLineBreakRenderRequest::new(
-            decoded_source_char,
+        BufferTextLineBreakRenderRequest::from_source_event(
+            source_event,
             text,
             self.text_start_byte,
             self.selective_display,
@@ -2394,7 +2395,7 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn source_char_request<'a>(
         self,
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_event: BufferTextSourceTextEvent,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
@@ -2402,8 +2403,8 @@ impl BufferTextWindowLoopRequestContext {
         params: &'a WindowParams,
         glyph_y_offset: f32,
     ) -> BufferTextSourceCharRenderRequest<'a> {
-        BufferTextSourceCharRenderRequest::new(
-            decoded_source_char,
+        BufferTextSourceCharRenderRequest::from_source_event(
+            source_event,
             text,
             self.text_start_byte,
             self.buffer_id,
@@ -2631,13 +2632,13 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        let Some(decoded_source_char) = self.consume_source_char(text) else {
+        let Some(source_event) = self.consume_source_event(text) else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
         let selective_display_outcome = self.render_selective_display_tail_for_context(
             loop_context,
-            decoded_source_char,
+            source_event.decoded_char(),
             text,
             append_surface,
             active_face_state,
@@ -2650,12 +2651,12 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        match decoded_source_char.into_event() {
-            BufferTextDecodedSourceEvent::LineBreak(decoded_source_char) => {
+        match source_event {
+            BufferTextDecodedSourceEvent::LineBreak(source_event) => {
                 if self
                     .render_line_break_for_context(
                         loop_context,
-                        decoded_source_char,
+                        source_event,
                         text,
                         active_face_state,
                         buffer,
@@ -2665,10 +2666,10 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                     return BufferTextWindowLoopStepOutcome::StopBufferWalk;
                 }
             }
-            BufferTextDecodedSourceEvent::Text(decoded_source_char) => {
+            BufferTextDecodedSourceEvent::Text(source_event) => {
                 let char_render_outcome = self.render_source_char_for_context(
                     loop_context,
-                    decoded_source_char,
+                    source_event,
                     text,
                     append_surface,
                     overlay_context,
@@ -2728,11 +2729,11 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             );
     }
 
-    pub(crate) fn consume_source_char(
+    pub(crate) fn consume_source_event(
         &mut self,
         text: &[u8],
-    ) -> Option<BufferTextDecodedSourceChar> {
-        BufferTextDecodedSourceChar::consume_from_text(text, self.byte_idx, *self.charpos)
+    ) -> Option<BufferTextDecodedSourceEvent> {
+        BufferTextSourceEventCursor::new(text, self.byte_idx, *self.charpos).next_event()
     }
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
@@ -2813,19 +2814,19 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_line_break_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_event: BufferTextLineBreakSourceEvent,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
-        let request = context.line_break_request(decoded_source_char, text, active_face_state);
+        let request = context.line_break_request(source_event, text, active_face_state);
         self.render_line_break(request, buffer)
     }
 
     pub(crate) fn render_source_char_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_event: BufferTextSourceTextEvent,
         text: &'request [u8],
         append_surface: &'request DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
@@ -2834,7 +2835,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         buffer: &B,
     ) -> BufferTextSourceCharRenderOutcome {
         let request = context.source_char_request(
-            decoded_source_char,
+            source_event,
             text,
             append_surface,
             overlay_context,

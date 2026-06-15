@@ -843,7 +843,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
-    decoded_source_char: BufferTextDecodedSourceChar,
+    source_event: BufferTextSourceTextEvent,
     text: &'a [u8],
     text_start_byte: usize,
     buffer_id: BufferId,
@@ -4723,6 +4723,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
 }
 
 impl<'a> BufferTextSourceCharRenderRequest<'a> {
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         decoded_source_char: BufferTextDecodedSourceChar,
@@ -4744,8 +4745,51 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         max_rows: usize,
         row_limit: DisplayRowLimit,
     ) -> Self {
+        Self::from_source_event(
+            BufferTextSourceTextEvent::new(decoded_source_char),
+            text,
+            text_start_byte,
+            buffer_id,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+            glyph_y_offset,
+            char_h,
+            point_charpos,
+            row_visibility_limit,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            text_matrix_row_base,
+            max_rows,
+            row_limit,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_source_event(
+        source_event: BufferTextSourceTextEvent,
+        text: &'a [u8],
+        text_start_byte: usize,
+        buffer_id: BufferId,
+        append_surface: &'a DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        char_h: f32,
+        point_charpos: i64,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        text_matrix_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
         Self {
-            decoded_source_char,
+            source_event,
             text,
             text_start_byte,
             buffer_id,
@@ -4796,12 +4840,12 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         } = state;
         let mut source_render = source_render;
 
-        let ch = self.decoded_source_char.ch();
-        self.decoded_source_char
-            .record_word_wrap_candidate(word_wrap, source_render.output_emitter());
+        let decoded_source_char = self.source_event.decoded_char();
+        let ch = decoded_source_char.ch();
+        decoded_source_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
 
         let buffer_source_char = self
-            .decoded_source_char
+            .source_event
             .source_char(self.params.nobreak_char_display);
         let buffer_row_append_context = BufferTextRowAppendContext::new(
             buffer,
@@ -4827,7 +4871,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     append_geometry,
                     &buffer_source_char,
                     self.text,
-                    self.decoded_source_char.start_byte_idx(),
+                    decoded_source_char.start_byte_idx(),
                     append_position,
                 ),
                 &mut preparation_state,
@@ -4903,13 +4947,11 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
         };
 
-        prepared_append.update_cursor_info_for_main_char(
-            cursor_info,
-            self.decoded_source_char.start_byte_idx(),
-        );
+        prepared_append
+            .update_cursor_info_for_main_char(cursor_info, decoded_source_char.start_byte_idx());
         let overflow_outcome = BufferTextOverflowRenderRequest::new(
             prepared_append,
-            self.decoded_source_char,
+            decoded_source_char,
             ch,
             self.append_surface.right_edge(),
             self.params.truncate_lines,
@@ -4962,7 +5004,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             self.active_face_state,
             row_geometry,
             *x,
-            self.decoded_source_char.start_byte_idx(),
+            decoded_source_char.start_byte_idx(),
             *col,
             ch == '\t',
             *charpos,
@@ -5649,8 +5691,74 @@ pub(crate) struct BufferTextDecodedSourceChar {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextDecodedSourceEvent {
-    LineBreak(BufferTextDecodedSourceChar),
-    Text(BufferTextDecodedSourceChar),
+    LineBreak(BufferTextLineBreakSourceEvent),
+    Text(BufferTextSourceTextEvent),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextLineBreakSourceEvent {
+    source_char: BufferTextDecodedSourceChar,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSourceTextEvent {
+    source_char: BufferTextDecodedSourceChar,
+}
+
+pub(crate) struct BufferTextSourceEventCursor<'text, 'state> {
+    text: &'text [u8],
+    byte_idx: &'state mut usize,
+    charpos: i64,
+}
+
+impl BufferTextDecodedSourceEvent {
+    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+        match self {
+            Self::LineBreak(source_event) => source_event.decoded_char(),
+            Self::Text(source_event) => source_event.decoded_char(),
+        }
+    }
+}
+
+impl BufferTextLineBreakSourceEvent {
+    fn new(source_char: BufferTextDecodedSourceChar) -> Self {
+        debug_assert_eq!(source_char.ch(), '\n');
+        Self { source_char }
+    }
+
+    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+        self.source_char
+    }
+}
+
+impl BufferTextSourceTextEvent {
+    fn new(source_char: BufferTextDecodedSourceChar) -> Self {
+        debug_assert_ne!(source_char.ch(), '\n');
+        Self { source_char }
+    }
+
+    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+        self.source_char
+    }
+
+    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
+        self.source_char.source_char(nobreak_display_policy)
+    }
+}
+
+impl<'text, 'state> BufferTextSourceEventCursor<'text, 'state> {
+    pub(crate) fn new(text: &'text [u8], byte_idx: &'state mut usize, charpos: i64) -> Self {
+        Self {
+            text,
+            byte_idx,
+            charpos,
+        }
+    }
+
+    pub(crate) fn next_event(&mut self) -> Option<BufferTextDecodedSourceEvent> {
+        BufferTextDecodedSourceChar::consume_from_text(self.text, self.byte_idx, self.charpos)
+            .map(BufferTextDecodedSourceChar::into_event)
+    }
 }
 
 impl BufferTextDecodedSourceChar {
@@ -5695,9 +5803,9 @@ impl BufferTextDecodedSourceChar {
 
     pub(crate) fn into_event(self) -> BufferTextDecodedSourceEvent {
         if self.ch == '\n' {
-            BufferTextDecodedSourceEvent::LineBreak(self)
+            BufferTextDecodedSourceEvent::LineBreak(BufferTextLineBreakSourceEvent::new(self))
         } else {
-            BufferTextDecodedSourceEvent::Text(self)
+            BufferTextDecodedSourceEvent::Text(BufferTextSourceTextEvent::new(self))
         }
     }
 
@@ -7539,7 +7647,7 @@ pub(crate) struct BufferTextLineBreakSourceAction {
 }
 
 pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
-    source_char: BufferTextDecodedSourceChar,
+    source_event: BufferTextLineBreakSourceEvent,
     text: &'a [u8],
     text_start_byte: usize,
     selective_display: i32,
@@ -7557,6 +7665,7 @@ pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
 }
 
 impl<'a> BufferTextLineBreakRenderRequest<'a> {
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         source_char: BufferTextDecodedSourceChar,
@@ -7575,8 +7684,45 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         max_rows: usize,
         row_limit: DisplayRowLimit,
     ) -> Self {
+        Self::from_source_event(
+            BufferTextLineBreakSourceEvent::new(source_char),
+            text,
+            text_start_byte,
+            selective_display,
+            tab_width,
+            active_face_state,
+            point_charpos,
+            char_h,
+            extra_line_spacing,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            text_matrix_row_base,
+            max_rows,
+            row_limit,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_source_event(
+        source_event: BufferTextLineBreakSourceEvent,
+        text: &'a [u8],
+        text_start_byte: usize,
+        selective_display: i32,
+        tab_width: i32,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        point_charpos: i64,
+        char_h: f32,
+        extra_line_spacing: f32,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        text_matrix_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
         Self {
-            source_char,
+            source_event,
             text,
             text_start_byte,
             selective_display,
@@ -7623,7 +7769,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
 
         let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
             buffer,
-            self.source_char,
+            self.source_event.decoded_char(),
             self.char_h,
             self.extra_line_spacing,
         );
@@ -9747,12 +9893,19 @@ pub(crate) enum BufferDisplayPropertyTextWalkOutcome {
     FaceStateChanged,
 }
 
-pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferDisplayPropertyTextSourceEvent<'a> {
     value: Value,
-    buffer_id: BufferId,
     anchor_charpos: CharPos0,
     anchor_bytepos: EmacsBytePos,
     source_text: &'a [u8],
+    next_change: i64,
+    skip_to: i64,
+}
+
+pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
+    source_event: BufferDisplayPropertyTextSourceEvent<'a>,
+    buffer_id: BufferId,
     active_face_state: &'a DisplayRowActiveFaceState,
     current_x: f32,
     content_x: f32,
@@ -9760,8 +9913,6 @@ pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
     glyph_y_offset: f32,
     default_row_height: f32,
     start_position: DisplayRowPosition,
-    next_change: i64,
-    skip_to: i64,
 }
 
 pub(crate) struct BufferDisplayPropertyTextRenderContext<'a> {
@@ -9898,6 +10049,52 @@ impl BufferDisplayPropertyTextAppendAction {
     }
 }
 
+impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        value: Value,
+        text_start_byte: usize,
+        text: &'a [u8],
+        charpos: i64,
+        byte_idx: usize,
+        next_change: i64,
+        skip_to: i64,
+    ) -> Self {
+        Self {
+            value,
+            anchor_charpos: CharPos0::new(charpos.max(0) as usize),
+            anchor_bytepos: EmacsBytePos::new(text_start_byte + byte_idx),
+            source_text: text.get(byte_idx..).unwrap_or(&[]),
+            next_change,
+            skip_to,
+        }
+    }
+
+    fn value(self) -> Value {
+        self.value
+    }
+
+    fn anchor_charpos(self) -> CharPos0 {
+        self.anchor_charpos
+    }
+
+    fn anchor_bytepos(self) -> EmacsBytePos {
+        self.anchor_bytepos
+    }
+
+    fn source_text(self) -> &'a [u8] {
+        self.source_text
+    }
+
+    fn next_change(self) -> i64 {
+        self.next_change
+    }
+
+    fn skip_to(self) -> i64 {
+        self.skip_to
+    }
+}
+
 impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -9949,12 +10146,18 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
             return BufferDisplayPropertyTextAppendAction::None;
         };
 
-        BufferDisplayPropertyTextAppendRequest::for_text_property(
+        let source_event = BufferDisplayPropertyTextSourceEvent::new(
             value,
+            self.text_start_byte,
+            self.text,
+            charpos,
+            byte_idx,
+            checkpoints.display_next(),
+            checkpoints.display_skip_to(accessible_end),
+        );
+        BufferDisplayPropertyTextAppendRequest::for_source_event(
+            source_event,
             self.buffer_id,
-            CharPos0::new(charpos.max(0) as usize),
-            EmacsBytePos::new(self.text_start_byte + byte_idx),
-            self.text.get(byte_idx..).unwrap_or(&[]),
             self.active_face_state,
             self.current_x,
             self.content_x,
@@ -9962,8 +10165,6 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
             self.glyph_y_offset,
             self.default_row_height,
             self.start_position,
-            checkpoints.display_next(),
-            checkpoints.display_skip_to(accessible_end),
         )
         .resolve_and_append_to_text_row(
             buffer,
@@ -10111,12 +10312,9 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
 
 impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn for_text_property(
-        value: Value,
+    pub(crate) fn for_source_event(
+        source_event: BufferDisplayPropertyTextSourceEvent<'a>,
         buffer_id: BufferId,
-        anchor_charpos: CharPos0,
-        anchor_bytepos: EmacsBytePos,
-        source_text: &'a [u8],
         active_face_state: &'a DisplayRowActiveFaceState,
         current_x: f32,
         content_x: f32,
@@ -10124,15 +10322,10 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         glyph_y_offset: f32,
         default_row_height: f32,
         start_position: DisplayRowPosition,
-        next_change: i64,
-        skip_to: i64,
     ) -> Self {
         Self {
-            value,
+            source_event,
             buffer_id,
-            anchor_charpos,
-            anchor_bytepos,
-            source_text,
             active_face_state,
             current_x,
             content_x,
@@ -10140,8 +10333,6 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             glyph_y_offset,
             default_row_height,
             start_position,
-            next_change,
-            skip_to,
         }
     }
 
@@ -10153,13 +10344,13 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
     ) -> BufferDisplayPropertyTextAppendAction {
-        let display_property = classify_display_property(self.value);
+        let display_property = classify_display_property(self.source_event.value());
         let replacement_item = state.with_font_metrics_and_display_host(|font_metrics, host| {
             DisplayPropertyReplacementAppendItem::resolve(
                 &display_property,
-                self.value,
-                self.anchor_charpos,
-                self.source_text,
+                self.source_event.value(),
+                self.source_event.anchor_charpos(),
+                self.source_event.source_text(),
                 self.active_face_state,
                 font_metrics,
                 self.current_x,
@@ -10172,8 +10363,8 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             let replacement = DisplayPropertyReplacementAppendRequest::new(
                 BufferDisplayReplacementSource::new(
                     self.buffer_id,
-                    self.anchor_charpos,
-                    self.anchor_bytepos,
+                    self.source_event.anchor_charpos(),
+                    self.source_event.anchor_bytepos(),
                 ),
                 item,
                 self.glyph_y_offset,
@@ -10191,7 +10382,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             return BufferDisplayPropertyTextAppendAction::Replacement(
                 BufferDisplayPropertyTextReplacementOutcome {
                     replacement,
-                    skip_to: self.skip_to,
+                    skip_to: self.source_event.skip_to(),
                 },
             );
         }
@@ -10199,7 +10390,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
         BufferDisplayPropertyTextModifierAction::for_display_property(
             &display_property,
             self.default_row_height,
-            self.next_change,
+            self.source_event.next_change(),
         )
         .map(BufferDisplayPropertyTextAppendAction::Modifiers)
         .unwrap_or(BufferDisplayPropertyTextAppendAction::None)
