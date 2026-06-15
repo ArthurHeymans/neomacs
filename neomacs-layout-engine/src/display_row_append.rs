@@ -36,6 +36,7 @@ use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face}
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy, display_row_total_glyph_count,
+    pop_display_row_trailing_text_char, push_display_row_text_glyph,
     trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::{
@@ -83,7 +84,7 @@ use crate::window_output::{
     close_text_window_output, current_text_window_cluster_tail, emit_text_matrix_row_transition,
     emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
     finish_pending_text_window_row, install_text_window_body_output,
-    install_text_window_cursor_effects, install_text_window_row_decoration,
+    install_text_window_cursor_effects, install_text_window_row_decoration, right_border_text_item,
     right_edge_marker_text_item,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -4794,18 +4795,22 @@ impl BufferTextWindowTerminalRightBorderRequest {
     pub(crate) fn install_and_apply(
         self,
         builder: &mut GlyphMatrixBuilder,
-        face_resolver: &FaceResolver,
+        mut render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
-        let border_face = face_resolver.resolve_named_face(self.face_name);
+        let border_face = render_services
+            .face_resolver()
+            .resolve_named_face(self.face_name);
         let border_face_id = border_face.face_id;
         insert_resolved_display_row_face(builder, border_face_id, &border_face, None);
-        install_text_window_row_decoration(
+        install_last_window_right_border_from_source_requests(
             builder,
-            TextWindowRowDecorationRequest::LastWindowRightBorder(TextWindowRightBorder {
+            render_services.reborrow(),
+            TextWindowRightBorder {
                 ch: self.ch,
                 face_id: border_face_id,
                 char_width: self.char_width,
-            }),
+            },
+            &border_face,
         );
         border_face_id
     }
@@ -6639,6 +6644,163 @@ fn install_right_edge_markers_from_source_requests(
             );
         });
     }
+}
+
+struct RightBorderTextRenderRequest<'face> {
+    text: String,
+    area: GlyphArea,
+    face_id: u32,
+    base_face: &'face ResolvedFace,
+    char_width: f32,
+    matrix_cols: usize,
+    source_offset: usize,
+    start_col: usize,
+}
+
+fn render_right_border_text(
+    row: &mut GlyphRow,
+    render_services: &mut ChromeRowRenderServices<'_, '_>,
+    request: RightBorderTextRenderRequest<'_>,
+) {
+    if request.text.is_empty() {
+        return;
+    }
+    let char_width = request.char_width.max(1.0);
+    let start = DisplayRowPosition {
+        x_px: request.start_col as f32 * char_width,
+        col: request.start_col,
+    };
+    let mut source = SingleDisplayItemSource::new(right_border_text_item(
+        request.text,
+        request.face_id,
+        request.source_offset,
+    ));
+    let mut source_state = DisplayRowSourceState::default();
+    let row_request =
+        DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+            DisplayRowSourceRequestPolicy::from_display_row_geometry(
+                current_row_marker_geometry(row, request.matrix_cols, char_width),
+                GlyphRowRole::Text,
+            ),
+            request.face_id,
+            request.base_face,
+            DisplayRowRenderBounds {
+                start,
+                max_x_px: request.matrix_cols as f32 * char_width,
+            },
+        )
+        .with_glyph_area(request.area);
+    render_services.render_item_source_fragment_into_row(
+        row_request,
+        row,
+        &mut source,
+        &mut source_state,
+    );
+}
+
+fn install_right_border_from_source_request(
+    row: &mut GlyphRow,
+    target_col: usize,
+    request: TextWindowRightBorder,
+    base_face: &ResolvedFace,
+    matrix_cols: usize,
+    render_services: &mut ChromeRowRenderServices<'_, '_>,
+) {
+    if matrix_cols == 0 {
+        return;
+    }
+
+    let prior_displays_text = row.displays_text;
+    row.enabled = true;
+    let target_col = target_col.min(matrix_cols - 1);
+    let preserved_trailing = pop_display_row_trailing_text_char(row, '$');
+    let preserved_cols = usize::from(preserved_trailing.is_some());
+    let before_final_cols = target_col.saturating_sub(preserved_cols);
+    trim_display_row_text_to_total_glyph_count(row, before_final_cols);
+
+    let mut source_offset = 0usize;
+    let leading_padding = before_final_cols.saturating_sub(display_row_total_glyph_count(row));
+    if leading_padding > 0 {
+        render_right_border_text(
+            row,
+            render_services,
+            RightBorderTextRenderRequest {
+                text: " ".repeat(leading_padding),
+                area: GlyphArea::Text,
+                face_id: request.face_id,
+                base_face,
+                char_width: request.char_width,
+                matrix_cols,
+                source_offset,
+                start_col: display_row_total_glyph_count(row),
+            },
+        );
+        source_offset = source_offset.saturating_add(leading_padding);
+    }
+
+    if let Some(glyph) = preserved_trailing {
+        push_display_row_text_glyph(row, glyph);
+        source_offset = source_offset.saturating_add(preserved_cols);
+    }
+
+    let trailing_padding = target_col.saturating_sub(display_row_total_glyph_count(row));
+    if trailing_padding > 0 {
+        render_right_border_text(
+            row,
+            render_services,
+            RightBorderTextRenderRequest {
+                text: " ".repeat(trailing_padding),
+                area: GlyphArea::Text,
+                face_id: request.face_id,
+                base_face,
+                char_width: request.char_width,
+                matrix_cols,
+                source_offset,
+                start_col: display_row_total_glyph_count(row),
+            },
+        );
+        source_offset = source_offset.saturating_add(trailing_padding);
+    }
+
+    render_right_border_text(
+        row,
+        render_services,
+        RightBorderTextRenderRequest {
+            text: request.ch.to_string(),
+            area: GlyphArea::RightMargin,
+            face_id: request.face_id,
+            base_face,
+            char_width: request.char_width,
+            matrix_cols,
+            source_offset,
+            start_col: target_col,
+        },
+    );
+    row.displays_text = prior_displays_text;
+}
+
+fn install_last_window_right_border_from_source_requests(
+    builder: &mut GlyphMatrixBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightBorder,
+    base_face: &ResolvedFace,
+) {
+    builder.with_last_window_rows_mut(|rows, matrix_cols| {
+        if matrix_cols == 0 {
+            return;
+        }
+        let target_col = matrix_cols - 1;
+        for row in rows {
+            install_right_border_from_source_request(
+                row,
+                target_col,
+                request,
+                base_face,
+                matrix_cols,
+                &mut render_services,
+            );
+        }
+    });
 }
 
 impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, 'buf, B> {

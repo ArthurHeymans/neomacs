@@ -6255,8 +6255,16 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     builder.end_row();
     builder.end_window();
 
-    let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0)
-        .install_and_apply(&mut builder, &face_resolver);
+    let mut face_ids = FrameFaceIdAllocator::new(10);
+    let mut font_metrics = None;
+    let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
+        &mut builder,
+        crate::display_status_line::ChromeRowRenderServices::new(
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+        ),
+    );
 
     let state = builder.finish(5, 1, 8.0, 16.0);
     assert!(state.faces.contains_key(&face_id));

@@ -1,6 +1,6 @@
 use crate::display_row_append::BufferTextWindowTerminalRightBorderRequest;
+use crate::display_status_line::ChromeRowRenderServices;
 use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameArtifactInstallRequest};
-use crate::neovm_bridge::FaceResolver;
 use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
@@ -417,7 +417,6 @@ pub(crate) struct WindowFrameDecorationsRenderRequest<'a> {
     frame_params: &'a FrameParams,
     geometry: WindowFrameGeometry,
     info: &'a WindowInfo,
-    face_resolver: &'a FaceResolver,
 }
 
 impl<'a> WindowFrameDecorationsRenderRequest<'a> {
@@ -426,24 +425,30 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
         frame_params: &'a FrameParams,
         geometry: WindowFrameGeometry,
         info: &'a WindowInfo,
-        face_resolver: &'a FaceResolver,
     ) -> Self {
         Self {
             params,
             frame_params,
             geometry,
             info,
-            face_resolver,
         }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+    pub(crate) fn render_and_apply(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        mut render_services: ChromeRowRenderServices<'_, '_>,
+    ) {
         WindowScrollBarsRenderRequest::new(self.params, self.info).render_and_apply(builder);
-        self.render_right_divider(builder);
+        self.render_right_divider(builder, render_services.reborrow());
         self.render_bottom_divider(builder);
     }
 
-    fn render_right_divider(&self, builder: &mut GlyphMatrixBuilder) {
+    fn render_right_divider(
+        &self,
+        builder: &mut GlyphMatrixBuilder,
+        render_services: ChromeRowRenderServices<'_, '_>,
+    ) {
         if self.params.is_minibuffer || self.geometry.is_rightmost {
             return;
         }
@@ -480,7 +485,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
             });
         } else {
             BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
-                .install_and_apply(builder, self.face_resolver);
+                .install_and_apply(builder, render_services);
         }
     }
 

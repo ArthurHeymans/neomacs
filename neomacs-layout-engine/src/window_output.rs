@@ -16,9 +16,10 @@ use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{
     DisplayRowGlyphSlot, DisplayRowLayout, DisplayRowPosition, DisplayRowWriter, DisplayTabPolicy,
     display_row_total_glyph_count, mark_display_row_truncated_left,
-    pop_display_row_trailing_text_char, push_display_row_text_glyph,
     trim_display_row_text_to_total_glyph_count,
 };
+#[cfg(test)]
+use crate::display_row_builder::{pop_display_row_trailing_text_char, push_display_row_text_glyph};
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit,
     DisplayRowYPositions,
@@ -36,7 +37,9 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+#[cfg(test)]
+use neomacs_display_protocol::glyph_matrix::GlyphArea;
+use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -291,6 +294,7 @@ pub(crate) enum TextWindowRowDecorationRequest<'a> {
     #[cfg(test)]
     LineNumberMargin(TextWindowLineNumberMargin<'a>),
     RightEdgeMarkers(TextWindowRightEdgeMarkers<'a>),
+    #[cfg(test)]
     LastWindowRightBorder(TextWindowRightBorder),
 }
 
@@ -344,6 +348,7 @@ impl<'a> TextWindowRowDecorationRequest<'a> {
                     });
                 }
             }
+            #[cfg(test)]
             Self::LastWindowRightBorder(request) => {
                 builder.with_last_window_rows_mut(|rows, matrix_cols| {
                     if matrix_cols == 0 {
@@ -834,7 +839,11 @@ pub(crate) fn right_edge_marker_text_item(
     synthetic_window_marker_text_item(RIGHT_EDGE_MARKER_SOURCE_ID, text, face_id, start_offset)
 }
 
-fn right_border_text_item(text: String, face_id: u32, start_offset: usize) -> DisplayItem {
+pub(crate) fn right_border_text_item(
+    text: String,
+    face_id: u32,
+    start_offset: usize,
+) -> DisplayItem {
     synthetic_window_marker_text_item(RIGHT_BORDER_SOURCE_ID, text, face_id, start_offset)
 }
 
@@ -868,6 +877,7 @@ fn append_right_edge_marker_text(
     push_item_source_to_writer(&mut writer, &mut source);
 }
 
+#[cfg(test)]
 fn append_right_border_text(
     row: &mut GlyphRow,
     layout: &DisplayRowLayout,
@@ -916,6 +926,7 @@ fn install_right_edge_marker_into_row(
     append_right_edge_marker_text(row, &layout, marker.to_string(), face_id, source_offset);
 }
 
+#[cfg(test)]
 fn install_right_border_into_row(
     row: &mut GlyphRow,
     target_col: usize,

@@ -525,14 +525,23 @@ impl LayoutEngine {
                     .find(|info| info.window_id == params.window_id)
                     .cloned()
                 {
+                    let mut decoration_face_ids =
+                        FrameFaceIdAllocator::new(self.frame_face_id_counter);
                     WindowFrameDecorationsRenderRequest::new(
                         params,
                         &frame_params,
                         window_geometry,
                         &info,
-                        &face_resolver,
                     )
-                    .render_and_apply(&mut self.matrix_builder);
+                    .render_and_apply(
+                        &mut self.matrix_builder,
+                        ChromeRowRenderServices::new(
+                            &mut self.font_metrics,
+                            &face_resolver,
+                            &mut decoration_face_ids,
+                        ),
+                    );
+                    decoration_face_ids.finish_into(&mut self.frame_face_id_counter);
                 }
             }
 
