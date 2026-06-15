@@ -23,13 +23,13 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyInstallRenderState, BufferTextWindowBodyPassOutcome,
+    BufferTextWindowBodyInstallPublishState, BufferTextWindowBodyPassOutcome,
     BufferTextWindowBodyPassState, BufferTextWindowFinishInstallState, BufferTextWindowGeometry,
     BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
     BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
-    BufferTextWindowRenderContextsRequest, BufferTextWindowTailRequestContext,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowRedisplayPublishRequest,
+    BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
+    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -88,7 +88,6 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
-use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::window::{WindowDisplaySnapshot, WindowId};
 
 /// Bound redisplay convergence work when point begins outside the visible span.
@@ -1311,34 +1310,25 @@ impl LayoutEngine {
             return;
         }
 
-        let redisplay_positions = walk_setup.install_body(
-            BufferTextWindowBodyInstallRenderState {
+        let redisplay_positions = walk_setup.install_body_and_publish_redisplay(
+            BufferTextWindowBodyInstallPublishState {
                 builder: &mut self.matrix_builder,
                 output_emitter: &mut output_emitter,
+                evaluator,
             },
             &tail_request_context,
+            BufferTextWindowRedisplayPublishRequest::new(
+                frame_id,
+                neovm_core::window::WindowId(params.window_id as u64),
+                accessible_end_lisp_char,
+                accessible_end_emacs_byte,
+            ),
         );
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
             redisplay_positions.window_start.as_i64(),
             redisplay_positions.window_end.as_i64()
-        );
-
-        // GNU status-line percent specs read the live window state from the
-        // just-produced redisplay. Publish the authoritative window geometry
-        // before evaluating mode-line/header-line/tab-line forms so `%p/%P/%o`
-        // reflect the frame we are about to render, not stale state from the
-        // previous redisplay.
-        evaluator.publish_redisplay_window_positions(
-            frame_id,
-            neovm_core::window::WindowId(params.window_id as u64),
-            redisplay_positions.window_start,
-            LispCharPos1::from_one_based_usize(accessible_end_lisp_char),
-            EmacsBytePos::new(accessible_end_emacs_byte),
-            redisplay_positions.window_end,
-            redisplay_positions.window_end_byte,
-            redisplay_positions.window_end_vpos,
         );
 
         WindowChromeRowsRenderRequest {

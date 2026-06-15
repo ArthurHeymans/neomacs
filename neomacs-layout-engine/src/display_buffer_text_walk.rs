@@ -43,7 +43,7 @@ use crate::neovm_bridge::{
 use crate::types::WindowParams;
 use crate::window_output::{TextWindowRedisplayPositions, WindowOutputEmitter};
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::BufferId;
+use neovm_core::buffer::{BufferId, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};
 
@@ -279,6 +279,20 @@ pub(crate) struct BufferTextWindowBodyPassState<'emit> {
 pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+}
+
+pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+    pub(crate) evaluator: &'emit mut Context,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowRedisplayPublishRequest {
+    frame_id: FrameId,
+    window_id: WindowId,
+    accessible_end_lisp_char: usize,
+    accessible_end_emacs_byte: usize,
 }
 
 pub(crate) struct BufferTextWindowBodyPassOutcome {
@@ -721,6 +735,25 @@ impl BufferTextWindowWalkSetup {
             })
     }
 
+    pub(crate) fn install_body_and_publish_redisplay(
+        &mut self,
+        state: BufferTextWindowBodyInstallPublishState<'_>,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        publish_request: BufferTextWindowRedisplayPublishRequest,
+    ) -> TextWindowRedisplayPositions {
+        let redisplay_positions = self.install_body(
+            BufferTextWindowBodyInstallRenderState {
+                builder: state.builder,
+                output_emitter: state.output_emitter,
+            },
+            tail_context,
+        );
+        // GNU status-line percent specs read the live window state from the
+        // just-produced redisplay. Publish before chrome rows are evaluated.
+        publish_request.publish(state.evaluator, redisplay_positions);
+        redisplay_positions
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
@@ -828,6 +861,35 @@ impl BufferTextWindowWalkSetup {
             output_emitter,
             post_loop,
         }
+    }
+}
+
+impl BufferTextWindowRedisplayPublishRequest {
+    pub(crate) fn new(
+        frame_id: FrameId,
+        window_id: WindowId,
+        accessible_end_lisp_char: usize,
+        accessible_end_emacs_byte: usize,
+    ) -> Self {
+        Self {
+            frame_id,
+            window_id,
+            accessible_end_lisp_char,
+            accessible_end_emacs_byte,
+        }
+    }
+
+    pub(crate) fn publish(self, evaluator: &mut Context, positions: TextWindowRedisplayPositions) {
+        evaluator.publish_redisplay_window_positions(
+            self.frame_id,
+            self.window_id,
+            positions.window_start,
+            LispCharPos1::from_one_based_usize(self.accessible_end_lisp_char),
+            EmacsBytePos::new(self.accessible_end_emacs_byte),
+            positions.window_end,
+            positions.window_end_byte,
+            positions.window_end_vpos,
+        );
     }
 }
 
