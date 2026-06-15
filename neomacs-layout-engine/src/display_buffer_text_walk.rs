@@ -159,6 +159,15 @@ pub(crate) struct BufferTextWindowOutputSetup {
     pub(crate) retry_bounds: BufferTextWindowRetryBounds,
 }
 
+pub(crate) struct BufferTextWindowDefaultFacePlan {
+    face: ResolvedFace,
+    foreground: Color,
+    char_width: f32,
+    row_height: f32,
+    ascent: f32,
+    measurement_policy: DisplayRowMeasurementPolicy,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextWindowBodyInstallContext {
     matrix_window_id: u64,
@@ -1044,16 +1053,13 @@ where
 impl<'a> BufferTextWindowRenderedBody<'a> {
     pub(crate) fn retry_plan(
         &self,
-        window_id: i64,
-        window_start: i64,
-        point_charpos: i64,
-        charpos_end: i64,
+        walk_setup: &BufferTextWindowWalkSetup,
     ) -> BufferTextWindowRetryPlan {
         BufferTextWindowRetryPlan::from_post_loop(
-            window_id,
-            window_start,
-            point_charpos,
-            charpos_end,
+            self.tail_context.params.window_id,
+            self.tail_context.window_start,
+            self.tail_context.params.point_charpos().get(),
+            walk_setup.charpos,
             self.retry_bounds,
             self.post_loop,
         )
@@ -1214,6 +1220,64 @@ impl BufferTextWindowBodyInstallContext {
     }
 }
 
+impl BufferTextWindowDefaultFacePlan {
+    pub(crate) fn new(
+        face_resolver: &FaceResolver,
+        font_metrics: &mut Option<FontMetricsService>,
+        window_system: bool,
+        fallback_char_width: f32,
+        fallback_row_height: f32,
+        fallback_ascent: f32,
+    ) -> Self {
+        let face = face_resolver.default_face().clone();
+        let (char_width, row_height, ascent) = if window_system && let Some(service) = font_metrics
+        {
+            let metrics = service.font_metrics(
+                &face.font_family,
+                face.font_weight,
+                face.italic,
+                face.font_size,
+            );
+            (metrics.char_width, metrics.line_height, metrics.ascent)
+        } else {
+            (fallback_char_width, fallback_row_height, fallback_ascent)
+        };
+
+        Self {
+            foreground: Color::from_pixel(face.fg),
+            face,
+            char_width,
+            row_height,
+            ascent,
+            measurement_policy: DisplayRowMeasurementPolicy::for_frame(window_system),
+        }
+    }
+
+    pub(crate) fn face(&self) -> &ResolvedFace {
+        &self.face
+    }
+
+    pub(crate) fn foreground(&self) -> Color {
+        self.foreground
+    }
+
+    pub(crate) fn char_width(&self) -> f32 {
+        self.char_width
+    }
+
+    pub(crate) fn row_height(&self) -> f32 {
+        self.row_height
+    }
+
+    pub(crate) fn ascent(&self) -> f32 {
+        self.ascent
+    }
+
+    pub(crate) fn measurement_policy(&self) -> DisplayRowMeasurementPolicy {
+        self.measurement_policy
+    }
+}
+
 impl BufferTextWindowOutputSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn into_body_plan<'a, 'surface, B>(
@@ -1226,11 +1290,7 @@ impl BufferTextWindowOutputSetup {
         source: BufferTextWindowSource,
         params: &'a WindowParams,
         face_resolver: &'a FaceResolver,
-        measurement_policy: DisplayRowMeasurementPolicy,
-        default_resolved: &'a ResolvedFace,
-        default_face_char_width: f32,
-        default_face_ascent: f32,
-        default_face_height: f32,
+        default_face: &'a BufferTextWindowDefaultFacePlan,
         char_width: f32,
         char_height: f32,
         font_ascent: f32,
@@ -1242,7 +1302,6 @@ impl BufferTextWindowOutputSetup {
         content_x: f32,
         has_prefix: bool,
         cols: usize,
-        default_fg: Color,
         max_rows: usize,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
@@ -1256,11 +1315,11 @@ impl BufferTextWindowOutputSetup {
         let render_contexts = BufferTextWindowRenderContextsRequest::new(
             buffer,
             face_resolver,
-            measurement_policy,
-            default_resolved,
-            default_face_char_width,
-            default_face_ascent,
-            default_face_height,
+            default_face.measurement_policy(),
+            default_face.face(),
+            default_face.char_width(),
+            default_face.ascent(),
+            default_face.row_height(),
             char_width,
             char_height,
             font_ascent,
@@ -1280,7 +1339,7 @@ impl BufferTextWindowOutputSetup {
             params,
             content_x,
             has_prefix,
-            default_face_ascent,
+            default_face.ascent(),
             char_height,
             char_width,
             self.row_visibility_limit,
@@ -1292,13 +1351,13 @@ impl BufferTextWindowOutputSetup {
         let row_prelude_context =
             local_display_policy.row_prelude_context(line_number_cols, char_width, char_height);
         let initial_face_state = BufferTextWindowInitialFaceStateRequest::new(
-            measurement_policy,
-            default_resolved,
-            default_face_char_width,
+            default_face.measurement_policy(),
+            default_face.face(),
+            default_face.char_width(),
             DisplayRowFallbackMetrics::from_default_face_extents(
-                default_face_char_width,
-                default_face_height,
-                default_face_ascent,
+                default_face.char_width(),
+                default_face.row_height(),
+                default_face.ascent(),
             ),
         );
         let tail_context = BufferTextWindowTailRequestContext::new(
@@ -1316,7 +1375,7 @@ impl BufferTextWindowOutputSetup {
             cols,
             char_width,
             char_height,
-            default_fg,
+            default_face.foreground(),
             max_rows,
             self.row_limit,
             walk_setup.row_geometry_defaults,

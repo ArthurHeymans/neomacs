@@ -21,10 +21,11 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyPassState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
-    BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderedBodyChromeState, BufferTextWindowRenderedBodyFinishState,
-    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowBodyPassState, BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry,
+    BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderedBodyChromeState,
+    BufferTextWindowRenderedBodyFinishState, BufferTextWindowRenderedBodyInstallPublishState,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -48,7 +49,7 @@ use crate::display_frame_output::{
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::{DisplayRowMeasurementPolicy, insert_resolved_display_row_face};
+use crate::display_row::insert_resolved_display_row_face;
 use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
@@ -835,23 +836,15 @@ impl LayoutEngine {
         // Chrome row reservation must use the same realized face metrics as
         // the final status-line renderer, otherwise rows drift from GNU
         // redisplay when faces override font size, ascent, or box widths.
-        let default_resolved = face_resolver.default_face();
-        let default_fg = Color::from_pixel(default_resolved.fg);
-
-        let (default_face_char_w, default_face_h, default_face_ascent) = if frame_params
-            .window_system
-            && let Some(ref mut svc) = self.font_metrics
-        {
-            let m = svc.font_metrics(
-                &default_resolved.font_family,
-                default_resolved.font_weight,
-                default_resolved.italic,
-                default_resolved.font_size,
-            );
-            (m.char_width, m.line_height, m.ascent)
-        } else {
-            (char_w, char_h, font_ascent)
-        };
+        let default_face = BufferTextWindowDefaultFacePlan::new(
+            face_resolver,
+            &mut self.font_metrics,
+            frame_params.window_system,
+            char_w,
+            char_h,
+            font_ascent,
+        );
+        let default_resolved = default_face.face();
 
         tracing::debug!(
             "layout font metrics: family={:?} weight={} italic={} size={} char_w={:.2} char_h={:.2} ascent={:.2} (window char_w={:.2} char_h={:.2})",
@@ -859,9 +852,9 @@ impl LayoutEngine {
             default_resolved.font_weight,
             default_resolved.italic,
             default_resolved.font_size,
-            default_face_char_w,
-            default_face_h,
-            default_face_ascent,
+            default_face.char_width(),
+            default_face.row_height(),
+            default_face.ascent(),
             char_w,
             char_h,
         );
@@ -871,8 +864,8 @@ impl LayoutEngine {
             face_resolver,
             &mut self.font_metrics,
             char_w,
-            default_face_ascent,
-            default_face_h,
+            default_face.ascent(),
+            default_face.row_height(),
         );
         let mode_line_height = chrome_plan.mode_line_height();
         let header_line_height = chrome_plan.header_line_height();
@@ -941,7 +934,6 @@ impl LayoutEngine {
             .read_into(&buf_access, &mut self.text_buf);
         let window_start = text_source.window_start();
         let bytes_read = text_source.bytes_read();
-        let point_charpos = text_source.point_charpos();
 
         let text = if bytes_read > 0 {
             &self.text_buf[..bytes_read]
@@ -972,7 +964,6 @@ impl LayoutEngine {
         // counter per frame at `src/xfaces.c::lookup_face` /
         // `init_frame_faces`.
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let measurement_policy = DisplayRowMeasurementPolicy::for_frame(frame_params.window_system);
 
         if let Some(echo_message) = echo_message {
             // GNU `display_echo_area_1` displays the current message by
@@ -993,7 +984,7 @@ impl LayoutEngine {
                 selected: params.selected,
                 text_width,
                 char_width: char_w,
-                ascent: default_face_ascent,
+                ascent: default_face.ascent(),
                 row_height: char_h,
                 base_face: default_resolved,
                 message: echo_message,
@@ -1027,7 +1018,7 @@ impl LayoutEngine {
                 text_width,
                 row_height: char_h,
                 char_width: char_w,
-                ascent: default_face_ascent,
+                ascent: default_face.ascent(),
                 base_face: default_resolved,
             }
             .render_window(&mut MinibufferDisplayRenderState {
@@ -1056,7 +1047,7 @@ impl LayoutEngine {
             max_rows,
             char_w,
             char_h,
-            default_face_ascent,
+            default_face.ascent(),
             params.truncate_lines,
             params.hscroll,
             params.word_wrap,
@@ -1096,11 +1087,7 @@ impl LayoutEngine {
             text_source,
             params,
             face_resolver,
-            measurement_policy,
-            default_resolved,
-            default_face_char_w,
-            default_face_ascent,
-            default_face_h,
+            &default_face,
             char_w,
             char_h,
             font_ascent,
@@ -1112,7 +1099,6 @@ impl LayoutEngine {
             content_x,
             has_prefix,
             cols,
-            default_fg,
             max_rows,
             reserve_right_special_col,
             reserve_right_border_col,
@@ -1134,12 +1120,7 @@ impl LayoutEngine {
             buffer,
             &buf_access,
         );
-        let retry_plan = rendered_body.retry_plan(
-            params.window_id,
-            window_start,
-            point_charpos,
-            walk_setup.charpos,
-        );
+        let retry_plan = rendered_body.retry_plan(&walk_setup);
         retry_plan.log_visibility_adjustments();
 
         if let Some(new_window_start) = retry_plan.should_retry(remaining_visibility_retries) {
