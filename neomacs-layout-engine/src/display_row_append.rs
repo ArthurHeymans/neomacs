@@ -819,16 +819,16 @@ impl BufferTextSourceNaturalAdvanceRequest {
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
     ) -> Option<f32> {
-        measure_buffer_text_source_item_natural_advance_to_text_row(
-            state,
+        let operation = BufferTextSourceAppendOperation::for_buffer_text_item_request(
             self.source_item,
-            base_face,
             buffer_id,
             buffer,
             face_id,
+            base_face,
             frame,
             position,
-        )
+        )?;
+        operation.measure_natural_width_to_text_row(state)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4098,16 +4098,16 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRangeAppendContext<'a, B>
         range: BufferTextSourceRange,
         position: DisplayRowPosition,
     ) -> Option<f32> {
-        measure_buffer_text_source_range_natural_advance_to_text_row(
-            state,
+        let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
             range,
-            self.base_face,
             self.buffer_id,
             self.buffer,
             self.face_id,
+            self.base_face,
             self.frame.clone(),
             position,
-        )
+        )?;
+        operation.measure_natural_width_to_text_row(state)
     }
 }
 
@@ -5586,46 +5586,6 @@ impl BufferTextSourceCharAppendOutcome {
         *charpos += 1;
         word_wrap.allow_after_current_char(ch);
     }
-}
-
-#[cfg(test)]
-fn measure_buffer_text_source_range_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
-    state: &mut TextRowSourceMeasureState<'_>,
-    range: BufferTextSourceRange,
-    base_face: &ResolvedFace,
-    buffer_id: BufferId,
-    buffer: &B,
-    face_id: u32,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<f32> {
-    let operation = BufferTextSourceAppendOperation::for_buffer_text_range(
-        range, buffer_id, buffer, face_id, base_face, frame, position,
-    )?;
-    operation.measure_natural_width_to_text_row(state)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn measure_buffer_text_source_item_natural_advance_to_text_row<B: LayoutBufferView + ?Sized>(
-    state: &mut TextRowSourceMeasureState<'_>,
-    source_item: BufferTextSourceTextItemRequest,
-    base_face: &ResolvedFace,
-    buffer_id: BufferId,
-    buffer: &B,
-    face_id: u32,
-    frame: DisplayRowAppendFrame,
-    position: DisplayRowPosition,
-) -> Option<f32> {
-    let operation = BufferTextSourceAppendOperation::for_buffer_text_item_request(
-        source_item,
-        buffer_id,
-        buffer,
-        face_id,
-        base_face,
-        frame,
-        position,
-    )?;
-    operation.measure_natural_width_to_text_row(state)
 }
 
 impl BufferTextSourceAdvanceResolver {
