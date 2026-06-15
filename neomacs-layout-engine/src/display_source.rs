@@ -249,6 +249,45 @@ impl BufferTextSourceSpecialDisplay {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceChar {
+    ch: char,
+    range: BufferTextSourceRange,
+    precluster_special_display: Option<BufferTextSourceSpecialDisplay>,
+}
+
+impl BufferTextSourceChar {
+    pub(crate) fn new(ch: char, start: CharPos0, nobreak_display_policy: i32) -> Self {
+        Self {
+            ch,
+            range: BufferTextSourceRange::single_char(start),
+            precluster_special_display: BufferTextSourceSpecialDisplay::for_precluster_char(
+                ch,
+                nobreak_display_policy,
+            ),
+        }
+    }
+
+    pub(crate) fn range(&self) -> BufferTextSourceRange {
+        self.range
+    }
+
+    pub(crate) fn precluster_special_display(&self) -> Option<&BufferTextSourceSpecialDisplay> {
+        self.precluster_special_display.as_ref()
+    }
+
+    pub(crate) fn cluster_state(&self, tail: Option<(char, bool)>) -> BufferTextSourceClusterState {
+        BufferTextSourceClusterState::for_char(self.ch, tail)
+    }
+
+    pub(crate) fn cluster_special_display(
+        &self,
+        tail: Option<(char, bool)>,
+    ) -> Option<BufferTextSourceSpecialDisplay> {
+        BufferTextSourceSpecialDisplay::for_cluster_state(self.cluster_state(tail))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceTextItemRequest {
     range: BufferTextSourceRange,

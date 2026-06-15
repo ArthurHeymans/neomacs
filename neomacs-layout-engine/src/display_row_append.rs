@@ -51,9 +51,10 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringSource, BufferTextItemSource,
-    BufferTextSourceAppendItem, BufferTextSourceClusterState, BufferTextSourceItemRequest,
-    BufferTextSourceRange, BufferTextSourceSpecialDisplay, BufferTextSourceTextItemRequest,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor, SyntheticTextItemSource,
+    BufferTextSourceAppendItem, BufferTextSourceChar, BufferTextSourceClusterState,
+    BufferTextSourceItemRequest, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
+    BufferTextSourceTextItemRequest, DisplayItemSource, DisplayReplacementBox,
+    LispStringSourceCursor, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -5718,33 +5719,7 @@ impl BufferTextDecodedSourceChar {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceChar {
-    ch: char,
-    range: BufferTextSourceRange,
-    precluster_special_display: Option<BufferTextSourceSpecialDisplay>,
-}
-
 impl BufferTextSourceChar {
-    pub(crate) fn new(ch: char, start: CharPos0, nobreak_display_policy: i32) -> Self {
-        Self {
-            ch,
-            range: BufferTextSourceRange::single_char(start),
-            precluster_special_display: BufferTextSourceSpecialDisplay::for_precluster_char(
-                ch,
-                nobreak_display_policy,
-            ),
-        }
-    }
-
-    pub(crate) fn range(&self) -> BufferTextSourceRange {
-        self.range
-    }
-
-    fn precluster_special_display(&self) -> Option<&BufferTextSourceSpecialDisplay> {
-        self.precluster_special_display.as_ref()
-    }
-
     fn special_request_for_display(
         &self,
         display: BufferTextSourceSpecialDisplay,
@@ -5766,17 +5741,6 @@ impl BufferTextSourceChar {
             .filter(|display| display.is_nobreak())
             .cloned()
             .map(|display| self.special_request_for_display(display))
-    }
-
-    fn cluster_state(&self, tail: Option<(char, bool)>) -> BufferTextSourceClusterState {
-        BufferTextSourceClusterState::for_char(self.ch, tail)
-    }
-
-    fn cluster_special_display(
-        &self,
-        tail: Option<(char, bool)>,
-    ) -> Option<BufferTextSourceSpecialDisplay> {
-        BufferTextSourceSpecialDisplay::for_cluster_state(self.cluster_state(tail))
     }
 
     pub(crate) fn cluster_special_request(
