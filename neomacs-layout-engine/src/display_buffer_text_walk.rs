@@ -14,8 +14,8 @@ use crate::display_row_append::{
     BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
     BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
     BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
-    BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowBeginState, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeOutcome, BufferTextWindowTailFinalizeRequest,
     BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
     BufferTextWindowVisibilityRetryRequest, DisplayRowAppendSurface, DisplayRowPrefixRequest,
@@ -265,9 +265,25 @@ pub(crate) struct BufferTextWindowBodyRenderState<'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
+pub(crate) struct BufferTextWindowBodyPassState<'emit> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
+    pub(crate) face_resolver: &'emit FaceResolver,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
+    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
 pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit> {
     pub(crate) builder: &'emit mut GlyphMatrixBuilder,
     pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
+}
+
+pub(crate) struct BufferTextWindowBodyPassOutcome {
+    pub(crate) output_emitter: WindowOutputEmitter,
+    pub(crate) post_loop: BufferTextWindowPostLoopRenderOutcome,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -763,6 +779,55 @@ impl BufferTextWindowWalkSetup {
             buffer,
             buf_access,
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn begin_render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
+        &mut self,
+        begin_request: BufferTextWindowBeginRequest,
+        state: &mut BufferTextWindowBodyPassState<'_>,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        loop_context: BufferTextWindowLoopRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        has_overlays: bool,
+        overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
+        buffer: &B,
+        buf_access: &RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowBodyPassOutcome {
+        let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState {
+            builder: state.builder,
+            evaluator: state.evaluator,
+        });
+        let post_loop = self.render_body_and_tail(
+            &mut BufferTextWindowBodyRenderState {
+                builder: state.builder,
+                output_emitter: &mut output_emitter,
+                evaluator: state.evaluator,
+                font_metrics: state.font_metrics,
+                face_resolver: state.face_resolver,
+                line_numbers: state.line_numbers,
+                face_scan: state.face_scan,
+                active_face_state: state.active_face_state,
+                face_ids: state.face_ids,
+            },
+            row_prelude_context,
+            loop_context,
+            face_resolution_context,
+            tail_context,
+            text,
+            params,
+            has_overlays,
+            overlay_text_row_context,
+            buffer,
+            buf_access,
+        );
+        BufferTextWindowBodyPassOutcome {
+            output_emitter,
+            post_loop,
+        }
     }
 }
 

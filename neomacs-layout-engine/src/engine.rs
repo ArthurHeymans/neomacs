@@ -23,12 +23,13 @@ use super::window_output::RowMetricsSnapshot;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyInstallRenderState, BufferTextWindowBodyRenderState,
-    BufferTextWindowFinishInstallState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
-    BufferTextWindowLocalDisplayPolicy, BufferTextWindowLoopRequestContext,
-    BufferTextWindowOutputSetup, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderContexts, BufferTextWindowRenderContextsRequest,
-    BufferTextWindowTailRequestContext, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowBodyInstallRenderState, BufferTextWindowBodyPassOutcome,
+    BufferTextWindowBodyPassState, BufferTextWindowFinishInstallState, BufferTextWindowGeometry,
+    BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
+    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetup,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderContexts,
+    BufferTextWindowRenderContextsRequest, BufferTextWindowTailRequestContext,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -56,13 +57,13 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
     insert_resolved_display_row_face,
 };
+use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixValues;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
-use crate::display_row_append::{BufferTextWindowBeginState, BufferTextWindowCursorEffectsRequest};
 use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowWriter, DisplayTabPolicy, display_row_text_glyph_count,
     new_display_row,
@@ -1217,15 +1218,13 @@ impl LayoutEngine {
             tab_line_height,
         );
 
-        let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState {
-            builder: &mut self.matrix_builder,
-            evaluator,
-        });
-
-        let post_loop_outcome = walk_setup.render_body_and_tail(
-            &mut BufferTextWindowBodyRenderState {
+        let BufferTextWindowBodyPassOutcome {
+            mut output_emitter,
+            post_loop: post_loop_outcome,
+        } = walk_setup.begin_render_body_and_tail(
+            begin_request,
+            &mut BufferTextWindowBodyPassState {
                 builder: &mut self.matrix_builder,
-                output_emitter: &mut output_emitter,
                 evaluator,
                 font_metrics: &mut self.font_metrics,
                 face_resolver,
