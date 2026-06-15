@@ -926,7 +926,9 @@ fn encode_char_input(value: &Value) -> Result<i64, Flow> {
 
 fn charset_value_text(value: &Value) -> Option<String> {
     match value.kind() {
-        ValueKind::String => value.as_runtime_string_owned(),
+        ValueKind::String => value
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
         ValueKind::Symbol(id) => Some(resolve_sym(id).to_string()),
         _ => None,
     }

@@ -797,7 +797,8 @@ fn parse_zone_rule(zone: &Value) -> Result<ZoneRule, Flow> {
         },
         ValueKind::Fixnum(n) => Ok(ZoneRule::FixedOffset(n)),
         ValueKind::String => Ok(ZoneRule::TzString(
-            zone.as_runtime_string_owned()
+            zone.as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                 .expect("ValueKind::String must carry LispString payload"),
         )),
         ValueKind::Cons => {
@@ -810,7 +811,8 @@ fn parse_zone_rule(zone: &Value) -> Result<ZoneRule, Flow> {
             };
             let name = match items[1].kind() {
                 ValueKind::String => items[1]
-                    .as_runtime_string_owned()
+                    .as_lisp_string()
+                    .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                     .expect("ValueKind::String must carry LispString payload"),
                 ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
                 _ => return Err(invalid_time_zone_spec(zone)),

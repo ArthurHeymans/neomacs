@@ -793,7 +793,8 @@ fn normalized_face_name_value(value: &Value) -> Option<Value> {
         Some(face_symbol_value(name))
     } else if value.is_string() {
         value
-            .as_runtime_string_owned()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
             .map(|name| face_symbol_value(&name))
     } else {
         None
@@ -802,13 +803,19 @@ fn normalized_face_name_value(value: &Value) -> Option<Value> {
 
 impl Face {
     pub fn family_runtime_string_owned(&self) -> Option<String> {
-        self.family
-            .and_then(|value| value.as_runtime_string_owned())
+        self.family.and_then(|value| {
+            value
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        })
     }
 
     pub fn foundry_runtime_string_owned(&self) -> Option<String> {
-        self.foundry
-            .and_then(|value| value.as_runtime_string_owned())
+        self.foundry.and_then(|value| {
+            value
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        })
     }
 
     /// Compatibility constructor for existing call sites. The name is owned
@@ -1223,7 +1230,9 @@ fn parse_box_value(value: &Value) -> Option<BoxBorder> {
 }
 
 fn face_runtime_string(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn parse_color_value(value: &Value) -> Option<Color> {

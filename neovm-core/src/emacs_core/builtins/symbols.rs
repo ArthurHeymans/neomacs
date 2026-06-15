@@ -2443,9 +2443,13 @@ fn menu_bar_label(def: Value) -> Option<String> {
     let car = def.cons_car();
     let cdr = def.cons_cdr();
     if crate::emacs_core::keymap::KeymapMarker::MenuItem.is_value(car) && cdr.is_cons() {
-        return cdr.cons_car().as_runtime_string_owned();
+        return cdr
+            .cons_car()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
     }
-    car.as_runtime_string_owned()
+    car.as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn selected_frame_value(eval: &mut super::eval::Context) -> Value {

@@ -362,7 +362,8 @@ fn name_last_kbd_macro_impl(
     let name = match args[0].kind() {
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
         ValueKind::String => args[0]
-            .as_runtime_string_owned()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
             .expect("ValueKind::String must carry LispString payload"),
         other => {
             return Err(signal(

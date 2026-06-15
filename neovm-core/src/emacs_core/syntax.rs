@@ -505,12 +505,15 @@ pub fn string_to_syntax(s: &str) -> Result<SyntaxEntry, String> {
 }
 
 fn syntax_runtime_string(value: &Value) -> Result<String, Flow> {
-    value.as_runtime_string_owned().ok_or_else(|| {
-        signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )
-    })
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        .ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), *value],
+            )
+        })
 }
 
 /// Convert a `SyntaxEntry` into the Emacs cons-cell representation
