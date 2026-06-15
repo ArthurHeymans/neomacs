@@ -54,10 +54,11 @@ use crate::display_source::{
     BufferTextDecodedSourceChar, BufferTextItemSource, BufferTextLineBreakSourceEvent,
     BufferTextSourceAdvancePath, BufferTextSourceAppendItem, BufferTextSourceChar,
     BufferTextSourceClusterState, BufferTextSourceItemRequest,
-    BufferTextSourceNaturalFallbackAdvance, BufferTextSourceRange, BufferTextSourceSpecialDisplay,
-    BufferTextSourceTextEvent, BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
-    DisplayItemSource, DisplayReplacementBox, LispStringSourceCursor,
-    ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
+    BufferTextSourceRange, BufferTextSourceSpecialDisplay, BufferTextSourceTextEvent,
+    BufferTextSourceTextItemRequest, BufferTextSourceTextRequest, DisplayItemSource,
+    DisplayReplacementBox, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
+    SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -657,33 +658,7 @@ impl BufferTextSourceNaturalFallbackAdvance {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct BufferTextSourceNaturalAdvanceRequest {
-    source_item: BufferTextSourceTextItemRequest,
-    fallback: BufferTextSourceNaturalFallbackAdvance,
-}
-
 impl BufferTextSourceNaturalAdvanceRequest {
-    fn for_range_and_cluster(
-        range: BufferTextSourceRange,
-        cluster: BufferTextSourceClusterState,
-    ) -> Self {
-        Self {
-            source_item: BufferTextSourceTextItemRequest::for_range_and_cluster(range, cluster),
-            fallback: BufferTextSourceNaturalFallbackAdvance::for_cluster_state(cluster),
-        }
-    }
-
-    #[cfg(test)]
-    fn source_item(self) -> BufferTextSourceTextItemRequest {
-        self.source_item
-    }
-
-    #[cfg(test)]
-    fn fallback(self) -> BufferTextSourceNaturalFallbackAdvance {
-        self.fallback
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn measure_to_text_row<B: LayoutBufferView + ?Sized>(
         self,
@@ -696,7 +671,7 @@ impl BufferTextSourceNaturalAdvanceRequest {
         position: DisplayRowPosition,
     ) -> Option<f32> {
         let operation = BufferTextSourceAppendOperation::for_buffer_text_item_request(
-            self.source_item,
+            self.source_item(),
             buffer_id,
             buffer,
             face_id,
@@ -729,12 +704,12 @@ impl BufferTextSourceNaturalAdvanceRequest {
             return measured_width;
         }
 
-        self.fallback.resolve_to_text_row(
+        self.fallback().resolve_to_text_row(
             state.font_metrics(),
             active_face_state,
             &frame,
             position,
-            self.source_item.source_char(),
+            self.source_item().source_char(),
         )
     }
 }

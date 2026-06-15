@@ -595,6 +595,12 @@ pub(crate) enum BufferTextSourceNaturalFallbackAdvance {
     FaceColumns { columns: usize },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceNaturalAdvanceRequest {
+    source_item: BufferTextSourceTextItemRequest,
+    fallback: BufferTextSourceNaturalFallbackAdvance,
+}
+
 impl BufferTextSourceNaturalFallbackAdvance {
     pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
         let ch = cluster.ch();
@@ -607,6 +613,26 @@ impl BufferTextSourceNaturalFallbackAdvance {
                 columns: crate::composition::base_width_cols(ch) as usize,
             }
         }
+    }
+}
+
+impl BufferTextSourceNaturalAdvanceRequest {
+    pub(crate) fn for_range_and_cluster(
+        range: BufferTextSourceRange,
+        cluster: BufferTextSourceClusterState,
+    ) -> Self {
+        Self {
+            source_item: BufferTextSourceTextItemRequest::for_range_and_cluster(range, cluster),
+            fallback: BufferTextSourceNaturalFallbackAdvance::for_cluster_state(cluster),
+        }
+    }
+
+    pub(crate) fn source_item(self) -> BufferTextSourceTextItemRequest {
+        self.source_item
+    }
+
+    pub(crate) fn fallback(self) -> BufferTextSourceNaturalFallbackAdvance {
+        self.fallback
     }
 }
 
