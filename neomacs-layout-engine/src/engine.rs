@@ -10,9 +10,9 @@ use super::display_status_line::{
     ChromeRowRenderServices, EchoMinibufferDisplayRowsRequest, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
     InactiveMinibufferDisplayRowRequest, MinibufferDisplayRenderState, ResizeMiniWindowsMode,
-    ScratchGcRootScope, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
-    build_tab_bar_display, max_mini_window_lines, message_truncate_lines,
-    minibuffer_echo_message_for_window, minibuffer_resize_line_count,
+    ScratchGcRootScope, WindowChromeRowsRenderRequest, build_tab_bar_display,
+    max_mini_window_lines, message_truncate_lines, minibuffer_echo_message_for_window,
+    minibuffer_resize_line_count,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -24,8 +24,9 @@ use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyPassState, BufferTextWindowGeometry, BufferTextWindowGeometryRequest,
     BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRedisplayPublishRequest, BufferTextWindowRenderedBodyFinishState,
-    BufferTextWindowRenderedBodyInstallPublishState, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRedisplayPublishRequest, BufferTextWindowRenderedBodyChromeState,
+    BufferTextWindowRenderedBodyFinishState, BufferTextWindowRenderedBodyInstallPublishState,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -1246,30 +1247,31 @@ impl LayoutEngine {
             redisplay_positions.window_end.as_i64()
         );
 
-        WindowChromeRowsRenderRequest {
-            params,
-            tab_line_face: tab_line_face.as_ref(),
-            header_line_face: header_line_face.as_ref(),
-            mode_line_face: mode_line_face.as_ref(),
-            tab_line_height,
-            header_line_height,
-            mode_line_height,
-            mode_line_matrix_row,
-            reserve_right_border_col,
-            char_width: char_w,
-            font_ascent,
-            buffer_name: &buffer_name,
-        }
-        .render(&mut WindowChromeRowsRenderState {
-            builder: &mut self.matrix_builder,
-            evaluator,
-            output_emitter: rendered_body.output_emitter_mut(),
-            render_services: ChromeRowRenderServices::new(
-                &mut self.font_metrics,
-                face_resolver,
-                &mut face_ids,
-            ),
-        });
+        rendered_body.render_chrome_rows(
+            WindowChromeRowsRenderRequest {
+                params,
+                tab_line_face: tab_line_face.as_ref(),
+                header_line_face: header_line_face.as_ref(),
+                mode_line_face: mode_line_face.as_ref(),
+                tab_line_height,
+                header_line_height,
+                mode_line_height,
+                mode_line_matrix_row,
+                reserve_right_border_col,
+                char_width: char_w,
+                font_ascent,
+                buffer_name: &buffer_name,
+            },
+            BufferTextWindowRenderedBodyChromeState {
+                builder: &mut self.matrix_builder,
+                evaluator,
+                render_services: ChromeRowRenderServices::new(
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut face_ids,
+                ),
+            },
+        );
 
         rendered_body.finish_window_and_install(
             &mut walk_setup,

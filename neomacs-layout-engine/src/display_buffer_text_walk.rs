@@ -34,6 +34,9 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
+use crate::display_status_line::{
+    ChromeRowRenderServices, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
+};
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -326,6 +329,12 @@ pub(crate) struct BufferTextWindowRenderedBodyFinishState<'a> {
     pub(crate) evaluator: &'a mut Context,
     pub(crate) hit_data: &'a mut Vec<WindowHitData>,
     pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+}
+
+pub(crate) struct BufferTextWindowRenderedBodyChromeState<'emit, 'face> {
+    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
+    pub(crate) evaluator: &'emit mut Context,
+    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1039,8 +1048,17 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         )
     }
 
-    pub(crate) fn output_emitter_mut(&mut self) -> &mut WindowOutputEmitter {
-        &mut self.output_emitter
+    pub(crate) fn render_chrome_rows(
+        &mut self,
+        request: WindowChromeRowsRenderRequest<'_, '_>,
+        state: BufferTextWindowRenderedBodyChromeState<'_, '_>,
+    ) {
+        request.render(&mut WindowChromeRowsRenderState {
+            builder: state.builder,
+            evaluator: state.evaluator,
+            output_emitter: &mut self.output_emitter,
+            render_services: state.render_services,
+        });
     }
 
     pub(crate) fn finish_window_and_install(
