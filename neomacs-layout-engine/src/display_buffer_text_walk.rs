@@ -749,6 +749,41 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
         }
     }
 
+    pub(crate) fn from_window_geometry(
+        source: BufferTextWindowSource,
+        params: &'a WindowParams,
+        geometry: &BufferTextWindowGeometry,
+        local_display_policy: &BufferTextWindowLocalDisplayPolicy,
+        default_face: &BufferTextWindowDefaultFacePlan,
+        reserve_right_border_col: bool,
+        reserve_right_special_col: bool,
+    ) -> Self {
+        Self::new(
+            source.window_start(),
+            geometry.content_x,
+            geometry.text_x,
+            geometry.text_width,
+            geometry.text_y,
+            params.bounds.y,
+            geometry.line_number_pixel_width,
+            geometry.max_rows,
+            geometry.char_width,
+            geometry.char_height,
+            default_face.ascent(),
+            params.truncate_lines,
+            params.hscroll,
+            params.word_wrap,
+            local_display_policy.has_prefix(),
+            local_display_policy.has_line_default_prefix(),
+            reserve_right_border_col,
+            reserve_right_special_col,
+            params.tab_width,
+            &params.tab_stop_list,
+            params.show_trailing_whitespace,
+            params.trailing_ws_bg,
+        )
+    }
+
     pub(crate) fn into_setup(self) -> BufferTextWindowWalkSetup {
         let row_geometry_defaults = DisplayRowGeometryDefaults::new(
             self.text_y,
@@ -1239,6 +1274,28 @@ impl BufferTextWindowOutputSetupRequest {
         }
     }
 
+    pub(crate) fn from_window_geometry(
+        frame_id: FrameId,
+        window_id: WindowId,
+        params: &WindowParams,
+        geometry: &BufferTextWindowGeometry,
+    ) -> Self {
+        Self::new(
+            frame_id,
+            window_id,
+            params.window_id as u64,
+            geometry.text_matrix_row_base,
+            geometry.text_matrix_rows,
+            geometry.bottom_chrome_rows,
+            geometry.cols,
+            params.bounds,
+            params.text_bounds,
+            params.selected,
+            geometry.text_y,
+            geometry.text_height,
+        )
+    }
+
     pub(crate) fn into_setup(
         self,
         max_rows: usize,
@@ -1392,7 +1449,6 @@ impl BufferTextWindowOutputSetup {
         window_system: bool,
         matrix_window_id: u64,
         append_surface: &'surface DisplayRowAppendSurface,
-        has_prefix: bool,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
     ) -> BufferTextWindowBodyPlan<'a, 'surface, B>
@@ -1425,7 +1481,7 @@ impl BufferTextWindowOutputSetup {
             source.point_charpos(),
             params,
             geometry.content_x,
-            has_prefix,
+            local_display_policy.has_prefix(),
             default_face.ascent(),
             geometry.char_height,
             geometry.char_width,

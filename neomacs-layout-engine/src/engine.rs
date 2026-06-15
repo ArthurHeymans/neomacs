@@ -21,7 +21,7 @@ use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyPassState, BufferTextWindowChromeHeights,
-    BufferTextWindowContentRowsRequest, BufferTextWindowDefaultFacePlan, BufferTextWindowGeometry,
+    BufferTextWindowContentRowsRequest, BufferTextWindowDefaultFacePlan,
     BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
     BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
     BufferTextWindowRenderedBodyChromeState, BufferTextWindowRenderedBodyFinishState,
@@ -823,7 +823,6 @@ impl LayoutEngine {
         let char_h = params.char_height;
         let font_ascent = params.font_ascent;
         let local_display_policy = BufferTextWindowLocalDisplayPolicy::from_buffer(buffer);
-        let has_prefix = local_display_policy.has_prefix();
 
         // Use face_resolver's default face for this window.
         // Chrome row reservation must use the same realized face metrics as
@@ -885,30 +884,14 @@ impl LayoutEngine {
             BufferTextWindowContentRowsRequest::new(params, frame_params.height, char_h),
             evaluator,
         );
-        let BufferTextWindowGeometry {
-            text_x,
-            text_y,
-            text_width,
-            text_height,
-            max_rows,
-            text_matrix_row_base,
-            text_matrix_rows,
-            bottom_chrome_rows,
-            mode_line_matrix_row,
-            cols,
-            line_number_pixel_width: lnum_pixel_width,
-            content_x,
-            ..
-        } = geometry;
 
         // GNU Emacs redisplay advances iterators until the visible window is
         // fully resolved; it does not stop at an arbitrary "rows * cols"
         // character budget.  Capping the text slice here truncates long
         // wrapped or truncated lines before they are actually offscreen, which
         // breaks both redisplay and geometry queries.
-        let text_source = BufferTextWindowSourceReadRequest::new(params, max_rows)
+        let text_source = BufferTextWindowSourceReadRequest::new(params, geometry.max_rows)
             .read_into(&buf_access, &mut self.text_buf);
-        let window_start = text_source.window_start();
         let bytes_read = text_source.bytes_read();
 
         let text = if bytes_read > 0 {
@@ -922,13 +905,13 @@ impl LayoutEngine {
         tracing::debug!(
             "  layout_window_rust id={}: text_y={:.1} text_h={:.1} max_rows={} bytes_read={}",
             params.window_id,
-            text_y,
-            text_height,
-            max_rows,
+            geometry.text_y,
+            geometry.text_height,
+            geometry.max_rows,
             bytes_read
         );
 
-        if text_height <= 0.0 || text_width <= 0.0 {
+        if geometry.text_height <= 0.0 || geometry.text_width <= 0.0 {
             return;
         }
 
@@ -945,7 +928,7 @@ impl LayoutEngine {
             evaluator,
             params,
             frame_params,
-            text_width,
+            geometry.text_width,
             char_w,
             char_h,
             default_face.ascent(),
@@ -966,47 +949,21 @@ impl LayoutEngine {
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;
-        let mut walk_setup = BufferTextWindowWalkSetupRequest::new(
-            window_start,
-            content_x,
-            text_x,
-            text_width,
-            text_y,
-            params.bounds.y,
-            lnum_pixel_width,
-            max_rows,
-            char_w,
-            char_h,
-            default_face.ascent(),
-            params.truncate_lines,
-            params.hscroll,
-            params.word_wrap,
-            has_prefix,
-            local_display_policy.has_line_default_prefix(),
+        let mut walk_setup = BufferTextWindowWalkSetupRequest::from_window_geometry(
+            text_source,
+            params,
+            &geometry,
+            &local_display_policy,
+            &default_face,
             reserve_right_border_col,
             reserve_right_special_col,
-            params.tab_width,
-            &params.tab_stop_list,
-            params.show_trailing_whitespace,
-            params.trailing_ws_bg,
         )
         .into_setup();
         let text_append_surface = walk_setup.text_append_surface.clone();
-        let output_setup = BufferTextWindowOutputSetupRequest::new(
-            frame_id,
-            window_id,
-            params.window_id as u64,
-            text_matrix_row_base,
-            text_matrix_rows,
-            bottom_chrome_rows,
-            cols,
-            params.bounds,
-            params.text_bounds,
-            params.selected,
-            text_y,
-            text_height,
+        let output_setup = BufferTextWindowOutputSetupRequest::from_window_geometry(
+            frame_id, window_id, params, &geometry,
         )
-        .into_setup(max_rows, &walk_setup);
+        .into_setup(geometry.max_rows, &walk_setup);
 
         let body_plan = output_setup.into_body_plan(
             &walk_setup,
@@ -1024,7 +981,6 @@ impl LayoutEngine {
             frame_params.window_system,
             params.window_id as u64,
             &text_append_surface,
-            has_prefix,
             reserve_right_special_col,
             reserve_right_border_col,
         );
@@ -1084,7 +1040,7 @@ impl LayoutEngine {
         rendered_body.render_chrome_rows(
             chrome_plan.render_request(
                 params,
-                mode_line_matrix_row,
+                geometry.mode_line_matrix_row,
                 reserve_right_border_col,
                 char_w,
                 font_ascent,
