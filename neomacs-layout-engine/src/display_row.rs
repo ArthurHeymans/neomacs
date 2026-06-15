@@ -1860,7 +1860,6 @@ pub(crate) struct DisplayRowSourceAppendRequest<'face> {
     request: DisplayRowSourceRenderRequest<'face>,
     output: TextRowOutput,
     start: DisplayRowPosition,
-    base_face_id: u32,
 }
 
 pub(crate) struct DisplayRowCurrentTextRenderState<'face, 'emit> {
@@ -1915,13 +1914,11 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         request: DisplayRowSourceRenderRequest<'face>,
         output: TextRowOutput,
         start: DisplayRowPosition,
-        base_face_id: u32,
     ) -> Self {
         Self {
             request,
             output,
             start,
-            base_face_id,
         }
     }
 
@@ -1946,15 +1943,16 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             glyph_y: policy.glyph_y,
             height: policy.output_height,
         };
-        Self::new(request, output, position, base_face_id)
+        Self::new(request, output, position)
     }
 
     pub(crate) fn start_position(&self) -> DisplayRowPosition {
         self.start
     }
 
+    #[cfg(test)]
     pub(crate) fn base_face_id(&self) -> u32 {
-        self.base_face_id
+        self.request.base_face_id()
     }
 
     #[cfg(test)]
