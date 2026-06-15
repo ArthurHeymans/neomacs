@@ -4398,7 +4398,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         );
         let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
         let mut source_state = DisplayRowSourceState::default();
-        DisplayRowItemSourceRenderRequest::new(
+        DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
             DisplayRowSourceRequestPolicy::from_display_row_geometry(
                 DisplayRowGeometry {
                     y: 0.0,
@@ -4409,12 +4409,13 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
                     tab_policy: DisplayTabPolicy::every(8),
                 },
                 GlyphRowRole::Text,
-            )
-            .source_request_for_base_face_id(7, &base_face)
-            .with_render_bounds(DisplayRowRenderBounds {
+            ),
+            7,
+            &base_face,
+            DisplayRowRenderBounds {
                 start: DisplayRowPosition { x_px: 16.0, col: 2 },
                 max_x_px: 160.0,
-            }),
+            },
         )
         .render_fragment_step_with_display_host(
             &mut renderer,

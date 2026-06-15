@@ -79,17 +79,16 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
     )
     .with_symbol_values(symbol_values)
     .into_source_request_policy();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
-    let request = policy.source_request_from_base_face(&mut face_ids, &base_face);
+    let geometry = policy.geometry();
 
-    assert_eq!(request.role(), GlyphRowRole::ModeLine);
-    assert_eq!(request.geometry().y, 3.0);
-    assert_eq!(request.geometry().width, 80.0);
-    assert_eq!(request.geometry().height, 16.0);
-    assert_eq!(request.geometry().char_width, 8.0);
-    assert_eq!(request.geometry().ascent, 12.0);
+    assert_eq!(policy.role(), GlyphRowRole::ModeLine);
+    assert_eq!(geometry.y, 3.0);
+    assert_eq!(geometry.width, 80.0);
+    assert_eq!(geometry.height, 16.0);
+    assert_eq!(geometry.char_width, 8.0);
+    assert_eq!(geometry.ascent, 12.0);
     assert_eq!(
-        request.symbol_values().get("align-to").copied(),
+        policy.symbol_values().get("align-to").copied(),
         Some(align_value)
     );
 }

@@ -1275,7 +1275,7 @@ pub(crate) struct DisplayRowLispStringSourceSessionRowRequest<'a> {
 }
 
 impl<'a> DisplayRowLispStringRenderRequest<'a> {
-    pub(crate) fn new(row_request: DisplayRowSourceRenderRequest<'a>, value: Value) -> Self {
+    fn new(row_request: DisplayRowSourceRenderRequest<'a>, value: Value) -> Self {
         Self { row_request, value }
     }
 
@@ -1338,8 +1338,22 @@ impl<'a> DisplayRowLispStringRenderRequest<'a> {
 }
 
 impl<'a> DisplayRowItemSourceRenderRequest<'a> {
-    pub(crate) fn new(row_request: DisplayRowSourceRenderRequest<'a>) -> Self {
+    fn new(row_request: DisplayRowSourceRenderRequest<'a>) -> Self {
         Self { row_request }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_base_face_id_policy_with_render_bounds(
+        policy: DisplayRowSourceRequestPolicy,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        render_bounds: DisplayRowRenderBounds,
+    ) -> Self {
+        Self::new(
+            policy
+                .source_request_for_base_face_id(base_face_id, base_face)
+                .with_render_bounds(render_bounds),
+        )
     }
 
     fn into_render_plan(self) -> DisplayRowRenderPlan<'a> {
@@ -1774,7 +1788,22 @@ impl DisplayRowSourceRequestPolicy {
         self
     }
 
-    pub(crate) fn source_request_from_base_face<'face>(
+    #[cfg(test)]
+    pub(crate) fn role(&self) -> GlyphRowRole {
+        self.role
+    }
+
+    #[cfg(test)]
+    pub(crate) fn geometry(&self) -> DisplayRowGeometry {
+        self.geometry.clone().into_geometry()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn symbol_values(&self) -> &std::collections::HashMap<String, Value> {
+        &self.symbol_values
+    }
+
+    fn source_request_from_base_face<'face>(
         self,
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &'face ResolvedFace,
@@ -1787,7 +1816,7 @@ impl DisplayRowSourceRequestPolicy {
         )
     }
 
-    pub(crate) fn source_request_for_base_face_id<'face>(
+    fn source_request_for_base_face_id<'face>(
         self,
         base_face_id: u32,
         base_face: &'face ResolvedFace,
@@ -2107,7 +2136,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
+    fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
         self.render_bounds = render_bounds;
         self
     }
