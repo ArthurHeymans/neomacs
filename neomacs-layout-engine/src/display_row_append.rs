@@ -5742,12 +5742,6 @@ impl BufferTextSourceItemRequest {
         self.item.append_kind()
     }
 
-    fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
-        self.item
-            .fallback_width_policy()
-            .width_px(fallback_char_width)
-    }
-
     fn into_display_item_kind(self) -> DisplayItemKind {
         self.item.into_display_item_kind()
     }
@@ -8990,6 +8984,27 @@ impl BufferTextSourceFallbackWidthPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct BufferTextSourceFallbackWidthResolver {
+    char_width: f32,
+}
+
+impl BufferTextSourceFallbackWidthResolver {
+    fn for_frame(frame: &DisplayRowAppendFrame) -> Self {
+        Self {
+            char_width: frame.geometry.char_width,
+        }
+    }
+
+    fn width_for_request(self, request: &BufferTextSourceItemRequest) -> f32 {
+        self.width_for_item(&request.item)
+    }
+
+    fn width_for_item(self, item: &BufferTextSourceAppendItem) -> f32 {
+        item.fallback_width_policy().width_px(self.char_width)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextSourceClusterState {
     ch: char,
@@ -9133,7 +9148,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width = source_item.fallback_width_px(self.frame.geometry.char_width);
+        let fallback_width = BufferTextSourceFallbackWidthResolver::for_frame(&self.frame)
+            .width_for_request(&source_item);
         self.measure_source_request_width_to_text_row(state, source_item, position)
             .unwrap_or(fallback_width)
     }

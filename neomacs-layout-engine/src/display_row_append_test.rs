@@ -6888,7 +6888,14 @@ fn buffer_text_source_char_names_cluster_policy() {
 }
 
 #[test]
-fn buffer_text_source_append_item_names_fallback_width_policy() {
+fn buffer_text_source_fallback_width_resolver_names_policy_and_pixels() {
+    let resolver = BufferTextSourceFallbackWidthResolver { char_width: 8.0 };
+    let empty_source_mapped = BufferTextSourceAppendItem::SourceMappedText { text: "".into() };
+    let glyphless = BufferTextSourceAppendItem::Glyphless {
+        ch: '\u{200E}',
+        method: GlyphlessMethod::ZeroWidth,
+    };
+
     assert_eq!(
         BufferTextSourceAppendItem::ControlChar { ch: '\u{0001}' }.fallback_width_policy(),
         BufferTextSourceFallbackWidthPolicy::Columns(2)
@@ -6897,19 +6904,20 @@ fn buffer_text_source_append_item_names_fallback_width_policy() {
         BufferTextSourceAppendItem::SourceMappedText { text: "\\ ".into() }.fallback_width_policy(),
         BufferTextSourceFallbackWidthPolicy::Columns(2)
     );
+    assert_eq!(resolver.width_for_item(&empty_source_mapped), 8.0);
+    assert_eq!(resolver.width_for_item(&glyphless), 8.0);
     assert_eq!(
-        BufferTextSourceAppendItem::SourceMappedText { text: "".into() }
-            .fallback_width_policy()
-            .width_px(8.0),
+        resolver.width_for_request(&BufferTextSourceItemRequest::new(
+            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(0)),
+            empty_source_mapped,
+        )),
         8.0
     );
     assert_eq!(
-        BufferTextSourceAppendItem::Glyphless {
-            ch: '\u{200E}',
-            method: GlyphlessMethod::ZeroWidth,
-        }
-        .fallback_width_policy()
-        .width_px(8.0),
+        resolver.width_for_request(&BufferTextSourceItemRequest::new(
+            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+            glyphless,
+        )),
         8.0
     );
 }
