@@ -1586,7 +1586,7 @@ fn lisp_directory_file_name(
     file_name_lisp_from_bytes(bytes[..trimmed_len].to_vec(), filename.is_multibyte())
 }
 
-fn expand_file_name_lisp(
+pub(crate) fn expand_file_name_lisp(
     name: &crate::heap_types::LispString,
     default_directory: Option<&crate::heap_types::LispString>,
 ) -> crate::heap_types::LispString {
@@ -2484,7 +2484,7 @@ fn implicit_default_directory_value_for_expand_file_name(eval: &mut Context) -> 
     builtin_expand_file_name(eval, vec![value, absdir])
 }
 
-fn resolve_filename_lisp_in_state(
+pub(crate) fn resolve_filename_lisp_in_state(
     obarray: &Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
     buffers: &crate::buffer::BufferManager,

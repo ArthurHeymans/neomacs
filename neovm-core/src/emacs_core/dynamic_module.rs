@@ -1757,8 +1757,12 @@ unsafe extern "C" fn module_get_environment(rt: *mut emacs_runtime) -> *mut emac
 // module-load entry point
 // ============================================================================
 
-pub fn load_module(ctx: &mut Context, path_str: String) -> EvalResult {
-    let lib = unsafe { Library::new(&path_str) }.map_err(|e| {
+pub fn load_module(ctx: &mut Context, path: std::path::PathBuf) -> EvalResult {
+    // Load the shared library from the byte-faithful path (eight-bit-safe on
+    // Unix); `path_str` is a display form used only for error text and the
+    // already-loaded registry key (module paths are ASCII in practice).
+    let path_str = path.display().to_string();
+    let lib = unsafe { Library::new(&path) }.map_err(|e| {
         signal(
             "module-open-failed",
             vec![Value::string(&path_str), Value::string(&e.to_string())],

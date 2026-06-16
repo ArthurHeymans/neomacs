@@ -43,7 +43,7 @@ pub(super) struct FileWatch {
 pub(super) trait FileNotifyBackend {
     fn allocated_p(&self) -> bool;
     fn watch_list(&self) -> Vec<FileWatch>;
-    fn add_watch(&mut self, filename: &str) -> Result<FileNotifyWatchDescriptor, Flow>;
+    fn add_watch(&mut self, path: &std::path::Path) -> Result<FileNotifyWatchDescriptor, Flow>;
     fn remove_watch(&mut self, descriptor: &FileNotifyWatchDescriptor) -> Result<bool, Flow>;
     fn valid_p(&self, descriptor: &FileNotifyWatchDescriptor) -> bool;
 }
@@ -203,12 +203,12 @@ pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_inotify_add_watch(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-add-watch", &args, 3)?;
-    let filename = expect_strict_string(&args[0])?;
+    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
     validate_inotify_aspect(args[1])?;
 
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        let descriptor = state.backend.add_watch(&filename)?;
+        let descriptor = state.backend.add_watch(&path)?;
         Ok(descriptor.to_lisp())
     })
 }

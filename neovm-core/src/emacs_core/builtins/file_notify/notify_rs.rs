@@ -57,15 +57,14 @@ impl FileNotifyBackend for NotifyRsInotifyBackend {
         self.watches.clone()
     }
 
-    fn add_watch(&mut self, filename: &str) -> Result<FileNotifyWatchDescriptor, Flow> {
+    fn add_watch(&mut self, path: &std::path::Path) -> Result<FileNotifyWatchDescriptor, Flow> {
         self.ensure_watcher()?;
 
-        let path = std::path::Path::new(filename);
         if !path.exists() {
             return Err(file_notify_error(
                 "Could not add watch for file",
                 Some("No such file or directory".to_string()),
-                Some(Value::string(filename)),
+                Some(Value::string(path.display().to_string())),
             ));
         }
         if let Some(ref mut watcher) = self.watcher {
@@ -75,7 +74,7 @@ impl FileNotifyBackend for NotifyRsInotifyBackend {
                     file_notify_error(
                         "Could not add watch for file",
                         Some(e.to_string()),
-                        Some(Value::string(filename)),
+                        Some(Value::string(path.display().to_string())),
                     )
                 })?;
         }
@@ -85,7 +84,7 @@ impl FileNotifyBackend for NotifyRsInotifyBackend {
         self.watches.push(FileWatch {
             id,
             generation: descriptor.generation(),
-            path: filename.to_owned(),
+            path: path.display().to_string(),
         });
 
         Ok(descriptor)

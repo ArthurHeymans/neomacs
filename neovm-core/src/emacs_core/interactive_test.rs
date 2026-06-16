@@ -1575,7 +1575,8 @@ fn this_command_keys_empty() {
 fn this_command_keys_after_set() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    ev.set_this_command_keys_from_string("ab").unwrap();
+    ev.set_this_command_keys_from_string(&crate::heap_types::LispString::from_utf8("ab"))
+        .unwrap();
     let result = builtin_this_command_keys(&mut ev, vec![]).unwrap();
     assert_eq!(result.as_utf8_str(), Some("ab"));
 }
@@ -1592,7 +1593,8 @@ fn this_command_keys_vector_empty() {
 fn this_command_keys_vector_after_set() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    ev.set_this_command_keys_from_string("x").unwrap();
+    ev.set_this_command_keys_from_string(&crate::heap_types::LispString::from_utf8("x"))
+        .unwrap();
     let result = builtin_this_command_keys_vector(&mut ev, vec![]).unwrap();
     if result.is_vector() {
         let v = result.as_vector_data().unwrap().clone();
@@ -1702,8 +1704,10 @@ fn set_this_command_keys_clears_raw_sequence_history() {
         vec![Value::fixnum('q' as i64)],
         vec![Value::fixnum('z' as i64)],
     );
-    ev.set_this_command_keys_from_string("\u{00f8}foo\r")
-        .unwrap();
+    ev.set_this_command_keys_from_string(&crate::heap_types::LispString::from_utf8(
+        "\u{00f8}foo\r",
+    ))
+    .unwrap();
 
     let translated = builtin_this_command_keys_vector(&mut ev, vec![]).unwrap();
     let raw = builtin_this_single_command_raw_keys(&mut ev, vec![]).unwrap();

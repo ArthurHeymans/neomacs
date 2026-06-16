@@ -1,6 +1,5 @@
 use super::{
-    EvalResult, Value, ValueKind, expect_args, expect_lisp_string, expect_range_args,
-    expect_strict_string, signal,
+    EvalResult, Value, ValueKind, expect_args, expect_lisp_string, expect_range_args, signal,
 };
 use crate::emacs_core::tls::format_x509_certificate_pem;
 use crate::emacs_core::value::list_to_vec;

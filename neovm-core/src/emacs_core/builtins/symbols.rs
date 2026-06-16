@@ -2660,7 +2660,7 @@ pub(crate) fn builtin_open_dribble_file(
         eval.command_loop.keyboard.kboard.close_dribble_file();
         return Ok(Value::NIL);
     }
-    let path = expect_strict_string(&args[0])?;
+    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
     if let Err(err) = eval.command_loop.keyboard.kboard.open_dribble_file(&path) {
         return Err(signal(
             "file-error",
@@ -3009,8 +3009,8 @@ pub(crate) fn builtin_set_this_command_keys(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set--this-command-keys", &args, 1)?;
-    let keys = expect_strict_string(&args[0])?;
-    eval.set_this_command_keys_from_string(&keys)?;
+    let keys = expect_lisp_string(&args[0])?;
+    eval.set_this_command_keys_from_string(keys)?;
     Ok(Value::NIL)
 }
 
@@ -5279,7 +5279,7 @@ pub(crate) fn builtin_module_load(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("module-load", &args, 1)?;
-    let path = expect_strict_string(&args[0])?;
+    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
     super::super::dynamic_module::load_module(ctx, path)
 }
 
@@ -5314,13 +5314,14 @@ pub(crate) fn builtin_dump_emacs_portable(
         ));
     }
 
-    let path = expect_strict_string(&args[0])?;
-    let expanded_path = crate::emacs_core::fileio::expand_file_name(
-        &path,
-        crate::emacs_core::fileio::default_directory_in_state(&ctx.obarray, &[], &ctx.buffers)
-            .as_deref(),
+    let expanded_lisp = crate::emacs_core::fileio::expand_file_name_lisp(
+        expect_lisp_string(&args[0])?,
+        crate::emacs_core::fileio::default_directory_lisp_in_state(&ctx.obarray, &[], &ctx.buffers)
+            .as_ref(),
     );
-    let dump_path = std::path::Path::new(&expanded_path);
+    let dump_path_buf = crate::emacs_core::fileio::lisp_file_name_to_path_buf(&expanded_lisp);
+    let dump_path = dump_path_buf.as_path();
+    let expanded_path = dump_path.display().to_string();
     let is_final_dump = dump_path
         .file_name()
         .and_then(|name| name.to_str())

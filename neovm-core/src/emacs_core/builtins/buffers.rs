@@ -178,10 +178,8 @@ pub(crate) fn expect_integer_or_marker_in_buffers(
     crate::emacs_core::position::fix_position_with_buffers(buffers, value)
 }
 
-fn canonicalize_or_self(path: &str) -> String {
-    std::fs::canonicalize(path)
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| path.to_string())
+fn canonicalize_or_self(path: &std::path::Path) -> std::path::PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 pub(crate) fn run_buffer_list_update_hook(eval: &mut super::eval::Context) -> EvalResult {
@@ -420,25 +418,34 @@ pub(crate) fn builtin_get_file_buffer(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("get-file-buffer", &args, 1)?;
-    let filename = expect_string(&args[0])?;
-    let resolved =
-        super::fileio::resolve_filename_in_state(&eval.obarray, &[], &eval.buffers, &filename);
-    let resolved_true = canonicalize_or_self(&resolved);
+    let resolved = super::fileio::resolve_filename_lisp_in_state(
+        &eval.obarray,
+        &[],
+        &eval.buffers,
+        expect_lisp_string(&args[0])?,
+    );
+    let resolved_path = super::fileio::lisp_file_name_to_path_buf(&resolved);
+    let resolved_true = canonicalize_or_self(&resolved_path);
 
     for id in eval.buffers.buffer_list() {
         let Some(buf) = eval.buffers.get(id) else {
             continue;
         };
-        let Some(file_name) = buf.file_name_runtime_string_owned() else {
+        let Some(file_name) = buf.file_name_lisp_string() else {
             continue;
         };
 
-        let candidate =
-            super::fileio::resolve_filename_in_state(&eval.obarray, &[], &eval.buffers, &file_name);
+        let candidate = super::fileio::resolve_filename_lisp_in_state(
+            &eval.obarray,
+            &[],
+            &eval.buffers,
+            file_name,
+        );
         if candidate == resolved {
             return Ok(Value::make_buffer(id));
         }
-        if canonicalize_or_self(&candidate) == resolved_true {
+        let candidate_path = super::fileio::lisp_file_name_to_path_buf(&candidate);
+        if canonicalize_or_self(&candidate_path) == resolved_true {
             return Ok(Value::make_buffer(id));
         }
     }

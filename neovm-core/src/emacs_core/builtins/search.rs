@@ -1775,7 +1775,6 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     }
 
     let newtext_lisp = expect_lisp_string(&args[0])?;
-    let newtext = expect_strict_string(&args[0])?;
     let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());
     let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
     let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);

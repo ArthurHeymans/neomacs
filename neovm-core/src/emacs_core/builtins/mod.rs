@@ -547,18 +547,6 @@ pub(crate) use treesit::*;
 // Helpers
 // ===========================================================================
 
-pub(super) fn expect_string(value: &Value) -> Result<String, Flow> {
-    match value.kind() {
-        ValueKind::String => Ok(value
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload")),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )),
-    }
-}
-
 pub(super) fn expect_lisp_string(
     value: &Value,
 ) -> Result<&'static crate::heap_types::LispString, Flow> {
@@ -595,18 +583,6 @@ pub(super) fn expect_string_comparison_operand(
                     vec![Value::symbol("stringp"), *value],
                 )
             }),
-    }
-}
-
-pub(super) fn expect_strict_string(value: &Value) -> Result<String, Flow> {
-    match value.kind() {
-        ValueKind::String => Ok(value
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload")),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )),
     }
 }
 

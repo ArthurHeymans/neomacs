@@ -1033,7 +1033,7 @@ impl KBoard {
     ///   if (! dribble) report_file_error ("Opening dribble", file);
     ///
     /// Keyboard audit Finding 11.
-    pub fn open_dribble_file(&mut self, path: &str) -> std::io::Result<()> {
+    pub fn open_dribble_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
         self.close_dribble_file();
         let file = std::fs::OpenOptions::new()
             .create(true)
@@ -5409,7 +5409,7 @@ impl crate::emacs_core::eval::Context {
 
     pub(crate) fn set_this_command_keys_from_string(
         &mut self,
-        keys: &str,
+        keys: &LispString,
     ) -> Result<(), crate::emacs_core::error::Flow> {
         let key_bytes = keys.as_bytes();
         let mut translated = Vec::new();
@@ -5419,11 +5419,8 @@ impl crate::emacs_core::eval::Context {
             let (mut code, len) = crate::emacs_core::emacs_char::string_char(&key_bytes[pos..]);
             // Match GNU `keyboard.c:12239-12252`: byte8 chars are normalized
             // back to raw 8-bit bytes before the `M-x` special case runs.
-            if (0xE080..=0xE0FF).contains(&code) {
-                code = (code - 0xE000) as u8 as u32;
-            } else if (0xE300..=0xE3FF).contains(&code) {
-                // Unibyte sentinel: raw byte value
-                code = (code - 0xE300) as u32;
+            if crate::emacs_core::emacs_char::char_byte8_p(code) {
+                code = crate::emacs_core::emacs_char::char_to_byte8(code) as u32;
             }
             let event = if idx == 0 && code == 248 {
                 Value::fixnum(('x' as i64) | KEY_CHAR_META)
