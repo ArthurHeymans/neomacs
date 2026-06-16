@@ -962,9 +962,9 @@ fn mode_line_string_char_codes(string: &crate::heap_types::LispString) -> Vec<u3
     }
 }
 
-/// Build the final mode-line `LispString` from accumulated character codes,
-/// mirroring `runtime_string_to_lisp_string`: a multibyte result encodes each
-/// code via `char_string`, a unibyte result maps each code straight to a byte.
+/// Build the final mode-line `LispString` from accumulated character codes: a
+/// multibyte result encodes each code via `char_string`, a unibyte result maps
+/// each code straight to a byte.
 fn mode_line_lisp_string_from_codes(
     codes: &[u32],
     multibyte: bool,

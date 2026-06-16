@@ -586,29 +586,17 @@ pub(super) fn expect_string_comparison_operand(
     }
 }
 
-pub(crate) fn runtime_string_to_lisp_string(
-    text: &str,
-    multibyte: bool,
-) -> crate::heap_types::LispString {
-    let bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte);
-    if multibyte {
-        crate::heap_types::LispString::from_emacs_bytes(bytes)
-    } else {
-        crate::heap_types::LispString::from_unibyte(bytes)
-    }
-}
-
 /// Build a `LispString` from a plain (sentinel-free) Rust `&str`, preserving the
 /// caller's multibyteness choice.
 ///
-/// This is the byte-faithful replacement for [`runtime_string_to_lisp_string`]
-/// at call sites whose input is a plain Rust string that provably carries no
-/// storage-String sentinels (doc strings, parsed file data, filenames, pdump
-/// payloads, printer output). For such input the storage decode is a no-op, so
-/// the result is simply the str's bytes as a multibyte or unibyte string —
-/// valid Unicode is already in Emacs-internal form. The decode round-trip only
-/// matters for inputs that genuinely embed sentinels (the subprocess env/argv
-/// path), which still use `runtime_string_to_lisp_string`.
+/// Every Lisp-visible string built from a Rust `&str` (doc strings, parsed file
+/// data, filenames, pdump payloads, printer output) goes through here: the str
+/// carries no storage-String sentinels, so its bytes are already in Emacs
+/// internal form and become the `LispString` directly. The legacy
+/// storage-decode round-trip that this replaced has been retired (issue #131);
+/// the storage codec now survives only inside the buffer-text/runtime-reader
+/// layer (`storage_string_to_buffer_bytes`), which is unrelated to the
+/// Lisp-string path.
 pub(crate) fn plain_str_to_lisp_string(
     text: &str,
     multibyte: bool,

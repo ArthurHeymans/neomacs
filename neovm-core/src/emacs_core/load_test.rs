@@ -1379,7 +1379,7 @@ fn load_path_runtime_strings(load_path: &[crate::heap_types::LispString]) -> Vec
 }
 
 fn runtime_path_entry(path: &str) -> crate::heap_types::LispString {
-    crate::emacs_core::builtins::runtime_string_to_lisp_string(path, !path.is_ascii())
+    crate::emacs_core::builtins::plain_str_to_lisp_string(path, !path.is_ascii())
 }
 
 #[cfg(unix)]

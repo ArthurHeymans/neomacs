@@ -1,7 +1,7 @@
 use super::super::intern::intern;
 use super::*;
 use crate::emacs_core::autoload::is_autoload_value;
-use crate::emacs_core::builtins::runtime_string_to_lisp_string;
+use crate::emacs_core::builtins::plain_str_to_lisp_string;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::format_eval_result;
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_eval_all};
@@ -11,7 +11,7 @@ fn bootstrap_eval_all(src: &str) -> Vec<String> {
 }
 
 fn kmacro_string(text: &str) -> crate::heap_types::LispString {
-    runtime_string_to_lisp_string(text, true)
+    plain_str_to_lisp_string(text, true)
 }
 
 // -----------------------------------------------------------------------

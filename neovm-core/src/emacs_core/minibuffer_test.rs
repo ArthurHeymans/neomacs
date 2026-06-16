@@ -502,7 +502,7 @@ fn enter_exit_lifecycle() {
     // Modify content
     {
         let state = mgr.current_mut().unwrap();
-        state.content = super::super::builtins::runtime_string_to_lisp_string("modified", true);
+        state.content = super::super::builtins::plain_str_to_lisp_string("modified", true);
     }
 
     let result = mgr.exit_minibuffer();
