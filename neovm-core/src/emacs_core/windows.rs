@@ -99,10 +99,11 @@ fn expand_w32_filename(ctx: &mut Context, filename: Value) -> Result<String, Flo
 #[cfg(windows)]
 fn expect_string_runtime(value: &Value) -> Result<String, Flow> {
     match value.kind() {
-        ValueKind::String => Ok(super::builtins::runtime_string_from_lisp_string(
+        ValueKind::String => Ok(crate::emacs_core::emacs_char::to_utf8_lossy(
             value
                 .as_lisp_string()
-                .expect("ValueKind::String must carry LispString payload"),
+                .expect("ValueKind::String must carry LispString payload")
+                .as_bytes(),
         )),
         _ => Err(signal(
             "wrong-type-argument",

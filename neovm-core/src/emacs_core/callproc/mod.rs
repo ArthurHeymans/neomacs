@@ -155,8 +155,13 @@ fn callproc_owned_runtime_string(value: Value) -> String {
 fn lisp_string_to_os_string(string: &LispString) -> OsString {
     #[cfg(unix)]
     {
+        // Byte-faithful: a multibyte arg drops to unibyte bytes (eight-bit chars
+        // become their raw byte), like Emacs `string-as-unibyte`; the unibyte
+        // branch already passes raw bytes through.
         if string.is_multibyte() {
-            OsString::from(super::builtins::runtime_string_from_lisp_string(string))
+            OsString::from_vec(crate::emacs_core::emacs_char::str_as_unibyte(
+                string.as_bytes(),
+            ))
         } else {
             OsString::from_vec(string.as_bytes().to_vec())
         }
@@ -164,7 +169,9 @@ fn lisp_string_to_os_string(string: &LispString) -> OsString {
 
     #[cfg(not(unix))]
     {
-        OsString::from(super::builtins::runtime_string_from_lisp_string(string))
+        OsString::from(crate::emacs_core::emacs_char::to_utf8_lossy(
+            string.as_bytes(),
+        ))
     }
 }
 
@@ -271,7 +278,9 @@ fn resolve_call_process_program(
                 }
                 #[cfg(not(unix))]
                 {
-                    os.push(super::builtins::runtime_string_from_lisp_string(suffix));
+                    os.push(crate::emacs_core::emacs_char::to_utf8_lossy(
+                        suffix.as_bytes(),
+                    ));
                 }
                 candidate = PathBuf::from(os);
             }
