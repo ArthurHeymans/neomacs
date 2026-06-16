@@ -1999,6 +1999,7 @@ mod divergence_combo_complex28;
 mod divergence_combo_complex29;
 mod divergence_combo_complex30;
 mod divergence_combo_complex31;
+mod divergence_combo_complex32;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
