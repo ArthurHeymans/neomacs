@@ -1344,10 +1344,6 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
-fn fileio_owned_runtime_string_opt(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
-}
-
 fn expect_lisp_string_strict(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
@@ -2377,24 +2373,6 @@ pub(crate) fn builtin_substitute_in_file_name(eval: &mut Context, args: Vec<Valu
     }
 }
 
-pub(crate) fn default_directory_in_state(
-    obarray: &Obarray,
-    _dynamic: &[OrderedRuntimeBindingMap],
-    buffers: &crate::buffer::BufferManager,
-) -> Option<String> {
-    if let Some(buf) = buffers.current_buffer() {
-        if let Some(val) = buf.get_buffer_local("default-directory") {
-            if val.is_string() {
-                return fileio_owned_runtime_string_opt(&val);
-            }
-        }
-    }
-    match obarray.symbol_value("default-directory") {
-        Some(val) if val.is_string() => fileio_owned_runtime_string_opt(val),
-        _ => None,
-    }
-}
-
 pub(crate) fn default_directory_lisp_in_state(
     obarray: &Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
@@ -2410,10 +2388,6 @@ pub(crate) fn default_directory_lisp_in_state(
     obarray
         .symbol_value("default-directory")
         .and_then(|val| val.as_lisp_string().cloned())
-}
-
-fn default_directory_for_eval(eval: &Context) -> Option<String> {
-    default_directory_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
 fn default_directory_lisp_for_eval(eval: &Context) -> Option<crate::heap_types::LispString> {
@@ -2498,28 +2472,11 @@ pub(crate) fn resolve_filename_lisp_in_state(
     expand_file_name_lisp(filename, Some(&default_dir))
 }
 
-fn resolve_filename_lisp_for_eval(
+pub(crate) fn resolve_filename_lisp_for_eval(
     eval: &Context,
     filename: &crate::heap_types::LispString,
 ) -> crate::heap_types::LispString {
     resolve_filename_lisp_in_state(&eval.obarray, &[], &eval.buffers, filename)
-}
-
-pub(crate) fn resolve_filename_in_state(
-    obarray: &Obarray,
-    dynamic: &[OrderedRuntimeBindingMap],
-    buffers: &crate::buffer::BufferManager,
-    filename: &str,
-) -> String {
-    if filename.is_empty() || Path::new(filename).is_absolute() {
-        return filename.to_string();
-    }
-    let default_dir = default_directory_in_state(obarray, dynamic, buffers);
-    expand_file_name(filename, default_dir.as_deref())
-}
-
-pub(crate) fn resolve_filename_for_eval(eval: &Context, filename: &str) -> String {
-    resolve_filename_in_state(&eval.obarray, &[], &eval.buffers, filename)
 }
 
 fn file_error_symbol(kind: ErrorKind) -> &'static str {

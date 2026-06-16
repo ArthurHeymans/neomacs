@@ -9,9 +9,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use super::error::{EvalResult, Flow, signal};
-use super::fileio::resolve_filename_for_eval;
+use super::fileio::{lisp_file_name_to_path_buf, resolve_filename_lisp_for_eval};
 use super::value::{Value, ValueKind};
 use crate::buffer::BufferId;
+use crate::heap_types::LispString;
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
@@ -35,28 +36,12 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
     }
 }
 
-fn filelock_owned_runtime_string(value: Value) -> String {
-    value
-        .as_runtime_string_owned()
-        .expect("ValueKind::String must carry LispString payload")
-}
-
-fn expect_string_arg(value: &Value) -> Result<String, Flow> {
-    match value.kind() {
-        ValueKind::String => Ok(filelock_owned_runtime_string(*value)),
-        _other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )),
-    }
-}
-
-fn file_lock_error(context: &str, filename: &str, err: io::Error) -> Flow {
+fn file_lock_error(context: &str, filename: &LispString, err: io::Error) -> Flow {
     signal(
         "file-error",
         vec![
             Value::string(context),
-            Value::string(filename),
+            Value::heap_string(filename.clone()),
             Value::string(err.to_string()),
         ],
     )
@@ -113,32 +98,41 @@ enum LockOwner {
     Other(String),
 }
 
-fn fallback_make_lock_file_name(filename: &str) -> Option<String> {
-    let path = Path::new(filename);
-    let name = path.file_name()?.to_string_lossy();
+/// GNU's `make-lock-file-name` (files.el) prepends ".#" to the non-directory
+/// part of FILENAME.  Compute it byte-faithfully on the encoded path so raw
+/// unibyte file names survive intact.
+fn fallback_make_lock_file_name(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?;
+    let mut lock_name = std::ffi::OsString::from(".#");
+    lock_name.push(name);
     let mut out = PathBuf::new();
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
     {
         out.push(parent);
     }
-    out.push(format!(".#{name}"));
-    Some(out.to_string_lossy().into_owned())
+    out.push(lock_name);
+    Some(out)
 }
 
 fn make_lock_file_name(
     eval: &mut super::eval::Context,
-    filename: &str,
-) -> Result<Option<String>, Flow> {
-    let file = Value::string(filename);
+    filename: &LispString,
+) -> Result<Option<PathBuf>, Flow> {
+    let file = Value::heap_string(filename.clone());
     match eval.apply(Value::symbol("make-lock-file-name"), vec![file]) {
         Ok(v) if v.is_nil() => Ok(None),
-        Ok(v) if v.is_string() => Ok(Some(filelock_owned_runtime_string(v))),
+        Ok(v) if v.is_string() => Ok(Some(lisp_file_name_to_path_buf(
+            v.as_lisp_string()
+                .expect("ValueKind::String must carry LispString payload"),
+        ))),
         Ok(other) => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), other],
         )),
-        Err(_) => Ok(fallback_make_lock_file_name(filename)),
+        Err(_) => Ok(fallback_make_lock_file_name(&lisp_file_name_to_path_buf(
+            filename,
+        ))),
     }
 }
 
@@ -205,7 +199,10 @@ fn create_lock_file(lock_path: &Path, contents: &str, force: bool) -> io::Result
     fs::write(lock_path, contents)
 }
 
-fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result<Value, Flow> {
+fn lock_file_resolved(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+) -> Result<Value, Flow> {
     if !eval
         .visible_variable_value_or_nil("create-lockfiles")
         .is_truthy()
@@ -213,10 +210,9 @@ fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result
         return Ok(Value::NIL);
     }
 
-    let Some(lock_name) = make_lock_file_name(eval, filename)? else {
+    let Some(lock_path) = make_lock_file_name(eval, filename)? else {
         return Ok(Value::NIL);
     };
-    let lock_path = PathBuf::from(lock_name);
 
     // Supersession check: before locking a file-visiting buffer,
     // verify that the file hasn't been modified on disk since we
@@ -224,19 +220,15 @@ fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result
     if eval
         .buffers
         .current_buffer()
-        .and_then(|b| {
-            b.file_name_value()
-                .as_lisp_string()
-                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
-        })
-        .is_some_and(|fname| fname == filename)
+        .and_then(|b| b.file_name_value().as_lisp_string())
+        .is_some_and(|fname| fname.as_bytes() == filename.as_bytes())
         && eval
             .apply(Value::symbol("verify-visited-file-modtime"), vec![])
             .is_ok_and(|v| v.is_nil())
     {
         let _ = eval.apply(
             Value::symbol("userlock--ask-user-about-supersession-threat"),
-            vec![Value::string(filename)],
+            vec![Value::heap_string(filename.clone())],
         );
     }
 
@@ -248,7 +240,7 @@ fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result
             let attack = eval
                 .apply(
                     Value::symbol("ask-user-about-lock"),
-                    vec![Value::string(filename), Value::string(owner)],
+                    vec![Value::heap_string(filename.clone()), Value::string(owner)],
                 )
                 .unwrap_or(Value::NIL);
             if !attack.is_truthy() {
@@ -260,21 +252,18 @@ fn lock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result
         }
     }
 
-    create_lock_file(&lock_path, &current_lock_info_string(), false).map_err(|err| {
-        if err.kind() == io::ErrorKind::AlreadyExists {
-            file_lock_error("Locking file", filename, err)
-        } else {
-            file_lock_error("Locking file", filename, err)
-        }
-    })?;
+    create_lock_file(&lock_path, &current_lock_info_string(), false)
+        .map_err(|err| file_lock_error("Locking file", filename, err))?;
     Ok(Value::NIL)
 }
 
-fn unlock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Result<Value, Flow> {
-    let Some(lock_name) = make_lock_file_name(eval, filename)? else {
+fn unlock_file_resolved(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+) -> Result<Value, Flow> {
+    let Some(lock_path) = make_lock_file_name(eval, filename)? else {
         return Ok(Value::NIL);
     };
-    let lock_path = PathBuf::from(lock_name);
 
     match current_lock_owner(&lock_path)
         .map_err(|err| file_lock_error("Unlocking file", filename, err))?
@@ -291,15 +280,13 @@ fn unlock_file_resolved(eval: &mut super::eval::Context, filename: &str) -> Resu
 fn current_buffer_file_lock_target(
     eval: &super::eval::Context,
     buffer_id: BufferId,
-) -> Option<String> {
+) -> Option<LispString> {
     let root_id = eval.buffers.modified_state_root_id(buffer_id)?;
     let buffer = eval.buffers.get(root_id)?;
     let file_name = buffer.buffer_local_value("buffer-file-name")?;
     let file_truename = buffer.buffer_local_value("buffer-file-truename")?;
     match (file_name.kind(), file_truename.kind()) {
-        (ValueKind::String, ValueKind::String) => {
-            Some(filelock_owned_runtime_string(file_truename))
-        }
+        (ValueKind::String, ValueKind::String) => file_truename.as_lisp_string().cloned(),
         _ => None,
     }
 }
@@ -314,7 +301,7 @@ pub(crate) fn sync_modified_buffer_file_lock(
         return Ok(());
     };
 
-    let filename = resolve_filename_for_eval(eval, &filename);
+    let filename = resolve_filename_lisp_for_eval(eval, &filename);
     if !was_modified && !flag.is_nil() {
         let _ = lock_file_resolved(eval, &filename)?;
     } else if was_modified && flag.is_nil() {
@@ -325,15 +312,15 @@ pub(crate) fn sync_modified_buffer_file_lock(
 
 pub(crate) fn builtin_lock_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("lock-file", &args, 1)?;
-    let filename = expect_string_arg(&args[0])?;
-    let filename = resolve_filename_for_eval(eval, &filename);
+    let filename = super::builtins::expect_lisp_string(&args[0])?;
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
     lock_file_resolved(eval, &filename)
 }
 
 pub(crate) fn builtin_unlock_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("unlock-file", &args, 1)?;
-    let filename = expect_string_arg(&args[0])?;
-    let filename = resolve_filename_for_eval(eval, &filename);
+    let filename = super::builtins::expect_lisp_string(&args[0])?;
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
     unlock_file_resolved(eval, &filename)
 }
 
@@ -342,12 +329,11 @@ pub(crate) fn builtin_file_locked_p(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("file-locked-p", &args, 1)?;
-    let filename = expect_string_arg(&args[0])?;
-    let filename = resolve_filename_for_eval(eval, &filename);
-    let Some(lock_name) = make_lock_file_name(eval, &filename)? else {
+    let filename = super::builtins::expect_lisp_string(&args[0])?;
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
+    let Some(lock_path) = make_lock_file_name(eval, &filename)? else {
         return Ok(Value::NIL);
     };
-    let lock_path = PathBuf::from(lock_name);
 
     match current_lock_owner(&lock_path)
         .map_err(|err| file_lock_error("Testing file lock", &filename, err))?
@@ -364,10 +350,8 @@ pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Val
         if filename.is_nil() {
             None
         } else {
-            Some(resolve_filename_for_eval(
-                eval,
-                &expect_string_arg(filename)?,
-            ))
+            let filename = super::builtins::expect_lisp_string(filename)?;
+            Some(resolve_filename_lisp_for_eval(eval, filename))
         }
     } else {
         let current = eval
@@ -377,10 +361,10 @@ pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Val
         current
             .buffer_local_value("buffer-file-truename")
             .and_then(|value| match value.kind() {
-                ValueKind::String => Some(filelock_owned_runtime_string(value)),
+                ValueKind::String => value.as_lisp_string().cloned(),
                 _ => None,
             })
-            .map(|filename| resolve_filename_for_eval(eval, &filename))
+            .map(|filename| resolve_filename_lisp_for_eval(eval, &filename))
     };
 
     let modified = eval
@@ -405,8 +389,10 @@ pub(crate) fn builtin_unlock_buffer(
         && let Some(truename) = current.buffer_local_value("buffer-file-truename")
         && truename.is_string()
     {
-        let filename = filelock_owned_runtime_string(truename);
-        let filename = resolve_filename_for_eval(eval, &filename);
+        let filename = truename
+            .as_lisp_string()
+            .expect("ValueKind::String must carry LispString payload");
+        let filename = resolve_filename_lisp_for_eval(eval, filename);
         let _ = unlock_file_resolved(eval, &filename)?;
     }
     Ok(Value::NIL)

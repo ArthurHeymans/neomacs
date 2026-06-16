@@ -466,13 +466,9 @@ pub(crate) fn builtin_directory_files_and_attributes(
 ) -> EvalResult {
     expect_range_args("directory-files-and-attributes", &args, 1, 6)?;
     let dir = expect_lisp_string("directory-files-and-attributes", &args[0])?;
-    let dir = super::fileio::resolve_filename_in_state(
-        &eval.obarray,
-        &[],
-        &eval.buffers,
-        &dired_runtime_string(&dir),
-    );
-    directory_files_and_attributes_with_dir(&args, dir)
+    let dir =
+        super::fileio::resolve_filename_lisp_in_state(&eval.obarray, &[], &eval.buffers, &dir);
+    directory_files_and_attributes_with_dir(&args, dired_runtime_string(&dir))
 }
 
 fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalResult {
@@ -869,13 +865,8 @@ pub(crate) fn prepare_file_name_completion_in_state(
     let file = expect_lisp_string("file-name-completion", &args[0])?;
     let file_runtime = dired_runtime_string(&file);
     let directory_arg = expect_lisp_string("file-name-completion", &args[1])?;
-    let directory = super::fileio::resolve_filename_in_state(
-        obarray,
-        dynamic,
-        buffers,
-        &dired_runtime_string(&directory_arg),
-    );
-    let directory = runtime_file_name_to_lisp_string(&directory);
+    let directory =
+        super::fileio::resolve_filename_lisp_in_state(obarray, dynamic, buffers, &directory_arg);
     let ignore_case = get_completion_ignore_case(obarray);
     let ignored_extensions = get_ignored_extensions(obarray);
     let regexps = super::minibuffer::completion_regexp_lisp_list_from_obarray(obarray);
