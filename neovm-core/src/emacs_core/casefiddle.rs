@@ -807,7 +807,23 @@ pub(crate) fn apply_replace_match_case_lisp(
     replacement: &LispString,
     matched: &LispString,
 ) -> LispString {
-    match replace_match_case_action_lisp(matched, default_is_word_char) {
+    apply_replace_match_case_lisp_with(replacement, matched, default_is_word_char)
+}
+
+/// Like [`apply_replace_match_case_lisp`], but lets the caller supply the
+/// predicate used for the "previous character is a word constituent" check.
+/// Use this from paths that have a buffer syntax table in scope so per-mode
+/// definitions of word constituents apply. Mirrors
+/// [`apply_replace_match_case_with`] but stays byte-faithful (issue #131).
+pub(crate) fn apply_replace_match_case_lisp_with<F>(
+    replacement: &LispString,
+    matched: &LispString,
+    is_word_char: F,
+) -> LispString
+where
+    F: FnMut(char) -> bool,
+{
+    match replace_match_case_action_lisp(matched, is_word_char) {
         ReplaceMatchCaseAction::NoChange => replacement.clone(),
         ReplaceMatchCaseAction::AllCaps => upcase_lisp_string_emacs_compat(replacement),
         ReplaceMatchCaseAction::CapInitial => upcase_initials_lisp_string(replacement),

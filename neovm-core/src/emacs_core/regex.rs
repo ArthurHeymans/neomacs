@@ -2502,10 +2502,9 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
         None => return Err(REPLACE_MATCH_SUBEXP_MISSING.to_string()),
     };
 
-    let source = crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        &buf.buffer_substring_bytes_range(buf.full_emacs_byte_range()),
-        buf.get_multibyte(),
-    );
+    // Faithful Emacs-bytes view of the whole buffer; the replace core now
+    // indexes/slices it by Emacs-byte offsets directly (issue #131).
+    let source = buf.buffer_substring_bytes_range(buf.full_emacs_byte_range());
     let buf_syntax = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);
     let Some(match_group) = md.groups.get(subexp).and_then(|group| *group) else {
         return Err(REPLACE_MATCH_SUBEXP_MISSING.to_string());
@@ -2526,20 +2525,17 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
         (match_group.start(), match_group.end())
     };
 
-    let (_storage_start, _storage_end, replacement) = compute_replacement_with_syntax(
+    let (_byte_start, _byte_end, replacement_bytes) = compute_replacement_with_syntax(
         newtext,
         fixedcase,
         literal,
         subexp,
         match_data,
         &source,
+        buf.get_multibyte(),
         Some(&buf_syntax),
         case_symbols_as_words,
     )?;
-    let replacement_bytes = crate::emacs_core::string_escape::storage_string_to_buffer_bytes(
-        &replacement,
-        buf.get_multibyte(),
-    );
     let replacement = if buf.get_multibyte() {
         crate::heap_types::LispString::from_emacs_bytes(replacement_bytes)
     } else {
@@ -2549,17 +2545,28 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
     Ok((buffer_start, buffer_end, replacement))
 }
 
-/// Replace the last match in SOURCE and return the resulting string.
+/// Replace the last match in SOURCE (Emacs-bytes) and return the resulting
+/// Emacs-bytes. `source_multibyte` mirrors the source Lisp string's
+/// `STRING_MULTIBYTE` flag and governs how the result is reassembled.
 pub fn replace_match_string(
-    source: &str,
+    source: &[u8],
+    source_multibyte: bool,
     newtext: &str,
     fixedcase: bool,
     literal: bool,
     subexp: usize,
     match_data: &Option<MatchData>,
-) -> Result<String, String> {
+) -> Result<Vec<u8>, String> {
     replace_match_string_with_syntax(
-        source, newtext, fixedcase, literal, subexp, match_data, None, false,
+        source,
+        source_multibyte,
+        newtext,
+        fixedcase,
+        literal,
+        subexp,
+        match_data,
+        None,
+        false,
     )
 }
 
@@ -2568,7 +2575,8 @@ pub fn replace_match_string(
 /// For pure string replacement (no buffer in scope), pass `None` for
 /// the table to get GNU's standard-table baseline behavior.
 pub fn replace_match_string_with_syntax(
-    source: &str,
+    source: &[u8],
+    source_multibyte: bool,
     newtext: &str,
     fixedcase: bool,
     literal: bool,
@@ -2576,7 +2584,7 @@ pub fn replace_match_string_with_syntax(
     match_data: &Option<MatchData>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     case_symbols_as_words: bool,
-) -> Result<String, String> {
+) -> Result<Vec<u8>, String> {
     let (byte_start, byte_end, replacement) = compute_replacement_with_syntax(
         newtext,
         fixedcase,
@@ -2584,18 +2592,18 @@ pub fn replace_match_string_with_syntax(
         subexp,
         match_data,
         source,
+        source_multibyte,
         syntax_table,
         case_symbols_as_words,
     )?;
     if byte_end > source.len() || byte_start > byte_end {
         return Err(REPLACE_MATCH_SUBEXP_MISSING.to_string());
     }
-    Ok(format!(
-        "{}{}{}",
-        &source[..byte_start],
-        replacement,
-        &source[byte_end..]
-    ))
+    let mut out = Vec::with_capacity(byte_start + replacement.len() + (source.len() - byte_end));
+    out.extend_from_slice(&source[..byte_start]);
+    out.extend_from_slice(&replacement);
+    out.extend_from_slice(&source[byte_end..]);
+    Ok(out)
 }
 
 /// Convert a character position to a byte offset in a string.
@@ -2612,10 +2620,19 @@ fn compute_replacement(
     literal: bool,
     subexp: usize,
     match_data: &Option<MatchData>,
-    source: &str,
-) -> Result<(usize, usize, String), String> {
+    source: &[u8],
+    source_multibyte: bool,
+) -> Result<(usize, usize, Vec<u8>), String> {
     compute_replacement_with_syntax(
-        newtext, fixedcase, literal, subexp, match_data, source, None, false,
+        newtext,
+        fixedcase,
+        literal,
+        subexp,
+        match_data,
+        source,
+        source_multibyte,
+        None,
+        false,
     )
 }
 
@@ -2629,28 +2646,33 @@ fn compute_replacement(
 /// `drafts/regex-search-audit.md` track neomacs's divergence; this
 /// helper is the threading point callers must hit to keep parity.
 ///
-/// # Multibyte / unibyte handling (audit #13)
+/// # Multibyte / unibyte handling (audit #13, issue #131)
 ///
 /// GNU `src/search.c:2622-2720` runs an explicit byte conversion
 /// loop over the replacement, branching on both the replacement
 /// string's representation and the target buffer's
 /// `enable-multibyte-characters` flag.
 ///
-/// neomacs still computes replacement text against a storage-string
-/// view here, then converts the resulting text back into target
-/// buffer bytes at the buffer boundary. That now preserves raw-byte
-/// and unibyte buffer edits correctly, but it is still a
-/// compatibility seam rather than a direct GNU-style byte loop.
+/// `source` is now the faithful Emacs-bytes view of the searched
+/// text and is indexed/sliced directly by Emacs-byte offsets. The
+/// match-group positions are converted to Emacs-byte offsets the same
+/// way the matcher decodes characters (`emacs_char::string_char`), so
+/// eight-bit raw bytes and Private-Use-Area glyphs survive intact
+/// instead of round-tripping through the legacy PUA-sentinel storage
+/// form.
 fn compute_replacement_with_syntax(
     newtext: &str,
     fixedcase: bool,
     literal: bool,
     subexp: usize,
     match_data: &Option<MatchData>,
-    source: &str,
+    source: &[u8],
+    source_multibyte: bool,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     case_symbols_as_words: bool,
-) -> Result<(usize, usize, String), String> {
+) -> Result<(usize, usize, Vec<u8>), String> {
+    use crate::emacs_core::emacs_char::char_to_byte_pos;
+
     let md = match match_data {
         Some(md) => md,
         None => return Err(REPLACE_MATCH_SUBEXP_MISSING.to_string()),
@@ -2664,35 +2686,25 @@ fn compute_replacement_with_syntax(
     // Emacs byte positions until the Lisp boundary.
     let string_positions_are_chars = md.is_string_match();
     let buffer_positions_are_lisp_chars = md.uses_buffer_lisp_char_positions();
-    let uses_buffer_byte_positions = md.uses_buffer_byte_positions();
     let (byte_start, byte_end) = if string_positions_are_chars {
         (
-            char_pos_to_byte(source, match_group.start()),
-            char_pos_to_byte(source, match_group.end()),
+            char_to_byte_pos(source, match_group.start()),
+            char_to_byte_pos(source, match_group.end()),
         )
     } else if buffer_positions_are_lisp_chars {
         // `set-match-data` restores buffer positions in Lisp character
         // coordinates, which are 1-based. Convert them back to 0-based
-        // character offsets before slicing the storage string.
+        // character offsets before locating their Emacs-byte boundaries.
         (
-            char_pos_to_byte(
+            char_to_byte_pos(
                 source,
                 lisp_char_pos_to_zero_based_index(match_group.start()),
             ),
-            char_pos_to_byte(source, lisp_char_pos_to_zero_based_index(match_group.end())),
-        )
-    } else if uses_buffer_byte_positions {
-        (
-            crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(
-                source,
-                match_group.start(),
-            ),
-            crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(
-                source,
-                match_group.end(),
-            ),
+            char_to_byte_pos(source, lisp_char_pos_to_zero_based_index(match_group.end())),
         )
     } else {
+        // Engine-produced buffer match data already carries Emacs-byte
+        // offsets, which now index `source` directly.
         (match_group.start(), match_group.end())
     };
 
@@ -2701,16 +2713,23 @@ fn compute_replacement_with_syntax(
     }
 
     let mut replacement = if literal {
-        newtext.to_string()
+        newtext.as_bytes().to_vec()
     } else {
-        build_replacement(newtext, md, source, string_positions_are_chars)?
+        build_replacement(
+            newtext,
+            md,
+            source,
+            string_positions_are_chars,
+            buffer_positions_are_lisp_chars,
+        )?
     };
 
     if !fixedcase {
         let matched = &source[byte_start..byte_end];
         replacement = apply_match_case_with_syntax(
-            &replacement,
+            replacement,
             matched,
+            source_multibyte,
             syntax_table,
             case_symbols_as_words,
         );
@@ -2751,9 +2770,12 @@ fn compute_replacement_with_syntax(
 fn build_replacement(
     template: &str,
     md: &MatchData,
-    source: &str,
-    char_positions: bool,
-) -> Result<String, String> {
+    source: &[u8],
+    string_char_positions: bool,
+    buffer_lisp_char_positions: bool,
+) -> Result<Vec<u8>, String> {
+    use crate::emacs_core::emacs_char::char_to_byte_pos;
+
     const INVALID_BACKSLASH_MSG: &str = "Invalid use of `\\' in replacement text";
 
     fn next_char_at(s: &str, byte_idx: usize) -> Option<(char, usize)> {
@@ -2761,41 +2783,44 @@ fn build_replacement(
             .and_then(|tail| tail.chars().next().map(|ch| (ch, ch.len_utf8())))
     }
 
-    /// Extract matched text from source using group positions.
+    /// Convert a match-group endpoint to an Emacs-byte offset in `source`,
+    /// mirroring the coordinate handling in `compute_replacement_with_syntax`:
+    /// string searches use 0-based char positions, `set-match-data` restores
+    /// use 1-based Lisp char positions, and engine-produced buffer data already
+    /// carries Emacs-byte offsets.
+    fn group_pos_to_byte(
+        source: &[u8],
+        pos: usize,
+        string_char_positions: bool,
+        buffer_lisp_char_positions: bool,
+    ) -> usize {
+        if string_char_positions {
+            char_to_byte_pos(source, pos)
+        } else if buffer_lisp_char_positions {
+            char_to_byte_pos(source, lisp_char_pos_to_zero_based_index(pos))
+        } else {
+            pos
+        }
+    }
+
+    /// Extract the matched group's Emacs-bytes from `source`.
     fn extract_group(
-        source: &str,
+        source: &[u8],
         s: usize,
         e: usize,
-        char_positions: bool,
-        emacs_byte_positions: bool,
-    ) -> Option<&str> {
-        if char_positions {
-            let bs = char_pos_to_byte(source, s);
-            let be = char_pos_to_byte(source, e);
-            if be <= source.len() && bs <= be {
-                Some(&source[bs..be])
-            } else {
-                None
-            }
-        } else if emacs_byte_positions {
-            let bs =
-                crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(source, s);
-            let be =
-                crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(source, e);
-            if be <= source.len() && bs <= be {
-                Some(&source[bs..be])
-            } else {
-                None
-            }
-        } else if e <= source.len() && s <= e {
-            Some(&source[s..e])
+        string_char_positions: bool,
+        buffer_lisp_char_positions: bool,
+    ) -> Option<&[u8]> {
+        let bs = group_pos_to_byte(source, s, string_char_positions, buffer_lisp_char_positions);
+        let be = group_pos_to_byte(source, e, string_char_positions, buffer_lisp_char_positions);
+        if be <= source.len() && bs <= be {
+            Some(&source[bs..be])
         } else {
             None
         }
     }
 
-    let mut out = String::with_capacity(template.len());
-    let emacs_byte_positions = md.uses_buffer_byte_positions() && !char_positions;
+    let mut out: Vec<u8> = Vec::with_capacity(template.len());
     let bytes = template.as_bytes();
     let len = bytes.len();
     let mut i = 0;
@@ -2812,10 +2837,10 @@ fn build_replacement(
                             source,
                             group.start(),
                             group.end(),
-                            char_positions,
-                            emacs_byte_positions,
+                            string_char_positions,
+                            buffer_lisp_char_positions,
                         ) {
-                            out.push_str(text);
+                            out.extend_from_slice(text);
                         }
                     }
                     i += 1 + next_len;
@@ -2829,25 +2854,25 @@ fn build_replacement(
                             source,
                             group.start(),
                             group.end(),
-                            char_positions,
-                            emacs_byte_positions,
+                            string_char_positions,
+                            buffer_lisp_char_positions,
                         ) {
-                            out.push_str(text);
+                            out.extend_from_slice(text);
                         }
                     }
                     i += 1 + next_len;
                 }
                 '\\' => {
                     // GNU search.c:2581-2582, 2708-2709.
-                    out.push('\\');
+                    out.push(b'\\');
                     i += 1 + next_len;
                 }
                 '?' => {
                     // GNU search.c:2583 `else if (c != '?')`.
                     // `\?` is passed through literally in the
                     // string path; we honor that for both paths.
-                    out.push('\\');
-                    out.push('?');
+                    out.push(b'\\');
+                    out.push(b'?');
                     i += 1 + next_len;
                 }
                 _ => {
@@ -2859,9 +2884,9 @@ fn build_replacement(
                 }
             }
         } else {
-            let (ch, ch_len) = next_char_at(template, i).expect("byte index must be char boundary");
-            out.push(ch);
-            i += ch_len;
+            // Template bytes are UTF-8 (valid Emacs-bytes); copy verbatim.
+            out.push(bytes[i]);
+            i += 1;
         }
     }
 
@@ -2872,22 +2897,46 @@ fn apply_match_case(replacement: &str, matched: &str) -> String {
     apply_replace_match_case(replacement, matched)
 }
 
+/// Byte-faithful case preservation for the replace core (issue #131).
+///
+/// `replacement` and `matched` are Emacs-bytes; `source_multibyte` mirrors the
+/// searched text's `STRING_MULTIBYTE` flag so eight-bit raw bytes and
+/// Private-Use-Area glyphs are analyzed/cased through the LispString case
+/// primitives instead of the legacy PUA-sentinel storage form.
 fn apply_match_case_with_syntax(
-    replacement: &str,
-    matched: &str,
+    replacement: Vec<u8>,
+    matched: &[u8],
+    source_multibyte: bool,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     case_symbols_as_words: bool,
-) -> String {
-    use crate::emacs_core::casefiddle::apply_replace_match_case_with;
+) -> Vec<u8> {
+    use crate::emacs_core::casefiddle::{
+        apply_replace_match_case_lisp, apply_replace_match_case_lisp_with,
+    };
     use crate::emacs_core::syntax::SyntaxClass;
+    use crate::heap_types::LispString;
 
-    match syntax_table {
-        None => apply_replace_match_case(replacement, matched),
-        Some(table) => apply_replace_match_case_with(replacement, matched, move |ch| {
-            let class = table.char_syntax(ch);
-            class == SyntaxClass::Word || (case_symbols_as_words && class == SyntaxClass::Symbol)
-        }),
-    }
+    let make_lisp = |bytes: Vec<u8>| {
+        if source_multibyte {
+            LispString::from_emacs_bytes(bytes)
+        } else {
+            LispString::from_unibyte(bytes)
+        }
+    };
+    let replacement_lisp = make_lisp(replacement);
+    let matched_lisp = make_lisp(matched.to_vec());
+
+    let result = match syntax_table {
+        None => apply_replace_match_case_lisp(&replacement_lisp, &matched_lisp),
+        Some(table) => {
+            apply_replace_match_case_lisp_with(&replacement_lisp, &matched_lisp, move |ch| {
+                let class = table.char_syntax(ch);
+                class == SyntaxClass::Word
+                    || (case_symbols_as_words && class == SyntaxClass::Symbol)
+            })
+        }
+    };
+    result.as_bytes().to_vec()
 }
 
 // ---------------------------------------------------------------------------

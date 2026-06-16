@@ -7,6 +7,30 @@ fn match_group(group: Option<MatchGroup>) -> Option<MatchGroup> {
     group
 }
 
+/// `replace_match_string` is byte-native (issue #131). These string tests pass
+/// Rust `&str` sources mirroring `string_match_full`, which searches
+/// `LispString::from_utf8(source)`; this helper threads the matching Emacs-bytes
+/// and `STRING_MULTIBYTE` flag so the existing assertions stay byte-faithful.
+fn replace_match_string_str(
+    source: &str,
+    newtext: &str,
+    fixedcase: bool,
+    literal: bool,
+    subexp: usize,
+    match_data: &Option<MatchData>,
+) -> Result<Vec<u8>, String> {
+    let source_lisp = LispString::from_utf8(source);
+    replace_match_string(
+        source_lisp.as_bytes(),
+        source_lisp.is_multibyte(),
+        newtext,
+        fixedcase,
+        literal,
+        subexp,
+        match_data,
+    )
+}
+
 /// Build a multibyte `LispString` search pattern from a Rust literal (issue #131:
 /// `search_forward`/`search_backward` now take the faithful pattern, not a storage
 /// `&str`).
@@ -2408,12 +2432,12 @@ fn replace_match_applies_case_pattern() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let _ = string_match_full("FOO", "FOO", 0, &mut md);
-    let replaced = replace_match_string("FOO", "bar", false, false, 0, &md).unwrap();
-    assert_eq!(replaced, "BAR");
+    let replaced = replace_match_string_str("FOO", "bar", false, false, 0, &md).unwrap();
+    assert_eq!(replaced, b"BAR");
 
     let _ = string_match_full("Foo", "Foo", 0, &mut md);
-    let replaced = replace_match_string("Foo", "bar", false, false, 0, &md).unwrap();
-    assert_eq!(replaced, "Bar");
+    let replaced = replace_match_string_str("Foo", "bar", false, false, 0, &md).unwrap();
+    assert_eq!(replaced, b"Bar");
 }
 
 #[test]
@@ -2421,8 +2445,8 @@ fn replace_match_subexp_replaces_requested_group() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let _ = string_match_full("\\([a-z]+\\)\\([0-9]+\\)", "abc123", 0, &mut md);
-    let replaced = replace_match_string("abc123", "X", false, false, 2, &md).unwrap();
-    assert_eq!(replaced, "abcX");
+    let replaced = replace_match_string_str("abc123", "X", false, false, 2, &md).unwrap();
+    assert_eq!(replaced, b"abcX");
 }
 
 #[test]
@@ -2430,7 +2454,7 @@ fn replace_match_subexp_errors_when_missing() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let _ = string_match_full("\\([a-z]+\\)?\\([0-9]+\\)", "123", 0, &mut md);
-    let err = replace_match_string("123", "X", false, false, 1, &md).unwrap_err();
+    let err = replace_match_string_str("123", "X", false, false, 1, &md).unwrap_err();
     assert_eq!(err, REPLACE_MATCH_SUBEXP_MISSING);
 }
 
@@ -2439,8 +2463,8 @@ fn replace_match_preserves_multibyte_replacement_literals() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let _ = string_match_full("x", "x", 0, &mut md);
-    let replaced = replace_match_string("x", "éz", false, false, 0, &md).unwrap();
-    assert_eq!(replaced, "éz");
+    let replaced = replace_match_string_str("x", "éz", false, false, 0, &md).unwrap();
+    assert_eq!(replaced, "éz".as_bytes());
 }
 
 #[test]
@@ -2448,8 +2472,8 @@ fn replace_match_preserves_multibyte_replacement_with_backref() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let _ = string_match_full("\\(x\\)", "x", 0, &mut md);
-    let replaced = replace_match_string("x", "\\1é", false, false, 0, &md).unwrap();
-    assert_eq!(replaced, "xé");
+    let replaced = replace_match_string_str("x", "\\1é", false, false, 0, &md).unwrap();
+    assert_eq!(replaced, "xé".as_bytes());
 }
 
 // Regex audit #11: GNU `Freplace_match` rejects `\0` in the non-literal
@@ -2463,7 +2487,7 @@ fn replace_match_rejects_backslash_zero_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let _ = string_match_full("foo", "foo", 0, &mut md);
-    let err = replace_match_string("foo", "\\0", false, false, 0, &md)
+    let err = replace_match_string_str("foo", "\\0", false, false, 0, &md)
         .expect_err("\\0 must be rejected by replace-match");
     assert_eq!(err, "Invalid use of `\\' in replacement text");
 }
@@ -2480,17 +2504,17 @@ fn replace_match_rejects_unknown_backslash_escape_like_gnu() {
     let _ = string_match_full("foo", "foo", 0, &mut md);
 
     // `\n` must error, not emit literal `\n`.
-    let err = replace_match_string("foo", "a\\nb", false, false, 0, &md)
+    let err = replace_match_string_str("foo", "a\\nb", false, false, 0, &md)
         .expect_err("\\n in replacement must be rejected");
     assert_eq!(err, "Invalid use of `\\' in replacement text");
 
     // An arbitrary ASCII letter must error too.
-    let err = replace_match_string("foo", "\\x", false, false, 0, &md)
+    let err = replace_match_string_str("foo", "\\x", false, false, 0, &md)
         .expect_err("\\x in replacement must be rejected");
     assert_eq!(err, "Invalid use of `\\' in replacement text");
 
     // A non-ASCII character must error too.
-    let err = replace_match_string("foo", "\\é", false, false, 0, &md)
+    let err = replace_match_string_str("foo", "\\é", false, false, 0, &md)
         .expect_err("\\<non-ascii> in replacement must be rejected");
     assert_eq!(err, "Invalid use of `\\' in replacement text");
 }
@@ -2505,15 +2529,15 @@ fn replace_match_passes_backslash_question_literally() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
     let _ = string_match_full("foo", "foo", 0, &mut md);
-    let replaced = replace_match_string("foo", "\\?", false, true, 0, &md)
+    let replaced = replace_match_string_str("foo", "\\?", false, true, 0, &md)
         .expect("\\? must be accepted in non-literal replacement");
     // With `literal=true` the template is copied verbatim, matching
     // GNU's pass-through semantics from the other path.
-    assert_eq!(replaced, "\\?");
+    assert_eq!(replaced, b"\\?");
 
-    let replaced = replace_match_string("foo", "a\\?b", false, false, 0, &md)
+    let replaced = replace_match_string_str("foo", "a\\?b", false, false, 0, &md)
         .expect("\\? must be accepted in non-literal replacement");
-    assert_eq!(replaced, "a\\?b");
+    assert_eq!(replaced, b"a\\?b");
 }
 
 // -----------------------------------------------------------------------
