@@ -1,0 +1,212 @@
+//! Complex combo batch 172 — `pcase` advanced: `pred`, `app`, `quote`,
+//! `let`, `rx`, `map`, `and`, `or`, `not`, `guard`, with combined
+//! patterns and macro patterns.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_cx172_pcase_pred_with_various_predicates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            ((pred integerp) :int)
+            ((pred stringp) :str)
+            ((pred consp) :cons)
+            ((pred vectorp) :vec)
+            ((pred null) :nil)
+            ((pred symbolp) :sym)))
+        '(42 "hello" (1 2) [1 2] nil alpha))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_app_with_transformation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            ((app length len) (list :length len))
+            ((app car-safe 'first) :first-car)))
+        '("hello" (1 2 3) [a b c d]))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_quote_with_literal_match() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            ('alpha :alpha-symbol)
+            ('beta :beta-symbol)
+            ((quote gamma) :gamma-symbol)
+            ("str" :string-literal)
+            (42 :number-literal)
+            (_ :other)))
+        '(alpha beta gamma "str" 42 :unknown))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_let_pattern_binding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(pcase-let ((`(,a ,b ,c) (list 1 2 3)))
+  (list :a a :b b :c c))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_let_star_multiple_bindings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(pcase-let* ((`(,a ,b) (list 1 2))
+             (`(,c ,d) (list 3 4)))
+  (list a b c d))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_or_with_multiple_alternatives() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            ((or 'alpha 'beta 'gamma) :greek)
+            ((or 'red 'green 'blue) :color)
+            ((or 1 2 3) :small-int)
+            (_ :other)))
+        '(alpha red 1 delta))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_and_with_combined_predicates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            ((and (pred integerp) (pred (> _ 100))) :big-int)
+            ((and (pred stringp) (app length len) (pred (> len 3))) :long-str)
+            ((and (pred consp) (app car-safe 'first)) :cons-with-first)
+            (_ :other)))
+        '(200 "hello" (first . rest) 50 "ab"))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_not_pattern() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            ((not (pred integerp)) :not-int)
+            (_ :int)))
+        '(42 "hello" (1 2) [a b] nil))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_guard_clause() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            ((and n (guard (and (integerp n) (< 0 n 100))) :valid-range))
+            (_ :other)))
+        '(-5 0 50 100 200))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_map_pattern_with_hash_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(condition-case e
+    (let ((ht (make-hash-table :test 'equal)))
+      (puthash :name "alpha" ht)
+      (puthash :age 30 ht)
+      (pcase ht
+        ((map (:name name) (:age age))
+         (list :parsed name age))
+        (_ :no-match)))
+  (error (list :errored (car e))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_with_destructuring_complex_nested() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (v)
+          (pcase v
+            (`(start (,a ,b) ,c) (list :start-pattern a b c))
+            (`(mid (,a . ,rest) ,c) (list :mid-pattern a rest c))
+            (`(end . ,rest) (list :end-pattern rest))
+            (_ :other)))
+        '((start (1 2) 3)
+          (mid (1 2 3) 4)
+          (end one two three)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx172_pcase_with_marker_overlay_undo_narrow_mega() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((data '("alpha" 42 (1 2 3) [a b c])))
+  (with-temp-buffer
+    (buffer-enable-undo)
+    (insert (format "Pcase mega test: %S" data))
+    (put-text-property 1 6 'face 'bold)
+    (let ((m (set-marker (make-marker) 10))
+          (ov (make-overlay 4 18)))
+      (overlay-put ov 'face 'italic)
+      (overlay-put ov 'evaporate t)
+      (narrow-to-region 2 25)
+      (let ((pcase-result
+             (mapcar (lambda (v)
+                       (pcase v
+                         ((pred stringp) :str)
+                         ((pred integerp) :int)
+                         ((pred consp) :cons)
+                         ((pred vectorp) :vec)))
+                     data)))
+        (let ((state (list pcase-result
+                           (buffer-string)
+                           (marker-position m)
+                           (overlay-start ov) (overlay-end ov)
+                           (text-properties-at 1))))
+          (undo)
+          (widen)
+          (list state (buffer-string) (marker-position m)
+                (overlay-start ov) (overlay-end ov)
+                (text-properties-at 1)))))))
+"##,
+    );
+}
