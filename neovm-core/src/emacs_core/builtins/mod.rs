@@ -586,17 +586,6 @@ pub(super) fn expect_string_comparison_operand(
     }
 }
 
-pub(crate) fn storage_string_from_lisp_string(string: &crate::heap_types::LispString) -> String {
-    crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        string.as_bytes(),
-        string.is_multibyte(),
-    )
-}
-
-pub(crate) fn runtime_string_from_lisp_string(string: &crate::heap_types::LispString) -> String {
-    storage_string_from_lisp_string(string)
-}
-
 pub(crate) fn runtime_string_to_lisp_string(
     text: &str,
     multibyte: bool,
@@ -609,37 +598,14 @@ pub(crate) fn runtime_string_to_lisp_string(
     }
 }
 
-/// Issue #131: rebuild a runtime-transformed string (e.g. an upcased/downcased
-/// rendering of `source`) into a `LispString` without losing real Private-Use
-/// glyphs.
-///
-/// When `source` is pure Unicode (the common case) `rendered` is real text whose
-/// UTF-8 already IS the Emacs internal encoding, so it is taken verbatim — a real
-/// nerd-font glyph in the in-Unicode sentinel ranges survives instead of being
-/// decoded as a raw byte. When `source` carries genuine eight-bit/non-Unicode
-/// content the rendering is a storage string and is decoded the legacy way, which
-/// is byte-identical to the previous behaviour for that content.
-pub(crate) fn rebuild_transformed_runtime_string(
-    rendered: &str,
-    source: Value,
-    multibyte: bool,
-) -> crate::heap_types::LispString {
-    if strings::value_render_pure_unicode(source, 0) {
-        if multibyte {
-            crate::heap_types::LispString::from_emacs_bytes(rendered.as_bytes().to_vec())
-        } else {
-            crate::heap_types::LispString::from_unibyte(rendered.as_bytes().to_vec())
-        }
-    } else {
-        runtime_string_to_lisp_string(rendered, multibyte)
-    }
-}
-
+/// Test-only convenience: decode a string Value to a lossy `String` (valid
+/// Unicode preserved, raw eight-bit -> U+FFFD). No longer produces a storage
+/// string; production code uses `as_lisp_string` for byte-faithful access.
 pub(crate) fn lisp_string_to_runtime_string(value: Value) -> String {
-    let string = value
+    value
         .as_lisp_string()
-        .expect("ValueKind::String must carry LispString payload");
-    runtime_string_from_lisp_string(string)
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        .expect("ValueKind::String must carry LispString payload")
 }
 
 // Search / regex builtins are defined at the end of this file.
