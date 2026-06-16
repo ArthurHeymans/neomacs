@@ -604,6 +604,40 @@ fn test_builtin_bookmark_set_annotation() {
     assert!(missing.is_nil());
 }
 
+#[cfg(unix)]
+#[test]
+fn bookmark_save_load_preserves_raw_unibyte_file_path() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut eval = Context::new();
+    // A bookmark file path with a raw 0xFF byte (not valid UTF-8). The path was
+    // previously round-tripped through a storage String, so the byte became an
+    // in-Unicode sentinel and the file was written to the wrong path.
+    let raw_path_bytes = b"/tmp/neovm-bm-raw-\xFF.data".to_vec();
+    let os_path = std::path::PathBuf::from(std::ffi::OsStr::from_bytes(&raw_path_bytes));
+    let _ = std::fs::remove_file(&os_path);
+    let path_val = Value::heap_string(crate::heap_types::LispString::from_unibyte(
+        raw_path_bytes.clone(),
+    ));
+
+    set_current_buffer_file(&mut eval, "/raw-file.el");
+    builtin_bookmark_set(&mut eval, vec![Value::string("raw-bm")]).unwrap();
+
+    builtin_bookmark_save(&mut eval, vec![Value::NIL, path_val]).expect("save to raw path");
+    assert!(
+        os_path.exists(),
+        "bookmark file was not written to the raw-byte path {os_path:?}"
+    );
+
+    eval.bookmarks = BookmarkManager::new();
+    builtin_bookmark_load(&mut eval, vec![path_val]).expect("load from raw path");
+    assert!(eval.bookmarks.get(&bm_str("raw-bm")).is_some());
+
+    let _ = std::fs::remove_file(&os_path);
+}
+
 #[test]
 fn test_builtin_bookmark_save_load() {
     crate::test_utils::init_test_tracing();

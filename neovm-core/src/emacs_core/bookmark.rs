@@ -724,40 +724,37 @@ pub(crate) fn builtin_bookmark_set_annotation(
     }
 }
 
-fn default_bookmark_file() -> String {
+fn default_bookmark_file() -> LispString {
     if let Ok(home) = std::env::var("HOME") {
-        return format!("{home}/.config/emacs/bookmarks");
+        return LispString::from_utf8(&format!("{home}/.config/emacs/bookmarks"));
     }
-    ".config/emacs/bookmarks".to_string()
+    LispString::from_utf8(".config/emacs/bookmarks")
 }
 
-fn active_bookmark_default_file(eval: &super::eval::Context) -> String {
+fn active_bookmark_default_file(eval: &super::eval::Context) -> LispString {
     if let Some(v) = eval.obarray.symbol_value("bookmark-default-file") {
-        if v.is_string() {
-            return v
-                .as_runtime_string_owned()
-                .expect("ValueKind::String must carry LispString payload");
+        if let Some(ls) = v.as_lisp_string() {
+            return ls.clone();
         }
     }
     default_bookmark_file()
 }
 
-fn bookmark_timestamp_file(eval: &super::eval::Context) -> Option<String> {
+fn bookmark_timestamp_file(eval: &super::eval::Context) -> Option<LispString> {
     let value = eval.obarray.symbol_value("bookmark-bookmarks-timestamp")?;
     if !value.is_cons() {
         return None;
     };
     let pair_car = value.cons_car();
-    let _pair_cdr = value.cons_cdr();
-    pair_car.as_runtime_string_owned()
+    pair_car.as_lisp_string().cloned()
 }
 
-fn bookmark_save_stamp(path: &str) -> Value {
+fn bookmark_save_stamp(path: &LispString) -> Value {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     Value::list(vec![
-        Value::string(path.to_string()),
+        Value::heap_string(path.clone()),
         Value::fixnum(now.as_secs() as i64),
         Value::fixnum(0),
         Value::fixnum(now.subsec_micros() as i64),
@@ -765,7 +762,7 @@ fn bookmark_save_stamp(path: &str) -> Value {
     ])
 }
 
-fn set_bookmark_timestamp(eval: &mut super::eval::Context, file: &str) {
+fn set_bookmark_timestamp(eval: &mut super::eval::Context, file: &LispString) {
     eval.obarray
         .set_symbol_value("bookmark-bookmarks-timestamp", bookmark_save_stamp(file));
 }
@@ -804,12 +801,12 @@ pub(crate) fn builtin_bookmark_save(
     let configured_default = active_bookmark_default_file(eval);
     if bookmark_timestamp_file(eval).is_none()
         && eval.bookmarks.all_names().is_empty()
-        && Path::new(&configured_default).is_file()
+        && super::fileio::lisp_file_name_to_path_buf(&configured_default).is_file()
     {
         let _ = builtin_bookmark_load(
             eval,
             vec![
-                Value::string(configured_default.clone()),
+                Value::heap_string(configured_default.clone()),
                 Value::T,
                 Value::T,
             ],
@@ -818,8 +815,9 @@ pub(crate) fn builtin_bookmark_save(
 
     let path = if file_arg.is_string() {
         file_arg
-            .as_runtime_string_owned()
+            .as_lisp_string()
             .expect("ValueKind::String must carry LispString payload")
+            .clone()
     } else {
         if !parg.is_nil() {
             return Err(signal(
@@ -831,10 +829,11 @@ pub(crate) fn builtin_bookmark_save(
     };
 
     let data = eval.bookmarks.save_to_string();
-    if let Some(parent) = Path::new(&path).parent() {
+    let os_path = super::fileio::lisp_file_name_to_path_buf(&path);
+    if let Some(parent) = os_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let _ = fs::write(&path, data);
+    let _ = fs::write(&os_path, data);
     eval.bookmarks.mark_saved();
 
     if make_default {
@@ -842,10 +841,7 @@ pub(crate) fn builtin_bookmark_save(
         return Ok(bookmark_save_stamp(&path));
     }
 
-    if bookmark_timestamp_file(eval)
-        .as_deref()
-        .is_some_and(|default| default == path)
-    {
+    if bookmark_timestamp_file(eval).is_some_and(|default| default.as_bytes() == path.as_bytes()) {
         set_bookmark_timestamp(eval, &path);
         return Ok(bookmark_save_stamp(&path));
     }
@@ -870,8 +866,9 @@ pub(crate) fn builtin_bookmark_load(
 
     let file = match args[0].kind() {
         ValueKind::String => args[0]
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload"),
+            .as_lisp_string()
+            .expect("ValueKind::String must carry LispString payload")
+            .clone(),
         other => {
             return Err(signal(
                 "wrong-type-argument",
@@ -879,13 +876,16 @@ pub(crate) fn builtin_bookmark_load(
             ));
         }
     };
+    let file_display = crate::emacs_core::emacs_char::to_utf8_lossy(file.as_bytes());
 
-    let data = match fs::read_to_string(&file) {
+    let data = match fs::read_to_string(super::fileio::lisp_file_name_to_path_buf(&file)) {
         Ok(data) => data,
         Err(_) => {
             return Err(signal(
                 "user-error",
-                vec![Value::string(format!("Cannot read bookmark file {file}"))],
+                vec![Value::string(format!(
+                    "Cannot read bookmark file {file_display}"
+                ))],
             ));
         }
     };
@@ -894,7 +894,8 @@ pub(crate) fn builtin_bookmark_load(
 
     let current_default =
         bookmark_timestamp_file(eval).unwrap_or_else(|| active_bookmark_default_file(eval));
-    let set_default = args.get(3).is_some_and(|v| !v.is_nil()) || file == current_default;
+    let set_default =
+        args.get(3).is_some_and(|v| !v.is_nil()) || file.as_bytes() == current_default.as_bytes();
     if set_default {
         set_bookmark_timestamp(eval, &file);
     }
@@ -904,7 +905,7 @@ pub(crate) fn builtin_bookmark_load(
         return Ok(Value::NIL);
     }
     Ok(Value::string(format!(
-        "Loading bookmarks from {file}...done"
+        "Loading bookmarks from {file_display}...done"
     )))
 }
 
