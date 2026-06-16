@@ -2031,7 +2031,8 @@ impl Buffer {
     /// Clone `buffer-auto-save-file-name` as an owned runtime string.
     /// This is a boundary helper for filesystem-facing code.
     pub fn auto_save_file_name_runtime_string_owned(&self) -> Option<String> {
-        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME.index()].as_runtime_string_owned()
+        self.auto_save_file_name_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
     }
 
     pub fn auto_save_file_name_lisp_string(
@@ -4410,11 +4411,6 @@ impl BufferManager {
         self.dead_buffers.get(&id).map(Buffer::last_name_value)
     }
 
-    pub fn dead_buffer_last_name_owned(&self, id: BufferId) -> Option<String> {
-        self.dead_buffer_last_name_value(id)
-            .and_then(Value::as_runtime_string_owned)
-    }
-
     /// List all live buffer ids in buffer-list order, with the most recently
     /// displayed or selected buffers first.
     pub fn buffer_list(&self) -> Vec<BufferId> {
@@ -5385,8 +5381,9 @@ impl BufferManager {
                         }
                         (ValueKind::String, ValueKind::Fixnum(pos1)) => {
                             // Delete record: (TEXT . POS) — to undo, re-insert text
+                            // faithfully so eight-bit content survives undo.
                             let text = car
-                                .as_runtime_string_owned()
+                                .as_lisp_string()
                                 .expect("ValueKind::String must carry LispString payload");
                             let apos1 = LispCharPos1::new(pos1.abs());
                             let byte_pos = {
@@ -5397,7 +5394,7 @@ impl BufferManager {
                                 undo_char_pos1_to_byte_clamped(buffer, apos1)
                             };
                             self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
-                            self.insert_into_buffer(id, &text)?;
+                            self.insert_lisp_string_into_buffer(id, text)?;
                             if pos1 > 0 {
                                 self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
                             }
