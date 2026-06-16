@@ -72,25 +72,51 @@ fn expect_lisp_string(_name: &str, value: &Value) -> Result<LispString, Flow> {
     }
 }
 
-fn dired_runtime_string(value: &LispString) -> String {
-    super::builtins::runtime_string_from_lisp_string(value)
+/// Build a file-name `LispString` from raw bytes, preserving raw file-name
+/// bytes exactly. ASCII-only names stay unibyte; anything else is treated as
+/// Emacs-internal multibyte so eight-bit file-name bytes round-trip faithfully.
+fn file_name_lisp_from_bytes(bytes: Vec<u8>) -> LispString {
+    if bytes.is_ascii() {
+        LispString::from_unibyte(bytes)
+    } else {
+        LispString::from_emacs_bytes(bytes)
+    }
 }
 
-fn runtime_file_name_to_lisp_string(text: &str) -> LispString {
-    super::builtins::runtime_string_to_lisp_string(text, !text.is_ascii())
+/// Wrap a file-name `LispString` as a `Value` without any storage round-trip.
+fn file_name_value(name: LispString) -> Value {
+    Value::heap_string(name)
 }
 
-fn runtime_file_name_value(text: &str) -> Value {
-    Value::heap_string(runtime_file_name_to_lisp_string(text))
+/// Ensure a directory file-name `LispString` ends with '/', preserving raw
+/// file-name bytes (GNU `file-name-as-directory`).
+fn ensure_trailing_slash_lisp(dir: &LispString) -> LispString {
+    let bytes = dir.as_bytes();
+    if bytes.ends_with(b"/") {
+        return dir.clone();
+    }
+    let mut out = bytes.to_vec();
+    out.push(b'/');
+    file_name_lisp_from_bytes(out)
 }
 
-/// Ensure a directory path ends with '/'.
+/// Test-only convenience: ensure a directory path `&str` ends with '/'.
+#[cfg(test)]
 fn ensure_trailing_slash(dir: &str) -> String {
     if dir.ends_with('/') {
         dir.to_string()
     } else {
         format!("{}/", dir)
     }
+}
+
+/// Concatenate a directory file-name (already slash-terminated) with an entry
+/// name, preserving raw file-name bytes.
+fn concat_dir_entry_lisp(dir_with_slash: &LispString, name: &LispString) -> LispString {
+    let mut out = Vec::with_capacity(dir_with_slash.as_bytes().len() + name.as_bytes().len());
+    out.extend_from_slice(dir_with_slash.as_bytes());
+    out.extend_from_slice(name.as_bytes());
+    file_name_lisp_from_bytes(out)
 }
 
 fn file_error_symbol(kind: ErrorKind) -> &'static str {
@@ -113,12 +139,33 @@ fn signal_file_io(action: &str, path: &str, err: std::io::Error) -> Flow {
     )
 }
 
-fn read_directory_names(dir: &str) -> Result<Vec<String>, Flow> {
-    let entries = fs::read_dir(dir).map_err(|e| signal_file_io("Opening directory", dir, e))?;
-    let mut names = vec![".".to_string(), "..".to_string()];
+/// Read directory entry names byte-faithfully (GNU decodes each readdir name
+/// via DECODE_FILE; we keep the raw file-name bytes intact). Returns the entries
+/// as file-name `LispString`s plus "." and "..".
+fn read_directory_names(dir: &LispString) -> Result<Vec<LispString>, Flow> {
+    let path = super::fileio::lisp_file_name_to_path_buf(dir);
+    let entries = fs::read_dir(&path).map_err(|e| {
+        signal_file_io(
+            "Opening directory",
+            &super::emacs_char::to_utf8_lossy(dir.as_bytes()),
+            e,
+        )
+    })?;
+    let mut names = vec![
+        LispString::from_unibyte(b".".to_vec()),
+        LispString::from_unibyte(b"..".to_vec()),
+    ];
     for entry in entries {
-        let entry = entry.map_err(|e| signal_file_io("Reading directory entry", dir, e))?;
-        names.push(entry.file_name().to_string_lossy().into_owned());
+        let entry = entry.map_err(|e| {
+            signal_file_io(
+                "Reading directory entry",
+                &super::emacs_char::to_utf8_lossy(dir.as_bytes()),
+                e,
+            )
+        })?;
+        names.push(super::fileio::path_to_lisp_file_name(std::path::Path::new(
+            &entry.file_name(),
+        )));
     }
     Ok(names)
 }
@@ -249,15 +296,17 @@ fn gid_to_name(gid: u32) -> Option<String> {
 ///
 /// Times are in Emacs (HIGH LOW) format.
 /// If ID-FORMAT is non-nil and not 'integer, UID/GID are returned as strings.
-fn build_file_attributes(filename: &str, id_format: FileIdFormat) -> Option<Value> {
+fn build_file_attributes(filename: &LispString, id_format: FileIdFormat) -> Option<Value> {
+    let path = super::fileio::lisp_file_name_to_path_buf(filename);
+
     // Use symlink_metadata first to detect symlinks.
-    let sym_meta = fs::symlink_metadata(filename).ok()?;
+    let sym_meta = fs::symlink_metadata(&path).ok()?;
 
     // Determine file type.
     let file_type = if sym_meta.file_type().is_symlink() {
-        // Read the symlink target.
-        match fs::read_link(filename) {
-            Ok(target) => Value::string(target.to_string_lossy().into_owned()),
+        // Read the symlink target, preserving raw file-name bytes.
+        match fs::read_link(&path) {
+            Ok(target) => Value::heap_string(super::fileio::path_to_lisp_file_name(&target)),
             Err(_) => Value::string(""),
         }
     } else if sym_meta.is_dir() {
@@ -268,7 +317,7 @@ fn build_file_attributes(filename: &str, id_format: FileIdFormat) -> Option<Valu
 
     // For symlinks, get the target metadata for size etc; fall back to symlink meta.
     let meta = if sym_meta.file_type().is_symlink() {
-        fs::metadata(filename).unwrap_or_else(|_| sym_meta.clone())
+        fs::metadata(&path).unwrap_or_else(|_| sym_meta.clone())
     } else {
         sym_meta.clone()
     };
@@ -468,10 +517,10 @@ pub(crate) fn builtin_directory_files_and_attributes(
     let dir = expect_lisp_string("directory-files-and-attributes", &args[0])?;
     let dir =
         super::fileio::resolve_filename_lisp_in_state(&eval.obarray, &[], &eval.buffers, &dir);
-    directory_files_and_attributes_with_dir(&args, dired_runtime_string(&dir))
+    directory_files_and_attributes_with_dir(&args, &dir)
 }
 
-fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalResult {
+fn directory_files_and_attributes_with_dir(args: &[Value], dir: &LispString) -> EvalResult {
     let full_name = args.get(1).is_some_and(|v| v.is_truthy());
     let match_regexp = match args.get(2) {
         Some(v) if v.is_truthy() => Some(expect_lisp_string("directory-files-and-attributes", v)?),
@@ -485,19 +534,21 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
         return Ok(Value::NIL);
     }
 
-    let names = read_directory_names(&dir)?;
+    let names = read_directory_names(dir)?;
 
-    let dir_with_slash = ensure_trailing_slash(&dir);
-    let mut items: VecDeque<(String, String)> = VecDeque::new();
+    let dir_with_slash = ensure_trailing_slash_lisp(dir);
+    // (DISPLAY-NAME, FULL-PATH) — both kept byte-faithfully as LispStrings.
+    let mut items: VecDeque<(LispString, LispString)> = VecDeque::new();
     let mut remaining = count.unwrap_or(usize::MAX);
     for name in names {
         if let Some(pattern) = match_regexp.as_ref() {
-            let pattern_runtime = dired_runtime_string(pattern);
             let mut throwaway = None;
-            let matched = super::regex::string_match_full_with_case_fold(
-                &pattern_runtime,
+            let matched = super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+                pattern,
                 &name,
+                super::regex::SearchedString::Owned(name.clone()),
                 0,
+                false,
                 false,
                 &mut throwaway,
             )
@@ -506,7 +557,8 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
                     "invalid-regexp",
                     vec![Value::string(format!(
                         "Invalid regexp \"{}\": {}",
-                        pattern_runtime, msg
+                        super::emacs_char::to_utf8_lossy(pattern.as_bytes()),
+                        msg
                     ))],
                 )
             })?;
@@ -515,7 +567,7 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
             }
         }
 
-        let full_path = format!("{}{}", dir_with_slash, name);
+        let full_path = concat_dir_entry_lisp(&dir_with_slash, &name);
         let display_name = if full_name { full_path.clone() } else { name };
         items.push_front((display_name, full_path));
 
@@ -527,10 +579,11 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
         }
     }
 
-    let mut items: Vec<(String, String)> = items.into_iter().collect();
-    // Sort unless NOSORT is non-nil.
+    let mut items: Vec<(LispString, LispString)> = items.into_iter().collect();
+    // Sort unless NOSORT is non-nil. Compare byte-faithfully so eight-bit
+    // file names order exactly as GNU's string_lessp does.
     if !nosort {
-        items.sort_by(|a, b| a.0.cmp(&b.0));
+        items.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
     }
 
     // Build result list of (NAME . ATTRIBUTES) cons cells.
@@ -538,7 +591,7 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
         .into_iter()
         .map(|(display_name, full_path)| {
             let attrs = build_file_attributes(&full_path, id_format).unwrap_or(Value::NIL);
-            Value::cons(runtime_file_name_value(&display_name), attrs)
+            Value::cons(file_name_value(display_name), attrs)
         })
         .collect();
 
@@ -605,9 +658,7 @@ pub(crate) fn builtin_file_name_all_completions(
         return Ok(result);
     }
 
-    let file_runtime = dired_runtime_string(&file);
-    let directory = dired_runtime_string(&directory);
-    if file_runtime.contains('/') {
+    if file.as_bytes().contains(&b'/') {
         return Ok(Value::NIL);
     }
     let ignore_case = get_completion_ignore_case(&eval.obarray);
@@ -615,15 +666,12 @@ pub(crate) fn builtin_file_name_all_completions(
     // GNU Emacs: file-name-all-completions does NOT filter by
     // completion-ignored-extensions (the "all_flag" path).
     let completions = filter_by_completion_regexps(
-        collect_file_name_completions(&file_runtime, &directory, ignore_case, true)?,
+        collect_file_name_completions(&file, &directory, ignore_case, true)?,
         &regexps,
         ignore_case,
     )?;
     Ok(Value::list(
-        completions
-            .into_iter()
-            .map(|completion| runtime_file_name_value(&completion))
-            .collect(),
+        completions.into_iter().map(file_name_value).collect(),
     ))
 }
 
@@ -667,28 +715,39 @@ fn dispatch_file_completion_handler(
     Ok(None)
 }
 
+/// Byte-faithful prefix test. File-name syntax is ASCII, so ASCII case-folding
+/// matches GNU's completion-ignore-case behavior; eight-bit bytes never fold and
+/// must compare exactly.
+fn byte_prefix_matches(name: &[u8], file: &[u8], ignore_case: bool) -> bool {
+    if name.len() < file.len() {
+        return false;
+    }
+    let head = &name[..file.len()];
+    if ignore_case {
+        head.eq_ignore_ascii_case(file)
+    } else {
+        head == file
+    }
+}
+
 fn collect_file_name_completions(
-    file: &str,
-    directory: &str,
+    file: &LispString,
+    directory: &LispString,
     ignore_case: bool,
     reverse: bool,
-) -> Result<Vec<String>, Flow> {
+) -> Result<Vec<LispString>, Flow> {
     let names = read_directory_names(directory)?;
+    let dir_path = super::fileio::lisp_file_name_to_path_buf(directory);
     let mut completions = Vec::new();
 
     for name in names {
-        let matches = if ignore_case {
-            name.to_lowercase().starts_with(&file.to_lowercase())
-        } else {
-            name.starts_with(file)
-        };
-        if !matches {
+        if !byte_prefix_matches(name.as_bytes(), file.as_bytes(), ignore_case) {
             continue;
         }
 
-        let full_path = std::path::Path::new(directory).join(&name);
-        let completion = if full_path.is_dir() {
-            format!("{}/", name)
+        let entry_path = dir_path.join(super::fileio::lisp_file_name_to_path_buf(&name));
+        let completion = if entry_path.is_dir() {
+            ensure_trailing_slash_lisp(&name)
         } else {
             name
         };
@@ -703,18 +762,23 @@ fn collect_file_name_completions(
 }
 
 fn filter_by_completion_regexps(
-    completions: Vec<String>,
+    completions: Vec<LispString>,
     regexps: &[LispString],
     ignore_case: bool,
-) -> Result<Vec<String>, Flow> {
+) -> Result<Vec<LispString>, Flow> {
     if regexps.is_empty() {
         return Ok(completions);
     }
 
     let mut filtered = Vec::with_capacity(completions.len());
     for completion in completions {
-        let regexp_name = completion.strip_suffix('/').unwrap_or(&completion);
-        let candidate = runtime_file_name_to_lisp_string(regexp_name);
+        // Match the name without any trailing '/' added for directories.
+        let bytes = completion.as_bytes();
+        let candidate = if bytes.ends_with(b"/") {
+            file_name_lisp_from_bytes(bytes[..bytes.len() - 1].to_vec())
+        } else {
+            completion.clone()
+        };
         if super::minibuffer::lisp_string_matches_completion_regexps(
             &candidate,
             regexps,
@@ -759,68 +823,73 @@ fn get_completion_ignore_case(obarray: &super::symbol::Obarray) -> bool {
 /// - If there is at least one non-excludable match, all excludable matches are
 ///   dropped. If ALL matches are excludable, they are all kept (the "includeall"
 ///   fallback).
+/// Byte-faithful suffix test. Extension syntax is ASCII, so ASCII case-folding
+/// matches GNU's completion-ignore-case behavior; eight-bit bytes never fold.
+fn byte_suffix_matches(base: &[u8], ext: &[u8], ignore_case: bool) -> bool {
+    if base.len() < ext.len() {
+        return false;
+    }
+    let tail = &base[base.len() - ext.len()..];
+    if ignore_case {
+        tail.eq_ignore_ascii_case(ext)
+    } else {
+        tail == ext
+    }
+}
+
 fn filter_by_ignored_extensions(
-    file: &str,
-    completions: Vec<String>,
+    file: &LispString,
+    completions: Vec<LispString>,
     ignored_extensions: &[LispString],
     ignore_case: bool,
-) -> Vec<String> {
+) -> Vec<LispString> {
     if completions.is_empty() {
         return completions;
     }
 
-    let file_len = file.len();
+    let file_len = file.as_bytes().len();
 
     // Classify each completion as excludable or not.
-    let mut classified: Vec<(String, bool)> = Vec::with_capacity(completions.len());
+    let mut classified: Vec<(LispString, bool)> = Vec::with_capacity(completions.len());
     for comp in completions {
-        let is_dir = comp.ends_with('/');
+        let comp_bytes = comp.as_bytes();
+        let is_dir = comp_bytes.ends_with(b"/");
         // The base name (without trailing '/' for directories)
         let base = if is_dir {
-            &comp[..comp.len() - 1]
+            &comp_bytes[..comp_bytes.len() - 1]
         } else {
-            comp.as_str()
+            comp_bytes
         };
 
         let mut can_exclude = false;
 
         // "." and ".." are always excludable
-        if base == "." || base == ".." {
+        if base == b"." || base == b".." {
             can_exclude = true;
         } else if base.len() > file_len {
             // Only check ignored-extensions when the name is longer than FILE
             // (i.e., not an exact match).
             for ext in ignored_extensions {
-                let ext_runtime = dired_runtime_string(ext);
+                let ext_bytes = ext.as_bytes();
                 if is_dir {
                     // For directories, only match extensions that end in '/'.
-                    if !ext_runtime.ends_with('/') {
+                    if !ext_bytes.ends_with(b"/") {
                         continue;
                     }
-                    let ext_base = &ext_runtime[..ext_runtime.len() - 1]; // strip trailing '/'
+                    let ext_base = &ext_bytes[..ext_bytes.len() - 1]; // strip trailing '/'
                     if ext_base.is_empty() {
                         continue;
                     }
-                    let matches = if ignore_case {
-                        base.to_lowercase().ends_with(&ext_base.to_lowercase())
-                    } else {
-                        base.ends_with(ext_base)
-                    };
-                    if matches {
+                    if byte_suffix_matches(base, ext_base, ignore_case) {
                         can_exclude = true;
                         break;
                     }
                 } else {
                     // For files, match extensions (which should not end in '/').
-                    if ext_runtime.ends_with('/') {
+                    if ext_bytes.ends_with(b"/") {
                         continue;
                     }
-                    let matches = if ignore_case {
-                        base.to_lowercase().ends_with(&ext_runtime.to_lowercase())
-                    } else {
-                        base.ends_with(ext_runtime.as_str())
-                    };
-                    if matches {
+                    if byte_suffix_matches(base, ext_bytes, ignore_case) {
                         can_exclude = true;
                         break;
                     }
@@ -863,27 +932,20 @@ pub(crate) fn prepare_file_name_completion_in_state(
     expect_range_args("file-name-completion", args, 2, 3)?;
 
     let file = expect_lisp_string("file-name-completion", &args[0])?;
-    let file_runtime = dired_runtime_string(&file);
     let directory_arg = expect_lisp_string("file-name-completion", &args[1])?;
     let directory =
         super::fileio::resolve_filename_lisp_in_state(obarray, dynamic, buffers, &directory_arg);
     let ignore_case = get_completion_ignore_case(obarray);
     let ignored_extensions = get_ignored_extensions(obarray);
     let regexps = super::minibuffer::completion_regexp_lisp_list_from_obarray(obarray);
-    let completions = if file_runtime.contains('/') {
+    let completions = if file.as_bytes().contains(&b'/') {
         Vec::new()
     } else {
-        let directory_runtime = dired_runtime_string(&directory);
-        let raw =
-            collect_file_name_completions(&file_runtime, &directory_runtime, ignore_case, false)?;
+        let raw = collect_file_name_completions(&file, &directory, ignore_case, false)?;
         // Apply completion-ignored-extensions filtering for file-name-completion
         // (but not for file-name-all-completions, per GNU Emacs).
-        let filtered =
-            filter_by_ignored_extensions(&file_runtime, raw, &ignored_extensions, ignore_case);
+        let filtered = filter_by_ignored_extensions(&file, raw, &ignored_extensions, ignore_case);
         filter_by_completion_regexps(filtered, &regexps, ignore_case)?
-            .into_iter()
-            .map(|completion| runtime_file_name_to_lisp_string(&completion))
-            .collect()
     };
 
     Ok(FileNameCompletionPlan {
@@ -983,12 +1045,10 @@ fn resolve_file_name_completion(
     // string when FILE lacks the trailing slash (e.g. ".." -> "../").
     if filtered.len() == 1 {
         let comp = &filtered[0];
-        let file_runtime = dired_runtime_string(file);
-        let comp_runtime = dired_runtime_string(comp);
         let eq = if ignore_case {
-            comp_runtime.eq_ignore_ascii_case(&file_runtime)
+            comp.as_bytes().eq_ignore_ascii_case(file.as_bytes())
         } else {
-            comp_runtime == file_runtime
+            comp.as_bytes() == file.as_bytes()
         };
         if eq {
             return Value::T;
@@ -999,48 +1059,64 @@ fn resolve_file_name_completion(
     // Find the longest common prefix among completions.
     // When completion-ignore-case is set, use case-insensitive comparison
     // but preserve the case of the first match (which GNU Emacs refines to
-    // prefer the match whose case matches the input).
-    let mut prefix = dired_runtime_string(&filtered[0]);
+    // prefer the match whose case matches the input). Operate over Emacs
+    // characters so eight-bit/multibyte file-name bytes never split.
+    let mut prefix_bytes = filtered[0].as_bytes().to_vec();
     for comp in &filtered[1..] {
-        let comp_runtime = dired_runtime_string(comp);
-        let common_len = if ignore_case {
-            prefix
-                .chars()
-                .zip(comp_runtime.chars())
-                .take_while(|(a, b)| a.to_lowercase().eq(b.to_lowercase()))
-                .count()
-        } else {
-            prefix
-                .chars()
-                .zip(comp_runtime.chars())
-                .take_while(|(a, b)| a == b)
-                .count()
-        };
-        prefix.truncate(
-            prefix
-                .char_indices()
-                .nth(common_len)
-                .map(|(i, _)| i)
-                .unwrap_or(prefix.len()),
-        );
+        let common = common_prefix_byte_len(&prefix_bytes, comp.as_bytes(), ignore_case);
+        prefix_bytes.truncate(common);
     }
 
     // If the prefix equals the input exactly and there are multiple matches,
     // return the prefix (Emacs returns what was typed if ambiguous but valid prefix).
-    Value::heap_string(runtime_file_name_to_lisp_string(&prefix))
+    Value::heap_string(file_name_lisp_from_bytes(prefix_bytes))
+}
+
+/// Length (in bytes) of the longest common prefix of two Emacs-byte file-name
+/// sequences, measured at Emacs-character boundaries. Names are ASCII for the
+/// structural parts; eight-bit/multibyte chars compare by codepoint and only
+/// ASCII case-folds under `ignore_case`.
+fn common_prefix_byte_len(a: &[u8], b: &[u8], ignore_case: bool) -> usize {
+    let mut pos = 0usize;
+    while pos < a.len() && pos < b.len() {
+        let (ca, la) = super::emacs_char::string_char(&a[pos..]);
+        let (cb, lb) = super::emacs_char::string_char(&b[pos..]);
+        let eq = if ca == cb {
+            true
+        } else if ignore_case {
+            ascii_lower_codepoint(ca) == ascii_lower_codepoint(cb)
+        } else {
+            false
+        };
+        if !eq {
+            break;
+        }
+        pos += la.max(1);
+        // Defensive: if the two encodings disagree in length they cannot be the
+        // same character, so they should have compared unequal above.
+        debug_assert_eq!(la, lb);
+    }
+    pos
+}
+
+/// ASCII-only lowercasing of an Emacs codepoint (non-ASCII passes through).
+fn ascii_lower_codepoint(c: u32) -> u32 {
+    if (b'A' as u32..=b'Z' as u32).contains(&c) {
+        c + 32
+    } else {
+        c
+    }
 }
 
 fn filter_completion_candidates(
     file: &LispString,
     completions: Vec<LispString>,
 ) -> Vec<LispString> {
-    let file_runtime = dired_runtime_string(file);
+    let file_starts_dotdot = file.as_bytes().starts_with(b"..");
     completions
         .into_iter()
-        .filter(|completion| dired_runtime_string(completion) != "./")
-        .filter(|completion| {
-            file_runtime.starts_with("..") || dired_runtime_string(completion) != "../"
-        })
+        .filter(|completion| completion.as_bytes() != b"./")
+        .filter(|completion| file_starts_dotdot || completion.as_bytes() != b"../")
         .collect()
 }
 
@@ -1082,27 +1158,42 @@ fn symbol_predicate_matches_candidate(
             return Ok(result.is_truthy());
         }
 
-        let directory_runtime = dired_runtime_string(directory);
-        let candidate_runtime = dired_runtime_string(candidate);
-        let absolute = std::path::Path::new(&directory_runtime).join(&candidate_runtime);
-        let absolute = absolute.to_string_lossy().into_owned();
-        if let Some(result) = eval.dispatch_subr(symbol, vec![runtime_file_name_value(&absolute)]) {
+        let absolute = join_dir_candidate_lisp(directory, candidate);
+        if let Some(result) = eval.dispatch_subr(symbol, vec![file_name_value(absolute)]) {
             return Ok(result?.is_truthy());
         }
         return Ok(false);
     }
 
     // Fallback: try absolute path to make path predicates useful.
-    let directory_runtime = dired_runtime_string(directory);
-    let candidate_runtime = dired_runtime_string(candidate);
-    let absolute = std::path::Path::new(&directory_runtime).join(&candidate_runtime);
-    let absolute = absolute.to_string_lossy().into_owned();
-    if let Some(result) = eval.dispatch_subr(symbol, vec![runtime_file_name_value(&absolute)]) {
+    let absolute = join_dir_candidate_lisp(directory, candidate);
+    if let Some(result) = eval.dispatch_subr(symbol, vec![file_name_value(absolute)]) {
         return Ok(result?.is_truthy());
     }
 
     // Preserve current behavior for unknown/non-callable predicates.
     Ok(true)
+}
+
+/// Join a directory file-name with a candidate entry, preserving raw file-name
+/// bytes. Mirrors `Path::join`: an absolute candidate replaces the directory; a
+/// separator is inserted between the two components otherwise.
+fn join_dir_candidate_lisp(directory: &LispString, candidate: &LispString) -> LispString {
+    let cand = candidate.as_bytes();
+    if cand.first() == Some(&b'/') {
+        return candidate.clone();
+    }
+    let dir = directory.as_bytes();
+    if dir.is_empty() {
+        return candidate.clone();
+    }
+    let mut out = Vec::with_capacity(dir.len() + 1 + cand.len());
+    out.extend_from_slice(dir);
+    if out.last() != Some(&b'/') {
+        out.push(b'/');
+    }
+    out.extend_from_slice(cand);
+    file_name_lisp_from_bytes(out)
 }
 
 fn filter_completions_by_callable_predicate(
@@ -1144,10 +1235,7 @@ fn predicate_argument_for_callable_predicate(
     candidate: &LispString,
 ) -> Value {
     if use_absolute_path {
-        let directory_runtime = dired_runtime_string(directory);
-        let candidate_runtime = dired_runtime_string(candidate);
-        let absolute = std::path::Path::new(&directory_runtime).join(&candidate_runtime);
-        return runtime_file_name_value(absolute.to_string_lossy().as_ref());
+        return file_name_value(join_dir_candidate_lisp(directory, candidate));
     }
 
     Value::heap_string(candidate.clone())
@@ -1193,7 +1281,6 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
         Some(string) => string.clone(),
         None => return Ok(Value::NIL),
     };
-    let filename = dired_runtime_string(&filename_lisp);
 
     let mut handler_args = vec![Value::heap_string(filename_lisp.clone())];
     if args.get(1).is_some_and(|value| value.is_truthy()) {
@@ -1208,7 +1295,7 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
     // GNU Emacs: return string names unless ID-FORMAT is nil or 'integer.
     let id_format = FileIdFormat::from_id_format_arg(args.get(1));
 
-    match build_file_attributes(&filename, id_format) {
+    match build_file_attributes(&filename_lisp, id_format) {
         Some(attrs) => Ok(attrs),
         None => Ok(Value::NIL),
     }
@@ -1222,26 +1309,27 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
 pub(crate) fn builtin_file_attributes_lessp(args: Vec<Value>) -> EvalResult {
     expect_range_args("file-attributes-lessp", &args, 2, 2)?;
 
-    let name2 = file_attributes_lessp_car_string(&args[1])?;
-    let name1 = file_attributes_lessp_car_string(&args[0])?;
+    let name2 = file_attributes_lessp_car_bytes(&args[1])?;
+    let name1 = file_attributes_lessp_car_bytes(&args[0])?;
 
     Ok(Value::bool_val(name1 < name2))
 }
 
-/// Extract the car of a cons cell as a string.
+/// Extract the car of a cons cell as its raw file-name bytes.
 ///
 /// GNU implements `file-attributes-lessp` as `Fstring_lessp (Fcar (f1),
 /// Fcar (f2))`; with the current C build this observes the second `car` first.
-fn file_attributes_lessp_car_string(val: &Value) -> Result<String, Flow> {
+/// Comparing the raw bytes keeps eight-bit file names ordering byte-exactly.
+fn file_attributes_lessp_car_bytes(val: &Value) -> Result<Vec<u8>, Flow> {
     match val.kind() {
         ValueKind::Cons => {
             let pair_car = val.cons_car();
             match pair_car.kind() {
-                ValueKind::String => Ok(dired_runtime_string(
-                    pair_car
-                        .as_lisp_string()
-                        .expect("ValueKind::String must carry LispString payload"),
-                )),
+                ValueKind::String => Ok(pair_car
+                    .as_lisp_string()
+                    .expect("ValueKind::String must carry LispString payload")
+                    .as_bytes()
+                    .to_vec()),
                 other => Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("stringp"), *val],
