@@ -1640,12 +1640,17 @@ fn require_optional_locale(locale: Option<&Value>) -> Result<Option<String>, Flo
     match locale {
         None => Ok(None),
         Some(value) if value.is_nil() => Ok(None),
-        Some(value) => value.as_runtime_string_owned().map(Some).ok_or_else(|| {
-            signal(
-                "wrong-type-argument",
-                vec![Value::symbol("stringp"), *value],
-            )
-        }),
+        // Locale names are ASCII (e.g. "en_US.UTF-8"); decode lossily.
+        Some(value) => value
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+            .map(Some)
+            .ok_or_else(|| {
+                signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("stringp"), *value],
+                )
+            }),
     }
 }
 

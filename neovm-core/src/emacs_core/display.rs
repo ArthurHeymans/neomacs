@@ -126,7 +126,10 @@ fn dynamic_or_global_symbol_value_in_state(
 }
 
 fn display_string_text(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    // X display designators are ASCII protocol strings (e.g. ":0.0"); decode lossily.
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn global_window_system_symbol(eval: &super::eval::Context) -> Option<Value> {
@@ -1131,7 +1134,10 @@ pub(crate) fn builtin_x_popup_dialog(args: Vec<Value>) -> EvalResult {
 }
 
 fn popup_menu_string(value: Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    // Menu labels are display text; decode lossily (exact for ASCII/Unicode labels).
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn popup_menu_key_event_from_path(path: &[Value]) -> Value {
