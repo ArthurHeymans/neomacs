@@ -409,7 +409,7 @@ pub(crate) fn lisp_file_name_to_path_buf(filename: &crate::heap_types::LispStrin
 
     #[cfg(not(unix))]
     {
-        let name = crate::emacs_core::builtins::runtime_string_from_lisp_string(filename);
+        let name = crate::emacs_core::emacs_char::to_utf8_lossy(filename.as_bytes());
         PathBuf::from(lisp_file_name_to_host_path_string(&name))
     }
 }
@@ -1021,9 +1021,9 @@ pub(crate) fn substitute_in_file_name_lisp(
 
     #[cfg(not(unix))]
     {
-        let substituted = substitute_in_file_name(
-            &crate::emacs_core::builtins::runtime_string_from_lisp_string(filename),
-        );
+        let substituted = substitute_in_file_name(&crate::emacs_core::emacs_char::to_utf8_lossy(
+            filename.as_bytes(),
+        ));
         crate::emacs_core::builtins::runtime_string_to_lisp_string(
             &substituted,
             !substituted.is_ascii(),
