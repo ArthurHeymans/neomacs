@@ -66,18 +66,6 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
     }
 }
 
-fn expect_string(val: &Value) -> Result<String, Flow> {
-    match val.kind() {
-        ValueKind::String => Ok(val
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload")),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *val],
-        )),
-    }
-}
-
 fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     value.as_lisp_string().cloned().ok_or_else(|| {
         signal(
@@ -113,64 +101,87 @@ fn normalize_buffer_reader_default(buffers: &BufferManager, default: Value) -> V
     }
 }
 
-fn strip_read_buffer_prompt_suffix(prompt: &str) -> &str {
-    if let Some(stripped) = prompt.strip_suffix(": ") {
+fn strip_read_buffer_prompt_suffix(prompt: &[u8]) -> &[u8] {
+    if let Some(stripped) = prompt.strip_suffix(b": ") {
         stripped
-    } else if let Some(stripped) = prompt.strip_suffix(':') {
+    } else if let Some(stripped) = prompt.strip_suffix(b":") {
         stripped
-    } else if let Some(stripped) = prompt.strip_suffix(' ') {
+    } else if let Some(stripped) = prompt.strip_suffix(b" ") {
         stripped
     } else {
         prompt
     }
 }
 
-fn format_default_prompt(format: &str, default: &str) -> String {
-    let mut output = String::new();
-    let mut chars = format.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '%' {
-            match chars.peek().copied() {
-                Some('s') => {
-                    chars.next();
-                    output.push_str(default);
-                }
-                Some('%') => {
-                    chars.next();
-                    output.push('%');
-                }
-                _ => output.push(ch),
-            }
-        } else {
-            output.push(ch);
-        }
+fn prompt_lisp_from_bytes(bytes: Vec<u8>, multibyte: bool) -> LispString {
+    if multibyte {
+        LispString::from_emacs_bytes(bytes)
+    } else {
+        LispString::from_unibyte(bytes)
     }
-    output
+}
+
+/// Substitute `%s` (with DEFAULT) and `%%` (with `%`) in the
+/// `minibuffer-default-prompt-format` string, over raw Emacs bytes so eight-bit
+/// content in the default survives faithfully. `%s`/`%%` are ASCII, so matching
+/// on bytes is safe even when the format string is multibyte.
+fn format_default_prompt(format: &LispString, default: &LispString) -> LispString {
+    let bytes = format.as_bytes();
+    let fmt_multibyte = format.is_multibyte();
+    let mut result = prompt_lisp_from_bytes(Vec::new(), false);
+    let mut literal: Vec<u8> = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 1 < bytes.len() {
+            match bytes[i + 1] {
+                b's' => {
+                    if !literal.is_empty() {
+                        result = result.concat(&prompt_lisp_from_bytes(
+                            std::mem::take(&mut literal),
+                            fmt_multibyte,
+                        ));
+                    }
+                    result = result.concat(default);
+                    i += 2;
+                    continue;
+                }
+                b'%' => {
+                    literal.push(b'%');
+                    i += 2;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        literal.push(bytes[i]);
+        i += 1;
+    }
+    if !literal.is_empty() {
+        result = result.concat(&prompt_lisp_from_bytes(literal, fmt_multibyte));
+    }
+    result
 }
 
 fn read_buffer_prompt(obarray: &Obarray, raw_prompt: Value, default: Value) -> Value {
     if default.is_nil() {
         return raw_prompt;
     }
-    let Some(prompt) = raw_prompt.as_runtime_string_owned() else {
+    let Some(prompt) = raw_prompt.as_lisp_string() else {
         return raw_prompt;
     };
-    let prompt_base = strip_read_buffer_prompt_suffix(&prompt);
-    let mut formatted = String::from(prompt_base);
-    if let Some(default_text) = default.as_runtime_string_owned()
-        && !default_text.is_empty()
+    let prompt_base = strip_read_buffer_prompt_suffix(prompt.as_bytes());
+    let mut formatted = prompt_lisp_from_bytes(prompt_base.to_vec(), prompt.is_multibyte());
+    if let Some(default_text) = default.as_lisp_string()
+        && !default_text.as_bytes().is_empty()
     {
         let default_prompt_format = obarray
             .symbol_value("minibuffer-default-prompt-format")
-            .and_then(|value| (*value).as_runtime_string_owned())
-            .unwrap_or_else(|| " (default %s)".to_string());
-        formatted.push_str(&format_default_prompt(
-            &default_prompt_format,
-            &default_text,
-        ));
+            .and_then(|value| (*value).as_lisp_string().cloned())
+            .unwrap_or_else(|| LispString::from_unibyte(b" (default %s)".to_vec()));
+        formatted = formatted.concat(&format_default_prompt(&default_prompt_format, default_text));
     }
-    formatted.push_str(": ");
-    Value::string(formatted)
+    formatted = formatted.concat(&LispString::from_unibyte(b": ".to_vec()));
+    Value::heap_string(formatted)
 }
 
 // ---------------------------------------------------------------------------
@@ -888,21 +899,21 @@ pub(crate) fn builtin_read_directory_name(
 fn validate_file_name_reader_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     expect_min_args(name, args, 1)?;
     expect_max_args(name, args, max)?;
-    let _prompt = expect_string(&args[0])?;
+    let _prompt = expect_lisp_string(&args[0])?;
     if let Some(dir) = args.get(1)
         && !dir.is_nil()
     {
-        let _ = expect_string(dir)?;
+        let _ = expect_lisp_string(dir)?;
     }
     if let Some(default) = args.get(2)
         && !default.is_nil()
     {
-        let _ = expect_string(default)?;
+        let _ = expect_lisp_string(default)?;
     }
     if let Some(initial) = args.get(4)
         && !initial.is_nil()
     {
-        let _ = expect_string(initial)?;
+        let _ = expect_lisp_string(initial)?;
     }
     Ok(())
 }
@@ -1019,7 +1030,7 @@ pub(crate) fn builtin_read_buffer_in_runtime(
 ) -> Result<(), Flow> {
     expect_min_args("read-buffer", args, 1)?;
     expect_max_args("read-buffer", args, 4)?;
-    let _prompt = expect_string(&args[0])?;
+    let _prompt = expect_lisp_string(&args[0])?;
     if runtime.has_input_receiver() {
         Ok(())
     } else {
@@ -1084,7 +1095,7 @@ pub(crate) fn builtin_read_command_in_runtime(
 ) -> Result<(), Flow> {
     expect_min_args("read-command", args, 1)?;
     expect_max_args("read-command", args, 2)?;
-    let _prompt = expect_string(&args[0])?;
+    let _prompt = expect_lisp_string(&args[0])?;
     if runtime.has_input_receiver() {
         Ok(())
     } else {
@@ -1106,11 +1117,12 @@ fn symbol_reader_minibuffer_args(args: &[Value]) -> [Value; 6] {
 }
 
 fn intern_symbol_reader_result(result: Value) -> Value {
-    if result.is_string() {
-        let name = result
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload");
-        return Value::symbol(&name);
+    if let Some(name) = result.as_lisp_string() {
+        // read-symbol results are interned symbol names (ASCII / decoded text);
+        // decode lossily and reuse Value::symbol's nil/t/keyword canonicalization.
+        return Value::symbol(crate::emacs_core::emacs_char::to_utf8_lossy(
+            name.as_bytes(),
+        ));
     }
     result
 }
@@ -1168,7 +1180,7 @@ pub(crate) fn builtin_read_variable_in_runtime(
 ) -> Result<(), Flow> {
     expect_min_args("read-variable", args, 1)?;
     expect_max_args("read-variable", args, 2)?;
-    let _prompt = expect_string(&args[0])?;
+    let _prompt = expect_lisp_string(&args[0])?;
     if runtime.has_input_receiver() {
         Ok(())
     } else {
