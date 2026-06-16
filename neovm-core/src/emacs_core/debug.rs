@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::heap_types::LispString;
 
-use super::builtins::runtime_string_to_lisp_string;
+use super::builtins::plain_str_to_lisp_string;
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::print::print_value;
 use super::value::{Value, ValueKind, VecLikeType};
@@ -294,7 +294,7 @@ impl DebugState {
             id,
             function,
             enabled: true,
-            condition: Some(runtime_string_to_lisp_string(condition, true)),
+            condition: Some(plain_str_to_lisp_string(condition, true)),
             hit_count: 0,
         });
         id
@@ -366,7 +366,7 @@ impl DocStore {
 
     /// Set the documentation string for a function.
     pub fn set_function_doc(&mut self, name: &str, doc: &str) {
-        self.set_function_doc_symbol(intern(name), runtime_string_to_lisp_string(doc, true));
+        self.set_function_doc_symbol(intern(name), plain_str_to_lisp_string(doc, true));
     }
 
     pub fn set_function_doc_symbol(&mut self, name: SymId, doc: LispString) {
@@ -375,7 +375,7 @@ impl DocStore {
 
     /// Set the documentation string for a variable.
     pub fn set_variable_doc(&mut self, name: &str, doc: &str) {
-        self.set_variable_doc_symbol(intern(name), runtime_string_to_lisp_string(doc, true));
+        self.set_variable_doc_symbol(intern(name), plain_str_to_lisp_string(doc, true));
     }
 
     pub fn set_variable_doc_symbol(&mut self, name: SymId, doc: LispString) {

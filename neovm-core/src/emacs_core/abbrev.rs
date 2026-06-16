@@ -284,7 +284,7 @@ impl AbbrevManager {
 }
 
 fn runtime_string_to_abbrev_string(text: &str) -> LispString {
-    super::builtins::runtime_string_to_lisp_string(text, true)
+    super::builtins::plain_str_to_lisp_string(text, true)
 }
 
 fn abbrev_table_sym(text: &str) -> SymId {

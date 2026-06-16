@@ -1355,32 +1355,6 @@ fn expect_min_args(
     }
 }
 
-fn expect_string(val: &Value) -> Result<String, crate::emacs_core::error::Flow> {
-    match val.kind() {
-        ValueKind::String => {
-            let ls = val.as_lisp_string().unwrap();
-            // For unibyte strings, convert each byte to a char using sentinel encoding
-            // (backward compat for buffer/coding-system layer).
-            if !ls.is_multibyte() {
-                return Ok(
-                    crate::emacs_core::string_escape::bytes_to_unibyte_storage_string(
-                        ls.as_bytes(),
-                    ),
-                );
-            }
-            // For multibyte, try UTF-8 first, fall back to lossy conversion
-            Ok(ls
-                .as_utf8_str()
-                .map(|s| s.to_owned())
-                .unwrap_or_else(|| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())))
-        }
-        _other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *val],
-        )),
-    }
-}
-
 fn known_coding_system(name: &str) -> bool {
     crate::emacs_core::coding::CodingSystemManager::new().is_known_or_derived(name)
 }

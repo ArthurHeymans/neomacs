@@ -459,7 +459,7 @@ pub(crate) fn path_to_lisp_file_name(path: &Path) -> crate::heap_types::LispStri
 
     #[cfg(not(unix))]
     {
-        crate::emacs_core::builtins::runtime_string_to_lisp_string(
+        crate::emacs_core::builtins::plain_str_to_lisp_string(
             &host_path_to_lisp_file_name_string(path),
             true,
         )
@@ -1024,10 +1024,7 @@ pub(crate) fn substitute_in_file_name_lisp(
         let substituted = substitute_in_file_name(&crate::emacs_core::emacs_char::to_utf8_lossy(
             filename.as_bytes(),
         ));
-        crate::emacs_core::builtins::runtime_string_to_lisp_string(
-            &substituted,
-            !substituted.is_ascii(),
-        )
+        crate::emacs_core::builtins::plain_str_to_lisp_string(&substituted, !substituted.is_ascii())
     }
 }
 
@@ -1606,12 +1603,6 @@ fn expect_lisp_filename_string_strict(
         ));
     }
     Ok(string)
-}
-
-fn file_name_runtime_result_value(text: &str, multibyte: bool) -> Value {
-    Value::heap_string(crate::emacs_core::builtins::runtime_string_to_lisp_string(
-        text, multibyte,
-    ))
 }
 
 fn file_name_lisp_from_bytes(bytes: Vec<u8>, multibyte: bool) -> crate::heap_types::LispString {
@@ -4210,7 +4201,7 @@ pub(crate) fn builtin_find_file_name_handler(eval: &mut Context, args: Vec<Value
 /// handlers declare a restricted operation set without writing
 /// trampolines for everything else.
 pub(crate) fn find_file_name_handler(obarray: &Obarray, filename: &str, operation: Value) -> Value {
-    let filename = super::builtins::runtime_string_to_lisp_string(filename, !filename.is_ascii());
+    let filename = super::builtins::plain_str_to_lisp_string(filename, !filename.is_ascii());
     find_file_name_handler_lisp(obarray, &filename, operation)
 }
 

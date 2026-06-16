@@ -292,7 +292,7 @@ impl BookmarkManager {
 }
 
 fn runtime_string_to_bookmark_string(text: &str) -> LispString {
-    super::builtins::runtime_string_to_lisp_string(text, true)
+    super::builtins::plain_str_to_lisp_string(text, true)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

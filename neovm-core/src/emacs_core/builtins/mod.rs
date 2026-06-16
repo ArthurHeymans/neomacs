@@ -598,6 +598,28 @@ pub(crate) fn runtime_string_to_lisp_string(
     }
 }
 
+/// Build a `LispString` from a plain (sentinel-free) Rust `&str`, preserving the
+/// caller's multibyteness choice.
+///
+/// This is the byte-faithful replacement for [`runtime_string_to_lisp_string`]
+/// at call sites whose input is a plain Rust string that provably carries no
+/// storage-String sentinels (doc strings, parsed file data, filenames, pdump
+/// payloads, printer output). For such input the storage decode is a no-op, so
+/// the result is simply the str's bytes as a multibyte or unibyte string —
+/// valid Unicode is already in Emacs-internal form. The decode round-trip only
+/// matters for inputs that genuinely embed sentinels (the subprocess env/argv
+/// path), which still use `runtime_string_to_lisp_string`.
+pub(crate) fn plain_str_to_lisp_string(
+    text: &str,
+    multibyte: bool,
+) -> crate::heap_types::LispString {
+    if multibyte {
+        crate::heap_types::LispString::from_emacs_bytes(text.as_bytes().to_vec())
+    } else {
+        crate::heap_types::LispString::from_unibyte(text.as_bytes().to_vec())
+    }
+}
+
 /// Test-only convenience: decode a string Value to a lossy `String` (valid
 /// Unicode preserved, raw eight-bit -> U+FFFD). No longer produces a storage
 /// string; production code uses `as_lisp_string` for byte-faithful access.

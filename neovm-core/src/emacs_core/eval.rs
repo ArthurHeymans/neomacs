@@ -7783,7 +7783,7 @@ impl Context {
             .as_ref()
             .map(crate::heap_types::LispString::is_multibyte)
             .unwrap_or(true);
-        let piece = crate::emacs_core::builtins::runtime_string_to_lisp_string(text, multibyte);
+        let piece = crate::emacs_core::builtins::plain_str_to_lisp_string(text, multibyte);
         self.append_current_message_lisp_string(&piece);
     }
 

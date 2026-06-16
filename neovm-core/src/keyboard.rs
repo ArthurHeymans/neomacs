@@ -5480,7 +5480,7 @@ pub enum InteractiveCode {
 }
 
 fn interactive_prompt_lisp_string(prompt: &str) -> LispString {
-    crate::emacs_core::builtins::runtime_string_to_lisp_string(prompt, !prompt.is_ascii())
+    crate::emacs_core::builtins::plain_str_to_lisp_string(prompt, !prompt.is_ascii())
 }
 
 /// Parse an interactive specification string.

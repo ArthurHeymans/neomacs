@@ -832,7 +832,7 @@ impl Default for ProcessManager {
 }
 
 fn process_name_value(name: &str) -> Value {
-    Value::heap_string(super::builtins::runtime_string_to_lisp_string(name, true))
+    Value::heap_string(super::builtins::plain_str_to_lisp_string(name, true))
 }
 
 fn process_name_lisp_value(name: &LispString) -> Value {
@@ -6670,7 +6670,7 @@ pub(crate) fn builtin_make_serial_process_impl(
         ProcessKind::Serial,
     );
     if let Some(proc) = processes.get_mut(id) {
-        let port_value = Value::heap_string(super::builtins::runtime_string_to_lisp_string(
+        let port_value = Value::heap_string(super::builtins::plain_str_to_lisp_string(
             &port.clone().unwrap(),
             true,
         ));

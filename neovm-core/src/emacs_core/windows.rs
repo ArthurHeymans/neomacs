@@ -83,7 +83,7 @@ fn builtin_w32_long_file_name(ctx: &mut Context, filename: Value) -> EvalResult 
                 }
             }
             Ok(Value::heap_string(
-                super::builtins::runtime_string_to_lisp_string(&longname, !longname.is_ascii()),
+                super::builtins::plain_str_to_lisp_string(&longname, !longname.is_ascii()),
             ))
         }
         None => Ok(Value::NIL),

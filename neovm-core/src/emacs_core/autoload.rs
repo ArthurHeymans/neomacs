@@ -335,7 +335,7 @@ impl AutoloadManager {
 }
 
 fn runtime_string_to_autoload_string(text: &str) -> LispString {
-    super::builtins::runtime_string_to_lisp_string(text, true)
+    super::builtins::plain_str_to_lisp_string(text, true)
 }
 
 // ---------------------------------------------------------------------------

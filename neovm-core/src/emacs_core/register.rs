@@ -143,7 +143,7 @@ impl RegisterManager {
     /// containing just the new text.
     pub fn append_text(&mut self, register: char, text: &str, prepend: bool) {
         let make_text =
-            |multibyte: bool| super::builtins::runtime_string_to_lisp_string(text, multibyte);
+            |multibyte: bool| super::builtins::plain_str_to_lisp_string(text, multibyte);
         match self.registers.get_mut(&register) {
             Some(RegisterContent::Text(existing)) => {
                 let new = make_text(existing.is_multibyte() || !text.is_ascii());

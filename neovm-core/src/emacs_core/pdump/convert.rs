@@ -4928,10 +4928,8 @@ pub(crate) fn load_autoload_manager(
                     (
                         crate::emacs_core::intern::intern(k),
                         (
-                            crate::emacs_core::builtins::runtime_string_to_lisp_string(
-                                new_name, true,
-                            ),
-                            crate::emacs_core::builtins::runtime_string_to_lisp_string(when, true),
+                            crate::emacs_core::builtins::plain_str_to_lisp_string(new_name, true),
+                            crate::emacs_core::builtins::plain_str_to_lisp_string(when, true),
                         ),
                     )
                 })
@@ -4954,10 +4952,8 @@ pub(crate) fn load_autoload_manager(
                     (
                         crate::emacs_core::intern::intern(k),
                         (
-                            crate::emacs_core::builtins::runtime_string_to_lisp_string(
-                                new_name, true,
-                            ),
-                            crate::emacs_core::builtins::runtime_string_to_lisp_string(when, true),
+                            crate::emacs_core::builtins::plain_str_to_lisp_string(new_name, true),
+                            crate::emacs_core::builtins::plain_str_to_lisp_string(when, true),
                         ),
                     )
                 })
@@ -5764,9 +5760,9 @@ pub(crate) fn load_kmacro(decoder: &mut LoadDecoder, dkm: &DumpKmacroManager) ->
             .as_ref()
             .map(load_lisp_string)
             .or_else(|| {
-                dkm.counter_format.as_ref().map(|text| {
-                    crate::emacs_core::builtins::runtime_string_to_lisp_string(text, true)
-                })
+                dkm.counter_format
+                    .as_ref()
+                    .map(|text| crate::emacs_core::builtins::plain_str_to_lisp_string(text, true))
             })
             .unwrap_or_else(|| crate::heap_types::LispString::from_utf8("%d")),
     }
@@ -5841,7 +5837,7 @@ pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManage
                 .map(|(k, b)| {
                     (
                         crate::emacs_core::bookmark::BookmarkKey::from_lisp_string(
-                            &crate::emacs_core::builtins::runtime_string_to_lisp_string(k, true),
+                            &crate::emacs_core::builtins::plain_str_to_lisp_string(k, true),
                         ),
                         Bookmark {
                             name: load_lisp_string(&b.name),

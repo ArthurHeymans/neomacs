@@ -743,9 +743,10 @@ pub(crate) fn builtin_error_message_string(
 }
 
 /// Issue #131: render an error-data argument as a faithful LispString (Emacs
-/// bytes) instead of the PUA-sentinel storage string. String arguments keep
-/// their real bytes; other objects go through the printer (still storage) and
-/// are decoded back at this boundary.
+/// bytes). String arguments keep their real bytes; other objects go through the
+/// printer, which emits a plain Rust string (octal escapes / U+FFFD, never
+/// storage sentinels), so its bytes become the LispString directly. The result
+/// is multibyte iff the printed text contains a character above one byte.
 fn error_arg_lisp(
     eval: &super::eval::Context,
     value: &Value,
@@ -757,10 +758,8 @@ fn error_arg_lisp(
         }
     }
     let printed = super::error::print_value_with_eval(eval, value);
-    let multibyte = crate::emacs_core::string_escape::decode_storage_char_codes_auto(&printed)
-        .into_iter()
-        .any(|code| code > 0xFF);
-    super::builtins::runtime_string_to_lisp_string(&printed, multibyte)
+    let multibyte = printed.chars().any(|c| c as u32 > 0xFF);
+    super::builtins::plain_str_to_lisp_string(&printed, multibyte)
 }
 
 /// A static ASCII message literal as a LispString piece. Built unibyte so it
