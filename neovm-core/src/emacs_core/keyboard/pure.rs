@@ -249,8 +249,10 @@ pub(crate) fn describe_single_key_value(value: &Value, no_angles: bool) -> Resul
         ValueKind::Symbol(id) => Ok(describe_symbol_key(resolve_sym(id), no_angles)),
         ValueKind::T => Ok(describe_symbol_key("t", no_angles)),
         ValueKind::Nil => Ok(describe_symbol_key("nil", no_angles)),
+        // A string key description is display text; decode lossily.
         ValueKind::String => Ok(value
-            .as_runtime_string_owned()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
             .expect("ValueKind::String must carry LispString payload")),
         ValueKind::Cons => {
             // Cons key event (MOD . CHAR): the car encodes X11-style modifier
