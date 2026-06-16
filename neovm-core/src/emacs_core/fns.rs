@@ -115,11 +115,6 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
     }
 }
 
-fn require_string(_name: &str, val: &Value) -> Result<String, Flow> {
-    val.as_runtime_string_owned()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
-}
-
 fn require_string_or_symbol_name(val: &Value) -> Result<String, Flow> {
     val.as_symbol_name()
         .map(str::to_owned)
@@ -1133,7 +1128,9 @@ pub(crate) fn builtin_buffer_hash(eval: &mut super::eval::Context, args: Vec<Val
         match args[0].kind() {
             ValueKind::Veclike(VecLikeType::Buffer) => args[0].as_buffer_id().unwrap(),
             ValueKind::String => {
-                let name = require_string("buffer-hash", &args[0])?;
+                let name = crate::emacs_core::emacs_char::to_utf8_lossy(
+                    require_lisp_string(&args[0])?.as_bytes(),
+                );
                 eval.buffers.find_buffer_by_name(&name).ok_or_else(|| {
                     signal(
                         "error",
@@ -1369,11 +1366,11 @@ pub(crate) fn builtin_string_make_unibyte(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_compare_strings(args: Vec<Value>) -> EvalResult {
     expect_range_args("compare-strings", &args, 6, 7)?;
 
-    let s1 = require_string("compare-strings", &args[0])?;
-    let s2 = require_string("compare-strings", &args[3])?;
+    let s1 = require_lisp_string(&args[0])?;
+    let s2 = require_lisp_string(&args[3])?;
 
-    let chars1: Vec<char> = s1.chars().collect();
-    let chars2: Vec<char> = s2.chars().collect();
+    let chars1: Vec<u32> = compare_strings_codes(&s1);
+    let chars2: Vec<u32> = compare_strings_codes(&s2);
 
     let end1_arg = compare_strings_clamp_too_large_end(args[2], chars1.len());
     let end2_arg = compare_strings_clamp_too_large_end(args[5], chars2.len());
@@ -1388,12 +1385,12 @@ pub(crate) fn builtin_compare_strings(args: Vec<Value>) -> EvalResult {
     let len = sub1.len().min(sub2.len());
     for i in 0..len {
         let c1 = if ignore_case {
-            compare_strings_upcase_char(sub1[i])
+            compare_strings_upcase_code(sub1[i])
         } else {
             sub1[i]
         };
         let c2 = if ignore_case {
-            compare_strings_upcase_char(sub2[i])
+            compare_strings_upcase_code(sub2[i])
         } else {
             sub2[i]
         };
@@ -1473,12 +1470,47 @@ fn validate_compare_strings_subarray(
     ))
 }
 
-fn compare_strings_upcase_char(ch: char) -> char {
-    let mapped = super::builtins::upcase_char_code_emacs_compat(ch as i64);
-    u32::try_from(mapped)
-        .ok()
-        .and_then(char::from_u32)
-        .unwrap_or(ch)
+fn compare_strings_upcase_code(code: u32) -> u32 {
+    let mapped = super::builtins::upcase_char_code_emacs_compat(code as i64);
+    u32::try_from(mapped).unwrap_or(code)
+}
+
+/// Decode a `compare-strings` operand to character codes. Multibyte strings
+/// decode Emacs chars; a unibyte string's bytes >= 0x80 are eight-bit chars
+/// (matching GNU compare-strings, which unifies a unibyte raw byte with the
+/// corresponding multibyte eight-bit char).
+fn compare_strings_codes(value: &crate::heap_types::LispString) -> Vec<u32> {
+    let bytes = value.as_bytes();
+    if value.is_multibyte() {
+        let mut codes = Vec::new();
+        let mut pos = 0;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            codes.push(code);
+            pos += len.max(1);
+        }
+        codes
+    } else {
+        bytes
+            .iter()
+            .map(|&b| {
+                if b < 0x80 {
+                    b as u32
+                } else {
+                    crate::emacs_core::emacs_char::byte8_to_char(b)
+                }
+            })
+            .collect()
+    }
+}
+
+fn require_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
+    value.as_lisp_string().cloned().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), *value],
+        )
+    })
 }
 
 /// (string-version-lessp S1 S2) -- version-aware string comparison.
@@ -1486,19 +1518,17 @@ pub(crate) fn builtin_string_version_lessp(args: Vec<Value>) -> EvalResult {
     expect_args("string-version-lessp", &args, 2)?;
     // Symbols are allowed; their print names are used instead (like official Emacs).
     let s1 = if let Some(name) = args[0].as_symbol_name() {
-        name.to_string()
+        name.as_bytes().to_vec()
     } else {
-        require_string("string-version-lessp", &args[0])?
+        require_lisp_string(&args[0])?.as_bytes().to_vec()
     };
     let s2 = if let Some(name) = args[1].as_symbol_name() {
-        name.to_string()
+        name.as_bytes().to_vec()
     } else {
-        require_string("string-version-lessp", &args[1])?
+        require_lisp_string(&args[1])?.as_bytes().to_vec()
     };
 
-    Ok(Value::bool_val(
-        filenvercmp(s1.as_bytes(), s2.as_bytes()) < 0,
-    ))
+    Ok(Value::bool_val(filenvercmp(&s1, &s2) < 0))
 }
 
 fn file_prefixlen(s: &[u8]) -> usize {

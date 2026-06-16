@@ -1205,6 +1205,35 @@ fn string_make_unibyte_truncates_unicode_char_code() {
 // ---- compare-strings ----
 
 #[test]
+fn compare_strings_unifies_unibyte_and_multibyte_eight_bit() {
+    crate::test_utils::init_test_tracing();
+    // GNU compare-strings treats a unibyte raw byte and the corresponding
+    // multibyte eight-bit char as the same character.
+    let mut buf = [0u8; 8];
+    let len = crate::emacs_core::emacs_char::char_string(
+        crate::emacs_core::emacs_char::byte8_to_char(0xFF),
+        &mut buf,
+    );
+    let multibyte_eight_bit = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(
+        buf[..len].to_vec(),
+    ));
+    let unibyte = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
+    let r = builtin_compare_strings(vec![
+        unibyte,
+        Value::NIL,
+        Value::NIL,
+        multibyte_eight_bit,
+        Value::NIL,
+        Value::NIL,
+    ])
+    .unwrap();
+    assert!(
+        r.is_t(),
+        "unibyte 0xFF should compare equal to the multibyte eight-bit char"
+    );
+}
+
+#[test]
 fn compare_strings_equal() {
     crate::test_utils::init_test_tracing();
     let r = builtin_compare_strings(vec![
