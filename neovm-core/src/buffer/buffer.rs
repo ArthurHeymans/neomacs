@@ -2008,7 +2008,8 @@ impl Buffer {
     /// Clone `buffer-file-name` as an owned runtime string.
     /// This is a boundary helper for filesystem-facing code.
     pub fn file_name_runtime_string_owned(&self) -> Option<String> {
-        self.slots[BUFFER_SLOT_FILE_NAME.index()].as_runtime_string_owned()
+        self.file_name_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
     }
 
     pub fn file_name_lisp_string(&self) -> Option<&'static crate::heap_types::LispString> {
