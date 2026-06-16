@@ -2884,6 +2884,23 @@ impl crate::emacs_core::eval::Context {
         resize_acknowledged
     }
 
+    /// Whether `event` should be drained here by the wait-request special-input
+    /// service. Mirrors [`input_event_is_wait_request_special`], except a
+    /// `MouseMove` counts as special only when track-mouse is OFF.
+    ///
+    /// GNU keeps a pending mouse motion as readable command input while
+    /// track-mouse is on (keyboard.c `some_mouse_moved` / `readable_events`):
+    /// the motion must stay queued so `input_event_counts_as_pending` (and the
+    /// `read_char` path) can see it, rather than being silently consumed as a
+    /// bare cursor-position update here. With track-mouse off it is a pure
+    /// position update and is consumed as before.
+    fn input_event_is_wait_request_special_now(&self, event: &InputEvent) -> bool {
+        if matches!(event, InputEvent::MouseMove { .. }) {
+            return !self.track_mouse_enabled();
+        }
+        input_event_is_wait_request_special(event)
+    }
+
     fn take_next_wait_request_special_input_event(
         &mut self,
     ) -> Result<Option<InputEvent>, crate::emacs_core::error::Flow> {
@@ -2894,7 +2911,7 @@ impl crate::emacs_core::eval::Context {
             .front()
             .cloned()
         {
-            if input_event_is_wait_request_special(&event) {
+            if self.input_event_is_wait_request_special_now(&event) {
                 self.command_loop.keyboard.pending_input_events.pop_front();
                 self.timer_stop_idle();
                 return Ok(Some(event));
@@ -2909,7 +2926,7 @@ impl crate::emacs_core::eval::Context {
                 .pending_input_events
                 .front()
                 .cloned()
-                && input_event_is_wait_request_special(&event)
+                && self.input_event_is_wait_request_special_now(&event)
             {
                 self.command_loop.keyboard.pending_input_events.pop_front();
                 self.timer_stop_idle();
