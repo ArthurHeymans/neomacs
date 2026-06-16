@@ -118,7 +118,10 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
 fn require_string_or_symbol_name(val: &Value) -> Result<String, Flow> {
     val.as_symbol_name()
         .map(str::to_owned)
-        .or_else(|| val.as_runtime_string_owned())
+        .or_else(|| {
+            val.as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        })
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
 }
 
