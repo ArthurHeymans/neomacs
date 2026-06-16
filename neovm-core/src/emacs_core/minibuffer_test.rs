@@ -385,19 +385,13 @@ fn history_dedup() {
     mgr.add_to_history(intern("h"), "different", 100);
     assert_eq!(mgr.history.get(intern("h")).len(), 2);
     assert_eq!(
-        crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-            mgr.history.get(intern("h"))[0].as_bytes(),
-            mgr.history.get(intern("h"))[0].is_multibyte(),
-        )
-        .as_str(),
+        crate::emacs_core::emacs_char::to_utf8_lossy(mgr.history.get(intern("h"))[0].as_bytes())
+            .as_str(),
         "different"
     );
     assert_eq!(
-        crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-            mgr.history.get(intern("h"))[1].as_bytes(),
-            mgr.history.get(intern("h"))[1].is_multibyte(),
-        )
-        .as_str(),
+        crate::emacs_core::emacs_char::to_utf8_lossy(mgr.history.get(intern("h"))[1].as_bytes())
+            .as_str(),
         "same"
     );
 }
@@ -498,7 +492,7 @@ fn enter_exit_lifecycle() {
             crate::heap_types::LispString::from_utf8("Enter: ")
         );
         assert_eq!(
-            super::super::builtins::runtime_string_from_lisp_string(&state.content),
+            crate::emacs_core::emacs_char::to_utf8_lossy(state.content.as_bytes()),
             "init"
         );
         assert!(state.active);

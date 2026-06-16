@@ -61,7 +61,7 @@ fn bootstrap_load_path_entries_use_gnu_windows_file_name_syntax() {
     let first = entries
         .first()
         .and_then(Value::as_lisp_string)
-        .map(crate::emacs_core::builtins::runtime_string_from_lisp_string)
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .expect("load-path should include lisp root");
     assert!(
         !first.contains('\\'),
@@ -1374,7 +1374,7 @@ fn init_test_tracing() {
 fn load_path_runtime_strings(load_path: &[crate::heap_types::LispString]) -> Vec<String> {
     load_path
         .iter()
-        .map(crate::emacs_core::builtins::runtime_string_from_lisp_string)
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .collect()
 }
 
@@ -1393,8 +1393,8 @@ fn bootstrap_fixture_path(
     prefer_compiled: bool,
 ) -> Option<PathBuf> {
     for dir in load_path {
-        let base = PathBuf::from(crate::emacs_core::builtins::runtime_string_from_lisp_string(dir))
-            .join(name);
+        let base =
+            PathBuf::from(crate::emacs_core::emacs_char::to_utf8_lossy(dir.as_bytes())).join(name);
         if prefer_compiled {
             let elc = compiled_suffixed_path(&base);
             if elc.exists() {

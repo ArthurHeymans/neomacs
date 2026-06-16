@@ -372,24 +372,6 @@ pub(crate) fn bytes_to_unibyte_storage_string(bytes: &[u8]) -> String {
     out
 }
 
-pub(crate) fn emacs_bytes_to_storage_string(bytes: &[u8], multibyte: bool) -> String {
-    if !multibyte {
-        return bytes_to_unibyte_storage_string(bytes);
-    }
-
-    let mut out = String::new();
-    let mut pos = 0usize;
-    while pos < bytes.len() {
-        let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-        out.push_str(
-            &encode_char_code_for_string_storage(code, true)
-                .expect("valid Emacs byte sequence must encode into storage string"),
-        );
-        pos += len;
-    }
-    out
-}
-
 pub(crate) fn storage_string_to_buffer_bytes(s: &str, multibyte: bool) -> Vec<u8> {
     let codes = decode_storage_char_codes(s, multibyte);
     if !multibyte {

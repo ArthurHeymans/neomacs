@@ -91,24 +91,6 @@ fn storage_char_len_for_nonunicode() {
 }
 
 #[test]
-fn decode_storage_handles_overlong_raw_byte_encoding() {
-    crate::test_utils::init_test_tracing();
-    let encoded = emacs_bytes_to_storage_string(&[0xC1, 0xBF], true);
-    assert_eq!(decode_storage_char_codes(&encoded, true), vec![0x3FFFFF]);
-}
-
-#[test]
-fn multibyte_storage_string_handles_surrogate_character_codes() {
-    crate::test_utils::init_test_tracing();
-    let encoded = emacs_bytes_to_storage_string(&[0xED, 0xA0, 0x80], true);
-    assert_eq!(decode_storage_char_codes(&encoded, true), vec![0xD800]);
-    assert_eq!(
-        storage_string_to_buffer_bytes(&encoded, true),
-        vec![0xED, 0xA0, 0x80]
-    );
-}
-
-#[test]
 fn unibyte_storage_string_round_trips_emacs_mule_bytes() {
     crate::test_utils::init_test_tracing();
     let encoded =

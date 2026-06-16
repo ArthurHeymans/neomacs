@@ -210,7 +210,7 @@ fn builtin_expand_file_name_treats_drive_paths_as_absolute_on_windows() {
     .expect("expand-file-name should accept drive absolute default directory");
     let result = value
         .as_lisp_string()
-        .map(crate::emacs_core::builtins::runtime_string_from_lisp_string)
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .expect("string result");
     assert_eq!(result, "D:/a/neomacs/neomacs/lisp/emacs-lisp");
 }
@@ -1557,7 +1557,7 @@ fn builtin_expand_file_name_promotes_ascii_unibyte_name_for_multibyte_default_di
     let string = value.as_lisp_string().expect("string result");
     assert!(string.is_multibyte(), "expected multibyte string");
     assert_eq!(
-        crate::emacs_core::builtins::runtime_string_from_lisp_string(string),
+        crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes()),
         "/tmp/neovm-e/alpha.txt"
     );
 }

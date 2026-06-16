@@ -6,10 +6,7 @@ fn utf8_ls(text: &str) -> LispString {
 }
 
 fn runtime_text(value: &LispString) -> String {
-    crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        value.as_bytes(),
-        value.is_multibyte(),
-    )
+    crate::emacs_core::emacs_char::to_utf8_lossy(value.as_bytes())
 }
 
 fn runtime_opt_text(value: Option<&LispString>) -> Option<String> {
