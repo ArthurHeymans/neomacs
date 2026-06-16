@@ -2932,43 +2932,49 @@ fn signal_wrong_type_character(value: Value) -> Flow {
     )
 }
 
-fn storage_char_from_codepoint_value(value: &Value) -> Result<String, Flow> {
+fn char_code_from_value(value: &Value) -> Result<u32, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(c) => {
-            crate::emacs_core::string_escape::encode_char_code_for_string_storage(
-                super::builtins::expect_character_code(value)? as u32,
-                true,
-            )
-            .ok_or_else(|| signal_wrong_type_character(*value))
-        }
+        ValueKind::Fixnum(_) => Ok(super::builtins::expect_character_code(value)? as u32),
         _ => Err(signal_wrong_type_character(*value)),
     }
 }
 
-pub(crate) fn sequence_value_to_env_string(value: &Value) -> Result<String, Flow> {
+/// Append the Emacs-internal byte encoding of a single character code.
+fn push_char_code_bytes(code: u32, bytes: &mut Vec<u8>) {
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+    bytes.extend_from_slice(&buf[..len]);
+}
+
+/// Convert a string / character-code vector / character-code list into a
+/// faithful multibyte `LispString`, encoding each character code directly to
+/// Emacs bytes via `char_string`.
+///
+/// Issue #131: this replaces a storage-String round-trip that corrupted real
+/// character codes in the PUA sentinel ranges — e.g. the nerd-font glyph
+/// U+E0B0 was rewritten to the eight-bit code 0x3FFFB0. Building the bytes
+/// directly keeps every code intact.
+pub(crate) fn char_sequence_to_lisp_string(value: &Value) -> Result<LispString, Flow> {
+    if let Some(string) = value.as_lisp_string() {
+        return Ok(string.clone());
+    }
+    let mut bytes = Vec::new();
     match value.kind() {
-        ValueKind::String => Ok(process_owned_runtime_string(*value)),
         ValueKind::Veclike(VecLikeType::Vector) => {
             let vec = value.as_vector_data().unwrap().clone();
-            let chars = vec
-                .iter()
-                .map(storage_char_from_codepoint_value)
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(chars.concat())
+            for elt in vec.iter() {
+                push_char_code_bytes(char_code_from_value(elt)?, &mut bytes);
+            }
         }
         ValueKind::Cons | ValueKind::Nil => {
-            let mut out = String::new();
             let mut cursor = *value;
             loop {
                 match cursor.kind() {
                     ValueKind::Nil => break,
                     ValueKind::Cons => {
-                        let (car, cdr) = {
-                            let pair_car = cursor.cons_car();
-                            let pair_cdr = cursor.cons_cdr();
-                            (pair_car, pair_cdr)
-                        };
-                        out.push_str(&storage_char_from_codepoint_value(&car)?);
+                        let car = cursor.cons_car();
+                        let cdr = cursor.cons_cdr();
+                        push_char_code_bytes(char_code_from_value(&car)?, &mut bytes);
                         cursor = cdr;
                     }
                     _ => {
@@ -2979,10 +2985,10 @@ pub(crate) fn sequence_value_to_env_string(value: &Value) -> Result<String, Flow
                     }
                 }
             }
-            Ok(out)
         }
-        _ => Err(signal_wrong_type_sequence(*value)),
+        _ => return Err(signal_wrong_type_sequence(*value)),
     }
+    Ok(crate::heap_types::LispString::from_emacs_bytes(bytes))
 }
 
 pub(crate) fn expect_int_or_marker(value: &Value) -> Result<i64, Flow> {

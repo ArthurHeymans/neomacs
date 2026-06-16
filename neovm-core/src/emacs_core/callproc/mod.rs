@@ -692,14 +692,7 @@ fn signal_process_lines_status_error(program: &LispString, status: i32) -> Flow 
 }
 
 fn shell_command_fragment(value: &Value) -> Result<LispString, Flow> {
-    if let Some(string) = value.as_lisp_string() {
-        return Ok(string.clone());
-    }
-
-    let runtime = super::process::sequence_value_to_env_string(value)?;
-    Ok(super::builtins::runtime_string_to_lisp_string(
-        &runtime, true,
-    ))
+    super::process::char_sequence_to_lisp_string(value)
 }
 
 fn mapconcat_identity_lisp_strings(strings: &[LispString], separator: &[u8]) -> LispString {

@@ -210,13 +210,39 @@ fn process_finite_domains_match_gnu_symbols() {
 }
 
 #[test]
-fn sequence_value_to_env_string_preserves_nonunicode_char_codes() {
+fn char_sequence_to_lisp_string_preserves_nonunicode_char_codes() {
     crate::test_utils::init_test_tracing();
-    let code = 0x3F_FF80i64;
-    let result = sequence_value_to_env_string(&Value::vector(vec![Value::fixnum(code)]))
+    let code = 0x3F_FF80u32;
+    let result = char_sequence_to_lisp_string(&Value::vector(vec![Value::fixnum(code as i64)]))
         .expect("sequence should convert");
-    let decoded = crate::emacs_core::string_escape::decode_storage_char_codes(&result, true);
-    assert_eq!(decoded, vec![code as u32]);
+    assert!(result.is_multibyte());
+    assert_eq!(lisp_string_char_codes(&result), vec![code]);
+}
+
+#[test]
+fn char_sequence_to_lisp_string_preserves_pua_glyph_char_codes() {
+    crate::test_utils::init_test_tracing();
+    // U+E0B0 is a real nerd-font PUA glyph that happens to sit inside the
+    // legacy raw-byte storage-sentinel range (U+E080..E0FF). The retired
+    // storage round-trip silently rewrote it to the eight-bit code 0x3FFFB0
+    // (issue #131); building the LispString bytes directly keeps it intact.
+    let code = 0xE0B0u32;
+    let result = char_sequence_to_lisp_string(&Value::vector(vec![Value::fixnum(code as i64)]))
+        .expect("sequence should convert");
+    assert_eq!(lisp_string_char_codes(&result), vec![0xE0B0]);
+}
+
+/// Decode a `LispString`'s Emacs character codes (test helper).
+fn lisp_string_char_codes(string: &crate::heap_types::LispString) -> Vec<u32> {
+    let bytes = string.as_bytes();
+    let mut pos = 0;
+    let mut codes = Vec::new();
+    while pos < bytes.len() {
+        codes.push(crate::emacs_core::emacs_char::string_char_advance(
+            bytes, &mut pos,
+        ));
+    }
+    codes
 }
 
 #[test]

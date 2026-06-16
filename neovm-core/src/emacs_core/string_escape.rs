@@ -396,17 +396,6 @@ pub(crate) fn storage_string_to_buffer_bytes(s: &str, multibyte: bool) -> Vec<u8
     bytes
 }
 
-pub(crate) fn encode_char_code_for_string_storage(code: u32, multibyte: bool) -> Option<String> {
-    if !multibyte {
-        return (code <= 0xff).then(|| bytes_to_unibyte_storage_string(&[code as u8]));
-    }
-
-    if let Some(ch) = char::from_u32(code) {
-        return Some(ch.to_string());
-    }
-    encode_nonunicode_char_for_storage(code)
-}
-
 pub(crate) fn decode_storage_units(s: &str, multibyte: bool) -> Vec<(u32, usize)> {
     if !storage_has_special_units(s) {
         return s
