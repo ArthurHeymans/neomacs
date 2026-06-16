@@ -1,0 +1,199 @@
+//! Complex combo batch 207 — `keymap` / `where-is` / `command-remap` /
+//! `define-key` with various key types (vectors, strings, kbd).
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_cx207_define_key_with_various_key_types() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map (kbd "C-c C-a") 'neo-cx207-a)
+  (define-key map (kbd "C-c C-b") 'neo-cx207-b)
+  (define-key map [?\C-c ?\C-c] 'neo-cx207-c)
+  (define-key map "\C-x\C-f" 'neo-cx207-find)
+  (define-key map [f5] 'neo-cx207-f5)
+  (define-key map [M-down] 'neo-cx207-mdown)
+  (list (lookup-key map (kbd "C-c C-a"))
+        (lookup-key map (kbd "C-c C-b"))
+        (lookup-key map "\C-x\C-f")
+        (lookup-key map [f5])
+        (lookup-key map [M-down])
+        (lookup-key map (kbd "C-c C-x"))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_where_is_internal_lookup() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map (kbd "C-c C-a") 'neo-cx207-a)
+  (define-key map (kbd "C-c C-b") 'neo-cx207-b)
+  (list (where-is-internal 'neo-cx207-a map)
+        (where-is-internal 'neo-cx207-b map)
+        (where-is-internal 'neo-cx207-missing map)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_command_remap_lookup() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map [remap neo-cx207-old] 'neo-cx207-new)
+  (list (command-remapping 'neo-cx207-old map)
+        (lookup-key map [remap neo-cx207-old])
+        (command-remapping 'neo-cx207-other map)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_prefix_command_nested_keymap() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((outer (make-sparse-keymap))
+      (inner (make-sparse-keymap)))
+  (define-key inner "a" 'inner-a)
+  (define-key inner "b" 'inner-b)
+  (define-key inner "c" 'inner-c)
+  (define-key outer "\C-c" inner)
+  (list (keymapp outer)
+        (keymapp inner)
+        (lookup-key outer "\C-ca")
+        (lookup-key outer "\C-cb")
+        (lookup-key outer "\C-cc")
+        (lookup-key outer "\C-cx")
+        (lookup-key outer (kbd "C-c a"))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_define_prefix_command_state() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(condition-case e
+    (progn
+      (define-prefix-command 'neo-cx207-prefix)
+      (global-set-key "\C-cn" 'neo-cx207-prefix)
+      (define-key 'neo-cx207-prefix "a" 'neo-cx207-action-a)
+      (define-key 'neo-cx207-prefix "b" 'neo-cx207-action-b)
+      (list (commandp 'neo-cx207-prefix)
+            (lookup-key (current-global-map) "\C-cn")
+            (lookup-key 'neo-cx207-prefix "a")
+            (lookup-key 'neo-cx207-prefix "b")))
+  (error (list :errored (car e))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_accessible_keymaps_query() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap))
+      (sub (make-sparse-keymap)))
+  (define-key map "a" 'cmd-a)
+  (define-key map "b" 'cmd-b)
+  (define-key map "c" sub)
+  (define-key sub "x" 'cmd-x)
+  (let ((accessible (accessible-keymaps map)))
+    (list (consp accessible)
+          (>= (length accessible) 1))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_map_keymap_collect() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map "a" 'cmd-a)
+  (define-key map "b" 'cmd-b)
+  (define-key map "c" 'cmd-c)
+  (let (collected)
+    (map-keymap (lambda (key def) (push (cons key def) collected)) map)
+    (sort collected (lambda (a b)
+                      (string< (prin1-to-string (car a))
+                               (prin1-to-string (car b)))))))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_key_description_and_single_key() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (key-description (kbd "C-x C-f"))
+      (key-description "\C-x\C-f")
+      (single-key-description ?a)
+      (single-key-description 'return)
+      (single-key-description '(control ?x))
+      (single-key-description '(control meta ?a))
+      (single-key-description 'C-return)
+      (single-key-description 'M-mouse-1))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_event_modifiers_matrix() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(mapcar (lambda (e) (list e (event-modifiers e)))
+        '(?a C-a M-a C-M-a S-a
+          return C-return M-return
+          mouse-1 C-down-mouse-1 M-mouse-3
+          (control meta shift ?a)))
+"##,
+    );
+}
+
+#[test]
+fn div_cx207_keymap_with_marker_overlay_undo_narrow_mega() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map (kbd "C-c C-a") 'neo-cx207-a)
+  (define-key map (kbd "C-c C-b") 'neo-cx207-b)
+  (define-key map [f5] 'neo-cx207-f5)
+  (with-temp-buffer
+    (buffer-enable-undo)
+    (insert "Keymap mega test buffer content")
+    (put-text-property 1 6 'face 'bold)
+    (let ((m (set-marker (make-marker) 8))
+          (ov (make-overlay 4 14)))
+      (overlay-put ov 'face 'italic)
+      (overlay-put ov 'evaporate t)
+      (narrow-to-region 2 18)
+      (let ((state (list (lookup-key map (kbd "C-c C-a"))
+                         (lookup-key map [f5])
+                         (where-is-internal 'neo-cx207-a map)
+                         (buffer-string)
+                         (marker-position m)
+                         (overlay-start ov) (overlay-end ov)
+                         (text-properties-at 1))))
+        (undo)
+        (widen)
+        (list state (buffer-string) (marker-position m)
+              (overlay-start ov) (overlay-end ov)
+              (text-properties-at 1))))))
+"##,
+    );
+}
