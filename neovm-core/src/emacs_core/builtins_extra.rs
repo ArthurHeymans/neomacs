@@ -128,13 +128,14 @@ fn list_car_or_signal(value: &Value) -> Result<Value, Flow> {
     }
 }
 
-fn assoc_string_key_name(value: &Value) -> Result<String, Flow> {
+fn assoc_string_key_name(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload")),
+            .as_lisp_string()
+            .expect("ValueKind::String must carry LispString payload")
+            .clone()),
         _ => symbol_like_name(value)
-            .map(ToOwned::to_owned)
+            .map(crate::heap_types::LispString::from_utf8)
             .ok_or_else(|| {
                 signal(
                     "wrong-type-argument",
@@ -144,30 +145,82 @@ fn assoc_string_key_name(value: &Value) -> Result<String, Flow> {
     }
 }
 
-fn assoc_string_compare(key: &Value, entry_key: &str, fold_case: bool) -> Result<bool, Flow> {
+fn assoc_string_compare(
+    key: &Value,
+    entry_key: &crate::heap_types::LispString,
+    fold_case: bool,
+) -> Result<bool, Flow> {
     let key_name = assoc_string_key_name(key)?;
     Ok(assoc_string_equal(entry_key, &key_name, fold_case))
 }
 
-fn assoc_string_entry_name(value: &Value) -> Option<String> {
+fn assoc_string_entry_name(value: &Value) -> Option<crate::heap_types::LispString> {
     match value.kind() {
         ValueKind::String => Some(
             value
-                .as_runtime_string_owned()
-                .expect("ValueKind::String must carry LispString payload"),
+                .as_lisp_string()
+                .expect("ValueKind::String must carry LispString payload")
+                .clone(),
         ),
-        _ => symbol_like_name(value).map(ToOwned::to_owned),
+        _ => symbol_like_name(value).map(crate::heap_types::LispString::from_utf8),
     }
 }
 
-fn assoc_string_equal(left: &str, right: &str, fold_case: bool) -> bool {
+/// Compare two strings for `assoc-string`, mirroring GNU `compare-strings`:
+/// characters are compared by code, and a unibyte raw byte is unified with the
+/// corresponding multibyte eight-bit character (both decode to the same
+/// `0x3FFF00+` code). With folding, Unicode chars use `to_lowercase`; eight-bit
+/// chars are caseless. This replaces the storage-String encoding.
+fn assoc_string_equal(
+    left: &crate::heap_types::LispString,
+    right: &crate::heap_types::LispString,
+    fold_case: bool,
+) -> bool {
+    let left_codes = assoc_string_codes(left);
+    let right_codes = assoc_string_codes(right);
     if fold_case {
-        left.chars()
-            .flat_map(char::to_lowercase)
-            .eq(right.chars().flat_map(char::to_lowercase))
+        assoc_string_downcase(&left_codes) == assoc_string_downcase(&right_codes)
     } else {
-        left == right
+        left_codes == right_codes
     }
+}
+
+fn assoc_string_codes(value: &crate::heap_types::LispString) -> Vec<u32> {
+    let bytes = value.as_bytes();
+    if value.is_multibyte() {
+        let mut codes = Vec::new();
+        let mut pos = 0;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            codes.push(code);
+            pos += len.max(1);
+        }
+        codes
+    } else {
+        // A unibyte string's bytes ARE its characters; bytes >= 0x80 are eight-bit
+        // characters (matching how compare-strings unifies a unibyte raw byte with
+        // the corresponding multibyte eight-bit char).
+        bytes
+            .iter()
+            .map(|&b| {
+                if b < 0x80 {
+                    b as u32
+                } else {
+                    crate::emacs_core::emacs_char::byte8_to_char(b)
+                }
+            })
+            .collect()
+    }
+}
+
+fn assoc_string_downcase(codes: &[u32]) -> Vec<u32> {
+    codes
+        .iter()
+        .flat_map(|&code| match char::from_u32(code) {
+            Some(c) => c.to_lowercase().map(|lc| lc as u32).collect::<Vec<_>>(),
+            None => vec![code],
+        })
+        .collect()
 }
 
 fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {

@@ -225,6 +225,39 @@ fn byteorder_shape_and_arity() {
 }
 
 #[test]
+fn assoc_string_unifies_unibyte_and_multibyte_eight_bit() {
+    crate::test_utils::init_test_tracing();
+    // GNU `compare-strings` (used by assoc-string) treats a unibyte raw byte and
+    // the corresponding multibyte eight-bit character as the same character, so
+    // the lookup matches across the two representations.
+    let unibyte_key = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
+    let mut buf = [0u8; 8];
+    let len = crate::emacs_core::emacs_char::char_string(
+        crate::emacs_core::emacs_char::byte8_to_char(0xFF),
+        &mut buf,
+    );
+    let multibyte_entry = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(
+        buf[..len].to_vec(),
+    ));
+    let alist = Value::list(vec![Value::cons(multibyte_entry, Value::fixnum(7))]);
+    let hit = builtin_assoc_string(vec![unibyte_key, alist]).unwrap();
+    assert!(
+        hit.is_cons(),
+        "unibyte 0xFF should match the multibyte eight-bit entry"
+    );
+    assert_eq!(hit.cons_cdr(), Value::fixnum(7));
+
+    // Case-folding still matches ASCII case differences.
+    let fold_hit = builtin_assoc_string(vec![
+        Value::string("ABC"),
+        Value::list(vec![Value::cons(Value::string("abc"), Value::fixnum(1))]),
+        Value::T,
+    ])
+    .unwrap();
+    assert!(fold_hit.is_cons());
+}
+
+#[test]
 fn assoc_string_and_car_less_than_car_semantics() {
     crate::test_utils::init_test_tracing();
     let result = builtin_assoc_string(vec![
