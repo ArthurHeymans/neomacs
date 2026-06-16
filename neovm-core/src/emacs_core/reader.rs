@@ -49,10 +49,6 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
-fn reader_string_text(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
-}
-
 fn reader_initial_input_lisp_string(value: &Value) -> Option<crate::heap_types::LispString> {
     match value.kind() {
         ValueKind::String => value.as_lisp_string().cloned(),
@@ -230,16 +226,6 @@ fn history_add_new_input_enabled(obarray: &Obarray) -> bool {
     obarray
         .symbol_value("history-add-new-input")
         .is_none_or(|value| value.is_truthy())
-}
-
-fn expect_string(value: &Value) -> Result<String, Flow> {
-    match value.kind() {
-        ValueKind::String => Ok(reader_string_text(value).expect("checked string")),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )),
-    }
 }
 
 fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
@@ -981,7 +967,7 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
 ) -> Result<Option<Value>, Flow> {
     expect_min_args("read-from-minibuffer", args, 1)?;
     expect_max_args("read-from-minibuffer", args, 7)?;
-    let prompt = expect_string(&args[0])?;
+    let prompt = expect_lisp_string(&args[0])?;
     if let Some(initial) = args.get(1) {
         expect_initial_input_stringish(initial)?;
     }
@@ -989,7 +975,10 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
     if runtime.has_input_receiver() {
         Ok(None)
     } else {
-        read_from_stdin_noninteractive(&prompt).map(Some)
+        read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
+            prompt.as_bytes(),
+        ))
+        .map(Some)
     }
 }
 
@@ -1277,8 +1266,11 @@ pub(crate) fn builtin_read_string_in_runtime(
         return Ok(None);
     }
 
-    let prompt_str = expect_string(&prompt)?;
-    read_from_stdin_noninteractive(&prompt_str).map(Some)
+    let prompt_str = expect_lisp_string(&prompt)?;
+    read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
+        prompt_str.as_bytes(),
+    ))
+    .map(Some)
 }
 
 pub(crate) fn finish_read_string_with_minibuffer(
@@ -1336,7 +1328,7 @@ pub(crate) fn builtin_read_number_in_runtime(
     expect_min_args("read-number", args, 1)?;
     expect_max_args("read-number", args, 3)?;
     let prompt = args[0];
-    expect_string(&prompt)?;
+    expect_lisp_string(&prompt)?;
     if let Some(default) = args.get(1)
         && !default.is_nil()
     {
@@ -1456,7 +1448,7 @@ pub(crate) fn builtin_completing_read_in_runtime(
 ) -> Result<(), Flow> {
     validate_completing_read_arity(args)?;
     let prompt = args[0];
-    expect_string(&prompt)?;
+    expect_lisp_string(&prompt)?;
     if let Some(initial) = args.get(4) {
         expect_completing_read_initial_input(initial)?;
     }
@@ -2433,17 +2425,21 @@ pub(crate) fn finish_yes_or_no_p_with_minibuffer(
     args: &[Value],
     mut read_from_minibuffer: impl FnMut(&[Value]) -> EvalResult,
 ) -> EvalResult {
-    let prompt_str = if args[0].is_string() {
-        reader_string_text(&args[0]).expect("checked string")
+    let prompt_ls = if args[0].is_string() {
+        args[0].as_lisp_string().expect("checked string").clone()
     } else {
-        String::new()
+        crate::heap_types::LispString::from_unibyte(Vec::new())
     };
+    // Append the " (yes or no) " suffix faithfully so an eight-bit prompt survives.
+    let full_prompt = prompt_ls.concat(&crate::heap_types::LispString::from_unibyte(
+        b" (yes or no) ".to_vec(),
+    ));
     loop {
-        let full_prompt = format!("{} (yes or no) ", prompt_str);
-        let result = read_from_minibuffer(&[Value::string(&full_prompt)])?;
+        let result = read_from_minibuffer(&[Value::heap_string(full_prompt.clone())])?;
         if result.is_string() {
-            let answer = reader_string_text(&result).expect("checked string");
-            match answer.trim() {
+            let answer = result.as_lisp_string().expect("checked string");
+            // The valid answers are ASCII ("yes"/"no"); decode lossily to compare.
+            match crate::emacs_core::emacs_char::to_utf8_lossy(answer.as_bytes()).trim() {
                 "yes" => return Ok(Value::T),
                 "no" => return Ok(Value::NIL),
                 _ => continue,
