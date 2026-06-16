@@ -611,6 +611,9 @@ pub(crate) fn plain_str_to_lisp_string(
 /// Test-only convenience: decode a string Value to a lossy `String` (valid
 /// Unicode preserved, raw eight-bit -> U+FFFD). No longer produces a storage
 /// string; production code uses `as_lisp_string` for byte-faithful access.
+/// `#[cfg(test)]`-gated so this lossy helper can never re-enter a production
+/// path (issue #131).
+#[cfg(test)]
 pub(crate) fn lisp_string_to_runtime_string(value: Value) -> String {
     value
         .as_lisp_string()
