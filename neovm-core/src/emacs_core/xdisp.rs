@@ -934,8 +934,52 @@ fn percent99(n: usize, d: usize) -> usize {
 
 #[derive(Clone, Default)]
 struct ModeLineRendered {
-    text: String,
+    /// Accumulated Emacs character codes (one entry per character). Storing
+    /// codes rather than a `String` lets the mode line carry raw eight-bit and
+    /// non-Unicode characters byte-faithfully — a Rust `String` cannot hold
+    /// them, and the legacy storage-String round-trip that used to bridge the
+    /// gap has been retired (issue #131).
+    text: Vec<u32>,
     text_props: TextPropertyTable,
+}
+
+/// Decode a `LispString` into its sequence of Emacs character codes. Multibyte
+/// strings are scanned one Emacs character at a time (eight-bit characters
+/// surface as `0x3FFF00+`); unibyte strings yield one code per raw byte.
+fn mode_line_string_char_codes(string: &crate::heap_types::LispString) -> Vec<u32> {
+    let bytes = string.as_bytes();
+    if string.is_multibyte() {
+        let mut codes = Vec::new();
+        let mut pos = 0;
+        while pos < bytes.len() {
+            codes.push(crate::emacs_core::emacs_char::string_char_advance(
+                bytes, &mut pos,
+            ));
+        }
+        codes
+    } else {
+        bytes.iter().map(|&b| u32::from(b)).collect()
+    }
+}
+
+/// Build the final mode-line `LispString` from accumulated character codes,
+/// mirroring `runtime_string_to_lisp_string`: a multibyte result encodes each
+/// code via `char_string`, a unibyte result maps each code straight to a byte.
+fn mode_line_lisp_string_from_codes(
+    codes: &[u32],
+    multibyte: bool,
+) -> crate::heap_types::LispString {
+    if multibyte {
+        let mut bytes = Vec::new();
+        for &code in codes {
+            let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+            let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+            bytes.extend_from_slice(&buf[..len]);
+        }
+        crate::heap_types::LispString::from_emacs_bytes(bytes)
+    } else {
+        crate::heap_types::LispString::from_unibyte(codes.iter().map(|&c| c as u8).collect())
+    }
 }
 
 #[inline]
@@ -955,14 +999,14 @@ struct ModeLineFaceSpec {
 impl ModeLineRendered {
     fn plain(text: impl Into<String>) -> Self {
         Self {
-            text: text.into(),
+            text: text.into().chars().map(|c| c as u32).collect(),
             text_props: TextPropertyTable::new(),
         }
     }
 
     fn append_rendered(&mut self, other: &Self) {
         let char_offset = self.char_len();
-        self.text.push_str(&other.text);
+        self.text.extend_from_slice(&other.text);
         self.text_props
             .append_shifted_at_char_offset(&other.text_props, CharLen::new(char_offset));
     }
@@ -970,9 +1014,8 @@ impl ModeLineRendered {
     fn append_string_value_preserving_props(&mut self, value: &Value) {
         match value.as_lisp_string() {
             Some(string) => {
-                let text = crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes());
                 let char_offset = self.char_len();
-                self.text.push_str(&text);
+                self.text.extend(mode_line_string_char_codes(string));
                 if let Some(props) = get_string_text_properties_table_for_value(*value) {
                     self.text_props
                         .append_shifted_at_char_offset(&props, CharLen::new(char_offset));
@@ -982,7 +1025,7 @@ impl ModeLineRendered {
                 let Some(text) = value.as_utf8_str() else {
                     return;
                 };
-                self.text.push_str(text);
+                self.text.extend(text.chars().map(|c| c as u32));
             }
         }
     }
@@ -991,7 +1034,7 @@ impl ModeLineRendered {
         if value.is_string() {
             self.append_string_value_preserving_props(value);
         } else if let Some(ch) = value.as_char() {
-            self.text.push(ch);
+            self.text.push(ch as u32);
         }
     }
 
@@ -1006,14 +1049,12 @@ impl ModeLineRendered {
         }
         match value.as_lisp_string() {
             Some(string) => {
-                let text = crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes());
                 let char_offset = self.char_len();
-                self.text.push_str(
-                    &text
-                        .chars()
+                self.text.extend(
+                    mode_line_string_char_codes(string)
+                        .into_iter()
                         .skip(start_char)
-                        .take(end_char - start_char)
-                        .collect::<String>(),
+                        .take(end_char - start_char),
                 );
                 if let Some(props) = get_string_text_properties_table_for_value(*value) {
                     self.text_props.append_shifted_at_char_offset(
@@ -1027,12 +1068,11 @@ impl ModeLineRendered {
                     return;
                 };
                 let char_offset = self.char_len();
-                self.text.push_str(
-                    &text
-                        .chars()
+                self.text.extend(
+                    text.chars()
                         .skip(start_char)
                         .take(end_char - start_char)
-                        .collect::<String>(),
+                        .map(|c| c as u32),
                 );
                 if value.is_string() {
                     if let Some(props) = get_string_text_properties_table_for_value(*value) {
@@ -1047,16 +1087,16 @@ impl ModeLineRendered {
     }
 
     fn push_plain_char(&mut self, ch: char) {
-        self.text.push(ch);
+        self.text.push(ch as u32);
     }
 
     fn char_len(&self) -> usize {
-        self.text.chars().count()
+        self.text.len()
     }
 
     fn slice_chars(&self, precision: usize) -> Self {
         Self {
-            text: self.text.chars().take(precision).collect(),
+            text: self.text.iter().take(precision).copied().collect(),
             text_props: self
                 .text_props
                 .slice_char_range(display_char_range(0, precision)),
@@ -1067,7 +1107,8 @@ impl ModeLineRendered {
         if padding_chars == 0 {
             return;
         }
-        self.text.extend(std::iter::repeat_n(' ', padding_chars));
+        self.text
+            .extend(std::iter::repeat_n(' ' as u32, padding_chars));
     }
 
     fn apply_display_min_width(&mut self, props: Value) {
@@ -1163,21 +1204,17 @@ impl ModeLineRendered {
     }
 
     fn into_value(mut self, face_spec: ModeLineFaceSpec) -> Value {
-        let multibyte =
-            crate::emacs_core::string_escape::decode_storage_char_codes_auto(&self.text)
-                .into_iter()
-                .any(|code| code > 0xFF);
+        // A multibyte result iff any accumulated character exceeds a single
+        // byte; otherwise every code fits in a unibyte byte. Mirrors the old
+        // storage path's `decode_storage_char_codes_auto(..).any(> 0xFF)`.
+        let multibyte = self.text.iter().any(|&code| code > 0xFF);
         if face_spec.no_props {
-            return Value::heap_string(crate::emacs_core::builtins::runtime_string_to_lisp_string(
-                &self.text, multibyte,
-            ));
+            return Value::heap_string(mode_line_lisp_string_from_codes(&self.text, multibyte));
         }
         if let Some(face) = face_spec.face {
             self.apply_default_face(face);
         }
-        let value = Value::heap_string(crate::emacs_core::builtins::runtime_string_to_lisp_string(
-            &self.text, multibyte,
-        ));
+        let value = Value::heap_string(mode_line_lisp_string_from_codes(&self.text, multibyte));
         if value.is_string() {
             set_string_text_properties_table_for_value(value, self.text_props);
         }
@@ -1281,14 +1318,17 @@ fn append_mode_line_string_in_state(
     value: &Value,
     literal: bool,
 ) {
-    let text = if let Some(string) = value.as_lisp_string() {
-        crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes())
+    // `%` is ASCII (0x25), which can never appear as a UTF-8 continuation or
+    // lead byte, so scanning the raw bytes detects format specs without a lossy
+    // decode and stays byte-faithful for raw-unibyte literal segments.
+    let has_percent = if let Some(string) = value.as_lisp_string() {
+        string.as_bytes().contains(&b'%')
     } else if let Some(text) = value.as_utf8_str() {
-        text.to_owned()
+        text.contains('%')
     } else {
         return;
     };
-    if literal || !text.contains('%') {
+    if literal || !has_percent {
         result.append_string_value_preserving_props(value);
     } else {
         expand_mode_line_percent_in_state(
