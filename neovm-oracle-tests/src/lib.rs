@@ -2015,6 +2015,7 @@ mod divergence_combo_complex44;
 mod divergence_combo_complex45;
 mod divergence_combo_complex46;
 mod divergence_combo_complex47;
+mod divergence_combo_complex48;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
