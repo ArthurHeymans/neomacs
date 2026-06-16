@@ -356,25 +356,25 @@ fn isearch_backward_wraps() {
 #[test]
 fn case_fold_auto_lowercase_folds() {
     crate::test_utils::init_test_tracing();
-    assert!(resolve_case_fold(None, "hello"));
+    assert!(resolve_case_fold(None, &utf8_ls("hello")));
 }
 
 #[test]
 fn case_fold_auto_uppercase_exact() {
     crate::test_utils::init_test_tracing();
-    assert!(!resolve_case_fold(None, "Hello"));
+    assert!(!resolve_case_fold(None, &utf8_ls("Hello")));
 }
 
 #[test]
 fn case_fold_override_true() {
     crate::test_utils::init_test_tracing();
-    assert!(resolve_case_fold(Some(true), "Hello"));
+    assert!(resolve_case_fold(Some(true), &utf8_ls("Hello")));
 }
 
 #[test]
 fn case_fold_override_false() {
     crate::test_utils::init_test_tracing();
-    assert!(!resolve_case_fold(Some(false), "hello"));
+    assert!(!resolve_case_fold(Some(false), &utf8_ls("hello")));
 }
 
 #[test]

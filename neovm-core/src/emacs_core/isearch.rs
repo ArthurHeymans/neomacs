@@ -32,15 +32,13 @@ fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Re
     }
 }
 
-fn isearch_string_text(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
-}
-
-fn runtime_string_from_lisp_string(value: &LispString) -> String {
-    crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-        value.as_bytes(),
-        value.is_multibyte(),
-    )
+/// Render a search/replace string for a human-readable echo-area prompt only.
+///
+/// Issue #131: this is lossy by design (eight-bit / undecodable Emacs bytes
+/// become U+FFFD), so it MUST NOT be used for any matched/inserted content —
+/// only for echo-area display, where GNU likewise shows a best-effort glyph.
+fn lisp_string_for_display(value: &LispString) -> String {
+    crate::emacs_core::emacs_char::to_utf8_lossy(value.as_bytes())
 }
 
 fn empty_lisp_string(multibyte: bool) -> LispString {
@@ -100,14 +98,11 @@ fn append_runtime_fragment_to_lisp_string(value: &mut LispString, fragment: &str
     *value = value.concat(&fragment);
 }
 
-fn expect_string(val: &Value) -> Result<String, Flow> {
-    match val.kind() {
-        ValueKind::String => Ok(isearch_string_text(val).expect("checked string")),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *val],
-        )),
-    }
+fn expect_string(val: &Value) -> Result<&'static LispString, Flow> {
+    // Issue #131: keep the search/replace argument byte-faithful — hand the
+    // caller the real LispString (Emacs bytes), not a PUA-sentinel storage form.
+    val.as_lisp_string()
+        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
 }
 
 fn expect_integer_or_marker(
@@ -126,14 +121,14 @@ fn expect_integer_or_marker(
     }
 }
 
-fn expect_sequence_string(val: &Value) -> Result<String, Flow> {
-    match val.kind() {
-        ValueKind::String => Ok(isearch_string_text(val).expect("checked string")),
-        other => Err(signal(
+fn expect_sequence_string(val: &Value) -> Result<&'static LispString, Flow> {
+    // Issue #131: byte-faithful — see `expect_string`.
+    val.as_lisp_string().ok_or_else(|| {
+        signal(
             "wrong-type-argument",
             vec![Value::symbol("sequencep"), *val],
-        )),
-    }
+        )
+    })
 }
 
 fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, pos: LispCharPos1) -> EmacsBytePos {
@@ -299,55 +294,63 @@ fn replace_lax_whitespace_enabled(eval: &super::eval::Context) -> bool {
         .unwrap_or(false)
 }
 
-fn resolve_search_whitespace_regexp(eval: &super::eval::Context) -> Option<String> {
+fn resolve_search_whitespace_regexp(eval: &super::eval::Context) -> Option<LispString> {
+    // Issue #131: return the whitespace regexp as a byte-faithful LispString. The
+    // default `[ \t\n\r]+` is ASCII, but a user-set `search-whitespace-regexp`
+    // may carry eight-bit/PUA bytes, so keep the real bytes (no storage form).
     let raw = match dynamic_or_global_symbol_value(eval, "search-whitespace-regexp") {
-        Some(v) if v.is_string() => isearch_string_text(&v).expect("checked string"),
-        Some(v) if v.is_nil() => "[ \t\n\r]+".to_string(),
-        None => "[ \t\n\r]+".to_string(),
-        Some(_) => return None,
+        Some(v) => match v.as_lisp_string() {
+            Some(ls) => ls.clone(),
+            None if v.is_nil() => LispString::from_utf8("[ \t\n\r]+"),
+            None => return None,
+        },
+        None => LispString::from_utf8("[ \t\n\r]+"),
     };
     Some(raw)
 }
 
-fn quote_emacs_regexp_literal(literal: &str) -> String {
-    let mut result = String::with_capacity(literal.len() + 8);
-    for ch in literal.chars() {
-        match ch {
-            '.' | '*' | '+' | '?' | '[' | '^' | '$' | '\\' => {
-                result.push('\\');
-                result.push(ch);
+fn quote_emacs_regexp_literal_bytes(literal: &[u8], result: &mut Vec<u8>) {
+    // Issue #131: quote Emacs regexp metacharacters byte-by-byte. All quoted
+    // metacharacters are ASCII; non-ASCII Emacs bytes pass through untouched.
+    for &byte in literal {
+        match byte {
+            b'.' | b'*' | b'+' | b'?' | b'[' | b'^' | b'$' | b'\\' => {
+                result.push(b'\\');
+                result.push(byte);
             }
-            _ => result.push(ch),
+            _ => result.push(byte),
         }
     }
-    result
 }
 
-fn build_lax_whitespace_pattern(pattern: &str, whitespace_regex: &str) -> String {
-    let mut raw = String::new();
-    let mut literal = String::new();
+fn build_lax_whitespace_pattern(pattern: &[u8], whitespace_regex: &[u8]) -> Vec<u8> {
+    // Issue #131: operate on Emacs bytes — a literal run is byte-faithful, and the
+    // ASCII space (0x20) that separates runs cannot appear inside a multibyte
+    // Emacs char, so byte iteration is exact.
+    let mut raw: Vec<u8> = Vec::new();
+    let mut literal: Vec<u8> = Vec::new();
     let mut in_space_run = false;
 
-    for ch in pattern.chars() {
-        if ch == ' ' {
+    for &byte in pattern {
+        if byte == b' ' {
             if !literal.is_empty() {
-                raw.push_str(&quote_emacs_regexp_literal(&literal));
+                quote_emacs_regexp_literal_bytes(&literal, &mut raw);
                 literal.clear();
             }
             if !in_space_run {
-                raw.push_str("\\(");
-                raw.push_str(whitespace_regex);
-                raw.push_str("\\)");
+                raw.extend_from_slice(b"\\(");
+                raw.extend_from_slice(whitespace_regex);
+                raw.extend_from_slice(b"\\)");
                 in_space_run = true;
             }
         } else {
             in_space_run = false;
-            literal.push(ch);
+            literal.push(byte);
         }
     }
 
     if !literal.is_empty() {
-        raw.push_str(&quote_emacs_regexp_literal(&literal));
+        quote_emacs_regexp_literal_bytes(&literal, &mut raw);
     }
 
     raw
@@ -706,8 +709,9 @@ impl IsearchManager {
             return None;
         }
 
-        let search_string = runtime_string_from_lisp_string(&state.search_string);
-        let case_fold = resolve_case_fold(state.case_fold, &search_string);
+        // Issue #131: match the buffer text against the search string's real
+        // Emacs bytes — no storage-String round-trip.
+        let case_fold = resolve_case_fold(state.case_fold, &state.search_string);
 
         // Determine the starting position for the next search step.
         let from = match state.direction {
@@ -719,7 +723,7 @@ impl IsearchManager {
 
         if let Some(range) = find_match(
             text.as_bytes(),
-            search_string.as_bytes(),
+            state.search_string.as_bytes(),
             from,
             forward,
             state.regexp,
@@ -737,7 +741,7 @@ impl IsearchManager {
             let wrap_from = if forward { 0 } else { text.len() };
             if let Some(range) = find_match(
                 text.as_bytes(),
-                search_string.as_bytes(),
+                state.search_string.as_bytes(),
                 wrap_from,
                 forward,
                 state.regexp,
@@ -769,14 +773,14 @@ impl IsearchManager {
             return None;
         }
 
-        let search_string = runtime_string_from_lisp_string(&state.search_string);
-        let case_fold = resolve_case_fold(state.case_fold, &search_string);
+        // Issue #131: match against the search string's real Emacs bytes.
+        let case_fold = resolve_case_fold(state.case_fold, &state.search_string);
         let forward = state.direction == SearchDirection::Forward;
 
         // Search from origin first.
         if let Some(range) = find_match(
             text.as_bytes(),
-            search_string.as_bytes(),
+            state.search_string.as_bytes(),
             state.origin,
             forward,
             state.regexp,
@@ -793,7 +797,7 @@ impl IsearchManager {
         let wrap_from = if forward { 0 } else { text.len() };
         if let Some(range) = find_match(
             text.as_bytes(),
-            search_string.as_bytes(),
+            state.search_string.as_bytes(),
             wrap_from,
             forward,
             state.regexp,
@@ -827,8 +831,12 @@ impl IsearchManager {
             return;
         }
 
-        let search_string = runtime_string_from_lisp_string(&state.search_string);
-        let case_fold = resolve_case_fold(state.case_fold, &search_string);
+        // Issue #131: match the search string's real Emacs bytes against the
+        // visible region with the byte-native engine (`find_match`), the same
+        // path used by `search_next`/`search_update`. The previous literal branch
+        // lowercased through Rust `str` ops, which is not byte-faithful for
+        // eight-bit content; `find_match` folds via Emacs char codes instead.
+        let case_fold = resolve_case_fold(state.case_fold, &state.search_string);
         let start = visible_start.min(text.len());
         let end = visible_end.min(text.len());
 
@@ -836,12 +844,13 @@ impl IsearchManager {
             return;
         }
 
-        let region = &text[start..end];
+        let region = &text.as_bytes()[start..end];
+        let needle = state.search_string.as_bytes();
 
         if state.regexp {
             if let Ok(iterated) = super::regex::iterate_string_matches_with_case_fold(
-                &LispString::from_utf8(&search_string),
-                region.as_bytes(),
+                &state.search_string,
+                region,
                 0,
                 case_fold,
             ) {
@@ -856,22 +865,16 @@ impl IsearchManager {
                 }
             }
         } else {
-            let haystack = if case_fold {
-                region.to_lowercase()
-            } else {
-                region.to_string()
-            };
-            let needle = if case_fold {
-                search_string.to_lowercase()
-            } else {
-                search_string
-            };
             let mut search_from = 0;
-            while let Some(pos) = haystack[search_from..].find(&needle) {
-                let ms = start + search_from + pos;
-                let me = ms + needle.len();
-                state.lazy_matches.push(MatchGroup::new(ms, me));
-                search_from += pos + needle.len();
+            while let Some(range) = find_match(region, needle, search_from, true, false, case_fold)
+            {
+                if range.start() == range.end() {
+                    break;
+                }
+                state
+                    .lazy_matches
+                    .push(MatchGroup::new(start + range.start(), start + range.end()));
+                search_from = range.end();
             }
         }
     }
@@ -1003,7 +1006,7 @@ impl IsearchManager {
         format!(
             "{}: {}",
             prompt,
-            runtime_string_from_lisp_string(&state.search_string)
+            lisp_string_for_display(&state.search_string)
         )
     }
 }
@@ -1180,11 +1183,11 @@ impl QueryReplaceManager {
             return None;
         }
 
-        let from_string = runtime_string_from_lisp_string(&state.from_string);
-        let case_fold = resolve_case_fold(state.case_fold, &from_string);
+        // Issue #131: match against FROM's real Emacs bytes — no storage form.
+        let case_fold = resolve_case_fold(state.case_fold, &state.from_string);
         let result = find_match(
             text.as_bytes(),
-            from_string.as_bytes(),
+            state.from_string.as_bytes(),
             start,
             true,
             state.regexp,
@@ -1328,12 +1331,11 @@ impl QueryReplaceManager {
             None => return empty_lisp_string(true),
         };
 
-        let replacement = runtime_string_from_lisp_string(&state.to_string);
         if state.preserve_case {
-            storage_string_to_lisp_string(
-                &preserve_case(&replacement, matched),
-                state.to_string.is_multibyte(),
-            )
+            // Issue #131: preserve the matched text's case over TO's real Emacs
+            // bytes, instead of round-tripping through a storage String.
+            let matched_ls = LispString::from_utf8(matched);
+            super::casefiddle::apply_replace_match_case_lisp(&state.to_string, &matched_ls)
         } else {
             state.to_string.clone()
         }
@@ -1391,8 +1393,8 @@ impl QueryReplaceManager {
         format!(
             "{} {} with {}: (y/n/!/q/?)",
             kind,
-            runtime_string_from_lisp_string(&state.from_string),
-            runtime_string_from_lisp_string(&state.to_string)
+            lisp_string_for_display(&state.from_string),
+            lisp_string_for_display(&state.to_string)
         )
     }
 }
@@ -1411,12 +1413,15 @@ impl Default for QueryReplaceManager {
 ///
 /// When `override_val` is `None` (auto), we fold if the search string is
 /// entirely lowercase (Emacs `isearch-no-upper-case-p` heuristic).
-fn resolve_case_fold(override_val: Option<bool>, search_string: &str) -> bool {
+///
+/// Issue #131: scan the search string's real Emacs char codes (eight-bit raw
+/// bytes and PUA glyphs are caseless) instead of a storage-String round-trip.
+fn resolve_case_fold(override_val: Option<bool>, search_string: &LispString) -> bool {
     match override_val {
         Some(v) => v,
         None => {
             // Auto: fold if no uppercase letters in the search string.
-            !search_string.chars().any(|c| c.is_uppercase())
+            !lisp_pattern_has_uppercase(search_string)
         }
     }
 }
@@ -1690,14 +1695,8 @@ fn replace_string_eval_impl(
     query_style_point: bool,
 ) -> EvalResult {
     expect_min_max_args("replace-string", &args, 2, 7)?;
-    let from = expect_sequence_string(&args[0])?;
-    let from_ls = args[0]
-        .as_lisp_string()
-        .expect("replace-string from-string is a string");
-    expect_string(&args[1])?;
-    let to_ls = args[1]
-        .as_lisp_string()
-        .expect("replace-string to-string is a string");
+    let from_ls = expect_sequence_string(&args[0])?;
+    let to_ls = expect_string(&args[1])?;
     let to = to_ls.as_bytes();
     let delimited = args.get(2).is_some_and(|v| !v.is_nil());
     let backward = args.get(5).is_some_and(|v| !v.is_nil());
@@ -1754,7 +1753,7 @@ fn replace_string_eval_impl(
     // logical Emacs byte offsets, so the old storage->logical mapping is identity.
     let source = source_text.as_bytes();
 
-    if from.is_empty() {
+    if from_ls.is_empty() {
         if source.is_empty() {
             return Ok(Value::NIL);
         }
@@ -1842,25 +1841,26 @@ fn replace_string_eval_impl(
 
     let case_fold = case_fold_for_pattern(eval, from_ls);
     let preserve_match_case = case_fold && case_replace_enabled(eval);
-    let lax_whitespace_regex = if replace_lax_whitespace_enabled(eval) && from.contains(' ') {
-        resolve_search_whitespace_regexp(eval)
-    } else {
-        None
-    };
+    let lax_whitespace_regex =
+        if replace_lax_whitespace_enabled(eval) && from_ls.as_bytes().contains(&b' ') {
+            resolve_search_whitespace_regexp(eval)
+        } else {
+            None
+        };
     let mut out: Vec<u8> = Vec::with_capacity(source.len());
     let mut replaced = 0usize;
     let mut backward_point: Option<EmacsByteLen> = None;
     let mut query_forward_point: Option<EmacsByteLen> = None;
 
     if let Some(whitespace_regex) = lax_whitespace_regex {
-        let pattern = build_lax_whitespace_pattern(&from, &whitespace_regex);
-        let iterated = super::regex::iterate_string_matches_with_case_fold(
-            &LispString::from_utf8(&pattern),
-            source,
-            0,
-            case_fold,
-        )
-        .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
+        // Issue #131: build the lax-whitespace pattern from the real Emacs bytes
+        // of FROM and the whitespace regexp, then wrap as a byte-faithful pattern
+        // LispString for the byte-native match engine.
+        let pattern = build_lax_whitespace_pattern(from_ls.as_bytes(), whitespace_regex.as_bytes());
+        let pattern_ls = LispString::from_emacs_bytes(pattern);
+        let iterated =
+            super::regex::iterate_string_matches_with_case_fold(&pattern_ls, source, 0, case_fold)
+                .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
         let mut last = 0usize;
         for groups in iterated.matches {
             let Some(group) = groups.first().and_then(|group| *group) else {
@@ -1989,14 +1989,8 @@ fn replace_regexp_eval_impl(
     query_style_point: bool,
 ) -> EvalResult {
     expect_min_max_args("replace-regexp", &args, 2, 7)?;
-    expect_sequence_string(&args[0])?;
-    let from_ls = args[0]
-        .as_lisp_string()
-        .expect("replace-regexp regexp is a string");
-    expect_string(&args[1])?;
-    let to_ls = args[1]
-        .as_lisp_string()
-        .expect("replace-regexp to-string is a string");
+    let from_ls = expect_sequence_string(&args[0])?;
+    let to_ls = expect_string(&args[1])?;
     let to = to_ls.as_bytes();
     let delimited = args.get(2).is_some_and(|v| !v.is_nil());
     let backward = args.get(5).is_some_and(|v| !v.is_nil());
@@ -2229,10 +2223,7 @@ pub(crate) fn builtin_query_replace_regexp(
 /// evaluator-backed non-interactive line filtering subset.
 pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("keep-lines", &args, 1, 4)?;
-    expect_sequence_string(&args[0])?;
-    let regexp_ls = args[0]
-        .as_lisp_string()
-        .expect("keep-lines regexp is a string");
+    let regexp_ls = expect_sequence_string(&args[0])?;
 
     let (point_min, range, source_text) = {
         let buf = eval
@@ -2318,10 +2309,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
 /// evaluator-backed non-interactive line filtering subset.
 pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("flush-lines", &args, 1, 4)?;
-    expect_sequence_string(&args[0])?;
-    let regexp_ls = args[0]
-        .as_lisp_string()
-        .expect("flush-lines regexp is a string");
+    let regexp_ls = expect_sequence_string(&args[0])?;
 
     let (point_min, range, source_text) = {
         let buf = eval
@@ -2401,10 +2389,7 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
 /// evaluator-backed regexp match counting subset.
 pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("how-many", &args, 1, 4)?;
-    let regexp = expect_sequence_string(&args[0])?;
-    let regexp_ls = args[0]
-        .as_lisp_string()
-        .expect("how-many regexp is a string");
+    let regexp_ls = expect_sequence_string(&args[0])?;
 
     let source_text = {
         let buf = eval
@@ -2415,7 +2400,7 @@ pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>
         buf.buffer_substring_lisp_string_range(range)
     };
 
-    if regexp.is_empty() {
+    if regexp_ls.is_empty() {
         return Ok(Value::fixnum(source_text.schars() as i64));
     }
 
@@ -2436,10 +2421,7 @@ pub(crate) fn builtin_count_matches(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_max_args("count-matches", &args, 1, 4)?;
-    let regexp = expect_sequence_string(&args[0])?;
-    let regexp_ls = args[0]
-        .as_lisp_string()
-        .expect("count-matches regexp is a string");
+    let regexp_ls = expect_sequence_string(&args[0])?;
 
     let source_text = {
         let buf = eval
@@ -2450,7 +2432,7 @@ pub(crate) fn builtin_count_matches(
         buf.buffer_substring_lisp_string_range(range)
     };
 
-    if regexp.is_empty() {
+    if regexp_ls.is_empty() {
         return Ok(Value::fixnum(source_text.schars() as i64));
     }
 
