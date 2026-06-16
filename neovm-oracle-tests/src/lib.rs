@@ -2007,6 +2007,7 @@ mod divergence_combo_complex36;
 mod divergence_combo_complex37;
 mod divergence_combo_complex38;
 mod divergence_combo_complex39;
+mod divergence_combo_complex40;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
