@@ -36,10 +36,32 @@ pub(crate) fn builtin_string_equal_2(
     builtin_string_equal_values(a_value, b_value)
 }
 
+/// Decode a comparison operand to its character codes. Multibyte strings decode
+/// Emacs chars (eight-bit chars are 0x3FFF00+); a unibyte string's bytes are its
+/// characters (0..=255). Unlike compare-strings, string=/string</string> keep a
+/// unibyte raw byte distinct from the multibyte eight-bit char, matching GNU.
+fn string_comparison_codes(value: &crate::heap_types::LispString) -> Vec<u32> {
+    let bytes = value.as_bytes();
+    if value.is_multibyte() {
+        let mut codes = Vec::new();
+        let mut pos = 0;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            codes.push(code);
+            pos += len.max(1);
+        }
+        codes
+    } else {
+        bytes.iter().map(|&b| b as u32).collect()
+    }
+}
+
 fn builtin_string_equal_values(a_value: Value, b_value: Value) -> EvalResult {
     let a = expect_string_comparison_operand(&a_value)?;
     let b = expect_string_comparison_operand(&b_value)?;
-    Ok(Value::bool_val(a == b))
+    Ok(Value::bool_val(
+        string_comparison_codes(&a) == string_comparison_codes(&b),
+    ))
 }
 
 pub(crate) fn builtin_string_lessp(args: Vec<Value>) -> EvalResult {
@@ -58,14 +80,18 @@ pub(crate) fn builtin_string_lessp_2(
 fn builtin_string_lessp_values(a_value: Value, b_value: Value) -> EvalResult {
     let a = expect_string_comparison_operand(&a_value)?;
     let b = expect_string_comparison_operand(&b_value)?;
-    Ok(Value::bool_val(a < b))
+    Ok(Value::bool_val(
+        string_comparison_codes(&a) < string_comparison_codes(&b),
+    ))
 }
 
 pub(crate) fn builtin_string_greaterp(args: Vec<Value>) -> EvalResult {
     expect_args("string-greaterp", &args, 2)?;
     let a = expect_string_comparison_operand(&args[0])?;
     let b = expect_string_comparison_operand(&args[1])?;
-    Ok(Value::bool_val(a > b))
+    Ok(Value::bool_val(
+        string_comparison_codes(&a) > string_comparison_codes(&b),
+    ))
 }
 
 fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResult {

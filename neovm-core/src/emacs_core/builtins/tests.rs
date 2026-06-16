@@ -865,6 +865,35 @@ fn pure_dispatch_typed_string_equal_aliases_match() {
 }
 
 #[test]
+fn string_comparison_orders_eight_bit_above_ascii_and_keeps_unibyte_distinct() {
+    crate::test_utils::init_test_tracing();
+    let mut buf = [0u8; 8];
+    let len = crate::emacs_core::emacs_char::char_string(
+        crate::emacs_core::emacs_char::byte8_to_char(0xFF),
+        &mut buf,
+    );
+    let multibyte_eight_bit = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(
+        buf[..len].to_vec(),
+    ));
+
+    // An eight-bit char sorts above ASCII (char-code order, matching GNU).
+    let lt = dispatch_builtin_pure("string<", vec![Value::string("a"), multibyte_eight_bit])
+        .expect("string< resolves")
+        .expect("string< evaluates");
+    assert!(lt.is_truthy(), "ASCII should sort before an eight-bit char");
+
+    // string= keeps a unibyte raw byte distinct from the multibyte eight-bit char.
+    let unibyte = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
+    let eq = dispatch_builtin_pure("string=", vec![unibyte, multibyte_eight_bit])
+        .expect("string= resolves")
+        .expect("string= evaluates");
+    assert!(
+        !eq.is_truthy(),
+        "unibyte 0xFF must not equal the multibyte eight-bit char"
+    );
+}
+
+#[test]
 fn pure_dispatch_typed_string_comparisons_accept_symbol_designators() {
     crate::test_utils::init_test_tracing();
     let less = dispatch_builtin_pure("string<", vec![Value::symbol("foo"), Value::string("g")])

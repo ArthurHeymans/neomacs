@@ -570,17 +570,23 @@ pub(super) fn expect_lisp_string(
     })
 }
 
-pub(super) fn expect_string_comparison_operand(value: &Value) -> Result<String, Flow> {
+pub(super) fn expect_string_comparison_operand(
+    value: &Value,
+) -> Result<crate::heap_types::LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload")),
-        _ => value.as_symbol_name().map(str::to_owned).ok_or_else(|| {
-            signal(
-                "wrong-type-argument",
-                vec![Value::symbol("stringp"), *value],
-            )
-        }),
+            .as_lisp_string()
+            .expect("ValueKind::String must carry LispString payload")
+            .clone()),
+        _ => value
+            .as_symbol_name()
+            .map(crate::heap_types::LispString::from_utf8)
+            .ok_or_else(|| {
+                signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("stringp"), *value],
+                )
+            }),
     }
 }
 
