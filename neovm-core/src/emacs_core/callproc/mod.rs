@@ -144,8 +144,11 @@ fn signal_wrong_type_string(value: Value) -> Flow {
 }
 
 fn callproc_owned_runtime_string(value: Value) -> String {
+    // The sole caller looks up a destination buffer by name; names are
+    // ASCII/Unicode, for which to_utf8_lossy is exact.
     value
-        .as_runtime_string_owned()
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .expect("ValueKind::String must carry LispString payload")
 }
 

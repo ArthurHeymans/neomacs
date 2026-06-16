@@ -24,7 +24,11 @@ thread_local! {
 }
 
 fn load_string_text(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    // Used for error display, loaddefs file-name filtering and symbol-name
+    // collection — all ASCII/Unicode, for which to_utf8_lossy is exact.
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn load_display_string(value: &LispString) -> String {
