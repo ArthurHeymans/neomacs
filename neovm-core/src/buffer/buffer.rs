@@ -1914,8 +1914,11 @@ impl Buffer {
     }
 
     pub fn name_runtime_string_owned(&self) -> String {
+        // Buffer names are decoded text (ASCII/Unicode); to_utf8_lossy is exact
+        // for those and only differs for pathological raw-eight-bit names.
         self.name
-            .as_runtime_string_owned()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
             .expect("buffer name must be a Lisp string")
     }
 
@@ -4354,7 +4357,8 @@ impl BufferManager {
         self.dead_buffers.iter().find_map(|(id, buffer)| {
             (buffer
                 .last_name_value()
-                .as_runtime_string_owned()
+                .as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                 .as_deref()
                 == Some(name))
             .then_some(*id)
