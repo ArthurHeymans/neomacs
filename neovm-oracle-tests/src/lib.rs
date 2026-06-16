@@ -2022,6 +2022,7 @@ mod divergence_combo_complex51;
 mod divergence_combo_complex52;
 mod divergence_combo_complex53;
 mod divergence_combo_complex54;
+mod divergence_combo_complex55;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
