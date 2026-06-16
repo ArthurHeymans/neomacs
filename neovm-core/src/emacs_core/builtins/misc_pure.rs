@@ -75,17 +75,12 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         .goto_buffer_emacs_byte_pos(buf_id, old_full_end)
         .is_some()
     {
-        let same_multibyte = ctx
-            .buffers
-            .get(buf_id)
-            .map(|buf| buf.get_multibyte() == msg.is_multibyte())
-            .unwrap_or(false);
-        if same_multibyte {
-            let _ = ctx.buffers.insert_lisp_string_into_buffer(buf_id, msg);
-        } else {
-            let text = super::runtime_string_from_lisp_string(msg);
-            let _ = ctx.buffers.insert_into_buffer(buf_id, &text);
-        }
+        // Issue #131: `*Messages*` content must stay byte-faithful. Always go
+        // through the LispString insert path, which performs GNU's
+        // `insert_from_string` byte-level multibyte conversion (raw eight-bit
+        // bytes preserved as raw-byte chars) instead of a lossy Rust-String
+        // round-trip that would corrupt them.
+        let _ = ctx.buffers.insert_lisp_string_into_buffer(buf_id, msg);
         let _ = ctx.buffers.insert_into_buffer(buf_id, "\n");
     }
 
@@ -213,11 +208,11 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
         if matches!(displayed_message, EchoMessageSetResult::EchoArea(_)) && !ctx.noninteractive() {
             ctx.ensure_echo_area_buffers();
         }
-        tracing::info!(msg = %super::runtime_string_from_lisp_string(&msg));
+        tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes()));
         // GNU Emacs editfns.c: in batch mode, message prints to stderr with newline.
         if ctx.noninteractive() {
             use std::io::Write;
-            let text = super::runtime_string_from_lisp_string(&msg);
+            let text = crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes());
             let _ = std::io::stderr().write_all(text.as_bytes());
             let _ = std::io::stderr().write_all(b"\n");
             let _ = std::io::stderr().flush();

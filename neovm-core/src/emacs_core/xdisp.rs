@@ -970,7 +970,7 @@ impl ModeLineRendered {
     fn append_string_value_preserving_props(&mut self, value: &Value) {
         match value.as_lisp_string() {
             Some(string) => {
-                let text = crate::emacs_core::builtins::runtime_string_from_lisp_string(string);
+                let text = crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes());
                 let char_offset = self.char_len();
                 self.text.push_str(&text);
                 if let Some(props) = get_string_text_properties_table_for_value(*value) {
@@ -1006,7 +1006,7 @@ impl ModeLineRendered {
         }
         match value.as_lisp_string() {
             Some(string) => {
-                let text = crate::emacs_core::builtins::runtime_string_from_lisp_string(string);
+                let text = crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes());
                 let char_offset = self.char_len();
                 self.text.push_str(
                     &text
@@ -1282,7 +1282,7 @@ fn append_mode_line_string_in_state(
     literal: bool,
 ) {
     let text = if let Some(string) = value.as_lisp_string() {
-        crate::emacs_core::builtins::runtime_string_from_lisp_string(string)
+        crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes())
     } else if let Some(text) = value.as_utf8_str() {
         text.to_owned()
     } else {
@@ -2011,7 +2011,7 @@ fn expand_mode_line_percent_in_state(
     result: &mut ModeLineRendered,
 ) {
     let fmt_storage = if let Some(string) = value.as_lisp_string() {
-        crate::emacs_core::builtins::runtime_string_from_lisp_string(string)
+        crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes())
     } else if let Some(text) = value.as_utf8_str() {
         text.to_owned()
     } else {

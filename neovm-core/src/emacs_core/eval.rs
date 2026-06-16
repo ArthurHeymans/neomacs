@@ -7674,7 +7674,7 @@ impl Context {
     pub fn current_message_text(&self) -> Option<String> {
         self.current_message
             .as_ref()
-            .map(|message| crate::emacs_core::builtins::runtime_string_from_lisp_string(message))
+            .map(|message| crate::emacs_core::emacs_char::to_utf8_lossy(message.as_bytes()))
     }
 
     pub fn minibuffer_is_active(&self) -> bool {

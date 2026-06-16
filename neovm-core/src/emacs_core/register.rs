@@ -57,6 +57,23 @@ impl RegisterContent {
     }
 }
 
+/// Issue #131: join rectangle register lines into a single string for
+/// `insert-register` / `register-to-string`. The result is buffer CONTENT, so
+/// it must stay byte-faithful: each line's raw Emacs bytes are concatenated via
+/// the GNU-parity `concat` path (which performs proper multibyte promotion)
+/// rather than a lossy Rust-`String` round-trip that would turn raw eight-bit
+/// bytes into `U+FFFD`.
+fn join_rectangle_lines_faithfully(lines: &[LispString]) -> EvalResult {
+    let mut args = Vec::with_capacity(lines.len().saturating_mul(2).saturating_sub(1));
+    for (idx, line) in lines.iter().enumerate() {
+        if idx > 0 {
+            args.push(Value::string("\n"));
+        }
+        args.push(Value::heap_string(line.clone()));
+    }
+    super::builtins::builtin_concat_slice(&args)
+}
+
 // ---------------------------------------------------------------------------
 // RegisterManager
 // ---------------------------------------------------------------------------
@@ -308,12 +325,11 @@ pub(crate) fn builtin_insert_register(
         Some(RegisterContent::Text(s)) => Ok(Value::heap_string(s.clone())),
         Some(RegisterContent::Number(n)) => Ok(Value::string(n.to_string())),
         Some(RegisterContent::Rectangle(lines)) => {
-            let rendered = lines
-                .iter()
-                .map(super::builtins::runtime_string_from_lisp_string)
-                .collect::<Vec<_>>()
-                .join("\n");
-            Ok(Value::string(rendered))
+            // Issue #131: register CONTENT inserted into a buffer must stay
+            // byte-faithful. Join the lines via the GNU-parity concat path
+            // (handles multibyte promotion) instead of a lossy Rust-String
+            // round-trip that would corrupt raw eight-bit bytes.
+            join_rectangle_lines_faithfully(lines)
         }
         Some(_) => Err(signal(
             "error",
@@ -413,7 +429,7 @@ pub(crate) fn builtin_view_register(
     let reg = expect_register(&args[0])?;
     match eval.registers.get(reg) {
         Some(RegisterContent::Text(s)) => {
-            let rendered = super::builtins::runtime_string_from_lisp_string(s);
+            let rendered = super::emacs_char::to_utf8_lossy(s.as_bytes());
             let desc = if rendered.len() > 60 {
                 format!("Register {} contains text: {}...", reg, &rendered[..60])
             } else {
@@ -453,7 +469,7 @@ pub(crate) fn builtin_view_register(
         Some(RegisterContent::File(f)) => Ok(Value::string(format!(
             "Register {} contains file: {}",
             reg,
-            super::builtins::runtime_string_from_lisp_string(f)
+            super::emacs_char::to_utf8_lossy(f.as_bytes())
         ))),
         Some(RegisterContent::KbdMacro(keys)) => Ok(Value::string(format!(
             "Register {} contains a keyboard macro ({} keys)",
@@ -501,13 +517,7 @@ pub(crate) fn builtin_register_to_string(
     let reg = expect_register(&args[0])?;
     match eval.registers.get(reg) {
         Some(RegisterContent::Text(s)) => Ok(Value::heap_string(s.clone())),
-        Some(RegisterContent::Rectangle(lines)) => Ok(Value::string(
-            lines
-                .iter()
-                .map(super::builtins::runtime_string_from_lisp_string)
-                .collect::<Vec<_>>()
-                .join("\n"),
-        )),
+        Some(RegisterContent::Rectangle(lines)) => join_rectangle_lines_faithfully(lines),
         _ => Ok(Value::NIL),
     }
 }

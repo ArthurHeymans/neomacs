@@ -30,7 +30,7 @@ fn fontset_name_lisp_string(name: &str) -> LispString {
 }
 
 fn fontset_name_runtime(name: &LispString) -> String {
-    super::builtins::runtime_string_from_lisp_string(name)
+    crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes())
 }
 
 thread_local! {

@@ -122,8 +122,7 @@ impl KmacroManager {
     pub fn format_counter(&self) -> String {
         // Support basic %d / %o / %x / %X formats.
         // For anything more complex, fall back to decimal.
-        let fmt =
-            crate::emacs_core::builtins::runtime_string_from_lisp_string(&self.counter_format);
+        let fmt = crate::emacs_core::emacs_char::to_utf8_lossy(self.counter_format.as_bytes());
         if fmt.contains("%d") {
             fmt.replace("%d", &self.counter.to_string())
         } else if fmt.contains("%o") {

@@ -537,7 +537,7 @@ pub(crate) fn builtin_make_category_set(args: Vec<Value>) -> EvalResult {
     expect_args("make-category-set", &args, 1)?;
 
     let categories = match args[0].as_lisp_string() {
-        Some(string) => super::builtins::runtime_string_from_lisp_string(string),
+        Some(string) => super::emacs_char::to_utf8_lossy(string.as_bytes()),
         _ => {
             return Err(signal(
                 "wrong-type-argument",
