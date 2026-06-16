@@ -302,7 +302,7 @@ impl PieceTreeTextBackend {
         );
         let mut out = Vec::with_capacity(end - start);
         self.copy_emacs_byte_range_to(range, &mut out);
-        crate::emacs_core::string_escape::emacs_bytes_to_storage_string(&out, self.multibyte)
+        crate::emacs_core::emacs_char::emacs_bytes_to_lossy_string(&out, self.multibyte)
     }
 
     pub(in crate::buffer) fn copy_emacs_byte_range_to(

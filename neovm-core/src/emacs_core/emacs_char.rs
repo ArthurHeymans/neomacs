@@ -1283,6 +1283,24 @@ pub fn to_utf8_lossy(bytes: &[u8]) -> String {
     out
 }
 
+/// Decode Emacs-bytes into a lossy Rust `String` for measurement/layout/Debug
+/// consumers (line/char counting, motion, display estimation).
+///
+/// Valid Unicode (including real PUA glyphs) is preserved; raw eight-bit bytes
+/// that have no Unicode scalar become `U+FFFD` (which still counts as one
+/// char). This is NOT a faithful round-trip and must never be used on any
+/// subprocess/content path — those use the byte-faithful APIs instead.
+pub fn emacs_bytes_to_lossy_string(bytes: &[u8], multibyte: bool) -> String {
+    if multibyte {
+        to_utf8_lossy(bytes)
+    } else {
+        bytes
+            .iter()
+            .map(|&b| if b < 0x80 { b as char } else { '\u{FFFD}' })
+            .collect()
+    }
+}
+
 /// Convert a UTF-8 string to Emacs internal encoding.
 ///
 /// For standard Unicode this is a no-op (UTF-8 is a subset of Emacs encoding).

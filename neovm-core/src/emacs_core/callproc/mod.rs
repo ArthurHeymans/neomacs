@@ -558,9 +558,7 @@ fn encode_call_process_region_string_input(input: &LispString) -> Vec<u8> {
     crate::encoding::encode_lisp_string(input, "utf-8-unix")
 }
 
-fn encode_call_process_region_buffer_text(storage_text: String) -> Vec<u8> {
-    let emacs_bytes =
-        crate::emacs_core::string_escape::storage_string_to_buffer_bytes(&storage_text, true);
+fn encode_call_process_region_buffer_text(emacs_bytes: Vec<u8>) -> Vec<u8> {
     crate::emacs_core::emacs_char::str_as_unibyte(&emacs_bytes)
 }
 
@@ -774,7 +772,9 @@ fn builtin_call_process_region_impl(
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
                 (
-                    encode_call_process_region_buffer_text(buf.full_text_string()),
+                    encode_call_process_region_buffer_text(
+                        buf.buffer_substring_bytes_range(buf.full_emacs_byte_range()),
+                    ),
                     buf.full_emacs_byte_range(),
                 )
             };
@@ -809,7 +809,7 @@ fn builtin_call_process_region_impl(
                 let region = super::process::checked_region_bytes(buf, region_args)?;
                 (
                     encode_call_process_region_buffer_text(
-                        buf.storage_text_emacs_byte_range(region),
+                        buf.buffer_substring_bytes_range(region),
                     ),
                     region,
                 )

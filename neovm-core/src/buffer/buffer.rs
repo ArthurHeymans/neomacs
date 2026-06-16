@@ -2594,11 +2594,6 @@ impl Buffer {
             )
     }
 
-    pub(crate) fn storage_text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
-        self.text
-            .text_emacs_byte_range(self.clamped_emacs_byte_range(range))
-    }
-
     pub fn try_for_each_emacs_byte_range_chunk<E>(
         &self,
         range: EmacsByteRange,
@@ -2688,10 +2683,7 @@ impl Buffer {
     /// Return a `String` copy of the Emacs-byte range `[start, end)`.
     pub fn buffer_substring_range(&self, range: EmacsByteRange) -> String {
         let bytes = self.buffer_substring_bytes_range(range);
-        crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-            &bytes,
-            self.get_multibyte(),
-        )
+        crate::emacs_core::emacs_char::emacs_bytes_to_lossy_string(&bytes, self.get_multibyte())
     }
 
     /// Return the entire accessible portion of the buffer as a `String`.
