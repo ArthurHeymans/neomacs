@@ -197,7 +197,7 @@ pub(crate) fn builtin_get_buffer_create(
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Buffer) => Ok(args[0]),
         _ => {
-            let name = expect_string(&args[0])?;
+            let name = expect_string_lossy(&args[0])?;
             if let Some(id) = eval.buffers.find_buffer_by_name(&name) {
                 Ok(Value::make_buffer(id))
             } else {
@@ -257,7 +257,7 @@ pub(crate) fn prepare_make_indirect_buffer_in_manager(
         }
     };
 
-    let name = expect_string(&args[1])?;
+    let name = expect_string_lossy(&args[1])?;
     if name.is_empty() {
         return Err(signal(
             "error",
@@ -4163,7 +4163,7 @@ pub(crate) fn builtin_generate_new_buffer_name(
             vec![Value::symbol("stringp"), args[1]],
         ));
     }
-    let base = expect_string(&args[0])?;
+    let base = expect_string_lossy(&args[0])?;
     let ignore = args.get(1).and_then(|v| v.as_utf8_str());
     Ok(Value::string(
         eval.buffers

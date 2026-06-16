@@ -911,8 +911,8 @@ pub(crate) fn builtin_string_match_with_state(
                     }
                 }
                 _ => {
-                    let pattern = expect_string(&args[0])?;
-                    let s = expect_string(&args[1])?;
+                    let pattern = expect_string_lossy(&args[0])?;
+                    let s = expect_string_lossy(&args[1])?;
                     let start = normalize_string_start_arg(&s, args.get(2))?;
                     let mut throwaway = None;
                     let target = if inhibit_modify {
@@ -1038,8 +1038,8 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     }
                 }
                 _ => {
-                    let pattern = expect_string(&args[0])?;
-                    let s = expect_string(&args[1])?;
+                    let pattern = expect_string_lossy(&args[0])?;
+                    let s = expect_string_lossy(&args[1])?;
                     let start = normalize_string_start_arg(&s, args.get(2))?;
                     let mut throwaway = None;
                     let target = if inhibit_modify {
@@ -1101,8 +1101,8 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             }
         }
         _ => {
-            let pattern = expect_string(&args[0])?;
-            let s = expect_string(&args[1])?;
+            let pattern = expect_string_lossy(&args[0])?;
+            let s = expect_string_lossy(&args[1])?;
             let start = normalize_string_start_arg(&s, args.get(2))?;
             let mut throwaway = None;
 

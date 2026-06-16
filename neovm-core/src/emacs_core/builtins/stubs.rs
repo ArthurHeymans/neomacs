@@ -25,8 +25,8 @@ pub(crate) fn builtin_dbus_make_inhibitor_lock(
     expect_range_args("dbus-make-inhibitor-lock", &args, 2, 3)?;
     // GNU dbusbind.c:Fdbus_make_inhibitor_lock performs CHECK_STRING on
     // WHAT and WHY before any D-Bus side effect.
-    let what_text = expect_string(&args[0])?;
-    let why_text = expect_string(&args[1])?;
+    let what_text = expect_string_lossy(&args[0])?;
+    let why_text = expect_string_lossy(&args[1])?;
     let block = args.get(2).copied().unwrap_or(Value::NIL);
     let normalized_block = if block.is_nil() { Value::NIL } else { Value::T };
     let mode = if block.is_nil() { "delay" } else { "block" };

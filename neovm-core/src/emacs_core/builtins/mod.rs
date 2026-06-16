@@ -570,6 +570,14 @@ pub(super) fn expect_lisp_string(
     })
 }
 
+/// Validate a string argument and decode it to a Rust `String` for text-only
+/// processing (display strings, names, identifiers). Valid Unicode (including
+/// real Private-Use glyphs) is preserved exactly; raw eight-bit bytes become
+/// U+FFFD. Callers that must preserve raw bytes use `expect_lisp_string`.
+pub(super) fn expect_string_lossy(value: &Value) -> Result<String, Flow> {
+    expect_lisp_string(value).map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+}
+
 pub(super) fn expect_string_comparison_operand(
     value: &Value,
 ) -> Result<crate::heap_types::LispString, Flow> {

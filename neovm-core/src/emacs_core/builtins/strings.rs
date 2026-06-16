@@ -276,9 +276,8 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                     vec![Value::symbol("arrayp"), args[0]],
                 ))
             } else {
-                let s = expect_string(&args[0])?;
-                let _ = s;
-                unreachable!("expect_string either returns a string or signals")
+                let _ = expect_lisp_string(&args[0])?;
+                unreachable!("expect_lisp_string either returns a string or signals")
             }
         }
     }
@@ -529,7 +528,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
 pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
     expect_min_args("string-to-number", &args, 1)?;
     expect_max_args("string-to-number", &args, 2)?;
-    let s = expect_string(&args[0])?;
+    let s = expect_string_lossy(&args[0])?;
     let base = if args.len() > 1 && !args[1].is_nil() {
         expect_fixnum(&args[1])?
     } else {
@@ -933,8 +932,8 @@ fn preserve_emacs_downcase_string_payload(code: i64) -> bool {
 
 pub(crate) fn builtin_ngettext(args: Vec<Value>) -> EvalResult {
     expect_args("ngettext", &args, 3)?;
-    let singular = expect_strict_string(&args[0])?;
-    let plural = expect_strict_string(&args[1])?;
+    let singular = expect_string_lossy(&args[0])?;
+    let plural = expect_string_lossy(&args[1])?;
     let count = expect_int(&args[2])?;
     if count == 1 {
         Ok(Value::string(singular))

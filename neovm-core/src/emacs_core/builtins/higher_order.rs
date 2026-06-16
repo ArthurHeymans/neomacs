@@ -274,7 +274,7 @@ pub(crate) fn builtin_funcall_with_delayed_message(
 ) -> EvalResult {
     expect_args("funcall-with-delayed-message", &args, 3)?;
     let _delay = expect_number(&args[0])?;
-    let _message = expect_string(&args[1])?;
+    let _message = expect_lisp_string(&args[1])?;
     apply0(eval, args[2])
 }
 

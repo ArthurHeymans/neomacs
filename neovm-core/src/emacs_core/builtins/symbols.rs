@@ -2096,7 +2096,7 @@ pub(crate) fn builtin_rename_buffer(
 ) -> EvalResult {
     let buffers = &mut eval.buffers;
     expect_range_args("rename-buffer", &args, 1, 2)?;
-    let name = expect_strict_string(&args[0])?;
+    let name = expect_string_lossy(&args[0])?;
 
     if name.is_empty() {
         return Err(signal(
@@ -2601,7 +2601,7 @@ fn dynamic_or_global_symbol_value_in_state(
 pub(crate) fn builtin_new_fontset(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("new-fontset", &args, 2)?;
     let obarray = eval.obarray();
-    let name = expect_strict_string(&args[0])?;
+    let name = expect_string_lossy(&args[0])?;
     let char_script_table =
         dynamic_or_global_symbol_value_in_state(obarray, &[], "char-script-table");
     let charset_script_alist =
@@ -2875,7 +2875,7 @@ pub(crate) fn builtin_query_font(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_query_fontset(args: Vec<Value>) -> EvalResult {
     expect_range_args("query-fontset", &args, 1, 2)?;
-    let pattern = expect_strict_string(&args[0])?;
+    let pattern = expect_string_lossy(&args[0])?;
     if pattern.is_empty() {
         return Ok(Value::NIL);
     }
@@ -5166,7 +5166,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
-    let resource_value = expect_strict_string(&args[2])?;
+    let resource_value = expect_string_lossy(&args[2])?;
 
     let Some(attr_id) = symbol_id(&args[1]) else {
         return Err(signal(

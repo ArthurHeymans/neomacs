@@ -1651,7 +1651,7 @@ pub(crate) fn builtin_treesit_node_child_by_field_name(
         return Ok(Value::NIL);
     }
     let handle = ensure_current_node(eval, "treesit-node-child-by-field-name", args[0])?;
-    let field_name = expect_string(&args[1])?;
+    let field_name = expect_string_lossy(&args[1])?;
     let node = unsafe { tree_sitter::Node::from_raw(handle.raw) };
     Ok(node
         .child_by_field_name(&field_name)
