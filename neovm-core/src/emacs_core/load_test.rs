@@ -8797,18 +8797,24 @@ fn load_file_reads_utf8_emacs_extended_char_literals() {
 #[test]
 fn reader_accepts_utf8_emacs_extended_char_literals_from_ethiopic_source() {
     crate::test_utils::init_test_tracing();
-    let source = decode_emacs_utf8_source(
+    let source = decode_emacs_utf8_source_lisp(
         b"(aset composition-function-table ?\xF6\xA0\x87\x8A #'ethio-composition-function)\n",
     );
 
-    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+    let forms = crate::emacs_core::value_reader::read_all_lisp_source(
         &source,
-        true,
         &crate::emacs_core::symbol::Obarray::new(),
     )
     .expect("reader should accept utf-8-emacs extended chars before function quote");
 
     assert_eq!(forms.len(), 1);
+
+    // The non-Unicode ethiopic source character literal `?\xF6\xA0\x87\x8A`
+    // must keep its real code (0x1A01CA) via the faithful LispString path,
+    // not collapse to U+FFFD (issue #131).
+    let items =
+        crate::emacs_core::value::list_to_vec(&forms[0]).expect("aset form should be a list");
+    assert_eq!(items[2].as_fixnum(), Some(0x1A_01CA));
 }
 
 #[test]
@@ -8821,11 +8827,10 @@ fn reader_accepts_utf8_emacs_extended_char_literals_in_full_ethiopic_source() {
             .join("lisp/language/ethiopic.el"),
     )
     .expect("read ethiopic source fixture");
-    let source = decode_emacs_utf8_source(&bytes);
+    let source = decode_emacs_utf8_source_lisp(&bytes);
 
-    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+    let forms = crate::emacs_core::value_reader::read_all_lisp_source(
         &source,
-        true,
         &crate::emacs_core::symbol::Obarray::new(),
     )
     .expect("reader should accept GNU utf-8-emacs source files");
@@ -8843,10 +8848,7 @@ fn lisp_source_reader_accepts_utf8_emacs_extended_char_literals_in_full_ethiopic
             .join("lisp/language/ethiopic.el"),
     )
     .expect("read ethiopic source fixture");
-    let text = crate::emacs_core::builtins::runtime_string_to_lisp_string(
-        &decode_emacs_utf8_source(&bytes),
-        true,
-    );
+    let text = decode_emacs_utf8_source_lisp(&bytes);
     let source = crate::emacs_core::value_reader::LispReadSource::new(&text);
 
     let mut pos = 0;

@@ -128,20 +128,6 @@ fn bootstrap_prefers_ldefs_boot() -> bool {
     BOOTSTRAP_PREFER_LDEFS_BOOT.with(Cell::get)
 }
 
-/// Decode Emacs source bytes into the runtime storage string representation.
-///
-/// Emacs uses a superset of UTF-8 that allows code points above U+10FFFF
-/// (used for internal charset characters, eight-bit raw bytes, etc.).
-/// These are encoded using UTF-8-style 4/5/6-byte sequences that standard
-/// UTF-8 rejects once the leading byte is above F4.
-///
-/// Keep this on the same coding-system path as `insert-file-contents` and
-/// `decode-coding-string`, so the reader sees storage sentinels for every
-/// non-Unicode Emacs character instead of source-load-specific rewrites.
-pub(crate) fn decode_emacs_utf8_source(bytes: &[u8]) -> String {
-    crate::encoding::decode_bytes(bytes, source_emacs_coding(bytes))
-}
-
 /// EOL-aware coding-system name for an Emacs-extended UTF-8 source file.
 fn source_emacs_coding(bytes: &[u8]) -> &'static str {
     match detect_source_eol(bytes) {
@@ -3075,19 +3061,17 @@ fn collect_source_surface_from_paths(
             ))],
             raw_data: None,
         })?;
-        let source = decode_emacs_utf8(&bytes);
+        let source = decode_emacs_utf8_source_lisp(&bytes);
         let obarray = crate::emacs_core::symbol::Obarray::new();
-        let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
-            &source, true, &obarray,
-        )
-        .map_err(|err| EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
-                "{error_context}: failed parsing {}: {err}",
-                path.display()
-            ))],
-            raw_data: None,
-        })?;
+        let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &obarray)
+            .map_err(|err| EvalError::Signal {
+                symbol: intern("error"),
+                data: vec![Value::string(format!(
+                    "{error_context}: failed parsing {}: {err}",
+                    path.display()
+                ))],
+                raw_data: None,
+            })?;
 
         for form in forms {
             collect_value_symbol_names(
@@ -3256,19 +3240,17 @@ fn collect_loaddefs_surface_from_paths(
             ))],
             raw_data: None,
         })?;
-        let source = decode_emacs_utf8(&bytes);
+        let source = decode_emacs_utf8_source_lisp(&bytes);
         let obarray = crate::emacs_core::symbol::Obarray::new();
-        let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
-            &source, true, &obarray,
-        )
-        .map_err(|err| EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
-                "{error_context}: failed parsing {}: {err}",
-                path.display()
-            ))],
-            raw_data: None,
-        })?;
+        let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &obarray)
+            .map_err(|err| EvalError::Signal {
+                symbol: intern("error"),
+                data: vec![Value::string(format!(
+                    "{error_context}: failed parsing {}: {err}",
+                    path.display()
+                ))],
+                raw_data: None,
+            })?;
 
         for form in &forms {
             collect_loaddefs_autoload_args(*form, allowed_files, allowed_names, &mut state);
@@ -3599,7 +3581,7 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
 ) -> Result<(), EvalError> {
     let project_root = runtime_project_root();
     let ldefs_path = project_root.join("lisp/ldefs-boot.el");
-    let source = fs::read_to_string(&ldefs_path).map_err(|err| EvalError::Signal {
+    let bytes = fs::read(&ldefs_path).map_err(|err| EvalError::Signal {
         symbol: intern("error"),
         data: vec![Value::string(format!(
             "ldefs-boot autoload restore: failed reading {}: {err}",
@@ -3607,19 +3589,16 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
         ))],
         raw_data: None,
     })?;
-    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
-        &source,
-        true,
-        &eval.obarray,
-    )
-    .map_err(|err| EvalError::Signal {
-        symbol: intern("error"),
-        data: vec![Value::string(format!(
-            "ldefs-boot autoload restore: failed parsing {}: {err}",
-            ldefs_path.display()
-        ))],
-        raw_data: None,
-    })?;
+    let source = decode_emacs_utf8_source_lisp(&bytes);
+    let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &eval.obarray)
+        .map_err(|err| EvalError::Signal {
+            symbol: intern("error"),
+            data: vec![Value::string(format!(
+                "ldefs-boot autoload restore: failed parsing {}: {err}",
+                ldefs_path.display()
+            ))],
+            raw_data: None,
+        })?;
 
     // Phase: parsed Lisp forms in `forms` (a Vec<Value>) live on
     // the malloc heap and are NOT reachable via conservative stack

@@ -1079,23 +1079,33 @@ fn lisp_read_source_preserves_extended_emacs_chars_in_char_literals() {
 fn runtime_reader_reads_utf8_emacs_extended_char_literal() {
     crate::test_utils::init_test_tracing();
     let code = 0x1A_01CA;
-    let source = crate::encoding::decode_bytes(b"?\xF6\xA0\x87\x8A", "utf-8-emacs");
+    // Faithful Emacs-bytes LispString source (issue #131): the non-Unicode
+    // ethiopic literal keeps its real code instead of round-tripping through
+    // the lossy storage-string form.
+    let source = crate::emacs_core::load::decode_emacs_utf8_source_lisp(b"?\xF6\xA0\x87\x8A");
+    let read_source = crate::emacs_core::value_reader::LispReadSource::new(&source);
 
-    let (form, end_pos) = read_one(&source, 0, &crate::emacs_core::symbol::Obarray::new())
+    let (form, end_pos) = read_source
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
         .expect("read should accept extended utf-8-emacs character literals")
         .expect("form should exist");
 
     assert_eq!(form.as_fixnum(), Some(code));
-    assert_eq!(end_pos, source.len());
+    assert_eq!(end_pos, source.sbytes());
 }
 
 #[test]
 fn runtime_reader_steps_utf8_emacs_extended_chars_as_single_source_chars() {
     crate::test_utils::init_test_tracing();
     let code = 0x1A_01CA;
-    let source = crate::encoding::decode_bytes(b"(list ?\xF6\xA0\x87\x8A 1)", "utf-8-emacs");
+    let source =
+        crate::emacs_core::load::decode_emacs_utf8_source_lisp(b"(list ?\xF6\xA0\x87\x8A 1)");
+    let read_source = crate::emacs_core::value_reader::LispReadSource::new(&source);
 
-    let form = read1(&source);
+    let (form, _) = read_source
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
+        .expect("read should accept extended utf-8-emacs character literals")
+        .expect("form should exist");
     let items =
         crate::emacs_core::value::list_to_vec(&form).expect("reader should return a proper list");
 
@@ -1109,9 +1119,13 @@ fn runtime_reader_steps_utf8_emacs_extended_chars_as_single_source_chars() {
 fn runtime_reader_reads_utf8_emacs_extended_string_literal() {
     crate::test_utils::init_test_tracing();
     let code = 0x1A_01CA;
-    let source = crate::encoding::decode_bytes(b"\"\xF6\xA0\x87\x8A\"", "utf-8-emacs");
+    let source = crate::emacs_core::load::decode_emacs_utf8_source_lisp(b"\"\xF6\xA0\x87\x8A\"");
+    let read_source = crate::emacs_core::value_reader::LispReadSource::new(&source);
 
-    let form = read1(&source);
+    let (form, _) = read_source
+        .read_one(0, &crate::emacs_core::symbol::Obarray::new())
+        .expect("read should accept extended utf-8-emacs string literals")
+        .expect("form should exist");
     let text = form.as_lisp_string().expect("form should be a string");
 
     assert!(text.is_multibyte());

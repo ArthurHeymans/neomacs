@@ -85,6 +85,25 @@ pub fn read_all_with_source_multibyte(
     Ok(forms)
 }
 
+/// Read all top-level forms from a faithful Emacs-bytes `LispString`, returning
+/// them as `Value`. Uses the LispString reader path (the same one the streaming
+/// `.el` load loop uses), so non-Unicode source character literals keep their
+/// real codes instead of round-tripping through the in-Unicode storage-string
+/// form (issue #131).
+pub fn read_all_lisp_source(
+    input: &crate::heap_types::LispString,
+    obarray: &super::symbol::Obarray,
+) -> Result<Vec<Value>, ReadError> {
+    let source = LispReadSource::new(input);
+    let mut forms = Vec::new();
+    let mut pos = 0;
+    while let Some((form, next_pos)) = source.read_one(pos, obarray)? {
+        forms.push(form);
+        pos = next_pos;
+    }
+    Ok(forms)
+}
+
 /// Read a single form from `input` starting at byte offset `start`.
 /// Returns `None` if there is nothing to read (only whitespace/comments remain).
 /// On success returns `(value, end_position)`.

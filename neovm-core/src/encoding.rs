@@ -1178,10 +1178,15 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
         bytes.drain(..3);
     }
     match coding_system_family(coding_system) {
-        "utf-8" | "utf-8-emacs" => crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-            &decode_utf8_to_emacs_bytes(&bytes),
-            true,
-        ),
+        "utf-8" | "utf-8-emacs" => {
+            // `decode_bytes` is the lossy `String` boundary; the faithful,
+            // byte-exact path is `decode_bytes_to_lisp_string` /
+            // `decode_bytes_emacs`, which never touch this arm (issue #131).
+            // Non-Unicode Emacs bytes collapse to U+FFFD here, so do NOT route
+            // any reader/source path through this — they use the LispString
+            // reader instead.
+            crate::emacs_core::emacs_char::to_utf8_lossy(&decode_utf8_to_emacs_bytes(&bytes))
+        }
         "chinese-big5" | "chinese-big5-hkscs" => {
             let (decoded, _, _) = BIG5.decode(&bytes);
             decoded.into_owned()
