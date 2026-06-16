@@ -2889,21 +2889,9 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 
 fn process_owned_runtime_string(value: Value) -> String {
     value
-        .as_runtime_string_owned()
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .expect("ValueKind::String must carry LispString payload")
-}
-
-fn expect_string(value: &Value) -> Result<String, Flow> {
-    match value.kind() {
-        ValueKind::String => Ok(process_owned_runtime_string(*value)),
-        ValueKind::Symbol(id) => Ok(resolve_sym(id).to_owned()),
-        ValueKind::Nil => Ok("nil".to_string()),
-        ValueKind::T => Ok("t".to_string()),
-        _ => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *value],
-        )),
-    }
 }
 
 fn expect_sequence(value: &Value) -> Result<(), Flow> {
@@ -4079,15 +4067,17 @@ fn parse_network_service_port(value: &Value, server: bool) -> Result<u16, Flow> 
 enum NetworkAddressSpec {
     Inet(SocketAddr),
     #[cfg(unix)]
-    Local(String),
+    Local(std::path::PathBuf),
 }
 
 fn parse_network_address_spec(value: &Value) -> Result<NetworkAddressSpec, Flow> {
     #[cfg(unix)]
     if matches!(value.kind(), ValueKind::String) {
-        return Ok(NetworkAddressSpec::Local(process_owned_runtime_string(
-            *value,
-        )));
+        return Ok(NetworkAddressSpec::Local(
+            crate::emacs_core::fileio::lisp_file_name_to_path_buf(
+                super::builtins::expect_lisp_string(value)?,
+            ),
+        ));
     }
 
     let Some(items) = value.as_vector_data() else {
@@ -5991,7 +5981,7 @@ pub(crate) fn builtin_make_network_process(
             #[cfg(unix)]
             NetworkAddressSpec::Local(path) => {
                 if server {
-                    let listener = UnixListener::bind(Path::new(&path)).map_err(|e| {
+                    let listener = UnixListener::bind(&path).map_err(|e| {
                         signal(
                             "file-error",
                             vec![
@@ -6009,7 +5999,9 @@ pub(crate) fn builtin_make_network_process(
                     contact = process_contact_plist_put(
                         contact,
                         ProcessKeyword::Local.value(),
-                        Value::string(&path),
+                        Value::heap_string(crate::emacs_core::fileio::path_to_lisp_file_name(
+                            &path,
+                        )),
                     )?;
 
                     let id = eval.processes.create_process_with_kind_lisp(
@@ -6064,13 +6056,15 @@ pub(crate) fn builtin_make_network_process(
                     return Ok(Value::fixnum(id as i64));
                 }
 
-                let stream = UnixStream::connect(Path::new(&path)).map_err(|e| {
+                let stream = UnixStream::connect(&path).map_err(|e| {
                     signal(
                         "file-error",
                         vec![
                             Value::string("make client process failed"),
                             Value::string(e.to_string()),
-                            Value::string(&path),
+                            Value::heap_string(crate::emacs_core::fileio::path_to_lisp_file_name(
+                                &path,
+                            )),
                         ],
                     )
                 })?;
@@ -6083,7 +6077,7 @@ pub(crate) fn builtin_make_network_process(
                 contact = process_contact_plist_put(
                     contact,
                     ProcessKeyword::Remote.value(),
-                    Value::string(&path),
+                    Value::heap_string(crate::emacs_core::fileio::path_to_lisp_file_name(&path)),
                 )?;
                 contact = process_contact_plist_put(
                     contact,
@@ -6169,14 +6163,16 @@ pub(crate) fn builtin_make_network_process(
 
         #[cfg(unix)]
         {
-            let service_path = expect_string(&service)?;
+            let service_path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(
+                super::builtins::expect_lisp_string(&service)?,
+            );
             if !host_value.is_nil() {
                 contact =
                     process_contact_plist_put(contact, ProcessKeyword::Host.value(), Value::NIL)?;
             }
 
             if server {
-                let listener = UnixListener::bind(Path::new(&service_path)).map_err(|e| {
+                let listener = UnixListener::bind(&service_path).map_err(|e| {
                     signal(
                         "file-error",
                         vec![
@@ -6194,7 +6190,9 @@ pub(crate) fn builtin_make_network_process(
                 contact = process_contact_plist_put(
                     contact,
                     ProcessKeyword::Local.value(),
-                    Value::string(&service_path),
+                    Value::heap_string(crate::emacs_core::fileio::path_to_lisp_file_name(
+                        &service_path,
+                    )),
                 )?;
 
                 let id = eval.processes.create_process_with_kind_lisp(
@@ -6258,13 +6256,15 @@ pub(crate) fn builtin_make_network_process(
                 return Ok(Value::fixnum(id as i64));
             }
 
-            let stream = UnixStream::connect(Path::new(&service_path)).map_err(|e| {
+            let stream = UnixStream::connect(&service_path).map_err(|e| {
                 signal(
                     "file-error",
                     vec![
                         Value::string("make client process failed"),
                         Value::string(e.to_string()),
-                        Value::string(&service_path),
+                        Value::heap_string(crate::emacs_core::fileio::path_to_lisp_file_name(
+                            &service_path,
+                        )),
                     ],
                 )
             })?;
@@ -6277,7 +6277,9 @@ pub(crate) fn builtin_make_network_process(
             contact = process_contact_plist_put(
                 contact,
                 ProcessKeyword::Remote.value(),
-                Value::string(&service_path),
+                Value::heap_string(crate::emacs_core::fileio::path_to_lisp_file_name(
+                    &service_path,
+                )),
             )?;
             contact = process_contact_plist_put(
                 contact,
@@ -9060,7 +9062,7 @@ pub(crate) fn builtin_process_get(eval: &mut super::eval::Context, args: Vec<Val
 /// Runs COMMAND via the system shell and returns captured stdout.
 pub(crate) fn builtin_shell_command_to_string(args: Vec<Value>) -> EvalResult {
     expect_args("shell-command-to-string", &args, 1)?;
-    let command = expect_string(&args[0])?;
+    let command = lisp_string_to_os_string(super::builtins::expect_lisp_string(&args[0])?);
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
 
