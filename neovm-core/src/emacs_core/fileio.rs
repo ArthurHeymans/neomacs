@@ -121,6 +121,244 @@ fn expand_file_name_with_home_inner(
     cleaned
 }
 
+/// Byte-native `expand-file-name` core.
+///
+/// Operates on Emacs internal-encoding bytes so raw eight-bit file-name bytes
+/// survive byte-exactly (GNU keeps file names as Lisp strings; on Unix
+/// ENCODE_FILE / DECODE_FILE are byte-identity).  Path manipulation is
+/// ASCII-structural (`/`, `~`, `.`); non-ASCII byte8 multibyte sequences are
+/// non-special and pass through untouched.  This mirrors
+/// `expand_file_name_with_home_inner` but never round-trips through a
+/// storage-`&str`.
+fn expand_file_name_bytes_with_home(
+    name: &[u8],
+    default_dir: Option<&[u8]>,
+    home_override: Option<&[u8]>,
+    expand_default_dir: bool,
+) -> Vec<u8> {
+    #[cfg(windows)]
+    let name_normalized: Vec<u8> = name
+        .iter()
+        .map(|&b| if b == b'\\' { b'/' } else { b })
+        .collect();
+    #[cfg(windows)]
+    let name: &[u8] = &name_normalized;
+    #[cfg(windows)]
+    let default_dir_normalized: Option<Vec<u8>> = default_dir.map(|dir| {
+        dir.iter()
+            .map(|&b| if b == b'\\' { b'/' } else { b })
+            .collect()
+    });
+    #[cfg(windows)]
+    let default_dir: Option<&[u8]> = default_dir_normalized.as_deref();
+
+    // Handle ~ expansion
+    let expanded: Vec<u8> = if name.starts_with(b"~/") {
+        let mut out = Vec::new();
+        if let Some(home) = home_override {
+            out.extend_from_slice(home);
+        } else if let Some(home) = home_env_bytes() {
+            out.extend_from_slice(&home);
+        } else {
+            out.push(b'~');
+        }
+        out.extend_from_slice(&name[1..]);
+        out
+    } else if name == b"~" {
+        if let Some(home) = home_override {
+            home.to_vec()
+        } else if let Some(home) = home_env_bytes() {
+            home
+        } else {
+            name.to_vec()
+        }
+    } else if let Some((home, rest)) = expand_user_home_prefix_bytes(name) {
+        let mut out = home;
+        out.extend_from_slice(rest);
+        out
+    } else {
+        name.to_vec()
+    };
+
+    let preserve_trailing_slash = expanded.last() == Some(&b'/');
+
+    // If already absolute, just clean it up.
+    if file_name_absolute_bytes_p(&expanded) {
+        let mut cleaned = clean_path_bytes(&expanded);
+        if preserve_trailing_slash && cleaned.last() != Some(&b'/') {
+            cleaned.push(b'/');
+        }
+        return cleaned;
+    }
+
+    // Resolve relative to default_dir or cwd
+    let base: Vec<u8> = if let Some(dir) = default_dir {
+        if expand_default_dir {
+            expand_file_name_bytes_with_home(dir, None, home_override, true)
+        } else {
+            dir.to_vec()
+        }
+    } else {
+        current_dir_bytes()
+    };
+
+    if expanded.is_empty() {
+        let mut cleaned = clean_path_bytes(&base);
+        trim_trailing_slashes_except_roots_bytes(&mut cleaned);
+        return cleaned;
+    }
+
+    let joined = join_file_name_bytes(&base, &expanded);
+    let mut cleaned = clean_path_bytes(&joined);
+    if preserve_trailing_slash && cleaned.last() != Some(&b'/') {
+        cleaned.push(b'/');
+    }
+    cleaned
+}
+
+/// Raw bytes of the `HOME` environment variable, byte-exact on Unix.
+fn home_env_bytes() -> Option<Vec<u8>> {
+    let home = std::env::var_os("HOME")?;
+    #[cfg(unix)]
+    {
+        Some(home.as_bytes().to_vec())
+    }
+    #[cfg(not(unix))]
+    {
+        Some(home.to_string_lossy().into_owned().into_bytes())
+    }
+}
+
+/// Raw bytes of the current working directory, byte-exact on Unix.
+fn current_dir_bytes() -> Vec<u8> {
+    match std::env::current_dir() {
+        Ok(dir) => {
+            #[cfg(unix)]
+            {
+                dir.as_os_str().as_bytes().to_vec()
+            }
+            #[cfg(not(unix))]
+            {
+                dir.to_string_lossy().into_owned().into_bytes()
+            }
+        }
+        Err(_) => b"/".to_vec(),
+    }
+}
+
+/// Byte-native twin of `expand_user_home_prefix`.
+fn expand_user_home_prefix_bytes(name: &[u8]) -> Option<(Vec<u8>, &[u8])> {
+    let rest = name.strip_prefix(b"~")?;
+    let sep = rest.iter().position(|&b| b == b'/').unwrap_or(rest.len());
+    if sep == 0 {
+        return None;
+    }
+    let user = &rest[..sep];
+    let home = user_homedir_bytes(user)?;
+    Some((home, &rest[sep..]))
+}
+
+/// Byte-native twin of `user_homedir`, returning the raw passwd `pw_dir` bytes.
+fn user_homedir_bytes(user: &[u8]) -> Option<Vec<u8>> {
+    #[cfg(unix)]
+    {
+        let user = CString::new(user).ok()?;
+        let passwd = unsafe { libc::getpwnam(user.as_ptr()) };
+        if passwd.is_null() {
+            return None;
+        }
+        let pw_dir = unsafe { (*passwd).pw_dir };
+        if pw_dir.is_null() {
+            return None;
+        }
+        let dir = unsafe { CStr::from_ptr(pw_dir) }.to_bytes();
+        if !dir.starts_with(b"/") {
+            return None;
+        }
+        Some(dir.to_vec())
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = user;
+        None
+    }
+}
+
+/// Byte-native twin of `join_file_name`.
+fn join_file_name_bytes(base: &[u8], name: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(base.len() + 1 + name.len());
+    out.extend_from_slice(base);
+    if base.last() != Some(&b'/') {
+        out.push(b'/');
+    }
+    out.extend_from_slice(name);
+    out
+}
+
+/// Byte-native twin of `trim_trailing_slashes_except_roots`.
+fn trim_trailing_slashes_except_roots_bytes(path: &mut Vec<u8>) {
+    while path.len() > 1
+        && path.last() == Some(&b'/')
+        && !(path.len() == 2 && path.starts_with(b"//"))
+    {
+        path.pop();
+    }
+}
+
+/// Byte-native twin of `clean_path`.  Resolves `.`/`..` as a spelling-preserving
+/// byte pass (no filesystem / symlink resolution), preserving the leading `//`
+/// root marker and the POSIX superroot spelling exactly like the `&str` version.
+fn clean_path_bytes(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut p = 0;
+
+    while p < bytes.len() {
+        if bytes[p] != b'/' {
+            out.push(bytes[p]);
+            p += 1;
+        } else if p + 1 < bytes.len()
+            && bytes[p + 1] == b'.'
+            && (p + 2 == bytes.len() || bytes[p + 2] == b'/')
+        {
+            if out.is_empty() && p + 2 == bytes.len() {
+                out.push(b'/');
+            }
+            p += 2;
+        } else if p + 2 < bytes.len()
+            && bytes[p + 1] == b'.'
+            && bytes[p + 2] == b'.'
+            && !out.is_empty()
+            && (p + 3 == bytes.len() || bytes[p + 3] == b'/')
+        {
+            let mut previous_sep = out.len();
+            while previous_sep > 0 {
+                previous_sep -= 1;
+                if out[previous_sep] == b'/' {
+                    break;
+                }
+            }
+
+            if previous_sep == 0 && out.first() == Some(&b'/') && p + 3 == bytes.len() {
+                out.truncate(1);
+            } else {
+                out.truncate(previous_sep);
+            }
+            p += 3;
+        } else if p + 1 < bytes.len()
+            && bytes[p + 1] == b'/'
+            && (p != 0 || (p + 2 < bytes.len() && bytes[p + 2] == b'/'))
+        {
+            p += 1;
+        } else {
+            out.push(bytes[p]);
+            p += 1;
+        }
+    }
+
+    out
+}
+
 fn expand_user_home_prefix(name: &str) -> Option<(String, &str)> {
     let rest = name.strip_prefix('~')?;
     let sep = rest.find('/').unwrap_or(rest.len());
@@ -292,7 +530,7 @@ fn file_truename_lisp_inner(
                 "error",
                 vec![Value::string(format!(
                     "Apparent cycle of symbolic links for {}",
-                    crate::emacs_core::builtins::runtime_string_from_lisp_string(&filename)
+                    crate::emacs_core::emacs_char::to_utf8_lossy(filename.as_bytes())
                 ))],
             ));
         }
@@ -1586,24 +1824,29 @@ pub(crate) fn expand_file_name_lisp(
     name: &crate::heap_types::LispString,
     default_directory: Option<&crate::heap_types::LispString>,
 ) -> crate::heap_types::LispString {
-    let name_runtime = crate::emacs_core::builtins::runtime_string_from_lisp_string(name);
     let default_directory = default_directory
         .cloned()
         .unwrap_or_else(fallback_root_default_directory);
-    let default_runtime =
-        crate::emacs_core::builtins::runtime_string_from_lisp_string(&default_directory);
-    let result = expand_file_name(&name_runtime, Some(&default_runtime));
-    crate::emacs_core::builtins::runtime_string_to_lisp_string(
-        &result,
+    // Operate on the Emacs-internal-encoding bytes, like the rest of the
+    // `_lisp` file-name family, so raw eight-bit file-name bytes round-trip
+    // byte-exactly (no storage-String detour).
+    let result = expand_file_name_bytes_with_home(
+        name.as_bytes(),
+        Some(default_directory.as_bytes()),
+        None,
+        true,
+    );
+    file_name_lisp_from_bytes(
+        result,
         expand_file_name_result_multibyte(name, &default_directory),
     )
 }
 
-fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<String> {
+/// HOME for `expand-file-name`, as Emacs-internal-encoding bytes to feed the
+/// byte-native expansion core without a storage-String detour.
+fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<Vec<u8>> {
     match super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")]) {
-        Ok(value) => value
-            .as_lisp_string()
-            .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
+        Ok(value) => value.as_lisp_string().map(|ls| ls.as_bytes().to_vec()),
         Err(_) => None,
     }
 }
@@ -2046,7 +2289,6 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
         return file_name_handler_string_or_error(result);
     }
 
-    let name = crate::emacs_core::builtins::runtime_string_from_lisp_string(&name_lisp);
     let default_dir_value = if let Some(arg) = args.get(1) {
         match arg.kind() {
             ValueKind::Nil => implicit_default_directory_value_for_expand_file_name(eval)?,
@@ -2087,14 +2329,20 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
         return file_name_handler_string_or_error(result);
     }
 
-    let default_dir =
-        crate::emacs_core::builtins::runtime_string_from_lisp_string(&default_dir_lisp);
-
     let home_dir = home_directory_for_expand_file_name(eval);
-    let result =
-        expand_file_name_with_home_inner(&name, Some(&default_dir), home_dir.as_deref(), false);
+    // Expand on Emacs-internal-encoding bytes so raw eight-bit file-name bytes
+    // survive byte-exactly (no storage-String round-trip).
+    let result = expand_file_name_bytes_with_home(
+        name_lisp.as_bytes(),
+        Some(default_dir_lisp.as_bytes()),
+        home_dir.as_deref(),
+        false,
+    );
     let result_multibyte = expand_file_name_result_multibyte(&name_lisp, &default_dir_lisp);
-    Ok(file_name_runtime_result_value(&result, result_multibyte))
+    Ok(Value::heap_string(file_name_lisp_from_bytes(
+        result,
+        result_multibyte,
+    )))
 }
 
 /// (make-temp-name PREFIX) -> string
@@ -5479,9 +5727,10 @@ pub(crate) fn builtin_find_file_noselect(
         }
     }
 
-    // Derive buffer name from file name
-    let buf_name = crate::emacs_core::builtins::runtime_string_from_lisp_string(
-        &lisp_file_name_nondirectory(&abs_path),
+    // Derive buffer name from file name.  Buffer names are display strings, so
+    // a lossy decode of the file-name bytes is acceptable here.
+    let buf_name = crate::emacs_core::emacs_char::to_utf8_lossy(
+        lisp_file_name_nondirectory(&abs_path).as_bytes(),
     );
     let unique_name = eval.buffers.generate_new_buffer_name(&buf_name);
     let buf_id = eval.buffers.create_buffer(&unique_name);
