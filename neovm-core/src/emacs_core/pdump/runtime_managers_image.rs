@@ -1102,24 +1102,24 @@ fn read_bookmark_manager(cursor: &mut Cursor<'_>) -> Result<DumpBookmarkManager,
 
 fn write_bookmark(out: &mut Vec<u8>, bookmark: &DumpBookmark) -> Result<(), DumpError> {
     write_lisp_string(out, &bookmark.name)?;
-    write_opt_string(out, bookmark.filename.as_deref())?;
+    write_opt_lisp_string(out, bookmark.filename.as_ref())?;
     write_usize(out, bookmark.position)?;
-    write_opt_string(out, bookmark.front_context.as_deref())?;
-    write_opt_string(out, bookmark.rear_context.as_deref())?;
-    write_opt_string(out, bookmark.annotation.as_deref())?;
-    write_opt_string(out, bookmark.handler.as_deref())?;
+    write_opt_lisp_string(out, bookmark.front_context.as_ref())?;
+    write_opt_lisp_string(out, bookmark.rear_context.as_ref())?;
+    write_opt_lisp_string(out, bookmark.annotation.as_ref())?;
+    write_opt_lisp_string(out, bookmark.handler.as_ref())?;
     Ok(())
 }
 
 fn read_bookmark(cursor: &mut Cursor<'_>) -> Result<DumpBookmark, DumpError> {
     Ok(DumpBookmark {
         name: read_lisp_string(cursor)?,
-        filename: read_opt_string(cursor)?,
+        filename: read_opt_lisp_string(cursor)?,
         position: cursor.read_usize("bookmark position")?,
-        front_context: read_opt_string(cursor)?,
-        rear_context: read_opt_string(cursor)?,
-        annotation: read_opt_string(cursor)?,
-        handler: read_opt_string(cursor)?,
+        front_context: read_opt_lisp_string(cursor)?,
+        rear_context: read_opt_lisp_string(cursor)?,
+        annotation: read_opt_lisp_string(cursor)?,
+        handler: read_opt_lisp_string(cursor)?,
     })
 }
 
@@ -1602,11 +1602,11 @@ mod tests {
                     lisp_string(b"home"),
                     DumpBookmark {
                         name: lisp_string(b"home"),
-                        filename: Some("/tmp/home".to_string()),
+                        filename: Some(lisp_string(b"/tmp/home")),
                         position: 12,
                         front_context: None,
                         rear_context: None,
-                        annotation: Some("note".to_string()),
+                        annotation: Some(lisp_string(b"note")),
                         handler: None,
                     },
                 )],

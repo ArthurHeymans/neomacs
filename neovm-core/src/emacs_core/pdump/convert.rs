@@ -3607,27 +3607,12 @@ pub(crate) fn dump_bookmark_manager(bm: &BookmarkManager) -> DumpBookmarkManager
                     dump_lisp_string(k.as_lisp_string()),
                     DumpBookmark {
                         name: dump_lisp_string(&b.name),
-                        filename: b
-                            .filename
-                            .as_ref()
-                            .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
+                        filename: b.filename.as_ref().map(dump_lisp_string),
                         position: b.position.as_i64().max(1) as usize,
-                        front_context: b
-                            .front_context
-                            .as_ref()
-                            .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
-                        rear_context: b
-                            .rear_context
-                            .as_ref()
-                            .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
-                        annotation: b
-                            .annotation
-                            .as_ref()
-                            .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
-                        handler: b
-                            .handler
-                            .as_ref()
-                            .map(crate::emacs_core::builtins::runtime_string_from_lisp_string),
+                        front_context: b.front_context.as_ref().map(dump_lisp_string),
+                        rear_context: b.rear_context.as_ref().map(dump_lisp_string),
+                        annotation: b.annotation.as_ref().map(dump_lisp_string),
+                        handler: b.handler.as_ref().map(dump_lisp_string),
                     },
                 )
             })
@@ -5840,22 +5825,12 @@ pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManage
                         ),
                         Bookmark {
                             name: load_lisp_string(&b.name),
-                            filename: b.filename.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
+                            filename: b.filename.as_ref().map(load_lisp_string),
                             position: LispCharPos1::from_one_based_usize(b.position),
-                            front_context: b.front_context.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
-                            rear_context: b.rear_context.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
-                            annotation: b.annotation.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
-                            handler: b.handler.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
+                            front_context: b.front_context.as_ref().map(load_lisp_string),
+                            rear_context: b.rear_context.as_ref().map(load_lisp_string),
+                            annotation: b.annotation.as_ref().map(load_lisp_string),
+                            handler: b.handler.as_ref().map(load_lisp_string),
                         },
                     )
                 })
@@ -5870,22 +5845,12 @@ pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManage
                         ),
                         Bookmark {
                             name: load_lisp_string(&b.name),
-                            filename: b.filename.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
+                            filename: b.filename.as_ref().map(load_lisp_string),
                             position: LispCharPos1::from_one_based_usize(b.position),
-                            front_context: b.front_context.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
-                            rear_context: b.rear_context.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
-                            annotation: b.annotation.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
-                            handler: b.handler.as_deref().map(|s| {
-                                crate::emacs_core::builtins::runtime_string_to_lisp_string(s, true)
-                            }),
+                            front_context: b.front_context.as_ref().map(load_lisp_string),
+                            rear_context: b.rear_context.as_ref().map(load_lisp_string),
+                            annotation: b.annotation.as_ref().map(load_lisp_string),
+                            handler: b.handler.as_ref().map(load_lisp_string),
                         },
                     )
                 })
@@ -5959,13 +5924,7 @@ pub(crate) fn load_abbrev_manager(dam: &DumpAbbrevManager) -> AbbrevManager {
     let global_table_sym = dam
         .global_table_sym
         .map(|sym| load_sym_id(&sym))
-        .unwrap_or_else(|| {
-            intern::intern(
-                &crate::emacs_core::builtins::runtime_string_from_lisp_string(&load_lisp_string(
-                    &dam.global_table_name,
-                )),
-            )
-        });
+        .unwrap_or_else(|| intern::intern_lisp_string(&load_lisp_string(&dam.global_table_name)));
     AbbrevManager::from_dump(tables, global_table_sym, dam.abbrev_mode)
 }
 

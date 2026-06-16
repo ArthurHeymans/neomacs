@@ -1326,12 +1326,12 @@ pub struct DumpRegisterManager {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpBookmark {
     pub name: DumpLispString,
-    pub filename: Option<String>,
+    pub filename: Option<DumpLispString>,
     pub position: usize,
-    pub front_context: Option<String>,
-    pub rear_context: Option<String>,
-    pub annotation: Option<String>,
-    pub handler: Option<String>,
+    pub front_context: Option<DumpLispString>,
+    pub rear_context: Option<DumpLispString>,
+    pub annotation: Option<DumpLispString>,
+    pub handler: Option<DumpLispString>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
