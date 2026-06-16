@@ -5724,7 +5724,11 @@ impl Context {
         let error_msg =
             crate::emacs_core::errors::builtin_error_message_string(self, vec![error_data])
                 .ok()
-                .and_then(|value| value.as_runtime_string_owned())
+                .and_then(|value| {
+                    value
+                        .as_lisp_string()
+                        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+                })
                 .unwrap_or_else(|| sig.symbol_name().to_string());
         let _ = super::builtins::dispatch_builtin(self, "message", vec![Value::string(&error_msg)]);
         error_msg
@@ -10142,7 +10146,11 @@ impl Context {
         let load_file_name = if trace_toplevel_bytecode {
             self.obarray()
                 .symbol_value("load-file-name")
-                .and_then(|value| value.as_runtime_string_owned())
+                .and_then(|value| {
+                    value
+                        .as_lisp_string()
+                        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+                })
                 .unwrap_or_else(|| "<unknown>".to_string())
         } else {
             String::new()
@@ -10385,7 +10393,10 @@ impl Context {
     ) -> EvalResult {
         let feature_name =
             super::builtins::symbols::symbol_id(&feature).map(|sid| resolve_sym(sid).to_string());
-        let filename_str = filename.as_ref().and_then(|v| v.as_runtime_string_owned());
+        let filename_str = filename.as_ref().and_then(|v| {
+            v.as_lisp_string()
+                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        });
         match plan_require_in_state(
             &self.obarray,
             &mut self.features,
