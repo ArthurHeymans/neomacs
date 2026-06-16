@@ -678,13 +678,7 @@ pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let rendered = super::runtime_string_from_lisp_string(string);
-            let upcased = upcase_string_emacs_compat(&rendered);
-            let result = Value::heap_string(super::rebuild_transformed_runtime_string(
-                &upcased,
-                source,
-                runtime_string_result_multibyte(string.is_multibyte(), &upcased),
-            ));
+            let result = Value::heap_string(transform_string_case(string, true));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
@@ -756,6 +750,64 @@ fn preserve_emacs_upcase_payload(code: i64) -> bool {
             | 68976..=68997
             | 93883..=93907
     )
+}
+
+/// Byte-faithful string case transform over Emacs char codes (issue #131):
+/// eight-bit / non-Unicode chars are caseless and pass through unchanged; in a
+/// unibyte string only ASCII is cased (raw high bytes pass through), matching the
+/// retired storage-String path. Mirrors `upcase`/`downcase_string_emacs_compat`
+/// (the `\u{0131}`/`\u{212A}` + payload-preserve specials, multi-char mapping).
+fn transform_string_case(
+    s: &crate::heap_types::LispString,
+    upcase: bool,
+) -> crate::heap_types::LispString {
+    let bytes = s.as_bytes();
+    let multibyte = s.is_multibyte();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let push = |out: &mut Vec<u8>, code: u32| {
+        if multibyte {
+            let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+            let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+            out.extend_from_slice(&buf[..n]);
+        } else {
+            out.push(code as u8);
+        }
+    };
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let (code, len) = if multibyte {
+            crate::emacs_core::emacs_char::string_char(&bytes[pos..])
+        } else {
+            (bytes[pos] as u32, 1)
+        };
+        pos += len;
+        match char::from_u32(code).filter(|_| multibyte || code < 0x80) {
+            Some(ch) if upcase => {
+                if ch == '\u{0131}' || preserve_emacs_upcase_string_payload(code as i64) {
+                    push(&mut out, code);
+                } else {
+                    for up in ch.to_uppercase() {
+                        push(&mut out, up as u32);
+                    }
+                }
+            }
+            Some(ch) => {
+                if ch == '\u{212A}' || preserve_emacs_downcase_string_payload(code as i64) {
+                    push(&mut out, code);
+                } else {
+                    for low in ch.to_lowercase() {
+                        push(&mut out, low as u32);
+                    }
+                }
+            }
+            None => push(&mut out, code),
+        }
+    }
+    if multibyte {
+        crate::heap_types::LispString::from_emacs_bytes(out)
+    } else {
+        crate::heap_types::LispString::from_unibyte(out)
+    }
 }
 
 fn upcase_string_emacs_compat(s: &str) -> String {
@@ -868,13 +920,7 @@ pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let rendered = super::runtime_string_from_lisp_string(string);
-            let downcased = downcase_string_emacs_compat(&rendered);
-            let result = Value::heap_string(super::rebuild_transformed_runtime_string(
-                &downcased,
-                source,
-                runtime_string_result_multibyte(string.is_multibyte(), &downcased),
-            ));
+            let result = Value::heap_string(transform_string_case(string, false));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
