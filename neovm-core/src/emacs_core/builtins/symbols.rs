@@ -2574,10 +2574,11 @@ pub(crate) fn builtin_native_comp_unit_set_file(args: Vec<Value>) -> EvalResult 
 
 pub(crate) fn builtin_native_elisp_load(args: Vec<Value>) -> EvalResult {
     expect_range_args("native-elisp-load", &args, 1, 2)?;
-    let file = expect_strict_string(&args[0])?;
+    // Validate the argument is a string, then echo it back unchanged.
+    let _ = expect_lisp_string(&args[0])?;
     Err(signal(
         "native-lisp-load-failed",
-        vec![Value::string("file does not exists"), Value::string(file)],
+        vec![Value::string("file does not exists"), args[0]],
     ))
 }
 
@@ -2924,7 +2925,8 @@ pub(crate) fn builtin_redirect_debugging_output(
     }
     let expanded =
         crate::emacs_core::fileio::builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
-    let path = expect_strict_string(&expanded)?;
+    let path =
+        crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&expanded)?);
     let append = args.get(1).is_some_and(|value| value.is_truthy());
     let file = std::fs::OpenOptions::new()
         .write(true)
@@ -4425,7 +4427,7 @@ pub(crate) fn builtin_lock_buffer(args: Vec<Value>) -> EvalResult {
     expect_range_args("lock-buffer", &args, 0, 1)?;
     if let Some(filename) = args.first() {
         if !filename.is_nil() {
-            let _ = expect_strict_string(filename)?;
+            let _ = expect_lisp_string(filename)?;
         }
     }
     Ok(Value::NIL)
@@ -4433,7 +4435,7 @@ pub(crate) fn builtin_lock_buffer(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_lock_file(args: Vec<Value>) -> EvalResult {
     expect_args("lock-file", &args, 1)?;
-    let _ = expect_strict_string(&args[0])?;
+    let _ = expect_lisp_string(&args[0])?;
     Ok(Value::NIL)
 }
 
@@ -4486,7 +4488,7 @@ pub(crate) fn builtin_unlock_buffer(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_unlock_file(args: Vec<Value>) -> EvalResult {
     expect_args("unlock-file", &args, 1)?;
-    let _ = expect_strict_string(&args[0])?;
+    let _ = expect_lisp_string(&args[0])?;
     Ok(Value::NIL)
 }
 

@@ -58,18 +58,6 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
-fn expect_string(val: &Value) -> Result<String, Flow> {
-    match val.kind() {
-        ValueKind::String => Ok(val
-            .as_runtime_string_owned()
-            .expect("ValueKind::String must carry LispString payload")),
-        other => Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), *val],
-        )),
-    }
-}
-
 fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),

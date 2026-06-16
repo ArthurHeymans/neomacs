@@ -4811,7 +4811,7 @@ impl crate::emacs_core::eval::Context {
             return def.as_symbol_name() == Some("menu-bar-separator");
         }
         let car = def.cons_car();
-        KeymapMarker::MenuItem.is_value(car) || car.as_runtime_string_owned().is_some()
+        KeymapMarker::MenuItem.is_value(car) || car.is_string()
     }
 
     fn make_mouse_position(x: f32, y: f32, target_frame_id: u64, eval: &Self) -> Value {

@@ -2672,7 +2672,7 @@ pub(crate) fn builtin_delete_field(
 /// Zeroes every byte, makes STRING unibyte, and removes text properties.
 pub(crate) fn builtin_clear_string(args: Vec<Value>) -> EvalResult {
     expect_args("clear-string", &args, 1)?;
-    let _ = expect_strict_string(&args[0])?;
+    let _ = expect_lisp_string(&args[0])?;
     if args[0].is_string() {
         let _ = args[0].with_lisp_string_mut(|lisp_str| {
             let len = lisp_str.sbytes();

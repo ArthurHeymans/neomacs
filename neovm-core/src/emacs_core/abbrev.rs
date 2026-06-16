@@ -498,7 +498,8 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_string(value: &Value) -> Result<String, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
-            .as_runtime_string_owned()
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
             .expect("ValueKind::String must carry LispString payload")),
         ValueKind::Symbol(id) => Ok(resolve_sym(id).to_owned()),
         ValueKind::Nil => Ok("nil".to_string()),
@@ -1086,7 +1087,8 @@ pub(crate) fn builtin_insert_abbrev_table_description(
             }
             let exp_str = match expansion.kind() {
                 ValueKind::String => expansion
-                    .as_runtime_string_owned()
+                    .as_lisp_string()
+                    .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                     .expect("ValueKind::String must carry LispString payload"),
                 _ => continue,
             };

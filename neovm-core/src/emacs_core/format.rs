@@ -25,7 +25,8 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 }
 
 fn require_string(_name: &str, val: &Value) -> Result<String, Flow> {
-    val.as_runtime_string_owned()
+    val.as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
 }
 

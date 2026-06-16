@@ -172,7 +172,7 @@ fn gnutls_peer_status_warning_description(symbol: &str) -> Option<&'static str> 
 
 pub(crate) fn builtin_gnutls_format_certificate(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-format-certificate", &args, 1)?;
-    let cert = expect_strict_string(&args[0])?;
+    let cert = expect_lisp_string(&args[0])?;
     let formatted = format_x509_certificate_pem(cert.as_bytes()).map_err(|err| {
         signal(
             "error",

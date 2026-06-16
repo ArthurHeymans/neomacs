@@ -53,7 +53,9 @@ fn expect_integer_or_marker_in_buffers(
 }
 
 fn lread_string_text(value: &Value) -> Option<String> {
-    value.as_runtime_string_owned()
+    value
+        .as_lisp_string()
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
 fn expect_lisp_string(value: &Value) -> Result<LispString, Flow> {
@@ -838,7 +840,10 @@ fn load_suffix_list(value: Option<&Value>, name: &str) -> Result<Vec<String>, Fl
     };
     let mut suffixes = Vec::with_capacity(items.len());
     for item in items {
-        let Some(suffix) = item.as_runtime_string_owned() else {
+        let Some(suffix) = item
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+        else {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("stringp"), item],

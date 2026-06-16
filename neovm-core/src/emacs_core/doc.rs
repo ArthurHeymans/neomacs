@@ -395,7 +395,12 @@ fn compiled_doc_ref(value: &Value) -> Option<(String, i64)> {
     };
     let pair_car = value.cons_car();
     let pair_cdr = value.cons_cdr();
-    Some((pair_car.as_runtime_string_owned()?, pair_cdr.as_int()?))
+    Some((
+        pair_car
+            .as_lisp_string()
+            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))?,
+        pair_cdr.as_int()?,
+    ))
 }
 
 fn resolve_compiled_doc_path(lisp_directory: Option<&str>, file: &str) -> PathBuf {
