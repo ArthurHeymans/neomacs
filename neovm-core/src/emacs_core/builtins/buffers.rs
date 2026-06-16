@@ -886,7 +886,13 @@ fn buffer_slice_for_char_region(
         clamped_lisp_char_pos_to_char_pos(to, buf.total_char_len()),
     );
     let byte_range = EmacsByteRange::new(from_byte, to_byte);
-    super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string_range(byte_range))
+    // Issue #131: drop the buggy storage-string producer. A lossy UTF-8
+    // rendering preserves real Unicode (incl. PUA) for this `String`-typed
+    // helper and avoids the sentinel scheme.
+    crate::emacs_core::emacs_char::to_utf8_lossy(
+        buf.buffer_substring_lisp_string_range(byte_range)
+            .as_bytes(),
+    )
 }
 
 fn accessible_lisp_range_to_byte_range(
@@ -987,8 +993,10 @@ fn checked_buffer_slice_for_char_region(
     validate_accessible_lisp_range(buf, start, end, vec![start_arg, end_arg])?;
 
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
-    Ok(super::runtime_string_from_lisp_string(
-        &buf.buffer_substring_lisp_string_range(byte_range),
+    // Issue #131: drop the buggy storage-string producer (see above).
+    Ok(crate::emacs_core::emacs_char::to_utf8_lossy(
+        buf.buffer_substring_lisp_string_range(byte_range)
+            .as_bytes(),
     ))
 }
 
@@ -1035,12 +1043,12 @@ fn checked_buffer_slice_for_char_region_in_manager(
     end: LispCharPos1,
     start_arg: Value,
     end_arg: Value,
-) -> Result<String, Flow> {
+) -> Result<crate::heap_types::LispString, Flow> {
     let Some(buffer_id) = buffer_id else {
-        return Ok(String::new());
+        return Ok(crate::heap_types::LispString::from_utf8(""));
     };
     let Some(buf) = buffers.get(buffer_id) else {
-        return Ok(String::new());
+        return Ok(crate::heap_types::LispString::from_utf8(""));
     };
 
     let point_min = buf.point_min_lisp_char_pos().as_i64();
@@ -1053,10 +1061,12 @@ fn checked_buffer_slice_for_char_region_in_manager(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
+    // Issue #131: return the byte-faithful buffer substring as a `LispString`
+    // so `compare-buffer-substrings` can compare real Emacs characters (eight-bit
+    // and PUA glyphs stay distinct) instead of routing through a lossy/storage
+    // Rust string.
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
-    Ok(super::runtime_string_from_lisp_string(
-        &buf.buffer_substring_lisp_string_range(byte_range),
-    ))
+    Ok(buf.buffer_substring_lisp_string_range(byte_range))
 }
 
 fn checked_buffer_substring_for_char_region_in_manager(
@@ -1096,33 +1106,52 @@ fn checked_buffer_substring_for_char_region_in_manager(
     ))
 }
 
-fn compare_buffer_substring_strings(left: &str, right: &str, case_fold: bool) -> i64 {
+fn compare_buffer_substring_strings(
+    left: &crate::heap_types::LispString,
+    right: &crate::heap_types::LispString,
+    case_fold: bool,
+) -> i64 {
+    // Issue #131: compare the two substrings character-by-character over their
+    // exact Emacs bytes (GNU `Fcompare_buffer_substrings` returns the 1-based
+    // char index of the first difference). Eight-bit raw bytes and Private-Use
+    // glyphs stay distinct because each Emacs char is decoded faithfully.
+    let left_bytes = left.as_bytes();
+    let right_bytes = right.as_bytes();
+    let mut lp = 0usize;
+    let mut rp = 0usize;
     let mut pos = 1i64;
-    let mut left_iter = left.chars();
-    let mut right_iter = right.chars();
 
     loop {
-        match (left_iter.next(), right_iter.next()) {
-            (Some(a), Some(b)) => {
-                let a = if case_fold {
-                    a.to_lowercase().next().unwrap_or(a)
-                } else {
-                    a
-                };
-                let b = if case_fold {
-                    b.to_lowercase().next().unwrap_or(b)
-                } else {
-                    b
-                };
+        match (lp < left_bytes.len(), rp < right_bytes.len()) {
+            (true, true) => {
+                let (a_code, a_len) = crate::emacs_core::emacs_char::string_char(&left_bytes[lp..]);
+                let (b_code, b_len) =
+                    crate::emacs_core::emacs_char::string_char(&right_bytes[rp..]);
+                lp += a_len;
+                rp += b_len;
+                let a = fold_emacs_char_code(a_code, case_fold);
+                let b = fold_emacs_char_code(b_code, case_fold);
                 if a != b {
                     return if a < b { -pos } else { pos };
                 }
                 pos += 1;
             }
-            (Some(_), None) => return pos,
-            (None, Some(_)) => return -pos,
-            (None, None) => return 0,
+            (true, false) => return pos,
+            (false, true) => return -pos,
+            (false, false) => return 0,
         }
+    }
+}
+
+/// Issue #131: lowercase an Emacs character code when `case_fold` is set,
+/// preserving non-Unicode/eight-bit codes (which have no Rust `char`) verbatim.
+fn fold_emacs_char_code(code: u32, case_fold: bool) -> u32 {
+    if !case_fold {
+        return code;
+    }
+    match char::from_u32(code) {
+        Some(ch) => ch.to_lowercase().next().map(|c| c as u32).unwrap_or(code),
+        None => code,
     }
 }
 
@@ -1870,8 +1899,13 @@ pub(crate) fn builtin_buffer_text_pixel_size(
 
     let text = if let Some(id) = buffer_id {
         if let Some(buf) = buffers.get(id) {
-            super::runtime_string_from_lisp_string(
-                &buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range()),
+            // Issue #131: this text only feeds a line/column pixel-size
+            // measurement, so a lossy UTF-8 rendering (real PUA preserved,
+            // eight-bit -> one U+FFFD column) is the right display form and
+            // avoids the buggy storage-string sentinels.
+            crate::emacs_core::emacs_char::to_utf8_lossy(
+                buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range())
+                    .as_bytes(),
             )
         } else {
             String::new()
@@ -2428,7 +2462,8 @@ fn current_buffer_has_newline_between_positions(
         Value::fixnum(left.min(right)),
         Value::fixnum(left.max(right)),
     )?;
-    Ok(text.contains('\n'))
+    // A newline is the single ASCII byte 0x0A in Emacs' internal encoding.
+    Ok(text.as_bytes().contains(&b'\n'))
 }
 
 fn resolve_field_position_in_buffers(

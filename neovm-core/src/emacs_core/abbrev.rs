@@ -292,11 +292,18 @@ fn abbrev_table_sym(text: &str) -> SymId {
 }
 
 fn abbrev_table_sym_from_lisp(text: &LispString) -> SymId {
-    abbrev_table_sym(&abbrev_string_to_runtime(text))
+    // Issue #131: intern the symbol-name key from the exact Emacs-byte
+    // LispString instead of routing through a lossy/storage Rust string, so the
+    // abbrev-table key stays byte-faithful (no eight-bit collision). For ASCII
+    // and pure-Unicode names this yields the same SymId as the `&str` path.
+    super::intern::intern_lisp_string(text)
 }
 
 fn abbrev_string_to_runtime(text: &LispString) -> String {
-    super::builtins::runtime_string_from_lisp_string(text)
+    // Issue #131: remaining consumers are display/expansion/sort text reached
+    // through `&str` APIs; a lossy UTF-8 rendering keeps real Unicode (incl.
+    // PUA) while dropping the buggy storage-string sentinels.
+    crate::emacs_core::emacs_char::to_utf8_lossy(text.as_bytes())
 }
 
 // ---------------------------------------------------------------------------

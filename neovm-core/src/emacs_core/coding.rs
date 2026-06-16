@@ -1742,11 +1742,8 @@ pub(crate) fn builtin_check_coding_systems_region(
         buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
         buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
     );
-    let text = {
-        let string = buffer.buffer_substring_lisp_string_range(byte_range);
-        super::builtins::runtime_string_from_lisp_string(&string)
-    };
-    if text.is_ascii() {
+    let string = buffer.buffer_substring_lisp_string_range(byte_range);
+    if string.as_bytes().is_ascii() {
         return Ok(Value::NIL);
     }
 
@@ -2642,9 +2639,14 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
         buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
         buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
     );
+    // Issue #131: decode the buffer substring with `to_utf8_lossy` so real
+    // Unicode (including genuine Private-Use glyphs) is preserved verbatim;
+    // only true eight-bit raw bytes collapse to U+FFFD, which the per-coding
+    // encode check below rejects anyway (matching GNU's raw-text fallback).
+    // The legacy storage-string form mangled real PUA glyphs into eight-bit.
     let text = {
         let string = buffer.buffer_substring_lisp_string_range(byte_range);
-        super::builtins::runtime_string_from_lisp_string(&string)
+        crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes())
     };
     safe_coding_systems_for_text(
         &eval.coding_systems,

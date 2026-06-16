@@ -659,10 +659,11 @@ fn ensure_parser_parsed(eval: &mut super::eval::Context, parser_id: u64) -> Resu
             .ok_or_else(|| signal("error", vec![Value::string("Missing tree-sitter parser")]))?;
         let needs_parse = parser.tree.is_none() || parser.last_source.as_ref() != Some(&source);
         if needs_parse {
-            let source_runtime = runtime_string_from_lisp_string(&source);
+            // Issue #131: feed the parser the exact Emacs bytes so byte offsets
+            // match the buffer and real PUA glyphs / eight-bit bytes survive.
             let tree = parser
                 .parser
-                .parse(source_runtime.as_str(), parser.tree.as_ref())
+                .parse(source.as_bytes(), parser.tree.as_ref())
                 .ok_or_else(|| treesit_parse_error(parser_value))?;
             parser.tree = Some(tree);
             parser.last_source = Some(source);
@@ -744,10 +745,10 @@ fn ensure_parser_parsed_with_changes(
         }
 
         let old_tree = parser.tree.clone();
-        let source_runtime = runtime_string_from_lisp_string(&source);
+        // Issue #131: feed the parser the exact Emacs bytes (see above).
         let tree = parser
             .parser
-            .parse(source_runtime.as_str(), parser.tree.as_ref())
+            .parse(source.as_bytes(), parser.tree.as_ref())
             .ok_or_else(|| treesit_parse_error(parser_value))?;
         let ranges = if let Some(old_tree) = old_tree.as_ref() {
             old_tree
@@ -2360,7 +2361,9 @@ pub(crate) fn builtin_treesit_query_capture(
             .last_source
             .as_ref()
             .ok_or_else(|| treesit_parse_error(input.parser_value))?;
-        let source_runtime = runtime_string_from_lisp_string(source);
+        // Issue #131: query against the exact Emacs bytes so capture byte ranges
+        // line up with the buffer and raw bytes survive.
+        let source_bytes = source.as_bytes();
         let capture_names = query
             .capture_names()
             .iter()
@@ -2372,7 +2375,7 @@ pub(crate) fn builtin_treesit_query_capture(
             cursor.set_byte_range(range);
         }
         if grouped {
-            let mut matches = cursor.matches(query, node, source_runtime.as_bytes());
+            let mut matches = cursor.matches(query, node, source_bytes);
             matches.advance();
             let mut out = Vec::new();
             while let Some(query_match) = matches.get() {
@@ -2387,7 +2390,7 @@ pub(crate) fn builtin_treesit_query_capture(
             }
             (capture_names, CaptureResult::Grouped(out))
         } else {
-            let mut matches = cursor.captures(query, node, source_runtime.as_bytes());
+            let mut matches = cursor.captures(query, node, source_bytes);
             matches.advance();
             let mut out = Vec::new();
             while let Some((query_match, capture_index)) = matches.get() {

@@ -224,7 +224,10 @@ impl<'a> LispReadSource<'a> {
             .input
             .slice(start, end)
             .expect("LispReadSource range should stay within source");
-        crate::emacs_core::builtins::runtime_string_from_lisp_string(&slice)
+        // Issue #131: this slice is only used for human-readable load/trace form
+        // previews, so a lossy UTF-8 rendering (real PUA preserved, eight-bit ->
+        // U+FFFD) is correct and avoids the buggy storage-string sentinels.
+        crate::emacs_core::emacs_char::to_utf8_lossy(slice.as_bytes())
     }
 
     pub fn read_one(
@@ -2481,7 +2484,11 @@ impl<'a> Reader<'a> {
                 let slice = input
                     .slice(start, end)
                     .expect("reader slice should stay within source");
-                crate::emacs_core::builtins::runtime_string_from_lisp_string(&slice)
+                // Issue #131: `source_slice_string` only feeds ASCII numeric
+                // sub-parsers (hex/radix-digit escapes), so a lossy UTF-8
+                // rendering is byte-exact here and avoids the storage-string
+                // sentinel scheme.
+                crate::emacs_core::emacs_char::to_utf8_lossy(slice.as_bytes())
             }
             ReaderSource::Buffer(input) => {
                 let mut bytes = Vec::with_capacity(end - start);
@@ -2497,7 +2504,9 @@ impl<'a> Reader<'a> {
                 } else {
                     crate::heap_types::LispString::from_unibyte(bytes)
                 };
-                crate::emacs_core::builtins::runtime_string_from_lisp_string(&slice)
+                // Issue #131: ASCII-only numeric sub-parser input (see above);
+                // lossy rendering is byte-exact and drops the storage scheme.
+                crate::emacs_core::emacs_char::to_utf8_lossy(slice.as_bytes())
             }
         }
     }

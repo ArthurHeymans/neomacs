@@ -56,7 +56,10 @@ fn load_name_equal(left: &LispString, right: &LispString) -> bool {
 
 #[cfg(not(unix))]
 fn load_runtime_string(value: &LispString) -> String {
-    super::builtins::runtime_string_from_lisp_string(value)
+    // Issue #131: only used for tilde-expanding a load path into a Rust string;
+    // a lossy UTF-8 rendering is correct here and avoids the storage-string
+    // sentinel scheme.
+    crate::emacs_core::emacs_char::to_utf8_lossy(value.as_bytes())
 }
 
 fn load_path_lisp_string(path: &Path) -> LispString {
@@ -2056,7 +2059,12 @@ pub(crate) fn eval_lisp_source_file_in_context(
 ) -> Result<Value, EvalError> {
     let macroexpand_fn = get_eager_macroexpand_fn(eval);
     let path = load_path_buf(found);
-    let source_text = super::builtins::runtime_string_from_lisp_string(content);
+    // Issue #131: this text is scanned only for the ASCII `Local Variables:` /
+    // `read-symbol-shorthands:` header; a lossy UTF-8 rendering keeps real
+    // Unicode (incl. PUA) while dropping the buggy storage-string sentinels.
+    // The actual forms are evaluated from the original `content` LispString via
+    // the byte-faithful reader below.
+    let source_text = crate::emacs_core::emacs_char::to_utf8_lossy(content.as_bytes());
     let shorthands_text = source_read_symbol_shorthands_text(&source_text);
     let shorthands = match shorthands_text {
         Some(text) => {

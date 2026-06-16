@@ -1062,7 +1062,12 @@ fn decode_process_output_bytes(bytes: &[u8], coding: Value) -> LispString {
 }
 
 fn process_output_runtime_string(output: &LispString) -> String {
-    super::builtins::runtime_string_from_lisp_string(output)
+    // Issue #131: this only feeds the `proc.stdout: String` diagnostic mirror
+    // (read solely via `get_output` in tests). The byte-faithful process output
+    // that is actually inserted into the process buffer flows through
+    // `read_process_output` as a `LispString`. A lossy UTF-8 rendering here
+    // keeps real Unicode (incl. PUA) and avoids the buggy storage-string form.
+    crate::emacs_core::emacs_char::to_utf8_lossy(output.as_bytes())
 }
 
 #[cfg(unix)]
@@ -6572,7 +6577,10 @@ pub(crate) fn builtin_make_pipe_process_impl(
     let resolved_buffer = match buffer {
         Some(explicit) => explicit,
         None => {
-            let name_runtime = super::builtins::runtime_string_from_lisp_string(&name);
+            // Issue #131: buffer-name lookup/creation takes a `&str`; a lossy
+            // UTF-8 rendering is the right display form here and avoids the
+            // buggy storage-string sentinels.
+            let name_runtime = crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes());
             let id = buffers
                 .find_buffer_by_name(&name_runtime)
                 .unwrap_or_else(|| buffers.create_buffer(&name_runtime));

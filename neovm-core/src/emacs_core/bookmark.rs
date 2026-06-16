@@ -300,9 +300,19 @@ pub(crate) struct BookmarkKey(LispString);
 
 impl BookmarkKey {
     pub(crate) fn from_lisp_string(text: &LispString) -> Self {
-        Self(runtime_string_to_bookmark_string(
-            &bookmark_string_to_runtime(text),
-        ))
+        // Issue #131: build the map key from the exact Emacs bytes, normalized
+        // to canonical multibyte (matching the previous always-multibyte key),
+        // instead of round-tripping through a lossy/storage Rust string. This
+        // keeps the bookmark key byte-faithful so distinct names (incl. real PUA
+        // glyphs and eight-bit raw bytes) never collide.
+        let normalized = if text.is_multibyte() {
+            text.clone()
+        } else {
+            LispString::from_emacs_bytes(crate::emacs_core::emacs_char::str_to_multibyte(
+                text.as_bytes(),
+            ))
+        };
+        Self(normalized)
     }
 
     pub(crate) fn as_lisp_string(&self) -> &LispString {
@@ -315,7 +325,10 @@ fn bookmark_lookup_key(text: &LispString) -> BookmarkKey {
 }
 
 fn bookmark_string_to_runtime(text: &LispString) -> String {
-    super::builtins::runtime_string_from_lisp_string(text)
+    // Issue #131: remaining consumers are display / print-buffer / sort text
+    // reached through `&str`; a lossy UTF-8 rendering keeps real Unicode (incl.
+    // PUA) while dropping the buggy storage-string sentinels.
+    crate::emacs_core::emacs_char::to_utf8_lossy(text.as_bytes())
 }
 
 fn optional_bookmark_string_to_runtime(text: Option<&LispString>) -> String {
