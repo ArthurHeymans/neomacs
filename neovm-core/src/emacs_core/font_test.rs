@@ -3111,9 +3111,12 @@ fn internal_set_alternative_font_registry_alist_accepts_raw_unibyte_strings() {
     let result = builtin_internal_set_alternative_font_registry_alist(vec![input]).unwrap();
     let outer = list_to_vec(&result).expect("outer list");
     let inner = list_to_vec(&outer[0]).expect("inner list");
+    // Raw unibyte [0xFF, 'A'] is downcased byte-faithfully to unibyte [0xFF, 'a'].
     assert_eq!(
-        inner[0].as_runtime_string_owned().as_deref(),
-        Some(expected.as_str())
+        inner[0].as_lisp_string(),
+        Some(&crate::heap_types::LispString::from_unibyte(vec![
+            0xFF, b'a'
+        ]))
     );
     assert_eq!(alternative_font_registries(&expected), vec![expected]);
 }

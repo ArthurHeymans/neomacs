@@ -1648,15 +1648,13 @@ impl TaggedValue {
         self.as_utf8_str().map(|s| s.to_owned())
     }
 
-    /// Get an owned runtime-string view of a Lisp string, preserving raw
-    /// unibyte bytes and multibyte Emacs encoding instead of requiring UTF-8.
+    /// Get an owned, lossily-decoded `String` view of a Lisp string: valid
+    /// Unicode (including real Private-Use glyphs) is preserved exactly, while
+    /// raw eight-bit bytes become U+FFFD. Test-only convenience; production code
+    /// uses `as_lisp_string` for byte-faithful access.
     pub fn as_runtime_string_owned(self) -> Option<String> {
-        self.as_lisp_string().map(|string| {
-            crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
-                string.as_bytes(),
-                string.is_multibyte(),
-            )
-        })
+        self.as_lisp_string()
+            .map(|string| crate::emacs_core::emacs_char::to_utf8_lossy(string.as_bytes()))
     }
 
     /// Access the heap string via a closure.
