@@ -7,7 +7,6 @@
 #![allow(unsafe_op_in_unsafe_fn)] // FFI-heavy layout code; migrate to explicit blocks incrementally.
 
 pub mod bidi;
-pub mod bidi_layout;
 pub mod composition;
 pub(crate) mod coords;
 pub(crate) mod display_buffer_text_append;

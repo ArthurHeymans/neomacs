@@ -166,8 +166,8 @@ impl BidiDir {
 }
 
 /// Placeholder bidi iterator state. GNU's `struct bidi_it` is a
-/// large struct in `bidi.c`; neomacs will either port it or use its
-/// existing `bidi_layout` module. For Step 3.2 this is a marker that
+/// large struct in `bidi.c`; neomacs will either port it or reuse the
+/// live row-level reorder in `glyph_row_writer::reorder_row_bidi`. For Step 3.2 this is a marker that
 /// occupies the slot in `It` so downstream code can reference
 /// `it.bidi_it` without type errors.
 ///
