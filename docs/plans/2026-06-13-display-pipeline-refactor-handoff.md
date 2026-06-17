@@ -518,23 +518,58 @@ Status legend: ✅ done · ⬜ remaining.
    prerequisites (now resolved by the scout): enumerate every pre-install reader of
    chrome row geometry; resolve the tab-bar measure-then-relayout vs
    append-into-live-matrix conflict (height reader is order-independent, so safe).
-   **PREREQUISITE for slice 6 (new, from the critique — schedule BEFORE 6):**
-   **Express walk-state concerns in the typed source / `DisplayItemKind`.** The
-   typed `BufferTextSourceCursor` cannot yet model hscroll-skip, invisible-text +
-   selective-display ellipsis, line-number margins, tab classification,
-   nobreak/NBSP policy, or word-wrap break candidates — none of which slice 5
-   addresses. Each needs a typed-vs-legacy parity test (matrix_rows AND faces AND
-   cursor col) behind `use_typed_buffer_source=false`. Without this, slice 6's
-   `None`-fallthrough resync never reaches zero and the legacy path is undeletable.
+   **PREREQUISITE for slice 6 — walk-state parity coverage ✅ DONE** (`a0801d56c`,
+   `9e120f049`). A design scout corrected the scope sharply: **6 of the 8 named
+   gaps are pure WALK-STATE and need NO typed-source change** — line-number margins,
+   invisible runs, hscroll-skip run *before* `consume_source_event` (bypass
+   sourcing); selective-display ellipsis + nobreak/NBSP reach the typed path
+   through the shim's *translated* arms; word-wrap candidates + tab + multibyte are
+   already covered. Parity tests now exist for all of them (the new ones:
+   invisible, nobreak, selective-display, hscroll; pre-existing: line-numbers,
+   word-wrap, truncate, wrap, tab, multibyte, face). Also corrected: **the parity
+   harness ALREADY compares faces + cursor col** (`matrix_rows` is `assert_eq!`'d
+   whole; `GlyphTrace` derives `Eq` over `face_id`, `RowTrace` over `cursor_col`).
+   The ONLY genuine typed-source gaps left are (a) glyphless-with-composition-
+   cluster-tail emit reconciliation and (b) native handling of the replacement
+   items (`SourceMappedText`/`Stretch`/`MediaReplacement`/non-Buffer span) that
+   currently hit the `None`-fallthrough — and **both are coupled to slice 6**: the
+   shim's fallthrough/flattening MASKS these divergences, so they cannot be
+   validated by a standalone parity test until the native consume is built. They
+   are folded into slice 6 below.
 6. ⬜ **Make `BufferTextSourceCursor` the production path; delete the legacy
-   decoder + lowering shim.** Risk **high**, keystone. Deps: 5, 3, and the
-   prerequisite above. Extend the existing typed-vs-raw parity harness
-   (`engine_test.rs:1954/2000`) to compare **faces** (it only compares positions
-   today — that gap is the overlay-face-regression guard) and to cover tabs, NBSP,
-   glyphless+cluster-tails, multibyte, selective display, hscroll, invisible text,
-   word-wrap, and display-property replacements. Only flip the default and delete
-   `BufferTextDecodedSourceEvent` / `BufferTextSourceEventCursor` / the shim after
-   all parity cases pass.
+   decoder + lowering shim.** Risk **high**, keystone. Deps: 5, 3, prereq (done).
+   This is effectively ONE atomic change (the shim masks the remaining divergences,
+   so it can't be sub-divided into independently-validated green commits). Scout's
+   exact plan (`keystone-prereq-design-scout`, run `wti0xt1u4`):
+   - **Native consume:** rewrite `consume_source_event` (walk.rs:2778-2790) to be
+     UNCONDITIONALLY native — pull a `DisplayItem` from a per-step
+     `BufferTextSourceCursor` (keep the stateless-per-step pattern seeded at
+     `CharPos0(*self.charpos)`; the walk's `&mut byte_idx/charpos` stay
+     authoritative, advancing by `ch.len_utf8` / +1 for newline). Emit
+     Text/LineBreak for TextRun/ControlChar/Glyphless as the shim does, AND handle
+     `SourceMappedText`/`Stretch`/`MediaReplacement` natively (these are the
+     fallthrough cases — **the real blocker**, larger than the per-char gaps).
+   - **Glyphless+composition reconciliation:** make the cursor emit composition-
+     joiner chars as **Text** (not Glyphless) so the downstream `has_tail`
+     look-ahead (display_source.rs:732) makes the classification, matching the raw
+     path. Reconcile `PreserveForComposition` (display_source.rs:2095) with
+     `glyphless_method_for_char`.
+   - **Flip + delete:** remove the `use_typed_buffer_source` branch + field +
+     setter (engine.rs:186/211/236/276/1000; walk.rs threading); delete
+     `consume_typed_source_event` (walk.rs:2792-2873), `BufferTextSourceEventCursor`
+     + `next_event` + `into_event` (display_buffer_text_source.rs:363-382/295-301).
+     **KEEP** `BufferTextDecodedSourceEvent`/`BufferTextSourceTextEvent`/
+     `BufferTextLineBreakSourceEvent` (still request-builder inputs at
+     display_row_append.rs:4346/4350) unless you also refactor those builders.
+   - **Test fallout:** display_buffer_text_walk_test.rs:198-199 (flag assert);
+     display_row_append_test.rs / display_source_test.rs callers of
+     `BufferTextSourceEventCursor::new().next_event()`; collapse the now-redundant
+     dual-path parity tests (engine_test.rs ~2005-2200) to single-path assertions.
+   - **Validation:** full `cargo nextest run -p neomacs-layout-engine` (1223
+     baseline) AND a Doom GUI screenshot smoke (the release binary is built; regen
+     the pdump first) — the parity tests only cover synthetic buffers, not real
+     overlay/bidi/composition interactions. Default flip changes production
+     rendering for ALL of layout, so this is the GUI-validation gate.
 7. ⬜ **Overlay before/after-strings as `DisplayItem`s on the source stack;
    delete the side-channel render loop + third lisp-string lifecycle.** Risk high.
    Deps: 5, 6. Also replace the dual before/after sort with one interleaved sort
