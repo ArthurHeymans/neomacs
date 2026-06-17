@@ -487,7 +487,7 @@ Status legend: ✅ done · ⬜ remaining.
 2. ✅ **Delete `DisplayOrigin::Posframe`** (`685a288ff`). Risk low. Independent.
    (Mock child-frame loop deliberately kept — see Landed note.)
 3. ✅ **Shaped-run cache** (`4e95cf933`, `e58ae8082`). Risk medium. Independent.
-4. ⬜ **Add characterization/parity tests** that guard slices 5–6. Risk low.
+4. ✅ **Add characterization/parity tests** (`e184af092`). `rtl_text_and_chrome_rows_reorder_identically` (matrix_builder_test) + `child_frame_resolves_faces_and_width_independently_from_parent` (engine_test); both pass on HEAD.
    Deps: 1. The two intended tests: (a) child-frame face/width independence;
    (b) **cross-row-kind RTL bidi parity** — identical RTL text as a buffer `Text`
    row vs a `ModeLine`/`Minibuffer` chrome row. CAVEAT from the critique: (b) is a
@@ -497,17 +497,27 @@ Status legend: ✅ done · ⬜ remaining.
    `reversed_p` (identical today); the cursor-column axis is what slice 5 fixes.
    The mixed-ascent baseline test the critique wanted is **not needed** — the
    review confirmed the live `GlyphRow` single-per-row ascent already covers it.
-5. ⬜ **Collapse the `EndPrebuilt`/`EndIncremental` bidi+install fork into ONE
-   row-end boundary** so `reorder_current_row_bidi` is the single bidi finalizer
-   for all row kinds. Risk **high**. Deps: 1, 4. *The real "one row lifecycle"
-   prize* and the structural fix for the finalization/bidi-timing bug class
-   (tab-bar/tab-line overlap + height growth, posframe width drift). Delete
-   `MatrixRowLifecycleRequest::EndPrebuilt` + `install_prebuilt_current` + the
-   standalone `normalize_external_row` reorder; thread `phys_cursor` through the
-   chrome path. Critique prerequisites: enumerate every pre-install reader of
-   chrome row geometry (tab-bar resize width, echo wrap width) before moving
-   finalization later; resolve the tab-bar measure-then-relayout (`engine.rs:457`)
-   vs append-into-live-matrix conflict.
+5. ✅ **Collapse the `EndPrebuilt`/`EndIncremental` bidi+install fork into ONE
+   row-end boundary** (core landed `6d5aadf9d`). `reorder_current_row_bidi` is now
+   the single bidi finalizer for all row kinds; the bidi/finalization-timing bug
+   class is structurally fixed. `normalize_external_row` no longer reorders (render
+   produces logical order); `PrebuiltDisplayRowInstall` uses `EndIncremental`;
+   the frame tab-bar reorders its side-vector clone; `EndPrebuilt` deleted.
+   Validated: 1219 layout-engine + 1431/1435 cross-crate green (4 pre-existing tty
+   failures unrelated). The scout's verdict simplified it: threading `phys_cursor`
+   through chrome is NOT needed (point never lives in chrome; the active minibuffer
+   already goes through the buffer walk), and nearly all pre-install geometry
+   readers are vertical/count (reorder-independent). **One GNU-correct behavior
+   delta** remains untested: the RTL echo continuation-marker side (markers now
+   participate in paragraph direction) — recommend an RTL-echo characterization
+   test + GUI check. **Optional remaining containment** (not needed for the bug-class
+   fix): delete `PrebuiltDisplayRowInstall`/`PrebuiltCurrent` by having chrome
+   append directly into the current row instead of copy-prebuilt-glyphs-then-reorder.
+   _Original framing kept for reference:_ *The real "one row lifecycle" prize* and
+   the structural fix for the finalization/bidi-timing bug class. Critique
+   prerequisites (now resolved by the scout): enumerate every pre-install reader of
+   chrome row geometry; resolve the tab-bar measure-then-relayout vs
+   append-into-live-matrix conflict (height reader is order-independent, so safe).
    **PREREQUISITE for slice 6 (new, from the critique — schedule BEFORE 6):**
    **Express walk-state concerns in the typed source / `DisplayItemKind`.** The
    typed `BufferTextSourceCursor` cannot yet model hscroll-skip, invisible-text +
