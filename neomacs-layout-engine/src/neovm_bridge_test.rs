@@ -76,7 +76,7 @@ fn test_collect_layout_params_basic() {
 
     // First window: root leaf (not minibuffer).
     let root_wp = &wps[0];
-    assert!(!root_wp.is_minibuffer);
+    assert!(!root_wp.is_minibuffer());
     assert!(root_wp.selected); // first window is selected by default
     assert_eq!(root_wp.char_width, 7.0);
     assert_eq!(root_wp.char_height, 14.0);
@@ -84,7 +84,7 @@ fn test_collect_layout_params_basic() {
 
     // Second window: minibuffer.
     let mini_wp = &wps[1];
-    assert!(mini_wp.is_minibuffer);
+    assert!(mini_wp.is_minibuffer());
     assert!(!mini_wp.selected);
     assert_eq!(mini_wp.mode_line_height, 0.0); // minibuffer has no mode-line
 }
@@ -576,7 +576,7 @@ fn collect_layout_params_dims_windows_on_nonselected_frame() {
 
     let main_window = windows
         .iter()
-        .find(|window| !window.is_minibuffer)
+        .find(|window| !window.is_minibuffer())
         .expect("main window");
     assert_eq!(main_window.cursor_kind, CursorKind::HollowBox);
 }
@@ -691,7 +691,7 @@ fn test_window_params_buffer_locals() {
 
     // The root window should pick up the buffer-local vars.
     let wp = &wps[0];
-    assert!(wp.truncate_lines);
+    assert_eq!(wp.wrap_mode, LineWrapMode::Truncate);
     assert!(!wp.word_wrap);
     assert_eq!(wp.tab_width, 4);
 }
@@ -764,11 +764,13 @@ fn test_window_params_partial_width_windows_force_truncation_like_gnu() {
     );
 
     let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
-    let main_windows: Vec<_> = wps.into_iter().filter(|wp| !wp.is_minibuffer).collect();
+    let main_windows: Vec<_> = wps.into_iter().filter(|wp| !wp.is_minibuffer()).collect();
 
     assert_eq!(main_windows.len(), 2);
     assert!(
-        main_windows.iter().all(|wp| wp.truncate_lines),
+        main_windows
+            .iter()
+            .all(|wp| wp.wrap_mode == LineWrapMode::Truncate),
         "GNU truncates partial-width windows below the default threshold: {main_windows:#?}"
     );
 }
@@ -805,11 +807,13 @@ fn test_window_params_partial_width_windows_respect_disabled_truncate_partial_wi
     eval_lisp(&mut evaluator, "(setq truncate-partial-width-windows nil)");
 
     let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
-    let main_windows: Vec<_> = wps.into_iter().filter(|wp| !wp.is_minibuffer).collect();
+    let main_windows: Vec<_> = wps.into_iter().filter(|wp| !wp.is_minibuffer()).collect();
 
     assert_eq!(main_windows.len(), 2);
     assert!(
-        main_windows.iter().all(|wp| !wp.truncate_lines),
+        main_windows
+            .iter()
+            .all(|wp| wp.wrap_mode == LineWrapMode::Wrap),
         "nil truncate-partial-width-windows should preserve wrapping: {main_windows:#?}"
     );
 }
@@ -840,10 +844,10 @@ fn test_window_params_hscroll_forces_truncation_like_gnu() {
     let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
     let wp = wps
         .into_iter()
-        .find(|wp| !wp.is_minibuffer)
+        .find(|wp| !wp.is_minibuffer())
         .expect("main window");
 
-    assert!(wp.truncate_lines);
+    assert_eq!(wp.wrap_mode, LineWrapMode::Truncate);
     assert_eq!(wp.hscroll, 3);
 }
 

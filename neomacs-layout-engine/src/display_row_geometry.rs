@@ -3,6 +3,27 @@ use crate::window_output::{
     RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
 };
 
+/// Horizontal append limit for a display row.
+///
+/// Tabs are measured against an unbounded limit so that tab-stop alignment
+/// survives past the right edge; every other kind clips at a concrete pixel
+/// boundary.  Using an enum instead of `f32::INFINITY` makes the unbounded
+/// case explicit at compile time.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayRowMaxX {
+    Unbounded,
+    Bounded(f32),
+}
+
+impl DisplayRowMaxX {
+    pub(crate) fn to_f32(self) -> f32 {
+        match self {
+            Self::Unbounded => f32::INFINITY,
+            Self::Bounded(x) => x,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CurrentDisplayRowMetrics {
     height: f32,

@@ -325,7 +325,7 @@ fn display_row_source_geometry_request_overrides_render_bounds() {
     };
     let bounds = DisplayRowRenderBounds {
         start: DisplayRowPosition { x_px: 16.0, col: 2 },
-        max_x_px: 40.0,
+        max_x: DisplayRowMaxX::Bounded(40.0),
     };
 
     let request = display_row_request_for_face(geometry, 7, &face, GlyphRowRole::Text)
@@ -671,7 +671,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     )
     .with_render_bounds(DisplayRowRenderBounds {
         start: DisplayRowPosition { x_px: 16.0, col: 2 },
-        max_x_px: 32.0,
+        max_x: DisplayRowMaxX::Bounded(32.0),
     });
 
     let rendered = DisplayRowLispStringRenderRequest::new(request, Value::string("ABC"))
@@ -775,7 +775,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     )
     .with_render_bounds(DisplayRowRenderBounds {
         start: DisplayRowPosition { x_px: 16.0, col: 2 },
-        max_x_px: 240.0,
+        max_x: DisplayRowMaxX::Bounded(240.0),
     });
 
     let rendered = DisplayRowLispStringRenderRequest::new(request, Value::string("\tX"))
@@ -1117,7 +1117,7 @@ fn render_buffer_display_row_with_properties(
         role,
         std::collections::HashMap::new(),
     );
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
+    let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -1149,7 +1149,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
+    let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
         buf_id,
         buffer,
         neovm_core::buffer::CharPos0::new(0),
@@ -1695,7 +1695,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
+    let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
         buf_id,
         buffer,
         neovm_core::buffer::CharPos0::new(0),
@@ -2737,7 +2737,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     )
     .with_render_bounds(DisplayRowRenderBounds {
         start: DisplayRowPosition { x_px: 8.0, col: 1 },
-        max_x_px: 240.0,
+        max_x: DisplayRowMaxX::Bounded(240.0),
     });
     let base_face_id = request.base_face_id();
     let mut row = GlyphRow::new(GlyphRowRole::Text);

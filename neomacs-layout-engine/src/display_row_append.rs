@@ -8,6 +8,11 @@ use crate::display_cursor::{
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+
+use crate::display_buffer_text_source::{
+    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceTextEvent,
+};
+#[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
@@ -15,19 +20,18 @@ use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
     classify_display_property,
 };
+use crate::display_row::DisplayRowRenderStop;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplayRowCurrentSourceFragmentRenderState, DisplayRowCurrentTextMeasureState,
-    DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics, DisplayRowGeometry,
+    DisplayRowCurrentSourceFragmentRenderState, DisplayRowFallbackMetrics, DisplayRowGeometry,
     DisplayRowItemSourceRenderRequest, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
     DisplayRowRenderBounds, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
-    DisplayRowResolvedMeasuredFace, DisplayRowSourceAppendRequest,
-    DisplayRowSourceAppendRequestPolicy, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
-    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy,
+    DisplayRowSourceRequestPolicy, DisplayRowSourceState, DisplaySourceAppendRenderPolicy,
+    NaturalDisplayRowAppendRenderPolicy,
 };
-use crate::display_row::{DisplayRowRenderStop, insert_resolved_display_row_face};
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy, display_row_total_glyph_count,
@@ -35,8 +39,13 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowScopedValue,
-    DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
+    DisplayRowScopedValue, DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions,
+    DisplayRowYRecording,
+};
+use crate::display_row_source_render::{
+    TextRowOutputRenderState, TextRowSourceMeasureState, TextRowSourceRenderState,
+    current_text_measure_state, current_text_render_state,
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
@@ -50,25 +59,22 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,
     BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
-    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceAdvancePath,
-    BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem, BufferTextSourceChar,
-    BufferTextSourceClusterState, BufferTextSourceItemRequest,
+    BufferTextSourceAdvancePath, BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem,
+    BufferTextSourceChar, BufferTextSourceClusterState, BufferTextSourceItemRequest,
     BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
-    BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextEvent,
-    BufferTextSourceTextItemRequest, BufferTextSourceTextRequest,
-    BufferTextSpecialSourceCharRequest, DisplayItemSource, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
-    DisplayPropertyReplacementSourceMetrics, DisplayReplacementAppendItem,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem, LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
-    SyntheticTextItemSource,
+    BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextItemRequest,
+    BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest, DisplayItemSource,
+    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceInputs,
+    DisplayPropertyReplacementSourceItem, DisplayPropertyReplacementSourceMetrics,
+    DisplayReplacementAppendItem, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_source_resolver::{
-    DisplayStringBaseFace, ResolvedDisplayReplacement, display_string_base_face,
-    display_string_base_face_for_active_row, resolve_display_replacement,
+    DisplayStringBaseFace, ResolvedDisplayReplacement, resolve_display_replacement,
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
@@ -79,22 +85,18 @@ use crate::neovm_bridge::{
     FaceResolver, LayoutBufferView, OverlayDisplayString, ResolvedFace, RustBufferAccess,
     RustTextPropAccess,
 };
+use crate::types::LineWrapMode;
 use crate::types::WindowParams;
 use crate::unicode::{decode_utf8, is_wide_char};
 use crate::window_output::{
     LineNumberMarginItemSource, RightEdgeMarkerItemSource, TextMatrixRowBegin,
-    TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition,
-    TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowLineNumberMargin, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightBorder, TextWindowRightEdgeMarkers, TextWindowRowDecorationRequest,
+    TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowBegin,
+    TextWindowBodyOutputInstall, TextWindowLineNumberMargin, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightBorder, TextWindowRightEdgeMarkers,
     WindowOutputEmitter, begin_text_window_output, close_text_window_output,
-    current_text_window_cluster_tail, emit_text_matrix_row_transition,
-    emit_text_matrix_row_transition_with_limit, finish_and_end_text_matrix_row_output,
-    finish_pending_text_window_row, install_text_window_body_output,
-    install_text_window_cursor_effects, install_text_window_row_decoration,
-    right_border_text_source,
+    current_text_window_cluster_tail, emit_text_matrix_row_transition_with_limit,
+    finish_pending_text_window_row, install_text_window_body_output, right_border_text_source,
 };
-use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
@@ -269,371 +271,6 @@ pub(crate) struct BufferTextRowAppendState {
 impl BufferTextRowAppendState {
     fn advance_resolver(&mut self) -> &mut BufferTextSourceAdvanceResolver {
         &mut self.advance_resolver
-    }
-}
-
-pub(crate) struct TextRowOutputRenderState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    output_emitter: &'a mut WindowOutputEmitter,
-    evaluator: &'a mut Context,
-}
-
-impl<'a> TextRowOutputRenderState<'a> {
-    pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-    ) -> Self {
-        Self {
-            builder,
-            output_emitter,
-            evaluator,
-        }
-    }
-
-    pub(crate) fn reborrow(&mut self) -> TextRowOutputRenderState<'_> {
-        TextRowOutputRenderState {
-            builder: self.builder,
-            output_emitter: self.output_emitter,
-            evaluator: self.evaluator,
-        }
-    }
-
-    pub(crate) fn into_parts(
-        self,
-    ) -> (
-        &'a mut GlyphMatrixBuilder,
-        &'a mut WindowOutputEmitter,
-        &'a mut Context,
-    ) {
-        (self.builder, self.output_emitter, self.evaluator)
-    }
-
-    fn finish_and_end_text_matrix_row_output(self, metrics: TextMatrixRowMetrics) {
-        finish_and_end_text_matrix_row_output(
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
-            metrics,
-        );
-    }
-
-    fn emit_text_matrix_row_transition(self, transition: TextMatrixRowGeometryTransition) {
-        emit_text_matrix_row_transition(
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
-            transition,
-        );
-    }
-}
-
-pub(crate) struct TextRowSourceRenderState<'a> {
-    output_render: TextRowOutputRenderState<'a>,
-    font_metrics: &'a mut Option<FontMetricsService>,
-    face_resolver: &'a FaceResolver,
-}
-
-impl<'a> TextRowSourceRenderState<'a> {
-    pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
-    ) -> Self {
-        Self {
-            output_render: TextRowOutputRenderState::new(builder, output_emitter, evaluator),
-            font_metrics,
-            face_resolver,
-        }
-    }
-
-    pub(crate) fn reborrow(&mut self) -> TextRowSourceRenderState<'_> {
-        TextRowSourceRenderState {
-            output_render: self.output_render.reborrow(),
-            font_metrics: self.font_metrics,
-            face_resolver: self.face_resolver,
-        }
-    }
-
-    pub(crate) fn output_render(&mut self) -> TextRowOutputRenderState<'_> {
-        self.output_render.reborrow()
-    }
-
-    pub(crate) fn measure_state(&mut self) -> TextRowSourceMeasureState<'_> {
-        TextRowSourceMeasureState {
-            builder: self.output_render.builder,
-            evaluator: self.output_render.evaluator,
-            font_metrics: self.font_metrics,
-            face_resolver: self.face_resolver,
-        }
-    }
-
-    pub(crate) fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        insert_resolved_display_row_face(self.output_render.builder, face_id, face, None);
-    }
-
-    fn resolved_measured_face(
-        &mut self,
-        measurement_policy: DisplayRowMeasurementPolicy,
-        face_id: u32,
-        face: ResolvedFace,
-        window_system: bool,
-        fallback_char_width: f32,
-        fallback_metrics: DisplayRowFallbackMetrics,
-    ) -> DisplayRowResolvedMeasuredFace {
-        let metrics = if window_system {
-            self.font_metrics.as_mut().map(|svc| {
-                svc.font_metrics(
-                    &face.font_family,
-                    face.font_weight,
-                    face.italic,
-                    face.font_size,
-                )
-            })
-        } else {
-            None
-        };
-        measurement_policy.resolved_measured_face(
-            face_id,
-            face,
-            metrics,
-            fallback_char_width,
-            fallback_metrics,
-            self.font_metrics,
-        )
-    }
-
-    pub(crate) fn resolve_and_install_measured_face(
-        &mut self,
-        measurement_policy: DisplayRowMeasurementPolicy,
-        face_id: u32,
-        face: ResolvedFace,
-        window_system: bool,
-        fallback_char_width: f32,
-        fallback_metrics: DisplayRowFallbackMetrics,
-    ) -> DisplayRowActiveFaceState {
-        let resolved_face = self.resolved_measured_face(
-            measurement_policy,
-            face_id,
-            face,
-            window_system,
-            fallback_char_width,
-            fallback_metrics,
-        );
-        resolved_face.install_into(self.output_render.builder);
-        resolved_face.into_active_face_state()
-    }
-
-    pub(crate) fn resolve_named_face(&self, face_name: &str) -> ResolvedFace {
-        self.face_resolver.resolve_named_face(face_name)
-    }
-
-    pub(crate) fn default_face(&self) -> ResolvedFace {
-        self.face_resolver.default_face().clone()
-    }
-
-    pub(crate) fn display_string_base_face<B: LayoutBufferView>(
-        &mut self,
-        buffer: &B,
-        origin: DisplayOrigin,
-        policy: BaseFacePolicy,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayStringBaseFace {
-        display_string_base_face(
-            buffer,
-            self.face_resolver,
-            origin,
-            policy,
-            face_ids,
-            self.output_render.builder,
-        )
-    }
-
-    pub(crate) fn default_display_string_base_face<B: LayoutBufferView>(
-        &mut self,
-        buffer: &B,
-        origin: DisplayOrigin,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayStringBaseFace {
-        self.display_string_base_face(buffer, origin, origin.default_base_face_policy(), face_ids)
-    }
-
-    pub(crate) fn display_string_base_face_for_active_row<B: LayoutBufferView>(
-        &mut self,
-        buffer: &B,
-        origin: DisplayOrigin,
-        policy: BaseFacePolicy,
-        active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayStringBaseFace {
-        display_string_base_face_for_active_row(
-            buffer,
-            self.face_resolver,
-            origin,
-            policy,
-            active_face_state,
-            face_ids,
-            self.output_render.builder,
-        )
-    }
-
-    pub(crate) fn default_display_string_base_face_for_active_row<B: LayoutBufferView>(
-        &mut self,
-        buffer: &B,
-        origin: DisplayOrigin,
-        active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayStringBaseFace {
-        self.display_string_base_face_for_active_row(
-            buffer,
-            origin,
-            origin.default_base_face_policy(),
-            active_face_state,
-            face_ids,
-        )
-    }
-
-    pub(crate) fn display_property_replacement_append_plan<B: LayoutBufferView>(
-        &mut self,
-        request: DisplayPropertyReplacementAppendRequest,
-        buffer: &B,
-        active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) -> DisplayPropertyReplacementAppendPlan {
-        request.into_plan(buffer, self, active_face_state, face_ids)
-    }
-
-    pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
-        install_text_window_row_decoration(
-            self.output_render.builder,
-            TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft,
-        );
-    }
-
-    pub(crate) fn with_font_metrics_and_display_host<R>(
-        &mut self,
-        f: impl FnOnce(&mut Option<FontMetricsService>, Option<&dyn DisplayHost>) -> R,
-    ) -> R {
-        f(
-            self.font_metrics,
-            self.output_render.evaluator.display_host.as_deref(),
-        )
-    }
-
-    pub(crate) fn into_parts(
-        self,
-    ) -> (
-        &'a mut GlyphMatrixBuilder,
-        &'a mut WindowOutputEmitter,
-        &'a mut Context,
-        &'a mut Option<FontMetricsService>,
-        &'a FaceResolver,
-    ) {
-        let (builder, output_emitter, evaluator) = self.output_render.into_parts();
-        (
-            builder,
-            output_emitter,
-            evaluator,
-            self.font_metrics,
-            self.face_resolver,
-        )
-    }
-
-    pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
-        self.output_render.output_emitter
-    }
-
-    pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {
-        self.output_render.output_emitter.rows()
-    }
-
-    pub(crate) fn output_rows_len(&self) -> usize {
-        self.output_render.output_emitter.rows().len()
-    }
-}
-
-fn current_text_render_state<'emit>(
-    state: &'emit mut TextRowSourceRenderState<'_>,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
-    let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-        state.reborrow().into_parts();
-    DisplayRowCurrentTextRenderState {
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        face_resolver,
-        face_ids,
-    }
-}
-
-pub(crate) struct TextRowSourceMeasureState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    evaluator: &'a mut Context,
-    font_metrics: &'a mut Option<FontMetricsService>,
-    face_resolver: &'a FaceResolver,
-}
-
-impl<'a> TextRowSourceMeasureState<'a> {
-    #[cfg(test)]
-    pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        evaluator: &'a mut Context,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        face_resolver: &'a FaceResolver,
-    ) -> Self {
-        Self {
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
-        }
-    }
-
-    pub(crate) fn reborrow(&mut self) -> TextRowSourceMeasureState<'_> {
-        TextRowSourceMeasureState {
-            builder: self.builder,
-            evaluator: self.evaluator,
-            font_metrics: self.font_metrics,
-            face_resolver: self.face_resolver,
-        }
-    }
-
-    fn into_parts(
-        self,
-    ) -> (
-        &'a mut GlyphMatrixBuilder,
-        &'a mut Context,
-        &'a mut Option<FontMetricsService>,
-        &'a FaceResolver,
-    ) {
-        (
-            self.builder,
-            self.evaluator,
-            self.font_metrics,
-            self.face_resolver,
-        )
-    }
-
-    fn font_metrics(&mut self) -> &mut Option<FontMetricsService> {
-        self.font_metrics
-    }
-}
-
-fn current_text_measure_state<'emit>(
-    state: &'emit mut TextRowSourceMeasureState<'_>,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-) -> DisplayRowCurrentTextMeasureState<'emit, 'emit> {
-    let (builder, evaluator, font_metrics, face_resolver) = state.reborrow().into_parts();
-    DisplayRowCurrentTextMeasureState {
-        builder,
-        evaluator,
-        font_metrics,
-        face_resolver,
-        face_ids,
     }
 }
 
@@ -1011,17 +648,6 @@ pub(crate) struct BufferTextWindowBeginRequest {
 pub(crate) struct BufferTextWindowBeginState<'a> {
     pub(crate) builder: &'a mut GlyphMatrixBuilder,
     pub(crate) evaluator: &'a mut Context,
-}
-
-pub(crate) struct BufferTextWindowCursorEffectsRequest {
-    window_id: i64,
-    effects: Option<EffectsConfig>,
-}
-
-pub(crate) struct BufferTextWindowTerminalRightBorderRequest {
-    ch: char,
-    face_name: &'static str,
-    char_width: f32,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
@@ -4282,7 +3908,7 @@ pub(crate) struct BufferTextOverflowRenderRequest {
 pub(crate) struct BufferTextOverflowRenderContext {
     pub(crate) ch: char,
     pub(crate) right_edge_px: f32,
-    pub(crate) truncate_lines: bool,
+    pub(crate) wrap_mode: LineWrapMode,
     pub(crate) word_wrap: WordWrapRenderState,
     pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
     pub(crate) content_x: f32,
@@ -4518,59 +4144,6 @@ impl BufferTextWindowBeginRequest {
 
     pub(crate) fn window_id(&self) -> WindowId {
         self.window_id
-    }
-}
-
-impl BufferTextWindowCursorEffectsRequest {
-    pub(crate) fn new(window_id: i64, effects: Option<EffectsConfig>) -> Self {
-        Self { window_id, effects }
-    }
-
-    pub(crate) fn install_and_apply(self, builder: &mut GlyphMatrixBuilder) -> bool {
-        let Some(effects) = self.effects else {
-            return false;
-        };
-        install_text_window_cursor_effects(
-            builder,
-            TextWindowCursorEffects {
-                window_id: self.window_id,
-                effects,
-            },
-        );
-        true
-    }
-}
-
-impl BufferTextWindowTerminalRightBorderRequest {
-    pub(crate) fn new(char_width: f32) -> Self {
-        Self {
-            ch: '|',
-            face_name: "vertical-border",
-            char_width,
-        }
-    }
-
-    pub(crate) fn install_and_apply(
-        self,
-        builder: &mut GlyphMatrixBuilder,
-        mut render_services: ChromeRowRenderServices<'_, '_>,
-    ) -> u32 {
-        let border_face = render_services
-            .face_resolver()
-            .resolve_named_face(self.face_name);
-        let border_face_id = border_face.face_id;
-        insert_resolved_display_row_face(builder, border_face_id, &border_face, None);
-        install_last_window_right_border_from_source_requests(
-            builder,
-            render_services.reborrow(),
-            TextWindowRightBorder {
-                ch: self.ch,
-                face_id: border_face_id,
-                char_width: self.char_width,
-            },
-            &border_face,
-        );
-        border_face_id
     }
 }
 
@@ -4817,7 +4390,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                         text_start_byte: context.text_start_byte,
                         x_px: *x,
                         right_edge_px: context.append_surface.full_text_right_edge(),
-                        truncate_lines: context.params.truncate_lines,
+                        wrap_mode: context.params.wrap_mode,
                         row_visibility_limit: context.row_visibility_limit,
                         content_x: context.content_x,
                         has_prefix: context.has_prefix,
@@ -4887,7 +4460,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             BufferTextOverflowRenderContext {
                 ch,
                 right_edge_px: context.append_surface.right_edge(),
-                truncate_lines: context.params.truncate_lines,
+                wrap_mode: context.params.wrap_mode,
                 word_wrap: *word_wrap,
                 row_visibility_limit: context.row_visibility_limit,
                 content_x: context.content_x,
@@ -5051,7 +4624,7 @@ impl BufferTextOverflowRenderRequest {
         match self.prepared_append.overflow_action(
             context.ch,
             context.right_edge_px,
-            context.truncate_lines,
+            context.wrap_mode,
             context.word_wrap,
         ) {
             BufferTextSourceCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
@@ -5242,7 +4815,7 @@ impl BufferTextSourceCharPreparedAppend {
         self,
         ch: char,
         right_edge_px: f32,
-        truncate_lines: bool,
+        wrap_mode: LineWrapMode,
         word_wrap: WordWrapRenderState,
     ) -> BufferTextRowOverflowDecision {
         BufferTextRowOverflowDecision::for_char(
@@ -5250,7 +4823,7 @@ impl BufferTextSourceCharPreparedAppend {
             self.plan.position.x_px,
             self.advance_px(),
             right_edge_px,
-            truncate_lines,
+            wrap_mode,
             word_wrap,
         )
     }
@@ -5259,13 +4832,13 @@ impl BufferTextSourceCharPreparedAppend {
         self,
         ch: char,
         right_edge_px: f32,
-        truncate_lines: bool,
+        wrap_mode: LineWrapMode,
         word_wrap: WordWrapRenderState,
     ) -> BufferTextSourceCharOverflowAction {
         BufferTextSourceCharOverflowAction::for_decision(self.overflow_decision(
             ch,
             right_edge_px,
-            truncate_lines,
+            wrap_mode,
             word_wrap,
         ))
     }
@@ -5995,7 +5568,7 @@ fn render_right_edge_marker_source(
         base_face,
         DisplayRowRenderBounds {
             start,
-            max_x_px: matrix_cols as f32 * char_width,
+            max_x: DisplayRowMaxX::Bounded(matrix_cols as f32 * char_width),
         },
     );
     render_services.render_item_source_fragment_into_row(request, row, source, &mut source_state);
@@ -6107,7 +5680,7 @@ fn render_right_border_text(
             request.base_face,
             DisplayRowRenderBounds {
                 start,
-                max_x_px: request.matrix_cols as f32 * char_width,
+                max_x: DisplayRowMaxX::Bounded(request.matrix_cols as f32 * char_width),
             },
         )
         .with_glyph_area(request.area);
@@ -6213,7 +5786,7 @@ fn install_right_border_from_source_request(
     row.displays_text = prior_displays_text;
 }
 
-fn install_last_window_right_border_from_source_requests(
+pub(crate) fn install_last_window_right_border_from_source_requests(
     builder: &mut GlyphMatrixBuilder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
     request: TextWindowRightBorder,
@@ -8008,7 +7581,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderContext<'a> {
     pub(crate) text_start_byte: usize,
     pub(crate) x_px: f32,
     pub(crate) right_edge_px: f32,
-    pub(crate) truncate_lines: bool,
+    pub(crate) wrap_mode: LineWrapMode,
     pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
     pub(crate) content_x: f32,
     pub(crate) has_prefix: bool,
@@ -8116,7 +7689,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
         match self.prepared_append.overflow_action(
             context.x_px,
             context.right_edge_px,
-            context.truncate_lines,
+            context.wrap_mode,
         ) {
             None | Some(BufferTextSpecialSourceCharOverflowAction::Fits) => {
                 BufferTextSpecialOverflowRenderOutcome::Fits
@@ -8247,13 +7820,13 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         &self,
         x_px: f32,
         right_edge_px: f32,
-        truncate_lines: bool,
+        wrap_mode: LineWrapMode,
     ) -> Option<SpecialTextRowOverflowDecision> {
         Some(SpecialTextRowOverflowDecision::for_width(
             x_px,
             self.measured_width_px()?,
             right_edge_px,
-            truncate_lines,
+            wrap_mode,
         ))
     }
 
@@ -8261,10 +7834,10 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         &self,
         x_px: f32,
         right_edge_px: f32,
-        truncate_lines: bool,
+        wrap_mode: LineWrapMode,
     ) -> Option<BufferTextSpecialSourceCharOverflowAction> {
         Some(BufferTextSpecialSourceCharOverflowAction::for_decision(
-            self.overflow_decision(x_px, right_edge_px, truncate_lines)?,
+            self.overflow_decision(x_px, right_edge_px, wrap_mode)?,
         ))
     }
 
@@ -10172,77 +9745,6 @@ impl DisplayRowAppendArea {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextWindowAppendSurfaceRequest<'a> {
-    content_x: f32,
-    text_width: f32,
-    line_number_width: f32,
-    reserve_right_border_col: bool,
-    reserve_right_special_col: bool,
-    char_width: f32,
-    tab_width: i32,
-    tab_stop_list: &'a [i32],
-}
-
-impl<'a> TextWindowAppendSurfaceRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        content_x: f32,
-        text_width: f32,
-        line_number_width: f32,
-        reserve_right_border_col: bool,
-        reserve_right_special_col: bool,
-        char_width: f32,
-        tab_width: i32,
-        tab_stop_list: &'a [i32],
-    ) -> Self {
-        Self {
-            content_x,
-            text_width,
-            line_number_width,
-            reserve_right_border_col,
-            reserve_right_special_col,
-            char_width,
-            tab_width,
-            tab_stop_list,
-        }
-    }
-
-    fn reserved_width(self) -> f32 {
-        let right_border = if self.reserve_right_border_col {
-            self.char_width
-        } else {
-            0.0
-        };
-        let right_special = if self.reserve_right_special_col {
-            self.char_width
-        } else {
-            0.0
-        };
-        right_border + right_special
-    }
-
-    fn append_width(self) -> f32 {
-        (self.text_width - self.line_number_width - self.reserved_width()).max(self.char_width)
-    }
-
-    pub(crate) fn into_surface(self) -> DisplayRowAppendSurface {
-        DisplayRowAppendSurface::new(
-            DisplayRowAppendArea::new(
-                self.content_x,
-                self.append_width(),
-                self.text_width,
-                self.line_number_width,
-            ),
-            DisplayTabPolicy::from_tab_width_and_stops(
-                self.content_x,
-                self.tab_width,
-                self.tab_stop_list,
-            ),
-        )
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendSurface {
     area: DisplayRowAppendArea,
@@ -10508,6 +10010,14 @@ pub(crate) struct DisplayRowAppendFrame {
 }
 
 impl DisplayRowAppendFrame {
+    fn right_edge(&self) -> f32 {
+        self.content_x + self.geometry.width
+    }
+
+    fn text_right_edge_excluding_line_number(&self) -> f32 {
+        self.content_x + (self.text_width - self.line_number_width).max(0.0)
+    }
+
     fn from_parts(
         placement: DisplayRowAppendPlacement,
         area: DisplayRowAppendArea,
@@ -10583,15 +10093,17 @@ impl DisplayRowAppendKind {
         }
     }
 
-    fn max_x(self, frame: &DisplayRowAppendFrame) -> f32 {
+    fn max_x(self, frame: &DisplayRowAppendFrame) -> DisplayRowMaxX {
         match self {
-            Self::Tab => f32::INFINITY,
-            Self::ControlChar => frame.content_x + (frame.text_width - frame.line_number_width),
+            Self::Tab => DisplayRowMaxX::Unbounded,
+            Self::ControlChar => {
+                DisplayRowMaxX::Bounded(frame.text_right_edge_excluding_line_number())
+            }
             Self::SourceText
             | Self::SourceMappedText
             | Self::Glyphless
             | Self::DisplayReplacement
-            | Self::DisplayReplacementString => frame.content_x + frame.geometry.width,
+            | Self::DisplayReplacementString => DisplayRowMaxX::Bounded(frame.right_edge()),
         }
     }
 

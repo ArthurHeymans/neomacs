@@ -35,10 +35,11 @@ use crate::display_row_builder::{
     DisplayRowLayout, DisplayRowPosition, DisplayTabPolicy, display_row_text_glyph_count,
     display_row_text_is_empty, new_display_row,
 };
+use crate::display_row_geometry::DisplayRowMaxX;
 use crate::display_source::{DisplayItemSource, SyntheticTextItemSource};
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
-use crate::types::{FrameParams, WindowParams};
+use crate::types::{FrameParams, LineWrapMode, WindowParams};
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -117,7 +118,7 @@ fn append_synthetic_minibuffer_text(
         base_face,
         DisplayRowRenderBounds {
             start,
-            max_x_px: width.max(0.0),
+            max_x: DisplayRowMaxX::Bounded(width.max(0.0)),
         },
     );
     let mut source_state = DisplayRowSourceState::default();
@@ -802,7 +803,7 @@ impl<'face> MinibufferSpecialRowsPlan<'face> {
         let active_minibuffer_window =
             evaluator.minibuffer_window_is_active(WindowId(params.window_id as u64));
         let echo_message = minibuffer_echo_message_for_window(
-            params.is_minibuffer,
+            params.is_minibuffer(),
             active_minibuffer_window,
             evaluator.current_message_value(),
         );
@@ -830,13 +831,13 @@ impl<'face> MinibufferSpecialRowsPlan<'face> {
                     base_face,
                     message,
                     max_rows,
-                    truncate_lines: message_truncate_lines(evaluator),
+                    wrap_mode: message_wrap_mode(evaluator),
                     reserve_right_special_col,
                 }),
             });
         }
 
-        if params.is_minibuffer && !active_minibuffer_window {
+        if params.is_minibuffer() && !active_minibuffer_window {
             // GNU `display_echo_area` temporarily displays an echo-area
             // buffer in the minibuffer window. With no current message that
             // buffer is empty; the inactive minibuffer must not redisplay the
@@ -938,7 +939,7 @@ struct EchoMinibufferDisplayRowsRequest<'face> {
     base_face: &'face ResolvedFace,
     message: Value,
     max_rows: usize,
-    truncate_lines: bool,
+    wrap_mode: LineWrapMode,
     reserve_right_special_col: bool,
 }
 
@@ -951,7 +952,7 @@ pub(crate) struct EchoMinibufferRowsRenderRequest<'face> {
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) message: Value,
     pub(crate) max_rows: usize,
-    pub(crate) truncate_lines: bool,
+    pub(crate) wrap_mode: LineWrapMode,
     pub(crate) reserve_right_special_col: bool,
 }
 
@@ -985,7 +986,7 @@ impl<'face> EchoMinibufferDisplayRowsRequest<'face> {
                 base_face: self.base_face,
                 message: self.message,
                 max_rows: self.max_rows,
-                truncate_lines: self.truncate_lines,
+                wrap_mode: self.wrap_mode,
                 reserve_right_special_col: self.reserve_right_special_col,
             },
         }
@@ -1030,7 +1031,7 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
     }
 
     fn wrap_width(&self, char_width: f32) -> f32 {
-        if self.truncate_lines {
+        if self.wrap_mode == LineWrapMode::Truncate {
             self.text_width
         } else {
             (self.text_width - self.reserve_width(char_width)).max(char_width.max(1.0))
@@ -1113,7 +1114,11 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
             rendered.row.role = GlyphRowRole::Minibuffer;
             rendered.row.mode_line = false;
             if self.reserve_right_special_col && stop == DisplayRowRenderStop::Clipped {
-                let ch = if self.truncate_lines { '$' } else { '\\' };
+                let ch = if self.wrap_mode == LineWrapMode::Truncate {
+                    '$'
+                } else {
+                    '\\'
+                };
                 let row_y = rendered.progress.y;
                 let current_cols = display_row_text_glyph_count(&rendered.row);
                 if current_cols < special_col {
@@ -1152,7 +1157,7 @@ impl<'face> EchoMinibufferRowsRenderRequest<'face> {
                 DisplayRowRenderStop::SourceExhausted => break,
                 DisplayRowRenderStop::RowBreak => {}
                 DisplayRowRenderStop::Clipped => {
-                    if self.truncate_lines {
+                    if self.wrap_mode == LineWrapMode::Truncate {
                         break;
                     }
                 }
@@ -1501,11 +1506,16 @@ pub(crate) fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32
     }
 }
 
-pub(crate) fn message_truncate_lines(evaluator: &Context) -> bool {
-    evaluator
+pub(crate) fn message_wrap_mode(evaluator: &Context) -> LineWrapMode {
+    if evaluator
         .obarray()
         .symbol_value("message-truncate-lines")
         .is_some_and(|value| !value.is_nil())
+    {
+        LineWrapMode::Truncate
+    } else {
+        LineWrapMode::Wrap
+    }
 }
 
 pub(crate) fn minibuffer_echo_message_for_window(

@@ -144,6 +144,33 @@ impl LayoutCharPos0 {
     }
 }
 
+/// How the layout engine should handle text that exceeds the right edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum LineWrapMode {
+    /// Lines that exceed the window width are truncated with a continuation
+    /// glyph (e.g. `$`).
+    #[default]
+    Truncate,
+    /// Lines that exceed the window width wrap to the next visual row.
+    Wrap,
+}
+
+/// Semantic category of a window within its frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum WindowKind {
+    /// A normal editing window.
+    #[default]
+    Main,
+    /// The minibuffer window.
+    Minibuffer,
+}
+
+impl WindowKind {
+    pub const fn is_minibuffer(self) -> bool {
+        matches!(self, Self::Minibuffer)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WindowParams {
     /// Window identifier (pointer value)
@@ -156,8 +183,8 @@ pub struct WindowParams {
     pub text_bounds: Rect,
     /// Whether this is the selected window
     pub selected: bool,
-    /// Whether this is the minibuffer window
-    pub is_minibuffer: bool,
+    /// What kind of window this is (main editing area or minibuffer).
+    pub kind: WindowKind,
 
     /// First visible buffer position in layout 0-based char coordinates.
     /// Derived from GNU `marker_position (w->start)`.
@@ -177,8 +204,8 @@ pub struct WindowParams {
     /// Vertical scroll offset in pixels (shifts content up)
     pub vscroll: i32,
 
-    /// Whether to truncate long lines
-    pub truncate_lines: bool,
+    /// How to handle long lines.
+    pub wrap_mode: LineWrapMode,
     /// Whether to wrap at word boundaries
     pub word_wrap: bool,
     /// Tab width in columns
@@ -280,6 +307,10 @@ pub struct WindowParams {
 }
 
 impl WindowParams {
+    pub const fn is_minibuffer(&self) -> bool {
+        self.kind.is_minibuffer()
+    }
+
     pub fn window_start_charpos(&self) -> LayoutCharPos0 {
         LayoutCharPos0::new(self.window_start)
     }

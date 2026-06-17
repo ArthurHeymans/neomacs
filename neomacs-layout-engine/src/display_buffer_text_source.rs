@@ -1,5 +1,17 @@
+use crate::display_item::{
+    DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+};
+use crate::display_source::{
+    BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
+    DisplayPropertySourceCursorAction, DisplaySourceContext, LispStringSourceStack,
+    TextSourceCharClassification, classify_text_source_char,
+    display_item_kind_for_text_source_char, display_property_source_action,
+};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
-use crate::types::WindowParams;
+use crate::types::{WindowKind, WindowParams};
+use crate::unicode::decode_utf8;
+use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
+use neovm_core::emacs_core::Value;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowSource {
@@ -62,7 +74,7 @@ pub(crate) struct BufferTextWindowSourceRequest {
     accessible_end: i64,
     max_rows: usize,
     visible_cols: i64,
-    is_minibuffer: bool,
+    kind: WindowKind,
 }
 
 impl<'a> BufferTextWindowSourceReadRequest<'a> {
@@ -90,7 +102,7 @@ impl BufferTextWindowSourceRequest {
             params.accessible_end_charpos().get(),
             max_rows,
             visible_cols_for_window_params(params),
-            params.is_minibuffer,
+            params.kind,
         )
     }
 
@@ -102,7 +114,7 @@ impl BufferTextWindowSourceRequest {
         accessible_end: i64,
         max_rows: usize,
         visible_cols: i64,
-        is_minibuffer: bool,
+        kind: WindowKind,
     ) -> Self {
         Self {
             requested_window_start,
@@ -112,7 +124,7 @@ impl BufferTextWindowSourceRequest {
             accessible_end,
             max_rows,
             visible_cols: visible_cols.max(1),
-            is_minibuffer,
+            kind,
         }
     }
 
@@ -187,7 +199,7 @@ impl BufferTextWindowSourceRequest {
     }
 
     fn should_forward_scroll_without_layout(self, window_start: i64) -> bool {
-        if self.point_charpos <= 0 || self.is_minibuffer {
+        if self.point_charpos <= 0 || self.kind.is_minibuffer() {
             return false;
         }
         let has_prev_end = self
@@ -221,6 +233,367 @@ fn visible_cols_for_window_params(params: &WindowParams) -> i64 {
     (params.text_bounds.width.max(1.0) / char_width)
         .floor()
         .max(1.0) as i64
+}
+
+/// A single character decoded from raw buffer text, together with its byte and
+/// char positions in the original buffer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextDecodedSourceChar {
+    ch: char,
+    start_byte_idx: usize,
+    start_charpos: i64,
+}
+
+impl BufferTextDecodedSourceChar {
+    pub(crate) const fn new(ch: char, start_byte_idx: usize, start_charpos: i64) -> Self {
+        Self {
+            ch,
+            start_byte_idx,
+            start_charpos,
+        }
+    }
+
+    pub(crate) fn consume_from_text(
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<Self> {
+        if *byte_idx >= text.len() {
+            return None;
+        }
+
+        let start_byte_idx = *byte_idx;
+        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
+        if ch_len == 0 {
+            return None;
+        }
+        *byte_idx += ch_len;
+
+        Some(Self {
+            ch,
+            start_byte_idx,
+            start_charpos: charpos,
+        })
+    }
+
+    pub(crate) fn ch(self) -> char {
+        self.ch
+    }
+
+    pub(crate) fn start_byte_idx(self) -> usize {
+        self.start_byte_idx
+    }
+
+    pub(crate) fn start_charpos(self) -> i64 {
+        self.start_charpos
+    }
+
+    pub(crate) fn source_range(self) -> BufferTextSourceRange {
+        BufferTextSourceRange::single_char(CharPos0::new(self.start_charpos as usize))
+    }
+
+    pub(crate) fn into_event(self) -> BufferTextDecodedSourceEvent {
+        if self.ch == '\n' {
+            BufferTextDecodedSourceEvent::LineBreak(BufferTextLineBreakSourceEvent::new(self))
+        } else {
+            BufferTextDecodedSourceEvent::Text(BufferTextSourceTextEvent::new(self))
+        }
+    }
+
+    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
+        BufferTextSourceChar::new(self.ch, self.source_range().start(), nobreak_display_policy)
+    }
+}
+
+/// A decoded event from a buffer text source: either a printable character/text
+/// run or a line-break character.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextDecodedSourceEvent {
+    LineBreak(BufferTextLineBreakSourceEvent),
+    Text(BufferTextSourceTextEvent),
+}
+
+impl BufferTextDecodedSourceEvent {
+    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+        match self {
+            Self::LineBreak(source_event) => source_event.decoded_char(),
+            Self::Text(source_event) => source_event.decoded_char(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextLineBreakSourceEvent {
+    source_char: BufferTextDecodedSourceChar,
+}
+
+impl BufferTextLineBreakSourceEvent {
+    pub(crate) fn new(source_char: BufferTextDecodedSourceChar) -> Self {
+        debug_assert_eq!(source_char.ch(), '\n');
+        Self { source_char }
+    }
+
+    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+        self.source_char
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSourceTextEvent {
+    source_char: BufferTextDecodedSourceChar,
+}
+
+impl BufferTextSourceTextEvent {
+    pub(crate) fn new(source_char: BufferTextDecodedSourceChar) -> Self {
+        debug_assert_ne!(source_char.ch(), '\n');
+        Self { source_char }
+    }
+
+    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+        self.source_char
+    }
+
+    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
+        self.source_char.source_char(nobreak_display_policy)
+    }
+}
+
+/// Cursor that iterates over raw buffer text bytes and yields decoded source
+/// events for the buffer text walker.
+pub(crate) struct BufferTextSourceEventCursor<'text, 'state> {
+    text: &'text [u8],
+    byte_idx: &'state mut usize,
+    charpos: i64,
+}
+
+impl<'text, 'state> BufferTextSourceEventCursor<'text, 'state> {
+    pub(crate) fn new(text: &'text [u8], byte_idx: &'state mut usize, charpos: i64) -> Self {
+        Self {
+            text,
+            byte_idx,
+            charpos,
+        }
+    }
+
+    pub(crate) fn next_event(&mut self) -> Option<BufferTextDecodedSourceEvent> {
+        BufferTextDecodedSourceChar::consume_from_text(self.text, self.byte_idx, self.charpos)
+            .map(BufferTextDecodedSourceChar::into_event)
+    }
+}
+
+/// A `DisplayItemSource` that reads plain buffer text (with face and display
+/// property boundaries) and emits `DisplayItem` values for the shared row
+/// renderer. This is the new-path buffer source; the old monolithic walker in
+/// `display_buffer_text_walk.rs` should eventually route through it.
+#[allow(dead_code)]
+pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
+    buffer_id: BufferId,
+    buffer: &'a B,
+    char_pos: CharPos0,
+    end: CharPos0,
+    base_face: RenderFaceRef,
+    replacement_strings: LispStringSourceStack,
+}
+
+#[allow(dead_code)]
+impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
+    pub(crate) fn new(
+        buffer_id: BufferId,
+        buffer: &'a B,
+        start: CharPos0,
+        end: CharPos0,
+        base_face: RenderFaceRef,
+    ) -> Self {
+        let accessible_end = buffer.layout_point_max_char_pos();
+        let start = start.min(accessible_end);
+        let end = end.min(accessible_end).max(start);
+        Self {
+            buffer_id,
+            buffer,
+            char_pos: start,
+            end,
+            base_face,
+            replacement_strings: LispStringSourceStack::empty(1),
+        }
+    }
+
+    pub(crate) fn current_char_pos(&self) -> CharPos0 {
+        self.char_pos
+    }
+
+    pub(crate) fn current_byte_pos(&self) -> EmacsBytePos {
+        self.byte_pos(self.char_pos)
+    }
+
+    pub(crate) fn reset_to(&mut self, char_pos: CharPos0) {
+        let accessible_end = self.buffer.layout_point_max_char_pos();
+        self.char_pos = char_pos.min(self.end).min(accessible_end);
+    }
+
+    fn byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
+        self.buffer.layout_char_pos_to_emacs_byte_pos(char_pos)
+    }
+
+    fn char_at(&self, char_pos: CharPos0) -> Option<char> {
+        if char_pos >= self.end {
+            return None;
+        }
+        let start = self.byte_pos(char_pos);
+        let end = self.byte_pos(char_pos.add_len(CharLen::new(1)).min(self.end));
+        let mut bytes = Vec::new();
+        self.buffer
+            .layout_copy_emacs_byte_range_to(EmacsByteRange::new(start, end), &mut bytes);
+        let (ch, len) = decode_utf8(&bytes);
+        (len > 0).then_some(ch)
+    }
+
+    fn text_slice(&self, start: CharPos0, end: CharPos0) -> String {
+        let mut bytes = Vec::new();
+        self.buffer.layout_copy_emacs_byte_range_to(
+            EmacsByteRange::new(self.byte_pos(start), self.byte_pos(end)),
+            &mut bytes,
+        );
+        let mut text = String::new();
+        let mut offset = 0usize;
+        while offset < bytes.len() {
+            let (ch, len) = decode_utf8(&bytes[offset..]);
+            if len == 0 {
+                break;
+            }
+            text.push(ch);
+            offset += len;
+        }
+        text
+    }
+
+    fn span(&self, start: CharPos0, end: CharPos0) -> SourceSpan {
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(self.buffer_id, start, self.byte_pos(start)),
+            DisplaySourcePosition::buffer(self.buffer_id, end, self.byte_pos(end)),
+        )
+    }
+
+    fn next_property_change(&self, char_pos: CharPos0) -> CharPos0 {
+        self.buffer
+            .layout_next_text_prop_change_after_emacs_byte_pos(self.byte_pos(char_pos))
+            .map(|byte_pos| self.buffer.layout_emacs_byte_pos_to_char_pos(byte_pos))
+            .unwrap_or(self.end)
+            .min(self.end)
+    }
+
+    fn display_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
+        self.buffer
+            .layout_text_prop_at_emacs_byte_pos(self.byte_pos(char_pos), Value::symbol("display"))
+    }
+
+    fn face_at(&self, char_pos: CharPos0, context: &mut DisplaySourceContext<'_>) -> RenderFaceRef {
+        let face = self
+            .buffer
+            .layout_text_prop_at_emacs_byte_pos(self.byte_pos(char_pos), Value::symbol("face"))
+            .or_else(|| {
+                self.buffer.layout_text_prop_at_emacs_byte_pos(
+                    self.byte_pos(char_pos),
+                    Value::symbol("font-lock-face"),
+                )
+            });
+        face.map(|value| context.resolve_face_ref(self.base_face, value))
+            .unwrap_or(self.base_face)
+    }
+
+    fn next_text_run_end(&self, start: CharPos0, limit: CharPos0) -> CharPos0 {
+        let mut end = start;
+        while end < limit {
+            let Some(ch) = self.char_at(end) else {
+                break;
+            };
+            if classify_text_source_char(ch) != TextSourceCharClassification::Text {
+                break;
+            }
+            end = end.add_len(CharLen::new(1));
+        }
+        end.max(start.add_len(CharLen::new(1))).min(limit)
+    }
+
+    pub(crate) fn source_position(&self) -> DisplaySourcePosition {
+        if !self.replacement_strings.is_empty() {
+            return self.replacement_strings.source_position();
+        }
+        DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
+    }
+}
+
+impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<'_, B> {
+    fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        loop {
+            if let Some(item) = self.replacement_strings.next_item(context) {
+                return Some(item);
+            }
+
+            if self.char_pos >= self.end {
+                return None;
+            }
+
+            let start = self.char_pos;
+            let property_end = self
+                .next_property_change(start)
+                .max(start.add_len(CharLen::new(1)))
+                .min(self.end);
+            let face = self.face_at(start, context);
+            let span = self.span(start, property_end);
+
+            if let Some(display_prop) = self.display_prop_at(start) {
+                self.char_pos = property_end;
+                let item_layout = match display_property_source_action(context, display_prop, face)
+                    .into_cursor_action(span, face)
+                {
+                    DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
+                        self.replacement_strings.push(value, base_face);
+                        continue;
+                    }
+                    DisplayPropertySourceCursorAction::Emit(item) => {
+                        return Some(item);
+                    }
+                    DisplayPropertySourceCursorAction::FallThrough { layout } => layout,
+                };
+                let ch = self.char_at(start)?;
+                if let Some(kind) = display_item_kind_for_text_source_char(ch) {
+                    self.char_pos = start.add_len(CharLen::new(1));
+                    return Some(
+                        DisplayItem::new(self.span(start, self.char_pos), face, kind)
+                            .with_layout(item_layout),
+                    );
+                }
+
+                let end = self.next_text_run_end(start, property_end);
+                self.char_pos = end;
+                return Some(
+                    DisplayItem::new(
+                        self.span(start, end),
+                        face,
+                        DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+                    )
+                    .with_layout(item_layout),
+                );
+            }
+
+            let ch = self.char_at(start)?;
+            if let Some(kind) = display_item_kind_for_text_source_char(ch) {
+                self.char_pos = start.add_len(CharLen::new(1));
+                return Some(DisplayItem::new(
+                    self.span(start, self.char_pos),
+                    face,
+                    kind,
+                ));
+            }
+            let end = self.next_text_run_end(start, property_end);
+            self.char_pos = end;
+            return Some(DisplayItem::new(
+                self.span(start, end),
+                face,
+                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+            ));
+        }
+    }
 }
 
 #[cfg(test)]

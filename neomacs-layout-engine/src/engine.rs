@@ -21,6 +21,7 @@ use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
     TextWindowMatrixBegin, begin_text_window_matrix, close_text_window_output,
 };
+use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowBodyPassState, BufferTextWindowChromeHeights,
@@ -58,7 +59,6 @@ use crate::display_row::{
     DisplayRowRenderExecutor, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
     PrebuiltDisplayRowInstall, insert_resolved_display_row_face,
 };
-use crate::display_row_append::BufferTextWindowCursorEffectsRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixRequest;
 #[cfg(test)]
@@ -66,6 +66,7 @@ use crate::display_row_append::DisplayRowPrefixValues;
 #[cfg(test)]
 use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
+use crate::display_row_geometry::DisplayRowMaxX;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
@@ -180,6 +181,9 @@ pub struct LayoutEngine {
         Vec<neomacs_display_protocol::glyph_matrix::FrameChromeRow>,
     /// Frame-level tab bar metadata for render-thread hit-testing.
     pending_tab_bar: Option<neomacs_display_protocol::frame_glyphs::FrameTabBarState>,
+    /// Test/debug toggle: route main-buffer text through the typed
+    /// `BufferTextSourceCursor` instead of the legacy raw decoder.
+    use_typed_buffer_source: bool,
 }
 
 impl LayoutEngine {
@@ -204,6 +208,7 @@ impl LayoutEngine {
             frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
+            use_typed_buffer_source: false,
         }
     }
 
@@ -228,6 +233,7 @@ impl LayoutEngine {
             frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
+            use_typed_buffer_source: false,
         }
     }
 
@@ -262,6 +268,13 @@ impl LayoutEngine {
 
     pub fn set_font_sizing(&mut self, font_sizing: FontSizing) {
         self.font_sizing = font_sizing;
+    }
+
+    /// Test-only toggle: route main-buffer text through the typed
+    /// `BufferTextSourceCursor` instead of the legacy raw decoder.
+    #[cfg(test)]
+    pub(crate) fn set_use_typed_buffer_source(&mut self, enabled: bool) {
+        self.use_typed_buffer_source = enabled;
     }
 
     /// Perform layout for a frame using neovm-core data (Rust-authoritative path).
@@ -474,7 +487,7 @@ impl LayoutEngine {
             }
             let main_area_bottom = window_params_list
                 .iter()
-                .filter(|params| !params.is_minibuffer)
+                .filter(|params| !params.is_minibuffer())
                 .map(|params| params.bounds.y + params.bounds.height)
                 .fold(0.0_f32, f32::max);
 
@@ -487,7 +500,7 @@ impl LayoutEngine {
                     params.bounds.y,
                     params.bounds.width,
                     params.bounds.height,
-                    params.is_minibuffer,
+                    params.is_minibuffer(),
                     params.selected,
                     params.mode_line_height,
                 );
@@ -558,7 +571,7 @@ impl LayoutEngine {
             if !mini_resize_attempted {
                 if let Some(mini_entry) = self.matrix_builder.windows().last() {
                     if let Some(mini_params) = window_params_list.last() {
-                        if mini_params.is_minibuffer {
+                        if mini_params.is_minibuffer() {
                             let mini_rows_used =
                                 mini_entry.matrix.rows.iter().filter(|r| r.enabled).count();
                             let char_h = frame_params.char_height.max(1.0);
@@ -984,6 +997,7 @@ impl LayoutEngine {
             reserve_right_border_col,
             reserve_right_special_col,
         )
+        .with_typed_buffer_source(self.use_typed_buffer_source)
         .into_setup();
         let text_append_surface = walk_setup.text_append_surface.clone();
         let output_setup = BufferTextWindowOutputSetupRequest::from_window_geometry(
@@ -1318,7 +1332,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
             base_face,
             DisplayRowRenderBounds {
                 start: DisplayRowPosition { x_px: 0.0, col: 0 },
-                max_x_px: render_width,
+                max_x: DisplayRowMaxX::Bounded(render_width),
             },
         )
         .with_glyph_area(area);
@@ -1556,7 +1570,7 @@ impl LayoutEngine {
         // the window top; the mode-line is pinned to the window bottom.
         for window in &content.windows {
             let nrows = window.lines.len() + 1;
-            let ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
+            let ncols = mock_frame_pixel_width_to_columns(window.pixel_bounds.width, char_w);
             begin_text_window_matrix(
                 &mut builder,
                 TextWindowMatrixBegin {
@@ -1591,7 +1605,7 @@ impl LayoutEngine {
 
             // Mode-line pinned to window bottom.
             let mode_line_row = window.lines.len();
-            let ml_ncols = (window.pixel_bounds.width / char_w.max(1.0)) as usize;
+            let ml_ncols = mock_frame_pixel_width_to_columns(window.pixel_bounds.width, char_w);
             let row = mock_display_row_from_line(
                 GlyphRowRole::ModeLine,
                 &window.mode_line,
@@ -1618,7 +1632,7 @@ impl LayoutEngine {
         if let Some(ref mini) = content.minibuffer {
             let has_mode_line = !mini.mode_line.glyphs.is_empty();
             let nrows = mini.lines.len() + usize::from(has_mode_line);
-            let ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
+            let ncols = mock_frame_pixel_width_to_columns(mini.pixel_bounds.width, char_w);
             begin_text_window_matrix(
                 &mut builder,
                 TextWindowMatrixBegin {
@@ -1653,7 +1667,7 @@ impl LayoutEngine {
 
             if has_mode_line {
                 let mode_line_row = mini.lines.len();
-                let mini_ncols = (mini.pixel_bounds.width / char_w.max(1.0)) as usize;
+                let mini_ncols = mock_frame_pixel_width_to_columns(mini.pixel_bounds.width, char_w);
                 let row = mock_display_row_from_line(
                     GlyphRowRole::ModeLine,
                     &mini.mode_line,
@@ -1676,7 +1690,7 @@ impl LayoutEngine {
         }
 
         let main_state = builder.finish(
-            (content.frame_pixel_width / char_w.max(1.0)) as usize,
+            mock_frame_pixel_width_to_columns(content.frame_pixel_width, char_w),
             (content.frame_pixel_height / char_h.max(1.0)) as usize,
             char_w,
             char_h,
@@ -1714,7 +1728,7 @@ impl LayoutEngine {
                 super::matrix_builder::MatrixFrameStateInstallRequest::Faces(cfm),
             );
             let nrows = cf.window.lines.len();
-            let ncols = (cf.window.pixel_bounds.width / char_w.max(1.0)) as usize;
+            let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
             begin_text_window_matrix(
                 &mut cb,
                 TextWindowMatrixBegin {
@@ -1746,7 +1760,7 @@ impl LayoutEngine {
             }
             close_text_window_output(&mut cb);
             let cs = cb.finish(
-                (cf.window.pixel_bounds.width / char_w.max(1.0)) as usize,
+                mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w),
                 cf.window.lines.len().max(1),
                 char_w,
                 char_h,
@@ -1758,6 +1772,17 @@ impl LayoutEngine {
         all.extend(child_frames);
         all
     }
+}
+
+/// Convert a pixel width to a monospace column count, mirroring the
+/// `ncols` estimates used by `begin_text_window_matrix` for mock frames.
+///
+/// This is intentionally a geometry estimate for matrix allocation, not a
+/// measured text advance.  Real buffer layout does not need this because the
+/// row renderer owns text advance; mock frames still use it to size matrices
+/// before rendering rows.
+fn mock_frame_pixel_width_to_columns(width_px: f32, char_w: f32) -> usize {
+    (width_px / char_w.max(1.0)) as usize
 }
 
 #[cfg(test)]

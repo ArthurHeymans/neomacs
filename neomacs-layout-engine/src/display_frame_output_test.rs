@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::{FrameParams, WindowParams};
+use crate::types::{FrameParams, LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::{
     CursorKind, CursorStyle, DisplaySlotId, WindowEffectHint, WindowInfo, WindowTransitionKind,
@@ -13,7 +13,7 @@ fn window_params() -> WindowParams {
         bounds: Rect::new(10.0, 20.0, 120.0, 100.0),
         text_bounds: Rect::new(20.0, 30.0, 80.0, 70.0),
         selected: true,
-        is_minibuffer: false,
+        kind: WindowKind::Main,
         window_start: 10,
         window_end: 80,
         point: 10,
@@ -21,7 +21,7 @@ fn window_params() -> WindowParams {
         buffer_begv: 0,
         hscroll: 4,
         vscroll: 0,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         word_wrap: false,
         tab_width: 8,
         tab_stop_list: Vec::new(),
@@ -100,7 +100,7 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         header_line_height: params.header_line_height,
         tab_line_height: params.tab_line_height,
         selected: params.selected,
-        is_minibuffer: params.is_minibuffer,
+        is_minibuffer: params.is_minibuffer(),
         char_height: params.char_height,
         buffer_file_name: String::new(),
         modified: false,

@@ -3,6 +3,7 @@ use crate::coords::lisp_char_pos_to_layout_i64;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::types::LineWrapMode;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::LispCharPos1;
@@ -196,11 +197,11 @@ impl SpecialTextRowOverflowDecision {
         x_px: f32,
         width_px: f32,
         right_edge_px: f32,
-        truncate_lines: bool,
+        wrap_mode: LineWrapMode,
     ) -> Self {
         if x_px + width_px <= right_edge_px {
             Self::Fits
-        } else if truncate_lines {
+        } else if wrap_mode == LineWrapMode::Truncate {
             Self::Truncate
         } else {
             Self::Wrap
@@ -214,12 +215,12 @@ impl BufferTextRowOverflowDecision {
         x_px: f32,
         advance_px: f32,
         right_edge_px: f32,
-        truncate_lines: bool,
+        wrap_mode: LineWrapMode,
         word_wrap: WordWrapRenderState,
     ) -> Self {
         if ch == '\t' || x_px + advance_px <= right_edge_px {
             Self::Fits
-        } else if truncate_lines {
+        } else if wrap_mode == LineWrapMode::Truncate {
             Self::Truncate
         } else if word_wrap.has_candidate() {
             Self::WordWrap {
@@ -407,8 +408,8 @@ impl WordWrapRenderState {
 }
 
 impl HorizontalScrollSkipState {
-    pub(crate) fn new(truncate_lines: bool, hscroll_columns: i32) -> Self {
-        let configured_columns = if truncate_lines {
+    pub(crate) fn new(wrap_mode: LineWrapMode, hscroll_columns: i32) -> Self {
+        let configured_columns = if wrap_mode == LineWrapMode::Truncate {
             hscroll_columns.max(0) as i32
         } else {
             0

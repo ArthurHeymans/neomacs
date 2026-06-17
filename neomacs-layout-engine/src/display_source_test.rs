@@ -1,9 +1,10 @@
 use super::*;
+use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourceEventCursor};
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
-    DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplaySourceId,
-    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
-    RenderFaceRef, SourceSpan,
+    DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplayRowBreakReason,
+    DisplaySourceId, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
+    GlyphlessMethod, RenderFaceRef, SourceSpan,
 };
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
@@ -863,4 +864,198 @@ fn buffer_text_source_cursor_emits_control_and_glyphless_items() {
             method: GlyphlessMethod::ZeroWidth,
         })
     );
+}
+
+#[test]
+fn typed_buffer_source_events_match_raw_decoder_for_plain_text() {
+    let text = "abc\ndef\tghi\n";
+    let (buffer_id, snapshot, end) = snapshot_with_text(text);
+    let mut cursor = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::Inherit,
+    );
+    let mut context = DisplaySourceContext::empty();
+
+    let mut typed = Vec::new();
+    let mut byte_offset = 0usize;
+    let mut charpos = 0i64;
+    while let Some(item) = cursor.next_item(&mut context) {
+        match item.kind {
+            DisplayItemKind::TextRun(run) => {
+                for ch in run.text.chars() {
+                    typed.push((ch, byte_offset, charpos));
+                    byte_offset += ch.len_utf8();
+                    charpos += 1;
+                }
+            }
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
+            {
+                typed.push(('\n', byte_offset, charpos));
+                byte_offset += 1;
+                charpos += 1;
+            }
+            DisplayItemKind::ControlChar { ch }
+            | DisplayItemKind::Glyphless(DisplayGlyphless { ch, .. }) => {
+                typed.push((ch, byte_offset, charpos));
+                byte_offset += ch.len_utf8();
+                charpos += 1;
+            }
+            other => panic!("unexpected display item for plain text: {:?}", other),
+        }
+    }
+
+    let bytes = text.as_bytes();
+    let mut byte_idx = 0usize;
+    let mut raw_charpos = 0i64;
+    let mut raw = Vec::new();
+    while let Some(event) =
+        BufferTextSourceEventCursor::new(bytes, &mut byte_idx, raw_charpos).next_event()
+    {
+        let dc = event.decoded_char();
+        raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
+        raw_charpos = dc.start_charpos() + 1;
+    }
+
+    assert_eq!(typed, raw);
+}
+
+#[test]
+fn typed_buffer_source_events_match_raw_decoder_for_control_and_glyphless_chars() {
+    let text = "abc\u{0001}def\u{200b}ghi\n";
+    let (buffer_id, snapshot, end) = snapshot_with_text(text);
+    let mut cursor = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::Inherit,
+    );
+    let mut context = DisplaySourceContext::empty();
+
+    let mut typed = Vec::new();
+    let mut byte_offset = 0usize;
+    let mut charpos = 0i64;
+    while let Some(item) = cursor.next_item(&mut context) {
+        match item.kind {
+            DisplayItemKind::TextRun(run) => {
+                for ch in run.text.chars() {
+                    typed.push((ch, byte_offset, charpos));
+                    byte_offset += ch.len_utf8();
+                    charpos += 1;
+                }
+            }
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
+            {
+                typed.push(('\n', byte_offset, charpos));
+                byte_offset += 1;
+                charpos += 1;
+            }
+            DisplayItemKind::ControlChar { ch }
+            | DisplayItemKind::Glyphless(DisplayGlyphless { ch, .. }) => {
+                typed.push((ch, byte_offset, charpos));
+                byte_offset += ch.len_utf8();
+                charpos += 1;
+            }
+            other => panic!("unexpected display item: {:?}", other),
+        }
+    }
+
+    let bytes = text.as_bytes();
+    let mut byte_idx = 0usize;
+    let mut raw_charpos = 0i64;
+    let mut raw = Vec::new();
+    while let Some(event) =
+        BufferTextSourceEventCursor::new(bytes, &mut byte_idx, raw_charpos).next_event()
+    {
+        let dc = event.decoded_char();
+        raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
+        raw_charpos = dc.start_charpos() + 1;
+    }
+
+    assert_eq!(typed, raw);
+}
+
+#[test]
+fn typed_buffer_source_events_match_raw_decoder_for_face_property() {
+    let text = "abc\ndef\n";
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert(text);
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(3));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    let mut cursor = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::Inherit,
+    );
+    let mut context = DisplaySourceContext::empty();
+
+    let mut typed = Vec::new();
+    let mut byte_offset = 0usize;
+    let mut charpos = 0i64;
+    while let Some(item) = cursor.next_item(&mut context) {
+        match item.kind {
+            DisplayItemKind::TextRun(run) => {
+                for ch in run.text.chars() {
+                    typed.push((ch, byte_offset, charpos));
+                    byte_offset += ch.len_utf8();
+                    charpos += 1;
+                }
+            }
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
+            {
+                typed.push(('\n', byte_offset, charpos));
+                byte_offset += 1;
+                charpos += 1;
+            }
+            DisplayItemKind::ControlChar { ch }
+            | DisplayItemKind::Glyphless(DisplayGlyphless { ch, .. }) => {
+                typed.push((ch, byte_offset, charpos));
+                byte_offset += ch.len_utf8();
+                charpos += 1;
+            }
+            other => panic!("unexpected display item: {:?}", other),
+        }
+    }
+
+    let bytes = text.as_bytes();
+    let mut byte_idx = 0usize;
+    let mut raw_charpos = 0i64;
+    let mut raw = Vec::new();
+    while let Some(event) =
+        BufferTextSourceEventCursor::new(bytes, &mut byte_idx, raw_charpos).next_event()
+    {
+        let dc = event.decoded_char();
+        raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
+        raw_charpos = dc.start_charpos() + 1;
+    }
+
+    assert_eq!(typed, raw);
 }

@@ -21,7 +21,7 @@ use neovm_core::window::{
     resolve_window_scroll_bar_geometry,
 };
 
-use super::types::{FrameParams, VisualCursorSpec, WindowParams};
+use super::types::{FrameParams, LineWrapMode, VisualCursorSpec, WindowKind, WindowParams};
 use crate::coords::{
     clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
     lisp_char_pos_to_layout_i64, lisp_charpos_to_layout_char_pos,
@@ -544,35 +544,41 @@ fn window_total_cols(window: &Window, char_width: f32) -> i64 {
     }
 }
 
-fn effective_truncate_lines(
+fn effective_wrap_mode(
     window: &Window,
     buffer: &Buffer,
     frame: &Frame,
     obarray: &Obarray,
     hscroll: usize,
-) -> bool {
+) -> LineWrapMode {
     if effective_buffer_bool(buffer, obarray, "truncate-lines") {
-        return true;
+        return LineWrapMode::Truncate;
     }
 
     // GNU `xdisp.c:init_iterator` only enables wrapping when the
     // window is not horizontally scrolled.
     if hscroll != 0 {
-        return true;
+        return LineWrapMode::Truncate;
     }
 
     let total_cols = window_total_cols(window, frame.char_width);
     let frame_cols = frame_total_cols(frame);
 
     if total_cols >= frame_cols {
-        return false;
+        return LineWrapMode::Wrap;
     }
 
-    match effective_buffer_value(buffer, obarray, "truncate-partial-width-windows") {
+    let truncate = match effective_buffer_value(buffer, obarray, "truncate-partial-width-windows") {
         Some(value) if value.is_nil() => false,
         Some(value) if value.is_fixnum() => total_cols < value.as_fixnum().unwrap(),
         Some(_) => true,
         None => false,
+    };
+
+    if truncate {
+        LineWrapMode::Truncate
+    } else {
+        LineWrapMode::Wrap
     }
 }
 
@@ -1118,7 +1124,7 @@ pub fn window_params_from_neovm_with_font_sizing(
     let text_bounds = Rect::new(text_x, bounds.y, text_width, bounds.height);
 
     // Read buffer-local variables.
-    let truncate_lines = effective_truncate_lines(window, buffer, frame, obarray, hscroll);
+    let wrap_mode = effective_wrap_mode(window, buffer, frame, obarray, hscroll);
     let word_wrap = effective_buffer_bool(buffer, obarray, "word-wrap");
     let tab_width = effective_buffer_int(buffer, obarray, "tab-width", 8) as i32;
 
@@ -1206,7 +1212,11 @@ pub fn window_params_from_neovm_with_font_sizing(
         bounds: display_bounds,
         text_bounds,
         selected: is_selected,
-        is_minibuffer,
+        kind: if is_minibuffer {
+            WindowKind::Minibuffer
+        } else {
+            WindowKind::Main
+        },
         // Window::window_start tracks GNU marker positions (1-based).
         // Normalize to the layout engine's internal 0-based char positions.
         window_start: lisp_char_pos_to_layout_i64(window_start),
@@ -1251,7 +1261,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         buffer_begv: buffer.point_min_char_pos().get() as i64,
         hscroll: hscroll as i32,
         vscroll: 0,
-        truncate_lines,
+        wrap_mode,
         word_wrap,
         tab_width,
         tab_stop_list: buffer_local_list_values(buffer, "tab-stop-list")

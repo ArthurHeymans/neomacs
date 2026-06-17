@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::WindowParams;
+use crate::types::{LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::types::Rect;
 
 fn window_params() -> WindowParams {
@@ -9,7 +9,7 @@ fn window_params() -> WindowParams {
         bounds: Rect::new(0.0, 8.0, 240.0, 120.0),
         text_bounds: Rect::new(16.0, 32.0, 160.0, 80.0),
         selected: true,
-        is_minibuffer: false,
+        kind: WindowKind::Main,
         window_start: 17,
         window_end: 29,
         point: 21,
@@ -17,7 +17,7 @@ fn window_params() -> WindowParams {
         buffer_begv: 3,
         hscroll: 0,
         vscroll: 0,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         word_wrap: false,
         tab_width: 8,
         tab_stop_list: vec![],
@@ -68,7 +68,7 @@ fn request(
     point_charpos: i64,
     accessible_end: i64,
     max_rows: usize,
-    is_minibuffer: bool,
+    kind: WindowKind,
 ) -> BufferTextWindowSourceRequest {
     BufferTextWindowSourceRequest::new(
         requested_window_start,
@@ -78,7 +78,7 @@ fn request(
         accessible_end,
         max_rows,
         20,
-        is_minibuffer,
+        kind,
     )
 }
 
@@ -98,7 +98,7 @@ fn source_request_from_window_params_carries_source_bounds() {
     assert_eq!(request.accessible_end, 80);
     assert_eq!(request.max_rows, 6);
     assert_eq!(request.visible_cols, 20);
-    assert!(!request.is_minibuffer);
+    assert!(!request.kind.is_minibuffer());
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn source_request_from_window_params_uses_text_bounds_columns() {
 #[test]
 fn source_request_scrolls_back_when_start_is_past_remaining_content() {
     let text = b"a\nb\nc\nd\ne\nf\n";
-    let resolved = request(10, None, 10, text.len() as i64, 4, false)
+    let resolved = request(10, None, 10, text.len() as i64, 4, WindowKind::Main)
         .resolve_window_start(byte_at_charpos(text));
 
     assert_eq!(resolved, 7);
@@ -125,7 +125,7 @@ fn source_request_scrolls_back_when_start_is_past_remaining_content() {
 #[test]
 fn source_request_scrolls_back_when_point_is_above_window_start() {
     let text = b"a\nb\nc\nd\ne\nf\n";
-    let resolved = request(8, None, 3, text.len() as i64, 4, false)
+    let resolved = request(8, None, 3, text.len() as i64, 4, WindowKind::Main)
         .resolve_window_start(byte_at_charpos(text));
 
     assert_eq!(resolved, 1);
@@ -134,7 +134,7 @@ fn source_request_scrolls_back_when_point_is_above_window_start() {
 #[test]
 fn source_request_scrolls_forward_when_point_passed_previous_end() {
     let text = b"a\nb\nc\nd\ne\nf\ng\nh\n";
-    let resolved = request(0, Some(4), 12, text.len() as i64, 4, false)
+    let resolved = request(0, Some(4), 12, text.len() as i64, 4, WindowKind::Main)
         .resolve_window_start(byte_at_charpos(text));
 
     assert_eq!(resolved, 7);
@@ -143,7 +143,7 @@ fn source_request_scrolls_forward_when_point_passed_previous_end() {
 #[test]
 fn source_request_does_not_forward_scroll_minibuffer() {
     let text = b"a\nb\nc\nd\ne\nf\ng\nh\n";
-    let resolved = request(0, Some(4), 12, text.len() as i64, 4, true)
+    let resolved = request(0, Some(4), 12, text.len() as i64, 4, WindowKind::Minibuffer)
         .resolve_window_start(byte_at_charpos(text));
 
     assert_eq!(resolved, 0);

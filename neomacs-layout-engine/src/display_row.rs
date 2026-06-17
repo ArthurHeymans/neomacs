@@ -15,6 +15,7 @@ use crate::display_row_builder::{
     new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
+pub(crate) use crate::display_row_geometry::DisplayRowMaxX;
 use crate::display_source::{DisplayItemOnceSource, DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -1877,7 +1878,7 @@ pub(crate) struct DisplayRowSourceAppendRequestPolicy {
     glyph_y: f32,
     output_height: f32,
     geometry: DisplayRowGeometry,
-    max_x_px: f32,
+    max_x: DisplayRowMaxX,
 }
 
 impl DisplayRowSourceAppendRequestPolicy {
@@ -1887,7 +1888,7 @@ impl DisplayRowSourceAppendRequestPolicy {
         glyph_y: f32,
         output_height: f32,
         geometry: DisplayRowGeometry,
-        max_x_px: f32,
+        max_x: DisplayRowMaxX,
     ) -> Self {
         Self {
             matrix_row,
@@ -1895,7 +1896,7 @@ impl DisplayRowSourceAppendRequestPolicy {
             glyph_y,
             output_height,
             geometry,
-            max_x_px,
+            max_x,
         }
     }
 }
@@ -1926,7 +1927,7 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         .source_request_for_base_face_id(base_face_id, base_face)
         .with_render_bounds(DisplayRowRenderBounds {
             start: position,
-            max_x_px: policy.max_x_px,
+            max_x: policy.max_x,
         });
         let output = TextRowOutput {
             row: policy.matrix_row,
@@ -2200,21 +2201,21 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowRenderBounds {
     pub(crate) start: DisplayRowPosition,
-    pub(crate) max_x_px: f32,
+    pub(crate) max_x: DisplayRowMaxX,
 }
 
 impl DisplayRowRenderBounds {
     pub(crate) fn whole_row(width_px: f32) -> Self {
         Self {
             start: DisplayRowPosition { x_px: 0.0, col: 0 },
-            max_x_px: width_px.max(0.0),
+            max_x: DisplayRowMaxX::Bounded(width_px.max(0.0)),
         }
     }
 
     pub(crate) fn unbounded_from(start: DisplayRowPosition) -> Self {
         Self {
             start,
-            max_x_px: f32::INFINITY,
+            max_x: DisplayRowMaxX::Unbounded,
         }
     }
 }
@@ -3283,7 +3284,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         &mut *row,
                         &mut glyph_measurer,
                         position,
-                        render_bounds.max_x_px,
+                        render_bounds.max_x.to_f32(),
                         area,
                     );
                     row_writer.push_item(render_item.row_item_for_write())
@@ -3295,7 +3296,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                             &mut *row,
                             measurement,
                             position,
-                            render_bounds.max_x_px,
+                            render_bounds.max_x.to_f32(),
                             area,
                         );
                     row_writer.push_item(render_item.row_item_for_write())

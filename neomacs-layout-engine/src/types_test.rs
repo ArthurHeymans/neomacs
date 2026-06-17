@@ -364,7 +364,7 @@ fn window_params_construction() {
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
         text_bounds: Rect::new(10.0, 0.0, 780.0, 580.0),
         selected: true,
-        is_minibuffer: false,
+        kind: WindowKind::Main,
         window_start: 1,
         window_end: 0,
         point: 42,
@@ -372,7 +372,7 @@ fn window_params_construction() {
         buffer_begv: 1,
         hscroll: 0,
         vscroll: 0,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         word_wrap: true,
         tab_width: 8,
         tab_stop_list: vec![],
@@ -418,10 +418,10 @@ fn window_params_construction() {
     assert_eq!(params.window_id, 12345);
     assert_eq!(params.buffer_id, 67890);
     assert!(params.selected);
-    assert!(!params.is_minibuffer);
+    assert!(!params.is_minibuffer());
     assert_eq!(params.point, 42);
     assert!(params.word_wrap);
-    assert!(!params.truncate_lines);
+    assert_eq!(params.wrap_mode, LineWrapMode::Wrap);
     assert_eq!(params.tab_width, 8);
     assert_eq!(params.fill_column_indicator, 80);
     assert_eq!(params.fill_column_indicator_char, '|');
@@ -435,7 +435,7 @@ fn window_params_minibuffer() {
         bounds: Rect::new(0.0, 580.0, 800.0, 20.0),
         text_bounds: Rect::new(0.0, 580.0, 800.0, 20.0),
         selected: true,
-        is_minibuffer: true,
+        kind: WindowKind::Minibuffer,
         window_start: 1,
         window_end: 0,
         point: 1,
@@ -443,7 +443,7 @@ fn window_params_minibuffer() {
         buffer_begv: 1,
         hscroll: 0,
         vscroll: 0,
-        truncate_lines: true,
+        wrap_mode: LineWrapMode::Truncate,
         word_wrap: false,
         tab_width: 8,
         tab_stop_list: vec![],
@@ -486,7 +486,7 @@ fn window_params_minibuffer() {
         scroll_bar_pixel_width: 0.0,
         scroll_bar_pixel_height: 0.0,
     };
-    assert!(params.is_minibuffer);
+    assert!(params.is_minibuffer());
     assert_eq!(params.mode_line_height, 0.0);
 }
 
@@ -498,7 +498,7 @@ fn window_params_clone() {
         bounds: Rect::new(0.0, 0.0, 100.0, 100.0),
         text_bounds: Rect::new(0.0, 0.0, 100.0, 100.0),
         selected: false,
-        is_minibuffer: false,
+        kind: WindowKind::Main,
         window_start: 1,
         window_end: 0,
         point: 1,
@@ -506,7 +506,7 @@ fn window_params_clone() {
         buffer_begv: 1,
         hscroll: 5,
         vscroll: 0,
-        truncate_lines: true,
+        wrap_mode: LineWrapMode::Truncate,
         word_wrap: false,
         tab_width: 4,
         tab_stop_list: vec![],
@@ -553,7 +553,7 @@ fn window_params_clone() {
     assert_eq!(cloned.window_id, params.window_id);
     assert_eq!(cloned.hscroll, 5);
     assert_eq!(cloned.tab_width, 4);
-    assert!(cloned.truncate_lines);
+    assert_eq!(cloned.wrap_mode, LineWrapMode::Truncate);
     assert!(cloned.show_trailing_whitespace);
     assert_eq!(cloned.wrap_prefix, b"  ".to_vec());
     assert_eq!(cloned.line_prefix, b"> ".to_vec());

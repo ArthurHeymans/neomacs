@@ -1,5 +1,6 @@
 use super::*;
 use crate::display_row_geometry::DisplayRowMarker;
+use crate::types::WindowKind;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{FrameId, WindowId};
@@ -11,7 +12,7 @@ fn window_params() -> WindowParams {
         bounds: Rect::new(0.0, 8.0, 240.0, 120.0),
         text_bounds: Rect::new(16.0, 32.0, 160.0, 80.0),
         selected: true,
-        is_minibuffer: false,
+        kind: WindowKind::Main,
         window_start: 17,
         window_end: 0,
         point: 17,
@@ -19,7 +20,7 @@ fn window_params() -> WindowParams {
         buffer_begv: 1,
         hscroll: 0,
         vscroll: 0,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         word_wrap: false,
         tab_width: 8,
         tab_stop_list: vec![],
@@ -77,7 +78,7 @@ fn setup_request() -> BufferTextWindowWalkSetupRequest<'static> {
         8.0,
         16.0,
         11.0,
-        true,
+        LineWrapMode::Truncate,
         3,
         true,
         true,
@@ -126,7 +127,7 @@ fn geometry_request_only_forces_fractional_row_for_minibuffer() {
         .into_geometry(0, None);
     assert_eq!(ordinary.max_rows, 0);
 
-    params.is_minibuffer = true;
+    params.kind = WindowKind::Minibuffer;
     let minibuffer = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
         .into_geometry(0, None);
     assert_eq!(minibuffer.max_rows, 1);
@@ -135,7 +136,7 @@ fn geometry_request_only_forces_fractional_row_for_minibuffer() {
 #[test]
 fn geometry_request_uses_minibuffer_resize_rows_when_supplied() {
     let mut params = window_params();
-    params.is_minibuffer = true;
+    params.kind = WindowKind::Minibuffer;
     let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0);
 
     let geometry = request.into_geometry(0, Some(2));
@@ -155,7 +156,7 @@ fn content_rows_request_only_applies_to_minibuffer_windows() {
         None
     );
 
-    params.is_minibuffer = true;
+    params.kind = WindowKind::Minibuffer;
     assert_eq!(
         BufferTextWindowContentRowsRequest::new(&params, 80.0, 16.0).resolve(&evaluator),
         Some(1)
@@ -190,6 +191,12 @@ fn walk_setup_applies_hscroll_prefix_and_reserved_surface_policy() {
     assert_eq!(setup.text_append_surface.content_x(), 24.0);
     assert_eq!(setup.text_append_surface.right_edge(), 164.0);
     assert!(setup.trailing_whitespace.background().is_some());
+}
+
+#[test]
+fn walk_setup_request_can_enable_typed_buffer_source() {
+    let setup = setup_request().with_typed_buffer_source(true).into_setup();
+    assert!(setup.use_typed_buffer_source);
 }
 
 #[test]

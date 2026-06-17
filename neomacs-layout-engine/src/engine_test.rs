@@ -18,6 +18,7 @@ use crate::display_row_append::{
     OverlayStringRenderBatchSource,
 };
 use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row_geometry::DisplayRowMaxX;
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     next_window_start_for_partially_visible_point_row,
@@ -32,7 +33,7 @@ use crate::display_status_line::{
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
-use crate::types::VisualCursorSpec;
+use crate::types::{VisualCursorSpec, WindowKind};
 use crate::window_output::WindowOutputEmitter;
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, GlyphRowRole};
@@ -170,7 +171,7 @@ fn word_wrap_render_state_records_candidates_only_when_wrap_is_allowed() {
 #[test]
 fn text_row_transition_state_policy_applies_line_break_state_updates() {
     let mut line_numbers = LineNumberRenderState::new(true, 3, 5);
-    let mut hscroll = HorizontalScrollSkipState::new(true, 4);
+    let mut hscroll = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
     hscroll.consume_columns(2);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
@@ -210,7 +211,7 @@ fn text_row_transition_state_policy_applies_line_break_state_updates() {
 #[test]
 fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
     let mut line_numbers = LineNumberRenderState::new(true, 3, 5);
-    let mut hscroll = HorizontalScrollSkipState::new(true, 4);
+    let mut hscroll = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
     hscroll.consume_columns(2);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
@@ -246,15 +247,15 @@ fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
 #[test]
 fn special_text_row_overflow_decision_names_fit_truncate_and_wrap() {
     assert_eq!(
-        SpecialTextRowOverflowDecision::for_width(4.0, 6.0, 10.0, true),
+        SpecialTextRowOverflowDecision::for_width(4.0, 6.0, 10.0, LineWrapMode::Truncate),
         SpecialTextRowOverflowDecision::Fits
     );
     assert_eq!(
-        SpecialTextRowOverflowDecision::for_width(5.0, 6.0, 10.0, true),
+        SpecialTextRowOverflowDecision::for_width(5.0, 6.0, 10.0, LineWrapMode::Truncate),
         SpecialTextRowOverflowDecision::Truncate
     );
     assert_eq!(
-        SpecialTextRowOverflowDecision::for_width(5.0, 6.0, 10.0, false),
+        SpecialTextRowOverflowDecision::for_width(5.0, 6.0, 10.0, LineWrapMode::Wrap),
         SpecialTextRowOverflowDecision::Wrap
     );
 }
@@ -264,19 +265,47 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
     let empty_wrap = WordWrapRenderState::new(true);
 
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char('x', 4.0, 6.0, 10.0, true, empty_wrap),
+        BufferTextRowOverflowDecision::for_char(
+            'x',
+            4.0,
+            6.0,
+            10.0,
+            LineWrapMode::Truncate,
+            empty_wrap
+        ),
         BufferTextRowOverflowDecision::Fits
     );
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char('\t', 12.0, 16.0, 10.0, true, empty_wrap),
+        BufferTextRowOverflowDecision::for_char(
+            '\t',
+            12.0,
+            16.0,
+            10.0,
+            LineWrapMode::Truncate,
+            empty_wrap
+        ),
         BufferTextRowOverflowDecision::Fits
     );
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, true, empty_wrap),
+        BufferTextRowOverflowDecision::for_char(
+            'x',
+            5.0,
+            6.0,
+            10.0,
+            LineWrapMode::Truncate,
+            empty_wrap
+        ),
         BufferTextRowOverflowDecision::Truncate
     );
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, false, empty_wrap),
+        BufferTextRowOverflowDecision::for_char(
+            'x',
+            5.0,
+            6.0,
+            10.0,
+            LineWrapMode::Wrap,
+            empty_wrap
+        ),
         BufferTextRowOverflowDecision::CharacterWrap
     );
 
@@ -285,7 +314,7 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
     word_wrap.record_candidate('a', 7, 11, 2, (Some(LispCharPos1::new(3)), None));
 
     assert_eq!(
-        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, false, word_wrap),
+        BufferTextRowOverflowDecision::for_char('x', 5.0, 6.0, 10.0, LineWrapMode::Wrap, word_wrap),
         BufferTextRowOverflowDecision::WordWrap {
             break_candidate: word_wrap.candidate(),
         }
@@ -663,7 +692,7 @@ fn overlay_string_render_batch_source_builds_typed_sources() {
 
 #[test]
 fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
-    let mut state = HorizontalScrollSkipState::new(true, 5);
+    let mut state = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 5);
 
     assert!(state.should_skip());
     assert!(state.should_show_left_truncation());
@@ -683,7 +712,7 @@ fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
 
     assert!(state.should_skip());
     assert_eq!(state.consumed_columns(), 0);
-    assert!(!HorizontalScrollSkipState::new(false, 5).should_skip());
+    assert!(!HorizontalScrollSkipState::new(LineWrapMode::Wrap, 5).should_skip());
 }
 
 #[test]
@@ -1290,7 +1319,7 @@ fn test_window_params() -> WindowParams {
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
         text_bounds: Rect::new(0.0, 0.0, 800.0, 560.0),
         selected: true,
-        is_minibuffer: false,
+        kind: WindowKind::Main,
         window_start: 1,
         window_end: 0,
         point: 1,
@@ -1298,7 +1327,7 @@ fn test_window_params() -> WindowParams {
         buffer_begv: 1,
         hscroll: 0,
         vscroll: 0,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         word_wrap: false,
         tab_width: 8,
         tab_stop_list: vec![],
@@ -1477,7 +1506,7 @@ fn render_buffer_text_source_shadow_row(
     ascent_px: f32,
     char_width_px: f32,
 ) -> GlyphRow {
-    let mut source = crate::display_source::BufferTextSourceCursor::new(
+    let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
         buf_id,
         snapshot,
         CharPos0::ZERO,
@@ -1505,7 +1534,7 @@ fn render_buffer_text_source_shadow_row(
         resolver.default_face(),
         DisplayRowRenderBounds {
             start: DisplayRowPosition { x_px: 0.0, col: 0 },
-            max_x_px: width_px,
+            max_x: DisplayRowMaxX::Bounded(width_px),
         },
     )
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
@@ -1920,6 +1949,184 @@ fn backend_layout_trace_with_buffer_setup(
         setup,
         |_| {},
     )
+}
+
+fn layout_trace_for_plain_text(text: &str, use_typed_buffer_source: bool) -> BackendLayoutTrace {
+    layout_trace_with_buffer_setup(text, 360, 180, use_typed_buffer_source, |_, _, _| {})
+}
+
+fn layout_trace_with_buffer_setup(
+    text: &str,
+    frame_width: u32,
+    frame_height: u32,
+    use_typed_buffer_source: bool,
+    setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
+) -> BackendLayoutTrace {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, text);
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        setup(buffer, buf_id, text);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "typed-source-parity",
+        frame_width,
+        frame_height,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = LispCharPos1::ONE;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.set_use_typed_buffer_source(use_typed_buffer_source);
+    engine.layout_frame_rust(&mut eval, frame_id);
+    selected_window_layout_trace(&eval, &engine, frame_id)
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_plain_text() {
+    let text = "Hello, world!\nThis is a test.\n";
+    let raw_trace = layout_trace_for_plain_text(text, false);
+    let typed_trace = layout_trace_for_plain_text(text, true);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_mixed_chars() {
+    let text = "a\tb\n\u{0001}c\n日\nd\u{200b}\n";
+    let raw_trace = layout_trace_for_plain_text(text, false);
+    let typed_trace = layout_trace_for_plain_text(text, true);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_face_property() {
+    let text = "abc\ndef\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
+        let start = text.find('b').expect("b start");
+        let end = start + "bc".len();
+        assert!(buffer.put_text_property(start, end, Value::symbol("face"), Value::symbol("bold")));
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_simple_display_property() {
+    let text = "abcXYZdef\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
+        let start = text.find("XYZ").expect("XYZ start");
+        let end = start + "XYZ".len();
+        assert!(buffer.put_text_property(start, end, Value::symbol("display"), Value::string("R")));
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_truncated_long_line() {
+    let text = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("truncate-lines", Value::T);
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 120, 120, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 120, 120, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_wrapped_long_line() {
+    let text = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("truncate-lines", Value::NIL);
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 120, 120, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 120, 120, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_line_numbers() {
+    let text = "abc\ndef\nghi\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_word_wrap() {
+    let text = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("truncate-lines", Value::NIL);
+        buffer.set_buffer_local("word-wrap", Value::T);
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 120, 120, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 120, 120, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
 }
 
 fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
@@ -2709,7 +2916,7 @@ fn minibuffer_echo_rows_continue_after_display_property_clips() {
         base_face: &default_face,
         message: echo,
         max_rows: 2,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         reserve_right_special_col: false,
     }
     .render_rows(&mut MinibufferDisplayRenderState {

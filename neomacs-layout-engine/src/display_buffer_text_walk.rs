@@ -1,7 +1,13 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_buffer_text_append::TextWindowAppendSurfaceRequest;
 use crate::display_buffer_text_source::BufferTextWindowSource;
+use crate::display_buffer_text_source::{
+    BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakSourceEvent,
+    BufferTextSourceCursor, BufferTextSourceEventCursor, BufferTextSourceTextEvent,
+};
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_item::{DisplayItemKind, DisplayRowBreakReason, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -28,23 +34,21 @@ use crate::display_row_append::{
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
     BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
     DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTransitionContinuation, TextRowSourceRenderState, TextWindowAppendSurfaceRequest,
+    DisplayRowTransitionContinuation,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
+use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
-use crate::display_source::{
-    BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakSourceEvent,
-    BufferTextSourceEventCursor, BufferTextSourceTextEvent,
-};
+use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::display_status_line::{
     ChromeRowRenderServices, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
     max_mini_window_lines, minibuffer_resize_line_count,
@@ -56,10 +60,10 @@ use crate::neovm_bridge::{
     FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess,
     buffer_display_line_numbers_mode, buffer_local_bool, buffer_local_int, buffer_local_value,
 };
-use crate::types::WindowParams;
+use crate::types::{LineWrapMode, WindowKind, WindowParams};
 use crate::window_output::{TextWindowRedisplayPositions, WindowOutputEmitter};
 use neomacs_display_protocol::types::{Color, Rect};
-use neovm_core::buffer::{BufferId, EmacsBytePos, LispCharPos1};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};
 
@@ -70,7 +74,7 @@ pub(crate) struct BufferTextWindowGeometryRequest {
     text_width: f32,
     text_height: f32,
     vscroll: f32,
-    is_minibuffer: bool,
+    kind: WindowKind,
     top_chrome_rows: usize,
     bottom_chrome_rows: usize,
     char_width: f32,
@@ -119,7 +123,7 @@ pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
     char_width: f32,
     char_height: f32,
     default_face_ascent: f32,
-    truncate_lines: bool,
+    wrap_mode: LineWrapMode,
     hscroll: i32,
     word_wrap: bool,
     has_prefix: bool,
@@ -130,6 +134,7 @@ pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
     tab_stop_list: &'a [i32],
     trailing_whitespace_enabled: bool,
     trailing_whitespace_bg: u32,
+    use_typed_buffer_source: bool,
 }
 
 pub(crate) struct BufferTextWindowWalkSetup {
@@ -137,6 +142,7 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) col: usize,
     pub(crate) byte_idx: usize,
     pub(crate) charpos: i64,
+    pub(crate) use_typed_buffer_source: bool,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
     pub(crate) text_property_checkpoints: TextPropertyScanCheckpoints,
@@ -510,6 +516,7 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
     face_ids: &'emit mut FrameFaceIdAllocator,
     raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
     height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+    use_typed_buffer_source: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -581,7 +588,7 @@ impl BufferTextWindowGeometryRequest {
             text_width,
             text_height,
             vscroll,
-            is_minibuffer: params.is_minibuffer,
+            kind: params.kind,
             top_chrome_rows: usize::from(tab_line_height > 0.0)
                 + usize::from(header_line_height > 0.0),
             bottom_chrome_rows: usize::from(mode_line_height > 0.0),
@@ -642,7 +649,11 @@ impl BufferTextWindowGeometryRequest {
         // 24.15 with line-spacing) causing floor() to yield 0.  Exception:
         // when vscroll is active, don't force 1 row -- vscroll is used (e.g.
         // by vertico-posframe) to intentionally hide content.
-        if self.is_minibuffer && max_rows == 0 && self.text_height > 0.0 && self.vscroll == 0.0 {
+        if self.kind.is_minibuffer()
+            && max_rows == 0
+            && self.text_height > 0.0
+            && self.vscroll == 0.0
+        {
             1
         } else {
             max_rows
@@ -686,7 +697,7 @@ impl<'a> BufferTextWindowContentRowsRequest<'a> {
     }
 
     pub(crate) fn resolve(self, evaluator: &Context) -> Option<usize> {
-        if !self.params.is_minibuffer {
+        if !self.params.is_minibuffer() {
             return None;
         }
 
@@ -730,7 +741,7 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
         char_width: f32,
         char_height: f32,
         default_face_ascent: f32,
-        truncate_lines: bool,
+        wrap_mode: LineWrapMode,
         hscroll: i32,
         word_wrap: bool,
         has_prefix: bool,
@@ -754,7 +765,7 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             char_width,
             char_height,
             default_face_ascent,
-            truncate_lines,
+            wrap_mode,
             hscroll,
             word_wrap,
             has_prefix,
@@ -765,7 +776,14 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             tab_stop_list,
             trailing_whitespace_enabled,
             trailing_whitespace_bg,
+            use_typed_buffer_source: false,
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn with_typed_buffer_source(mut self, enabled: bool) -> Self {
+        self.use_typed_buffer_source = enabled;
+        self
     }
 
     pub(crate) fn from_window_geometry(
@@ -789,7 +807,7 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             geometry.char_width,
             geometry.char_height,
             default_face.ascent(),
-            params.truncate_lines,
+            params.wrap_mode,
             params.hscroll,
             params.word_wrap,
             local_display_policy.has_prefix(),
@@ -815,13 +833,14 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             col: 0,
             byte_idx: 0,
             charpos: self.window_start,
+            use_typed_buffer_source: self.use_typed_buffer_source,
             text_area_left: self.text_x,
             window_top: self.window_top,
             text_property_checkpoints: TextPropertyScanCheckpoints::new(self.window_start),
             raise_span: ActiveDisplayPropertySpan::inactive(),
             height_span: ActiveDisplayPropertySpan::inactive(),
             row_flags: DisplayRowFlags::new(self.max_rows),
-            hscroll_skip: HorizontalScrollSkipState::new(self.truncate_lines, self.hscroll),
+            hscroll_skip: HorizontalScrollSkipState::new(self.wrap_mode, self.hscroll),
             word_wrap: WordWrapRenderState::new(self.word_wrap),
             prefix_request: DisplayRowPrefixRequest::initial(
                 self.has_prefix,
@@ -862,6 +881,7 @@ impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
+        use_typed_buffer_source: bool,
         state: &mut BufferTextWindowWalkRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
@@ -896,6 +916,7 @@ impl BufferTextWindowWalkSetup {
             state.face_ids,
             &mut self.raise_span,
             &mut self.height_span,
+            use_typed_buffer_source,
         )
         .render_visible_steps(
             row_prelude_context,
@@ -989,6 +1010,7 @@ impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
+        use_typed_buffer_source: bool,
         state: &mut BufferTextWindowBodyRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
@@ -1002,6 +1024,7 @@ impl BufferTextWindowWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowPostLoopRenderOutcome {
         self.render_visible_steps(
+            use_typed_buffer_source,
             &mut BufferTextWindowWalkRenderState {
                 source_render: TextRowSourceRenderState::new(
                     state.builder,
@@ -1070,6 +1093,7 @@ impl BufferTextWindowWalkSetup {
             evaluator: state.evaluator,
         });
         let post_loop = self.render_body_and_tail(
+            self.use_typed_buffer_source,
             &mut BufferTextWindowBodyRenderState {
                 builder: state.builder,
                 output_emitter: &mut output_emitter,
@@ -1937,7 +1961,7 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
             self.params.point_charpos().get(),
             charpos,
             point_is_visible_eob,
-            self.params.is_minibuffer,
+            self.params.is_minibuffer(),
             self.retry_bounds.text_area_top,
             self.retry_bounds.text_area_bottom,
             buf_access,
@@ -2467,12 +2491,10 @@ impl BufferTextWindowLoopRequestContext {
         })
     }
 
-    #[cfg(test)]
     pub(crate) fn buffer_id(self) -> BufferId {
         self.buffer_id
     }
 
-    #[cfg(test)]
     pub(crate) fn text_start_byte(self) -> usize {
         self.text_start_byte
     }
@@ -2525,6 +2547,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         face_ids: &'emit mut FrameFaceIdAllocator,
         raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
         height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+        use_typed_buffer_source: bool,
     ) -> Self {
         Self {
             append_state,
@@ -2551,6 +2574,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             face_ids,
             raise_span,
             height_span,
+            use_typed_buffer_source,
         }
     }
 
@@ -2654,7 +2678,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        let Some(source_event) = self.consume_source_event(text) else {
+        let Some(source_event) = self.consume_source_event(text, loop_context, buffer) else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
@@ -2751,11 +2775,101 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             );
     }
 
-    pub(crate) fn consume_source_event(
+    pub(crate) fn consume_source_event<'buf, B: LayoutBufferView>(
         &mut self,
         text: &[u8],
+        loop_context: BufferTextWindowLoopRequestContext,
+        buffer: &B,
     ) -> Option<BufferTextDecodedSourceEvent> {
+        if self.use_typed_buffer_source {
+            if let Some(event) = self.consume_typed_source_event(text, loop_context, buffer) {
+                return Some(event);
+            }
+        }
         BufferTextSourceEventCursor::new(text, self.byte_idx, *self.charpos).next_event()
+    }
+
+    fn consume_typed_source_event<B: LayoutBufferView>(
+        &mut self,
+        text: &[u8],
+        loop_context: BufferTextWindowLoopRequestContext,
+        buffer: &B,
+    ) -> Option<BufferTextDecodedSourceEvent> {
+        let start_charpos = CharPos0::new((*self.charpos).max(0) as usize);
+        let mut cursor = BufferTextSourceCursor::new(
+            loop_context.buffer_id(),
+            buffer,
+            start_charpos,
+            CharPos0::new(usize::MAX),
+            RenderFaceRef::Inherit,
+        );
+        let mut context = DisplaySourceContext::empty();
+        let item = cursor.next_item(&mut context)?;
+
+        let text_start_byte = loop_context.text_start_byte();
+        let relative_byte_idx =
+            |byte_pos: EmacsBytePos| byte_pos.get().checked_sub(text_start_byte);
+
+        match item.kind {
+            DisplayItemKind::TextRun(run) => {
+                let ch = run.text.chars().next()?;
+                let start_byte_idx = relative_byte_idx(match item.span.start {
+                    crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
+                    _ => return None,
+                })?;
+                let start_charpos = *self.charpos;
+                let start_byte_idx = start_byte_idx.min(text.len());
+                *self.byte_idx = start_byte_idx + ch.len_utf8();
+                Some(BufferTextDecodedSourceEvent::Text(
+                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
+                        ch,
+                        start_byte_idx,
+                        start_charpos,
+                    )),
+                ))
+            }
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
+            {
+                let start_byte_idx = relative_byte_idx(match item.span.start {
+                    crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
+                    _ => return None,
+                })?;
+                let start_charpos = *self.charpos;
+                let start_byte_idx = start_byte_idx.min(text.len());
+                *self.byte_idx = start_byte_idx + 1;
+                Some(BufferTextDecodedSourceEvent::LineBreak(
+                    BufferTextLineBreakSourceEvent::new(BufferTextDecodedSourceChar::new(
+                        '\n',
+                        start_byte_idx,
+                        start_charpos,
+                    )),
+                ))
+            }
+            DisplayItemKind::ControlChar { ch }
+            | DisplayItemKind::Glyphless(crate::display_item::DisplayGlyphless { ch, .. }) => {
+                let start_byte_idx = relative_byte_idx(match item.span.start {
+                    crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
+                    _ => return None,
+                })?;
+                let start_charpos = *self.charpos;
+                let start_byte_idx = start_byte_idx.min(text.len());
+                *self.byte_idx = start_byte_idx + ch.len_utf8();
+                Some(BufferTextDecodedSourceEvent::Text(
+                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
+                        ch,
+                        start_byte_idx,
+                        start_charpos,
+                    )),
+                ))
+            }
+            _ => {
+                // Untranslatable item: resync the typed cursor to the current
+                // raw decoder position and let the legacy raw decoder handle it.
+                cursor.reset_to(start_charpos);
+                None
+            }
+        }
     }
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(

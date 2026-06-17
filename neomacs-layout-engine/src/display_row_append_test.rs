@@ -1,4 +1,10 @@
 use super::*;
+use crate::display_buffer_text_append::{
+    BufferTextWindowCursorEffectsRequest, BufferTextWindowTerminalRightBorderRequest,
+};
+use crate::display_buffer_text_source::{
+    BufferTextDecodedSourceEvent, BufferTextSourceEventCursor,
+};
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -23,8 +29,8 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
-    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowStartMarker,
-    DisplayRowVisibilityLimit, DisplayRowYPositions,
+    DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
+    DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
@@ -32,18 +38,19 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
-    BufferTextDecodedSourceEvent, BufferTextSourceAdvanceRequest, BufferTextSourceEventCursor,
-    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementSourceItem, DisplayReplacementAppendItem, DisplayReplacementBox,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
-    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    BufferTextSourceAdvanceRequest, BufferTextSourceSpecialDisplay,
+    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
+    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{
     FaceResolver, LayoutBufferSnapshot, OverlayDisplayString, RustBufferAccess,
 };
+use crate::types::WindowKind;
 use crate::window_output::TextMatrixRowTransition;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -731,7 +738,7 @@ fn display_row_text_window_emit_context_applies_line_break_render_state_after_tr
     let mut ctx = RowTransitionTestContext::new("text-window-transition-line-state");
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
     hscroll_skip.consume_columns(4);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
@@ -786,7 +793,7 @@ fn display_row_text_window_emit_context_applies_overflow_render_state_after_tran
     let mut ctx = RowTransitionTestContext::new("text-window-transition-overflow-state");
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -847,7 +854,7 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
     hscroll_skip.consume_columns(4);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
@@ -890,7 +897,7 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
 fn buffer_hscroll_skip_source_char_preserves_line_break_action() {
     let mut byte_idx = 0;
     let mut charpos = 10;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
     let action = BufferHscrollSkipSourceChar::consume_from_text(
         b"\nnext",
@@ -917,7 +924,7 @@ fn buffer_hscroll_skip_source_char_preserves_line_break_action() {
 fn buffer_hscroll_skip_source_char_consumes_tab_to_next_stop() {
     let mut byte_idx = 0;
     let mut charpos = 0;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
     let action = BufferHscrollSkipSourceChar::consume_from_text(
         b"\tabc",
@@ -945,7 +952,7 @@ fn buffer_hscroll_skip_source_char_consumes_tab_to_next_stop() {
 fn buffer_hscroll_skip_source_char_consumes_wide_char_columns() {
     let mut byte_idx = 0;
     let mut charpos = 3;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 2);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 2);
 
     let action = BufferHscrollSkipSourceChar::consume_from_text(
         "界x".as_bytes(),
@@ -973,7 +980,7 @@ fn buffer_hscroll_skip_source_char_consumes_wide_char_columns() {
 fn buffer_hscroll_skip_source_char_keeps_marker_pending_while_still_skipping() {
     let mut byte_idx = 0;
     let mut charpos = 0;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 3);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 3);
 
     let action = BufferHscrollSkipSourceChar::consume_from_text(
         b"abc",
@@ -1014,7 +1021,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     );
     let mut byte_idx = 0;
     let mut charpos = 0;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(true, 4);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut x = 0.0;
     let mut col = 0;
@@ -2114,7 +2121,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut col = 5;
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 1, 0);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let row_limit = context.row_limit;
@@ -2282,7 +2289,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(1);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut font_metrics = None;
@@ -2569,7 +2576,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     let mut final_charpos = 30;
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut wrap_state = WordWrapRenderState::new(true);
     wrap_state.allow_after_current_char(' ');
     wrap_state.record_candidate(
@@ -2699,7 +2706,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let row_limit = context.row_limit;
@@ -2714,7 +2721,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
             text_start_byte: 0,
             x_px: x,
             right_edge_px: 80.0,
-            truncate_lines: false,
+            wrap_mode: LineWrapMode::Wrap,
             row_visibility_limit: DisplayRowVisibilityLimit {
                 max_rows: 4,
                 bottom_y: 64.0,
@@ -2931,7 +2938,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(6);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -2947,7 +2954,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         BufferTextOverflowRenderContext {
             ch: 'a',
             right_edge_px: 80.0,
-            truncate_lines: false,
+            wrap_mode: LineWrapMode::Wrap,
             word_wrap,
             row_visibility_limit: DisplayRowVisibilityLimit {
                 max_rows: 4,
@@ -3007,7 +3014,7 @@ fn display_row_transition_render_state_applies_overflow_wrap_policy() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     word_wrap.record_candidate(
@@ -3182,18 +3189,6 @@ fn test_append_frame_at(
     let surface = DisplayRowAppendSurface::new(area, tab_policy);
     let geometry = DisplayRowGeometryState::new(row, y, 0.0, metrics.height, metrics.ascent);
     surface.frame_from_geometry_state(&geometry, glyph_y - y, metrics)
-}
-
-#[test]
-fn text_window_append_surface_request_reserves_right_columns() {
-    let tab_stops = vec![4, 12];
-    let surface =
-        TextWindowAppendSurfaceRequest::new(20.0, 200.0, 16.0, true, true, 8.0, 6, &tab_stops)
-            .into_surface();
-
-    assert_eq!(surface.content_x(), 20.0);
-    assert_eq!(surface.right_edge(), 188.0);
-    assert_eq!(surface.full_text_right_edge(), 204.0);
 }
 
 #[test]
@@ -4436,7 +4431,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
     let mut font_metrics = None;
     let rendered = {
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-        let mut source = crate::display_source::BufferTextSourceCursor::new(
+        let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
             buf_id,
             buffer,
             CharPos0::new(0),
@@ -4461,7 +4456,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
             &base_face,
             DisplayRowRenderBounds {
                 start: DisplayRowPosition { x_px: 16.0, col: 2 },
-                max_x_px: 160.0,
+                max_x: DisplayRowMaxX::Bounded(160.0),
             },
         )
         .render_fragment_step_with_display_host(
@@ -4568,7 +4563,10 @@ fn display_row_append_surface_builds_positioned_source_requests() {
         request.render_bounds().start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(request.render_bounds().max_x_px, 128.0);
+    assert_eq!(
+        request.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
     assert_eq!(
@@ -4621,7 +4619,10 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         ordinary.render_bounds().start,
         DisplayRowPosition { x_px: 8.0, col: 0 }
     );
-    assert_eq!(ordinary.render_bounds().max_x_px, 128.0);
+    assert_eq!(
+        ordinary.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(ordinary.geometry().char_width, 9.0);
     assert_eq!(ordinary.output().row, 3);
     assert_eq!(ordinary.output().row_y, 20.0);
@@ -4629,13 +4630,16 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     assert_eq!(ordinary.output().height, 16.0);
 
     let tab = frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::Tab);
-    assert_eq!(tab.render_bounds().max_x_px, f32::INFINITY);
+    assert_eq!(tab.render_bounds().max_x, DisplayRowMaxX::Unbounded);
     assert_eq!(tab.geometry().char_width, 7.0);
     assert_eq!(tab.output().height, 14.0);
 
     let control =
         frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::ControlChar);
-    assert_eq!(control.render_bounds().max_x_px, 148.0);
+    assert_eq!(
+        control.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(148.0)
+    );
     assert_eq!(control.geometry().char_width, 9.0);
     assert_eq!(control.output().height, 14.0);
 
@@ -4645,12 +4649,15 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         base_face,
         DisplayRowAppendKind::SourceMappedText,
     );
-    assert_eq!(mapped.render_bounds().max_x_px, 128.0);
+    assert_eq!(mapped.render_bounds().max_x, DisplayRowMaxX::Bounded(128.0));
     assert_eq!(mapped.output().height, 14.0);
 
     let glyphless =
         frame.source_append_request(position, 42, base_face, DisplayRowAppendKind::Glyphless);
-    assert_eq!(glyphless.render_bounds().max_x_px, 128.0);
+    assert_eq!(
+        glyphless.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(glyphless.output().height, 16.0);
 
     let replacement = frame.source_append_request(
@@ -4659,7 +4666,10 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         base_face,
         DisplayRowAppendKind::DisplayReplacement,
     );
-    assert_eq!(replacement.render_bounds().max_x_px, 128.0);
+    assert_eq!(
+        replacement.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(replacement.geometry().char_width, 9.0);
     assert_eq!(replacement.output().height, 16.0);
 
@@ -4669,7 +4679,10 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
         base_face,
         DisplayRowAppendKind::DisplayReplacementString,
     );
-    assert_eq!(replacement_string.render_bounds().max_x_px, 128.0);
+    assert_eq!(
+        replacement_string.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(replacement_string.geometry().char_width, 7.0);
     assert_eq!(replacement_string.output().height, 16.0);
 }
@@ -4702,9 +4715,18 @@ fn display_row_append_kind_names_width_clip_and_output_policy() {
         DisplayRowAppendKind::DisplayReplacementString.char_width(&frame),
         7.0
     );
-    assert!(DisplayRowAppendKind::Tab.max_x(&frame).is_infinite());
-    assert_eq!(DisplayRowAppendKind::ControlChar.max_x(&frame), 148.0);
-    assert_eq!(DisplayRowAppendKind::Glyphless.max_x(&frame), 128.0);
+    assert_eq!(
+        DisplayRowAppendKind::Tab.max_x(&frame),
+        DisplayRowMaxX::Unbounded
+    );
+    assert_eq!(
+        DisplayRowAppendKind::ControlChar.max_x(&frame),
+        DisplayRowMaxX::Bounded(148.0)
+    );
+    assert_eq!(
+        DisplayRowAppendKind::Glyphless.max_x(&frame),
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(
         DisplayRowAppendKind::DisplayReplacement.output_height(&frame),
         16.0
@@ -4752,7 +4774,10 @@ fn display_row_append_frame_builds_positioned_source_request() {
         request.start_position(),
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(request.render_bounds().max_x_px, 128.0);
+    assert_eq!(
+        request.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
     assert_eq!(request.output().row, 3);
 }
@@ -4794,7 +4819,10 @@ fn display_row_append_frame_builds_source_request_directly() {
         request.start_position(),
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(request.render_bounds().max_x_px, 128.0);
+    assert_eq!(
+        request.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(128.0)
+    );
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
     assert_eq!(request.output().row, 3);
 }
@@ -4841,7 +4869,10 @@ fn display_row_source_append_request_uses_frame_policy() {
         request.render_bounds().start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(request.render_bounds().max_x_px, 148.0);
+    assert_eq!(
+        request.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(148.0)
+    );
     assert_eq!(request.geometry().height, 16.0);
     assert_eq!(request.output().height, 14.0);
 }
@@ -4887,7 +4918,10 @@ fn display_row_append_frame_builds_source_append_request() {
         request.render_bounds().start,
         DisplayRowPosition { x_px: 18.0, col: 2 }
     );
-    assert_eq!(request.render_bounds().max_x_px, 148.0);
+    assert_eq!(
+        request.render_bounds().max_x,
+        DisplayRowMaxX::Bounded(148.0)
+    );
     assert_eq!(request.base_face_id(), 42);
     assert_eq!(request.output().row, 3);
     assert_eq!(request.output().height, 14.0);
@@ -5545,19 +5579,39 @@ fn buffer_text_source_append_context_appends_source_char() {
     assert_eq!(captured_cursor.slot_width, Some(8.0));
     assert!(!captured_cursor.stretch_like);
     assert_eq!(
-        prepared_append.overflow_decision('a', 80.0, false, WordWrapRenderState::new(false)),
+        prepared_append.overflow_decision(
+            'a',
+            80.0,
+            LineWrapMode::Wrap,
+            WordWrapRenderState::new(false)
+        ),
         BufferTextRowOverflowDecision::Fits
     );
     assert!(matches!(
-        prepared_append.overflow_action('a', 80.0, false, WordWrapRenderState::new(false)),
+        prepared_append.overflow_action(
+            'a',
+            80.0,
+            LineWrapMode::Wrap,
+            WordWrapRenderState::new(false)
+        ),
         BufferTextSourceCharOverflowAction::Fits
     ));
     assert!(matches!(
-        prepared_append.overflow_action('a', 4.0, true, WordWrapRenderState::new(false)),
+        prepared_append.overflow_action(
+            'a',
+            4.0,
+            LineWrapMode::Truncate,
+            WordWrapRenderState::new(false)
+        ),
         BufferTextSourceCharOverflowAction::Truncate { .. }
     ));
     assert!(matches!(
-        prepared_append.overflow_action('a', 4.0, false, WordWrapRenderState::new(false)),
+        prepared_append.overflow_action(
+            'a',
+            4.0,
+            LineWrapMode::Wrap,
+            WordWrapRenderState::new(false)
+        ),
         BufferTextSourceCharOverflowAction::CharacterWrap { .. }
     ));
     let mut word_wrap = WordWrapRenderState::new(true);
@@ -5570,7 +5624,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         (Some(LispCharPos1::new(1)), Some(LispCharPos1::new(1))),
     );
     assert!(matches!(
-        prepared_append.overflow_action('a', 4.0, false, word_wrap),
+        prepared_append.overflow_action('a', 4.0, LineWrapMode::Wrap, word_wrap),
         BufferTextSourceCharOverflowAction::WordWrap { break_candidate, .. }
             if break_candidate.byte_idx() == 0
                 && break_candidate.charpos() == 0
@@ -5669,7 +5723,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut prefix_request = DisplayRowPrefixRequest::None;
-    let mut hscroll_skip = HorizontalScrollSkipState::new(false, 0);
+    let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Wrap, 0);
     let mut word_wrap = WordWrapRenderState::new(false);
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(false, 0);
     let mut face_scan = FaceScanCheckpoint::initial();
@@ -5828,7 +5882,12 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
         .expect("ordinary buffer char should prepare text append");
 
     assert_eq!(
-        prepared_append.overflow_decision('a', 80.0, false, WordWrapRenderState::new(false)),
+        prepared_append.overflow_decision(
+            'a',
+            80.0,
+            LineWrapMode::Wrap,
+            WordWrapRenderState::new(false)
+        ),
         BufferTextRowOverflowDecision::Fits
     );
 }
@@ -7160,8 +7219,14 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         prepared_append.kind(),
         BufferTextSourceSpecialDisplayKind::Nobreak
     );
-    assert_eq!(prepared_append.overflow_decision(0.0, 80.0, false), None);
-    assert_eq!(prepared_append.overflow_action(0.0, 80.0, false), None);
+    assert_eq!(
+        prepared_append.overflow_decision(0.0, 80.0, LineWrapMode::Wrap),
+        None
+    );
+    assert_eq!(
+        prepared_append.overflow_action(0.0, 80.0, LineWrapMode::Wrap),
+        None
+    );
     let mut params = test_display_space_window_params();
     params.nobreak_char_fg = 0x00ff00;
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
@@ -7274,8 +7339,14 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         prepared_append.kind(),
         BufferTextSourceSpecialDisplayKind::Glyphless
     );
-    assert_eq!(prepared_append.overflow_decision(0.0, 80.0, false), None);
-    assert_eq!(prepared_append.overflow_action(0.0, 80.0, false), None);
+    assert_eq!(
+        prepared_append.overflow_decision(0.0, 80.0, LineWrapMode::Wrap),
+        None
+    );
+    assert_eq!(
+        prepared_append.overflow_action(0.0, 80.0, LineWrapMode::Wrap),
+        None
+    );
     let mut policy_face_ids = FrameFaceIdAllocator::new(30);
     let params = test_display_space_window_params();
     let append_outcome = prepared_append
@@ -8643,7 +8714,7 @@ fn test_display_space_window_params() -> WindowParams {
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
         text_bounds: Rect::new(0.0, 0.0, 800.0, 560.0),
         selected: true,
-        is_minibuffer: false,
+        kind: WindowKind::Main,
         window_start: 1,
         window_end: 0,
         point: 1,
@@ -8651,7 +8722,7 @@ fn test_display_space_window_params() -> WindowParams {
         buffer_begv: 1,
         hscroll: 0,
         vscroll: 0,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         word_wrap: false,
         tab_width: 8,
         tab_stop_list: vec![],

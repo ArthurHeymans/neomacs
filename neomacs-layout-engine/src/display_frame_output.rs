@@ -1,4 +1,4 @@
-use crate::display_row_append::BufferTextWindowTerminalRightBorderRequest;
+use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameArtifactInstallRequest};
 use crate::types::{FrameParams, WindowParams};
@@ -48,11 +48,12 @@ impl<'a> WindowFrameGeometryRequest<'a> {
         let right_edge = self.params.bounds.x + self.params.bounds.width;
         let bottom_edge = self.params.bounds.y + self.params.bounds.height;
         let is_rightmost = right_edge >= self.frame_params.width - 1.0;
-        let is_bottommost = self.params.is_minibuffer || bottom_edge >= self.main_area_bottom - 1.0;
+        let is_bottommost =
+            self.params.is_minibuffer() || bottom_edge >= self.main_area_bottom - 1.0;
         let reserve_terminal_right_border_col = !self.frame_params.window_system
             && self.frame_params.right_divider_width == 0
             && !is_rightmost
-            && !self.params.is_minibuffer;
+            && !self.params.is_minibuffer();
 
         WindowFrameGeometry {
             right_edge,
@@ -95,7 +96,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
             header_line_height: self.params.header_line_height,
             tab_line_height: self.params.tab_line_height,
             selected: self.params.selected,
-            is_minibuffer: self.params.is_minibuffer,
+            is_minibuffer: self.params.is_minibuffer(),
             char_height: self.params.char_height,
             buffer_file_name: self.metadata.buffer_file_name,
             modified: self.metadata.modified,
@@ -449,7 +450,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
         builder: &mut GlyphMatrixBuilder,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
-        if self.params.is_minibuffer || self.geometry.is_rightmost {
+        if self.params.is_minibuffer() || self.geometry.is_rightmost {
             return;
         }
 
@@ -490,7 +491,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
     }
 
     fn render_bottom_divider(&self, builder: &mut GlyphMatrixBuilder) {
-        if self.params.is_minibuffer
+        if self.params.is_minibuffer()
             || self.geometry.is_bottommost
             || self.frame_params.bottom_divider_width <= 0
         {

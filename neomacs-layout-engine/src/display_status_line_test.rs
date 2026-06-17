@@ -149,7 +149,7 @@ fn echo_minibuffer_clipped_row_appends_reserved_marker_through_text_row() {
         base_face: &base_face,
         message: Value::string("ABCD"),
         max_rows: 1,
-        truncate_lines: false,
+        wrap_mode: LineWrapMode::Wrap,
         reserve_right_special_col: true,
     }
     .render_rows(&mut MinibufferDisplayRenderState {
