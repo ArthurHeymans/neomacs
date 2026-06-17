@@ -18,6 +18,36 @@ Continue the long-term display pipeline refactor until Neomacs has one typed sou
 
 The goal is not complete. The recent work landed several safe slices, but the pipeline is still split between older buffer-walker code and newer request/source-based row rendering.
 
+### Strategic guidance (agreed 2026-06-17)
+
+The destination above is correct and matches GNU's real structure: source-specific
+"get next element" via `it->method` dispatch (`GET_FROM_BUFFER` / `GET_FROM_STRING`
+/ `GET_FROM_STRETCH` / `GET_FROM_IMAGE` / …) feeding a shared `produce_glyphs`
+keyed on `it->what`. That is exactly `DisplayItemSource` → one row builder. Keep
+the direction. Three refinements to *how* it's pursued:
+
+- **Relax the "pure typed boundary" ideal.** "Below `DisplayItemSource` consume
+  only typed display items, no peeking at source semantics" is stricter than GNU,
+  which shares mutable `it` state (bidi level, cursor pos, hpos/x, wrap/continuation)
+  across both layers — because wrap, cursor, and bidi inherently need to see across
+  the boundary. Plan for the boundary to carry a small *typed* shared-progress
+  channel (x/col, bidi level, wrap state), not zero shared state. The current
+  `DisplayItem -> BufferTextDecodedSourceEvent` round-trip and the unremovable
+  resolved-advance-for-wrap are that channel asking to be made explicit — not
+  failures to design away.
+- **Judge progress by paths deleted, not types added.** Value is realized when an
+  old path is *removed* and a bug class becomes structurally impossible, not when
+  another typed wrapper lands. After the 476-commit batch, no production main-buffer
+  path is deleted yet; `BufferTextSourceCursor` is still dead-code behind a
+  test-only toggle, and `display_row_append.rs` has grown to ~10k lines. Close one
+  loop end-to-end before widening, and give that module a complexity budget so
+  "unified" means smaller, not relocated.
+- **Slice 5 (one row lifecycle) is the real prize.** The listed bugs are *lifecycle*
+  bugs (inconsistent bidi/finalization timing). Shared production + one finalization
+  boundary fixes them. Source unification (Slice 4) is necessary plumbing but fixes
+  no listed bug on its own. Starting with Slice 2 is recommended: it is the cheapest
+  way to confront the cross-boundary-state question before the big cursor swap.
+
 ## Current Status
 
 Most recent display-pipeline commits on `main` (newest first):
