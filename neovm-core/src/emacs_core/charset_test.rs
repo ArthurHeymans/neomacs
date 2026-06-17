@@ -208,6 +208,20 @@ fn char_charset_with_restriction() {
 }
 
 #[test]
+fn char_charset_classifies_eight_bit_and_emacs_ranges() {
+    crate::test_utils::init_test_tracing();
+    // Raw bytes (BYTE8_TO_CHAR(128..255) = 0x3FFF80..0x3FFFFF) are `eight-bit`,
+    // matching GNU `char_charset` (charset.c).
+    for code in [0x3F_FF80, 0x3F_FFB0, 0x3F_FFFF] {
+        let r = builtin_char_charset(vec![Value::fixnum(code)]).unwrap();
+        assert!(r.is_symbol_named("eight-bit"), "code {code:#x} -> {r:?}");
+    }
+    // Codes above the Unicode max but within MAX_5_BYTE_CHAR are `emacs`.
+    let r = builtin_char_charset(vec![Value::fixnum(0x11_0000)]).unwrap();
+    assert!(r.is_symbol_named("emacs"), "0x110000 -> {r:?}");
+}
+
+#[test]
 fn char_charset_wrong_type() {
     crate::test_utils::init_test_tracing();
     assert!(builtin_char_charset(vec![Value::string("not a char")]).is_err());

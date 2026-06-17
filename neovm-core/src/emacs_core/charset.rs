@@ -1065,8 +1065,17 @@ pub(crate) fn builtin_char_charset(args: Vec<Value>) -> EvalResult {
     expect_min_args("char-charset", &args, 1)?;
     expect_max_args("char-charset", &args, 2)?;
     let ch = encode_char_input(&args[0])?;
+    // GNU `char_charset` (charset.c) classifies the high code ranges by the
+    // internal char boundaries: codes above MAX_5_BYTE_CHAR (0x3FFF7F) are
+    // raw bytes in the `eight-bit` charset, codes above the Unicode maximum
+    // (0x10FFFF) but within MAX_5_BYTE_CHAR are in the internal `emacs`
+    // charset, and the rest are Unicode.
     let charset = if (0..=0x7F).contains(&ch) {
         "ascii"
+    } else if ch > 0x3F_FF7F {
+        "eight-bit"
+    } else if ch > 0x10_FFFF {
+        "emacs"
     } else if ch <= 0xFFFF {
         "unicode-bmp"
     } else {
