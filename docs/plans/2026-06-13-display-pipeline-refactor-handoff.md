@@ -585,10 +585,37 @@ Status legend: ✅ done · ⬜ remaining.
      the pdump first) — the parity tests only cover synthetic buffers, not real
      overlay/bidi/composition interactions. Default flip changes production
      rendering for ALL of layout, so this is the GUI-validation gate.
-7. ⬜ **Overlay before/after-strings as `DisplayItem`s on the source stack;
-   delete the side-channel render loop + third lisp-string lifecycle.** Risk high.
-   Deps: 5, 6. Also replace the dual before/after sort with one interleaved sort
-   mirroring GNU `compare_overlay_entries`.
+7. ◑ **Overlay strings — partially done.** A design scout (run `wcwa3lt3d`)
+   corrected the framing: overlay strings, display-property replacements, AND
+   line/wrap prefixes ALREADY share one render path (`LispStringSourceRowAppendSession`,
+   keyed by `LispStringSourceId` OVERLAY_STRING=1 / PREFIX=2) — there is NO separate
+   "third lifecycle" to delete. And the typed cursor's `replacement_strings` stack
+   is dead (the display-property checkpoint pre-empts replacements, per slice 6), so
+   "overlay strings as DisplayItems on the typed cursor's stack" is NOT achievable
+   without first making that stack load-bearing + teaching `LispStringSourceFrame`
+   to carry overlay identity (cursor capture keys on it) — **deferred to a later
+   slice**. The achievable wins:
+   - ✅ **GNU `compare_overlay_entries` ordering** (`2a8d3fd5b`): `overlay_strings_at`
+     returns ONE interleaved list (after-strings of other overlays in front of
+     before-strings; same-overlay before<after; before asc / after desc priority),
+     via a manual stable insertion sort (the comparator is NOT a total order — a
+     zero-length overlay with both before+after cycles; `sort_by` would panic).
+     Behavior-neutral so far: consumers re-split by kind.
+   - ⬜ **Step 2 (HIGH risk): activate the interleaving** — collapse the three
+     injection points (`render_before_at`/`render_after_at`/`render_both_at`,
+     display_row_append.rs ~2253/2327) into ONE `render_overlay_strings_at` that
+     consumes the interleaved list in order. Risk: today before-strings render
+     before the buffer char (4533) and after-strings after it (4572); GNU renders
+     all position overlay strings before the char. Scout mitigation: keep a
+     documented two-phase split (same-overlay-end after-strings post-char) if the
+     single point regresses `places_cursor_inside_overlay_string_text_run` (9358)
+     or `preserves_multiline_overlay_output_rows` (9116). Canary test: 9358.
+   - ⬜ **Steps 3–5: containment** — rewire the 4 call sites, delete the batch
+     scaffolding (`render_overlay_string_batch`, `OverlayStringRenderBatchSource`,
+     `BufferOverlayString*RenderContext` shells, engine_test.rs:633/663 scaffolding
+     tests), remove the `overlay_context` threading. KEEP `render_overlay_string`,
+     `OverlayStringRowBreakRenderContext::finish_row`, `discard_pending_until_row_break`,
+     `capture_overlay_string_cursor*` (the shared row-break/clip/cursor machinery).
 8. ⬜ **Echo / inactive-minibuffer through the buffer walk over the echo-area
    buffer; delete the parallel echo loop, marker duplication, and resize
    estimator.** Risk high. Deps: 5, 6. Mirrors GNU `display_echo_area_1`.
