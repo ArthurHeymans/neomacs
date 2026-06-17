@@ -2346,6 +2346,8 @@ mod divergence_combo_complex375;
 mod divergence_combo_complex376;
 mod divergence_combo_complex377;
 mod divergence_combo_complex378;
+mod divergence_combo_complex379;
+mod divergence_combo_complex380;
 mod divergence_utf8_charset_conv_deep;
 mod divergence_utf8_coding;
 mod divergence_utf8_coding_deep;
