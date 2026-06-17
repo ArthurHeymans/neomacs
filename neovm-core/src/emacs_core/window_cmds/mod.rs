@@ -823,7 +823,16 @@ fn ensure_selected_frame_id_in_state_with_policy(
         // these parameters were seeded.
         if let Some(frame) = frames.get_mut(fid) {
             if frame.parameter("display-type").is_none() {
-                frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
+                // GNU's `frame-set-background-mode` (frame.el) derives display-type:
+                // a GUI frame is `color`; a tty frame is `color` only if
+                // `tty-display-color-p`, else `mono`. A restored batch frame is a
+                // no-color initial terminal, so it must be `mono` (matching GNU).
+                let display_type = if frame.effective_window_system().is_some() {
+                    "color"
+                } else {
+                    "mono"
+                };
+                frame.set_parameter(Value::symbol("display-type"), Value::symbol(display_type));
             }
             if frame.parameter("background-mode").is_none() {
                 frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
@@ -861,9 +870,14 @@ fn ensure_selected_frame_id_in_state_with_policy(
         frame.set_window_system(None);
         frame.set_parameter(Value::symbol("width"), Value::fixnum(80));
         frame.set_parameter(Value::symbol("height"), Value::fixnum(25));
-        // Required for defface spec matching (class color)
-        // and (background dark/light) in face-spec-set-match-display.
-        frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
+        // Required for defface spec matching (class ...) and (background ...) in
+        // `face-spec-set-match-display`. GNU's `frame-set-background-mode`
+        // computes a tty frame's display-type as `color` iff `tty-display-color-p`,
+        // else `mono`. This synthesized batch frame is the no-color initial
+        // terminal (window-system None, set just above), so it is `mono` — matching
+        // GNU's batch frame and letting deffaces fall through to their `(t ...)`
+        // clauses instead of selecting `(class color)` clauses.
+        frame.set_parameter(Value::symbol("display-type"), Value::symbol("mono"));
         frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
         // The root window covers the 24-line text area (not the minibuffer).
         frame
