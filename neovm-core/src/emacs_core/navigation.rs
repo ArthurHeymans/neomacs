@@ -89,9 +89,12 @@ fn line_count_arg(value: &Value) -> Result<LineCountArg, Flow> {
             count: bignum_line_count(value),
             excessive: true,
         }),
+        // GNU `bol`/`eol` (editfns.c) run the N (line-count) argument through
+        // `CHECK_INTEGER`, which signals `integerp` — not `integer-or-marker-p`.
+        // N is a line count, never a buffer position, so markers are not valid.
         _ => Err(signal(
             "wrong-type-argument",
-            vec![Value::symbol("integer-or-marker-p"), *value],
+            vec![Value::symbol("integerp"), *value],
         )),
     }
 }

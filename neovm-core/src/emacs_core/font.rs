@@ -5347,19 +5347,18 @@ fn parse_color_distance_input(value: &Value) -> Result<(i64, i64, i64), Flow> {
 }
 
 fn color_distance_metric(lhs: (i64, i64, i64), rhs: (i64, i64, i64)) -> i64 {
-    // Emacs-compatible perceptual approximation (redmean) over 8-bit channels.
-    let r1 = lhs.0 / 257;
-    let g1 = lhs.1 / 257;
-    let b1 = lhs.2 / 257;
-    let r2 = rhs.0 / 257;
-    let g2 = rhs.1 / 257;
-    let b2 = rhs.2 / 257;
-
-    let dr = r1 - r2;
-    let dg = g1 - g2;
-    let db = b1 - b2;
-    let rmean = (r1 + r2) / 2;
-    (((512 + rmean) * dr * dr) >> 8) + 4 * dg * dg + (((767 - rmean) * db * db) >> 8)
+    // GNU `color_distance` (xfaces.c): the Riemersma colour metric over 16-bit
+    // channels (the inputs here are already 0..65535). This is a more even
+    // approximation of L*u*v* than the 8-bit redmean variant.
+    // See https://www.compuphase.com/cmetric.htm
+    let r = lhs.0 - rhs.0;
+    let g = lhs.1 - rhs.1;
+    let b = lhs.2 - rhs.2;
+    let r_mean = (lhs.0 + rhs.0) >> 1;
+    ((((2 * 65536 + r_mean) * r * r) >> 16)
+        + 4 * g * g
+        + (((2 * 65536 + 65535 - r_mean) * b * b) >> 16))
+        >> 16
 }
 
 /// `(color-distance COLOR1 COLOR2 &optional FRAME METRIC-FN)` -- return a
