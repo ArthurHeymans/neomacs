@@ -616,12 +616,46 @@ Status legend: ✅ done · ⬜ remaining.
      tests), remove the `overlay_context` threading. KEEP `render_overlay_string`,
      `OverlayStringRowBreakRenderContext::finish_row`, `discard_pending_until_row_break`,
      `capture_overlay_string_cursor*` (the shared row-break/clip/cursor machinery).
-8. ⬜ **Echo / inactive-minibuffer through the buffer walk over the echo-area
-   buffer; delete the parallel echo loop, marker duplication, and resize
-   estimator.** Risk high. Deps: 5, 6. Mirrors GNU `display_echo_area_1`.
-   Critique prerequisite: make the first layout pass measure **unclamped** height
-   (GNU `move_it_to` semantics) so deleting the pre-layout newline estimator
-   doesn't deadlock the `visible_max_rows` clamp against the height it determines.
+8. ⬜ **Echo / inactive-minibuffer through the buffer walk.** Risk **high**, large
+   (8 steps, several HIGH-risk to ALL minibuffer rendering). Deps: 5, 6. Mirrors
+   GNU `display_echo_area_1`. **Scout (run `w9bzpec3k`) verdict: go-with-care.**
+   The ` *Echo Area 0/1*` buffers already exist (`Context::ensure_echo_area_buffers`,
+   eval.rs:7759); `set_current_message` (eval.rs:7751) exists but only stashes a
+   `LispString` field — it never writes the buffer. The dual message/buffer source
+   is the historical duplicate-"Making completion list..." bug. Ordered plan:
+   1. **(low risk) Mirror the message into ` *Echo Area 0*`** in `set_current_message`
+      + `append_current_message_*` + the clear path — GNU `set_message_1`
+      (clear BEG..Z, insert at BEG via `replace_buffer_contents_lisp_string`,
+      buffer mgr buffer.rs:4739). GOTCHA: that fn asserts the message's
+      multibyteness matches the buffer's — toggle echo-buffer multibyte first
+      (GNU xdisp.c:13598) or convert. Additive; keep the existing render path.
+   2. (med) Swap the inactive mini-window's buffer to ` *Echo Area 0*` (GNU
+      `with_echo_area_buffer`; restore on activate, window/mod.rs:1617, eval.rs:7701).
+   3. (HIGH) **Unclamped-height fix** — for the minibuffer kind (vscroll==0) make
+      `visible_max_rows`/`into_geometry` (display_buffer_text_walk.rs:607/642) use
+      the `max-mini-window-height` ceiling as the *measurement* cap instead of
+      `floor(text_height/char_height)` (the current 1-row grid). The byte source
+      already reads the full buffer; only the `row_visibility_limit` gate needs
+      relaxing. `mini_rows_used` (engine.rs:563) then becomes the true measured
+      height for the existing grow/shrink branches. Affects ALL minibuffer walks —
+      verify active fido/vertico still clamp to their real allocation post-resize.
+   4. (HIGH) Delete the engine.rs:954 early-return dispatch so echo/inactive falls
+      through to the ordinary walk over the swapped buffer.
+   5. (med) Delete the parallel machinery: `MinibufferSpecialRowsPlan` + enum +
+      `from_window` + `render_window`, `EchoMinibufferRowsRenderRequest::render_rows`,
+      `append_synthetic_minibuffer_text`, `empty_minibuffer_echo_row`,
+      `minibuffer_echo_message_for_window`, `current_message_value`.
+   6. (HIGH) Delete the pre-layout estimator `minibuffer_resize_line_count` +
+      `BufferTextWindowContentRowsRequest::resolve` pre-grow (now redundant).
+   7. (med) Replace the `visible_region_empty` shrink heuristic with GNU `BEGV==ZV`
+      emptiness of the echo buffer (now truthful). Keep `should_shrink`.
+   8. (low) Cleanup; confirm keyboard.rs:3534/4231 keystroke echo drives the
+      buffer-backed `set_current_message`. CONVERT (don't just delete) the
+      suppression tests (engine_test.rs:2823/2832) + marker test
+      (display_status_line_test.rs:131) to end-to-end buffer-walk behavior tests —
+      same contract. Full-suite + GUI smoke (echo wrap/truncate markers; resize).
+   _Not started this session (large + HIGH-risk; would leave a core UI element
+   half-migrated if rushed)._
 9. ⬜ **Relocate non-append clusters out of `display_row_append.rs` (~10k lines).**
    Risk medium. Deps: 5, 6 (so relocated clusters call the unified lifecycle, not
    just move duplication). The right-edge-marker / right-border move is
