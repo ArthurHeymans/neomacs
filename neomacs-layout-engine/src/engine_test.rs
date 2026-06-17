@@ -10365,3 +10365,92 @@ fn test_resolve_cursor_vertical_metrics_preserves_eob_origin() {
     assert_eq!(height, 20.0);
     assert_eq!(ascent, 14.0);
 }
+
+/// Child-frame independence (Slice 4 characterization; guards the Slice 5
+/// mock-frame migration + the posframe face/width-independence property).
+///
+/// A detached child frame must carry its OWN identity (frame_id/parent_*/z_order),
+/// resolve its OWN faces, and derive its OWN text width — never inherit the
+/// parent's. Here an 800px parent and a 200px child must produce different
+/// column counts, and the child state must report its own frame identity.
+#[test]
+fn child_frame_resolves_faces_and_width_independently_from_parent() {
+    use crate::mock_frame::{
+        MockChildFrameContent, MockFrameContent, MockStyledLine, MockWindowContent,
+    };
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::types::{Color, Rect};
+
+    let char_w = 8.0;
+    let char_h = 16.0;
+
+    let content = MockFrameContent {
+        frame_id: 1,
+        faces: vec![Face::new(0)],
+        windows: vec![MockWindowContent {
+            window_id: 1,
+            lines: vec![MockStyledLine::from_str("parent buffer text", 0)],
+            mode_line: MockStyledLine::from_str("-- parent --", 0),
+            // Wide parent window: 800px / 8px = 100 cols.
+            pixel_bounds: Rect::new(0.0, 0.0, 800.0, 15.0 * char_h),
+            selected: true,
+            truncated_lines: false,
+        }],
+        child_frames: vec![MockChildFrameContent {
+            frame_id: 100,
+            window: MockWindowContent {
+                window_id: 2,
+                lines: vec![MockStyledLine::from_str("child", 0)],
+                mode_line: MockStyledLine::from_str("", 0),
+                // Narrow child: 200px / 8px = 25 cols — independent of the parent.
+                pixel_bounds: Rect::new(0.0, 0.0, 200.0, 3.0 * char_h),
+                selected: false,
+                truncated_lines: false,
+            },
+            parent_x: 120.0,
+            parent_y: 48.0,
+            z_order: 1,
+        }],
+        frame_pixel_width: 800.0,
+        frame_pixel_height: 16.0 * char_h,
+        background: Color::from_pixel(0x00112233),
+        menu_bar: None,
+        minibuffer: Some(MockWindowContent {
+            window_id: 999,
+            lines: vec![MockStyledLine::from_str("", 0)],
+            mode_line: MockStyledLine::from_str("", 0),
+            pixel_bounds: Rect::new(0.0, 15.0 * char_h, 800.0, char_h),
+            selected: false,
+            truncated_lines: false,
+        }),
+    };
+
+    let mut engine = LayoutEngine::new();
+    let states = engine.layout_mock_frame(&content, char_w, char_h);
+
+    assert!(states.len() >= 2, "expected a parent + child frame state");
+    let parent = &states[0];
+    let child = &states[1];
+
+    // The child carries its OWN identity, not the parent's.
+    assert_eq!(child.frame_id, 100);
+    assert_eq!(child.parent_id, content.frame_id);
+    assert_eq!(child.parent_x, 120.0);
+    assert_eq!(child.parent_y, 48.0);
+    assert_eq!(child.z_order, 1);
+
+    // The child resolves its own face map (not an empty/parent-shared identity).
+    assert!(
+        !child.faces.is_empty(),
+        "child frame must resolve its own faces"
+    );
+
+    // The child's text width is independent of the parent's: 200px vs 800px
+    // produce different column counts.
+    let parent_cols = parent.window_matrices[0].matrix.ncols;
+    let child_cols = child.window_matrices[0].matrix.ncols;
+    assert_ne!(
+        child_cols, parent_cols,
+        "child width (200px) must derive its own ncols, not inherit the parent (800px): child={child_cols} parent={parent_cols}"
+    );
+}

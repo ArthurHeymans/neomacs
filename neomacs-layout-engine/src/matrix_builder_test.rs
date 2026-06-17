@@ -946,6 +946,61 @@ fn builder_reorders_status_line_rtl_row() {
     assert_eq!(glyphs[1].bidi_level, 1);
 }
 
+/// Cross-row-kind RTL bidi parity (Slice 4 characterization; guards Slice 5).
+///
+/// A buffer `Text` row (incremental path — reorders at `EndIncremental`) and a
+/// `ModeLine` chrome row (prebuilt path — reorders via `normalize_external_row`)
+/// built from the SAME Hebrew string must reorder to the SAME visual glyph
+/// order, per-glyph `bidi_level`, and `reversed_p`. Today the two paths run the
+/// same `reorder_row_bidi` at different times, so these axes are identical;
+/// Slice 5 collapses them onto one finalizer and must preserve this parity.
+///
+/// The cursor column is the ONE axis that legitimately differs (the Text path
+/// threads `phys_cursor`; the prebuilt/chrome path passes `None`), so it is
+/// deliberately NOT asserted here.
+#[test]
+fn rtl_text_and_chrome_rows_reorder_identically() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
+
+    // Row 0 — buffer Text row via the incremental path (EndIncremental reorder).
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'א', 0, 0);
+    write_char_to_current_row(&mut builder, 'ב', 0, 1);
+    builder.end_row();
+
+    // Row 1 — ModeLine chrome row via the prebuilt path (normalize_external_row).
+    let chrome = prebuilt_text_row(
+        GlyphRowRole::ModeLine,
+        vec![Glyph::char('א', 5, 0), Glyph::char('ב', 5, 1)],
+    );
+    builder.install_prebuilt_row(1, &chrome);
+    builder.end_window();
+
+    let state = builder.finish(10, 2, 8.0, 16.0);
+    let rows = &state.window_matrices[0].matrix.rows;
+    let text_glyphs = &rows[0].glyphs[GlyphArea::Text as usize];
+    let chrome_glyphs = &rows[1].glyphs[GlyphArea::Text as usize];
+
+    // The same Hebrew "אב" reorders to visual "בא" on BOTH row kinds.
+    assert_eq!(text_glyphs.len(), 2);
+    assert_eq!(chrome_glyphs.len(), 2);
+    for glyphs in [text_glyphs, chrome_glyphs] {
+        assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'ב' });
+        assert_eq!(glyphs[1].glyph_type, GlyphType::Char { ch: 'א' });
+        assert_eq!(glyphs[0].bidi_level, 1);
+        assert_eq!(glyphs[1].bidi_level, 1);
+    }
+    // Element-for-element parity between the two row kinds.
+    assert_eq!(text_glyphs[0].glyph_type, chrome_glyphs[0].glyph_type);
+    assert_eq!(text_glyphs[1].glyph_type, chrome_glyphs[1].glyph_type);
+    assert_eq!(text_glyphs[0].bidi_level, chrome_glyphs[0].bidi_level);
+    assert_eq!(text_glyphs[1].bidi_level, chrome_glyphs[1].bidi_level);
+    // Both rows are flagged reversed (RTL paragraph) — same row-level flag.
+    assert!(rows[0].reversed_p);
+    assert!(rows[1].reversed_p);
+}
+
 /// Regression test for the face-id-collision bug that caused
 /// both mode lines to render with mode-line-inactive colors
 /// after `C-x 2`.
