@@ -9399,7 +9399,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "find-composition-internal",
-        |_ctx, args| super::composite::builtin_find_composition_internal(args),
+        super::composite::builtin_find_composition_internal,
         4,
         Some(4),
     );

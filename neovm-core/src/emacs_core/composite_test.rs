@@ -298,70 +298,127 @@ fn compose_string_internal_accepts_raw_unibyte_ranges() {
 }
 
 #[test]
-fn find_composition_internal_returns_nil() {
+fn find_composition_internal_returns_nil_when_no_composition() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_find_composition_internal(vec![
-        Value::fixnum(1),
-        Value::fixnum(100),
-        Value::NIL,
-        Value::NIL,
-    ]);
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.insert("abcde");
+    }
+    let result = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(6), Value::NIL, Value::NIL],
+    );
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
 }
 
 #[test]
+fn find_composition_internal_reports_composed_region() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.insert("abcde");
+    }
+    // (compose-region 2 4 "") => find-composition detail (2 4 [] t nil 0)
+    builtin_compose_region_internal(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            Value::fixnum(4),
+            Value::string(""),
+            Value::NIL,
+        ],
+    )
+    .expect("compose-region-internal");
+
+    // Without DETAIL-P: (FROM TO VALID-P).
+    let plain_val = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(2), Value::NIL, Value::NIL, Value::NIL],
+    )
+    .expect("find-composition plain");
+    let plain = crate::emacs_core::value::list_to_vec(&plain_val).expect("list result");
+    assert_eq!(plain.len(), 3);
+    assert_eq!(plain[0].as_fixnum(), Some(2));
+    assert_eq!(plain[1].as_fixnum(), Some(4));
+    assert_eq!(plain[2], Value::T);
+
+    // With DETAIL-P: (FROM TO COMPONENTS RELATIVE-P MOD-FUNC WIDTH).
+    let detail_val = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(2), Value::NIL, Value::NIL, Value::T],
+    )
+    .expect("find-composition detail");
+    let detail = crate::emacs_core::value::list_to_vec(&detail_val).expect("list result");
+    assert_eq!(detail.len(), 6);
+    assert_eq!(detail[0].as_fixnum(), Some(2));
+    assert_eq!(detail[1].as_fixnum(), Some(4));
+    assert_eq!(detail[2].as_vector_data().map(|v| v.len()), Some(0)); // [] empty components
+    assert_eq!(detail[3], Value::T); // relative-p
+    assert!(detail[4].is_nil()); // mod-func
+    assert_eq!(detail[5].as_fixnum(), Some(0)); // width
+
+    // A position outside the composed region returns nil.
+    let outside = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::NIL, Value::NIL, Value::T],
+    )
+    .expect("find-composition outside");
+    assert!(outside.is_nil());
+}
+
+#[test]
 fn find_composition_internal_wrong_arity() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_find_composition_internal(vec![Value::fixnum(1)]);
+    let mut eval = super::super::eval::Context::new();
+    let result = builtin_find_composition_internal(&mut eval, vec![Value::fixnum(1)]);
     assert!(result.is_err());
 }
 
 #[test]
 fn find_composition_internal_type_checks() {
     crate::test_utils::init_test_tracing();
-    let bad_pos = builtin_find_composition_internal(vec![
-        Value::symbol("x"),
-        Value::fixnum(10),
-        Value::NIL,
-        Value::NIL,
-    ]);
+    let mut eval = super::super::eval::Context::new();
+    let bad_pos = builtin_find_composition_internal(
+        &mut eval,
+        vec![
+            Value::symbol("x"),
+            Value::fixnum(10),
+            Value::NIL,
+            Value::NIL,
+        ],
+    );
     assert!(bad_pos.is_err());
 
-    let bad_limit = builtin_find_composition_internal(vec![
-        Value::fixnum(1),
-        Value::symbol("y"),
-        Value::NIL,
-        Value::NIL,
-    ]);
+    let bad_limit = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::symbol("y"), Value::NIL, Value::NIL],
+    );
     assert!(bad_limit.is_err());
 
-    let bad_string = builtin_find_composition_internal(vec![
-        Value::fixnum(1),
-        Value::NIL,
-        Value::fixnum(1),
-        Value::NIL,
-    ]);
+    let bad_string = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(1), Value::NIL, Value::fixnum(1), Value::NIL],
+    );
     assert!(bad_string.is_err());
 }
 
 #[test]
 fn find_composition_internal_position_range_checks() {
     crate::test_utils::init_test_tracing();
-    let zero = builtin_find_composition_internal(vec![
-        Value::fixnum(0),
-        Value::NIL,
-        Value::NIL,
-        Value::NIL,
-    ]);
+    let mut eval = super::super::eval::Context::new();
+    let zero = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(0), Value::NIL, Value::NIL, Value::NIL],
+    );
     assert!(zero.is_err());
 
-    let negative = builtin_find_composition_internal(vec![
-        Value::fixnum(-1),
-        Value::NIL,
-        Value::NIL,
-        Value::NIL,
-    ]);
+    let negative = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(-1), Value::NIL, Value::NIL, Value::NIL],
+    );
     assert!(negative.is_err());
 }
 

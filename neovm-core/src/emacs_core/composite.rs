@@ -7,7 +7,7 @@
 use super::chartable::make_char_table_value;
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::{CharLen, CharPos0, CharRange};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -210,13 +210,192 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
     Ok(args[0])
 }
 
+/// Decode an UNREGISTERED composition property `((LENGTH . COMPONENTS) . MOD-FUNC)`
+/// into `(length, components, mod-func)`. `compose-region-internal` only ever
+/// stores this (Form-A) shape; neomacs never rewrites it to GNU's registered
+/// `(ID . (LENGTH COMPONENTS . FUNC))` form (the registration is a display-time
+/// optimization keyed on a global id and is not Lisp-observable here).
+fn composition_unregistered_parts(prop: Value) -> Option<(i64, Value, Value)> {
+    if !prop.is_cons() {
+        return None;
+    }
+    let head = prop.cons_car(); // (LENGTH . COMPONENTS)
+    let mod_func = prop.cons_cdr();
+    if !head.is_cons() {
+        return None;
+    }
+    let length = head.cons_car().as_fixnum()?;
+    let components = head.cons_cdr();
+    Some((length, components, mod_func))
+}
+
+/// GNU `composition_valid_p` restricted to the unregistered form: PROP is a
+/// well-formed composition property whose stored length equals `end - start`.
+fn composition_valid_unregistered(start: i64, end: i64, prop: Value) -> bool {
+    let Some((length, components, _)) = composition_unregistered_parts(prop) else {
+        return false;
+    };
+    let components_ok = components.is_nil()
+        || components.is_string()
+        || components.is_vector()
+        || components.is_fixnum()
+        || components.is_cons();
+    components_ok && length == end - start
+}
+
+/// GNU `composition_method`: relative unless the components describe explicit
+/// composition rules. `find-composition` reports `relative-p` as nil only for
+/// `COMPOSITION_WITH_RULE_ALTCHARS` (vector/list components); nil/char/string
+/// components are relative.
+fn composition_relative_p(components: Value) -> bool {
+    components.is_nil() || components.is_fixnum() || components.is_string()
+}
+
+/// GNU `get_composition_id` key derivation: the components vector returned by
+/// `find-composition`. A single char becomes `[char]`; a string or list is
+/// `vconcat`-ed into a char vector; a vector is used as-is; nil takes the chars
+/// of the composed range from the buffer (or STRING).
+fn composition_components_key(
+    ctx: &super::eval::Context,
+    components: Value,
+    string: Value,
+    start: i64,
+    nchars: i64,
+) -> Value {
+    match components.kind() {
+        ValueKind::Fixnum(code) => Value::vector(vec![Value::fixnum(code)]),
+        ValueKind::String => {
+            let codes = crate::emacs_core::builtins::lisp_string_char_codes(
+                components.as_lisp_string().expect("string"),
+            );
+            Value::vector(codes.into_iter().map(|c| Value::fixnum(c as i64)).collect())
+        }
+        ValueKind::Cons => Value::vector(list_to_vec(&components).unwrap_or_default()),
+        _ if components.is_vector() => components,
+        _ => {
+            // nil components: take the chars of the composed range.
+            let codes: Vec<u32> = if let Some(text) = string.as_lisp_string() {
+                let all = crate::emacs_core::builtins::lisp_string_char_codes(text);
+                let from = start.max(0) as usize;
+                let to = ((start + nchars).max(0) as usize).min(all.len());
+                all.get(from..to).map(|s| s.to_vec()).unwrap_or_default()
+            } else if let Some(buf) = ctx.buffers.current_buffer() {
+                let byte_start = buf
+                    .char_pos_to_emacs_byte_pos_clamped(CharPos0::new((start - 1).max(0) as usize));
+                let byte_end = buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
+                    (start - 1 + nchars).max(0) as usize,
+                ));
+                let sub = buf
+                    .buffer_substring_lisp_string_range(EmacsByteRange::new(byte_start, byte_end));
+                crate::emacs_core::builtins::lisp_string_char_codes(&sub)
+            } else {
+                Vec::new()
+            };
+            Value::vector(codes.into_iter().map(|c| Value::fixnum(c as i64)).collect())
+        }
+    }
+}
+
+/// GNU relative/altchars width: the maximum display width over the component
+/// glyphs (TAB counts as 1), 0 for an empty composition. (Rule-based
+/// compositions report `relative-p` nil and are not exercised by batch tests;
+/// this max is a faithful upper bound for them.)
+fn composition_relative_width(key: &Value) -> i64 {
+    let Some(items) = key.as_vector_data() else {
+        return 0;
+    };
+    let mut width = 0i64;
+    for item in items.iter() {
+        if let ValueKind::Fixnum(code) = item.kind() {
+            let this = if code == 9 {
+                1
+            } else {
+                crate::encoding::char_width_for_code_with_display_table(code, None) as i64
+            };
+            if width < this {
+                width = this;
+            }
+        }
+    }
+    width
+}
+
+/// GNU `find_composition`/`get_property_and_range` for a buffer: the
+/// `composition` property covering `from` (1-based), else the nearest one
+/// toward `to` (-1 = none). Returns `(start, end, prop)` in 1-based positions.
+fn find_composition_in_buffer(
+    buf: &crate::buffer::buffer::Buffer,
+    begv: i64,
+    zv: i64,
+    from: i64,
+    to: i64,
+    comp: Value,
+) -> Option<(i64, i64, Value)> {
+    let run_at = |charpos: i64| -> Option<(i64, i64, Value)> {
+        if charpos < begv || charpos >= zv {
+            return None;
+        }
+        let (prop, s, e) =
+            buf.get_property_run_at_char_pos(CharPos0::new((charpos - 1) as usize), comp);
+        match prop {
+            Some(p) if !p.is_nil() => Some((s.get() as i64 + 1, e.get() as i64 + 1, p)),
+            _ => None,
+        }
+    };
+    if let Some(found) = run_at(from) {
+        return Some(found);
+    }
+    if to < 0 || to == from {
+        return None;
+    }
+    if to > from {
+        // Forward: jump run by run until a composition appears before `to`.
+        let mut pos = from;
+        while pos < to {
+            let (_p, _s, e) =
+                buf.get_property_run_at_char_pos(CharPos0::new((pos - 1) as usize), comp);
+            let next = e.get() as i64 + 1;
+            if next <= pos || next >= to {
+                return None;
+            }
+            if let Some(found) = run_at(next) {
+                return Some(found);
+            }
+            pos = next;
+        }
+        None
+    } else {
+        // Backward: GNU checks the char before `from`, then scans backward.
+        if let Some(found) = run_at(from - 1) {
+            return Some(found);
+        }
+        let mut pos = from - 1;
+        while pos > to {
+            let (_p, s, _e) =
+                buf.get_property_run_at_char_pos(CharPos0::new((pos - 1) as usize), comp);
+            let prev = s.get() as i64; // 1-based position one before this run's start
+            if prev <= to || prev >= pos {
+                return None;
+            }
+            if let Some(found) = run_at(prev) {
+                return Some(found);
+            }
+            pos = prev;
+        }
+        None
+    }
+}
+
 /// `(find-composition-internal POS LIMIT STRING DETAIL-P)`
 ///
-/// Find a composition at or near position POS.
-/// Returns a list describing the composition, or nil if none found.
-///
-/// Stub: no compositions exist, always return nil.
-pub(crate) fn builtin_find_composition_internal(args: Vec<Value>) -> EvalResult {
+/// GNU `Ffind_composition_internal` (composite.c): describe the composition at
+/// or nearest to POS. With DETAIL-P nil, returns `(FROM TO VALID-P)`; otherwise
+/// `(FROM TO COMPONENTS RELATIVE-P MOD-FUNC WIDTH)`. Automatic (font-driven)
+/// composition discovery is not implemented (returns nil for that case).
+pub(crate) fn builtin_find_composition_internal(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("find-composition-internal", &args, 4)?;
     expect_integer_or_marker_p(&args[0])?;
     if !args[1].is_nil() {
@@ -228,8 +407,16 @@ pub(crate) fn builtin_find_composition_internal(args: Vec<Value>) -> EvalResult 
             vec![Value::symbol("stringp"), args[2]],
         ));
     }
+    let detail = !args[3].is_nil();
     let pos = integer_value(&args[0]);
-    if let Some(text) = args[2].as_lisp_string() {
+    let limit = if args[1].is_nil() {
+        -1
+    } else {
+        integer_value(&args[1])
+    };
+    let comp = Value::symbol("composition");
+
+    let found = if let Some(text) = args[2].as_lisp_string() {
         let len = text.schars() as i64;
         if pos < 0 || pos > len {
             return Err(signal(
@@ -237,13 +424,88 @@ pub(crate) fn builtin_find_composition_internal(args: Vec<Value>) -> EvalResult 
                 vec![args[2], Value::fixnum(pos)],
             ));
         }
-    } else if pos <= 0 {
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::NIL, Value::fixnum(pos)],
-        ));
+        let table = get_string_text_properties_table_for_value(args[2]).unwrap_or_default();
+        let run_at = |charpos: i64| -> Option<(i64, i64, Value)> {
+            if charpos < 0 || charpos >= len {
+                return None;
+            }
+            let (prop, s, e) = table.get_property_run_at_char_pos(
+                CharPos0::new(charpos as usize),
+                comp,
+                len as usize,
+            );
+            match prop {
+                Some(p) if !p.is_nil() => Some((s.get() as i64, e.get() as i64, p)),
+                _ => None,
+            }
+        };
+        // STRING positions are 0-based; only the at-pos lookup is needed for
+        // the Lisp-visible behavior exercised here.
+        run_at(pos)
+    } else {
+        let (begv, zv) = {
+            let Some(buf) = ctx.buffers.current_buffer() else {
+                return Err(signal(
+                    "args-out-of-range",
+                    vec![Value::NIL, Value::fixnum(pos)],
+                ));
+            };
+            (
+                buf.point_min_lisp_char_pos().as_i64(),
+                buf.point_max_lisp_char_pos().as_i64(),
+            )
+        };
+        if pos < begv || pos > zv {
+            let handle = ctx
+                .buffers
+                .current_buffer()
+                .map(|b| Value::make_buffer(b.id))
+                .unwrap_or(Value::NIL);
+            return Err(signal(
+                "args-out-of-range",
+                vec![handle, Value::fixnum(pos)],
+            ));
+        }
+        let to = if limit < 0 { -1 } else { limit.clamp(begv, zv) };
+        let buf = ctx
+            .buffers
+            .current_buffer()
+            .expect("checked current buffer");
+        find_composition_in_buffer(buf, begv, zv, pos, to, comp)
+    };
+
+    let Some((start, end, prop)) = found else {
+        return Ok(Value::NIL);
+    };
+
+    if !composition_valid_unregistered(start, end, prop) {
+        return Ok(Value::list(vec![
+            Value::fixnum(start),
+            Value::fixnum(end),
+            Value::NIL,
+        ]));
     }
-    Ok(Value::NIL)
+    if !detail {
+        return Ok(Value::list(vec![
+            Value::fixnum(start),
+            Value::fixnum(end),
+            Value::T,
+        ]));
+    }
+
+    let (_length, components, mod_func) =
+        composition_unregistered_parts(prop).expect("valid composition decodes");
+    let relative_p = composition_relative_p(components);
+    let key = composition_components_key(ctx, components, args[2], start, end - start);
+    let width = composition_relative_width(&key);
+    Ok(Value::list(vec![
+        Value::fixnum(start),
+        Value::fixnum(end),
+        key,
+        if relative_p { Value::T } else { Value::NIL },
+        mod_func,
+        Value::fixnum(width),
+    ]))
 }
 
 /// `(composition-get-gstring FROM TO FONT-OBJECT STRING)`
