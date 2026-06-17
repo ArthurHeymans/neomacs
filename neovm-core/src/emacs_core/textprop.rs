@@ -891,6 +891,119 @@ fn value_in_list(needle: Value, list: Value) -> bool {
     false
 }
 
+/// GNU `TMEM(sym, set)` (intervals.h): if SET is a list, whether SYM is `memq`
+/// it; otherwise whether SET is non-nil (`t` means "all properties").
+fn text_prop_sticky_member(sym: Value, set: Value) -> bool {
+    if set.is_cons() {
+        value_in_list(sym, set)
+    } else {
+        !set.is_nil()
+    }
+}
+
+/// `inhibit-read-only` silences this read-only value: never (nil), or when it
+/// is a list containing the value. (The "non-nil non-list" blanket case is
+/// handled by the caller before reaching here.)
+fn read_only_silenced(read_only: Value, inhibit: Value) -> bool {
+    inhibit.is_cons() && value_in_list(read_only, inhibit)
+}
+
+fn text_read_only_flow(read_only: Value) -> Flow {
+    let args = if read_only.is_string() {
+        vec![read_only]
+    } else {
+        vec![]
+    };
+    signal("text-read-only", args)
+}
+
+/// GNU `verify_interval_modification` (textprop.c:2184), the `start == end`
+/// insertion case: signal `text-read-only` when inserting at `byte_pos` is
+/// forbidden by the `read-only` property of the adjacent characters, honoring
+/// stickiness. The char *after* blocks only when `read-only` is front-sticky;
+/// the char *before* blocks unless `read-only` is rear-nonsticky (so a plain
+/// `(put-text-property ... 'read-only t)` — rear-sticky by default — forbids
+/// insertion right after it, while inserting before it stays allowed). This is
+/// what lets minibuffer input through: the prompt is `rear-nonsticky t`.
+pub(crate) fn verify_text_read_only_for_insert_in_state(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    buf_id: BufferId,
+    byte_pos: EmacsBytePos,
+) -> Result<(), Flow> {
+    let Some(buf) = buffers.get(buf_id) else {
+        return Ok(());
+    };
+    let inhibit = buf
+        .get_buffer_local("inhibit-read-only")
+        .unwrap_or_else(|| {
+            obarray
+                .symbol_value("inhibit-read-only")
+                .copied()
+                .unwrap_or(Value::NIL)
+        });
+    // inhibit-read-only non-nil and not a list: every modification is allowed.
+    if !inhibit.is_nil() && !inhibit.is_cons() {
+        return Ok(());
+    }
+    let read_only_sym = Value::symbol("read-only");
+    let accessible = buf.accessible_emacs_byte_range();
+    let begv = accessible.start().get();
+    let zv = accessible.end().get();
+    let pos = byte_pos.get();
+
+    // Character after the insertion point: blocks only if `read-only` is
+    // front-sticky there.
+    if pos < zv {
+        let after = lookup_buffer_text_property_at_emacs_byte_pos(
+            obarray,
+            buffers,
+            buf,
+            byte_pos,
+            read_only_sym,
+        );
+        if !after.is_nil() && !read_only_silenced(after, inhibit) {
+            let front_sticky = lookup_buffer_text_property_at_emacs_byte_pos(
+                obarray,
+                buffers,
+                buf,
+                byte_pos,
+                Value::symbol("front-sticky"),
+            );
+            if text_prop_sticky_member(read_only_sym, front_sticky) {
+                return Err(text_read_only_flow(after));
+            }
+        }
+    }
+
+    // Character before the insertion point: blocks unless `read-only` is
+    // rear-nonsticky there (rear-sticky is the default).
+    if pos > begv {
+        let before_byte = EmacsBytePos::new(pos - 1);
+        let before = lookup_buffer_text_property_at_emacs_byte_pos(
+            obarray,
+            buffers,
+            buf,
+            before_byte,
+            read_only_sym,
+        );
+        if !before.is_nil() && !read_only_silenced(before, inhibit) {
+            let rear_nonsticky = lookup_buffer_text_property_at_emacs_byte_pos(
+                obarray,
+                buffers,
+                buf,
+                before_byte,
+                Value::symbol("rear-nonsticky"),
+            );
+            if !text_prop_sticky_member(read_only_sym, rear_nonsticky) {
+                return Err(text_read_only_flow(before));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Resolve OBJECT-arg to a buffer and verify text-read-only over the
 /// `[BEG, END)` byte range.  No-op if OBJECT is a string (text properties
 /// on strings have no read-only enforcement in GNU either).

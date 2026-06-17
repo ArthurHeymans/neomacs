@@ -272,6 +272,33 @@ pub(crate) fn signal_before_change(
     ctx: &mut crate::emacs_core::eval::Context,
     byte_range: EmacsByteRange,
 ) -> Result<(), Flow> {
+    // GNU `prepare_to_modify_buffer` -> `verify_interval_modification`: enforce
+    // the `read-only` text property before any modification. This is the central
+    // modification chokepoint (every insert/delete/replace/case/abbrev/indent
+    // primitive routes through `signal_before_text_change`), so checking here
+    // matches GNU's single enforcement point. It runs regardless of
+    // `inhibit-modification-hooks` (read-only is gated only by
+    // `inhibit-read-only`). For an insertion (empty range) the stickiness of the
+    // adjacent characters' `read-only` decides; for a range modification any
+    // read-only interval in the range signals.
+    if let Some(current_id) = ctx.buffers.current_buffer_id() {
+        if byte_range.is_empty() {
+            crate::emacs_core::textprop::verify_text_read_only_for_insert_in_state(
+                &ctx.obarray,
+                &ctx.buffers,
+                current_id,
+                byte_range.start(),
+            )?;
+        } else {
+            crate::emacs_core::textprop::verify_text_read_only_emacs_byte_range_in_state(
+                &ctx.obarray,
+                &ctx.buffers,
+                current_id,
+                byte_range,
+            )?;
+        }
+    }
+
     if let Some(current_id) = ctx.buffers.current_buffer_id() {
         let undo_enabled = ctx
             .buffers
