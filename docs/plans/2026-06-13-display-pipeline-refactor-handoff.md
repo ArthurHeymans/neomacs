@@ -1,8 +1,16 @@
 # Display Pipeline Refactor Handoff
 
-Date: 2026-06-13
+Date: 2026-06-13 (refreshed 2026-06-17)
 Branch: `main`
-Latest relevant pushed commit before this batch: `d98c96bad refactor: group lisp source append context`
+HEAD at refresh: `77c140125 refactor: typed buffer source adapter and parity tests`
+
+> Refresh note (2026-06-17): the original 2026-06-13 handoff stopped at
+> `798f6b312 refactor: group buffer advance context`. **476 commits** landed
+> between then and `77c140125`, so the per-slice bullet list below was rewritten
+> to describe where the pipeline actually stands now rather than re-listing every
+> wrapper commit. The "Why", "Desired Pipeline", "Important Invariants", GNU
+> reference, manual-repro, and verification sections were still accurate and are
+> unchanged.
 
 ## Goal
 
@@ -12,68 +20,65 @@ The goal is not complete. The recent work landed several safe slices, but the pi
 
 ## Current Status
 
-Recent commits on `main`:
+Most recent display-pipeline commits on `main` (newest first):
 
-- `e7f537b67 refactor: render source fragments from requests`
-- `5b22c4f94 refactor: group append request render parts`
-- `1591c69aa refactor: render display rows from source requests`
-- `e501cc48d refactor: use source render requests in row tests`
-- `92f0016f7 refactor: drop legacy display row spec test constructor`
-- `ab77dba68 refactor: create source render requests from base faces`
-- `12a4fe846 refactor: render minibuffer echo from source request`
-- `691f063ce refactor: route overlay strings through append request`
-- `576e02b6a refactor: render display sources from append request`
-- `25313d877 refactor: route lisp string append through source request`
+- `77c140125 refactor: typed buffer source adapter and parity tests`
+- `a39aca1d9 refactor: request display replacement append plan items`
+- `f906fd14f refactor: move replacement cursor policy source`
+- `d82458511 refactor: resolve display replacements from request`
+- `3225f4b4e refactor: build display replacement source items`
+- `03095e21e refactor: move display property replacement source item`
 
-Verification for `e7f537b67`:
+Baseline at refresh (`77c140125`):
 
 ```bash
 cargo nextest run -p neomacs-layout-engine
-cargo fmt --check
-git diff --check
-cargo check -p neomacs-layout-engine
 ```
 
-`cargo nextest run -p neomacs-layout-engine` passed with 1053 tests. Do not use `cargo test`; the project owner explicitly requested `cargo nextest`.
+passed with **1263 tests** (up from 1061 at the original handoff). Do not use
+`cargo test`; the project owner explicitly requested `cargo nextest`.
 
-Continuation work after this handoff:
+### What landed in the 476 commits since the original handoff
 
-- `DisplayRowSpec` has been contained and renamed to the private `LoweredDisplayRowSpec` in `display_row.rs`; external tests/callers now use `DisplayRowSourceRenderRequest` or request-native helpers.
-- Main buffer ordinary text and several special buffer item paths now append through shared source append requests; complex shaping keeps a premeasured policy only where the buffer walker still needs it for wrap/cursor decisions.
-- Replacement-string display sources now use the renderer-owned font metrics slot through render policy measurement callbacks.
-- The dormant `neomacs-layout-engine::display_backend` / `display_row_sink` scaffolding has been deleted. It represented an older backend-oriented width path and was no longer wired into production layout.
-- Synthetic ellipses and truncation markers now let the source-row append renderer own text measurement instead of passing caller-precomputed `DisplayTextRunMeasurement`.
-- Test-only direct display-item append stream helpers have been removed. Lisp string, synthetic text, and media replacement append coverage now exercises the same source-append request helpers used by runtime paths.
-- `.config/nextest.toml` caps the default nextest worker pool at 24 threads while keeping the memory-limit wrapper on every test.
-- Main buffer complex text append no longer constructs `DisplayTextRunMeasurement` in `engine.rs`; the append layer now lowers the already-resolved fragment advance into its render policy. The buffer walker still computes that advance for wrap and cursor decisions, so full width-path unification remains open.
-- Buffer text fragment append now uses one typed append helper with `BufferTextFragmentAppendMeasurement::{Natural, ResolvedAdvance}` instead of separate natural/resolved append entry points. This keeps measurement policy at the source-append boundary while the main buffer walker still decides when a resolved advance is required.
-- Append placement is private to `display_row_append.rs`, and append tests now build frames through `DisplayRowAppendSurface` instead of constructing lowered placement/frame internals.
-- The generic `DisplayTextRunMeasurementPlan::from_char_advances` helper has been removed. Fallback per-character text-run measurement now lives in `DisplayRowGlyphMeasurementFace`, so caller-provided char-advance construction is no longer exposed as a shared measurement-plan API.
-- Buffer text fragment append advance selection now uses typed `BufferTextFragmentAdvancePath` variants for natural face-column, natural rendered-fragment, and resolved complex-run paths instead of inline conditional policy.
-- Buffer text fragment natural fallback advance now uses typed `BufferTextFragmentNaturalFallbackAdvance` variants for tab, cluster-continuation, and face-column width policy instead of raw fallback conditionals.
-- Overlay string rendering now consumes the shared `DisplayRowAppendSurface` from the main text row instead of rebuilding append bounds from raw right-limit/content-x values at every overlay call site.
-- Overlay string rendering now receives a typed `OverlayStringRenderRowContext`, and display-property replacement strings derive their full text-width append surface from the shared text-row append surface instead of rebuilding raw width geometry in `engine.rs`.
-- Main buffer synthetic text, display replacements, glyphless/control items, replacement strings, and ordinary text append frame creation now go through `MainTextRowAppendContext`; text-row right edges and full text-width limits are exposed by `DisplayRowAppendSurface` instead of repeated raw `content_x + width` calculations in `engine.rs`.
-- Main-buffer and overlay row frame creation now use shared `DisplayRowTextAppendContext` / `DisplayRowActiveFaceAppendContext` types from `display_row_append.rs`; `engine.rs` no longer calls the raw append-surface frame constructors directly.
-- Display-property replacement strings, stretches, media items, and placeholders now append through `DisplayReplacementAppendContext`; `engine.rs` still owns GNU display-property classification and cursor capture, but no longer wires raw replacement source/frame/base-face append requests directly.
-- Main-buffer control chars, nobreak source-mapped text, and glyphless item append now use `BufferTextItemAppendContext`; the older raw buffer/replacement append helper functions are private implementation details of `display_row_append.rs`.
-- Main-buffer line/wrap prefixes and synthetic ellipsis/truncation markers now use `LispStringAppendContext` and `SyntheticTextAppendContext`; direct Lisp-fragment and synthetic-text append helpers are private implementation details.
-- Ordinary main-buffer text append now uses `BufferTextFragmentAppendContext`; `engine.rs` still computes resolved advances for wrap/cursor decisions, but final append request wiring is contained in `display_row_append.rs`.
-- Overlay Lisp-string source append now uses `LispStringSourceAppendContext`; `engine.rs` still owns overlay row breaks, hit rows, and cursor capture, but source-state append request wiring is contained in `display_row_append.rs`.
-- Main-buffer ordinary text advance resolution now goes through `BufferTextFragmentAppendContext`; `engine.rs` still consumes the resolved advance for wrap and cursor decisions, but it no longer wires buffer, face, frame, and append-measurement policy directly into `BufferTextFragmentAdvanceResolver`.
-- Latest local verification:
+Grouped by theme instead of per-commit, because almost every commit is one
+containment/typing step in a long strangler-fig sequence:
 
-  ```bash
-  cargo fmt --check
-  cargo check -p neomacs-layout-engine
-  cargo nextest run -p neomacs-layout-engine display_row_append
-  cargo nextest run -p neomacs-layout-engine
-  git diff --check
-  cargo fmt --all --check
-  cargo check
-  ```
+- **The giant buffer redisplay loop left `engine.rs`.** `engine.rs` is now
+  ~1790 lines; the per-window buffer walk is a typed state machine in the new
+  `display_buffer_text_walk.rs` (~3396 lines) built from dozens of
+  `BufferTextWindow*` request/state structs. `engine.rs::layout_window_rust`
+  now delegates into that module.
+- **A real typed buffer source exists but is not yet the production path.**
+  `display_buffer_text_source.rs` adds `BufferTextSourceCursor`, a
+  `DisplayItemSource` that walks plain buffer text + face/display-property
+  boundaries and emits `DisplayItem`s. It is wired behind
+  `LayoutEngine::use_typed_buffer_source` (default `false`, `#[cfg(test)]`
+  setter only). When enabled, `display_buffer_text_walk.rs::consume_source_event`
+  pulls one `DisplayItem` from the cursor and **lowers it back into the legacy
+  `BufferTextDecodedSourceEvent`** the old loop consumes. So today it is a
+  *parity shim* proving the cursor yields equivalent events — not a replacement
+  of the downstream walker. Parity is asserted in `display_source_test.rs`.
+- **Display replacements moved to the source layer.** Display-property
+  replacement strings, media, stretches/spaces, mapped text, and placeholders
+  are now built as typed source items and resolved from request/source context
+  (`display_source.rs`, `display_source_resolver.rs`), instead of `engine.rs`
+  wiring raw replacement append requests.
+- **Chrome, line numbers, right borders, echo markers, and mock rows render
+  through item sources / row requests.** Legacy direct row-glyph installers and
+  the legacy line-number row writer were removed; status/chrome rows install as
+  prebuilt rows through the row lifecycle.
+- **Matrix builder boundary narrowed.** `matrix_builder.rs` API was internalized
+  and row-writing pushed out; row glyph surgery now lives in the row builder.
+- **Width/advance measurement centralized (but not unified).** ASCII buffer
+  text and display items are measured through the row renderer; buffer advances
+  are resolved from typed requests. The walker still computes a resolved advance
+  for wrap/cursor decisions, so the width path is *not* fully unified yet (this
+  is still the open "Slice 2" work below).
 
-  Full layout-engine nextest passed with 1061 tests after grouping main-buffer text advance resolution behind `BufferTextFragmentAppendContext`.
+Out of scope but on the same branch in this range (do not let these confuse a
+`git log` of the display work): Cranelift JIT (Milestone D + Tier-2 phases),
+perf work (mimalloc global allocator, FxHash maps), `fix(#131)` multibyte buffer
+decode, and `fix(#132)` subprocess isolation / wait-strategy refactor.
 
 ## Why This Refactor Exists
 
@@ -137,13 +142,25 @@ Important boundary:
   - Typed display item language: `DisplayItem`, `DisplayItemKind`, source spans, text runs, media/stretch items, face refs.
 
 - `neomacs-layout-engine/src/display_source.rs`
-  - Source cursor abstraction: `DisplayItemSource`, `LispStringSourceCursor`, buffer/string source-facing cursor logic.
+  - Source cursor abstraction and shared source types: `DisplayItemSource`, `DisplaySourceContext`, `LispStringSourceCursor`, `BufferTextSourceChar`, the buffer advance request/classification types, and display-replacement source resolution.
+
+- `neomacs-layout-engine/src/display_buffer_text_source.rs` (new since handoff)
+  - `BufferTextSourceCursor`: the typed `DisplayItemSource` for plain buffer text + face/display-property boundaries — the strangler-fig replacement for the old raw decoder. Also `BufferTextWindowSource*` (window-start resolution + text read) and `BufferTextSourceEventCursor` (the raw decoder still used in production). The cursor is gated behind `use_typed_buffer_source` and is currently a parity shim only.
+
+- `neomacs-layout-engine/src/display_buffer_text_walk.rs` (new since handoff)
+  - The per-window buffer redisplay walk as a typed state machine (`BufferTextWindow*` request/state structs). This is where the giant `engine.rs` loop now lives, and where `consume_source_event` chooses between the raw decoder and the typed cursor.
 
 - `neomacs-layout-engine/src/display_row.rs`
   - Current row rendering center: `DisplayRowSourceRenderRequest`, private `LoweredDisplayRowSpec`, `DisplayRowRenderContext`, `DisplayRowRenderer`, fragment rendering, row finalization helpers.
 
+- `neomacs-layout-engine/src/display_row_source_render.rs` (new since handoff)
+  - Source → row render-request execution (`render_*_with_source_state` helpers) used by the walk module.
+
+- `neomacs-layout-engine/src/display_row_walk_state.rs` (new since handoff)
+  - Per-row overflow/wrap decision state (`BufferTextRowOverflowDecision`, etc.).
+
 - `neomacs-layout-engine/src/display_row_append.rs`
-  - Bridge for appending rendered fragments into current text rows and emitting output. Still has significant builder coupling.
+  - Bridge for appending rendered fragments into current text rows and emitting output. **Now the largest module (~10k lines)** and still the biggest builder-coupling debt area after `engine.rs` shrank.
 
 - `neomacs-layout-engine/src/display_origin.rs`
   - Typed origins for face/source policy decisions.
@@ -161,27 +178,36 @@ Important boundary:
   - Matrix installation/bookkeeping. Long-term, this should not encode display semantics.
 
 - `neomacs-layout-engine/src/engine.rs`
-  - Still contains the large buffer redisplay walker. This is the main debt area.
+  - Frame-level orchestration (`layout_frame_rust`, `layout_window_rust`), `LayoutEngine` state, font-metrics setup, and the `use_typed_buffer_source` toggle. The large per-window buffer walk it used to host now lives in `display_buffer_text_walk.rs`; the remaining debt is `display_row_append.rs` and finishing the typed buffer source migration.
 
 ## Current Split To Remove
 
-There are still two broad rendering paths:
+The split is no longer "two whole rendering paths" — chrome/string rows and the
+main buffer row append now share `DisplayRowSourceRenderRequest` /
+`display_row_append.rs`. What remains split is **how main-buffer text is
+sourced**:
 
 ```text
-Main buffer path
-----------------
-engine.rs buffer loop
-  -> direct GlyphMatrixBuilder / display_row_append helpers
-  -> GlyphRow
+Production main-buffer path (use_typed_buffer_source = false)
+------------------------------------------------------------
+display_buffer_text_walk.rs::consume_source_event
+  -> BufferTextSourceEventCursor (raw UTF-8 decoder)
+  -> BufferTextDecodedSourceEvent
+  -> shared append/render (display_row_append.rs -> GlyphRow)
 
-String/chrome path
-------------------
-DisplayRowSourceRenderRequest
-  -> LoweredDisplayRowSpec
-  -> DisplayItemSource
-  -> DisplayRowRenderer
-  -> GlyphRow
+Typed parity path (use_typed_buffer_source = true, tests only)
+--------------------------------------------------------------
+display_buffer_text_walk.rs::consume_source_event
+  -> BufferTextSourceCursor (DisplayItemSource)
+  -> DisplayItem
+  -> lowered BACK to BufferTextDecodedSourceEvent   <-- shim, not yet a replacement
+  -> shared append/render (display_row_append.rs -> GlyphRow)
 ```
+
+The goal is to delete the raw-decoder path and let `BufferTextSourceCursor`'s
+`DisplayItem`s flow straight into the shared renderer without the
+`DisplayItem -> BufferTextDecodedSourceEvent` round-trip. That round-trip is the
+load-bearing piece of the next slice.
 
 The old caller-facing `DisplayRowSpec` name is gone from source. The lowered row request is now the private `LoweredDisplayRowSpec` inside `display_row.rs`; new caller coverage should use `DisplayRowSourceRenderRequest`, `DisplayRowSourceAppendRequest`, or a higher-level row request.
 
@@ -270,18 +296,24 @@ Keep policy in:
 
 Avoid putting source-specific face rules in `DisplayRowRenderer`.
 
-### Slice 4: Move More Buffer Walker Output To `DisplayItemSource`
+### Slice 4: Move More Buffer Walker Output To `DisplayItemSource` (in progress)
 
-Goal: shrink the giant buffer loop in `engine.rs`.
+Goal: shrink the buffer walk and let it consume typed `DisplayItem`s.
+
+Status: the buffer loop already moved out of `engine.rs` into
+`display_buffer_text_walk.rs`, and step 1 below is done — `BufferTextSourceCursor`
+exists with parity tests. What remains is to stop lowering its items back to the
+legacy `BufferTextDecodedSourceEvent`.
 
 Approach:
 
-1. Extract a narrow source cursor for one simple segment type first, probably plain buffer text with resolved face refs.
-2. Route that through `DisplayRowRenderer`.
+1. ~~Extract a narrow source cursor for plain buffer text with resolved face refs.~~ Done: `BufferTextSourceCursor` in `display_buffer_text_source.rs`.
+2. **Next: remove the parity round-trip.** Have `consume_source_event` (or its caller) consume `DisplayItem`s directly instead of translating `DisplayItem -> BufferTextDecodedSourceEvent`. Do this for plain text first; keep overlays/display-properties/cursor metadata on the legacy path until each is covered.
 3. Keep matrix installation unchanged.
-4. Add regression tests around cursor position, row end, clipping, and bidi.
+4. Add regression tests around cursor position, row end, clipping, and bidi as each segment type moves over.
+5. Once a segment type renders identically from the typed source, flip and eventually delete the raw-decoder branch for it.
 
-Do not try to migrate overlays, display properties, and cursor metadata all in one commit.
+Do not try to migrate overlays, display properties, and cursor metadata all in one commit. The `use_typed_buffer_source` toggle is the seam: expand what it covers, keep both paths green via parity tests, then retire the legacy path.
 
 ### Slice 5: Unified Row Lifecycle
 
@@ -371,10 +403,28 @@ Expect some unrelated warnings from `neovm-core` during `cargo check`; do not mi
 
 ## Good First Task For The Next Developer
 
-Start with Slice 2: retire old width paths.
+The last session's momentum is **Slice 4 (productionize `BufferTextSourceCursor`)**,
+not the original "Slice 2" recommendation. The cursor and its parity tests are
+already in place, so the highest-leverage next step is to push that one more
+notch:
 
-Slice 1 is complete in source: external tests and non-renderer callers construct `DisplayRowSourceRenderRequest` or a higher-level request, and lowered row construction is local to renderer lowering. The next concrete success criteria are:
+1. Pick the simplest segment (plain ASCII buffer text) and make the typed path
+   feed the renderer **without** lowering back to `BufferTextDecodedSourceEvent`
+   (see `display_buffer_text_walk.rs::consume_typed_source_event`, ~line 2792).
+2. Keep `use_typed_buffer_source` as the seam; assert byte-for-byte parity in
+   `display_source_test.rs` / `engine_test.rs` between the two paths.
+3. Then default the toggle on for that segment type and delete its raw-decoder
+   branch.
 
-- reduce duplicated width/advance decisions outside row rendering;
-- keep main-buffer tests covering ASCII, wide characters, grapheme clusters, and display replacements green;
-- full `neomacs-layout-engine` nextest remains green.
+Success criteria:
+
+- one segment type renders identically with the toggle on and off;
+- main-buffer tests covering ASCII, wide characters, grapheme clusters, and display replacements stay green;
+- full `neomacs-layout-engine` nextest (currently 1263) remains green.
+
+Slice 2 (retire old width paths) is still open and a fine alternative if you want
+a more contained, lower-risk change — the walker still computes a resolved
+advance for wrap/cursor decisions, which is the remaining width duplication. Slice 1
+is complete: external tests and non-renderer callers construct
+`DisplayRowSourceRenderRequest` or a higher-level request, and lowered row
+construction is local to renderer lowering.
