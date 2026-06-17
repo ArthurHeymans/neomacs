@@ -2129,6 +2129,66 @@ fn layout_frame_rust_typed_buffer_source_matches_raw_for_word_wrap() {
     assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
 }
 
+// Keystone-prerequisite parity tests: pin the typed-vs-raw equivalence of the
+// walk-state gaps that ran untested. These cases reach the typed path through
+// the shim's *translated* arms or *bypass* sourcing entirely (invisible/hscroll
+// short-circuit before consume_source_event), so they validate genuinely — not
+// via the None-fallthrough resync (which is what the replacement-item tests rely
+// on, and which slice 6 must remove).
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_invisible_text() {
+    let text = "abcXYZdef\nghi\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
+        let start = text.find("XYZ").expect("XYZ start");
+        let end = start + "XYZ".len();
+        assert!(buffer.put_text_property(start, end, Value::symbol("invisible"), Value::T));
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_nobreak_chars() {
+    // U+00A0 NBSP and U+00AD SHY are delivered as plain Text by the typed cursor;
+    // the nobreak display policy is applied downstream by the walk, identically
+    // for both sources.
+    let text = "a\u{00A0}b\u{00AD}c\nd\u{00A0}\u{00A0}e\n";
+    let raw_trace = layout_trace_for_plain_text(text, false);
+    let typed_trace = layout_trace_for_plain_text(text, true);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_selective_display() {
+    // selective-display>0 + embedded '\r': the typed cursor emits '\r' as a
+    // ControlChar (a translated shim arm); the selective-display tail-skip is
+    // walk-state run on the consumed char, independent of which source fed it.
+    let text = "visible\rhidden\nnext\rgone\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("selective-display", Value::fixnum(1));
+    };
+    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
+    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
 fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
     let text = "abé\tz\n日本x\nlast Ω line\n";
     backend_layout_trace_with_buffer_setup(
