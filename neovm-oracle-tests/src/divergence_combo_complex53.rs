@@ -152,7 +152,8 @@ fn div_cx53_json_dom_xml_chain_deeply_nested_multibyte_hash_secure_mega() {
 }
 
 #[test]
-fn div_cx53_window_config_register_buffer_split_merge_marker_overlay_narrow_dedicated_hscroll_vscroll_full_mega() {
+fn div_cx53_window_config_register_buffer_split_merge_marker_overlay_narrow_dedicated_hscroll_vscroll_full_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -188,7 +189,8 @@ fn div_cx53_window_config_register_buffer_split_merge_marker_overlay_narrow_dedi
 }
 
 #[test]
-fn div_cx53_undo_redo_marker_overlay_textprop_display_evaporate_narrow_env_exitcode_coding_timer_mega() {
+fn div_cx53_undo_redo_marker_overlay_textprop_display_evaporate_narrow_env_exitcode_coding_timer_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -313,7 +315,8 @@ fn div_cx53_coding_priority_utf8_utf16_big5_position_category_combined_mega() {
 }
 
 #[test]
-fn div_cx53_set_buffer_multibyte_overlay_marker_textprop_display_evaporate_undo_narrow_widen_full_chain_mega() {
+fn div_cx53_set_buffer_multibyte_overlay_marker_textprop_display_evaporate_undo_narrow_widen_full_chain_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

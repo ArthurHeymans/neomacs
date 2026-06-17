@@ -280,7 +280,8 @@ fn div_cx57_longlines_mode() {
 }
 
 #[test]
-fn div_cx57_subword_superword_kill_undo_marker_overlay_narrow_display_textprop_evaporate_env_exitcode_coding_timer_weak_hash_mega() {
+fn div_cx57_subword_superword_kill_undo_marker_overlay_narrow_display_textprop_evaporate_env_exitcode_coding_timer_weak_hash_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

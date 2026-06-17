@@ -28,34 +28,110 @@ macro_rules! iso_decode_test {
     };
 }
 
-iso_decode_test!(div_utf8_decode_iso8859_2,  "iso-8859-2",  "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_3,  "iso-8859-3",  "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_4,  "iso-8859-4",  "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_5,  "iso-8859-5",  "161 176 198 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_6,  "iso-8859-6",  "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_8,  "iso-8859-8",  "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_9,  "iso-8859-9",  "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_10, "iso-8859-10", "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_13, "iso-8859-13", "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_14, "iso-8859-14", "161 198 230 240 253");
-iso_decode_test!(div_utf8_decode_iso8859_16, "iso-8859-16", "161 198 230 240 253");
+iso_decode_test!(
+    div_utf8_decode_iso8859_2,
+    "iso-8859-2",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_3,
+    "iso-8859-3",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_4,
+    "iso-8859-4",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_5,
+    "iso-8859-5",
+    "161 176 198 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_6,
+    "iso-8859-6",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_8,
+    "iso-8859-8",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_9,
+    "iso-8859-9",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_10,
+    "iso-8859-10",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_13,
+    "iso-8859-13",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_14,
+    "iso-8859-14",
+    "161 198 230 240 253"
+);
+iso_decode_test!(
+    div_utf8_decode_iso8859_16,
+    "iso-8859-16",
+    "161 198 230 240 253"
+);
 
 // --- Windows codepages ------------------------------------------------------
 
-iso_decode_test!(div_utf8_decode_windows_1250, "windows-1250", "140 141 156 159 165");
-iso_decode_test!(div_utf8_decode_windows_1251, "windows-1251", "192 193 194 195 196");
-iso_decode_test!(div_utf8_decode_windows_1253, "windows-1253", "193 194 195 196 197");
-iso_decode_test!(div_utf8_decode_windows_1254, "windows-1254", "199 208 221 222 254");
-iso_decode_test!(div_utf8_decode_windows_1255, "windows-1255", "224 231 32 241 250");
-iso_decode_test!(div_utf8_decode_windows_1256, "windows-1256",  "199 32 218 225 237");
-iso_decode_test!(div_utf8_decode_windows_1257, "windows-1257", "193 196 197 198 207");
+iso_decode_test!(
+    div_utf8_decode_windows_1250,
+    "windows-1250",
+    "140 141 156 159 165"
+);
+iso_decode_test!(
+    div_utf8_decode_windows_1251,
+    "windows-1251",
+    "192 193 194 195 196"
+);
+iso_decode_test!(
+    div_utf8_decode_windows_1253,
+    "windows-1253",
+    "193 194 195 196 197"
+);
+iso_decode_test!(
+    div_utf8_decode_windows_1254,
+    "windows-1254",
+    "199 208 221 222 254"
+);
+iso_decode_test!(
+    div_utf8_decode_windows_1255,
+    "windows-1255",
+    "224 231 32 241 250"
+);
+iso_decode_test!(
+    div_utf8_decode_windows_1256,
+    "windows-1256",
+    "199 32 218 225 237"
+);
+iso_decode_test!(
+    div_utf8_decode_windows_1257,
+    "windows-1257",
+    "193 196 197 198 207"
+);
 
 // --- KOI8 / Mac / Vietnamese / Thai -----------------------------------------
 
-iso_decode_test!(div_utf8_decode_koi8_u,  "koi8-u",  "193 194 195 196 197");
-iso_decode_test!(div_utf8_decode_mac_roman, "mac-roman", "129 143 167 200 201 214");
-iso_decode_test!(div_utf8_decode_viscii,  "viscii",  "161 178 192 199 252");
-iso_decode_test!(div_utf8_decode_tis620,  "tis-620", "161 198 209 225 249");
+iso_decode_test!(div_utf8_decode_koi8_u, "koi8-u", "193 194 195 196 197");
+iso_decode_test!(
+    div_utf8_decode_mac_roman,
+    "mac-roman",
+    "129 143 167 200 201 214"
+);
+iso_decode_test!(div_utf8_decode_viscii, "viscii", "161 178 192 199 252");
+iso_decode_test!(div_utf8_decode_tis620, "tis-620", "161 198 209 225 249");
 
 // --- CJK / multibyte legacy (round-trip) ------------------------------------
 
@@ -65,9 +141,15 @@ macro_rules! cjk_roundtrip_test {
         fn $name() {
             return_if_neovm_enable_oracle_proptest_not_set!();
             let form = concat!(
-                "(let* ((s ", $text, ")\n",
-                "       (e (encode-coding-string s '", $coding, "))\n",
-                "       (d (decode-coding-string e '", $coding, ")))\n",
+                "(let* ((s ",
+                $text,
+                ")\n",
+                "       (e (encode-coding-string s '",
+                $coding,
+                "))\n",
+                "       (d (decode-coding-string e '",
+                $coding,
+                ")))\n",
                 "  (list (append e nil) (equal s d) (length e)))"
             );
             assert_oracle_parity(form);
@@ -75,14 +157,18 @@ macro_rules! cjk_roundtrip_test {
     };
 }
 
-cjk_roundtrip_test!(div_utf8_euc_kr_roundtrip,     "euc-kr",         "\"안녕하세요\"");
-cjk_roundtrip_test!(div_utf8_gb2312_roundtrip,     "gb2312",         "\"中文测试\"");
-cjk_roundtrip_test!(div_utf8_gb18030_roundtrip,    "gb18030",        "\"中文测试😀\"");
-cjk_roundtrip_test!(div_utf8_iso2022_jp_roundtrip, "iso-2022-jp",    "\"こんにちは\"");
-cjk_roundtrip_test!(div_utf8_iso2022_cn_roundtrip, "iso-2022-cn",    "\"中文测试\"");
-cjk_roundtrip_test!(div_utf8_iso2022_kr_roundtrip, "iso-2022-kr",    "\"안녕\"");
-cjk_roundtrip_test!(div_utf8_utf7_roundtrip,       "utf-7",          "\"café世界\"");
-cjk_roundtrip_test!(div_utf8_emacs_mule_roundtrip, "emacs-mule",     "\"café世界\"");
+cjk_roundtrip_test!(div_utf8_euc_kr_roundtrip, "euc-kr", "\"안녕하세요\"");
+cjk_roundtrip_test!(div_utf8_gb2312_roundtrip, "gb2312", "\"中文测试\"");
+cjk_roundtrip_test!(div_utf8_gb18030_roundtrip, "gb18030", "\"中文测试😀\"");
+cjk_roundtrip_test!(
+    div_utf8_iso2022_jp_roundtrip,
+    "iso-2022-jp",
+    "\"こんにちは\""
+);
+cjk_roundtrip_test!(div_utf8_iso2022_cn_roundtrip, "iso-2022-cn", "\"中文测试\"");
+cjk_roundtrip_test!(div_utf8_iso2022_kr_roundtrip, "iso-2022-kr", "\"안녕\"");
+cjk_roundtrip_test!(div_utf8_utf7_roundtrip, "utf-7", "\"café世界\"");
+cjk_roundtrip_test!(div_utf8_emacs_mule_roundtrip, "emacs-mule", "\"café世界\"");
 
 // --- detect-coding / find-operation-coding-system --------------------------
 

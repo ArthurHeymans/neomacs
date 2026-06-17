@@ -115,7 +115,8 @@ fn div_cx200_mega_milestone_2_eieio_clloop_pcase_advice_closure_coding_obarray_s
 }
 
 #[test]
-fn div_cx200_mega_milestone_3_process_buflocal_textprop_overlay_marker_undo_narrow_coding_env_exitcode_timer() {
+fn div_cx200_mega_milestone_3_process_buflocal_textprop_overlay_marker_undo_narrow_coding_env_exitcode_timer()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -158,7 +159,8 @@ fn div_cx200_mega_milestone_3_process_buflocal_textprop_overlay_marker_undo_narr
 }
 
 #[test]
-fn div_cx200_mega_milestone_4_pcase_rx_syntax_search_replace_format_time_advice_clloop_register_window_config() {
+fn div_cx200_mega_milestone_4_pcase_rx_syntax_search_replace_format_time_advice_clloop_register_window_config()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

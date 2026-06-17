@@ -4,7 +4,8 @@ use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
-fn div_cx55_superword_kill_upcase_undo_marker_overlay_narrow_textprop_display_evaporate_env_exitcode_timer_mega() {
+fn div_cx55_superword_kill_upcase_undo_marker_overlay_narrow_textprop_display_evaporate_env_exitcode_timer_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -46,7 +47,8 @@ fn div_cx55_superword_kill_upcase_undo_marker_overlay_narrow_textprop_display_ev
 }
 
 #[test]
-fn div_cx55_process_output_narrow_decode_encode_hash_overlay_textprop_evaporate_undo_env_exitcode_mega() {
+fn div_cx55_process_output_narrow_decode_encode_hash_overlay_textprop_evaporate_undo_env_exitcode_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -117,7 +119,8 @@ fn div_cx55_json_xml_dom_full_chain_with_coerce_hash_backquote_struct_mega() {
 }
 
 #[test]
-fn div_cx55_cl_defmethod_full_hierarchy_5_methods_advice_eql_error_call_next_undo_superword_subword_mega() {
+fn div_cx55_cl_defmethod_full_hierarchy_5_methods_advice_eql_error_call_next_undo_superword_subword_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -149,7 +152,8 @@ fn div_cx55_cl_defmethod_full_hierarchy_5_methods_advice_eql_error_call_next_und
 }
 
 #[test]
-fn div_cx55_window_config_register_split_merge_narrow_widen_hscroll_vscroll_margins_fringes_dedicated_marker_overlay_textprop_display_evaporate_undo_mega() {
+fn div_cx55_window_config_register_split_merge_narrow_widen_hscroll_vscroll_margins_fringes_dedicated_marker_overlay_textprop_display_evaporate_undo_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -195,7 +199,8 @@ fn div_cx55_window_config_register_split_merge_narrow_widen_hscroll_vscroll_marg
 }
 
 #[test]
-fn div_cx55_weak_hash_key_value_eviction_after_gc_cons_vector_marker_string_symbol_comparison_mega() {
+fn div_cx55_weak_hash_key_value_eviction_after_gc_cons_vector_marker_string_symbol_comparison_mega()
+{
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -217,7 +222,8 @@ fn div_cx55_weak_hash_key_value_eviction_after_gc_cons_vector_marker_string_symb
 }
 
 #[test]
-fn div_cx55_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_evaporate_env_exitcode_coding_mega() {
+fn div_cx55_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_evaporate_env_exitcode_coding_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -254,7 +260,8 @@ fn div_cx55_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_e
 }
 
 #[test]
-fn div_cx55_print_circle_gensym_struct_vector_propertized_escape_length_level_circle_backquote_read_roundtrip_mega() {
+fn div_cx55_print_circle_gensym_struct_vector_propertized_escape_length_level_circle_backquote_read_roundtrip_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -306,7 +313,8 @@ fn div_cx55_read_eval_backquote_destructuring_lexical_macro_propertized_hash_cl_
 }
 
 #[test]
-fn div_cx55_set_buffer_multibyte_undo_redo_narrow_widen_overlay_marker_textprop_display_evaporate_full_mega() {
+fn div_cx55_set_buffer_multibyte_undo_redo_narrow_widen_overlay_marker_textprop_display_evaporate_full_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -346,7 +354,8 @@ fn div_cx55_set_buffer_multibyte_undo_redo_narrow_widen_overlay_marker_textprop_
 }
 
 #[test]
-fn div_cx55_subword_superword_toggle_kill_upcase_capitalize_undo_marker_overlay_narrow_textprop_display_env_exitcode_timer_mega() {
+fn div_cx55_subword_superword_toggle_kill_upcase_capitalize_undo_marker_overlay_narrow_textprop_display_env_exitcode_timer_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

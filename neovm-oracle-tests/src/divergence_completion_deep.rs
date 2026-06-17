@@ -11,7 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cdt_try_completion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(completion-try-completion "ap" '("apple" "apricot" "banana") nil 2)"##);
+    assert_oracle_parity(
+        r##"(completion-try-completion "ap" '("apple" "apricot" "banana") nil 2)"##,
+    );
 }
 
 #[test]

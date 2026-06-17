@@ -11,7 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_ar_backreference_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(r##"(list (string-match "\(a\)\1" "xaa") (string-match "\(a\)\1" "xab"))"##);
+    assert_oracle_parity(
+        r##"(list (string-match "\(a\)\1" "xaa") (string-match "\(a\)\1" "xab"))"##,
+    );
 }
 
 #[test]

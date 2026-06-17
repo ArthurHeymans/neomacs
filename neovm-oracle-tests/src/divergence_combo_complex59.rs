@@ -190,7 +190,8 @@ fn div_cx59_subword_superword_toggle_word_ops_undo_marker_overlay_narrow_env_exi
 }
 
 #[test]
-fn div_cx59_process_output_narrow_decode_encode_hash_overlay_textprop_undo_env_exitcode_timer_weak_hash_display_evaporate_mega() {
+fn div_cx59_process_output_narrow_decode_encode_hash_overlay_textprop_undo_env_exitcode_timer_weak_hash_display_evaporate_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -233,7 +234,8 @@ fn div_cx59_process_output_narrow_decode_encode_hash_overlay_textprop_undo_env_e
 }
 
 #[test]
-fn div_cx59_json_deeply_nested_with_org_xml_dom_struct_hash_secure_print_circle_env_exitcode_weak_hash_mega() {
+fn div_cx59_json_deeply_nested_with_org_xml_dom_struct_hash_secure_print_circle_env_exitcode_weak_hash_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -269,7 +271,8 @@ fn div_cx59_json_deeply_nested_with_org_xml_dom_struct_hash_secure_print_circle_
 }
 
 #[test]
-fn div_cx59_set_buffer_multibyte_undo_narrow_widen_marker_overlay_textprop_display_evaporate_env_exitcode_coding_timer_weak_hash_regex_replace_full_mega() {
+fn div_cx59_set_buffer_multibyte_undo_narrow_widen_marker_overlay_textprop_display_evaporate_env_exitcode_coding_timer_weak_hash_regex_replace_full_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

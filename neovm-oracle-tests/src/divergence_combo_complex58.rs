@@ -159,7 +159,8 @@ fn div_cx58_process_kill_query_exit_flag_with_buffer_narrowed() {
 }
 
 #[test]
-fn div_cx58_overlay_evaporate_undo_display_marker_narrow_textprop_evaporate_env_exitcode_weak_hash_mega() {
+fn div_cx58_overlay_evaporate_undo_display_marker_narrow_textprop_evaporate_env_exitcode_weak_hash_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -222,7 +223,8 @@ fn div_cx58_json_xml_dom_struct_backquote_cl_loop_hash_secure_print_circle_mega(
 }
 
 #[test]
-fn div_cx58_window_split_merge_marker_overlay_textprop_display_evaporate_undo_narrow_widen_env_exitcode_timer_weak_hash_mega() {
+fn div_cx58_window_split_merge_marker_overlay_textprop_display_evaporate_undo_narrow_widen_env_exitcode_timer_weak_hash_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -271,7 +273,8 @@ fn div_cx58_window_split_merge_marker_overlay_textprop_display_evaporate_undo_na
 }
 
 #[test]
-fn div_cx58_regex_casefold_replace_undo_superword_subword_kill_marker_overlay_narrow_display_textprop_env_exitcode_weak_hash_mega() {
+fn div_cx58_regex_casefold_replace_undo_superword_subword_kill_marker_overlay_narrow_display_textprop_env_exitcode_weak_hash_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -312,7 +315,8 @@ fn div_cx58_regex_casefold_replace_undo_superword_subword_kill_marker_overlay_na
 }
 
 #[test]
-fn div_cx58_read_eval_backquote_destructuring_lexical_cl_loop_hash_secure_print_circle_env_exitcode_weak_hash_mega() {
+fn div_cx58_read_eval_backquote_destructuring_lexical_cl_loop_hash_secure_print_circle_env_exitcode_weak_hash_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

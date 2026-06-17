@@ -209,7 +209,8 @@ fn div_cx52_print_circle_gensym_struct_vector_propertized_escape_length_level_me
 }
 
 #[test]
-fn div_cx52_set_buffer_multibyte_narrow_marker_overlay_textprop_display_evaporate_undo_full_chain_mega() {
+fn div_cx52_set_buffer_multibyte_narrow_marker_overlay_textprop_display_evaporate_undo_full_chain_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -282,7 +283,8 @@ fn div_cx52_weak_hash_all_weakness_types_eviction_gc_stress_2_rounds_mega() {
 }
 
 #[test]
-fn div_cx52_process_send_string_newline_filter_buffer_textprop_overlay_narrow_undo_evaporate_mega() {
+fn div_cx52_process_send_string_newline_filter_buffer_textprop_overlay_narrow_undo_evaporate_mega()
+{
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

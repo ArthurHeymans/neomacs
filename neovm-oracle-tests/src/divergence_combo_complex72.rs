@@ -23,7 +23,7 @@ fn div_cx72_seq_map_filter_reduce_across_types() {
 }
 
 #[test]
-fn div_cx72_seq_group_by_partition () {
+fn div_cx72_seq_group_by_partition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

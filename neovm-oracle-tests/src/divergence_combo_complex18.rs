@@ -335,6 +335,5 @@ fn div_cx18_narrow_restrict_widen_marker_consistency() {
       (widen)
       (list n-min n-max m-in (point-min) (point-max) (marker-position m)))))
 "##,
-    )
-    ;
+    );
 }

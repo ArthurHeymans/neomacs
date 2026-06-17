@@ -33,7 +33,8 @@ fn div_cx54_superword_subword_toggle_kill_undo_marker_overlay_textprop_narrow_me
 }
 
 #[test]
-fn div_cx54_process_output_env_coding_exitcode_timer_narrow_overlay_textprop_undo_evaporate_display_mega() {
+fn div_cx54_process_output_env_coding_exitcode_timer_narrow_overlay_textprop_undo_evaporate_display_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -102,7 +103,8 @@ fn div_cx54_json_xml_dom_serialize_parse_chain_with_hash_multibyte_mega() {
 }
 
 #[test]
-fn div_cx54_cl_defmethod_full_hierarchy_eql_static_around_before_after_primary_advice_error_call_next_undo_mega() {
+fn div_cx54_cl_defmethod_full_hierarchy_eql_static_around_before_after_primary_advice_error_call_next_undo_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -133,7 +135,8 @@ fn div_cx54_cl_defmethod_full_hierarchy_eql_static_around_before_after_primary_a
 }
 
 #[test]
-fn div_cx54_window_config_register_split_merge_narrow_widen_marker_overlay_textprop_display_dedicated_hscroll_vscroll_margins_fringes_mega() {
+fn div_cx54_window_config_register_split_merge_narrow_widen_marker_overlay_textprop_display_dedicated_hscroll_vscroll_margins_fringes_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -174,7 +177,8 @@ fn div_cx54_window_config_register_split_merge_narrow_widen_marker_overlay_textp
 }
 
 #[test]
-fn div_cx54_set_buffer_multibyte_undo_redo_narrow_widen_marker_overlay_textprop_display_evaporate_env_exitcode_coding_timer_full_mega() {
+fn div_cx54_set_buffer_multibyte_undo_redo_narrow_widen_marker_overlay_textprop_display_evaporate_env_exitcode_coding_timer_full_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -310,7 +314,8 @@ fn div_cx54_cl_coerce_list_vector_string_char_cycle_propertized_multibyte_hash_m
 }
 
 #[test]
-fn div_cx54_print_circle_gensym_struct_vector_propertized_escape_length_level_circle_roundtrip_mega() {
+fn div_cx54_print_circle_gensym_struct_vector_propertized_escape_length_level_circle_roundtrip_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

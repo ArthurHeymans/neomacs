@@ -4,7 +4,8 @@ use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
-fn div_cx56_process_filter_hash_env_exitcode_coding_narrow_overlay_textprop_evaporate_undo_display_mega() {
+fn div_cx56_process_filter_hash_env_exitcode_coding_narrow_overlay_textprop_evaporate_undo_display_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -44,7 +45,8 @@ fn div_cx56_process_filter_hash_env_exitcode_coding_narrow_overlay_textprop_evap
 }
 
 #[test]
-fn div_cx56_subword_superword_default_cycle_kill_capitalize_undo_marker_overlay_narrow_env_exitcode_timer_display_evaporate_mega() {
+fn div_cx56_subword_superword_default_cycle_kill_capitalize_undo_marker_overlay_narrow_env_exitcode_timer_display_evaporate_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -119,7 +121,8 @@ fn div_cx56_json_xml_dom_coerce_hash_struct_backquote_read_print_circle_mega() {
 }
 
 #[test]
-fn div_cx56_cl_defmethod_full_hierarchy_advice_eql_static_error_recovery_call_next_print_read_circle_mega() {
+fn div_cx56_cl_defmethod_full_hierarchy_advice_eql_static_error_recovery_call_next_print_read_circle_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -149,7 +152,8 @@ fn div_cx56_cl_defmethod_full_hierarchy_advice_eql_static_error_recovery_call_ne
 }
 
 #[test]
-fn div_cx56_window_register_split_merge_narrow_widen_hscroll_vscroll_margins_fringes_dedicated_marker_overlay_textprop_display_evaporate_undo_env_exitcode_timer_mega() {
+fn div_cx56_window_register_split_merge_narrow_widen_hscroll_vscroll_margins_fringes_dedicated_marker_overlay_textprop_display_evaporate_undo_env_exitcode_timer_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -203,7 +207,8 @@ fn div_cx56_window_register_split_merge_narrow_widen_hscroll_vscroll_margins_fri
 }
 
 #[test]
-fn div_cx56_set_buffer_multibyte_narrow_overlay_marker_textprop_display_evaporate_undo_env_exitcode_coding_weak_hash_full_mega() {
+fn div_cx56_set_buffer_multibyte_narrow_overlay_marker_textprop_display_evaporate_undo_env_exitcode_coding_weak_hash_full_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -245,7 +250,8 @@ fn div_cx56_set_buffer_multibyte_narrow_overlay_marker_textprop_display_evaporat
 }
 
 #[test]
-fn div_cx56_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_evaporate_superword_subword_env_exitcode_mega() {
+fn div_cx56_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_evaporate_superword_subword_env_exitcode_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -282,7 +288,8 @@ fn div_cx56_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_e
 }
 
 #[test]
-fn div_cx56_print_circle_gensym_struct_vector_propertized_escape_length_level_backquote_read_cl_coerce_hash_secure_mega() {
+fn div_cx56_print_circle_gensym_struct_vector_propertized_escape_length_level_backquote_read_cl_coerce_hash_secure_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -313,7 +320,8 @@ fn div_cx56_print_circle_gensym_struct_vector_propertized_escape_length_level_ba
 }
 
 #[test]
-fn div_cx56_process_output_decode_encode_hash_overlay_narrow_textprop_evaporate_undo_display_cl_coerce_json_xml_env_exitcode_timer_mega() {
+fn div_cx56_process_output_decode_encode_hash_overlay_narrow_textprop_evaporate_undo_display_cl_coerce_json_xml_env_exitcode_timer_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
@@ -358,7 +366,8 @@ fn div_cx56_process_output_decode_encode_hash_overlay_narrow_textprop_evaporate_
 }
 
 #[test]
-fn div_cx56_read_eval_backquote_destructuring_lexical_cl_loop_hash_secure_print_circle_env_exitcode_mega() {
+fn div_cx56_read_eval_backquote_destructuring_lexical_cl_loop_hash_secure_print_circle_env_exitcode_mega()
+ {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"

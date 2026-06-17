@@ -113,7 +113,9 @@ fn div_face_attr_default() {
 #[test]
 fn div_face_attr_eldoc_highlight_function_argument() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity("(face-all-attributes 'eldoc-highlight-function-argument (selected-frame))");
+    assert_oracle_parity(
+        "(face-all-attributes 'eldoc-highlight-function-argument (selected-frame))",
+    );
 }
 
 #[test]
@@ -155,7 +157,9 @@ fn div_face_attr_elisp_completion_category() {
 #[test]
 fn div_face_attr_elisp_completion_category_definition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity("(face-all-attributes 'elisp-completion-category-definition (selected-frame))");
+    assert_oracle_parity(
+        "(face-all-attributes 'elisp-completion-category-definition (selected-frame))",
+    );
 }
 
 #[test]
@@ -245,7 +249,9 @@ fn div_face_attr_elisp_function() {
 #[test]
 fn div_face_attr_elisp_function_property_declaration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity("(face-all-attributes 'elisp-function-property-declaration (selected-frame))");
+    assert_oracle_parity(
+        "(face-all-attributes 'elisp-function-property-declaration (selected-frame))",
+    );
 }
 
 #[test]
@@ -329,7 +335,9 @@ fn div_face_attr_elisp_special_form() {
 #[test]
 fn div_face_attr_elisp_special_variable_declaration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity("(face-all-attributes 'elisp-special-variable-declaration (selected-frame))");
+    assert_oracle_parity(
+        "(face-all-attributes 'elisp-special-variable-declaration (selected-frame))",
+    );
 }
 
 #[test]
@@ -449,7 +457,9 @@ fn div_face_attr_font_lock_builtin_face() {
 #[test]
 fn div_face_attr_font_lock_comment_delimiter_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity("(face-all-attributes 'font-lock-comment-delimiter-face (selected-frame))");
+    assert_oracle_parity(
+        "(face-all-attributes 'font-lock-comment-delimiter-face (selected-frame))",
+    );
 }
 
 #[test]
@@ -563,13 +573,17 @@ fn div_face_attr_font_lock_regexp_face() {
 #[test]
 fn div_face_attr_font_lock_regexp_grouping_backslash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity("(face-all-attributes 'font-lock-regexp-grouping-backslash (selected-frame))");
+    assert_oracle_parity(
+        "(face-all-attributes 'font-lock-regexp-grouping-backslash (selected-frame))",
+    );
 }
 
 #[test]
 fn div_face_attr_font_lock_regexp_grouping_construct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity("(face-all-attributes 'font-lock-regexp-grouping-construct (selected-frame))");
+    assert_oracle_parity(
+        "(face-all-attributes 'font-lock-regexp-grouping-construct (selected-frame))",
+    );
 }
 
 #[test]
