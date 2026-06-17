@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+# Packages are installed through neomacs's own `package-install` over the
+# network (not fetched from Rust), so no HTTP/tar deps are needed — only an
+# isolated temp `$HOME` per test.
 tempfile = "3"
-ureq = "3"
-tar = "0.4"
