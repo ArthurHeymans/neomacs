@@ -1962,6 +1962,24 @@ fn layout_trace_with_buffer_setup(
     use_typed_buffer_source: bool,
     setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
 ) -> BackendLayoutTrace {
+    layout_trace_with_buffer_and_window_setup(
+        text,
+        frame_width,
+        frame_height,
+        use_typed_buffer_source,
+        setup,
+        |_| {},
+    )
+}
+
+fn layout_trace_with_buffer_and_window_setup(
+    text: &str,
+    frame_width: u32,
+    frame_height: u32,
+    use_typed_buffer_source: bool,
+    setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
+    setup_window: impl FnOnce(&mut neovm_core::window::Window),
+) -> BackendLayoutTrace {
     let mut eval = Context::new();
     convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
     let buf_id = eval
@@ -1994,6 +2012,7 @@ fn layout_trace_with_buffer_setup(
         if let neovm_core::window::Window::Leaf { window_start, .. } = window {
             *window_start = LispCharPos1::ONE;
         }
+        setup_window(window);
     }
 
     let mut engine = LayoutEngine::new();
@@ -2181,6 +2200,32 @@ fn layout_frame_rust_typed_buffer_source_matches_raw_for_selective_display() {
     };
     let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
     let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_hscroll() {
+    // Window hscroll>0 on a truncated long line: the walk skips leading columns
+    // BEFORE consuming the source (render_hscroll_skip), so sourcing is bypassed
+    // for the skipped span — source-independent.
+    let text = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+    let buf_setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("truncate-lines", Value::T);
+    };
+    let win_setup = |window: &mut neovm_core::window::Window| {
+        if let neovm_core::window::Window::Leaf { hscroll, .. } = window {
+            *hscroll = 10;
+        }
+    };
+    let raw_trace =
+        layout_trace_with_buffer_and_window_setup(text, 200, 120, false, buf_setup, win_setup);
+    let typed_trace =
+        layout_trace_with_buffer_and_window_setup(text, 200, 120, true, buf_setup, win_setup);
 
     assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
     assert_eq!(raw_trace.hit, typed_trace.hit);
