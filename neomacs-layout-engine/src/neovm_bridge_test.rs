@@ -1424,7 +1424,7 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
     let access = RustTextPropAccess::new(buf);
 
-    let (bob_before, bob_after) = access.overlay_strings_at(0);
+    let (bob_before, bob_after) = access.overlay_strings_split_at(0);
     assert_eq!(bob_before.len(), 1);
     assert_eq!(
         std::str::from_utf8(bob_before[0].bytes().unwrap()).unwrap(),
@@ -1432,7 +1432,8 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
     );
     assert!(bob_after.is_empty());
 
-    let (eob_before, eob_after) = access.overlay_strings_at(buf.point_max_char_pos().get() as i64);
+    let (eob_before, eob_after) =
+        access.overlay_strings_split_at(buf.point_max_char_pos().get() as i64);
     assert_eq!(eob_before.len(), 1);
     assert_eq!(
         std::str::from_utf8(eob_before[0].bytes().unwrap()).unwrap(),
@@ -1488,7 +1489,7 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
 
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
     let access = RustTextPropAccess::new_for_window(buf, 1);
-    let (before, _) = access.overlay_strings_at(buf.point_max_char_pos().get() as i64);
+    let (before, _) = access.overlay_strings_split_at(buf.point_max_char_pos().get() as i64);
     let rendered: Vec<String> = before
         .into_iter()
         .map(|string| {
@@ -1510,6 +1511,73 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
         !rendered.iter().any(|text| text == "OTHER"),
         "expected overlay for a different window to be filtered, got {rendered:?}"
     );
+}
+
+#[test]
+fn overlay_strings_at_orders_like_gnu_compare_overlay_entries() {
+    // GNU compare_overlay_entries (src/xdisp.c): after-strings from different
+    // overlays come in front of before-strings; within after-strings priority
+    // descends; within before-strings priority ascends. Each overlay carries a
+    // single string here so the order is a deterministic, cycle-free total order.
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*overlay-order*");
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        buf.insert("x");
+        let eob = buf.point_max_emacs_byte_pos().get();
+        let specs: [(i64, Option<&str>, Option<&str>); 4] = [
+            (1, Some("b1"), None),
+            (5, Some("b5"), None),
+            (1, None, Some("a1")),
+            (5, None, Some("a5")),
+        ];
+        for (prio, before, after) in specs {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                serial: 0,
+                plist: Value::NIL,
+                buffer: Some(buf_id),
+                start: eob,
+                end: eob,
+                front_advance: false,
+                rear_advance: false,
+            });
+            buf.overlays_mut().insert_overlay(overlay);
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("priority"), Value::fixnum(prio))
+                .unwrap();
+            if let Some(before) = before {
+                buf.overlays_mut()
+                    .overlay_put(
+                        overlay,
+                        Value::symbol("before-string"),
+                        Value::string(before),
+                    )
+                    .unwrap();
+            }
+            if let Some(after) = after {
+                buf.overlays_mut()
+                    .overlay_put(overlay, Value::symbol("after-string"), Value::string(after))
+                    .unwrap();
+            }
+        }
+    }
+
+    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
+    let access = RustTextPropAccess::new(buf);
+    let order: Vec<String> = access
+        .overlay_strings_at(buf.point_max_char_pos().get() as i64)
+        .iter()
+        .map(|entry| {
+            std::str::from_utf8(entry.bytes().unwrap())
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+
+    // After-strings (descending priority) in front of before-strings (ascending).
+    assert_eq!(order, vec!["a5", "a1", "b1", "b5"]);
 }
 
 #[test]

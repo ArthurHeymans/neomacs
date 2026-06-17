@@ -3,6 +3,8 @@
 //! Provides functions to build `WindowParams` and `FrameParams` from
 //! the Rust Context's state, replacing C FFI data sources.
 
+use std::cmp::Ordering;
+
 use neovm_core::buffer::{
     Buffer, BufferTextSnapshot, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
@@ -1568,6 +1570,12 @@ pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView> {
 pub(crate) struct OverlayDisplayString {
     pub(crate) string: Value,
     pub(crate) overlay_id: Value,
+    /// True for an after-string, false for a before-string. Drives GNU's
+    /// `compare_overlay_entries` interleaving order.
+    pub(crate) after_string_p: bool,
+    /// The overlay's `priority` plist value, captured at collection time so the
+    /// comparator does not re-read the plist.
+    pub(crate) priority: i64,
 }
 
 impl OverlayDisplayString {
@@ -1836,13 +1844,16 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// Lisp string object.  GNU `reseat_to_string' keeps string intervals live
     /// for overlay strings, so redisplay must not flatten these to bytes before
     /// the layout iterator has handled text properties such as `display'.
-    pub fn overlay_strings_at(
-        &self,
-        charpos: i64,
-    ) -> (Vec<OverlayDisplayString>, Vec<OverlayDisplayString>) {
+    /// Collect the overlay before/after-strings active at `charpos` into ONE
+    /// list ordered by GNU's `compare_overlay_entries` (`src/xdisp.c`): after-
+    /// strings come in front of before-strings from *different* overlays, before-
+    /// strings precede after-strings of the *same* overlay, before-strings sort
+    /// by ascending priority and after-strings by descending priority. Returns a
+    /// single interleaved list (not separate before/after lists) so consumers can
+    /// render them in GNU's exact visual order.
+    pub fn overlay_strings_at(&self, charpos: i64) -> Vec<OverlayDisplayString> {
         let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
-        let mut before = Vec::new();
-        let mut after = Vec::new();
+        let mut entries = Vec::new();
 
         // GNU `load_overlay_strings' (`src/xdisp.c') scans overlays that
         // start or end at the iterator position, not only overlays covering
@@ -1864,6 +1875,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
             if !self.overlay_applies_to_window(oid) {
                 continue;
             }
+            let priority = overlay_string_priority(oid);
             if self
                 .buffer
                 .layout_overlays()
@@ -1876,9 +1888,11 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                     .overlay_get_named(oid, Value::symbol("before-string"))
                     && val.is_string()
                 {
-                    before.push(OverlayDisplayString {
+                    entries.push(OverlayDisplayString {
                         string: val,
                         overlay_id: oid,
+                        after_string_p: false,
+                        priority,
                     });
                 }
             }
@@ -1895,21 +1909,54 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                     .overlay_get_named(oid, Value::symbol("after-string"))
                     && val.is_string()
                 {
-                    after.push(OverlayDisplayString {
+                    entries.push(OverlayDisplayString {
                         string: val,
                         overlay_id: oid,
+                        after_string_p: true,
+                        priority,
                     });
                 }
             }
         }
 
-        before.sort_by(|left, right| {
-            overlay_string_priority(left.overlay_id).cmp(&overlay_string_priority(right.overlay_id))
-        });
-        after.sort_by(|left, right| {
-            overlay_string_priority(right.overlay_id).cmp(&overlay_string_priority(left.overlay_id))
-        });
+        // Stable insertion sort by GNU compare_overlay_entries. A MANUAL sort is
+        // used (not slice::sort_by) because compare_overlay_entries is NOT a
+        // total order: a zero-length overlay carrying both a before- and an
+        // after-string can create a comparison cycle, which GNU's qsort tolerates
+        // but Rust's sort_by may reject with a panic. Insertion sort applies the
+        // pairwise rules without requiring transitivity and only moves an element
+        // when it is strictly Less than its predecessor (so equal/cyclic entries
+        // keep collection order). Overlay-string counts at a position are tiny, so
+        // O(n^2) is irrelevant.
+        for i in 1..entries.len() {
+            let mut j = i;
+            while j > 0 && compare_overlay_entries(&entries[j], &entries[j - 1]) == Ordering::Less {
+                entries.swap(j, j - 1);
+                j -= 1;
+            }
+        }
+        entries
+    }
 
+    /// Test-only helper: split the interleaved `overlay_strings_at` list back
+    /// into (before-strings, after-strings), each preserving its GNU within-kind
+    /// order (before ascending priority, after descending priority).
+    #[cfg(test)]
+    pub fn overlay_strings_split_at(
+        &self,
+        charpos: i64,
+    ) -> (Vec<OverlayDisplayString>, Vec<OverlayDisplayString>) {
+        let entries = self.overlay_strings_at(charpos);
+        let before = entries
+            .iter()
+            .copied()
+            .filter(|e| !e.after_string_p)
+            .collect();
+        let after = entries
+            .iter()
+            .copied()
+            .filter(|e| e.after_string_p)
+            .collect();
         (before, after)
     }
 
@@ -1945,6 +1992,43 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         self.buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, name)
+    }
+}
+
+/// Rust port of GNU `compare_overlay_entries` (`src/xdisp.c`). Orders overlay
+/// before/after-strings into one visual sequence:
+/// - differing kind: same overlay → before-string precedes after-string;
+///   different overlays → after-string precedes before-string;
+/// - same kind, differing priority: after-strings sort by *decreasing* priority,
+///   before-strings by *increasing* priority;
+/// - else equal (a stable sort keeps collection order).
+fn compare_overlay_entries(e1: &OverlayDisplayString, e2: &OverlayDisplayString) -> Ordering {
+    if e1.after_string_p != e2.after_string_p {
+        if e1.overlay_id.bits() == e2.overlay_id.bits() {
+            // Same overlay: before-string in front of after-string.
+            if e1.after_string_p {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            }
+        } else {
+            // Different overlays: after-strings in front of before-strings.
+            if e1.after_string_p {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        }
+    } else if e1.priority != e2.priority {
+        if e1.after_string_p {
+            // After-strings: decreasing priority.
+            e2.priority.cmp(&e1.priority)
+        } else {
+            // Before-strings: increasing priority.
+            e1.priority.cmp(&e2.priority)
+        }
+    } else {
+        Ordering::Equal
     }
 }
 

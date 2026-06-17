@@ -638,6 +638,8 @@ fn overlay_string_render_source_exposes_typed_render_inputs() {
         crate::neovm_bridge::OverlayDisplayString {
             string: text,
             overlay_id,
+            after_string_p: false,
+            priority: 0,
         },
         CharPos0::new(9),
         OverlayStringKind::After,
@@ -665,10 +667,14 @@ fn overlay_string_render_batch_source_builds_typed_sources() {
     let first = crate::neovm_bridge::OverlayDisplayString {
         string: Value::string("before"),
         overlay_id: Value::symbol("overlay-a"),
+        after_string_p: false,
+        priority: 0,
     };
     let second = crate::neovm_bridge::OverlayDisplayString {
         string: Value::string("after"),
         overlay_id: Value::symbol("overlay-b"),
+        after_string_p: true,
+        priority: 0,
     };
     let overlay_strings = [first, second];
     let batch = OverlayStringRenderBatchSource::new(

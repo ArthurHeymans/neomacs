@@ -2363,15 +2363,19 @@ impl<'a> BufferOverlayStringRenderContext<'a> {
             return;
         }
         let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
-        let (before_strings, after_strings) = text_props.overlay_strings_at(anchor_charpos);
-        let overlay_strings = match kind {
-            OverlayStringKind::Before => &before_strings,
-            OverlayStringKind::After => &after_strings,
-        };
+        // overlay_strings_at now returns one GNU-ordered interleaved list; pick
+        // the entries of this kind (within-kind order is preserved, so this is
+        // behavior-neutral vs the old per-kind sort).
+        let want_after = matches!(kind, OverlayStringKind::After);
+        let overlay_strings: Vec<_> = text_props
+            .overlay_strings_at(anchor_charpos)
+            .into_iter()
+            .filter(|entry| entry.after_string_p == want_after)
+            .collect();
         render_overlay_string_batch(
             buffer,
             OverlayStringRenderBatchSource::new(
-                overlay_strings,
+                &overlay_strings,
                 CharPos0::new(anchor_charpos as usize),
                 kind,
             ),
