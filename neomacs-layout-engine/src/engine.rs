@@ -208,7 +208,7 @@ impl LayoutEngine {
             frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
-            use_typed_buffer_source: false,
+            use_typed_buffer_source: true,
         }
     }
 
@@ -233,7 +233,7 @@ impl LayoutEngine {
             frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
-            use_typed_buffer_source: false,
+            use_typed_buffer_source: true,
         }
     }
 

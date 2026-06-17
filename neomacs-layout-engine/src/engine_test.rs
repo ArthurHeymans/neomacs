@@ -2234,6 +2234,23 @@ fn layout_frame_rust_typed_buffer_source_matches_raw_for_hscroll() {
     assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
 }
 
+#[test]
+fn layout_frame_rust_typed_buffer_source_matches_raw_for_complex_text() {
+    // Arabic (contextual joining), Hebrew (RTL bidi), and an emoji ZWJ family
+    // (composition): the typed cursor folds these into TextRuns that the append
+    // layer re-shapes/clusters/reorders downstream identically to the raw
+    // decoder — the source carries only the chars + faces, not shaping decisions.
+    let text = "العربية\nאבגד\n👨\u{200d}👩\u{200d}👧\nmixed العربية text\n";
+    let raw_trace = layout_trace_for_plain_text(text, false);
+    let typed_trace = layout_trace_for_plain_text(text, true);
+
+    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
+    assert_eq!(raw_trace.hit, typed_trace.hit);
+    assert_eq!(raw_trace.window_start, typed_trace.window_start);
+    assert_eq!(raw_trace.window_point, typed_trace.window_point);
+    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+}
+
 fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
     let text = "abé\tz\n日本x\nlast Ω line\n";
     backend_layout_trace_with_buffer_setup(
