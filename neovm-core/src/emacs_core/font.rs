@@ -4797,7 +4797,11 @@ pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) 
             .map(runtime_color_to_lisp_value)
             .unwrap_or_else(|| Value::symbol("unspecified")),
         LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => Value::symbol("unspecified"),
-        LFaceAttr::Inherit => face.inherit.unwrap_or(Value::NIL),
+        // GNU initializes every lface slot — including LFACE_INHERIT_INDEX — to
+        // `Qunspecified`, so an unset `:inherit` reports as `unspecified`, not
+        // nil (matching every sibling arm here). The `default` face's explicit
+        // nil inherit comes from `default_face_attribute_value`, a separate path.
+        LFaceAttr::Inherit => face.inherit.unwrap_or_else(|| Value::symbol("unspecified")),
         LFaceAttr::Extend => face
             .extend
             .map(Value::bool)
