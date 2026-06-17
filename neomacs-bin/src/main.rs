@@ -3179,6 +3179,25 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
     eval.set_variable("terminal-frame", terminal_frame);
     eval.set_variable("frame-initial-frame", frame_initial_frame);
     eval.set_variable("default-minibuffer-frame", default_minibuffer_frame);
+    // Realize the initial frame's faces from their `defface` specs, the way GNU
+    // does at startup (term.c -> `tty-set-up-initial-frame-faces` ->
+    // `face-set-after-frame-default`, and frame.el for window-system frames).
+    // This must run here — after `bootstrap_buffers` has finalized the frame and
+    // its display-type/background-mode parameters — because a realization done
+    // earlier (during `apply_runtime_startup_state`) does not survive the frame
+    // re-bootstrap. Without it the frame-local face vectors are never populated
+    // from the specs, so stock faces fall through to their bootstrap `Color`
+    // defaults: `(face-attribute 'elisp-condition :foreground (selected-frame))`
+    // returned the realized hex "#ff0000" instead of GNU's literal spec value
+    // "red", `tab-bar` background "grey50" instead of "grey", and `:foreground
+    // reset` faces reported `unspecified`. `face-set-after-frame-default` stores
+    // each spec value verbatim (color parsing happens only at display time),
+    // matching GNU's lface storage.
+    if let Err(error) = eval.eval_str(
+        "(when (fboundp 'face-set-after-frame-default) (face-set-after-frame-default (selected-frame)))",
+    ) {
+        tracing::warn!(?error, "failed to realize initial-frame faces from defface specs");
+    }
     // Skip the splash screen — its fill-region is extremely slow through
     // with_mirrored_evaluator.  Users who want it can set this to nil in
     // their init file.
