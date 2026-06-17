@@ -46,8 +46,6 @@ pub(crate) enum DisplayOrigin {
     TabBar,
     Minibuffer,
     EchoArea,
-    #[allow(dead_code)]
-    Posframe,
 }
 
 impl DisplayOrigin {
@@ -62,7 +60,6 @@ impl DisplayOrigin {
             Self::TabLine => Some(GlyphRowRole::TabLine),
             Self::TabBar => Some(GlyphRowRole::TabBar),
             Self::Minibuffer | Self::EchoArea => Some(GlyphRowRole::Minibuffer),
-            Self::Posframe => Some(GlyphRowRole::Text),
             Self::BufferText { .. }
             | Self::OverlayString { .. }
             | Self::DisplayPropertyString { .. }
@@ -102,7 +99,6 @@ mod tests {
         let _ = DisplayOrigin::TabBar;
         let _ = DisplayOrigin::Minibuffer;
         let _ = DisplayOrigin::EchoArea;
-        let _ = DisplayOrigin::Posframe;
     }
 
     #[test]
@@ -130,10 +126,6 @@ mod tests {
         assert_eq!(
             DisplayOrigin::EchoArea.glyph_row_role(),
             Some(GlyphRowRole::Minibuffer)
-        );
-        assert_eq!(
-            DisplayOrigin::Posframe.glyph_row_role(),
-            Some(GlyphRowRole::Text)
         );
         assert_eq!(
             DisplayOrigin::BufferText {

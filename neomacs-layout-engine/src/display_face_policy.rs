@@ -19,8 +19,7 @@ impl From<DisplayOrigin> for BaseFacePolicy {
             DisplayOrigin::LinePrefix { .. }
             | DisplayOrigin::WrapPrefix { .. }
             | DisplayOrigin::Minibuffer
-            | DisplayOrigin::EchoArea
-            | DisplayOrigin::Posframe => Self::DefaultFace,
+            | DisplayOrigin::EchoArea => Self::DefaultFace,
             DisplayOrigin::ModeLine { selected } => Self::FixedBasicFace(if selected {
                 BasicFaceId::ModeLineActive
             } else {
@@ -94,17 +93,13 @@ mod tests {
     }
 
     #[test]
-    fn base_face_policy_derives_from_minibuffer_echo_area_and_posframe_origins() {
+    fn base_face_policy_derives_from_minibuffer_and_echo_area_origins() {
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::Minibuffer),
             BaseFacePolicy::DefaultFace
         );
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::EchoArea),
-            BaseFacePolicy::DefaultFace
-        );
-        assert_eq!(
-            BaseFacePolicy::from(DisplayOrigin::Posframe),
             BaseFacePolicy::DefaultFace
         );
     }
