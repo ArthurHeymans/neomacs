@@ -2,7 +2,9 @@
 
 Date: 2026-06-13 (refreshed 2026-06-17)
 Branch: `main`
-HEAD at refresh: `77c140125 refactor: typed buffer source adapter and parity tests`
+HEAD at refresh: `e58ae8082` (started from `77c140125`; this session landed 3
+path-deletion slices + an exhaustive remaining-gap map — see "Landed" and
+"Prioritized Execution Plan" below)
 
 > Refresh note (2026-06-17): the original 2026-06-13 handoff stopped at
 > `798f6b312 refactor: group buffer advance context`. **476 commits** landed
@@ -109,6 +111,43 @@ Out of scope but on the same branch in this range (do not let these confuse a
 `git log` of the display work): Cranelift JIT (Milestone D + Tier-2 phases),
 perf work (mimalloc global allocator, FxHash maps), `fix(#131)` multibyte buffer
 decode, and `fix(#132)` subprocess isolation / wait-strategy refactor.
+
+## Landed (2026-06-17 session): exhaustive map + first 3 path-deletions
+
+A 12-agent mapping workflow enumerated **45 gaps across 10 subsystems** and
+deduped them into a prioritized plan of 10 path-deletion slices, with an
+adversarial completeness critic (see **Prioritized Execution Plan** below). The
+map corrected two wrong assumptions *before* any code was written: complex runs
+are *already* single-shaped (the double-shape was the **Natural** path), and the
+`FaceColumns` advance is the TTY/no-font-metrics fallback, not removable
+duplication.
+
+Three slices then landed (HEAD `e58ae8082`; net **−1194 lines**; full
+layout-engine suite green at 1217), each adversarially reviewed (verdict: SHIP,
+zero blockers):
+
+- **`4c0df03fd` — delete dead `bidi_layout.rs`** (the second bidi-reorder, over
+  the retired `FrameGlyphBuffer`/`FrameGlyph` representation). Zero production
+  callers; the only live row reorder is `glyph_row_writer::reorder_row_bidi` over
+  `GlyphRow`. −1299 lines; one production bidi reorder remains. The deleted
+  per-glyph `row_max_ascent` baseline logic was dead code on a defunct
+  representation — the live `GlyphRow` uses GNU's single-per-row `ascent` model,
+  so no capability was lost. (`bidi_layout.rs` no longer exists; ignore older
+  plan/audit docs that still cite it by path.)
+- **`685a288ff` — delete vestigial `DisplayOrigin::Posframe`** (`#[allow(dead_code)]`,
+  never constructed; production posframes go through display-runtime's
+  `ChildFrameManager`). NOTE: the mapped slice also proposed deleting the mock
+  child-frame loop in `engine.rs::layout_mock_frame`, but that was **kept** —
+  `mock-display.rs:690` exercises it, so it is live for the dev tool, not dead.
+- **`4e95cf933` + `e58ae8082` — shaped-run cache in `FontMetricsService`**. Kills
+  the Natural-path measure/render double-shape: every non-ASCII simple char and
+  natural run was shaped twice (`measure_natural_width_to_text_row` +
+  `NaturalDisplayRowAppendRenderPolicy`, both via `display_row.rs::text_run_advances_px
+  → shape_run`, with no shaped-run cache). Now cached by integer-centipx face
+  identity + run text, cleared by `clear_caches` (same font-change posture as the
+  existing advance caches), bounded at 8192. Tests assert dedup, per-face
+  distinctness across all four key fields, `clear_caches` invalidation, and the
+  overflow branch.
 
 ## Why This Refactor Exists
 
@@ -431,30 +470,84 @@ cargo nextest run -p neomacs-display-runtime
 
 Expect some unrelated warnings from `neovm-core` during `cargo check`; do not mix warning cleanup into display refactor commits unless directly required.
 
-## Good First Task For The Next Developer
+## Prioritized Execution Plan (mapped 2026-06-17)
 
-The last session's momentum is **Slice 4 (productionize `BufferTextSourceCursor`)**,
-not the original "Slice 2" recommendation. The cursor and its parity tests are
-already in place, so the highest-leverage next step is to push that one more
-notch:
+This supersedes the conceptual "Suggested Next Slices" above as the authoritative
+ordered worklist. It is the dedup+prioritized output of the 10-subsystem gap map,
+ordered by (deletion value) × (inverse risk) × (dependency readiness): free
+dead/mock deletions first, then the local correctness dedup, then the lifecycle
+unification, then the typed-source keystone, then the convergences that depend on
+it. **Lead with the free wins; do NOT relocate `display_row_append.rs` or merge
+overlay/echo before the lifecycle is unified — relocating first only moves
+duplication.**
 
-1. Pick the simplest segment (plain ASCII buffer text) and make the typed path
-   feed the renderer **without** lowering back to `BufferTextDecodedSourceEvent`
-   (see `display_buffer_text_walk.rs::consume_typed_source_event`, ~line 2792).
-2. Keep `use_typed_buffer_source` as the seam; assert byte-for-byte parity in
-   `display_source_test.rs` / `engine_test.rs` between the two paths.
-3. Then default the toggle on for that segment type and delete its raw-decoder
-   branch.
+Status legend: ✅ done · ⬜ remaining.
 
-Success criteria:
+1. ✅ **Delete dead `bidi_layout.rs`** (`4c0df03fd`). Risk low. Independent.
+2. ✅ **Delete `DisplayOrigin::Posframe`** (`685a288ff`). Risk low. Independent.
+   (Mock child-frame loop deliberately kept — see Landed note.)
+3. ✅ **Shaped-run cache** (`4e95cf933`, `e58ae8082`). Risk medium. Independent.
+4. ⬜ **Add characterization/parity tests** that guard slices 5–6. Risk low.
+   Deps: 1. The two intended tests: (a) child-frame face/width independence;
+   (b) **cross-row-kind RTL bidi parity** — identical RTL text as a buffer `Text`
+   row vs a `ModeLine`/`Minibuffer` chrome row. CAVEAT from the critique: (b) is a
+   **forward-spec, not a characterization** — buffer rows reorder at
+   `EndIncremental` (cursor remapped) while chrome reorders earlier with
+   `phys_cursor=None`, so it may *not* pass on HEAD. Scope (b) to glyph order /
+   `reversed_p` (identical today); the cursor-column axis is what slice 5 fixes.
+   The mixed-ascent baseline test the critique wanted is **not needed** — the
+   review confirmed the live `GlyphRow` single-per-row ascent already covers it.
+5. ⬜ **Collapse the `EndPrebuilt`/`EndIncremental` bidi+install fork into ONE
+   row-end boundary** so `reorder_current_row_bidi` is the single bidi finalizer
+   for all row kinds. Risk **high**. Deps: 1, 4. *The real "one row lifecycle"
+   prize* and the structural fix for the finalization/bidi-timing bug class
+   (tab-bar/tab-line overlap + height growth, posframe width drift). Delete
+   `MatrixRowLifecycleRequest::EndPrebuilt` + `install_prebuilt_current` + the
+   standalone `normalize_external_row` reorder; thread `phys_cursor` through the
+   chrome path. Critique prerequisites: enumerate every pre-install reader of
+   chrome row geometry (tab-bar resize width, echo wrap width) before moving
+   finalization later; resolve the tab-bar measure-then-relayout (`engine.rs:457`)
+   vs append-into-live-matrix conflict.
+   **PREREQUISITE for slice 6 (new, from the critique — schedule BEFORE 6):**
+   **Express walk-state concerns in the typed source / `DisplayItemKind`.** The
+   typed `BufferTextSourceCursor` cannot yet model hscroll-skip, invisible-text +
+   selective-display ellipsis, line-number margins, tab classification,
+   nobreak/NBSP policy, or word-wrap break candidates — none of which slice 5
+   addresses. Each needs a typed-vs-legacy parity test (matrix_rows AND faces AND
+   cursor col) behind `use_typed_buffer_source=false`. Without this, slice 6's
+   `None`-fallthrough resync never reaches zero and the legacy path is undeletable.
+6. ⬜ **Make `BufferTextSourceCursor` the production path; delete the legacy
+   decoder + lowering shim.** Risk **high**, keystone. Deps: 5, 3, and the
+   prerequisite above. Extend the existing typed-vs-raw parity harness
+   (`engine_test.rs:1954/2000`) to compare **faces** (it only compares positions
+   today — that gap is the overlay-face-regression guard) and to cover tabs, NBSP,
+   glyphless+cluster-tails, multibyte, selective display, hscroll, invisible text,
+   word-wrap, and display-property replacements. Only flip the default and delete
+   `BufferTextDecodedSourceEvent` / `BufferTextSourceEventCursor` / the shim after
+   all parity cases pass.
+7. ⬜ **Overlay before/after-strings as `DisplayItem`s on the source stack;
+   delete the side-channel render loop + third lisp-string lifecycle.** Risk high.
+   Deps: 5, 6. Also replace the dual before/after sort with one interleaved sort
+   mirroring GNU `compare_overlay_entries`.
+8. ⬜ **Echo / inactive-minibuffer through the buffer walk over the echo-area
+   buffer; delete the parallel echo loop, marker duplication, and resize
+   estimator.** Risk high. Deps: 5, 6. Mirrors GNU `display_echo_area_1`.
+   Critique prerequisite: make the first layout pass measure **unclamped** height
+   (GNU `move_it_to` semantics) so deleting the pre-layout newline estimator
+   doesn't deadlock the `visible_max_rows` clamp against the height it determines.
+9. ⬜ **Relocate non-append clusters out of `display_row_append.rs` (~10k lines).**
+   Risk medium. Deps: 5, 6 (so relocated clusters call the unified lifecycle, not
+   just move duplication). The right-edge-marker / right-border move is
+   independent + low-risk and **can be pulled forward anytime**.
+10. ⬜ **Collapse the two-layer append-operation indirection + unify
+    decoration-face resolution** (merge-over-`DEFAULT_FACE_ID`, GNU-style;
+    retire `FaceResolver::next_dynamic_id`). Risk medium. Deps: 3, 6. Lowest
+    payoff; do last. The `#[cfg(test)]`-only `for_buffer_text_range` constructor
+    is deletable independently anytime.
 
-- one segment type renders identically with the toggle on and off;
-- main-buffer tests covering ASCII, wide characters, grapheme clusters, and display replacements stay green;
-- full `neomacs-layout-engine` nextest (currently 1263) remains green.
-
-Slice 2 (retire old width paths) is still open and a fine alternative if you want
-a more contained, lower-risk change — the walker still computes a resolved
-advance for wrap/cursor decisions, which is the remaining width duplication. Slice 1
-is complete: external tests and non-renderer callers construct
-`DisplayRowSourceRenderRequest` or a higher-level request, and lowered row
-construction is local to renderer lowering.
+**Risk note for slices 5–10:** these touch live redisplay in exactly the areas
+validated visually (posframe, tab-bar/tab-line, bidi, echo/minibuffer). Do them
+incrementally with per-segment parity tests and GUI validation
+(`NEOMACS_DUMP_FRAME_GLYPHS=1`, the screenshot+`xdotool` loop) — not a one-shot
+rush. The keystone (6) is gated on the unscheduled prerequisite above; sequence
+it explicitly or the legacy path can never be deleted.
