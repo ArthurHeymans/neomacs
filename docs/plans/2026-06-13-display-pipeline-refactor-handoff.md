@@ -536,10 +536,25 @@ Status legend: ✅ done · ⬜ remaining.
    shim's fallthrough/flattening MASKS these divergences, so they cannot be
    validated by a standalone parity test until the native consume is built. They
    are folded into slice 6 below.
-6. ⬜ **Make `BufferTextSourceCursor` the production path; delete the legacy
-   decoder + lowering shim.** Risk **high**, keystone. Deps: 5, 3, prereq (done).
-   This is effectively ONE atomic change (the shim masks the remaining divergences,
-   so it can't be sub-divided into independently-validated green commits). Scout's
+6. ✅ **DONE — `BufferTextSourceCursor` is the production path; legacy decoder +
+   flag deleted** (`149d22717` flip, `a77d18446` no-fallback, `c09adac5f` delete).
+   The keystone. A design scout (run `wti0xt1u4`) + reading `render_next_step`
+   resolved it far more simply than feared: the display-property / invisible /
+   hscroll checkpoints run BEFORE `consume_source_event` and short-circuit on every
+   replacement / non-buffer-span span, so consume only ever sees plain text /
+   control / glyphless / newline — the per-char native consume the shim already
+   implemented is sufficient and the `None`-fallthrough is unreachable in
+   production. Validated empirically: flipped the default, removed the raw
+   fallback, and all 1224 tests stayed byte-identical (parity tests assert whole
+   `matrix_rows` incl. faces + cursor across plain/mixed/face/display/truncate/wrap/
+   line-numbers/word-wrap/invisible/nobreak/selective-display/hscroll + a new
+   Arabic/Hebrew/emoji-ZWJ complex-text case). Then deleted `BufferTextSourceEventCursor`
+   + the shim + the `use_typed_buffer_source` flag everywhere (net −125 lines); the
+   structurally-dead arms degrade gracefully (log + decode underlying char) rather
+   than panic during redisplay. Workspace builds; 1223 layout-engine tests green.
+   _Historical detail below (kept for reference):_
+   This was effectively ONE atomic change (the shim masked the remaining
+   divergences). Scout's
    exact plan (`keystone-prereq-design-scout`, run `wti0xt1u4`):
    - **Native consume:** rewrite `consume_source_event` (walk.rs:2778-2790) to be
      UNCONDITIONALLY native — pull a `DisplayItem` from a per-step
