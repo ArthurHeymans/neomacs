@@ -542,7 +542,6 @@ pub(crate) struct MatrixPrebuiltRowRequest<'row> {
 pub(crate) enum MatrixRowLifecycleRequest<'row> {
     Begin(MatrixRowBeginRequest),
     EndIncremental,
-    EndPrebuilt,
     CurrentMetrics(MatrixRowMetricsRequest),
     RowMetrics(MatrixIndexedRowMetricsRequest),
     CursorAt(MatrixRowCursorRequest),
@@ -565,9 +564,6 @@ impl MatrixRowLifecycleRequest<'_> {
             }
             Self::EndIncremental => {
                 builder.reorder_current_row_bidi();
-                builder.in_row = false;
-            }
-            Self::EndPrebuilt => {
                 builder.in_row = false;
             }
             Self::CurrentMetrics(metrics) => {
@@ -859,18 +855,6 @@ impl GlyphMatrixBuilder {
         self.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
     }
 
-    /// Close a row whose glyph ordering was already finalized before
-    /// installation.
-    ///
-    /// `end_row` owns bidi normalization for rows built incrementally through
-    /// the matrix builder. Rows produced by `DisplayRowBuilder` have already
-    /// gone through the same normalization, so closing them must only update
-    /// builder state.
-    #[cfg(test)]
-    pub(crate) fn end_prebuilt_row(&mut self) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::EndPrebuilt);
-    }
-
     /// Record authoritative geometry for the currently open row.
     ///
     /// `pixel_y` is frame-absolute; the builder stores rows
@@ -901,7 +885,9 @@ impl GlyphMatrixBuilder {
         self.install_row_lifecycle(MatrixRowLifecycleRequest::PrebuiltCurrent(
             MatrixPrebuiltRowRequest { source },
         ));
-        self.end_prebuilt_row();
+        // Reorder at install (EndIncremental), matching the production
+        // PrebuiltDisplayRowInstall path — the source is copied un-reordered.
+        self.end_row();
     }
 
     pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {

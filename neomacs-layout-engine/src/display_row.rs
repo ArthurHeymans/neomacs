@@ -2514,7 +2514,10 @@ impl<'row> PrebuiltDisplayRowInstall<'row> {
         builder.install_row_lifecycle(MatrixRowLifecycleRequest::PrebuiltCurrent(
             MatrixPrebuiltRowRequest { source: self.row },
         ));
-        builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndPrebuilt);
+        // Single bidi finalizer for all row kinds: chrome/prebuilt rows now
+        // reorder at install (EndIncremental) like buffer rows, instead of
+        // during render. The source glyphs are copied un-reordered above.
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
     }
 }
 
@@ -2565,6 +2568,11 @@ pub(crate) fn install_measured_frame_chrome_row(
     .install(builder);
     let mut row = measured.rendered.row.clone();
     apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
+    // Frame chrome (tab-bar) rows are stored in a side vector and never pass
+    // through the matrix-row lifecycle, so they reorder here. Render no longer
+    // reorders (the single matrix-row finalizer is EndIncremental), so the
+    // cloned row is un-reordered and must be finalized once on the clone.
+    let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
     row.pixel_y = measured.bounds.y;
     row.height_px = measured.row_height();
     row.ascent_px = measured.row_ascent();

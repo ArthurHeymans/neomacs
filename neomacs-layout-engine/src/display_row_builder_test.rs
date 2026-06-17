@@ -1058,14 +1058,17 @@ fn display_row_builder_groups_arabic_complex_run() {
 }
 
 #[test]
-fn display_row_builder_reorders_rtl_rows() {
+fn display_row_builder_produces_logical_order_rows() {
+    // Slice 5: DisplayRowBuilder::finish normalizes displays_text but no longer
+    // reorders — bidi finalization moved to the single matrix-row install
+    // (EndIncremental). A freshly built RTL row is therefore in logical order.
     let mut builder = DisplayRowBuilder::new(layout());
     builder.push_item(text_item("אב"));
 
     let row = builder.finish();
 
-    assert!(row.reversed_p);
-    assert_eq!(row_text(&row), "בא");
+    assert!(!row.reversed_p);
+    assert_eq!(row_text(&row), "אב");
 }
 
 #[test]

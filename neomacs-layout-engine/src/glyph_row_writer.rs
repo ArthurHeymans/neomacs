@@ -406,9 +406,14 @@ pub(crate) fn push_stretch_to_area(
 }
 
 /// Normalize a standalone row built outside the window-matrix walker.
+///
+/// Bidi reorder is intentionally NOT performed here. Reordering happens once,
+/// at row install (`EndIncremental` -> `reorder_current_row_bidi`), uniformly
+/// for buffer-text and chrome rows, so every row is reordered exactly once by a
+/// single finalizer. This only normalizes `displays_text` for rows built
+/// outside the walker.
 pub(crate) fn normalize_external_row(row: &mut GlyphRow) {
     row.displays_text = !row.glyphs[GlyphArea::Text.index()].is_empty();
-    let _ = reorder_row_bidi(row, None);
 }
 
 pub(crate) fn reorder_row_bidi(row: &mut GlyphRow, phys_cursor_col: Option<u16>) -> Option<u16> {

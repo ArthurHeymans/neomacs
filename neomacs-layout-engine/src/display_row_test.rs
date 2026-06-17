@@ -2652,16 +2652,18 @@ fn display_row_lisp_chrome_roles_share_wide_and_cluster_builder() {
 }
 
 #[test]
-fn display_row_baseline_tab_line_rtl_text_is_reordered_after_row_build() {
+fn display_row_tab_line_rtl_text_is_logical_order_at_render() {
+    // Slice 5: render produces LOGICAL-order rows; the single bidi finalizer is
+    // the matrix-row install (EndIncremental). A render-only chrome row keeps
+    // logical order and is not yet flagged reversed. The end-to-end reorder is
+    // verified by install_rendered_display_row_finalizes_bidi_at_install and
+    // (cross-row-kind) matrix_builder rtl_text_and_chrome_rows_reorder_identically.
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
 
     assert_eq!(row.role, GlyphRowRole::TabLine);
-    assert!(
-        row.reversed_p,
-        "pure RTL chrome row should be marked reversed"
-    );
-    assert_eq!(row_text_expanding_stretches(&row), "בא");
+    assert!(!row.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&row), "אב");
 }
 
 #[test]
@@ -2708,9 +2710,12 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     assert!(!fragment.reversed_p);
     assert_eq!(row_text_expanding_stretches(&fragment), "אב");
 
-    let finalized = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
-    assert!(finalized.reversed_p);
-    assert_eq!(row_text_expanding_stretches(&finalized), "בא");
+    // Slice 5: the non-fragment step path also defers bidi finalization to row
+    // install now, so it likewise yields logical order here — the matrix-row
+    // install (EndIncremental) is the sole finalizer for both render entries.
+    let step_path = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
+    assert!(!step_path.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&step_path), "אב");
 }
 
 #[test]
@@ -2781,7 +2786,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
 }
 
 #[test]
-fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
+fn install_rendered_display_row_finalizes_bidi_at_install() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
     let table = FaceTable::new();
@@ -2806,14 +2811,17 @@ fn install_rendered_display_row_preserves_prebuilt_bidi_metadata() {
         .render(&mut renderer, &resolver, &mut face_ids)
         .expect("display source row");
 
-    assert!(rendered.row.reversed_p);
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "בא");
+    // Slice 5: render yields LOGICAL order; the matrix-row install is the sole
+    // bidi finalizer. So the rendered row is un-reordered here...
+    assert!(!rendered.row.reversed_p);
+    assert_eq!(row_text_expanding_stretches(&rendered.row), "אב");
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     install_rendered_display_row(&mut builder, &rendered, 0);
     builder.end_window();
 
+    // ...and the install (EndIncremental) finalizes it into visual order.
     let state = builder.finish(10, 1, 8.0, 16.0);
     let row = &state.window_matrices[0].matrix.rows[0];
     assert!(row.reversed_p);
