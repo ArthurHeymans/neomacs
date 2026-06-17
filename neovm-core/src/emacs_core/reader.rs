@@ -2430,9 +2430,20 @@ pub(crate) fn finish_yes_or_no_p_with_minibuffer(
     } else {
         crate::heap_types::LispString::from_unibyte(Vec::new())
     };
-    // Append the " (yes or no) " suffix faithfully so an eight-bit prompt survives.
+    // Build the prompt exactly like GNU `Fyes_or_no_p` (fns.c): append
+    // `yes-or-no-prompt` ("(yes or no) "), preceded by a single space only when
+    // the prompt does not already end in whitespace.
+    let ends_in_blank = prompt_ls
+        .as_bytes()
+        .last()
+        .is_some_and(|&b| b == b' ' || b == b'\t');
+    let suffix: &[u8] = if ends_in_blank {
+        b"(yes or no) "
+    } else {
+        b" (yes or no) "
+    };
     let full_prompt = prompt_ls.concat(&crate::heap_types::LispString::from_unibyte(
-        b" (yes or no) ".to_vec(),
+        suffix.to_vec(),
     ));
     loop {
         let result = read_from_minibuffer(&[Value::heap_string(full_prompt.clone())])?;
@@ -2486,7 +2497,20 @@ pub(crate) fn builtin_yes_or_no_p_in_runtime(
     if runtime.has_input_receiver() {
         Ok(None)
     } else {
-        Err(stdin_end_of_file_error())
+        // Batch/noninteractive: GNU's `read_minibuf_noninteractive` (minibuf.c)
+        // writes the prompt to stdout and reads the answer from stdin. Mirror
+        // that — including the yes/no re-prompt loop — instead of failing before
+        // the prompt is ever shown, so batch `yes-or-no-p` emits the prompt
+        // exactly like GNU (and still signals end-of-file on empty stdin).
+        finish_yes_or_no_p_with_minibuffer(args, |minibuffer_args| {
+            let prompt = minibuffer_args[0]
+                .as_lisp_string()
+                .expect("yes-or-no-p minibuffer prompt is a string");
+            read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
+                prompt.as_bytes(),
+            ))
+        })
+        .map(Some)
     }
 }
 
