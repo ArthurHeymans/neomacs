@@ -248,6 +248,12 @@ impl MetricsCacheKey {
     }
 }
 
+/// Upper bound on `shaped_run_cache` entries before it is cleared, mirroring
+/// GNU's bounded composition cache. Shaped runs are typically words or
+/// property spans, so a frame's working set stays well under this; clearing on
+/// overflow keeps memory bounded without per-entry LRU bookkeeping.
+const SHAPED_RUN_CACHE_CAP: usize = 8192;
+
 /// Cosmic-text based font metrics service.
 ///
 /// Runs on the Emacs/layout thread. Creates its own `FontSystem` which scans
@@ -265,6 +271,17 @@ pub struct FontMetricsService {
     interned_families: HashMap<String, &'static str>,
     /// Cache for pre-loading font files and resolving fontdb family names
     font_file_cache: FontFileCache,
+    /// Cache: (face, run text) → shaped glyphs. A run is shaped by BOTH the
+    /// measure pass (wrap/cursor advance) and the render pass (glyph
+    /// production); this makes the second a cache hit so cosmic-text shapes
+    /// each (run, face) once instead of twice. Keyed on the same integer-centipx
+    /// face identity as the advance caches, so two runs with identical text but
+    /// different faces never share an entry. Cleared by `clear_caches` alongside
+    /// the advance/metrics caches when fonts change.
+    shaped_run_cache: HashMap<(MetricsCacheKey, String), Vec<ShapedGlyph>>,
+    /// Number of actual cosmic-text shaping invocations (`shaped_run_cache`
+    /// misses). Lets tests prove the measure/render double-shape is deduped.
+    n_shape_calls: usize,
 }
 
 impl FontMetricsService {
@@ -283,6 +300,8 @@ impl FontMetricsService {
             metrics_cache: HashMap::new(),
             interned_families: HashMap::new(),
             font_file_cache: FontFileCache::new(),
+            shaped_run_cache: HashMap::new(),
+            n_shape_calls: 0,
         }
     }
 
@@ -406,6 +425,14 @@ impl FontMetricsService {
         if text.is_empty() {
             return Vec::new();
         }
+        let key = (
+            MetricsCacheKey::new(family, weight, italic, font_size),
+            text.to_string(),
+        );
+        if let Some(cached) = self.shaped_run_cache.get(&key) {
+            return cached.clone();
+        }
+        self.n_shape_calls += 1;
         let attrs = self.build_attrs(
             family,
             weight,
@@ -444,6 +471,10 @@ impl FontMetricsService {
                 });
             }
         }
+        if self.shaped_run_cache.len() >= SHAPED_RUN_CACHE_CAP {
+            self.shaped_run_cache.clear();
+        }
+        self.shaped_run_cache.insert(key, glyphs.clone());
         glyphs
     }
 
@@ -883,6 +914,15 @@ impl FontMetricsService {
         self.ascii_cache.clear();
         self.char_cache.clear();
         self.metrics_cache.clear();
+        self.shaped_run_cache.clear();
+    }
+
+    /// Number of times `shape_run` actually invoked cosmic-text shaping (i.e.
+    /// `shaped_run_cache` misses). Used by tests to assert the measure/render
+    /// double-shape is deduped to one shape per (run, face).
+    #[cfg(test)]
+    pub(crate) fn shape_calls(&self) -> usize {
+        self.n_shape_calls
     }
 }
 

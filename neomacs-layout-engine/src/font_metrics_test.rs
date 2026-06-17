@@ -462,16 +462,95 @@ fn clear_caches_empties_all() {
     svc.fill_ascii_widths("monospace", 400, false, 14.0);
     svc.char_width('漢', "monospace", 400, false, 14.0);
     svc.font_metrics("monospace", 400, false, 14.0);
+    svc.shape_run("漢字", "monospace", 400, false, 14.0);
 
     assert!(!svc.ascii_cache.is_empty());
     assert!(!svc.char_cache.is_empty());
     assert!(!svc.metrics_cache.is_empty());
+    assert!(!svc.shaped_run_cache.is_empty());
 
     svc.clear_caches();
 
     assert!(svc.ascii_cache.is_empty());
     assert!(svc.char_cache.is_empty());
     assert!(svc.metrics_cache.is_empty());
+    assert!(svc.shaped_run_cache.is_empty());
+}
+
+// ---------------------------------------------------------------
+// shaped-run cache: dedupes the measure-pass + render-pass double shape
+// ---------------------------------------------------------------
+
+#[test]
+fn shape_run_caches_runs_to_dedupe_double_shape() {
+    let mut svc = make_svc();
+    // The measure pass and the render pass shape the same run with the same
+    // face; the second must be a cache hit so cosmic-text shapes it once.
+    let first = svc.shape_run("hello", "monospace", 400, false, 16.0);
+    assert_eq!(svc.shape_calls(), 1, "first shape_run must actually shape");
+    let second = svc.shape_run("hello", "monospace", 400, false, 16.0);
+    assert_eq!(
+        svc.shape_calls(),
+        1,
+        "second identical shape_run must hit the cache, not reshape"
+    );
+    assert_eq!(
+        first, second,
+        "cached shaping must equal the freshly shaped run"
+    );
+    assert!(!svc.shaped_run_cache.is_empty());
+}
+
+#[test]
+fn shape_run_cache_keys_on_face_identity_not_just_text() {
+    let mut svc = make_svc();
+    // Same text, different font size: distinct faces must NOT share a cache
+    // entry, or one face's advances would bleed into the other (the exact
+    // advance-bleed bug class a text-only key would introduce).
+    let small = svc.shape_run("WW", "monospace", 400, false, 12.0);
+    assert_eq!(svc.shape_calls(), 1);
+    let large = svc.shape_run("WW", "monospace", 400, false, 24.0);
+    assert_eq!(
+        svc.shape_calls(),
+        2,
+        "a different face must miss the cache, not reuse another size's shaping"
+    );
+    assert_eq!(svc.shaped_run_cache.len(), 2);
+
+    // Re-requesting each face now hits its own entry (no further shaping).
+    let small2 = svc.shape_run("WW", "monospace", 400, false, 12.0);
+    let large2 = svc.shape_run("WW", "monospace", 400, false, 24.0);
+    assert_eq!(svc.shape_calls(), 2, "both faces are now cached");
+    assert_eq!(small, small2);
+    assert_eq!(large, large2);
+
+    // Sanity that the two cached entries are genuinely different shapings.
+    let small_w: f32 = small.iter().map(|g| g.x_advance).sum();
+    let large_w: f32 = large.iter().map(|g| g.x_advance).sum();
+    assert!(
+        large_w > small_w,
+        "24px run must be wider than 12px (small={small_w}, large={large_w})"
+    );
+}
+
+#[test]
+fn shape_run_cache_cleared_by_clear_caches() {
+    let mut svc = make_svc();
+    svc.shape_run("abc", "monospace", 400, false, 16.0);
+    assert_eq!(svc.shape_calls(), 1);
+    svc.shape_run("abc", "monospace", 400, false, 16.0);
+    assert_eq!(svc.shape_calls(), 1, "cached");
+
+    svc.clear_caches();
+    assert!(svc.shaped_run_cache.is_empty());
+
+    // After a font-change clear, the run must reshape (no stale cached glyphs).
+    svc.shape_run("abc", "monospace", 400, false, 16.0);
+    assert_eq!(
+        svc.shape_calls(),
+        2,
+        "after clear_caches the run must reshape"
+    );
 }
 
 // ---------------------------------------------------------------
