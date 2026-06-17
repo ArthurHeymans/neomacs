@@ -585,6 +585,18 @@ fn decode_epoch_secs(total_secs: i64) -> DecodedTime {
 
 /// Encode date/time components to epoch seconds (UTC).
 fn encode_to_epoch_secs(sec: i64, min: i64, hour: i64, day: i64, month: i64, year: i64) -> i64 {
+    // Normalize an out-of-range MONTH into 1..=12, rolling the YEAR, exactly
+    // like GNU's `encode-time` (mktime/timegm semantics): month 0 -> December of
+    // the previous year, month 13 -> January of the next year, month -1 ->
+    // November of the previous year, and so on. DAY is handled by the
+    // day-of-year arithmetic below (it works for any integer via `day - 1`), so
+    // only MONTH needs an explicit rollover here; without it `for m in 1..month`
+    // silently treats month 0 as January of the same year and mis-indexes
+    // `days_in_month` for month > 12.
+    let m0 = month - 1;
+    let year = year + m0.div_euclid(12);
+    let month = m0.rem_euclid(12) + 1;
+
     // Count days from epoch (1970-01-01) to the given date.
     let mut total_days: i64 = 0;
 

@@ -516,6 +516,40 @@ fn builtin_encode_time_known() {
     assert_eq!(high * 65536 + low, 0);
 }
 
+/// GNU `encode-time` (mktime/timegm) rolls an out-of-range MONTH into the year:
+/// month 0 -> December of the previous year, month 13 -> January of the next
+/// year, month -1 -> November of the previous year. Verify the out-of-range
+/// form encodes to the same instant as the explicitly-normalized form. (This is
+/// what made org-timestamp-to-time on a string diverge: -001-12-31 vs GNU's
+/// -001-11-30.)
+#[test]
+fn builtin_encode_time_normalizes_out_of_range_month_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let enc = |day: i64, month: i64, year: i64| -> i64 {
+        let r = builtin_encode_time(vec![
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(day),
+            Value::fixnum(month),
+            Value::fixnum(year),
+            Value::T,
+        ])
+        .unwrap();
+        let items = list_to_vec(&r).unwrap();
+        items[0].as_int().unwrap() * 65536 + items[1].as_int().unwrap()
+    };
+    // month 0, year Y  ==  month 12, year Y-1
+    assert_eq!(enc(1, 0, 1), enc(1, 12, 0));
+    // month 13, year Y  ==  month 1, year Y+1
+    assert_eq!(enc(1, 13, 1), enc(1, 1, 2));
+    // month -1, year Y  ==  month 11, year Y-1
+    assert_eq!(enc(1, -1, 1), enc(1, 11, 0));
+    // The degenerate org-timestamp case: (day 0 month 0 year 0) normalizes
+    // through month 0 -> Dec of year -1, then day 0 -> Nov 30.
+    assert_eq!(enc(0, 0, 0), enc(0, 12, -1));
+}
+
 #[test]
 fn builtin_encode_time_y2k() {
     crate::test_utils::init_test_tracing();
