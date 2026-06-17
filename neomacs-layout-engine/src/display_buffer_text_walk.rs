@@ -2782,9 +2782,12 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         buffer: &B,
     ) -> Option<BufferTextDecodedSourceEvent> {
         if self.use_typed_buffer_source {
-            if let Some(event) = self.consume_typed_source_event(text, loop_context, buffer) {
-                return Some(event);
-            }
+            // Native path: no raw-decoder fallback. The display-property /
+            // invisible / hscroll checkpoints in render_next_step pre-empt every
+            // replacement / non-buffer-span item before sourcing, so the typed
+            // cursor only ever yields plain text / control / glyphless / newline
+            // here; a None means the buffer is exhausted (stop the walk).
+            return self.consume_typed_source_event(text, loop_context, buffer);
         }
         BufferTextSourceEventCursor::new(text, self.byte_idx, *self.charpos).next_event()
     }
