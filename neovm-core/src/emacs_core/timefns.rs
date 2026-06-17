@@ -956,11 +956,17 @@ fn time_convert_default_hz(value: &Value) -> i64 {
     }
 }
 
-fn require_integer_component(value: &Value) -> Result<i64, Flow> {
-    value.as_int().ok_or_else(|| {
+/// Extract a time component as a fixnum, mirroring GNU `encode-time`'s
+/// `CHECK_FIXNUM`: nil, non-numbers, AND bignums all signal
+/// `wrong-type-argument fixnump VALUE`. Verified against GNU 31.0.50 — both
+/// `(encode-time 0 0 0 2026 5 nil)` and a bignum year signal `fixnump`, not
+/// `integerp`. (This is what made org-datetree-find-month-create on a 2-element
+/// date — where the extracted year is nil — diverge: integerp vs fixnump.)
+fn require_fixnum_component(value: &Value) -> Result<i64, Flow> {
+    value.as_fixnum().ok_or_else(|| {
         signal(
             "wrong-type-argument",
-            vec![Value::symbol("integerp"), *value],
+            vec![Value::symbol("fixnump"), *value],
         )
     })
 }
@@ -1153,12 +1159,12 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
             ));
         }
         (
-            require_integer_component(&items[0])?,
-            require_integer_component(&items[1])?,
-            require_integer_component(&items[2])?,
-            require_integer_component(&items[3])?,
-            require_integer_component(&items[4])?,
-            require_integer_component(&items[5])?,
+            require_fixnum_component(&items[0])?,
+            require_fixnum_component(&items[1])?,
+            require_fixnum_component(&items[2])?,
+            require_fixnum_component(&items[3])?,
+            require_fixnum_component(&items[4])?,
+            require_fixnum_component(&items[5])?,
             items.get(8).copied().unwrap_or(Value::NIL),
         )
     } else if args.len() < 6 {
@@ -1171,12 +1177,12 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
         ));
     } else {
         (
-            require_integer_component(&args[0])?,
-            require_integer_component(&args[1])?,
-            require_integer_component(&args[2])?,
-            require_integer_component(&args[3])?,
-            require_integer_component(&args[4])?,
-            require_integer_component(&args[5])?,
+            require_fixnum_component(&args[0])?,
+            require_fixnum_component(&args[1])?,
+            require_fixnum_component(&args[2])?,
+            require_fixnum_component(&args[3])?,
+            require_fixnum_component(&args[4])?,
+            require_fixnum_component(&args[5])?,
             if args.len() > 6 {
                 args.last().copied().unwrap_or(Value::NIL)
             } else {
