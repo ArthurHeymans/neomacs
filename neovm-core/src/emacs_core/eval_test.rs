@@ -14924,3 +14924,57 @@ fn adjust_point_for_property_noop_in_visible_text() {
         "point in visible text is left untouched"
     );
 }
+
+/// GNU's `adjust_point_for_property` also relocates point out of a
+/// `display`-intangible run (a replacing display string), not just invisible
+/// text. Ground truth from GNU 31.0.50 (via execute-kbd-macro through the
+/// command loop): `display "=>"` on [4,8), a command lands point at 6, and
+/// moving FORWARD (last_pt=1) relocates point to the run END (8).
+#[test]
+fn adjust_point_for_property_relocates_out_of_display_intangible_run_forward() {
+    let mut ev = Context::new();
+    {
+        let buf = ev.buffers.current_buffer_mut().unwrap();
+        buf.insert("abcXXXXdef");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    ev.eval_str("(put-text-property 4 8 'display \"=>\")")
+        .unwrap();
+    ev.eval_str("(goto-char 6)").unwrap();
+    assert_eq!(
+        ev.eval_str("(point)").unwrap().as_fixnum(),
+        Some(6),
+        "precondition: point is inside the display-intangible run"
+    );
+
+    ev.adjust_point_for_property(1, false).unwrap();
+
+    assert_eq!(
+        ev.eval_str("(point)").unwrap().as_fixnum(),
+        Some(8),
+        "forward into display-intangible run relocates to its end (GNU 31.0.50)"
+    );
+}
+
+/// Backward motion (last_pt=10) into the same `display`-intangible run
+/// relocates point to the run START (4). GNU 31.0.50 ground truth.
+#[test]
+fn adjust_point_for_property_relocates_out_of_display_intangible_run_backward() {
+    let mut ev = Context::new();
+    {
+        let buf = ev.buffers.current_buffer_mut().unwrap();
+        buf.insert("abcXXXXdef");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    ev.eval_str("(put-text-property 4 8 'display \"=>\")")
+        .unwrap();
+    ev.eval_str("(goto-char 6)").unwrap();
+
+    ev.adjust_point_for_property(10, false).unwrap();
+
+    assert_eq!(
+        ev.eval_str("(point)").unwrap().as_fixnum(),
+        Some(4),
+        "backward into display-intangible run relocates to its start (GNU 31.0.50)"
+    );
+}

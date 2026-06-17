@@ -2827,3 +2827,84 @@ fn test_optional_args() {
     );
     assert!(builtin_window_text_pixel_size(vec![Value::fixnum(1); 8]).is_err());
 }
+
+/// `display_prop_replacing_p` must match GNU 31.0.50's `display_prop_intangible_p`
+/// taxonomy (verified by driving the real binary's command loop): replacing
+/// specs make text intangible; modifying-only specs do not; media specs replace
+/// only on a window (GUI) frame. The classification args are irrelevant — only
+/// the spec head/shape matters — so minimal forms are used.
+#[test]
+fn display_prop_replacing_p_matches_gnu_taxonomy() {
+    fn head(name: &str) -> Value {
+        Value::list(vec![Value::symbol(name)])
+    }
+    let sym = Value::symbol;
+
+    // Replacing, frame-independent.
+    assert!(display_prop_replacing_p(Value::string("=>"), false));
+    assert!(display_prop_replacing_p(Value::string(""), false)); // empty string
+    assert!(display_prop_replacing_p(head("space"), false));
+    assert!(display_prop_replacing_p(head("left-fringe"), false));
+    assert!(display_prop_replacing_p(head("right-fringe"), false));
+    // ((margin LOCATION) "x")
+    assert!(display_prop_replacing_p(
+        Value::list(vec![
+            Value::list(vec![sym("margin"), sym("left-margin")]),
+            Value::string("x"),
+        ]),
+        false,
+    ));
+    // List of specs containing a string: ((raise 1) "=>")
+    assert!(display_prop_replacing_p(
+        Value::list(vec![
+            Value::list(vec![sym("raise"), Value::fixnum(1)]),
+            Value::string("=>"),
+        ]),
+        false,
+    ));
+    // Vector of specs.
+    assert!(display_prop_replacing_p(
+        Value::vector(vec![Value::string("=>")]),
+        false
+    ));
+    // (disable-eval "=>")
+    assert!(display_prop_replacing_p(
+        Value::list(vec![sym("disable-eval"), Value::string("=>")]),
+        false,
+    ));
+
+    // Modifying-only: never replacing.
+    for name in ["height", "raise", "slice", "space-width", "min-width"] {
+        assert!(
+            !display_prop_replacing_p(head(name), false),
+            "({name} …) must be modifying, not replacing"
+        );
+    }
+    // List of only-modifying specs.
+    assert!(!display_prop_replacing_p(
+        Value::list(vec![head("raise"), head("height")]),
+        false,
+    ));
+    // (when nil "=>") is disabled; (when t "=>") parses to the rest list and is
+    // not itself a string, matching GNU (both non-replacing).
+    assert!(!display_prop_replacing_p(
+        Value::list(vec![sym("when"), Value::NIL, Value::string("=>")]),
+        false,
+    ));
+    assert!(!display_prop_replacing_p(
+        Value::list(vec![sym("when"), Value::T, Value::string("=>")]),
+        false,
+    ));
+
+    // Media specs replace text only on a window (GUI) frame.
+    for name in ["image", "xwidget", "video", "webkit"] {
+        assert!(
+            !display_prop_replacing_p(head(name), false),
+            "({name} …) does not replace on a tty frame"
+        );
+        assert!(
+            display_prop_replacing_p(head(name), true),
+            "({name} …) replaces on a GUI frame"
+        );
+    }
+}

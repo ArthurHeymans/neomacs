@@ -13654,6 +13654,14 @@ impl Context {
         let spec = self
             .eval_symbol_by_id(intern("buffer-invisibility-spec"))
             .unwrap_or(Value::NIL);
+        let display_sym = Value::symbol("display");
+        // GNU's `FRAME_WINDOW_P (selected_frame)`: image/xwidget `display`
+        // specs replace text (and so make it intangible) only on a GUI frame.
+        let frame_window_p = self
+            .frames
+            .selected_frame()
+            .map(|frame| frame.effective_window_system().is_some())
+            .unwrap_or(false);
 
         // `orig_pt` mirrors GNU: point on entry, used to detect "we have not
         // moved yet" so the boundary-choice heuristic stays free.
@@ -13670,6 +13678,57 @@ impl Context {
             };
             if !(pt > begv && pt < zv) {
                 break;
+            }
+
+            // GNU `adjust_point_for_property` display-intangible branch: never
+            // leave point inside text that a `display` property replaces. Moving
+            // forward relocates to the run end; moving backward to its start (an
+            // empty replacing string relocates one char before the start). A
+            // relocation re-enters the loop so the invisible branch re-checks
+            // the new position, mirroring GNU's `check_display`/`check_invisible`
+            // cycling.
+            let disp = self.apfp_char_property(pt, display_sym)?;
+            if !disp.is_nil() && super::xdisp::display_prop_replacing_p(disp, frame_window_p) {
+                // Maximal run [dbeg, dend) around PT whose `display` value is
+                // `eq` to the one at PT (GNU `get_property_and_range`). Stepped
+                // boundary-by-boundary (checking each edge before advancing, as
+                // the invisible branch does) so a change-scan is never issued
+                // from a run edge, where it would jump past the adjacent run.
+                let mut dend = pt;
+                while dend < zv
+                    && crate::emacs_core::value::eq_value(
+                        &self.apfp_char_property(dend, display_sym)?,
+                        &disp,
+                    )
+                {
+                    dend = self.apfp_next_change(dend, display_sym, zv)?;
+                }
+                let mut dbeg = pt;
+                while dbeg > begv
+                    && crate::emacs_core::value::eq_value(
+                        &self.apfp_char_property(dbeg - 1, display_sym)?,
+                        &disp,
+                    )
+                {
+                    dbeg = self.apfp_prev_change(dbeg, display_sym, begv)?;
+                }
+                let empty_string = disp
+                    .as_lisp_string()
+                    .map(|s| s.as_bytes().is_empty())
+                    .unwrap_or(false);
+                if dbeg < pt || (dbeg <= pt && empty_string) {
+                    let target = if pt < last_pt {
+                        if empty_string {
+                            (dbeg - 1).max(begv)
+                        } else {
+                            dbeg
+                        }
+                    } else {
+                        dend
+                    };
+                    self.apfp_set_point(id, target);
+                    continue;
+                }
             }
 
             let pt_before_invis = pt;
@@ -13713,11 +13772,13 @@ impl Context {
                 moved = true;
             }
 
-            // `shown`: if the invisible text is shown via a replacing `display`
-            // property, the display engine positions the cursor and we must not
-            // move point.  The `display`-intangible predicate is not yet ported;
-            // org descriptive links carry no such property, so `shown` is false.
-            let shown = false;
+            // GNU keyboard.c: skip the boundary nudge when the invisible run's
+            // start carries a replacing `display` property — the display engine
+            // then positions the cursor, so point need not move (`shown`).
+            let shown = {
+                let dprop = self.apfp_char_property(beg, display_sym)?;
+                !dprop.is_nil() && super::xdisp::display_prop_replacing_p(dprop, frame_window_p)
+            };
 
             if !modified && !shown && !ellipsis && beg < end {
                 let pt2 = self.apfp_point(id);
