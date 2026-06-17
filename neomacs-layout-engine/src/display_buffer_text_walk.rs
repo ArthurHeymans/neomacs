@@ -3,7 +3,7 @@ use crate::display_buffer_text_append::TextWindowAppendSurfaceRequest;
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
     BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakSourceEvent,
-    BufferTextSourceCursor, BufferTextSourceEventCursor, BufferTextSourceTextEvent,
+    BufferTextSourceCursor, BufferTextSourceTextEvent,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -134,7 +134,6 @@ pub(crate) struct BufferTextWindowWalkSetupRequest<'a> {
     tab_stop_list: &'a [i32],
     trailing_whitespace_enabled: bool,
     trailing_whitespace_bg: u32,
-    use_typed_buffer_source: bool,
 }
 
 pub(crate) struct BufferTextWindowWalkSetup {
@@ -142,7 +141,6 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) col: usize,
     pub(crate) byte_idx: usize,
     pub(crate) charpos: i64,
-    pub(crate) use_typed_buffer_source: bool,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
     pub(crate) text_property_checkpoints: TextPropertyScanCheckpoints,
@@ -516,7 +514,6 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
     face_ids: &'emit mut FrameFaceIdAllocator,
     raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
     height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
-    use_typed_buffer_source: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -776,14 +773,7 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             tab_stop_list,
             trailing_whitespace_enabled,
             trailing_whitespace_bg,
-            use_typed_buffer_source: false,
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn with_typed_buffer_source(mut self, enabled: bool) -> Self {
-        self.use_typed_buffer_source = enabled;
-        self
     }
 
     pub(crate) fn from_window_geometry(
@@ -833,7 +823,6 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             col: 0,
             byte_idx: 0,
             charpos: self.window_start,
-            use_typed_buffer_source: self.use_typed_buffer_source,
             text_area_left: self.text_x,
             window_top: self.window_top,
             text_property_checkpoints: TextPropertyScanCheckpoints::new(self.window_start),
@@ -881,7 +870,6 @@ impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
-        use_typed_buffer_source: bool,
         state: &mut BufferTextWindowWalkRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
@@ -916,7 +904,6 @@ impl BufferTextWindowWalkSetup {
             state.face_ids,
             &mut self.raise_span,
             &mut self.height_span,
-            use_typed_buffer_source,
         )
         .render_visible_steps(
             row_prelude_context,
@@ -1010,7 +997,6 @@ impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
-        use_typed_buffer_source: bool,
         state: &mut BufferTextWindowBodyRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
@@ -1024,7 +1010,6 @@ impl BufferTextWindowWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowPostLoopRenderOutcome {
         self.render_visible_steps(
-            use_typed_buffer_source,
             &mut BufferTextWindowWalkRenderState {
                 source_render: TextRowSourceRenderState::new(
                     state.builder,
@@ -1093,7 +1078,6 @@ impl BufferTextWindowWalkSetup {
             evaluator: state.evaluator,
         });
         let post_loop = self.render_body_and_tail(
-            self.use_typed_buffer_source,
             &mut BufferTextWindowBodyRenderState {
                 builder: state.builder,
                 output_emitter: &mut output_emitter,
@@ -2547,7 +2531,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         face_ids: &'emit mut FrameFaceIdAllocator,
         raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
         height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
-        use_typed_buffer_source: bool,
     ) -> Self {
         Self {
             append_state,
@@ -2574,7 +2557,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             face_ids,
             raise_span,
             height_span,
-            use_typed_buffer_source,
         }
     }
 
@@ -2781,23 +2763,12 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         loop_context: BufferTextWindowLoopRequestContext,
         buffer: &B,
     ) -> Option<BufferTextDecodedSourceEvent> {
-        if self.use_typed_buffer_source {
-            // Native path: no raw-decoder fallback. The display-property /
-            // invisible / hscroll checkpoints in render_next_step pre-empt every
-            // replacement / non-buffer-span item before sourcing, so the typed
-            // cursor only ever yields plain text / control / glyphless / newline
-            // here; a None means the buffer is exhausted (stop the walk).
-            return self.consume_typed_source_event(text, loop_context, buffer);
-        }
-        BufferTextSourceEventCursor::new(text, self.byte_idx, *self.charpos).next_event()
-    }
-
-    fn consume_typed_source_event<B: LayoutBufferView>(
-        &mut self,
-        text: &[u8],
-        loop_context: BufferTextWindowLoopRequestContext,
-        buffer: &B,
-    ) -> Option<BufferTextDecodedSourceEvent> {
+        // Native path: the typed `BufferTextSourceCursor` is the sole main-buffer
+        // text source. The display-property / invisible / hscroll checkpoints in
+        // `render_next_step` pre-empt every replacement / non-buffer-span item
+        // before sourcing, so the typed cursor only ever yields plain text /
+        // control / glyphless / newline here. A `None` means the buffer is
+        // exhausted (stop the walk).
         let start_charpos = CharPos0::new((*self.charpos).max(0) as usize);
         let mut cursor = BufferTextSourceCursor::new(
             loop_context.buffer_id(),
@@ -2807,19 +2778,39 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             RenderFaceRef::Inherit,
         );
         let mut context = DisplaySourceContext::empty();
+        // End-of-buffer: the only legitimate `None`. Reached at the end of the
+        // walk and must keep returning None to stop it.
         let item = cursor.next_item(&mut context)?;
 
         let text_start_byte = loop_context.text_start_byte();
         let relative_byte_idx =
             |byte_pos: EmacsBytePos| byte_pos.get().checked_sub(text_start_byte);
+        // The pre-source checkpoints guarantee a buffer-span item here.
+        let buffer_byte_pos = match item.span.start {
+            crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
+            _ => {
+                // Structurally pre-empted by the render_next_step checkpoints, so
+                // not expected to fire. Degrade gracefully (decode the underlying
+                // buffer char, as the former raw decoder did) rather than panic
+                // during redisplay, and log loudly so it is not hidden.
+                tracing::error!(
+                    "consume_source_event: typed cursor yielded a non-buffer-span item; \
+                     a display property escaped the render_next_step checkpoints — \
+                     falling back to decoding the underlying buffer char"
+                );
+                return BufferTextDecodedSourceChar::consume_from_text(
+                    text,
+                    self.byte_idx,
+                    *self.charpos,
+                )
+                .map(BufferTextDecodedSourceChar::into_event);
+            }
+        };
 
         match item.kind {
             DisplayItemKind::TextRun(run) => {
                 let ch = run.text.chars().next()?;
-                let start_byte_idx = relative_byte_idx(match item.span.start {
-                    crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
-                    _ => return None,
-                })?;
+                let start_byte_idx = relative_byte_idx(buffer_byte_pos)?;
                 let start_charpos = *self.charpos;
                 let start_byte_idx = start_byte_idx.min(text.len());
                 *self.byte_idx = start_byte_idx + ch.len_utf8();
@@ -2834,10 +2825,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             DisplayItemKind::RowBreak(row_break)
                 if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
             {
-                let start_byte_idx = relative_byte_idx(match item.span.start {
-                    crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
-                    _ => return None,
-                })?;
+                let start_byte_idx = relative_byte_idx(buffer_byte_pos)?;
                 let start_charpos = *self.charpos;
                 let start_byte_idx = start_byte_idx.min(text.len());
                 *self.byte_idx = start_byte_idx + 1;
@@ -2851,10 +2839,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             }
             DisplayItemKind::ControlChar { ch }
             | DisplayItemKind::Glyphless(crate::display_item::DisplayGlyphless { ch, .. }) => {
-                let start_byte_idx = relative_byte_idx(match item.span.start {
-                    crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
-                    _ => return None,
-                })?;
+                let start_byte_idx = relative_byte_idx(buffer_byte_pos)?;
                 let start_charpos = *self.charpos;
                 let start_byte_idx = start_byte_idx.min(text.len());
                 *self.byte_idx = start_byte_idx + ch.len_utf8();
@@ -2866,11 +2851,19 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                     )),
                 ))
             }
+            // Replacement / display-spec / image / stretch items are pre-empted
+            // by the display-property / invisible / hscroll checkpoints in
+            // render_next_step before this source is consulted, so this is not
+            // expected to fire. Degrade gracefully (decode the underlying buffer
+            // char) rather than panic during redisplay, and log loudly.
             _ => {
-                // Untranslatable item: resync the typed cursor to the current
-                // raw decoder position and let the legacy raw decoder handle it.
-                cursor.reset_to(start_charpos);
-                None
+                tracing::error!(
+                    "consume_source_event: typed cursor yielded a non-text item kind; \
+                     a display property escaped the render_next_step checkpoints — \
+                     falling back to decoding the underlying buffer char"
+                );
+                BufferTextDecodedSourceChar::consume_from_text(text, self.byte_idx, *self.charpos)
+                    .map(BufferTextDecodedSourceChar::into_event)
             }
         }
     }

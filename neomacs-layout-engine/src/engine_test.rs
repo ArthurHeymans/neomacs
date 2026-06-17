@@ -1951,32 +1951,23 @@ fn backend_layout_trace_with_buffer_setup(
     )
 }
 
-fn layout_trace_for_plain_text(text: &str, use_typed_buffer_source: bool) -> BackendLayoutTrace {
-    layout_trace_with_buffer_setup(text, 360, 180, use_typed_buffer_source, |_, _, _| {})
+fn layout_trace_for_plain_text(text: &str) -> BackendLayoutTrace {
+    layout_trace_with_buffer_setup(text, 360, 180, |_, _, _| {})
 }
 
 fn layout_trace_with_buffer_setup(
     text: &str,
     frame_width: u32,
     frame_height: u32,
-    use_typed_buffer_source: bool,
     setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
 ) -> BackendLayoutTrace {
-    layout_trace_with_buffer_and_window_setup(
-        text,
-        frame_width,
-        frame_height,
-        use_typed_buffer_source,
-        setup,
-        |_| {},
-    )
+    layout_trace_with_buffer_and_window_setup(text, frame_width, frame_height, setup, |_| {})
 }
 
 fn layout_trace_with_buffer_and_window_setup(
     text: &str,
     frame_width: u32,
     frame_height: u32,
-    use_typed_buffer_source: bool,
     setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
     setup_window: impl FnOnce(&mut neovm_core::window::Window),
 ) -> BackendLayoutTrace {
@@ -2016,203 +2007,147 @@ fn layout_trace_with_buffer_and_window_setup(
     }
 
     let mut engine = LayoutEngine::new();
-    engine.set_use_typed_buffer_source(use_typed_buffer_source);
     engine.layout_frame_rust(&mut eval, frame_id);
     selected_window_layout_trace(&eval, &engine, frame_id)
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_plain_text() {
+fn layout_frame_rust_lays_out_plain_text() {
     let text = "Hello, world!\nThis is a test.\n";
-    let raw_trace = layout_trace_for_plain_text(text, false);
-    let typed_trace = layout_trace_for_plain_text(text, true);
+    let trace = layout_trace_for_plain_text(text);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_mixed_chars() {
+fn layout_frame_rust_lays_out_mixed_chars() {
     let text = "a\tb\n\u{0001}c\n日\nd\u{200b}\n";
-    let raw_trace = layout_trace_for_plain_text(text, false);
-    let typed_trace = layout_trace_for_plain_text(text, true);
+    let trace = layout_trace_for_plain_text(text);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_face_property() {
+fn layout_frame_rust_lays_out_face_property() {
     let text = "abc\ndef\n";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
         let start = text.find('b').expect("b start");
         let end = start + "bc".len();
         assert!(buffer.put_text_property(start, end, Value::symbol("face"), Value::symbol("bold")));
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_simple_display_property() {
+fn layout_frame_rust_lays_out_simple_display_property() {
     let text = "abcXYZdef\n";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
         let start = text.find("XYZ").expect("XYZ start");
         let end = start + "XYZ".len();
         assert!(buffer.put_text_property(start, end, Value::symbol("display"), Value::string("R")));
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_truncated_long_line() {
+fn layout_frame_rust_lays_out_truncated_long_line() {
     let text = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
         buffer.set_buffer_local("truncate-lines", Value::T);
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 120, 120, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 120, 120, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 120, 120, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_wrapped_long_line() {
+fn layout_frame_rust_lays_out_wrapped_long_line() {
     let text = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
         buffer.set_buffer_local("truncate-lines", Value::NIL);
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 120, 120, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 120, 120, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 120, 120, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_line_numbers() {
+fn layout_frame_rust_lays_out_line_numbers() {
     let text = "abc\ndef\nghi\n";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
         buffer.set_buffer_local("display-line-numbers", Value::T);
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_word_wrap() {
+fn layout_frame_rust_lays_out_word_wrap() {
     let text = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
         buffer.set_buffer_local("truncate-lines", Value::NIL);
         buffer.set_buffer_local("word-wrap", Value::T);
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 120, 120, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 120, 120, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 120, 120, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
-// Keystone-prerequisite parity tests: pin the typed-vs-raw equivalence of the
-// walk-state gaps that ran untested. These cases reach the typed path through
-// the shim's *translated* arms or *bypass* sourcing entirely (invisible/hscroll
-// short-circuit before consume_source_event), so they validate genuinely — not
-// via the None-fallthrough resync (which is what the replacement-item tests rely
-// on, and which slice 6 must remove).
+// Walk-state coverage guards: these scenarios exercise the typed-source walk
+// through its *translated* arms (control chars, NBSP/SHY, selective-display
+// '\r') or *bypass* sourcing entirely (invisible/hscroll short-circuit before
+// consume_source_event). They were the typed-vs-raw parity tests before the raw
+// decoder was removed; they remain as single-path regression guards so the
+// NBSP / selective-display / invisible / hscroll / complex-text scenarios keep
+// being laid out.
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_invisible_text() {
+fn layout_frame_rust_lays_out_invisible_text() {
     let text = "abcXYZdef\nghi\n";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, text: &str| {
         let start = text.find("XYZ").expect("XYZ start");
         let end = start + "XYZ".len();
         assert!(buffer.put_text_property(start, end, Value::symbol("invisible"), Value::T));
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_nobreak_chars() {
+fn layout_frame_rust_lays_out_nobreak_chars() {
     // U+00A0 NBSP and U+00AD SHY are delivered as plain Text by the typed cursor;
-    // the nobreak display policy is applied downstream by the walk, identically
-    // for both sources.
+    // the nobreak display policy is applied downstream by the walk.
     let text = "a\u{00A0}b\u{00AD}c\nd\u{00A0}\u{00A0}e\n";
-    let raw_trace = layout_trace_for_plain_text(text, false);
-    let typed_trace = layout_trace_for_plain_text(text, true);
+    let trace = layout_trace_for_plain_text(text);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_selective_display() {
+fn layout_frame_rust_lays_out_selective_display() {
     // selective-display>0 + embedded '\r': the typed cursor emits '\r' as a
     // ControlChar (a translated shim arm); the selective-display tail-skip is
-    // walk-state run on the consumed char, independent of which source fed it.
+    // walk-state run on the consumed char.
     let text = "visible\rhidden\nnext\rgone\n";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
         buffer.set_buffer_local("selective-display", Value::fixnum(1));
     };
-    let raw_trace = layout_trace_with_buffer_setup(text, 360, 180, false, setup);
-    let typed_trace = layout_trace_with_buffer_setup(text, 360, 180, true, setup);
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_hscroll() {
+fn layout_frame_rust_lays_out_hscroll() {
     // Window hscroll>0 on a truncated long line: the walk skips leading columns
     // BEFORE consuming the source (render_hscroll_skip), so sourcing is bypassed
-    // for the skipped span — source-independent.
+    // for the skipped span.
     let text = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
     let buf_setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
         buffer.set_buffer_local("truncate-lines", Value::T);
@@ -2222,33 +2157,21 @@ fn layout_frame_rust_typed_buffer_source_matches_raw_for_hscroll() {
             *hscroll = 10;
         }
     };
-    let raw_trace =
-        layout_trace_with_buffer_and_window_setup(text, 200, 120, false, buf_setup, win_setup);
-    let typed_trace =
-        layout_trace_with_buffer_and_window_setup(text, 200, 120, true, buf_setup, win_setup);
+    let trace = layout_trace_with_buffer_and_window_setup(text, 200, 120, buf_setup, win_setup);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 #[test]
-fn layout_frame_rust_typed_buffer_source_matches_raw_for_complex_text() {
+fn layout_frame_rust_lays_out_complex_text() {
     // Arabic (contextual joining), Hebrew (RTL bidi), and an emoji ZWJ family
     // (composition): the typed cursor folds these into TextRuns that the append
-    // layer re-shapes/clusters/reorders downstream identically to the raw
-    // decoder — the source carries only the chars + faces, not shaping decisions.
+    // layer re-shapes/clusters/reorders downstream — the source carries only the
+    // chars + faces, not shaping decisions.
     let text = "العربية\nאבגד\n👨\u{200d}👩\u{200d}👧\nmixed العربية text\n";
-    let raw_trace = layout_trace_for_plain_text(text, false);
-    let typed_trace = layout_trace_for_plain_text(text, true);
+    let trace = layout_trace_for_plain_text(text);
 
-    assert_eq!(raw_trace.matrix_rows, typed_trace.matrix_rows);
-    assert_eq!(raw_trace.hit, typed_trace.hit);
-    assert_eq!(raw_trace.window_start, typed_trace.window_start);
-    assert_eq!(raw_trace.window_point, typed_trace.window_point);
-    assert_eq!(raw_trace.visible_span, typed_trace.visible_span);
+    assert!(!trace.matrix_rows.is_empty());
 }
 
 fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {

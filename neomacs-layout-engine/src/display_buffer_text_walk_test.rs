@@ -194,12 +194,6 @@ fn walk_setup_applies_hscroll_prefix_and_reserved_surface_policy() {
 }
 
 #[test]
-fn walk_setup_request_can_enable_typed_buffer_source() {
-    let setup = setup_request().with_typed_buffer_source(true).into_setup();
-    assert!(setup.use_typed_buffer_source);
-}
-
-#[test]
 fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
     let walk_setup = setup_request().into_setup();
     let output_setup = BufferTextWindowOutputSetupRequest::new(

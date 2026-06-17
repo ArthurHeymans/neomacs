@@ -358,29 +358,6 @@ impl BufferTextSourceTextEvent {
     }
 }
 
-/// Cursor that iterates over raw buffer text bytes and yields decoded source
-/// events for the buffer text walker.
-pub(crate) struct BufferTextSourceEventCursor<'text, 'state> {
-    text: &'text [u8],
-    byte_idx: &'state mut usize,
-    charpos: i64,
-}
-
-impl<'text, 'state> BufferTextSourceEventCursor<'text, 'state> {
-    pub(crate) fn new(text: &'text [u8], byte_idx: &'state mut usize, charpos: i64) -> Self {
-        Self {
-            text,
-            byte_idx,
-            charpos,
-        }
-    }
-
-    pub(crate) fn next_event(&mut self) -> Option<BufferTextDecodedSourceEvent> {
-        BufferTextDecodedSourceChar::consume_from_text(self.text, self.byte_idx, self.charpos)
-            .map(BufferTextDecodedSourceChar::into_event)
-    }
-}
-
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
 /// property boundaries) and emits `DisplayItem` values for the shared row
 /// renderer. This is the new-path buffer source; the old monolithic walker in

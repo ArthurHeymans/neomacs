@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourceEventCursor};
+use crate::display_buffer_text_source::{BufferTextDecodedSourceChar, BufferTextSourceCursor};
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
     DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplayRowBreakReason,
@@ -913,7 +913,8 @@ fn typed_buffer_source_events_match_raw_decoder_for_plain_text() {
     let mut raw_charpos = 0i64;
     let mut raw = Vec::new();
     while let Some(event) =
-        BufferTextSourceEventCursor::new(bytes, &mut byte_idx, raw_charpos).next_event()
+        BufferTextDecodedSourceChar::consume_from_text(bytes, &mut byte_idx, raw_charpos)
+            .map(BufferTextDecodedSourceChar::into_event)
     {
         let dc = event.decoded_char();
         raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
@@ -970,7 +971,8 @@ fn typed_buffer_source_events_match_raw_decoder_for_control_and_glyphless_chars(
     let mut raw_charpos = 0i64;
     let mut raw = Vec::new();
     while let Some(event) =
-        BufferTextSourceEventCursor::new(bytes, &mut byte_idx, raw_charpos).next_event()
+        BufferTextDecodedSourceChar::consume_from_text(bytes, &mut byte_idx, raw_charpos)
+            .map(BufferTextDecodedSourceChar::into_event)
     {
         let dc = event.decoded_char();
         raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
@@ -1050,7 +1052,8 @@ fn typed_buffer_source_events_match_raw_decoder_for_face_property() {
     let mut raw_charpos = 0i64;
     let mut raw = Vec::new();
     while let Some(event) =
-        BufferTextSourceEventCursor::new(bytes, &mut byte_idx, raw_charpos).next_event()
+        BufferTextDecodedSourceChar::consume_from_text(bytes, &mut byte_idx, raw_charpos)
+            .map(BufferTextDecodedSourceChar::into_event)
     {
         let dc = event.decoded_char();
         raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));

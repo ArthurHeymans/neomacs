@@ -181,9 +181,6 @@ pub struct LayoutEngine {
         Vec<neomacs_display_protocol::glyph_matrix::FrameChromeRow>,
     /// Frame-level tab bar metadata for render-thread hit-testing.
     pending_tab_bar: Option<neomacs_display_protocol::frame_glyphs::FrameTabBarState>,
-    /// Test/debug toggle: route main-buffer text through the typed
-    /// `BufferTextSourceCursor` instead of the legacy raw decoder.
-    use_typed_buffer_source: bool,
 }
 
 impl LayoutEngine {
@@ -208,7 +205,6 @@ impl LayoutEngine {
             frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
-            use_typed_buffer_source: true,
         }
     }
 
@@ -233,7 +229,6 @@ impl LayoutEngine {
             frame_face_id_counter: BasicFaceId::SENTINEL,
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
-            use_typed_buffer_source: true,
         }
     }
 
@@ -268,13 +263,6 @@ impl LayoutEngine {
 
     pub fn set_font_sizing(&mut self, font_sizing: FontSizing) {
         self.font_sizing = font_sizing;
-    }
-
-    /// Test-only toggle: route main-buffer text through the typed
-    /// `BufferTextSourceCursor` instead of the legacy raw decoder.
-    #[cfg(test)]
-    pub(crate) fn set_use_typed_buffer_source(&mut self, enabled: bool) {
-        self.use_typed_buffer_source = enabled;
     }
 
     /// Perform layout for a frame using neovm-core data (Rust-authoritative path).
@@ -997,7 +985,6 @@ impl LayoutEngine {
             reserve_right_border_col,
             reserve_right_special_col,
         )
-        .with_typed_buffer_source(self.use_typed_buffer_source)
         .into_setup();
         let text_append_surface = walk_setup.text_append_surface.clone();
         let output_setup = BufferTextWindowOutputSetupRequest::from_window_geometry(

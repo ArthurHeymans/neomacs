@@ -2,9 +2,7 @@ use super::*;
 use crate::display_buffer_text_append::{
     BufferTextWindowCursorEffectsRequest, BufferTextWindowTerminalRightBorderRequest,
 };
-use crate::display_buffer_text_source::{
-    BufferTextDecodedSourceEvent, BufferTextSourceEventCursor,
-};
+use crate::display_buffer_text_source::BufferTextDecodedSourceEvent;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -1771,8 +1769,8 @@ fn buffer_text_source_event_cursor_decodes_text_and_line_break_events() {
     let text = "a\n界".as_bytes();
     let mut byte_idx = 0;
 
-    let first_event = BufferTextSourceEventCursor::new(text, &mut byte_idx, 7)
-        .next_event()
+    let first_event = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 7)
+        .map(BufferTextDecodedSourceChar::into_event)
         .expect("first event");
     assert!(matches!(first_event, BufferTextDecodedSourceEvent::Text(_)));
     assert_eq!(first_event.decoded_char().ch(), 'a');
@@ -1780,8 +1778,8 @@ fn buffer_text_source_event_cursor_decodes_text_and_line_break_events() {
     assert_eq!(first_event.decoded_char().start_charpos(), 7);
     assert_eq!(byte_idx, 1);
 
-    let line_break_event = BufferTextSourceEventCursor::new(text, &mut byte_idx, 8)
-        .next_event()
+    let line_break_event = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 8)
+        .map(BufferTextDecodedSourceChar::into_event)
         .expect("line break event");
     assert!(matches!(
         line_break_event,
@@ -1792,8 +1790,8 @@ fn buffer_text_source_event_cursor_decodes_text_and_line_break_events() {
     assert_eq!(line_break_event.decoded_char().start_charpos(), 8);
     assert_eq!(byte_idx, 2);
 
-    let multibyte_event = BufferTextSourceEventCursor::new(text, &mut byte_idx, 9)
-        .next_event()
+    let multibyte_event = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 9)
+        .map(BufferTextDecodedSourceChar::into_event)
         .expect("multibyte event");
     assert!(matches!(
         multibyte_event,
