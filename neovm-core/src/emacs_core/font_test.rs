@@ -2675,19 +2675,22 @@ fn face_id_known_faces_use_oracle_ids() {
         ("header-line", 31),
         ("header-line-active", 33),
         ("header-line-inactive", 34),
-        ("fringe", 42),
-        ("scroll-bar", 43),
-        ("cursor", 45),
-        ("tool-bar", 47),
-        ("tab-line", 49),
-        ("menu", 50),
-        ("tooltip", 182),
+        ("margin", 42),
+        ("fringe", 43),
+        ("scroll-bar", 44),
+        ("cursor", 46),
+        ("tool-bar", 48),
+        ("tab-line", 50),
+        ("tab-line-active", 51),
+        ("tab-line-inactive", 52),
+        ("menu", 53),
+        ("tooltip", 185),
     ];
     for (face, id) in faces {
         let value = builtin_face_id(vec![Value::symbol(face)]).unwrap();
         assert_eq!(value.as_int(), Some(id), "face-id mismatch for {face}");
     }
-    assert_eq!(FIRST_DYNAMIC_FACE_ID, 183);
+    assert_eq!(FIRST_DYNAMIC_FACE_ID, 186);
 }
 
 #[test]
@@ -2701,8 +2704,8 @@ fn gnu_bootstrap_lisp_face_ids_round_trip_names() {
         assert_eq!(face.id(), expected_id as i64);
         assert_eq!(known_face_id(face.name()), Some(expected_id as i64));
     }
-    assert_eq!(known_face_id("isearch-group-1"), Some(111));
-    assert_eq!(known_face_id("isearch-group-2"), Some(112));
+    assert_eq!(known_face_id("isearch-group-1"), Some(114));
+    assert_eq!(known_face_id("isearch-group-2"), Some(115));
     assert_eq!(known_face_id("unknown-face"), None);
 }
 
