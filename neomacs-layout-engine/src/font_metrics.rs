@@ -276,9 +276,25 @@ pub struct FontMetricsService {
     /// production); this makes the second a cache hit so cosmic-text shapes
     /// each (run, face) once instead of twice. Keyed on the same integer-centipx
     /// face identity as the advance caches, so two runs with identical text but
-    /// different faces never share an entry. Cleared by `clear_caches` alongside
-    /// the advance/metrics caches when fonts change.
+    /// different faces never share an entry.
+    ///
+    /// Like the `ascii_cache`/`char_cache`/`metrics_cache`, entries are only
+    /// valid for the current fontdb generation: `clear_caches` drops them on a
+    /// font change, but `prime_file` (reachable from `resolve_family` /
+    /// `resolve_font_for_char`) can load a font mid-session WITHOUT invalidating
+    /// the cache. Production primes a face's file before shaping it, so a stale
+    /// entry does not arise in practice; this matches the existing advance
+    /// caches' unstated contract. The cached `font_id`/`glyph_id` are likewise
+    /// only valid for that generation — production consumers read only
+    /// `cluster_start`/`x_advance` (see `DisplayTextRunClusterAdvances`), so a
+    /// stale entry degrades to a stale advance, never a wrong rasterized glyph.
+    /// Do NOT thread the cached glyph ids into rasterization without adding
+    /// fontdb-generation keying (cf. `font_match::resolve_weight_in_family`,
+    /// which folds `db().len()` into its key for exactly this reason).
     shaped_run_cache: HashMap<(MetricsCacheKey, String), Vec<ShapedGlyph>>,
+    /// Entry cap for `shaped_run_cache` before clear-on-overflow. Defaults to
+    /// `SHAPED_RUN_CACHE_CAP`; lowered by tests to exercise the overflow path.
+    shaped_run_cache_cap: usize,
     /// Number of actual cosmic-text shaping invocations (`shaped_run_cache`
     /// misses). Lets tests prove the measure/render double-shape is deduped.
     n_shape_calls: usize,
@@ -301,6 +317,7 @@ impl FontMetricsService {
             interned_families: HashMap::new(),
             font_file_cache: FontFileCache::new(),
             shaped_run_cache: HashMap::new(),
+            shaped_run_cache_cap: SHAPED_RUN_CACHE_CAP,
             n_shape_calls: 0,
         }
     }
@@ -471,7 +488,7 @@ impl FontMetricsService {
                 });
             }
         }
-        if self.shaped_run_cache.len() >= SHAPED_RUN_CACHE_CAP {
+        if self.shaped_run_cache.len() >= self.shaped_run_cache_cap {
             self.shaped_run_cache.clear();
         }
         self.shaped_run_cache.insert(key, glyphs.clone());
@@ -923,6 +940,13 @@ impl FontMetricsService {
     #[cfg(test)]
     pub(crate) fn shape_calls(&self) -> usize {
         self.n_shape_calls
+    }
+
+    /// Lower the `shaped_run_cache` entry cap so tests can exercise the
+    /// clear-on-overflow path without shaping `SHAPED_RUN_CACHE_CAP` runs.
+    #[cfg(test)]
+    pub(crate) fn set_shaped_run_cache_cap(&mut self, cap: usize) {
+        self.shaped_run_cache_cap = cap;
     }
 }
 

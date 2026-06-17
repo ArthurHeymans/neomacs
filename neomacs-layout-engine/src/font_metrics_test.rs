@@ -531,6 +531,69 @@ fn shape_run_cache_keys_on_face_identity_not_just_text() {
         large_w > small_w,
         "24px run must be wider than 12px (small={small_w}, large={large_w})"
     );
+
+    // The key must distinguish ALL four MetricsCacheKey fields, not just size:
+    // a key bug dropping weight/italic/family would let a bold/italic/serif run
+    // reuse the regular run's shaping (advance-bleed). Discriminate on
+    // shape_calls (exact: a key collision would be a hit, so no increment),
+    // NOT width — bold/italic width is font-dependent (see
+    // char_width_bold_vs_normal) and unreliable as a discriminator.
+    let base = svc.shape_calls();
+    svc.shape_run("ZZ", "monospace", 400, false, 16.0);
+    assert_eq!(
+        svc.shape_calls(),
+        base + 1,
+        "new (text, face) is a fresh shape"
+    );
+    svc.shape_run("ZZ", "monospace", 700, false, 16.0);
+    assert_eq!(
+        svc.shape_calls(),
+        base + 2,
+        "different weight must be a distinct cache entry"
+    );
+    svc.shape_run("ZZ", "monospace", 400, true, 16.0);
+    assert_eq!(
+        svc.shape_calls(),
+        base + 3,
+        "different italic must be a distinct cache entry"
+    );
+    svc.shape_run("ZZ", "serif", 400, false, 16.0);
+    assert_eq!(
+        svc.shape_calls(),
+        base + 4,
+        "different family must be a distinct cache entry"
+    );
+}
+
+#[test]
+fn shape_run_cache_clears_on_overflow_keeping_newest() {
+    let mut svc = make_svc();
+    svc.set_shaped_run_cache_cap(4);
+    // Fill the cache to the cap with distinct runs.
+    for s in ["a", "b", "c", "d"] {
+        svc.shape_run(s, "monospace", 400, false, 16.0);
+    }
+    assert_eq!(svc.shaped_run_cache.len(), 4);
+
+    // The next distinct run trips the cap: clear-then-insert keeps the cache
+    // bounded and holds only the newest entry.
+    let e = svc.shape_run("e", "monospace", 400, false, 16.0);
+    assert_eq!(
+        svc.shaped_run_cache.len(),
+        1,
+        "overflow clears the cache before inserting the newest run"
+    );
+
+    // The clear happened BEFORE the newest insert, so the just-shaped run is
+    // retained: an immediate re-request is a hit, not a reshape.
+    let calls = svc.shape_calls();
+    let e2 = svc.shape_run("e", "monospace", 400, false, 16.0);
+    assert_eq!(
+        svc.shape_calls(),
+        calls,
+        "the newest run is retained after the overflow clear"
+    );
+    assert_eq!(e, e2);
 }
 
 #[test]
