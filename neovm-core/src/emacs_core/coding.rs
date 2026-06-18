@@ -1365,6 +1365,32 @@ fn coding_has_bom(info: &CodingSystemInfo) -> bool {
         .is_some_and(|v| v.is_truthy())
 }
 
+/// `:bom` shape, mirroring GNU's `CONSP(bom)` / `NILP(bom)` discrimination in
+/// `Fdefine_coding_system_internal`: a cons `(le-sig . be-sig)` means auto-detect
+/// the signature, `t`/with-signature means always-signature, nil/absent means no
+/// signature.
+enum BomKind {
+    None,
+    Auto,
+    Sig,
+}
+
+fn coding_bom_kind(info: &CodingSystemInfo) -> BomKind {
+    match info.properties.get(&intern(":bom")).copied() {
+        Some(v) if v.is_cons() => BomKind::Auto,
+        Some(v) if v.is_truthy() => BomKind::Sig,
+        _ => BomKind::None,
+    }
+}
+
+/// Whether a pre-write or post-read conversion function is attached. Such a
+/// coding system (e.g. utf-7, chinese-hz) is not ASCII-compatible — GNU's
+/// `define-coding-system` passes `:ascii-compatible-p nil` for these even though
+/// the underlying `:coding-type` is utf-8.
+fn coding_has_conversion(info: &CodingSystemInfo) -> bool {
+    info.post_read_conversion.is_some() || info.pre_write_conversion.is_some()
+}
+
 /// Whether `:charset-list` is the FULL_SUPPORT marker symbol `iso-2022`.
 fn coding_is_iso2022_full_support(info: &CodingSystemInfo) -> bool {
     info.charset_list.len() == 1 && resolve_sym(info.charset_list[0]) == "iso-2022"
@@ -1376,19 +1402,25 @@ fn compute_coding_category(info: &CodingSystemInfo) -> &'static str {
     match resolve_sym(info.coding_type) {
         "charset" => "coding-category-charset",
         "ccl" => "coding-category-ccl",
-        "utf-8" => {
-            if coding_has_bom(info) {
-                "coding-category-utf-8-sig"
-            } else {
-                "coding-category-utf-8"
-            }
-        }
+        "utf-8" => match coding_bom_kind(info) {
+            BomKind::Auto => "coding-category-utf-8-auto",
+            BomKind::Sig => "coding-category-utf-8-sig",
+            BomKind::None => "coding-category-utf-8",
+        },
         "utf-16" => {
-            let endian = info.properties.get(&intern(":endian")).copied();
-            match endian.and_then(|v| v.as_symbol_id()).map(resolve_sym) {
-                Some("little") => "coding-category-utf-16-le",
-                Some("big") => "coding-category-utf-16-be",
-                _ => "coding-category-utf-16-auto",
+            // GNU defaults endian to big when unspecified.
+            let little = info
+                .properties
+                .get(&intern(":endian"))
+                .and_then(|v| v.as_symbol_id())
+                .map(resolve_sym)
+                == Some("little");
+            match coding_bom_kind(info) {
+                BomKind::Auto => "coding-category-utf-16-auto",
+                BomKind::None if little => "coding-category-utf-16-le-nosig",
+                BomKind::None => "coding-category-utf-16-be-nosig",
+                BomKind::Sig if little => "coding-category-utf-16-le",
+                BomKind::Sig => "coding-category-utf-16-be",
             }
         }
         "iso-2022" => {
@@ -1441,7 +1473,9 @@ fn compute_coding_ascii_compat(info: &CodingSystemInfo) -> bool {
     };
     match resolve_sym(info.coding_type) {
         "charset" => any_ascii() || info.ascii_compatible_p,
-        "utf-8" => !coding_has_bom(info),
+        // utf-8 is ASCII-compatible unless it carries a BOM (utf-8-with-signature
+        // / utf-8-auto) or a pre/post conversion (utf-7, utf-7-imap, chinese-hz).
+        "utf-8" => !coding_has_bom(info) && !coding_has_conversion(info),
         "utf-16" => false,
         "iso-2022" => matches!(
             compute_coding_category(info),
