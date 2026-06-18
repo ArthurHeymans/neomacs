@@ -301,6 +301,15 @@ impl CharsetRegistry {
         if !info.plist.iter().any(|(k, _)| *k == dim_sym) {
             info.plist.push((dim_sym, Value::fixnum(info.dimension)));
         }
+        // GNU define-charset stores :code-space as an 8-element vector
+        // [min1 max1 min2 max2 min3 max3 min4 max4] (charset.c). The Lisp
+        // `charset-chars` reads it via (plist-get (charset-plist cs) :code-space),
+        // so built-in charsets must expose it too.
+        let cs_sym = intern(":code-space");
+        if !info.plist.iter().any(|(k, _)| *k == cs_sym) {
+            let cs_vec = info.code_space.iter().map(|&n| Value::fixnum(n)).collect();
+            info.plist.push((cs_sym, Value::vector(cs_vec)));
+        }
         self.charsets.insert(info.name, info);
     }
 
