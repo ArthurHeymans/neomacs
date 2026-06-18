@@ -15014,3 +15014,49 @@ fn set_current_message_mirrors_into_echo_area_buffer() {
         "echo buffer is cleared when the message is cleared"
     );
 }
+
+#[test]
+fn set_current_message_handles_back_to_back_messages_of_differing_multibyteness() {
+    // Regression: the echo-area mirror must CLEAR the echo buffer before toggling
+    // its multibyteness (GNU `with_echo_area_buffer` order). Showing a multibyte
+    // message and then a unibyte one — exactly what byte-compile does, emitting
+    // curly-quote (multibyte) warnings followed by ASCII progress — used to panic
+    // "buffer text edit position underflow": the flag was flipped while the buffer
+    // still held the previous message, so the full-range delete in
+    // `replace_buffer_contents_lisp_string` ran against content encoded in the
+    // other multibyteness and miscomputed its marker/position adjustment.
+    let mut ev = Context::new();
+    ev.ensure_echo_area_buffers();
+
+    let multibyte = crate::emacs_core::builtins::plain_str_to_lisp_string("中文", true);
+    ev.set_current_message(Some(multibyte));
+
+    // Unibyte message while the echo buffer still holds the multibyte one.
+    let unibyte = crate::emacs_core::builtins::plain_str_to_lisp_string("x", false);
+    ev.set_current_message(Some(unibyte));
+
+    let id = ev
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo-area buffer should exist");
+    assert_eq!(
+        ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .full_text_string(),
+        "x",
+        "echo buffer holds the latest (unibyte) message after a multibyte one"
+    );
+
+    // And the other direction: unibyte buffer, then a multibyte message.
+    let multibyte2 = crate::emacs_core::builtins::plain_str_to_lisp_string("日本語", true);
+    ev.set_current_message(Some(multibyte2));
+    assert_eq!(
+        ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .full_text_string(),
+        "日本語",
+        "echo buffer holds the latest (multibyte) message after a unibyte one"
+    );
+}

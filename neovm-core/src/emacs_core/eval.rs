@@ -7786,8 +7786,17 @@ impl Context {
                 let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
                     return;
                 };
-                // GNU toggles the echo buffer's multibyteness to the message's
-                // before inserting (set_message_1).
+                // GNU `with_echo_area_buffer` clears the echo buffer
+                // (`del_range (BEG, Z)`) BEFORE setting its multibyteness, then
+                // inserts. Order matters: `set_buffer_multibyte_flag` only flips
+                // the flag, so toggling it while the buffer still holds the
+                // previous message — encoded in the OTHER multibyteness — makes
+                // the subsequent full-range delete in
+                // `replace_buffer_contents_lisp_string` miscompute its position
+                // adjustment and panic ("buffer text edit position underflow").
+                // Clear first (with the flag still matching the existing
+                // content), then toggle on the now-empty buffer, then insert.
+                let _ = self.buffers.replace_buffer_contents(id, "");
                 let _ = self
                     .buffers
                     .set_buffer_multibyte_flag(id, message.is_multibyte());
