@@ -7775,15 +7775,17 @@ impl Context {
         &mut self,
         message: Option<&crate::heap_types::LispString>,
     ) {
-        // GNU set_message_1 assumes the echo-area buffer already exists (it is
-        // materialized by the message-display setup AFTER logging to *Messages*);
-        // it does not create it. Mirror only when the buffer is present, so we
-        // never materialize the echo buffers out of order.
-        let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
-            return;
-        };
         match message {
             Some(message) => {
+                // GNU `set_message_1` runs inside `with_echo_area_buffer`
+                // (xdisp.c:12904), which calls `ensure_echo_area_buffers ()`
+                // first — so setting a message always materializes the echo
+                // buffers. Creation order stays correct because `builtin_message`
+                // logs *Messages* (message_dolog) BEFORE set_current_message.
+                self.ensure_echo_area_buffers();
+                let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
+                    return;
+                };
                 // GNU toggles the echo buffer's multibyteness to the message's
                 // before inserting (set_message_1).
                 let _ = self
@@ -7794,12 +7796,17 @@ impl Context {
                     .replace_buffer_contents_lisp_string(id, message);
             }
             None => {
+                // Clearing the message: only touch the echo buffer if it already
+                // exists; do not materialize it just to empty it.
+                let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
+                    return;
+                };
                 let _ = self.buffers.replace_buffer_contents(id, "");
             }
         }
     }
 
-    pub(crate) fn ensure_echo_area_buffers(&mut self) {
+    pub fn ensure_echo_area_buffers(&mut self) {
         for index in 0..2 {
             let name = format!(" *Echo Area {index}*");
             let id = self.buffers.find_buffer_by_name(&name).unwrap_or_else(|| {

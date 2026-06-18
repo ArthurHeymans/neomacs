@@ -2801,21 +2801,21 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
         !root_text.contains(echo),
         "echo text leaked into root window matrix: {root_text:?}"
     );
+    // Post slice-8 the echo area is rendered through the ordinary buffer-text
+    // walk over ` *Echo Area 0*` (GNU `display_echo_area_1`), so its rows are
+    // plain buffer-text rows — the same role the *active* minibuffer walk
+    // already produces — not a special Minibuffer-tagged row.
     assert!(
         minibuffer_entry
             .matrix
             .rows
             .iter()
-            .any(|row| row.enabled && row.role == GlyphRowRole::Minibuffer && !row.mode_line),
-        "expected a non-chrome minibuffer row for echo text"
+            .any(|row| row.enabled && row.role == GlyphRowRole::Text && !row.mode_line),
+        "expected a non-chrome buffer-text row for echo text"
     );
     assert!(
-        !root_entry
-            .matrix
-            .rows
-            .iter()
-            .any(|row| row.enabled && row.role == GlyphRowRole::Minibuffer),
-        "root window should not own minibuffer echo rows"
+        !root_text.contains(echo),
+        "echo text must not leak into the root window matrix"
     );
 }
 
@@ -2877,22 +2877,25 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
         .last_frame_display_state
         .as_ref()
         .expect("display state");
+    // Post slice-8 the echo area renders through the ordinary buffer-text walk
+    // over ` *Echo Area 0*`, so locate the mini-window by identity and take its
+    // non-chrome buffer-text row.
+    let minibuffer_window_id = state
+        .window_infos
+        .iter()
+        .find(|info| info.is_minibuffer)
+        .expect("minibuffer window info")
+        .window_id as u64;
     let minibuffer_entry = state
         .window_matrices
         .iter()
-        .find(|entry| {
-            entry
-                .matrix
-                .rows
-                .iter()
-                .any(|row| row.enabled && row.role == GlyphRowRole::Minibuffer)
-        })
+        .find(|entry| entry.window_id == minibuffer_window_id)
         .expect("minibuffer echo matrix");
     let echo_glyphs = minibuffer_entry
         .matrix
         .rows
         .iter()
-        .find(|row| row.enabled && row.role == GlyphRowRole::Minibuffer)
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && !row.mode_line)
         .expect("echo row")
         .glyphs[1]
         .clone();

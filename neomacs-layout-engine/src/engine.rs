@@ -825,8 +825,28 @@ impl LayoutEngine {
         reserve_right_border_col: bool,
         remaining_visibility_retries: usize,
     ) {
-        let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
+        // GNU `with_echo_area_buffer` (xdisp.c:12904): an inactive mini-window
+        // displays the echo-area buffer (whose contents `set_message_1` mirrored
+        // the current message into), NOT the ordinary buffer attached to the
+        // window record. Resolve the echo buffer for layout only — GNU does the
+        // same temporary `wset_buffer` for display without a full
+        // set-window-buffer; `params.buffer_id` (the window record) is untouched.
+        let buf_id = if params.is_minibuffer() && !evaluator.minibuffer_window_is_active(window_id)
+        {
+            // GNU `with_echo_area_buffer` `ensure_echo_area_buffers ()` first, so
+            // ` *Echo Area 0*` always exists here — empty when there is no current
+            // message. This is what makes an idle echo area blank instead of
+            // re-displaying the buffer the mini-window record happens to point at
+            // (which is the frame's root buffer, window/mod.rs).
+            evaluator.ensure_echo_area_buffers();
+            evaluator
+                .buffer_manager()
+                .find_buffer_by_name(" *Echo Area 0*")
+                .unwrap_or_else(|| neovm_core::buffer::BufferId(params.buffer_id))
+        } else {
+            neovm_core::buffer::BufferId(params.buffer_id)
+        };
         let layout_buffer = match evaluator.buffer_manager().get(buf_id) {
             Some(buffer) => super::neovm_bridge::LayoutBufferSnapshot::from_buffer_with_obarray(
                 buffer,
@@ -838,6 +858,28 @@ impl LayoutEngine {
             }
         };
         let buffer = &layout_buffer;
+
+        // When swapped to the echo buffer (above), the window record's position
+        // markers still point into the minibuffer's own buffer, so the source
+        // read would use that stale (short) accessible range and truncate the
+        // echo message. GNU `with_echo_area_buffer` moves `pointm`/`old_pointm`
+        // to BEG and lets the echo buffer's BEGV/ZV bound the display; mirror
+        // that by resetting the position params to the echo buffer's full range.
+        let echo_swapped_params;
+        let params: &WindowParams = if buf_id.0 != params.buffer_id {
+            use super::neovm_bridge::LayoutBufferView;
+            let mut swapped = params.clone();
+            swapped.buffer_id = buf_id.0;
+            swapped.window_start = 0;
+            swapped.window_end = 0;
+            swapped.point = 0;
+            swapped.buffer_begv = 0;
+            swapped.buffer_size = buffer.layout_point_max_char_pos().get() as i64;
+            echo_swapped_params = swapped;
+            &echo_swapped_params
+        } else {
+            params
+        };
 
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
@@ -908,7 +950,7 @@ impl LayoutEngine {
         } = geometry_request.into_window_plan(
             &local_display_policy,
             &buf_access,
-            BufferTextWindowContentRowsRequest::new(params, frame_params.height, char_h),
+            BufferTextWindowContentRowsRequest::new(params, buf_id, frame_params.height, char_h),
             evaluator,
         );
 
@@ -951,28 +993,11 @@ impl LayoutEngine {
         // `init_frame_faces`.
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
 
-        if let Some(minibuffer_plan) = MinibufferSpecialRowsPlan::from_window(
-            evaluator,
-            params,
-            frame_params,
-            geometry.text_width,
-            char_w,
-            char_h,
-            default_face.ascent(),
-            default_resolved,
-        ) {
-            minibuffer_plan.render_window(&mut MinibufferDisplayRenderState {
-                builder: &mut self.matrix_builder,
-                render_services: ChromeRowRenderServices::new(
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut face_ids,
-                ),
-                display_host: evaluator.display_host.as_deref(),
-            });
-            face_ids.finish_into(&mut self.frame_face_id_counter);
-            return;
-        }
+        // GNU `display_echo_area_1` (xdisp.c:13194) renders the echo area by just
+        // calling `resize_mini_window` + `try_window` over the echo-area buffer —
+        // i.e. the ordinary window walk. The inactive mini-window's `buf_id` was
+        // swapped to ` *Echo Area 0*` above, so it flows through that same walk
+        // here; there is no separate echo render path.
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;

@@ -151,14 +151,15 @@ fn content_rows_request_only_applies_to_minibuffer_windows() {
     let evaluator = Context::new();
     let mut params = window_params();
 
+    let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
     assert_eq!(
-        BufferTextWindowContentRowsRequest::new(&params, 80.0, 16.0).resolve(&evaluator),
+        BufferTextWindowContentRowsRequest::new(&params, buf_id, 80.0, 16.0).resolve(&evaluator),
         None
     );
 
     params.kind = WindowKind::Minibuffer;
     assert_eq!(
-        BufferTextWindowContentRowsRequest::new(&params, 80.0, 16.0).resolve(&evaluator),
+        BufferTextWindowContentRowsRequest::new(&params, buf_id, 80.0, 16.0).resolve(&evaluator),
         Some(1)
     );
 }

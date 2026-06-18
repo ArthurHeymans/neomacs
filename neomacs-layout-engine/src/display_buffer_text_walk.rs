@@ -180,6 +180,10 @@ pub(crate) struct BufferTextWindowOutputSetupRequest {
 
 pub(crate) struct BufferTextWindowContentRowsRequest<'a> {
     params: &'a WindowParams,
+    /// The buffer whose content height is estimated. For an inactive
+    /// mini-window this is the echo-area buffer it is displaying (GNU
+    /// `with_echo_area_buffer`), not the window record's own buffer.
+    effective_buf_id: BufferId,
     frame_height: f32,
     char_height: f32,
 }
@@ -685,9 +689,15 @@ impl BufferTextWindowChromeHeights {
 }
 
 impl<'a> BufferTextWindowContentRowsRequest<'a> {
-    pub(crate) fn new(params: &'a WindowParams, frame_height: f32, char_height: f32) -> Self {
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        effective_buf_id: BufferId,
+        frame_height: f32,
+        char_height: f32,
+    ) -> Self {
         Self {
             params,
+            effective_buf_id,
             frame_height,
             char_height,
         }
@@ -712,7 +722,7 @@ impl<'a> BufferTextWindowContentRowsRequest<'a> {
         // max_rows to the matching count avoids the boot-time tall echo-area
         // case while allowing fido/vertico multi-line overlays that GNU
         // counts during mini-window resize to render.
-        let buf_id = BufferId(self.params.buffer_id);
+        let buf_id = self.effective_buf_id;
         let content_lines = evaluator
             .buffer_manager()
             .get(buf_id)
