@@ -3662,16 +3662,30 @@ fn compile_fastmap(pattern: &mut CompiledPattern) {
                     let first = bytecode[pc];
                     pattern.fastmap[first as usize] = true;
                     if case_fold {
-                        let upper = (first as char)
-                            .to_uppercase()
-                            .next()
-                            .unwrap_or(first as char) as u8;
-                        let lower = (first as char)
-                            .to_lowercase()
-                            .next()
-                            .unwrap_or(first as char) as u8;
-                        pattern.fastmap[upper as usize] = true;
-                        pattern.fastmap[lower as usize] = true;
+                        if first >= 0x80 {
+                            // Multibyte character: the case-folded form may have
+                            // a different leading byte (e.g. Cyrillic
+                            // т = D1 82 vs Т = D0 A2), so byte-level case-folding
+                            // of `first` is meaningless and would wrongly exclude
+                            // the other case's lead byte. Conservatively allow all
+                            // multibyte leading bytes, matching the Charset path.
+                            for c in 128..256usize {
+                                pattern.fastmap[c] = true;
+                            }
+                        } else {
+                            let upper = (first as char)
+                                .to_uppercase()
+                                .next()
+                                .unwrap_or(first as char)
+                                as u8;
+                            let lower = (first as char)
+                                .to_lowercase()
+                                .next()
+                                .unwrap_or(first as char)
+                                as u8;
+                            pattern.fastmap[upper as usize] = true;
+                            pattern.fastmap[lower as usize] = true;
+                        }
                     }
                     break; // This opcode consumes input — done on this path.
                 }
