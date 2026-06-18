@@ -14988,7 +14988,7 @@ fn set_current_message_mirrors_into_echo_area_buffer() {
     // The echo-area buffers are materialized by the message-display setup, not by
     // set_current_message (GNU set_message_1 assumes they exist).
     ev.ensure_echo_area_buffers();
-    let message = crate::emacs_core::builtins::runtime_string_to_lisp_string("hello echo", true);
+    let message = crate::emacs_core::builtins::plain_str_to_lisp_string("hello echo", true);
     ev.set_current_message(Some(message));
 
     let id = ev
