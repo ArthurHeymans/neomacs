@@ -2262,6 +2262,7 @@ mod divergence_float_format_runtime;
 mod divergence_fontlock_jitlock_highlight;
 mod divergence_format_char_pua;
 mod divergence_format_char_pua_matrix;
+mod divergence_format_conversions_runtime;
 mod divergence_format_read_integers;
 mod divergence_format_specifiers;
 mod divergence_format_string_deep;
