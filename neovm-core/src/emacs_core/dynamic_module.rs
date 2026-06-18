@@ -1183,25 +1183,24 @@ unsafe extern "C" fn module_vec_set(
         return;
     }
     let val = value_to_lisp(vector);
-    if let Some(veclike_ptr) = val.as_veclike_ptr() {
-        if val.veclike_type() == Some(VecLikeType::Vector) {
-            let idx = index as usize;
-            unsafe {
-                let vec_obj = &mut *(veclike_ptr as *mut crate::tagged::header::VectorObj);
-                if idx < vec_obj.data.len() {
-                    vec_obj.data.ensure_owned();
-                    vec_obj.data.ensure_owned()[idx] = value_to_lisp(value);
-                    return;
-                }
-            }
-            unsafe {
-                let priv_ = &mut *(*env).private_members;
-                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-                priv_.non_local_exit_symbol = Value::from_sym_id(intern("args-out-of-range"));
-                priv_.non_local_exit_data = Value::list(vec![val, Value::fixnum(index as i64)]);
-            }
+    if val.veclike_type() == Some(VecLikeType::Vector) {
+        let idx = index as usize;
+        // Route the slot store through the barriered chokepoint. Writing the
+        // slot raw (as this did) skips the SATB pre-write log, so a concurrent
+        // mark could sweep an object whose last live reference was the
+        // overwritten slot — a use-after-free. `set_vector_slot` performs the
+        // bounds check + `note_heap_slot_write` + atomic store, returning false
+        // here only when `idx` is out of bounds.
+        if val.set_vector_slot(idx, value_to_lisp(value)) {
             return;
         }
+        unsafe {
+            let priv_ = &mut *(*env).private_members;
+            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+            priv_.non_local_exit_symbol = Value::from_sym_id(intern("args-out-of-range"));
+            priv_.non_local_exit_data = Value::list(vec![val, Value::fixnum(index as i64)]);
+        }
+        return;
     }
     unsafe {
         let priv_ = &mut *(*env).private_members;
