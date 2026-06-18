@@ -1196,6 +1196,7 @@ mod divergence_advice_hooks_deep;
 mod divergence_advice_hooks_locals;
 mod divergence_advice_method_buffersort_runtime;
 mod divergence_alist_plist_hash;
+mod divergence_alt_calendar_runtime;
 mod divergence_arithmetic_float;
 mod divergence_arithmetic_real;
 mod divergence_audit_advice_hooks;
