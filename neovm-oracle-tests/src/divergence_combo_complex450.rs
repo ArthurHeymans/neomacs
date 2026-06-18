@@ -1,0 +1,156 @@
+//! Complex combo batch 450 — 15 final milestone probes: thing-at-point,
+//! forward-sentence, backward-sentence, transpose-regions, replace-highlight,
+//! list-abbrevs, edit-abbrevs, define-global-abbrev, expand-abbrev,
+//! unexpand-abbrev, add-global-abbrev, inverse-add-global-abbrev,
+//! set-case-syntax-1, set-case-syntax-pair, with-case-table.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_cx450_thing_at_point() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (insert "hello world")
+  (goto-char 3)
+  (thing-at-point 'word))"##,
+    );
+}
+
+#[test]
+fn div_cx450_forward_sentence() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (insert "Hello world. Goodbye world.")
+  (goto-char 1)
+  (forward-sentence 1)
+  (point))"##,
+    );
+}
+
+#[test]
+fn div_cx450_transpose_regions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (insert "abc123")
+  (transpose-regions 1 4 4 7)
+  (buffer-string))"##,
+    );
+}
+
+#[test]
+fn div_cx450_define_global_abbrev() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'abbrev)
+  (let ((global-abbrev-table (make-abbrev-table)))
+    (define-global-abbrev "teh" "the")
+    (expand-abbrev)))"##,
+    );
+}
+
+#[test]
+fn div_cx450_abbrev_expansion() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'abbrev)
+  (let ((tab (make-abbrev-table)))
+    (define-abbrev tab "omw" "on my way")
+    (list (abbrev-expansion "omw" tab)
+          (abbrev-expansion "nonexistent" tab))))"##,
+    );
+}
+
+#[test]
+fn div_cx450_set_case_syntax() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(let ((tbl (copy-case-table)))
+  (set-case-syntax-pair ?\\[ ?\\] tbl)
+  (aref tbl ?\\[))"##,
+    );
+}
+
+#[test]
+fn div_cx450_with_case_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(let ((ct (copy-case-table)))
+  (set-char-table-range ct ?a ?x)
+  (set-case-table ct)
+  (downcase "A"))"##,
+    );
+}
+
+#[test]
+fn div_cx450_list_abbrevs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'abbrev)
+  (with-temp-buffer
+    (fboundp 'list-abbrevs)))"##,
+    );
+}
+
+#[test]
+fn div_cx450_unexpand_abbrev() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'abbrev)
+  (fboundp 'unexpand-abbrev))"##,
+    );
+}
+
+#[test]
+fn div_cx450_add_global_abbrev() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'abbrev)
+  (fboundp 'add-global-abbrev))"##,
+    );
+}
+
+#[test]
+fn div_cx450_inverse_add_global_abbrev() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'abbrev)
+  (fboundp 'inverse-add-global-abbrev))"##,
+    );
+}
+
+#[test]
+fn div_cx450_edit_abbrevs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'abbrev)
+  (fboundp 'edit-abbrevs))"##,
+    );
+}
+
+#[test]
+fn div_cx450_replace_highlight() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'replace)
+  (boundp 'replace-highlight))"##,
+    );
+}
+
+#[test]
+fn div_cx450_make_temp_file_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(let ((n (make-temp-name "/tmp/neo-cx450-")))
+  (stringp n))"##,
+    );
+}
+
+#[test]
+fn div_cx450_file_name_all_completions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(r##"(length (file-name-all-completions "" "/tmp"))"##);
+}
