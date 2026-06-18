@@ -2600,7 +2600,7 @@ pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBuff
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderContext<'a, B: LayoutBufferView> {
-    pub(crate) face_resolution_context: BufferCurrentFaceResolutionContext<'a, B>,
+    pub(crate) buffer: &'a B,
     pub(crate) buffer_id: BufferId,
     pub(crate) text_start_byte: usize,
     pub(crate) text: &'a [u8],
@@ -2621,10 +2621,7 @@ pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
     pub(crate) append_surface: &'a DisplayRowAppendSurface,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) checkpoints: &'emit mut TextPropertyScanCheckpoints,
-    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
     pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) box_face: &'emit mut BoxFaceRowState,
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
     pub(crate) x: &'emit mut f32,
@@ -2862,10 +2859,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             append_surface,
             row_geometry,
             checkpoints,
-            face_scan,
             active_face_state,
-            row_extend,
-            box_face,
             byte_idx,
             charpos,
             x,
@@ -2874,20 +2868,6 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             point_charpos,
         } = state;
         let context = self.context;
-
-        context
-            .face_resolution_context
-            .resolve_at_checkpoint_with_source_state(
-                &mut source_render,
-                face_scan,
-                face_ids,
-                active_face_state,
-                row_geometry,
-                row_extend,
-                box_face,
-                *x,
-                context.charpos,
-            );
 
         let action = BufferDisplayPropertyTextRenderContext::new(
             context.buffer_id,
@@ -2902,7 +2882,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             context.start_position,
         )
         .resolve_and_append_at_checkpoint(
-            context.face_resolution_context.buffer,
+            context.buffer,
             &mut source_render,
             face_ids,
             append_surface,

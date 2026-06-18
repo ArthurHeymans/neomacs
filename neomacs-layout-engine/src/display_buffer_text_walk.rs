@@ -2348,7 +2348,7 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn display_property_checkpoint_request<'a, B>(
         self,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'a, B>,
+        buffer: &'a B,
         text: &'a [u8],
         params: &'a WindowParams,
         x: f32,
@@ -2362,7 +2362,7 @@ impl BufferTextWindowLoopRequestContext {
     {
         BufferDisplayPropertyCheckpointRenderRequest::new(
             BufferDisplayPropertyCheckpointRenderContext {
-                face_resolution_context,
+                buffer,
                 buffer_id: self.buffer_id,
                 text_start_byte: self.text_start_byte,
                 text,
@@ -2673,13 +2673,15 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
+        self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
+
         let display_property_walk = self.render_display_property_checkpoint_for_context(
             loop_context,
-            face_resolution_context,
             text,
             params,
             append_surface,
             active_face_state,
+            buffer,
         );
         if display_property_walk.should_continue_buffer_walk() {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
@@ -2836,17 +2838,35 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         self.render_hscroll_skip(request)
     }
 
+    pub(crate) fn render_face_checkpoint_for_context<B: LayoutBufferView>(
+        &mut self,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        active_face_state: &mut DisplayRowActiveFaceState,
+    ) {
+        face_resolution_context.resolve_at_checkpoint_with_source_state(
+            &mut self.source_render.reborrow(),
+            self.face_scan,
+            self.face_ids,
+            active_face_state,
+            self.row_geometry,
+            self.row_extend,
+            self.box_face,
+            *self.x,
+            *self.charpos,
+        );
+    }
+
     pub(crate) fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
-        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
         params: &'request WindowParams,
         append_surface: &'request DisplayRowAppendSurface,
         active_face_state: &mut DisplayRowActiveFaceState,
+        buffer: &'request B,
     ) -> BufferDisplayPropertyTextWalkOutcome {
         let request = context.display_property_checkpoint_request(
-            face_resolution_context,
+            buffer,
             text,
             params,
             *self.x,
@@ -2983,10 +3003,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             append_surface,
             row_geometry: self.row_geometry,
             checkpoints: self.text_property_checkpoints,
-            face_scan: self.face_scan,
             active_face_state,
-            row_extend: self.row_extend,
-            box_face: self.box_face,
             byte_idx: self.byte_idx,
             charpos: self.charpos,
             x: self.x,

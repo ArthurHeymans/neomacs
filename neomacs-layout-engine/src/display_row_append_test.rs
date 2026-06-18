@@ -8741,22 +8741,41 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
         DisplayTabPolicy::every(8),
     );
     let params = test_display_space_window_params();
+    let face_resolution_context = BufferCurrentFaceResolutionContext::new(
+        &buffer,
+        &face_resolver,
+        measurement_policy,
+        &default_face,
+        8.0,
+        12.0,
+        16.0,
+        8.0,
+        16.0,
+        12.0,
+        false,
+    );
+
+    face_resolution_context.resolve_at_checkpoint_with_source_state(
+        &mut TextRowSourceRenderState::new(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        &mut face_scan,
+        &mut face_ids,
+        &mut active_face,
+        &mut context.geometry,
+        &mut row_extend,
+        &mut box_face,
+        x,
+        charpos,
+    );
 
     let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
         BufferDisplayPropertyCheckpointRenderContext {
-            face_resolution_context: BufferCurrentFaceResolutionContext::new(
-                &buffer,
-                &face_resolver,
-                measurement_policy,
-                &default_face,
-                8.0,
-                12.0,
-                16.0,
-                8.0,
-                16.0,
-                12.0,
-                false,
-            ),
+            buffer: &buffer,
             buffer_id: buf_id,
             text_start_byte: 0,
             text: b"abc",
@@ -8783,10 +8802,7 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
         append_surface: &surface,
         row_geometry: &mut context.geometry,
         checkpoints: &mut checkpoints,
-        face_scan: &mut face_scan,
         active_face_state: &mut active_face,
-        row_extend: &mut row_extend,
-        box_face: &mut box_face,
         byte_idx: &mut byte_idx,
         charpos: &mut charpos,
         x: &mut x,
