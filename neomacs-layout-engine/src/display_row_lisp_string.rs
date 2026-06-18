@@ -1,4 +1,3 @@
-use crate::display_buffer_text_item_append::DisplayRowSourceAppendOperation;
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
@@ -13,6 +12,7 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::display_row_source_append::DisplayRowSourceAppendOperation;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
 use crate::display_source::LispStringSourceCursor;
@@ -557,6 +557,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     match face {
         RenderFaceRef::FaceId(face_id) => face_id,

@@ -1,4 +1,3 @@
-use crate::display_buffer_text_item_append::DisplayRowSourceAppendOperation;
 use crate::display_cursor::{CapturedCursorInfo, display_property_replacement_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
@@ -21,6 +20,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 #[cfg(test)]
 use crate::display_row_lisp_string::LispStringSourceId;
+use crate::display_row_source_append::DisplayRowSourceAppendOperation;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,

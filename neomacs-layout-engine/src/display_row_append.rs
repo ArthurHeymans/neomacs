@@ -1,6 +1,5 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 
-use crate::display_buffer_text_item_append::DisplayRowSourceAppendOperation;
 use crate::display_buffer_text_render::SyntheticTextSource;
 #[cfg(test)]
 use crate::display_row::DisplayRowRenderStop;
@@ -13,6 +12,7 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
+use crate::display_row_source_append::DisplayRowSourceAppendOperation;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::neovm_bridge::ResolvedFace;
 
