@@ -31,6 +31,9 @@ use crate::display_row_geometry::{
     DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
+use crate::display_row_overlay_string::{
+    OverlayStringRenderBatchSource, OverlayStringRowBreakRenderContext, render_overlay_string_batch,
+};
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
