@@ -1,9 +1,11 @@
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
-    DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
+use crate::display_row_source_append::{
+    DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy,
+};
 use crate::neovm_bridge::ResolvedFace;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
