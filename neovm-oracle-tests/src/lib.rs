@@ -2350,6 +2350,7 @@ mod divergence_reader_printer_edge_runtime;
 mod divergence_reader_syntax_file_coding_runtime;
 mod divergence_regex_charset_runtime;
 mod divergence_regex_deep;
+mod divergence_regex_matchdata_controlflow_runtime;
 mod divergence_regex_string_search;
 mod divergence_region_mark_edit;
 mod divergence_register_narrow_misc;
