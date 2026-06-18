@@ -1229,6 +1229,7 @@ mod divergence_calendar_time_deep;
 mod divergence_casefold_matrix;
 mod divergence_category_unicode_props;
 mod divergence_charset_plist_matrix;
+mod divergence_charset_property_quoting_runtime;
 mod divergence_charset_roundtrip_runtime;
 mod divergence_charset_split_priority_runtime;
 mod divergence_chartab_charset_deep;
