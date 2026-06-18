@@ -1753,6 +1753,127 @@ fn decode_via_euc(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spec) -
     out
 }
 
+/// JIS code point (jisx0208 row/cell) -> the two Shift-JIS bytes. Mirrors
+/// `JIS_TO_SJIS` (coding.h).
+fn jis_to_sjis(code: u32) -> (u8, u8) {
+    let j1 = (code >> 8) as i32;
+    let j2 = (code & 0xFF) as i32;
+    let (s1, s2) = if j1 & 1 != 0 {
+        (
+            j1 / 2 + if j1 < 0x5F { 0x71 } else { 0xB1 },
+            j2 + if j2 >= 0x60 { 0x20 } else { 0x1F },
+        )
+    } else {
+        (j1 / 2 + if j1 < 0x5F { 0x70 } else { 0xB0 }, j2 + 0x7E)
+    };
+    (s1 as u8, s2 as u8)
+}
+
+/// Two Shift-JIS bytes -> the JIS code point. Mirrors `SJIS_TO_JIS` (coding.h).
+fn sjis_to_jis(s1: u8, s2: u8) -> u32 {
+    let s1 = s1 as i32;
+    let s2 = s2 as i32;
+    let (j1, j2) = if s2 >= 0x9F {
+        (s1 * 2 - if s1 >= 0xE0 { 0x160 } else { 0xE0 }, s2 - 0x7E)
+    } else {
+        (
+            s1 * 2 - if s1 >= 0xE0 { 0x161 } else { 0xE1 },
+            s2 - if s2 >= 0x7F { 0x20 } else { 0x1F },
+        )
+    };
+    ((j1 << 8) | j2) as u32
+}
+
+/// Charset list of a Shift-JIS coding system (`(ascii katakana-jisx0201
+/// japanese-jisx0208 …)`), or `None` if `coding` is not a shift-jis type.
+fn sjis_charsets(ctx: &crate::emacs_core::eval::Context, coding: &str) -> Option<Vec<SymId>> {
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    if resolve_sym(info.coding_type) != "shift-jis" || info.charset_list.len() < 3 {
+        return None;
+    }
+    Some(info.charset_list.clone())
+}
+
+/// Encode `s` as Shift-JIS: ASCII as-is, half-width katakana as `code | 0x80`,
+/// and JISX0208 kanji through the `JIS_TO_SJIS` shift into two bytes.
+fn encode_via_sjis(
+    s: &crate::heap_types::LispString,
+    charsets: &[SymId],
+    coding_system: &str,
+) -> Vec<u8> {
+    use crate::emacs_core::charset::charset_encode_char;
+    let kana = charsets[1];
+    let kanji = charsets[2];
+    let mut out = Vec::with_capacity(s.sbytes());
+    let emit = |code: u32, out: &mut Vec<u8>| {
+        if code < 0x80 {
+            out.push(code as u8);
+            return;
+        }
+        if crate::emacs_core::emacs_char::char_byte8_p(code) {
+            out.push(crate::emacs_core::emacs_char::char_to_byte8(code));
+            return;
+        }
+        if let Some(k) = charset_encode_char(kana, i64::from(code)) {
+            out.push((k as u8) | 0x80);
+        } else if let Some(j) = charset_encode_char(kanji, i64::from(code)) {
+            let (s1, s2) = jis_to_sjis(j as u32);
+            out.push(s1);
+            out.push(s2);
+        } else {
+            out.push(b' ');
+        }
+    };
+    if s.is_multibyte() {
+        let bytes = s.as_bytes();
+        let mut pos = 0usize;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            emit(code, &mut out);
+            pos += len;
+        }
+    } else {
+        for &byte in s.as_bytes() {
+            emit(u32::from(byte), &mut out);
+        }
+    }
+    encode_eol_bytes(&out, coding_system)
+}
+
+/// Decode Shift-JIS bytes: ASCII, half-width katakana (0xA1-0xDF), and the
+/// two-byte JISX0208 sequences (`SJIS_TO_JIS`); other bytes become eight-bit raw.
+fn decode_via_sjis(bytes: &[u8], charsets: &[SymId]) -> Vec<u8> {
+    let kana = charsets[1];
+    let kanji = charsets[2];
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut pos = 0usize;
+    let raw = |b: u8| crate::emacs_core::emacs_char::unibyte_to_char(b);
+    while pos < bytes.len() {
+        let b = bytes[pos];
+        let (code, consumed) = if b < 0x80 {
+            (u32::from(b), 1)
+        } else if (0xA1..=0xDF).contains(&b) {
+            crate::emacs_core::charset::charset_decode_char(kana, i64::from(b & 0x7F))
+                .map(|ch| (ch as u32, 1))
+                .unwrap_or((raw(b), 1))
+        } else if ((0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b))
+            && pos + 1 < bytes.len()
+        {
+            let jis = sjis_to_jis(b, bytes[pos + 1]);
+            crate::emacs_core::charset::charset_decode_char(kanji, i64::from(jis))
+                .map(|ch| (ch as u32, 2))
+                .unwrap_or((raw(b), 1))
+        } else {
+            (raw(b), 1)
+        };
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+        pos += consumed;
+    }
+    out
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1784,6 +1905,7 @@ fn builtin_coding_string_in_context(
     // the legacy family-based paths leave them empty / undecoded.  Other
     // families keep their existing handling.
     let euc_coding = euc_iso2022_spec(ctx, &coding);
+    let sjis_coding = sjis_charsets(ctx, &coding);
     let charset_coding = general_charset_coding_list(ctx, &coding, encode);
     let source_string = || {
         args[0]
@@ -1795,6 +1917,9 @@ fn builtin_coding_string_in_context(
         if let Some((spec, charsets)) = &euc_coding {
             let bytes = encode_via_euc(&source_string(), spec, charsets, &coding);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if let Some(charsets) = &sjis_coding {
+            let bytes = encode_via_sjis(&source_string(), charsets, &coding);
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some(charset_list) = &charset_coding {
             let bytes = encode_via_charset_list(&source_string(), charset_list, &coding);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
@@ -1805,6 +1930,11 @@ fn builtin_coding_string_in_context(
         let source_bytes =
             decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
         let bytes = decode_via_euc(&source_bytes, spec);
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+    } else if let Some(charsets) = &sjis_coding {
+        let source_bytes =
+            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
+        let bytes = decode_via_sjis(&source_bytes, charsets);
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some(charset_list) = &charset_coding {
         let source_bytes =

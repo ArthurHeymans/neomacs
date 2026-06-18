@@ -930,6 +930,18 @@ pub(crate) fn charset_decode_char_from_bytes(charset: SymId, bytes: &[u8]) -> Op
     CHARSET_REGISTRY.with(|slot| slot.borrow().decode_char_from_bytes(charset, bytes))
 }
 
+/// Encode `ch` in `charset` to its raw code point (not split into bytes), or
+/// `None` if unrepresentable. Used by codecs that transform the code point
+/// (e.g. Shift-JIS).
+pub(crate) fn charset_encode_char(charset: SymId, ch: i64) -> Option<i64> {
+    CHARSET_REGISTRY.with(|slot| slot.borrow().encode_char(charset, ch))
+}
+
+/// Decode a raw code point in `charset` to an Emacs character code, or `None`.
+pub(crate) fn charset_decode_char(charset: SymId, code: i64) -> Option<i64> {
+    CHARSET_REGISTRY.with(|slot| slot.borrow().decode_char(charset, code))
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
