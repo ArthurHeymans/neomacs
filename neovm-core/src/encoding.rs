@@ -1514,13 +1514,13 @@ fn coding_string_destination(
 }
 
 /// If `coding` is a plain charset-type coding system that the family branches
-/// of `encode_lisp_string` do not already handle, return its ordered
-/// `:charset-list` so the caller can encode each character through
-/// `charset_encode_char_bytes`. Returns `None` for utf-8, the single-byte /
+/// of `encode_lisp_string` / `decode_bytes` do not already handle, return its
+/// ordered `:charset-list` so the caller can encode/decode each character
+/// through the charset registry. Returns `None` for utf-8, the single-byte /
 /// Big5 / GBK families handled elsewhere, and for non-charset coding types
 /// (iso-2022/ccl/shift-jis) that need a state machine rather than a flat
 /// charset lookup.
-fn general_charset_encode_list(
+fn general_charset_coding_list(
     ctx: &crate::emacs_core::eval::Context,
     coding: &str,
 ) -> Option<Vec<SymId>> {
@@ -1587,6 +1587,34 @@ fn encode_via_charset_list(
     encode_eol_bytes(&out, coding_system)
 }
 
+/// Decode `bytes` through an explicit ordered charset list (a charset-type
+/// coding system): at each position, consume the bytes of the first charset in
+/// the list that yields an assigned code point and emit that character; a byte
+/// that no charset can decode becomes an eight-bit raw character, matching GNU.
+/// The result is Emacs internal multibyte bytes.
+fn decode_via_charset_list(bytes: &[u8], charset_list: &[SymId]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut pos = 0usize;
+    while pos < bytes.len() {
+        let decoded = charset_list.iter().find_map(|&charset| {
+            crate::emacs_core::charset::charset_decode_char_from_bytes(charset, &bytes[pos..])
+        });
+        let (code, consumed) = match decoded {
+            Some((ch, consumed)) => (ch as u32, consumed),
+            // A byte no charset can decode becomes an eight-bit raw character.
+            None => (
+                crate::emacs_core::emacs_char::unibyte_to_char(bytes[pos]),
+                1,
+            ),
+        };
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+        pos += consumed;
+    }
+    out
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1612,20 +1640,30 @@ fn builtin_coding_string_in_context(
     })?;
     let coding = context_coding_name(ctx, args[1])?;
     let destination = coding_string_destination(args.get(3).copied())?;
+    // Charset-type coding systems (cp437, koi8-r, chinese-gbk, …) encode and
+    // decode each character through their charset list; the legacy family-based
+    // paths leave them empty / undecoded.  Other families keep their existing
+    // handling.
+    let charset_coding = general_charset_coding_list(ctx, &coding);
     let result = if encode {
-        // Charset-type coding systems (cp437, koi8-r, chinese-gbk, …) encode
-        // each character through its charset list; the legacy family-based path
-        // leaves them empty.  Other families keep their existing handling.
-        if let Some(charset_list) = general_charset_encode_list(ctx, &coding) {
+        if let Some(charset_list) = &charset_coding {
             let source = args[0]
                 .as_lisp_string()
                 .expect("string argument validated above")
                 .clone();
-            let bytes = encode_via_charset_list(&source, &charset_list, &coding);
+            let bytes = encode_via_charset_list(&source, charset_list, &coding);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else {
             builtin_encode_coding_string_with_known(args, |_| true)?
         }
+    } else if let Some(charset_list) = &charset_coding {
+        let source = args[0]
+            .as_lisp_string()
+            .expect("string argument validated above")
+            .clone();
+        let source_bytes = decode_eol_text(&lisp_string_coding_source_bytes(&source), &coding);
+        let bytes = decode_via_charset_list(&source_bytes, charset_list);
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else {
         builtin_decode_coding_string_with_known(args, |_| true)?
     };

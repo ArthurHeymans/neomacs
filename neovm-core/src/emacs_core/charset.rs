@@ -669,6 +669,26 @@ impl CharsetRegistry {
         }
     }
 
+    /// Decode the next character of `bytes` in the charset, reading one byte
+    /// per charset dimension as a big-endian code point. Returns the decoded
+    /// Emacs character code and the number of bytes consumed, or `None` when
+    /// there are too few bytes or the code point is not assigned in the
+    /// charset (the caller then falls back to an eight-bit raw byte).
+    pub fn decode_char_from_bytes(&self, name: SymId, bytes: &[u8]) -> Option<(i64, usize)> {
+        let dimension = self
+            .charsets
+            .get(&self.resolve_name(name))
+            .map(|info| info.dimension.clamp(1, 4) as usize)?;
+        if bytes.len() < dimension {
+            return None;
+        }
+        let code = bytes[..dimension]
+            .iter()
+            .fold(0i64, |acc, &byte| (acc << 8) | i64::from(byte));
+        let ch = self.decode_char(name, code)?;
+        Some((ch, dimension))
+    }
+
     /// Encode `ch` in the charset and return the code point as its big-endian
     /// byte sequence (one byte per charset dimension) — the bytes a simple
     /// charset-based coding system emits for that character. Returns `None`
@@ -901,6 +921,13 @@ pub(crate) fn charset_contains_char(name: &str, ch: u32) -> Option<bool> {
 /// big-endian bytes (one per dimension), or `None` if it is not encodable.
 pub(crate) fn charset_encode_char_bytes(charset: SymId, ch: i64) -> Option<Vec<u8>> {
     CHARSET_REGISTRY.with(|slot| slot.borrow().encode_char_bytes(charset, ch))
+}
+
+/// Decode the next character of `bytes` in `charset`, returning the Emacs
+/// character code and how many bytes were consumed, or `None` when the leading
+/// bytes are not an assigned code point of the charset.
+pub(crate) fn charset_decode_char_from_bytes(charset: SymId, bytes: &[u8]) -> Option<(i64, usize)> {
+    CHARSET_REGISTRY.with(|slot| slot.borrow().decode_char_from_bytes(charset, bytes))
 }
 
 // ---------------------------------------------------------------------------
