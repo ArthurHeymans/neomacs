@@ -275,10 +275,10 @@ impl BufferTextDecodedSourceChar {
     }
 }
 
-/// A decoded event from a buffer text source: either a printable character/text
-/// run or a line-break character.
+/// A source step consumed by the buffer text row walk after typed display
+/// source items have been aligned with the current buffer byte/char cursor.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextDecodedSourceEvent {
+pub(crate) enum BufferTextSourceStep {
     LineBreak(BufferTextDecodedSourceChar),
     Text {
         source_char: BufferTextDecodedSourceChar,
@@ -286,7 +286,7 @@ pub(crate) enum BufferTextDecodedSourceEvent {
     },
 }
 
-impl BufferTextDecodedSourceEvent {
+impl BufferTextSourceStep {
     pub(crate) fn decoded_char(&self) -> BufferTextDecodedSourceChar {
         match self {
             Self::LineBreak(source_char) => *source_char,
@@ -333,15 +333,15 @@ impl PendingBufferTextRun {
         })
     }
 
-    fn next_event(
+    fn next_step(
         &mut self,
         text_start_byte: usize,
         byte_idx: &mut usize,
         charpos: i64,
-    ) -> Option<BufferTextDecodedSourceEvent> {
+    ) -> Option<BufferTextSourceStep> {
         if self.next_source_byte_idx != *byte_idx || self.next_charpos != charpos {
             tracing::debug!(
-                "BufferTextSourceEventAdapter: pending text run at byte {} charpos {} did not \
+                "BufferTextSourceStepAdapter: pending text run at byte {} charpos {} did not \
                  match buffer walk byte {} charpos {}",
                 self.next_source_byte_idx,
                 self.next_charpos,
@@ -377,9 +377,9 @@ impl PendingBufferTextRun {
         )
         .with_layout(self.layout);
 
-        Some(BufferTextDecodedSourceEvent::Text {
+        Some(BufferTextSourceStep::Text {
             source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, start_charpos),
-            source_item: text_event_source_item(source_item),
+            source_item: text_step_source_item(source_item),
         })
     }
 
@@ -389,12 +389,12 @@ impl PendingBufferTextRun {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceEventAdapter {
+pub(crate) struct BufferTextSourceStepAdapter {
     text_start_byte: usize,
     pending_text_run: Option<PendingBufferTextRun>,
 }
 
-impl BufferTextSourceEventAdapter {
+impl BufferTextSourceStepAdapter {
     pub(crate) fn new(text_start_byte: usize) -> Self {
         Self {
             text_start_byte,
@@ -402,15 +402,15 @@ impl BufferTextSourceEventAdapter {
         }
     }
 
-    pub(crate) fn next_event_from_source<B: LayoutBufferView + ?Sized>(
+    pub(crate) fn next_step_from_source<B: LayoutBufferView + ?Sized>(
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         byte_idx: &mut usize,
         charpos: i64,
-    ) -> Option<BufferTextDecodedSourceEvent> {
-        if let Some(event) = self.next_pending_event(byte_idx, charpos) {
-            return Some(event);
+    ) -> Option<BufferTextSourceStep> {
+        if let Some(step) = self.next_pending_step(byte_idx, charpos) {
+            return Some(step);
         }
 
         let expected_source_pos = CharPos0::new(charpos.max(0) as usize);
@@ -419,20 +419,20 @@ impl BufferTextSourceEventAdapter {
         }
 
         let item = source.next_item(context)?;
-        self.event_from_item(item, byte_idx, charpos)
+        self.step_from_item(item, byte_idx, charpos)
     }
 
-    pub(crate) fn event_from_item(
+    pub(crate) fn step_from_item(
         &mut self,
         item: DisplayItem,
         byte_idx: &mut usize,
         charpos: i64,
-    ) -> Option<BufferTextDecodedSourceEvent> {
+    ) -> Option<BufferTextSourceStep> {
         let buffer_byte_pos = match item.span.start {
             DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
             _ => {
                 tracing::error!(
-                    "BufferTextSourceEventAdapter: typed cursor yielded a non-buffer-span item; \
+                    "BufferTextSourceStepAdapter: typed cursor yielded a non-buffer-span item; \
                      a display property escaped the render_next_step checkpoints"
                 );
                 return None;
@@ -441,7 +441,7 @@ impl BufferTextSourceEventAdapter {
         let start_byte_idx = buffer_byte_pos.get().checked_sub(self.text_start_byte)?;
         if start_byte_idx != *byte_idx {
             tracing::error!(
-                "BufferTextSourceEventAdapter: typed cursor byte position {} did not match \
+                "BufferTextSourceStepAdapter: typed cursor byte position {} did not match \
                  buffer walk byte index {}",
                 start_byte_idx,
                 *byte_idx
@@ -459,13 +459,13 @@ impl BufferTextSourceEventAdapter {
             DisplayItemKind::TextRun(run) => {
                 self.pending_text_run =
                     PendingBufferTextRun::from_item(self.text_start_byte, span, face, layout, run);
-                self.next_pending_event(byte_idx, charpos)
+                self.next_pending_step(byte_idx, charpos)
             }
             DisplayItemKind::RowBreak(row_break)
                 if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
             {
                 *byte_idx = start_byte_idx + 1;
-                Some(BufferTextDecodedSourceEvent::LineBreak(
+                Some(BufferTextSourceStep::LineBreak(
                     BufferTextDecodedSourceChar::new('\n', start_byte_idx, charpos),
                 ))
             }
@@ -477,9 +477,9 @@ impl BufferTextSourceEventAdapter {
                     kind: DisplayItemKind::ControlChar { ch },
                     layout,
                 };
-                Some(BufferTextDecodedSourceEvent::Text {
+                Some(BufferTextSourceStep::Text {
                     source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
-                    source_item: text_event_source_item(source_item),
+                    source_item: text_step_source_item(source_item),
                 })
             }
             DisplayItemKind::Glyphless(glyphless) => {
@@ -491,14 +491,14 @@ impl BufferTextSourceEventAdapter {
                     kind: DisplayItemKind::Glyphless(glyphless),
                     layout,
                 };
-                Some(BufferTextDecodedSourceEvent::Text {
+                Some(BufferTextSourceStep::Text {
                     source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
-                    source_item: text_event_source_item(source_item),
+                    source_item: text_step_source_item(source_item),
                 })
             }
             _ => {
                 tracing::error!(
-                    "BufferTextSourceEventAdapter: typed cursor yielded a non-text item kind; \
+                    "BufferTextSourceStepAdapter: typed cursor yielded a non-text item kind; \
                      a display property escaped the render_next_step checkpoints"
                 );
                 None
@@ -506,21 +506,21 @@ impl BufferTextSourceEventAdapter {
         }
     }
 
-    fn next_pending_event(
+    fn next_pending_step(
         &mut self,
         byte_idx: &mut usize,
         charpos: i64,
-    ) -> Option<BufferTextDecodedSourceEvent> {
+    ) -> Option<BufferTextSourceStep> {
         let pending = self.pending_text_run.as_mut()?;
-        let event = pending.next_event(self.text_start_byte, byte_idx, charpos);
-        if pending.is_finished() || event.is_none() {
+        let step = pending.next_step(self.text_start_byte, byte_idx, charpos);
+        if pending.is_finished() || step.is_none() {
             self.pending_text_run = None;
         }
-        event
+        step
     }
 }
 
-fn text_event_source_item(source_item: DisplayItem) -> Option<DisplayItem> {
+fn text_step_source_item(source_item: DisplayItem) -> Option<DisplayItem> {
     if source_item.layout == DisplayItemLayout::default() {
         Some(source_item)
     } else {
@@ -531,7 +531,7 @@ fn text_event_source_item(source_item: DisplayItem) -> Option<DisplayItem> {
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
 /// property boundaries) and emits `DisplayItem` values for the shared row
 /// renderer. The main buffer walk consumes this cursor through
-/// `BufferTextSourceEventAdapter` while the remaining row lifecycle is migrated
+/// `BufferTextSourceStepAdapter` while the remaining row lifecycle is migrated
 /// from character-at-a-time events to direct display items.
 pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     buffer_id: BufferId,

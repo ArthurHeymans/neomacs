@@ -27,8 +27,8 @@ use crate::display_buffer_text_render::{
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
-    BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextSourceCursor,
-    BufferTextSourceEventAdapter,
+    BufferTextDecodedSourceChar, BufferTextSourceCursor, BufferTextSourceStep,
+    BufferTextSourceStepAdapter,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -892,7 +892,7 @@ impl BufferTextWindowWalkSetup {
             RenderFaceRef::Inherit,
         );
         let mut source_context = DisplaySourceContext::empty();
-        let mut source_adapter = BufferTextSourceEventAdapter::new(loop_context.text_start_byte());
+        let mut source_adapter = BufferTextSourceStepAdapter::new(loop_context.text_start_byte());
 
         BufferTextWindowLoopRenderState::new(
             &mut self.buffer_text_append_state,
@@ -2594,7 +2594,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'request, B>,
         source_context: &mut DisplaySourceContext<'_>,
-        source_adapter: &mut BufferTextSourceEventAdapter,
+        source_adapter: &mut BufferTextSourceStepAdapter,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -2636,7 +2636,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'request, B>,
         source_context: &mut DisplaySourceContext<'_>,
-        source_adapter: &mut BufferTextSourceEventAdapter,
+        source_adapter: &mut BufferTextSourceStepAdapter,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -2695,15 +2695,15 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        let Some(source_event) =
-            self.consume_source_event(source_cursor, source_context, source_adapter)
+        let Some(source_step) =
+            self.consume_source_step(source_cursor, source_context, source_adapter)
         else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
         let selective_display_outcome = self.render_selective_display_tail_for_context(
             loop_context,
-            source_event.decoded_char(),
+            source_step.decoded_char(),
             text,
             append_surface,
             active_face_state,
@@ -2716,8 +2716,8 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        match source_event {
-            BufferTextDecodedSourceEvent::LineBreak(source_char) => {
+        match source_step {
+            BufferTextSourceStep::LineBreak(source_char) => {
                 if self
                     .render_line_break_for_context(
                         loop_context,
@@ -2731,7 +2731,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                     return BufferTextWindowLoopStepOutcome::StopBufferWalk;
                 }
             }
-            BufferTextDecodedSourceEvent::Text {
+            BufferTextSourceStep::Text {
                 source_char,
                 source_item,
             } => {
@@ -2798,17 +2798,17 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             );
     }
 
-    pub(crate) fn consume_source_event<B: LayoutBufferView>(
+    pub(crate) fn consume_source_step<B: LayoutBufferView>(
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'_, B>,
         source_context: &mut DisplaySourceContext<'_>,
-        source_adapter: &mut BufferTextSourceEventAdapter,
-    ) -> Option<BufferTextDecodedSourceEvent> {
-        // Native path: one persistent typed source cursor feeds the legacy
-        // character-at-a-time walk. The adapter splits text-run items while
+        source_adapter: &mut BufferTextSourceStepAdapter,
+    ) -> Option<BufferTextSourceStep> {
+        // One persistent typed source cursor feeds the remaining
+        // character-at-a-time row walk. The adapter splits text-run items while
         // preserving source spans, so the row walk no longer rebuilds a source
         // cursor for every character.
-        source_adapter.next_event_from_source(
+        source_adapter.next_step_from_source(
             source_cursor,
             source_context,
             self.byte_idx,
