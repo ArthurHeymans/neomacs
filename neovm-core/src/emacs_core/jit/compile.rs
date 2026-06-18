@@ -1535,8 +1535,25 @@ impl CompiledLeaf {
         }
         if let Some((spec_base, stack_base)) = bind_frame {
             JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(stack_base));
+            // `unbind_to` runs unwind-protect cleanups (arbitrary lisp -> GC). On
+            // STATUS_OK the result lives ONLY in the local `out`, so a
+            // cleanup-triggered collection would sweep it while it is the return
+            // value (exact-root GC use-after-free). Root it across the unwind via
+            // the scratch roots, mirroring the interpreter's
+            // `unbind_to_with_result`. Signal/Throw flow components live in the
+            // Context's pending state, which the unwind preserves.
+            let saved_roots = if status == STATUS_OK {
+                let saved = crate::emacs_core::eval::save_scratch_gc_roots();
+                crate::emacs_core::eval::push_scratch_gc_root(Value::from_bits(out as usize));
+                Some(saved)
+            } else {
+                None
+            };
             // SAFETY: as above.
             unsafe { (*(vmctx as *mut Context)).unbind_to(spec_base) };
+            if let Some(saved) = saved_roots {
+                crate::emacs_core::eval::restore_scratch_gc_roots(saved);
+            }
         }
         match status {
             STATUS_OK => NativeRun::Ok(out as usize),
@@ -3183,7 +3200,25 @@ fn lower_simple_op(
             let val = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let vmctx = fb.use_var(rt.vmctx_var);
             let sym_v = fb.ins().iconst(types::I64, sym as i64);
+            // The shim runs variable watchers (arbitrary lisp -> GC). `val` is
+            // rooted by `specbind` inside the shim, but the remaining operand
+            // stack lives only in Cranelift registers — root it across the call
+            // (mirrors VarRef/VarSet). This is an exact-root GC: a live Value
+            // unrooted across a GC-capable call is a use-after-free.
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
             fb.ins().call(rt.refs.varbind, &[vmctx, sym_v, val]);
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
         }
         Op::Unbind(n) => {
             // Unbind the N most recent dynamic bindings — infallible; the
@@ -3191,7 +3226,22 @@ fn lower_simple_op(
             let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
             let vmctx = fb.use_var(rt.vmctx_var);
             let n_v = fb.ins().iconst(types::I64, *n as i64);
+            // The shim runs unwind-protect cleanups (arbitrary lisp -> GC); root
+            // the whole live operand stack across the call.
+            let saved = if stack.is_empty() {
+                None
+            } else {
+                let c = fb.ins().call(rt.refs.gc_save, &[]);
+                let s = fb.inst_results(c)[0];
+                for &v in stack.iter() {
+                    fb.ins().call(rt.refs.gc_push, &[v]);
+                }
+                Some(s)
+            };
             fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
+            if let Some(s) = saved {
+                fb.ins().call(rt.refs.gc_restore, &[s]);
+            }
         }
         Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => {
             // Infallible specpdl records (the interpreter arms mirrored in the
