@@ -2925,7 +2925,15 @@ fn builtin_coding_region(
     expect_range_args(name, &args, 3, 4)?;
 
     let coding = context_coding_name(ctx, args[2])?;
-    let destination = coding_region_destination(args.get(3).copied())?;
+    let mut destination = coding_region_destination(args.get(3).copied())?;
+    // A DESTINATION that is the current buffer means in-place conversion
+    // (GNU `code_convert_region` with dst_object == the source buffer), not an
+    // insertion that would duplicate the text.
+    if let Some(Some(dest_id)) = destination {
+        if Some(dest_id) == ctx.buffers.current_buffer_id() {
+            destination = Some(None);
+        }
+    }
     let Some(byte_range) =
         crate::emacs_core::editfns::current_buffer_accessible_char_region_in_buffers(
             &ctx.buffers,
