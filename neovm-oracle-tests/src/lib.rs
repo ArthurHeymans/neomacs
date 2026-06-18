@@ -2401,6 +2401,7 @@ mod divergence_time_process_final;
 mod divergence_time_zone_runtime;
 mod divergence_timer_eventloop;
 mod divergence_treesit_deep;
+mod divergence_ucs_normalize_i18n_runtime;
 mod divergence_ui_interaction;
 mod divergence_undo_buffer_deep;
 mod divergence_undo_deep_2;
