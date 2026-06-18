@@ -135,7 +135,12 @@ impl BufferTextWindowTerminalRightBorderRequest {
         let border_face = render_services
             .face_resolver()
             .resolve_named_face(self.face_name);
-        let border_face_id = border_face.face_id;
+        // GNU draws every realized face id from the single per-frame face cache
+        // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
+        // border's id from the frame-scoped allocator (reconciled into
+        // `frame_face_id_counter` by the decoration render, engine.rs) rather than
+        // a separate `FaceResolver` counter that could collide with it.
+        let border_face_id = render_services.face_ids().allocate();
         insert_resolved_display_row_face(builder, border_face_id, &border_face, None);
         install_last_window_right_border_from_source_requests(
             builder,

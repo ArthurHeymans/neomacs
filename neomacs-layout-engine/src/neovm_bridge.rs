@@ -2176,9 +2176,6 @@ impl Default for ResolvedFace {
 pub struct FaceResolver {
     face_table: FaceTable,
     default_face: ResolvedFace,
-    /// Next dynamic face ID.  Basic faces occupy 0–19 (matching
-    /// [`BasicFaceId`]); dynamically realized faces start at 20+.
-    next_dynamic_id: std::cell::Cell<u32>,
     /// Window system in use: `None` for TTY, `Some("x")` for X11,
     /// `Some("wayland")` for Wayland, etc.  Used to evaluate
     /// `:filtered` face spec predicates.
@@ -2280,9 +2277,6 @@ impl FaceResolver {
         Self {
             face_table: face_table.clone(),
             default_face: df,
-            next_dynamic_id: std::cell::Cell::new(
-                neomacs_display_protocol::face::BasicFaceId::SENTINEL,
-            ),
             window_system,
             font_sizing,
         }
@@ -2306,9 +2300,11 @@ impl FaceResolver {
         if let Some(basic) = BasicFaceId::from_name(name) {
             resolved.face_id = basic.into();
         } else {
-            let id = self.next_dynamic_id.get();
-            self.next_dynamic_id.set(id + 1);
-            resolved.face_id = id;
+            // Non-basic faces carry no stable id from here. Every consumer that
+            // needs a matrix face id re-keys via the frame-scoped allocator
+            // (GNU's single `face_cache->used`); the sentinel makes that
+            // "must be re-keyed" contract explicit.
+            resolved.face_id = BasicFaceId::SENTINEL;
         }
         resolved
     }
@@ -2330,9 +2326,9 @@ impl FaceResolver {
         if let Some(basic) = BasicFaceId::from_name(name) {
             resolved.face_id = basic.into();
         } else {
-            let id = self.next_dynamic_id.get();
-            self.next_dynamic_id.set(id + 1);
-            resolved.face_id = id;
+            // See `resolve_named_face`: non-basic faces are re-keyed by consumers
+            // via the frame-scoped allocator (GNU `face_cache->used`).
+            resolved.face_id = BasicFaceId::SENTINEL;
         }
         resolved.terminal_inverse_video = false;
         resolved

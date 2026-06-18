@@ -78,7 +78,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         self.face_resolver
     }
 
-    fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
+    pub(crate) fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
         self.face_ids
     }
 

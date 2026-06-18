@@ -6303,6 +6303,51 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
 }
 
 #[test]
+fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
+    // Slice 10 B / GNU `face_cache->used` (xfaces.c `lookup_face`): the TTY right
+    // border must draw its realized face id from the single per-frame allocator,
+    // so it can never alias a window's dynamic content faces (which are keyed
+    // from that same allocator). Before this fix the border used a separate
+    // `FaceResolver` counter that ALSO started at SENTINEL, so a multi-window TTY
+    // frame whose window had both a dynamic content face AND a right border could
+    // collapse them onto one id — silent in single-window fixtures.
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for ch in "abcd".chars() {
+        write_char_to_current_row_with_width(&mut builder, ch, 0, 0, 8.0);
+    }
+    builder.end_row();
+    builder.end_window();
+
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    // A dynamic (non-basic) content face takes the first id from the frame
+    // allocator, exactly as a propertized buffer-text run would.
+    let content_face_id = face_ids.allocate();
+    let mut font_metrics = None;
+    let border_face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
+        &mut builder,
+        crate::display_status_line::ChromeRowRenderServices::new(
+            &mut font_metrics,
+            &face_resolver,
+            &mut face_ids,
+        ),
+    );
+
+    assert_ne!(
+        border_face_id, content_face_id,
+        "border face id must not collide with a window's dynamic content face id"
+    );
+    assert_eq!(
+        border_face_id,
+        content_face_id + 1,
+        "border face id must be the next id from the shared frame allocator"
+    );
+}
+
+#[test]
 fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserves_marker() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
