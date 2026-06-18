@@ -1834,6 +1834,53 @@ fn buffer_text_source_step_adapter_preserves_single_char_source_item() {
 }
 
 #[test]
+fn buffer_text_source_step_item_keeps_raise_layout_as_row_item() {
+    let source_item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("x")),
+    )
+    .with_layout(DisplayItemLayout {
+        raise: Some(0.25),
+        height: None,
+    });
+
+    let step_item = BufferTextSourceStepItem::from_display_item(source_item);
+
+    let Some(row_item) = step_item.row_item() else {
+        panic!("raise-only display layout should remain a typed row item");
+    };
+    assert_eq!(row_item.layout.raise, Some(0.25));
+    assert_eq!(row_item.layout.height, None);
+}
+
+#[test]
+fn buffer_text_source_step_item_falls_back_for_height_layout() {
+    let source_item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("x")),
+    )
+    .with_layout(DisplayItemLayout {
+        raise: Some(0.25),
+        height: Some(1.5),
+    });
+
+    let step_item = BufferTextSourceStepItem::from_display_item(source_item);
+
+    assert!(step_item.row_item().is_none());
+    assert_eq!(
+        step_item,
+        BufferTextSourceStepItem::LegacyLayoutFallback {
+            layout: DisplayItemLayout {
+                raise: Some(0.25),
+                height: Some(1.5),
+            }
+        }
+    );
+}
+
+#[test]
 fn buffer_text_source_step_adapter_splits_persistent_text_run() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -8783,6 +8830,22 @@ fn buffer_display_property_text_modifier_action_applies_walk_state() {
     assert_eq!(raise_span.value(), Some(-4.0));
     assert_eq!(height_span.value(), Some(1.5));
     assert!(face_scan.should_resolve_at(0));
+}
+
+#[test]
+fn buffer_display_property_text_modifier_action_leaves_raise_to_typed_item_without_height() {
+    let action = BufferDisplayPropertyTextModifierAction::new_for_test(Some(-4.0), None, 11);
+    let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    let mut height_span = ActiveDisplayPropertySpan::inactive();
+    let mut face_scan = FaceScanCheckpoint::initial();
+    *face_scan.next_check_mut() = 99;
+
+    let outcome = action.apply_to_walk_state(&mut raise_span, &mut height_span, &mut face_scan);
+
+    assert!(!outcome.height_face_changed());
+    assert_eq!(raise_span.value(), None);
+    assert_eq!(height_span.value(), None);
+    assert!(!face_scan.should_resolve_at(0));
 }
 
 #[test]

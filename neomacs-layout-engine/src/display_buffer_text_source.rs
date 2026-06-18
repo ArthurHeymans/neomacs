@@ -303,7 +303,7 @@ pub(crate) enum BufferTextSourceStepItem {
 
 impl BufferTextSourceStepItem {
     pub(crate) fn from_display_item(source_item: DisplayItem) -> Self {
-        if source_item.layout == DisplayItemLayout::default() {
+        if source_item.layout.height.is_none() {
             Self::RowItem(source_item)
         } else {
             Self::LegacyLayoutFallback {

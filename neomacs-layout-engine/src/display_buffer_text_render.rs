@@ -3102,10 +3102,10 @@ impl BufferDisplayPropertyTextModifierAction {
         height_span: &mut ActiveDisplayPropertySpan<f32>,
         face_scan: &mut FaceScanCheckpoint,
     ) -> BufferDisplayPropertyTextModifierStateOutcome {
-        if let Some(raise_offset_px) = self.raise_offset_px() {
-            raise_span.set(raise_offset_px, self.next_change());
-        }
         let height_face_changed = if let Some(factor) = self.height_factor() {
+            if let Some(raise_offset_px) = self.raise_offset_px() {
+                raise_span.set(raise_offset_px, self.next_change());
+            }
             height_span.set(factor, self.next_change());
             face_scan.invalidate();
             true
