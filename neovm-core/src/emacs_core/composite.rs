@@ -210,31 +210,134 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
     Ok(args[0])
 }
 
-/// Decode an UNREGISTERED composition property `((LENGTH . COMPONENTS) . MOD-FUNC)`
-/// into `(length, components, mod-func)`. `compose-region-internal` only ever
-/// stores this (Form-A) shape; neomacs never rewrites it to GNU's registered
-/// `(ID . (LENGTH COMPONENTS . FUNC))` form (the registration is a display-time
-/// optimization keyed on a global id and is not Lisp-observable here).
-fn composition_unregistered_parts(prop: Value) -> Option<(i64, Value, Value)> {
+thread_local! {
+    /// Mirrors GNU's `composition_hash_table` (dedup: component chars -> id) plus
+    /// the `relative_p` slice of `composition_table` (id -> method). The id
+    /// counter is GNU's `n_compositions`. Keyed on the component char codes so
+    /// there is no GC interaction; `relative_by_id[id]` lets a later
+    /// `find-composition`/decode of a registered (Form-B) property recover the
+    /// `relative-p` it can no longer infer from the bare components vector.
+    static COMPOSITION_REGISTRY: std::cell::RefCell<CompositionRegistry> =
+        std::cell::RefCell::new(CompositionRegistry {
+            next_id: 0,
+            dedup: std::collections::HashMap::new(),
+            relative_by_id: Vec::new(),
+        });
+}
+
+struct CompositionRegistry {
+    next_id: i64,
+    dedup: std::collections::HashMap<Vec<i64>, i64>,
+    relative_by_id: Vec<bool>,
+}
+
+/// The component char codes of a key vector, or None if any element is not a
+/// fixnum (rule-based components carrying cons rules — not deduped, like a
+/// distinct GNU registration).
+fn composition_key_codes(key: &Value) -> Option<Vec<i64>> {
+    let items = key.as_vector_data()?;
+    let mut codes = Vec::with_capacity(items.len());
+    for item in items.iter() {
+        codes.push(item.as_fixnum()?);
+    }
+    Some(codes)
+}
+
+/// GNU `get_composition_id` id assignment: reuse the id of an identical
+/// composition (same component chars) else allocate the next id, recording its
+/// `relative-p` (method) for later decode.
+fn composition_assign_id(key: &Value, relative_p: bool) -> i64 {
+    let codes = composition_key_codes(key);
+    COMPOSITION_REGISTRY.with(|reg| {
+        let mut reg = reg.borrow_mut();
+        if let Some(codes) = &codes {
+            if let Some(&id) = reg.dedup.get(codes) {
+                return id;
+            }
+        }
+        let id = reg.next_id;
+        reg.next_id += 1;
+        if let Some(codes) = codes {
+            reg.dedup.insert(codes, id);
+        }
+        reg.relative_by_id.push(relative_p);
+        id
+    })
+}
+
+fn composition_lookup_relative(id: i64) -> bool {
+    COMPOSITION_REGISTRY.with(|reg| {
+        reg.borrow()
+            .relative_by_id
+            .get(id as usize)
+            .copied()
+            .unwrap_or(true)
+    })
+}
+
+/// A registered (Form-B) composition property `(ID LENGTH COMPONENTS-VEC . MOD)`.
+fn composition_registered_p(prop: Value) -> bool {
+    prop.is_cons() && prop.cons_car().is_fixnum()
+}
+
+/// Decode either composition form into `(length, components-or-vec, mod-func,
+/// registered-id)`. `registered-id` is `Some` for Form-B (then the second value
+/// is the components vector), `None` for Form-A (the raw components).
+fn composition_parts_any(prop: Value) -> Option<(i64, Value, Value, Option<i64>)> {
     if !prop.is_cons() {
         return None;
     }
-    let head = prop.cons_car(); // (LENGTH . COMPONENTS)
-    let mod_func = prop.cons_cdr();
-    if !head.is_cons() {
-        return None;
+    let head = prop.cons_car();
+    if let Some(id) = head.as_fixnum() {
+        // Form-B: (ID . (LENGTH COMPONENTS-VEC . MOD)).
+        let rest = prop.cons_cdr();
+        if !rest.is_cons() {
+            return None;
+        }
+        let length = rest.cons_car().as_fixnum()?;
+        let after = rest.cons_cdr();
+        if !after.is_cons() {
+            return None;
+        }
+        Some((length, after.cons_car(), after.cons_cdr(), Some(id)))
+    } else if head.is_cons() {
+        // Form-A: ((LENGTH . COMPONENTS) . MOD).
+        let length = head.cons_car().as_fixnum()?;
+        Some((length, head.cons_cdr(), prop.cons_cdr(), None))
+    } else {
+        None
     }
-    let length = head.cons_car().as_fixnum()?;
-    let components = head.cons_cdr();
-    Some((length, components, mod_func))
+}
+
+/// GNU `get_composition_id`: register a Form-A composition and rewrite the
+/// (shared) property cons in place to Form-B `(ID LENGTH COMPONENTS-VEC . MOD)`.
+/// Direct car/cdr mutation matches GNU's `XSETCAR`/`XSETCDR` — it upgrades the
+/// stored property without re-running put-text-property or touching
+/// buffer-modified-p. Returns the composition id.
+fn composition_register_prop(
+    prop: Value,
+    key: Value,
+    length: i64,
+    mod_func: Value,
+    relative_p: bool,
+) -> i64 {
+    let id = composition_assign_id(&key, relative_p);
+    let saved = super::eval::save_scratch_gc_roots();
+    super::eval::push_scratch_gc_root(key);
+    super::eval::push_scratch_gc_root(mod_func);
+    let new_cdr = Value::cons(Value::fixnum(length), Value::cons(key, mod_func));
+    prop.set_car(Value::fixnum(id));
+    prop.set_cdr(new_cdr);
+    super::eval::restore_scratch_gc_roots(saved);
+    id
 }
 
 /// Display width and character length of the composition whose `composition`
 /// text property begins at 1-based buffer position `charpos1`, or None if there
-/// is no valid composition there. This is what GNU's `current_column_1` /
-/// display scan derives from a composition (the composed glyphs' width over its
-/// covered characters); the column engine consults it so composed text lays out
-/// at the glyphs' width, not the underlying chars'.
+/// is no valid composition there. This is GNU's `get_composition_id` as called
+/// from `current_column_1`: it returns the composed glyphs' width over the
+/// covered characters AND, the first time the composition is seen, registers it
+/// — rewriting the property from Form-A to Form-B in place.
 pub(crate) fn composition_width_at(
     ctx: &super::eval::Context,
     charpos1: i64,
@@ -245,26 +348,40 @@ pub(crate) fn composition_width_at(
         vec![Value::fixnum(charpos1), Value::symbol("composition")],
     )
     .ok()?;
-    let (length, components, _) = composition_unregistered_parts(prop)?;
+    let (length, components, mod_func, registered) = composition_parts_any(prop)?;
     if length <= 0 {
         return None;
     }
+    if registered.is_some() {
+        // Already Form-B: `components` is the registered components vector.
+        return Some((composition_relative_width(&components), length));
+    }
+    // Form-A: compute the width, then register (rewrite in place to Form-B).
     let key = composition_components_key(ctx, components, Value::NIL, charpos1, length);
-    Some((composition_relative_width(&key), length))
+    let width = composition_relative_width(&key);
+    let relative_p = composition_relative_p(components);
+    composition_register_prop(prop, key, length, mod_func, relative_p);
+    Some((width, length))
 }
 
 /// GNU `composition_valid_p` restricted to the unregistered form: PROP is a
 /// well-formed composition property whose stored length equals `end - start`.
 fn composition_valid_unregistered(start: i64, end: i64, prop: Value) -> bool {
-    let Some((length, components, _)) = composition_unregistered_parts(prop) else {
+    let Some((length, components, _, registered)) = composition_parts_any(prop) else {
         return false;
     };
-    let components_ok = components.is_nil()
+    if length != end - start {
+        return false;
+    }
+    if registered.is_some() {
+        // Form-B: components is the registered components vector.
+        return true;
+    }
+    components.is_nil()
         || components.is_string()
         || components.is_vector()
         || components.is_fixnum()
-        || components.is_cons();
-    components_ok && length == end - start
+        || components.is_cons()
 }
 
 /// GNU `composition_method`: relative unless the components describe explicit
@@ -517,10 +634,22 @@ pub(crate) fn builtin_find_composition_internal(
         ]));
     }
 
-    let (_length, components, mod_func) =
-        composition_unregistered_parts(prop).expect("valid composition decodes");
-    let relative_p = composition_relative_p(components);
-    let key = composition_components_key(ctx, components, args[2], start, end - start);
+    // Requesting detail registers the composition (GNU `get_composition_id` in
+    // the detail branch of `Ffind_composition_internal`), so a subsequent read
+    // of the property sees Form-B. The Lisp-visible detail list is identical for
+    // both forms.
+    let (length, components, mod_func, registered) =
+        composition_parts_any(prop).expect("valid composition decodes");
+    let (key, relative_p) = if let Some(id) = registered {
+        // Already Form-B: components is the registered vector; relative-p was
+        // recorded at registration (it cannot be inferred from the bare vector).
+        (components, composition_lookup_relative(id))
+    } else {
+        let relative_p = composition_relative_p(components);
+        let key = composition_components_key(ctx, components, args[2], start, end - start);
+        composition_register_prop(prop, key, length, mod_func, relative_p);
+        (key, relative_p)
+    };
     let width = composition_relative_width(&key);
     Ok(Value::list(vec![
         Value::fixnum(start),
