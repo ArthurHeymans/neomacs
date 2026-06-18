@@ -1,5 +1,6 @@
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition, DisplayTextRun,
+    RenderFaceRef, SourceSpan,
 };
 use crate::display_source::{
     BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
@@ -355,6 +356,88 @@ impl BufferTextSourceTextEvent {
 
     pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
         self.source_char.source_char(nobreak_display_policy)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSourceEventAdapter {
+    text_start_byte: usize,
+}
+
+impl BufferTextSourceEventAdapter {
+    pub(crate) fn new(text_start_byte: usize) -> Self {
+        Self { text_start_byte }
+    }
+
+    pub(crate) fn event_from_item(
+        self,
+        item: DisplayItem,
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextDecodedSourceEvent> {
+        let buffer_byte_pos = match item.span.start {
+            DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
+            _ => {
+                tracing::error!(
+                    "BufferTextSourceEventAdapter: typed cursor yielded a non-buffer-span item; \
+                     a display property escaped the render_next_step checkpoints; \
+                     falling back to decoding the underlying buffer char"
+                );
+                return BufferTextDecodedSourceChar::consume_from_text(text, byte_idx, charpos)
+                    .map(BufferTextDecodedSourceChar::into_event);
+            }
+        };
+        let start_byte_idx = buffer_byte_pos
+            .get()
+            .checked_sub(self.text_start_byte)?
+            .min(text.len());
+
+        match item.kind {
+            DisplayItemKind::TextRun(run) => {
+                let ch = run.text.chars().next()?;
+                *byte_idx = start_byte_idx + ch.len_utf8();
+                Some(BufferTextDecodedSourceEvent::Text(
+                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
+                        ch,
+                        start_byte_idx,
+                        charpos,
+                    )),
+                ))
+            }
+            DisplayItemKind::RowBreak(row_break)
+                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
+            {
+                *byte_idx = start_byte_idx + 1;
+                Some(BufferTextDecodedSourceEvent::LineBreak(
+                    BufferTextLineBreakSourceEvent::new(BufferTextDecodedSourceChar::new(
+                        '\n',
+                        start_byte_idx,
+                        charpos,
+                    )),
+                ))
+            }
+            DisplayItemKind::ControlChar { ch }
+            | DisplayItemKind::Glyphless(crate::display_item::DisplayGlyphless { ch, .. }) => {
+                *byte_idx = start_byte_idx + ch.len_utf8();
+                Some(BufferTextDecodedSourceEvent::Text(
+                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
+                        ch,
+                        start_byte_idx,
+                        charpos,
+                    )),
+                ))
+            }
+            _ => {
+                tracing::error!(
+                    "BufferTextSourceEventAdapter: typed cursor yielded a non-text item kind; \
+                     a display property escaped the render_next_step checkpoints; \
+                     falling back to decoding the underlying buffer char"
+                );
+                BufferTextDecodedSourceChar::consume_from_text(text, byte_idx, charpos)
+                    .map(BufferTextDecodedSourceChar::into_event)
+            }
+        }
     }
 }
 

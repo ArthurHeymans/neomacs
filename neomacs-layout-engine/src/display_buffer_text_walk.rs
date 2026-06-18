@@ -28,11 +28,11 @@ use crate::display_buffer_text_render::{
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
     BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakSourceEvent,
-    BufferTextSourceCursor, BufferTextSourceTextEvent,
+    BufferTextSourceCursor, BufferTextSourceEventAdapter, BufferTextSourceTextEvent,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::{DisplayItemKind, DisplayRowBreakReason, RenderFaceRef};
+use crate::display_item::RenderFaceRef;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -2792,91 +2792,12 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         // End-of-buffer: the only legitimate `None`. Reached at the end of the
         // walk and must keep returning None to stop it.
         let item = cursor.next_item(&mut context)?;
-
-        let text_start_byte = loop_context.text_start_byte();
-        let relative_byte_idx =
-            |byte_pos: EmacsBytePos| byte_pos.get().checked_sub(text_start_byte);
-        // The pre-source checkpoints guarantee a buffer-span item here.
-        let buffer_byte_pos = match item.span.start {
-            crate::display_item::DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
-            _ => {
-                // Structurally pre-empted by the render_next_step checkpoints, so
-                // not expected to fire. Degrade gracefully (decode the underlying
-                // buffer char, as the former raw decoder did) rather than panic
-                // during redisplay, and log loudly so it is not hidden.
-                tracing::error!(
-                    "consume_source_event: typed cursor yielded a non-buffer-span item; \
-                     a display property escaped the render_next_step checkpoints — \
-                     falling back to decoding the underlying buffer char"
-                );
-                return BufferTextDecodedSourceChar::consume_from_text(
-                    text,
-                    self.byte_idx,
-                    *self.charpos,
-                )
-                .map(BufferTextDecodedSourceChar::into_event);
-            }
-        };
-
-        match item.kind {
-            DisplayItemKind::TextRun(run) => {
-                let ch = run.text.chars().next()?;
-                let start_byte_idx = relative_byte_idx(buffer_byte_pos)?;
-                let start_charpos = *self.charpos;
-                let start_byte_idx = start_byte_idx.min(text.len());
-                *self.byte_idx = start_byte_idx + ch.len_utf8();
-                Some(BufferTextDecodedSourceEvent::Text(
-                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
-                        ch,
-                        start_byte_idx,
-                        start_charpos,
-                    )),
-                ))
-            }
-            DisplayItemKind::RowBreak(row_break)
-                if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
-            {
-                let start_byte_idx = relative_byte_idx(buffer_byte_pos)?;
-                let start_charpos = *self.charpos;
-                let start_byte_idx = start_byte_idx.min(text.len());
-                *self.byte_idx = start_byte_idx + 1;
-                Some(BufferTextDecodedSourceEvent::LineBreak(
-                    BufferTextLineBreakSourceEvent::new(BufferTextDecodedSourceChar::new(
-                        '\n',
-                        start_byte_idx,
-                        start_charpos,
-                    )),
-                ))
-            }
-            DisplayItemKind::ControlChar { ch }
-            | DisplayItemKind::Glyphless(crate::display_item::DisplayGlyphless { ch, .. }) => {
-                let start_byte_idx = relative_byte_idx(buffer_byte_pos)?;
-                let start_charpos = *self.charpos;
-                let start_byte_idx = start_byte_idx.min(text.len());
-                *self.byte_idx = start_byte_idx + ch.len_utf8();
-                Some(BufferTextDecodedSourceEvent::Text(
-                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
-                        ch,
-                        start_byte_idx,
-                        start_charpos,
-                    )),
-                ))
-            }
-            // Replacement / display-spec / image / stretch items are pre-empted
-            // by the display-property / invisible / hscroll checkpoints in
-            // render_next_step before this source is consulted, so this is not
-            // expected to fire. Degrade gracefully (decode the underlying buffer
-            // char) rather than panic during redisplay, and log loudly.
-            _ => {
-                tracing::error!(
-                    "consume_source_event: typed cursor yielded a non-text item kind; \
-                     a display property escaped the render_next_step checkpoints — \
-                     falling back to decoding the underlying buffer char"
-                );
-                BufferTextDecodedSourceChar::consume_from_text(text, self.byte_idx, *self.charpos)
-                    .map(BufferTextDecodedSourceChar::into_event)
-            }
-        }
+        BufferTextSourceEventAdapter::new(loop_context.text_start_byte()).event_from_item(
+            item,
+            text,
+            self.byte_idx,
+            *self.charpos,
+        )
     }
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
