@@ -254,6 +254,7 @@ impl BufferTextDecodedSourceChar {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn consume_from_text(
         text: &[u8],
         byte_idx: &mut usize,
@@ -293,6 +294,7 @@ impl BufferTextDecodedSourceChar {
         BufferTextSourceRange::single_char(CharPos0::new(self.start_charpos as usize))
     }
 
+    #[cfg(test)]
     pub(crate) fn into_event(self) -> BufferTextDecodedSourceEvent {
         if self.ch == '\n' {
             BufferTextDecodedSourceEvent::LineBreak(BufferTextLineBreakSourceEvent::new(self))
@@ -391,7 +393,6 @@ impl BufferTextSourceEventAdapter {
     pub(crate) fn event_from_item(
         self,
         item: DisplayItem,
-        text: &[u8],
         byte_idx: &mut usize,
         charpos: i64,
     ) -> Option<BufferTextDecodedSourceEvent> {
@@ -400,17 +401,21 @@ impl BufferTextSourceEventAdapter {
             _ => {
                 tracing::error!(
                     "BufferTextSourceEventAdapter: typed cursor yielded a non-buffer-span item; \
-                     a display property escaped the render_next_step checkpoints; \
-                     falling back to decoding the underlying buffer char"
+                     a display property escaped the render_next_step checkpoints"
                 );
-                return BufferTextDecodedSourceChar::consume_from_text(text, byte_idx, charpos)
-                    .map(BufferTextDecodedSourceChar::into_event);
+                return None;
             }
         };
-        let start_byte_idx = buffer_byte_pos
-            .get()
-            .checked_sub(self.text_start_byte)?
-            .min(text.len());
+        let start_byte_idx = buffer_byte_pos.get().checked_sub(self.text_start_byte)?;
+        if start_byte_idx != *byte_idx {
+            tracing::error!(
+                "BufferTextSourceEventAdapter: typed cursor byte position {} did not match \
+                 buffer walk byte index {}",
+                start_byte_idx,
+                *byte_idx
+            );
+            return None;
+        }
 
         let DisplayItem {
             span,
@@ -481,11 +486,9 @@ impl BufferTextSourceEventAdapter {
             _ => {
                 tracing::error!(
                     "BufferTextSourceEventAdapter: typed cursor yielded a non-text item kind; \
-                     a display property escaped the render_next_step checkpoints; \
-                     falling back to decoding the underlying buffer char"
+                     a display property escaped the render_next_step checkpoints"
                 );
-                BufferTextDecodedSourceChar::consume_from_text(text, byte_idx, charpos)
-                    .map(BufferTextDecodedSourceChar::into_event)
+                None
             }
         }
     }

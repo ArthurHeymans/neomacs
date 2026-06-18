@@ -1859,7 +1859,7 @@ fn buffer_text_source_event_adapter_preserves_single_char_source_item() {
     let mut byte_idx = 0;
 
     let event = BufferTextSourceEventAdapter::new(text_start_byte)
-        .event_from_item(item, b"ab", &mut byte_idx, 0)
+        .event_from_item(item, &mut byte_idx, 0)
         .expect("source event");
 
     let BufferTextDecodedSourceEvent::Text(text_event) = event else {
@@ -1880,6 +1880,53 @@ fn buffer_text_source_event_adapter_preserves_single_char_source_item() {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "a"),
         other => panic!("expected single-char text run, got {other:?}"),
     }
+}
+
+#[test]
+fn buffer_text_source_event_adapter_rejects_non_buffer_items_without_raw_fallback() {
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::synthetic(9, 0, 1),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("x")),
+    );
+    let mut byte_idx = 3;
+
+    let event = BufferTextSourceEventAdapter::new(0).event_from_item(item, &mut byte_idx, 7);
+
+    assert!(event.is_none());
+    assert_eq!(byte_idx, 3);
+}
+
+#[test]
+fn buffer_text_source_event_adapter_rejects_replacement_items_without_raw_fallback() {
+    let item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(0),
+                neovm_core::buffer::EmacsBytePos::new(0),
+            ),
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(1),
+                neovm_core::buffer::EmacsBytePos::new(1),
+            ),
+        ),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::Stretch(crate::display_item::DisplayStretch {
+            width: crate::display_item::DisplayStretchWidth::Length(
+                crate::display_item::DisplayLength::Pixels(8.0),
+            ),
+            height: None,
+            ascent: None,
+        }),
+    );
+    let mut byte_idx = 0;
+
+    let event = BufferTextSourceEventAdapter::new(0).event_from_item(item, &mut byte_idx, 0);
+
+    assert!(event.is_none());
+    assert_eq!(byte_idx, 0);
 }
 
 #[test]

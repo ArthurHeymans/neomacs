@@ -2671,7 +2671,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        let Some(source_event) = self.consume_source_event(text, loop_context, buffer) else {
+        let Some(source_event) = self.consume_source_event(loop_context, buffer) else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
@@ -2770,7 +2770,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
     pub(crate) fn consume_source_event<'buf, B: LayoutBufferView>(
         &mut self,
-        text: &[u8],
         loop_context: BufferTextWindowLoopRequestContext,
         buffer: &B,
     ) -> Option<BufferTextDecodedSourceEvent> {
@@ -2794,7 +2793,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         let item = cursor.next_item(&mut context)?;
         BufferTextSourceEventAdapter::new(loop_context.text_start_byte()).event_from_item(
             item,
-            text,
             self.byte_idx,
             *self.charpos,
         )
