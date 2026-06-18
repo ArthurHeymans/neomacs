@@ -1,0 +1,137 @@
+//! format-time-string parity strict tests + documented gaps in the
+//! padding/flag/specifier handling added by the recent
+//! "support _ 0 ^ # flags" change. Fixed UTC times keep output stable.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn fts_a_b_combos() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%a %b %e %Y" '(26150 29968) t) (format-time-string "%A, %B %d" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+fn fts_misc_specs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%C" '(26150 29968) t) (format-time-string "%j" '(26150 29968) t) (format-time-string "%I:%M %p" '(26150 29968) t) (format-time-string "%k" '(26150 29968) t) (format-time-string "%l" '(26150 29968) t) (format-time-string "%n%t" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+fn fts_padding_flags() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%_d" '(26150 29968) t) (format-time-string "%-d" '(26150 29968) t) (format-time-string "%0e" '(26150 29968) t) (format-time-string "%e" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+fn fts_percent_literal() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "100%%" '(26150 29968) t) (format-time-string "%%Y=%Y" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+fn fts_week_iso() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%G" '(26150 29968) t) (format-time-string "%V" '(26150 29968) t) (format-time-string "%u" '(26150 29968) t) (format-time-string "%w" '(26150 29968) t) (format-time-string "%U" '(26150 29968) t) (format-time-string "%W" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+fn fts_dash_nopad() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%-S" '(26150 29968) t) (format-time-string "%-H" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+fn fts_h_month() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(r##"(format-time-string "%h" '(26150 29968) t)"##);
+}
+
+#[test]
+fn fts_x_X_locale() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%x" '(26150 29968) t) (format-time-string "%X" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+fn fts_p_lower_ampm() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(r##"(format-time-string "%P" '(26150 29968) t)"##);
+}
+
+#[test]
+#[ignore = "DIVERGENCE: format-time-string %N (nanoseconds) is emitted literally as \"%N\" instead of the 9-digit fractional seconds."]
+fn divergence_fts_pct_n_nanoseconds() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(r##"(format-time-string "%N" '(26150 29968) t)"##);
+}
+
+#[test]
+#[ignore = "DIVERGENCE: format-time-string %r (locale 12-hour clock) is emitted literally as \"%r\" instead of e.g. \"02:32:48 PM\"."]
+fn divergence_fts_pct_r_12hour() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(r##"(format-time-string "%r" '(26150 29968) t)"##);
+}
+
+#[test]
+#[ignore = "DIVERGENCE: format-time-string %:z / %::z (colon UTC offset) are emitted literally instead of \"+00:00\" / \"+00:00:00\"."]
+fn divergence_fts_colon_z_offset() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%:z" '(26150 29968) t) (format-time-string "%::z" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+#[ignore = "DIVERGENCE: format-time-string %# swaps case (Mon => mON) where GNU upcases name fields (%#a/%#A/%#B => MON/MONDAY/APRIL)."]
+fn divergence_fts_hash_flag_case() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%#a" '(26150 29968) t) (format-time-string "%#A" '(26150 29968) t) (format-time-string "%#B" '(26150 29968) t))"##,
+    );
+}
+
+#[test]
+#[ignore = "DIVERGENCE: format-time-string strips the E/O modifier even for combos glibc rejects (%Ed => \"22\"); GNU emits the literal \"%Ed\"."]
+fn divergence_fts_invalid_e_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(r##"(format-time-string "%Ed" '(26150 29968) t)"##);
+}
+
+#[test]
+#[ignore = "DIVERGENCE: format-time-string ignores numeric field width (%6Y => \"2024\" not \"002024\", %03H => \"14\" not \"014\"); GNU honors the width and zero/space padding."]
+fn divergence_fts_width_ignored() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (format-time-string "%6Y" '(26150 29968) t) (format-time-string "%03H" '(26150 29968) t) (format-time-string "%5S" '(26150 29968) t))"##,
+    );
+}
