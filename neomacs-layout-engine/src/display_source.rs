@@ -1661,14 +1661,17 @@ impl BufferDisplayPropertyTextModifierAction {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn raise_offset_px(self) -> Option<f32> {
         self.raise_offset_px
     }
 
+    #[cfg(test)]
     pub(crate) fn height_factor(self) -> Option<f32> {
         self.height_factor
     }
 
+    #[cfg(test)]
     pub(crate) fn next_change(self) -> i64 {
         self.next_change
     }

@@ -2300,6 +2300,19 @@ pub(crate) struct BufferCurrentFaceResolutionContext<'a, B: LayoutBufferView> {
     window_system: bool,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct BufferSourceItemLayoutResolutionContext<'a> {
+    measurement_policy: DisplayRowMeasurementPolicy,
+    default_resolved: &'a ResolvedFace,
+    default_face_char_w: f32,
+    default_face_ascent: f32,
+    default_face_h: f32,
+    char_w: f32,
+    char_h: f32,
+    font_ascent: f32,
+    window_system: bool,
+}
+
 impl<'a, B: LayoutBufferView> Clone for BufferCurrentFaceResolutionContext<'a, B> {
     fn clone(&self) -> Self {
         *self
@@ -2350,27 +2363,11 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
         let origin = DisplayOrigin::BufferText {
             charpos: neovm_core::buffer::CharPos0::new(charpos as usize),
         };
-        let mut resolved = self.face_resolver.default_base_face_for_origin(
+        let resolved = self.face_resolver.default_base_face_for_origin(
             Some(self.buffer),
             &origin,
             state.face_scan.next_check_mut(),
         );
-        if let Some(factor) = state.height_span.value()
-            && let Some(adjusted) = height_adjusted_face(
-                &resolved,
-                DisplayHeightFaceBasis {
-                    canonical_face: self.default_resolved,
-                    base_face: self.default_resolved,
-                    fallback_char_width: self.default_face_char_w,
-                    fallback_ascent: self.default_face_ascent,
-                    fallback_row_height: self.default_face_h,
-                },
-                factor,
-            )
-        {
-            resolved = adjusted;
-        }
-
         let face_id = state.face_ids.allocate();
         let resolved_extend = resolved.extend;
         let resolved_bg = resolved.bg;
@@ -2410,12 +2407,27 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
         true
     }
 
+    pub(crate) fn source_item_layout_resolution_context(
+        self,
+    ) -> BufferSourceItemLayoutResolutionContext<'a> {
+        BufferSourceItemLayoutResolutionContext {
+            measurement_policy: self.measurement_policy,
+            default_resolved: self.default_resolved,
+            default_face_char_w: self.default_face_char_w,
+            default_face_ascent: self.default_face_ascent,
+            default_face_h: self.default_face_h,
+            char_w: self.char_w,
+            char_h: self.char_h,
+            font_ascent: self.font_ascent,
+            window_system: self.window_system,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_at_checkpoint_with_source_state(
         &self,
         source_render: &mut TextRowSourceRenderState<'_>,
         face_scan: &mut FaceScanCheckpoint,
-        height_span: &mut ActiveDisplayPropertySpan<f32>,
         face_ids: &mut FrameFaceIdAllocator,
         active_face_state: &mut DisplayRowActiveFaceState,
         row_geometry: &mut DisplayRowGeometryState,
@@ -2428,7 +2440,6 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
             &mut BufferCurrentFaceResolutionState::new(
                 source_render,
                 face_scan,
-                height_span,
                 face_ids,
                 active_face_state,
                 row_geometry,
@@ -2441,10 +2452,65 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
     }
 }
 
+impl BufferSourceItemLayoutResolutionContext<'_> {
+    pub(crate) fn resolve_source_item_layout_for_active_face(
+        &self,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
+        row_geometry: &mut DisplayRowGeometryState,
+        active_face_state: &DisplayRowActiveFaceState,
+        item: &mut DisplayItem,
+    ) -> DisplayRowActiveFaceState {
+        if matches!(item.face, RenderFaceRef::Inherit) {
+            item.face = RenderFaceRef::FaceId(active_face_state.face_id());
+        }
+
+        let Some(factor) = item
+            .layout
+            .height
+            .filter(|factor| factor.is_finite() && *factor > 0.0)
+        else {
+            return active_face_state.clone();
+        };
+
+        item.layout.height = None;
+        let Some(resolved) = height_adjusted_face(
+            active_face_state.resolved_face(),
+            DisplayHeightFaceBasis {
+                canonical_face: self.default_resolved,
+                base_face: self.default_resolved,
+                fallback_char_width: self.default_face_char_w,
+                fallback_ascent: self.default_face_ascent,
+                fallback_row_height: self.default_face_h,
+            },
+            factor,
+        ) else {
+            return active_face_state.clone();
+        };
+
+        let face_id = face_ids.allocate();
+        item.face = RenderFaceRef::FaceId(face_id);
+        let resolved_active_face = source_render.resolve_and_install_measured_face(
+            self.measurement_policy,
+            face_id,
+            resolved,
+            self.window_system,
+            self.char_w,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                self.char_w,
+                self.char_h,
+                self.font_ascent,
+            ),
+        );
+        let metrics = resolved_active_face.metrics();
+        row_geometry.include_row_extents(metrics.row_height, metrics.ascent);
+        resolved_active_face
+    }
+}
+
 pub(crate) struct BufferCurrentFaceResolutionState<'a, 'source> {
     source_render: &'a mut TextRowSourceRenderState<'source>,
     face_scan: &'a mut FaceScanCheckpoint,
-    height_span: &'a ActiveDisplayPropertySpan<f32>,
     face_ids: &'a mut FrameFaceIdAllocator,
     active_face_state: &'a mut DisplayRowActiveFaceState,
     row_geometry: &'a mut DisplayRowGeometryState,
@@ -2458,7 +2524,6 @@ impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
     pub(crate) fn new(
         source_render: &'a mut TextRowSourceRenderState<'source>,
         face_scan: &'a mut FaceScanCheckpoint,
-        height_span: &'a ActiveDisplayPropertySpan<f32>,
         face_ids: &'a mut FrameFaceIdAllocator,
         active_face_state: &'a mut DisplayRowActiveFaceState,
         row_geometry: &'a mut DisplayRowGeometryState,
@@ -2469,7 +2534,6 @@ impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
         Self {
             source_render,
             face_scan,
-            height_span,
             face_ids,
             active_face_state,
             row_geometry,
@@ -2482,6 +2546,7 @@ impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
 
 pub(crate) enum BufferDisplayPropertyTextAppendAction {
     Replacement(BufferDisplayPropertyTextReplacementOutcome),
+    #[allow(dead_code)]
     Modifiers(BufferDisplayPropertyTextModifierAction),
     None,
 }
@@ -2490,7 +2555,6 @@ pub(crate) enum BufferDisplayPropertyTextAppendAction {
 pub(crate) enum BufferDisplayPropertyTextWalkOutcome {
     Continue,
     ReplacementConsumed,
-    FaceStateChanged,
 }
 
 pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
@@ -2569,8 +2633,6 @@ pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
     pub(crate) x: &'emit mut f32,
     pub(crate) col: &'emit mut usize,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
-    pub(crate) height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
     pub(crate) point_charpos: i64,
 }
 
@@ -2580,30 +2642,9 @@ pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) skip_to: i64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferDisplayPropertyTextModifierStateOutcome {
-    height_face_changed: bool,
-}
-
-impl BufferDisplayPropertyTextModifierStateOutcome {
-    fn new(height_face_changed: bool) -> Self {
-        Self {
-            height_face_changed,
-        }
-    }
-
-    pub(crate) fn height_face_changed(self) -> bool {
-        self.height_face_changed
-    }
-}
-
 impl BufferDisplayPropertyTextWalkOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         matches!(self, Self::ReplacementConsumed)
-    }
-
-    pub(crate) fn should_resolve_face(self) -> bool {
-        matches!(self, Self::FaceStateChanged)
     }
 }
 
@@ -2620,9 +2661,6 @@ impl BufferDisplayPropertyTextAppendAction {
         active_face_state: &DisplayRowActiveFaceState,
         row_geometry: &DisplayRowGeometryState,
         point_charpos: i64,
-        raise_span: &mut ActiveDisplayPropertySpan<f32>,
-        height_span: &mut ActiveDisplayPropertySpan<f32>,
-        face_scan: &mut FaceScanCheckpoint,
     ) -> BufferDisplayPropertyTextWalkOutcome {
         match self {
             Self::Replacement(replacement_outcome) => {
@@ -2637,16 +2675,7 @@ impl BufferDisplayPropertyTextAppendAction {
                 replacement_outcome.apply_to_walk_state(text, byte_idx, charpos, x, col);
                 BufferDisplayPropertyTextWalkOutcome::ReplacementConsumed
             }
-            Self::Modifiers(modifiers) => {
-                if modifiers
-                    .apply_to_walk_state(raise_span, height_span, face_scan)
-                    .height_face_changed()
-                {
-                    BufferDisplayPropertyTextWalkOutcome::FaceStateChanged
-                } else {
-                    BufferDisplayPropertyTextWalkOutcome::Continue
-                }
-            }
+            Self::Modifiers(_) => BufferDisplayPropertyTextWalkOutcome::Continue,
             Self::None => BufferDisplayPropertyTextWalkOutcome::Continue,
         }
     }
@@ -2847,24 +2876,15 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             x,
             col,
             cursor_info,
-            raise_span,
-            height_span,
             point_charpos,
         } = state;
         let context = self.context;
 
-        BufferDisplayPropertyTextModifierAction::clear_expired_height_span(
-            height_span,
-            face_scan,
-            context.charpos,
-            context.params.window_start,
-        );
         context
             .face_resolution_context
             .resolve_at_checkpoint_with_source_state(
                 &mut source_render,
                 face_scan,
-                height_span,
                 face_ids,
                 active_face_state,
                 row_geometry,
@@ -2907,26 +2927,7 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             active_face_state,
             row_geometry,
             point_charpos,
-            raise_span,
-            height_span,
-            face_scan,
         );
-        if outcome.should_resolve_face() {
-            context
-                .face_resolution_context
-                .resolve_at_checkpoint_with_source_state(
-                    &mut source_render,
-                    face_scan,
-                    height_span,
-                    face_ids,
-                    active_face_state,
-                    row_geometry,
-                    row_extend,
-                    box_face,
-                    *x,
-                    *charpos,
-                );
-        }
         outcome
     }
 }
@@ -3081,38 +3082,6 @@ impl BufferDisplayPropertyTextModifierAction {
         inactive_end_charpos: i64,
     ) {
         let _ = raise_span.clear_if_expired(charpos, inactive_end_charpos);
-    }
-
-    pub(crate) fn clear_expired_height_span(
-        height_span: &mut ActiveDisplayPropertySpan<f32>,
-        face_scan: &mut FaceScanCheckpoint,
-        charpos: i64,
-        inactive_end_charpos: i64,
-    ) -> BufferDisplayPropertyTextModifierStateOutcome {
-        let height_face_changed = height_span.clear_if_expired(charpos, inactive_end_charpos);
-        if height_face_changed {
-            face_scan.invalidate();
-        }
-        BufferDisplayPropertyTextModifierStateOutcome::new(height_face_changed)
-    }
-
-    pub(crate) fn apply_to_walk_state(
-        self,
-        raise_span: &mut ActiveDisplayPropertySpan<f32>,
-        height_span: &mut ActiveDisplayPropertySpan<f32>,
-        face_scan: &mut FaceScanCheckpoint,
-    ) -> BufferDisplayPropertyTextModifierStateOutcome {
-        let height_face_changed = if let Some(factor) = self.height_factor() {
-            if let Some(raise_offset_px) = self.raise_offset_px() {
-                raise_span.set(raise_offset_px, self.next_change());
-            }
-            height_span.set(factor, self.next_change());
-            face_scan.invalidate();
-            true
-        } else {
-            false
-        };
-        BufferDisplayPropertyTextModifierStateOutcome::new(height_face_changed)
     }
 }
 
@@ -3300,6 +3269,7 @@ pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferTextSourceCharRenderContext<'a> {
+    pub(crate) layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     pub(crate) text: &'a [u8],
     pub(crate) text_start_byte: usize,
     pub(crate) buffer_id: BufferId,
@@ -3564,12 +3534,15 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
         let mut source_item = self.source_item;
-        if matches!(source_item.face, RenderFaceRef::Inherit) {
-            source_item.face = RenderFaceRef::FaceId(context.active_face_state.face_id());
-        }
-        // Buffer display height is still resolved by the checkpoint active
-        // face path; do not resolve it a second time through the append item.
-        source_item.layout.height = None;
+        let active_face_state = context
+            .layout_resolution_context
+            .resolve_source_item_layout_for_active_face(
+                &mut source_render,
+                face_ids,
+                row_geometry,
+                context.active_face_state,
+                &mut source_item,
+            );
 
         let source_step_char = self.source_char;
         let ch = source_step_char.ch();
@@ -3580,7 +3553,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             buffer,
             context.buffer_id,
             context.append_surface,
-            context.active_face_state,
+            &active_face_state,
             context.glyph_y_offset,
             context.char_h,
         );
@@ -3748,14 +3721,14 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             context.overlay_context.render_before_at(
                 buffer,
                 *charpos,
-                context.active_face_state,
+                &active_face_state,
                 &mut overlay_state,
             );
         }
 
         prepared_append.capture_cursor_info_for_main_char_if_point(
             cursor_info,
-            context.active_face_state,
+            &active_face_state,
             row_geometry,
             *x,
             source_step_char.start_byte_idx(),
@@ -3799,7 +3772,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             context.overlay_context.render_after_at(
                 buffer,
                 *charpos,
-                context.active_face_state,
+                &active_face_state,
                 &mut overlay_state,
             );
         }

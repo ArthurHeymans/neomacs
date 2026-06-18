@@ -586,6 +586,7 @@ impl<T: Copy> ActiveDisplayPropertySpan<T> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn set(&mut self, value: T, end_charpos: i64) {
         self.value = Some(value);
         self.end_charpos = end_charpos;
@@ -608,6 +609,7 @@ impl<T: Copy> ActiveDisplayPropertySpan<T> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn value(&self) -> Option<T> {
         self.value
     }

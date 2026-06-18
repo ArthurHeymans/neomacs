@@ -20,10 +20,10 @@ use crate::display_buffer_text_render::{
     BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
     BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderOutcome,
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
-    BufferTextLineBreakRenderState, BufferTextSourceCharRenderContext,
-    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState,
+    BufferSourceItemLayoutResolutionContext, BufferTextLineBreakRenderContext,
+    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
+    BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
+    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
@@ -164,7 +164,6 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) window_top: f32,
     pub(crate) text_property_checkpoints: TextPropertyScanCheckpoints,
     pub(crate) raise_span: ActiveDisplayPropertySpan<f32>,
-    pub(crate) height_span: ActiveDisplayPropertySpan<f32>,
     pub(crate) row_flags: DisplayRowFlags,
     pub(crate) hscroll_skip: HorizontalScrollSkipState,
     pub(crate) word_wrap: WordWrapRenderState,
@@ -527,7 +526,6 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
     cursor_info: &'emit mut CursorCaptureState,
     face_ids: &'emit mut FrameFaceIdAllocator,
     raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
-    height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -833,7 +831,6 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             window_top: self.window_top,
             text_property_checkpoints: TextPropertyScanCheckpoints::new(self.window_start),
             raise_span: ActiveDisplayPropertySpan::inactive(),
-            height_span: ActiveDisplayPropertySpan::inactive(),
             row_flags: DisplayRowFlags::new(self.max_rows),
             hscroll_skip: HorizontalScrollSkipState::new(self.wrap_mode, self.hscroll),
             word_wrap: WordWrapRenderState::new(self.word_wrap),
@@ -919,7 +916,6 @@ impl BufferTextWindowWalkSetup {
             &mut self.cursor_info,
             state.face_ids,
             &mut self.raise_span,
-            &mut self.height_span,
         )
         .render_visible_steps(
             &mut source_cursor,
@@ -2448,6 +2444,7 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn source_char_request<'a>(
         self,
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
         source_char: BufferTextSourceStepChar,
         source_item: DisplayItem,
         text: &'a [u8],
@@ -2461,6 +2458,7 @@ impl BufferTextWindowLoopRequestContext {
             source_char,
             source_item,
             BufferTextSourceCharRenderContext {
+                layout_resolution_context,
                 text,
                 text_start_byte: self.text_start_byte,
                 buffer_id: self.buffer_id,
@@ -2557,7 +2555,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         cursor_info: &'emit mut CursorCaptureState,
         face_ids: &'emit mut FrameFaceIdAllocator,
         raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
-        height_span: &'emit mut ActiveDisplayPropertySpan<f32>,
     ) -> Self {
         Self {
             append_state,
@@ -2583,7 +2580,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             cursor_info,
             face_ids,
             raise_span,
-            height_span,
         }
     }
 
@@ -2738,6 +2734,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             } => {
                 let char_render_outcome = self.render_source_char_for_context(
                     loop_context,
+                    face_resolution_context.source_item_layout_resolution_context(),
                     source_char,
                     source_item,
                     text,
@@ -2907,6 +2904,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_source_char_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_char: BufferTextSourceStepChar,
         source_item: DisplayItem,
         text: &'request [u8],
@@ -2917,6 +2915,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         buffer: &B,
     ) -> BufferTextSourceCharRenderOutcome {
         let request = context.source_char_request(
+            layout_resolution_context,
             source_char,
             source_item,
             text,
@@ -3000,8 +2999,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             x: self.x,
             col: self.col,
             cursor_info: self.cursor_info,
-            raise_span: self.raise_span,
-            height_span: self.height_span,
             point_charpos,
         })
     }

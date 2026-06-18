@@ -382,7 +382,6 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
-    let height_span = ActiveDisplayPropertySpan::inactive();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let frame_id = eval
@@ -423,7 +422,6 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
         &mut BufferCurrentFaceResolutionState::new(
             &mut source_render,
             &mut face_scan,
-            &height_span,
             &mut face_ids,
             &mut active_face,
             &mut row_geometry,
@@ -463,7 +461,6 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     );
     let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
     let mut face_scan = FaceScanCheckpoint::initial();
-    let height_span = ActiveDisplayPropertySpan::inactive();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let frame_id = eval
@@ -504,7 +501,6 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
         &mut BufferCurrentFaceResolutionState::new(
             &mut source_render,
             &mut face_scan,
-            &height_span,
             &mut face_ids,
             &mut active_face,
             &mut row_geometry,
@@ -5810,6 +5806,8 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let default_face = face_resolver.default_face().clone();
+    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let active_face = test_active_face_state(7, 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea {
@@ -5863,6 +5861,20 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         source_step_char,
         source_item,
         BufferTextSourceCharRenderContext {
+            layout_resolution_context: BufferCurrentFaceResolutionContext::new(
+                &snapshot,
+                &face_resolver,
+                measurement_policy,
+                &default_face,
+                8.0,
+                12.0,
+                16.0,
+                8.0,
+                16.0,
+                12.0,
+                false,
+            )
+            .source_item_layout_resolution_context(),
             text,
             text_start_byte: 0,
             buffer_id: buf_id,
@@ -8442,9 +8454,6 @@ fn buffer_display_property_append_action_applies_replacement_walk_state() {
     let active_face = test_active_face_state(7, 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut cursor_info = CursorCaptureState::new();
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
-    let mut height_span = ActiveDisplayPropertySpan::inactive();
-    let mut face_scan = FaceScanCheckpoint::initial();
     let mut byte_idx = "a".len();
     let mut charpos = 1;
     let mut x = 4.0;
@@ -8460,9 +8469,6 @@ fn buffer_display_property_append_action_applies_replacement_walk_state() {
         &active_face,
         &geometry,
         2,
-        &mut raise_span,
-        &mut height_span,
-        &mut face_scan,
     );
 
     assert_eq!(
@@ -8470,14 +8476,11 @@ fn buffer_display_property_append_action_applies_replacement_walk_state() {
         BufferDisplayPropertyTextWalkOutcome::ReplacementConsumed
     );
     assert!(walk_outcome.should_continue_buffer_walk());
-    assert!(!walk_outcome.should_resolve_face());
     assert_eq!(byte_idx, "a界b\n".len());
     assert_eq!(charpos, 4);
     assert_eq!(x, 12.0);
     assert_eq!(col, 2);
     assert!(cursor_info.captured().is_some());
-    assert_eq!(raise_span.value(), None);
-    assert_eq!(height_span.value(), None);
 }
 
 #[test]
@@ -8736,8 +8739,6 @@ fn buffer_display_property_checkpoint_render_request_applies_modifier_and_resolv
     let mut x = 0.0;
     let mut col = 0;
     let mut cursor_info = CursorCaptureState::new();
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
-    let mut height_span = ActiveDisplayPropertySpan::inactive();
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea {
             content_x: 0.0,
@@ -8799,54 +8800,16 @@ fn buffer_display_property_checkpoint_render_request_applies_modifier_and_resolv
         x: &mut x,
         col: &mut col,
         cursor_info: &mut cursor_info,
-        raise_span: &mut raise_span,
-        height_span: &mut height_span,
         point_charpos: 99,
     });
 
-    assert_eq!(
-        outcome,
-        BufferDisplayPropertyTextWalkOutcome::FaceStateChanged
-    );
+    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
     assert!(!outcome.should_continue_buffer_walk());
-    assert_eq!(height_span.value(), Some(2.0));
-    assert_eq!(active_face.face_id(), 21);
-    assert_eq!(face_ids.allocate(), 22);
+    assert_eq!(active_face.face_id(), 20);
+    assert_eq!(face_ids.allocate(), 21);
     assert_eq!(byte_idx, 0);
     assert_eq!(charpos, 0);
     assert_eq!(checkpoints.display_next(), 1);
-}
-
-#[test]
-fn buffer_display_property_text_modifier_action_applies_walk_state() {
-    let action = BufferDisplayPropertyTextModifierAction::new_for_test(Some(-4.0), Some(1.5), 11);
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
-    let mut height_span = ActiveDisplayPropertySpan::inactive();
-    let mut face_scan = FaceScanCheckpoint::initial();
-    *face_scan.next_check_mut() = 99;
-
-    let outcome = action.apply_to_walk_state(&mut raise_span, &mut height_span, &mut face_scan);
-
-    assert!(outcome.height_face_changed());
-    assert_eq!(raise_span.value(), Some(-4.0));
-    assert_eq!(height_span.value(), Some(1.5));
-    assert!(face_scan.should_resolve_at(0));
-}
-
-#[test]
-fn buffer_display_property_text_modifier_action_leaves_raise_to_typed_item_without_height() {
-    let action = BufferDisplayPropertyTextModifierAction::new_for_test(Some(-4.0), None, 11);
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
-    let mut height_span = ActiveDisplayPropertySpan::inactive();
-    let mut face_scan = FaceScanCheckpoint::initial();
-    *face_scan.next_check_mut() = 99;
-
-    let outcome = action.apply_to_walk_state(&mut raise_span, &mut height_span, &mut face_scan);
-
-    assert!(!outcome.height_face_changed());
-    assert_eq!(raise_span.value(), None);
-    assert_eq!(height_span.value(), None);
-    assert!(!face_scan.should_resolve_at(0));
 }
 
 #[test]
@@ -8857,8 +8820,6 @@ fn buffer_display_property_append_action_applies_modifier_walk_state() {
     let active_face = test_active_face_state(7, 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut cursor_info = CursorCaptureState::new();
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
-    let mut height_span = ActiveDisplayPropertySpan::inactive();
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
     let mut byte_idx = 1;
@@ -8876,25 +8837,16 @@ fn buffer_display_property_append_action_applies_modifier_walk_state() {
         &active_face,
         &geometry,
         2,
-        &mut raise_span,
-        &mut height_span,
-        &mut face_scan,
     );
 
-    assert_eq!(
-        walk_outcome,
-        BufferDisplayPropertyTextWalkOutcome::FaceStateChanged
-    );
+    assert_eq!(walk_outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
     assert!(!walk_outcome.should_continue_buffer_walk());
-    assert!(walk_outcome.should_resolve_face());
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert_eq!(x, 4.0);
     assert_eq!(col, 1);
     assert!(cursor_info.captured().is_none());
-    assert_eq!(raise_span.value(), Some(-4.0));
-    assert_eq!(height_span.value(), Some(1.5));
-    assert!(face_scan.should_resolve_at(0));
+    assert!(!face_scan.should_resolve_at(0));
 }
 
 #[test]
@@ -8903,8 +8855,6 @@ fn buffer_display_property_append_action_none_keeps_walk_state() {
     let active_face = test_active_face_state(7, 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut cursor_info = CursorCaptureState::new();
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
-    let mut height_span = ActiveDisplayPropertySpan::inactive();
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
     let mut byte_idx = 1;
@@ -8922,45 +8872,26 @@ fn buffer_display_property_append_action_none_keeps_walk_state() {
         &active_face,
         &geometry,
         2,
-        &mut raise_span,
-        &mut height_span,
-        &mut face_scan,
     );
 
     assert_eq!(walk_outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
     assert!(!walk_outcome.should_continue_buffer_walk());
-    assert!(!walk_outcome.should_resolve_face());
     assert_eq!(byte_idx, 1);
     assert_eq!(charpos, 1);
     assert_eq!(x, 4.0);
     assert_eq!(col, 1);
     assert!(cursor_info.captured().is_none());
-    assert_eq!(raise_span.value(), None);
-    assert_eq!(height_span.value(), None);
     assert!(!face_scan.should_resolve_at(0));
 }
 
 #[test]
-fn buffer_display_property_text_modifier_action_clears_expired_spans() {
+fn buffer_display_property_text_modifier_action_clears_expired_raise_span() {
     let mut raise_span = ActiveDisplayPropertySpan::inactive();
     raise_span.set(-3.0, 7);
-    let mut height_span = ActiveDisplayPropertySpan::inactive();
-    height_span.set(1.25, 9);
-    let mut face_scan = FaceScanCheckpoint::initial();
-    *face_scan.next_check_mut() = 99;
 
     BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(&mut raise_span, 7, 1);
-    let outcome = BufferDisplayPropertyTextModifierAction::clear_expired_height_span(
-        &mut height_span,
-        &mut face_scan,
-        9,
-        1,
-    );
 
-    assert!(outcome.height_face_changed());
     assert_eq!(raise_span.value(), None);
-    assert_eq!(height_span.value(), None);
-    assert!(face_scan.should_resolve_at(0));
 }
 
 #[test]
