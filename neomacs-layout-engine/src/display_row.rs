@@ -2009,9 +2009,11 @@ impl<'a> DisplayRowCurrentSourceSlotBoundsMergeRequest<'a> {
     }
 
     fn install(self, builder: &mut GlyphMatrixBuilder) {
-        builder.with_current_row_mut(|row| {
-            merge_display_row_source_slot_bounds(row, self.slots);
-        });
+        let Some(mut row) = builder.current_row().cloned() else {
+            return;
+        };
+        merge_display_row_source_slot_bounds(&mut row, self.slots);
+        builder.replace_current_row(row);
     }
 }
 
@@ -2047,24 +2049,24 @@ where
         } = self;
         let role = row_request.role();
         let mut renderer = DisplayRowRenderer::new(state.font_metrics);
-        let (result, row_height_px, row_ascent_px) =
-            state.builder.with_current_row_mut(|row| {
-                let mut context = DisplayRowRenderContext::new(
-                    state.face_resolver,
-                    state.evaluator.display_host.as_deref(),
-                    state.face_ids,
-                );
-                let result = DisplayRowItemSourceRenderRequest::new(row_request)
-                    .render_fragment_step_into_row_with_policy(
-                        &mut renderer,
-                        row,
-                        source,
-                        source_state,
-                        &mut context,
-                        render_policy,
-                    )?;
-                Some((result, row.height_px, row.ascent_px))
-            })??;
+        let mut row = state.builder.current_row()?.clone();
+        let mut context = DisplayRowRenderContext::new(
+            state.face_resolver,
+            state.evaluator.display_host.as_deref(),
+            state.face_ids,
+        );
+        let result = DisplayRowItemSourceRenderRequest::new(row_request)
+            .render_fragment_step_into_row_with_policy(
+                &mut renderer,
+                &mut row,
+                source,
+                source_state,
+                &mut context,
+                render_policy,
+            )?;
+        let row_height_px = row.height_px;
+        let row_ascent_px = row.ascent_px;
+        state.builder.replace_current_row(row);
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -2085,25 +2087,23 @@ where
         } = self;
         let role = row_request.role();
         let mut renderer = DisplayRowRenderer::new(state.font_metrics);
-        let (result, row_height_px, row_ascent_px) =
-            state.builder.with_current_row_mut(|row| {
-                let mut scratch_row = row.clone();
-                let mut context = DisplayRowRenderContext::new(
-                    state.face_resolver,
-                    state.evaluator.display_host.as_deref(),
-                    state.face_ids,
-                );
-                let result = DisplayRowItemSourceRenderRequest::new(row_request)
-                    .render_fragment_step_into_row_with_policy(
-                        &mut renderer,
-                        &mut scratch_row,
-                        source,
-                        source_state,
-                        &mut context,
-                        render_policy,
-                    )?;
-                Some((result, scratch_row.height_px, scratch_row.ascent_px))
-            })??;
+        let mut scratch_row = state.builder.current_row()?.clone();
+        let mut context = DisplayRowRenderContext::new(
+            state.face_resolver,
+            state.evaluator.display_host.as_deref(),
+            state.face_ids,
+        );
+        let result = DisplayRowItemSourceRenderRequest::new(row_request)
+            .render_fragment_step_into_row_with_policy(
+                &mut renderer,
+                &mut scratch_row,
+                source,
+                source_state,
+                &mut context,
+                render_policy,
+            )?;
+        let row_height_px = scratch_row.height_px;
+        let row_ascent_px = scratch_row.ascent_px;
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -2788,9 +2788,14 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
             state.display_host,
             state.face_ids,
         );
-        let result = state.builder.with_current_row_mut(|row| {
-            render_executor.render_item_source_fragment_into_row(self, row, source, source_state)
-        })??;
+        let mut row = state.builder.current_row()?.clone();
+        let result = render_executor.render_item_source_fragment_into_row(
+            self,
+            &mut row,
+            source,
+            source_state,
+        )?;
+        state.builder.replace_current_row(row);
         DisplayRowCurrentSourceSlotBoundsMergeRequest::new(&result.source_slots)
             .install(state.builder);
         Some(result)

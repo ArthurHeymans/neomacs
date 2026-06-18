@@ -642,6 +642,7 @@ impl GlyphMatrixBuilder {
         ));
     }
 
+    #[cfg(test)]
     pub(crate) fn with_current_row_mut<R>(
         &mut self,
         f: impl FnOnce(&mut GlyphRow) -> R,

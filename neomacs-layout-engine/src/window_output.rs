@@ -286,9 +286,11 @@ impl TextWindowRowDecorationRequest {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         match self {
             Self::MarkCurrentTruncatedLeft => {
-                builder.with_current_row_mut(|glyph_row| {
-                    mark_display_row_truncated_left(glyph_row);
-                });
+                let Some(mut glyph_row) = builder.current_row().cloned() else {
+                    return;
+                };
+                mark_display_row_truncated_left(&mut glyph_row);
+                builder.replace_current_row(glyph_row);
             }
         }
     }
