@@ -623,12 +623,15 @@ Status legend: ✅ done · ⬜ remaining.
    eval.rs:7759); `set_current_message` (eval.rs:7751) exists but only stashes a
    `LispString` field — it never writes the buffer. The dual message/buffer source
    is the historical duplicate-"Making completion list..." bug. Ordered plan:
-   1. **(low risk) Mirror the message into ` *Echo Area 0*`** in `set_current_message`
-      + `append_current_message_*` + the clear path — GNU `set_message_1`
-      (clear BEG..Z, insert at BEG via `replace_buffer_contents_lisp_string`,
-      buffer mgr buffer.rs:4739). GOTCHA: that fn asserts the message's
-      multibyteness matches the buffer's — toggle echo-buffer multibyte first
-      (GNU xdisp.c:13598) or convert. Additive; keep the existing render path.
+   1. ✅ **DONE (`e05f98b84`): mirror the message into ` *Echo Area 0*`** in
+      `set_current_message` + `append_current_message_*` + the clear paths (GNU
+      `set_message_1`, via `replace_buffer_contents_lisp_string` after toggling
+      the echo buffer's multibyteness to the message's). The mirror does NOT
+      create the buffer (GNU assumes it exists) — only writes when present.
+      `builtin_message` reordered to GNU's `message_dolog`+`ensure_echo_area_buffers`
+      FIRST, then `set_current_message`, so the echo buffer exists + gets the
+      message and creation order stays `[*scratch*, *Messages*, *Echo Area 0/1*]`.
+      Additive — layout still renders from `current_message`.
    2. (med) Swap the inactive mini-window's buffer to ` *Echo Area 0*` (GNU
       `with_echo_area_buffer`; restore on activate, window/mod.rs:1617, eval.rs:7701).
    3. (HIGH) **Unclamped-height fix** — for the minibuffer kind (vscroll==0) make
