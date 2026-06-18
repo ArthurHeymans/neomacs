@@ -2767,6 +2767,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
                 x_px: 80.0,
                 col: 10,
             },
+            display_item: None,
         },
         measured_width_px: Some(8.0),
     };
@@ -7315,6 +7316,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         ),
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
+        None,
     );
     assert_eq!(
         prepared_append.kind(),
@@ -7381,6 +7383,79 @@ fn buffer_text_item_append_context_builds_mapped_item() {
 }
 
 #[test]
+fn buffer_text_special_source_append_preserves_direct_control_item() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("\u{0007}");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = test_advance_resolution_surface();
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut font_metrics = None;
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let append_context =
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let source_char = BufferTextSourceChar::new('\u{0007}', CharPos0::new(0), 2);
+    let source_request = source_char
+        .special_request(None)
+        .expect("control source char should map to a display item");
+    let source_item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                buf_id,
+                CharPos0::new(0),
+                neovm_core::buffer::EmacsBytePos::new(0),
+            ),
+            DisplaySourcePosition::buffer(
+                buf_id,
+                CharPos0::new(1),
+                neovm_core::buffer::EmacsBytePos::new(1),
+            ),
+        ),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::ControlChar { ch: '\u{0007}' },
+    );
+
+    let prepared_append = append_context.prepare_special_source_char_at(
+        &geometry,
+        &mut TextRowSourceMeasureState::new(
+            &mut builder,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        source_request,
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        Some(&source_item),
+    );
+
+    assert_eq!(
+        prepared_append.kind(),
+        BufferTextSourceSpecialDisplayKind::Control
+    );
+    let direct_item = prepared_append
+        .append_plan
+        .display_item
+        .as_ref()
+        .expect("direct control item");
+    assert!(matches!(
+        direct_item.kind,
+        DisplayItemKind::ControlChar { ch: '\u{0007}' }
+    ));
+}
+
+#[test]
 fn buffer_text_item_append_context_builds_glyphless_item() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -7435,6 +7510,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         ),
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
+        None,
     );
     assert_eq!(
         prepared_append.kind(),
