@@ -10,7 +10,10 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::DisplayRowFlagKind;
 use crate::display_status_line::ChromeRowRenderServices;
-use crate::matrix_builder::GlyphMatrixBuilder;
+use crate::matrix_builder::{
+    GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest,
+    MatrixLastWindowRowsDecorationRequest, MatrixRowDecorator,
+};
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::{
     RightEdgeMarkerItemSource, TextWindowRightBorder, TextWindowRightEdgeMarkers,
@@ -97,6 +100,30 @@ fn install_right_edge_marker_from_source_request(
     );
 }
 
+struct RightEdgeMarkerRowDecorator<'a, 'resolver, 'frame> {
+    target_col: usize,
+    marker: char,
+    face_id: u32,
+    base_face: &'a ResolvedFace,
+    char_width: f32,
+    render_services: &'a mut ChromeRowRenderServices<'resolver, 'frame>,
+}
+
+impl MatrixRowDecorator for RightEdgeMarkerRowDecorator<'_, '_, '_> {
+    fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize) {
+        install_right_edge_marker_from_source_request(
+            row,
+            self.target_col,
+            self.marker,
+            self.face_id,
+            self.base_face,
+            self.char_width,
+            matrix_cols,
+            self.render_services,
+        );
+    }
+}
+
 pub(crate) fn install_right_edge_markers_from_source_requests(
     builder: &mut GlyphMatrixBuilder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
@@ -122,20 +149,17 @@ pub(crate) fn install_right_edge_markers_from_source_requests(
         let Some(marker) = marker else {
             continue;
         };
-        let Some((mut row, matrix_cols)) = builder.current_window_row_snapshot(matrix_row) else {
-            continue;
-        };
-        install_right_edge_marker_from_source_request(
-            &mut row,
-            target_col,
-            marker,
-            request.face_id,
-            &base_face,
-            request.char_width,
-            matrix_cols,
-            &mut render_services,
-        );
-        builder.replace_current_window_row(matrix_row, row);
+        builder.decorate_current_window_row(MatrixCurrentWindowRowDecorationRequest::new(
+            matrix_row,
+            RightEdgeMarkerRowDecorator {
+                target_col,
+                marker,
+                face_id: request.face_id,
+                base_face: &base_face,
+                char_width: request.char_width,
+                render_services: &mut render_services,
+            },
+        ));
     }
 }
 
@@ -281,28 +305,39 @@ fn install_right_border_from_source_request(
     row.displays_text = prior_displays_text;
 }
 
+struct RightBorderRowsDecorator<'a, 'resolver, 'frame> {
+    request: TextWindowRightBorder,
+    base_face: &'a ResolvedFace,
+    render_services: &'a mut ChromeRowRenderServices<'resolver, 'frame>,
+}
+
+impl MatrixRowDecorator for RightBorderRowsDecorator<'_, '_, '_> {
+    fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize) {
+        if matrix_cols == 0 {
+            return;
+        }
+        install_right_border_from_source_request(
+            row,
+            matrix_cols - 1,
+            self.request,
+            self.base_face,
+            matrix_cols,
+            self.render_services,
+        );
+    }
+}
+
 pub(crate) fn install_last_window_right_border_from_source_requests(
     builder: &mut GlyphMatrixBuilder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
     request: TextWindowRightBorder,
     base_face: &ResolvedFace,
 ) {
-    let Some((mut rows, matrix_cols)) = builder.last_window_rows_snapshot() else {
-        return;
-    };
-    if matrix_cols == 0 {
-        return;
-    }
-    let target_col = matrix_cols - 1;
-    for row in &mut rows {
-        install_right_border_from_source_request(
-            row,
-            target_col,
+    builder.decorate_last_window_rows(MatrixLastWindowRowsDecorationRequest::new(
+        RightBorderRowsDecorator {
             request,
             base_face,
-            matrix_cols,
-            &mut render_services,
-        );
-    }
-    builder.replace_last_window_rows(rows);
+            render_services: &mut render_services,
+        },
+    ));
 }

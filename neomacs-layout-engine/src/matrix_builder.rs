@@ -324,6 +324,31 @@ pub(crate) struct MatrixRowMetricsRequest {
     pub(crate) ascent_px: f32,
 }
 
+pub(crate) trait MatrixRowDecorator {
+    fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
+}
+
+pub(crate) struct MatrixCurrentWindowRowDecorationRequest<D> {
+    pub(crate) row_idx: usize,
+    pub(crate) decorator: D,
+}
+
+impl<D> MatrixCurrentWindowRowDecorationRequest<D> {
+    pub(crate) fn new(row_idx: usize, decorator: D) -> Self {
+        Self { row_idx, decorator }
+    }
+}
+
+pub(crate) struct MatrixLastWindowRowsDecorationRequest<D> {
+    pub(crate) decorator: D,
+}
+
+impl<D> MatrixLastWindowRowsDecorationRequest<D> {
+    pub(crate) fn new(decorator: D) -> Self {
+        Self { decorator }
+    }
+}
+
 pub(crate) struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
@@ -792,32 +817,34 @@ impl GlyphMatrixBuilder {
         self.phys_cursor.as_ref()
     }
 
-    pub(crate) fn current_window_row_snapshot(&self, row_idx: usize) -> Option<(GlyphRow, usize)> {
-        let matrix = self.current_matrix.as_ref()?;
-        let row = matrix.rows.get(row_idx)?.clone();
-        Some((row, matrix.ncols))
-    }
-
-    pub(crate) fn replace_current_window_row(&mut self, row_idx: usize, row: GlyphRow) {
+    pub(crate) fn decorate_current_window_row<D>(
+        &mut self,
+        mut request: MatrixCurrentWindowRowDecorationRequest<D>,
+    ) where
+        D: MatrixRowDecorator,
+    {
         let Some(matrix) = self.current_matrix.as_mut() else {
             return;
         };
-        let Some(target) = matrix.rows.get_mut(row_idx) else {
+        let Some(row) = matrix.rows.get_mut(request.row_idx) else {
             return;
         };
-        *target = row;
+        request.decorator.decorate_row(row, matrix.ncols);
     }
 
-    pub(crate) fn last_window_rows_snapshot(&self) -> Option<(Vec<GlyphRow>, usize)> {
-        let entry = self.windows.last()?;
-        Some((entry.matrix.rows.clone(), entry.matrix.ncols))
-    }
-
-    pub(crate) fn replace_last_window_rows(&mut self, rows: Vec<GlyphRow>) {
+    pub(crate) fn decorate_last_window_rows<D>(
+        &mut self,
+        mut request: MatrixLastWindowRowsDecorationRequest<D>,
+    ) where
+        D: MatrixRowDecorator,
+    {
         let Some(entry) = self.windows.last_mut() else {
             return;
         };
-        entry.matrix.rows = rows;
+        let matrix_cols = entry.matrix.ncols;
+        for row in &mut entry.matrix.rows {
+            request.decorator.decorate_row(row, matrix_cols);
+        }
     }
 
     pub(crate) fn finish(
