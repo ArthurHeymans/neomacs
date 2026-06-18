@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_buffer_text_source::{BufferTextDecodedSourceChar, BufferTextSourceCursor};
+use crate::display_buffer_text_source::BufferTextSourceCursor;
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
     DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplayRowBreakReason,
@@ -48,6 +48,19 @@ fn snapshot_with_text(text: &str) -> (BufferId, LayoutBufferSnapshot, CharPos0) 
     let end = buffer.total_char_end_pos();
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     (buffer_id, snapshot, end)
+}
+
+fn expected_source_coords(text: &str) -> Vec<(char, usize, i64)> {
+    let mut byte_offset = 0usize;
+    let mut charpos = 0i64;
+    text.chars()
+        .map(|ch| {
+            let source = (ch, byte_offset, charpos);
+            byte_offset += ch.len_utf8();
+            charpos += 1;
+            source
+        })
+        .collect()
 }
 
 #[test]
@@ -867,7 +880,7 @@ fn buffer_text_source_cursor_emits_control_and_glyphless_items() {
 }
 
 #[test]
-fn typed_buffer_source_events_match_raw_decoder_for_plain_text() {
+fn typed_buffer_source_events_match_expected_plain_text_coordinates() {
     let text = "abc\ndef\tghi\n";
     let (buffer_id, snapshot, end) = snapshot_with_text(text);
     let mut cursor = BufferTextSourceCursor::new(
@@ -908,24 +921,11 @@ fn typed_buffer_source_events_match_raw_decoder_for_plain_text() {
         }
     }
 
-    let bytes = text.as_bytes();
-    let mut byte_idx = 0usize;
-    let mut raw_charpos = 0i64;
-    let mut raw = Vec::new();
-    while let Some(event) =
-        BufferTextDecodedSourceChar::consume_from_text(bytes, &mut byte_idx, raw_charpos)
-            .map(BufferTextDecodedSourceChar::into_event)
-    {
-        let dc = event.decoded_char();
-        raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
-        raw_charpos = dc.start_charpos() + 1;
-    }
-
-    assert_eq!(typed, raw);
+    assert_eq!(typed, expected_source_coords(text));
 }
 
 #[test]
-fn typed_buffer_source_events_match_raw_decoder_for_control_and_glyphless_chars() {
+fn typed_buffer_source_events_match_expected_control_and_glyphless_coordinates() {
     let text = "abc\u{0001}def\u{200b}ghi\n";
     let (buffer_id, snapshot, end) = snapshot_with_text(text);
     let mut cursor = BufferTextSourceCursor::new(
@@ -966,24 +966,11 @@ fn typed_buffer_source_events_match_raw_decoder_for_control_and_glyphless_chars(
         }
     }
 
-    let bytes = text.as_bytes();
-    let mut byte_idx = 0usize;
-    let mut raw_charpos = 0i64;
-    let mut raw = Vec::new();
-    while let Some(event) =
-        BufferTextDecodedSourceChar::consume_from_text(bytes, &mut byte_idx, raw_charpos)
-            .map(BufferTextDecodedSourceChar::into_event)
-    {
-        let dc = event.decoded_char();
-        raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
-        raw_charpos = dc.start_charpos() + 1;
-    }
-
-    assert_eq!(typed, raw);
+    assert_eq!(typed, expected_source_coords(text));
 }
 
 #[test]
-fn typed_buffer_source_events_match_raw_decoder_for_face_property() {
+fn typed_buffer_source_events_match_expected_face_property_coordinates() {
     let text = "abc\ndef\n";
     let mut eval = Context::new();
     let buffer_id = eval
@@ -1047,18 +1034,5 @@ fn typed_buffer_source_events_match_raw_decoder_for_face_property() {
         }
     }
 
-    let bytes = text.as_bytes();
-    let mut byte_idx = 0usize;
-    let mut raw_charpos = 0i64;
-    let mut raw = Vec::new();
-    while let Some(event) =
-        BufferTextDecodedSourceChar::consume_from_text(bytes, &mut byte_idx, raw_charpos)
-            .map(BufferTextDecodedSourceChar::into_event)
-    {
-        let dc = event.decoded_char();
-        raw.push((dc.ch(), dc.start_byte_idx(), dc.start_charpos()));
-        raw_charpos = dc.start_charpos() + 1;
-    }
-
-    assert_eq!(typed, raw);
+    assert_eq!(typed, expected_source_coords(text));
 }

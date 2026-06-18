@@ -1776,60 +1776,6 @@ fn buffer_selective_display_context_keeps_visible_indented_line() {
 }
 
 #[test]
-fn buffer_text_decoded_source_char_consumes_multibyte_source_coordinates() {
-    let text = "a界b".as_bytes();
-    let mut byte_idx = "a".len();
-    let charpos = 4;
-
-    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, charpos)
-        .expect("decoded source char");
-
-    assert_eq!(source_char.ch(), '界');
-    assert_eq!(source_char.start_byte_idx(), 1);
-    assert_eq!(source_char.start_charpos(), 4);
-    assert_eq!(byte_idx, "a界".len());
-}
-
-#[test]
-fn buffer_text_source_event_cursor_decodes_text_and_line_break_events() {
-    let text = "a\n界".as_bytes();
-    let mut byte_idx = 0;
-
-    let first_event = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 7)
-        .map(BufferTextDecodedSourceChar::into_event)
-        .expect("first event");
-    assert!(matches!(first_event, BufferTextDecodedSourceEvent::Text(_)));
-    assert_eq!(first_event.decoded_char().ch(), 'a');
-    assert_eq!(first_event.decoded_char().start_byte_idx(), 0);
-    assert_eq!(first_event.decoded_char().start_charpos(), 7);
-    assert_eq!(byte_idx, 1);
-
-    let line_break_event = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 8)
-        .map(BufferTextDecodedSourceChar::into_event)
-        .expect("line break event");
-    assert!(matches!(
-        line_break_event,
-        BufferTextDecodedSourceEvent::LineBreak(_)
-    ));
-    assert_eq!(line_break_event.decoded_char().ch(), '\n');
-    assert_eq!(line_break_event.decoded_char().start_byte_idx(), 1);
-    assert_eq!(line_break_event.decoded_char().start_charpos(), 8);
-    assert_eq!(byte_idx, 2);
-
-    let multibyte_event = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 9)
-        .map(BufferTextDecodedSourceChar::into_event)
-        .expect("multibyte event");
-    assert!(matches!(
-        multibyte_event,
-        BufferTextDecodedSourceEvent::Text(_)
-    ));
-    assert_eq!(multibyte_event.decoded_char().ch(), '界');
-    assert_eq!(multibyte_event.decoded_char().start_byte_idx(), 2);
-    assert_eq!(multibyte_event.decoded_char().start_charpos(), 9);
-    assert_eq!(byte_idx, text.len());
-}
-
-#[test]
 fn buffer_text_source_event_adapter_preserves_single_char_source_item() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -1932,10 +1878,7 @@ fn buffer_text_source_event_adapter_rejects_replacement_items_without_raw_fallba
 #[test]
 fn buffer_text_decoded_source_char_records_word_wrap_candidate() {
     let context = RowTransitionTestContext::new("decoded-source-char-word-wrap");
-    let text = b" a";
-    let mut byte_idx = 1;
-    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 6)
-        .expect("decoded source char");
+    let source_char = BufferTextDecodedSourceChar::new('a', 1, 6);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
 
@@ -1961,10 +1904,7 @@ fn buffer_text_decoded_source_char_builds_line_break_action() {
         buffer.insert("a\nb");
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let mut byte_idx = 1;
-    let source_char =
-        BufferTextDecodedSourceChar::consume_from_text("a\nb".as_bytes(), &mut byte_idx, 1)
-            .expect("decoded newline");
+    let source_char = BufferTextDecodedSourceChar::new('\n', 1, 1);
 
     let action =
         BufferTextLineBreakSourceAction::for_decoded_newline(&snapshot, source_char, 16.0, 5.0);
@@ -2227,9 +2167,8 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut context = RowTransitionTestContext::new("line-break-render-request");
     let active_face = test_active_face_state(9, 8.0);
     let text = b"\nnext";
-    let mut byte_idx = 0;
-    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 0)
-        .expect("decoded newline");
+    let mut byte_idx = 1;
+    let source_char = BufferTextDecodedSourceChar::new('\n', 0, 0);
     let mut charpos = 0;
     let mut cursor_info = CursorCaptureState::new();
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -2401,10 +2340,8 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
         DisplayTabPolicy::every(8),
     );
     let text = b"a\rb\nc";
-    let mut byte_idx = 1;
-    let decoded_source_char =
-        BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 1)
-            .expect("decoded carriage return");
+    let mut byte_idx = 2;
+    let decoded_source_char = BufferTextDecodedSourceChar::new('\r', 1, 1);
     let mut charpos = 1;
     let mut col = 0;
     let mut row_extend = DisplayRowScopedValue::inactive();
@@ -2915,12 +2852,9 @@ fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
 
 #[test]
 fn buffer_text_character_wrap_source_action_rewinds_decoded_source_char() {
-    let text = "a界b".as_bytes();
-    let mut byte_idx = "a".len();
-    let source_char = BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 9)
-        .expect("decoded source char");
+    let source_char = BufferTextDecodedSourceChar::new('界', "a".len(), 9);
     let action = BufferTextCharacterWrapSourceAction::from_decoded_char(source_char);
-    let mut rewind_byte_idx = byte_idx;
+    let mut rewind_byte_idx = "a界".len();
     let mut rewind_charpos = 10;
 
     action.rewind_source_state(&mut rewind_byte_idx, &mut rewind_charpos);
@@ -3036,9 +2970,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut context = RowTransitionTestContext::new("text-overflow-character-wrap-request");
     let text = b"a";
     let mut byte_idx = 0;
-    let decoded_source_char =
-        BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 21)
-            .expect("decoded source char");
+    let decoded_source_char = BufferTextDecodedSourceChar::new('a', 0, 21);
     let prepared_append = BufferTextSourceCharPreparedAppend {
         plan: BufferTextSourceCharAppendPlan {
             source_text: BufferTextSourceTextRequest::new(
@@ -5804,10 +5736,8 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
     let params = test_display_space_window_params();
     let text = b"ab";
-    let mut byte_idx = 0;
-    let decoded_source_char =
-        BufferTextDecodedSourceChar::consume_from_text(text, &mut byte_idx, 0)
-            .expect("decoded char");
+    let mut byte_idx = 1;
+    let decoded_source_char = BufferTextDecodedSourceChar::new('a', 0, 0);
     let mut append_state = BufferTextRowAppendState::default();
     let mut charpos = 0;
     let mut col = 0;

@@ -254,30 +254,6 @@ impl BufferTextDecodedSourceChar {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn consume_from_text(
-        text: &[u8],
-        byte_idx: &mut usize,
-        charpos: i64,
-    ) -> Option<Self> {
-        if *byte_idx >= text.len() {
-            return None;
-        }
-
-        let start_byte_idx = *byte_idx;
-        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
-        if ch_len == 0 {
-            return None;
-        }
-        *byte_idx += ch_len;
-
-        Some(Self {
-            ch,
-            start_byte_idx,
-            start_charpos: charpos,
-        })
-    }
-
     pub(crate) fn ch(self) -> char {
         self.ch
     }
@@ -292,15 +268,6 @@ impl BufferTextDecodedSourceChar {
 
     pub(crate) fn source_range(self) -> BufferTextSourceRange {
         BufferTextSourceRange::single_char(CharPos0::new(self.start_charpos as usize))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn into_event(self) -> BufferTextDecodedSourceEvent {
-        if self.ch == '\n' {
-            BufferTextDecodedSourceEvent::LineBreak(BufferTextLineBreakSourceEvent::new(self))
-        } else {
-            BufferTextDecodedSourceEvent::Text(BufferTextSourceTextEvent::new(self))
-        }
     }
 
     pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
