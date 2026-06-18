@@ -813,27 +813,32 @@ impl GlyphMatrixBuilder {
         self.phys_cursor.as_ref()
     }
 
-    pub(crate) fn with_current_window_row_mut<R>(
-        &mut self,
-        row_idx: usize,
-        f: impl FnOnce(&mut GlyphRow, usize) -> R,
-    ) -> Option<R> {
-        let Some(matrix) = self.current_matrix.as_mut() else {
-            return None;
-        };
-        let ncols = matrix.ncols;
-        let Some(row) = matrix.rows.get_mut(row_idx) else {
-            return None;
-        };
-        Some(f(row, ncols))
+    pub(crate) fn current_window_row_snapshot(&self, row_idx: usize) -> Option<(GlyphRow, usize)> {
+        let matrix = self.current_matrix.as_ref()?;
+        let row = matrix.rows.get(row_idx)?.clone();
+        Some((row, matrix.ncols))
     }
 
-    pub(crate) fn with_last_window_rows_mut<R>(
-        &mut self,
-        f: impl FnOnce(&mut [GlyphRow], usize) -> R,
-    ) -> Option<R> {
-        let entry = self.windows.last_mut()?;
-        Some(f(&mut entry.matrix.rows, entry.matrix.ncols))
+    pub(crate) fn replace_current_window_row(&mut self, row_idx: usize, row: GlyphRow) {
+        let Some(matrix) = self.current_matrix.as_mut() else {
+            return;
+        };
+        let Some(target) = matrix.rows.get_mut(row_idx) else {
+            return;
+        };
+        *target = row;
+    }
+
+    pub(crate) fn last_window_rows_snapshot(&self) -> Option<(Vec<GlyphRow>, usize)> {
+        let entry = self.windows.last()?;
+        Some((entry.matrix.rows.clone(), entry.matrix.ncols))
+    }
+
+    pub(crate) fn replace_last_window_rows(&mut self, rows: Vec<GlyphRow>) {
+        let Some(entry) = self.windows.last_mut() else {
+            return;
+        };
+        entry.matrix.rows = rows;
     }
 
     pub(crate) fn finish(

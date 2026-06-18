@@ -121,18 +121,20 @@ pub(crate) fn install_right_edge_markers_from_source_requests(
         let Some(marker) = marker else {
             continue;
         };
-        builder.with_current_window_row_mut(matrix_row, |row, matrix_cols| {
-            install_right_edge_marker_from_source_request(
-                row,
-                target_col,
-                marker,
-                request.face_id,
-                &base_face,
-                request.char_width,
-                matrix_cols,
-                &mut render_services,
-            );
-        });
+        let Some((mut row, matrix_cols)) = builder.current_window_row_snapshot(matrix_row) else {
+            continue;
+        };
+        install_right_edge_marker_from_source_request(
+            &mut row,
+            target_col,
+            marker,
+            request.face_id,
+            &base_face,
+            request.char_width,
+            matrix_cols,
+            &mut render_services,
+        );
+        builder.replace_current_window_row(matrix_row, row);
     }
 }
 
@@ -284,20 +286,22 @@ pub(crate) fn install_last_window_right_border_from_source_requests(
     request: TextWindowRightBorder,
     base_face: &ResolvedFace,
 ) {
-    builder.with_last_window_rows_mut(|rows, matrix_cols| {
-        if matrix_cols == 0 {
-            return;
-        }
-        let target_col = matrix_cols - 1;
-        for row in rows {
-            install_right_border_from_source_request(
-                row,
-                target_col,
-                request,
-                base_face,
-                matrix_cols,
-                &mut render_services,
-            );
-        }
-    });
+    let Some((mut rows, matrix_cols)) = builder.last_window_rows_snapshot() else {
+        return;
+    };
+    if matrix_cols == 0 {
+        return;
+    }
+    let target_col = matrix_cols - 1;
+    for row in &mut rows {
+        install_right_border_from_source_request(
+            row,
+            target_col,
+            request,
+            base_face,
+            matrix_cols,
+            &mut render_services,
+        );
+    }
+    builder.replace_last_window_rows(rows);
 }
