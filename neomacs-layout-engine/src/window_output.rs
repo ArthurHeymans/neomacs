@@ -426,6 +426,7 @@ impl<'a> TextMatrixRowOutput<'a> {
             .install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
                 row: begin.matrix_row,
                 role: GlyphRowRole::Text,
+                mode_line: false,
             }));
         self.output_emitter
             .begin_text_row(self.evaluator, begin.row, begin.col, begin.y, begin.x);

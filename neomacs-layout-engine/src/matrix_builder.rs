@@ -314,6 +314,7 @@ impl MatrixWindowLifecycleRequest {
 pub(crate) struct MatrixRowBeginRequest {
     pub(crate) row: usize,
     pub(crate) role: GlyphRowRole,
+    pub(crate) mode_line: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -357,7 +358,7 @@ impl MatrixRowLifecycleRequest {
                 {
                     matrix.rows[begin.row].role = begin.role;
                     matrix.rows[begin.row].enabled = true;
-                    matrix.rows[begin.row].mode_line = matches!(begin.role, GlyphRowRole::ModeLine);
+                    matrix.rows[begin.row].mode_line = begin.mode_line;
                 }
             }
             Self::EndIncremental => {
@@ -610,6 +611,7 @@ impl GlyphMatrixBuilder {
         self.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
             row,
             role,
+            mode_line: matches!(role, GlyphRowRole::ModeLine),
         }));
     }
 

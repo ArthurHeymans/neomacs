@@ -2209,6 +2209,7 @@ pub(crate) fn install_display_row_in_matrix_row(
     builder.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
         row: matrix_row,
         role: row.role,
+        mode_line: row.mode_line,
     }));
     builder.replace_current_row(row);
     builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
