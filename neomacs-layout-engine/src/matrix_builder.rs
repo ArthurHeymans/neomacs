@@ -339,14 +339,14 @@ pub(crate) struct MatrixRowCursorRequest {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum MatrixRowLifecycleRequest {
+pub(crate) enum MatrixRowUpdateRequest {
     Begin(MatrixRowBeginRequest),
     CurrentMetrics(MatrixRowMetricsRequest),
     RowMetrics(MatrixIndexedRowMetricsRequest),
     CursorAt(MatrixRowCursorRequest),
 }
 
-impl MatrixRowLifecycleRequest {
+impl MatrixRowUpdateRequest {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         match self {
             Self::Begin(begin) => {
@@ -590,13 +590,13 @@ impl GlyphMatrixBuilder {
         request.install(self);
     }
 
-    pub(crate) fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest) {
+    pub(crate) fn install_row_update(&mut self, request: MatrixRowUpdateRequest) {
         request.install(self);
     }
 
     #[cfg(test)]
     pub(crate) fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+        self.install_row_update(MatrixRowUpdateRequest::Begin(MatrixRowBeginRequest {
             row,
             role,
             mode_line: matches!(role, GlyphRowRole::ModeLine),
@@ -611,7 +611,7 @@ impl GlyphMatrixBuilder {
     /// Record stored geometry for the currently open row.
     #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::CurrentMetrics(
+        self.install_row_update(MatrixRowUpdateRequest::CurrentMetrics(
             MatrixRowMetricsRequest {
                 pixel_y,
                 height_px,
@@ -677,9 +677,11 @@ impl GlyphMatrixBuilder {
         col: u16,
         style: neomacs_display_protocol::frame_glyphs::CursorStyle,
     ) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::CursorAt(
-            MatrixRowCursorRequest { row, col, style },
-        ));
+        self.install_row_update(MatrixRowUpdateRequest::CursorAt(MatrixRowCursorRequest {
+            row,
+            col,
+            style,
+        }));
     }
 
     // -----------------------------------------------------------------------
