@@ -9,7 +9,7 @@ use crate::display_cursor::{
     capture_cursor_info, update_cursor_info_for_main_char,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::{DisplayItem, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
@@ -119,7 +119,21 @@ impl BufferTextSourceNaturalAdvanceRequest {
         face_id: u32,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
+        source_item: Option<&DisplayItem>,
     ) -> Option<f32> {
+        if let Some(item) = source_item {
+            let kind = display_item_append_kind(item, self.source_item().append_kind());
+            let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+            return Some(
+                DisplayRowSourceAppendOperation::for_single_item(
+                    item, base_face, face_id, frame, position, kind,
+                )
+                .measure_single_item_to_text_row(state, item.clone(), &mut render_policy)?
+                .metrics
+                .width_px,
+            );
+        }
+
         let append_item = buffer_text_source_text_item_append_request(
             self.source_item(),
             buffer_id,
@@ -148,6 +162,7 @@ impl BufferTextSourceNaturalAdvanceRequest {
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
+        source_item: Option<&DisplayItem>,
     ) -> f32 {
         if let Some(measured_width) = self.measure_to_text_row(
             state,
@@ -157,6 +172,7 @@ impl BufferTextSourceNaturalAdvanceRequest {
             active_face_state.face_id(),
             frame.clone(),
             position,
+            source_item,
         ) {
             return measured_width;
         }
@@ -188,6 +204,20 @@ impl BufferTextSourceRangeItemAppendRequest {
 
     pub(crate) fn into_item(self) -> DisplayItem {
         self.item
+    }
+}
+
+fn display_item_append_kind(
+    item: &DisplayItem,
+    fallback: DisplayRowAppendKind,
+) -> DisplayRowAppendKind {
+    match &item.kind {
+        DisplayItemKind::TextRun(run) if run.text.as_ref() == "\t" => DisplayRowAppendKind::Tab,
+        DisplayItemKind::TextRun(_) => DisplayRowAppendKind::SourceText,
+        DisplayItemKind::SourceMappedText(_) => DisplayRowAppendKind::SourceMappedText,
+        DisplayItemKind::ControlChar { .. } => DisplayRowAppendKind::ControlChar,
+        DisplayItemKind::Glyphless(_) => DisplayRowAppendKind::Glyphless,
+        _ => fallback,
     }
 }
 
@@ -341,7 +371,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourcePositionedAdvanceRequest<'_>,
+        request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
     ) -> ResolvedBufferTextSourceAdvance {
         let frame = self.active_face_context(geometry).active_face_frame();
         append_state
@@ -361,7 +391,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         append_state: &mut BufferTextRowAppendState,
         measure_state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSourcePositionedAdvanceRequest<'_>,
+        request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
     ) -> BufferTextSourceCharAppendPlan {
         let resolved_advance = self.resolve_source_advance_request_to_text_row(
             geometry,
@@ -382,9 +412,11 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         text: &[u8],
         byte_idx: usize,
         position: DisplayRowPosition,
+        source_item: Option<&DisplayItem>,
         cluster_tail: Option<(char, bool)>,
     ) -> BufferTextSourceCharPreparedAppend {
-        let request = source_char.advance_request_at(text, byte_idx, position, cluster_tail);
+        let request =
+            source_char.advance_request_at(text, byte_idx, position, source_item, cluster_tail);
         BufferTextSourceCharPreparedAppend {
             plan: self.prepare_source_char_append_plan(
                 geometry,
@@ -405,6 +437,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         text: &[u8],
         byte_idx: usize,
         position: DisplayRowPosition,
+        source_item: Option<&DisplayItem>,
         cluster_tail: Option<(char, bool)>,
     ) -> BufferTextPreparedSourceCharAppend {
         if let Some(request) = source_char.special_request(cluster_tail) {
@@ -420,6 +453,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             text,
             byte_idx,
             position,
+            source_item,
             cluster_tail,
         ))
     }
@@ -438,6 +472,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             request.text,
             request.byte_idx,
             request.position,
+            request.source_item,
             cluster_tail,
         )
     }
@@ -466,18 +501,50 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         .render_single_item_to_text_row_and_emit(state, item, &mut render_policy)
     }
 
+    fn append_source_display_item_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        state: &mut TextRowSourceRenderState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+        render_policy: &mut DisplaySourceAppendRenderPolicy,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let frame = self.active_face_context(geometry).active_face_frame();
+        let face_id = self.active_face.face_id();
+        let kind = display_item_append_kind(&item, fallback_kind);
+        DisplayRowSourceAppendOperation::for_single_item(
+            &item,
+            self.active_face.resolved_face(),
+            face_id,
+            frame,
+            position,
+            kind,
+        )
+        .render_single_item_to_text_row_and_emit(state, item, render_policy)
+    }
+
     fn append_source_char_plan_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
         plan: BufferTextSourceCharAppendPlan,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.append_source_text_request_to_text_row(
-            geometry,
-            state,
-            plan.source_text(),
-            plan.position(),
-        )
+        let position = plan.position();
+        let source_text = plan.source_text();
+        if let Some(item) = plan.source_item {
+            let fallback_kind = source_text.source_item().append_kind();
+            let mut render_policy = source_text.append_render_policy();
+            return self.append_source_display_item_to_text_row(
+                geometry,
+                state,
+                item,
+                position,
+                fallback_kind,
+                &mut render_policy,
+            );
+        }
+        self.append_source_text_request_to_text_row(geometry, state, source_text, position)
     }
 }
 
@@ -488,6 +555,7 @@ pub(crate) struct BufferTextSourceCharPreparationRequest<'a> {
     text: &'a [u8],
     byte_idx: usize,
     position: DisplayRowPosition,
+    source_item: Option<&'a DisplayItem>,
 }
 
 impl<'a> BufferTextSourceCharPreparationRequest<'a> {
@@ -497,6 +565,7 @@ impl<'a> BufferTextSourceCharPreparationRequest<'a> {
         text: &'a [u8],
         byte_idx: usize,
         position: DisplayRowPosition,
+        source_item: Option<&'a DisplayItem>,
     ) -> Self {
         Self {
             geometry,
@@ -504,6 +573,7 @@ impl<'a> BufferTextSourceCharPreparationRequest<'a> {
             text,
             byte_idx,
             position,
+            source_item,
         }
     }
 }
@@ -541,18 +611,18 @@ impl BufferTextPreparedSourceCharAppend {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceCharPreparedAppend {
     pub(crate) plan: BufferTextSourceCharAppendPlan,
 }
 
 impl BufferTextSourceCharPreparedAppend {
-    fn advance_px(self) -> f32 {
+    fn advance_px(&self) -> f32 {
         self.plan.advance_px()
     }
 
     pub(crate) fn update_cursor_info_for_main_char(
-        self,
+        &self,
         target: &mut CursorCaptureState,
         byte_idx: usize,
     ) {
@@ -561,7 +631,7 @@ impl BufferTextSourceCharPreparedAppend {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn capture_cursor_info_for_main_char_if_point(
-        self,
+        &self,
         target: &mut CursorCaptureState,
         active_face_state: &DisplayRowActiveFaceState,
         geometry: &DisplayRowGeometryState,
@@ -585,7 +655,7 @@ impl BufferTextSourceCharPreparedAppend {
     }
 
     pub(crate) fn overflow_decision(
-        self,
+        &self,
         ch: char,
         right_edge_px: f32,
         wrap_mode: LineWrapMode,
@@ -602,7 +672,7 @@ impl BufferTextSourceCharPreparedAppend {
     }
 
     pub(crate) fn overflow_action(
-        self,
+        &self,
         ch: char,
         right_edge_px: f32,
         wrap_mode: LineWrapMode,
@@ -616,12 +686,12 @@ impl BufferTextSourceCharPreparedAppend {
         ))
     }
 
-    fn cursor_slot_width(self) -> CapturedCursorSlotWidth {
+    fn cursor_slot_width(&self) -> CapturedCursorSlotWidth {
         CapturedCursorSlotWidth::Explicit(self.advance_px())
     }
 
     pub(crate) fn cursor_info_for_main_char(
-        self,
+        &self,
         active_face_state: &DisplayRowActiveFaceState,
         position: DisplayRowTextPosition,
         is_tab: bool,
@@ -725,7 +795,7 @@ impl BufferTextSourceAdvanceResolver {
         buffer: &B,
         active_face_state: &DisplayRowActiveFaceState,
         frame: DisplayRowAppendFrame,
-        request: BufferTextSourcePositionedAdvanceRequest<'_>,
+        request: BufferTextSourcePositionedAdvanceRequest<'_, '_>,
     ) -> ResolvedBufferTextSourceAdvance {
         let ch = request.cluster().ch();
         match BufferTextSourceAdvancePath::for_cluster_state(request.cluster()) {
@@ -755,6 +825,7 @@ impl BufferTextSourceAdvanceResolver {
                     active_face_state,
                     frame,
                     request.position(),
+                    request.source_item(),
                 );
                 ResolvedBufferTextSourceAdvance::natural(advance_px)
             }
@@ -795,16 +866,18 @@ impl BufferTextDecodedSourceChar {
 }
 
 impl BufferTextSourceChar {
-    fn advance_request_at<'text>(
+    fn advance_request_at<'text, 'item>(
         &self,
         text: &'text [u8],
         byte_idx: usize,
         position: DisplayRowPosition,
+        source_item: Option<&'item DisplayItem>,
         tail: Option<(char, bool)>,
-    ) -> BufferTextSourcePositionedAdvanceRequest<'text> {
-        BufferTextSourcePositionedAdvanceRequest::new(
+    ) -> BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
+        BufferTextSourcePositionedAdvanceRequest::with_source_item(
             self.advance_request(text, byte_idx, tail),
             position,
+            source_item,
         )
     }
 }
@@ -1034,38 +1107,57 @@ impl BufferTextSpecialSourceCharMeasureRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceCharAppendPlan {
     pub(crate) source_text: BufferTextSourceTextRequest,
     pub(crate) position: DisplayRowPosition,
+    pub(crate) source_item: Option<DisplayItem>,
 }
 
 impl BufferTextSourceCharAppendPlan {
-    fn source_text(self) -> BufferTextSourceTextRequest {
+    fn source_text(&self) -> BufferTextSourceTextRequest {
         self.source_text
     }
 
-    fn position(self) -> DisplayRowPosition {
+    fn position(&self) -> DisplayRowPosition {
         self.position
     }
 
-    fn advance_px(self) -> f32 {
+    fn advance_px(&self) -> f32 {
         self.source_text.advance_px()
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextSourcePositionedAdvanceRequest<'text> {
+pub(crate) struct BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
     source: BufferTextSourceAdvanceRequest<'text>,
     position: DisplayRowPosition,
+    source_item: Option<&'item DisplayItem>,
 }
 
-impl<'text> BufferTextSourcePositionedAdvanceRequest<'text> {
+impl<'text, 'item> BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
+    #[cfg(test)]
     pub(crate) fn new(
         source: BufferTextSourceAdvanceRequest<'text>,
         position: DisplayRowPosition,
+    ) -> BufferTextSourcePositionedAdvanceRequest<'text, 'static> {
+        BufferTextSourcePositionedAdvanceRequest {
+            source,
+            position,
+            source_item: None,
+        }
+    }
+
+    fn with_source_item(
+        source: BufferTextSourceAdvanceRequest<'text>,
+        position: DisplayRowPosition,
+        source_item: Option<&'item DisplayItem>,
     ) -> Self {
-        Self { source, position }
+        Self {
+            source,
+            position,
+            source_item,
+        }
     }
 
     fn text(self) -> &'text [u8] {
@@ -1088,6 +1180,10 @@ impl<'text> BufferTextSourcePositionedAdvanceRequest<'text> {
         self.source.cluster()
     }
 
+    fn source_item(self) -> Option<&'item DisplayItem> {
+        self.source_item
+    }
+
     fn append_plan(
         self,
         resolved_advance: ResolvedBufferTextSourceAdvance,
@@ -1095,6 +1191,7 @@ impl<'text> BufferTextSourcePositionedAdvanceRequest<'text> {
         BufferTextSourceCharAppendPlan {
             source_text: self.source.into_text_request(resolved_advance),
             position: self.position,
+            source_item: self.source_item.cloned(),
         }
     }
 }

@@ -1830,6 +1830,59 @@ fn buffer_text_source_event_cursor_decodes_text_and_line_break_events() {
 }
 
 #[test]
+fn buffer_text_source_event_adapter_preserves_single_char_source_item() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("ab");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut cursor = BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::new(0),
+        CharPos0::new(2),
+        RenderFaceRef::Inherit,
+    );
+    let item = cursor
+        .next_item(&mut DisplaySourceContext::empty())
+        .expect("source item");
+    let text_start_byte = match &item.span.start {
+        DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos.get(),
+        other => panic!("expected buffer source, got {other:?}"),
+    };
+    let mut byte_idx = 0;
+
+    let event = BufferTextSourceEventAdapter::new(text_start_byte)
+        .event_from_item(item, b"ab", &mut byte_idx, 0)
+        .expect("source event");
+
+    let BufferTextDecodedSourceEvent::Text(text_event) = event else {
+        panic!("expected text event");
+    };
+    assert_eq!(text_event.decoded_char().ch(), 'a');
+    assert_eq!(byte_idx, 1);
+    let source_item = text_event.source_item().expect("typed source item");
+    assert_eq!(
+        source_item.span.end,
+        DisplaySourcePosition::buffer(
+            buf_id,
+            CharPos0::new(1),
+            neovm_core::buffer::EmacsBytePos::new(text_start_byte + 1),
+        )
+    );
+    match &source_item.kind {
+        DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "a"),
+        other => panic!("expected single-char text run, got {other:?}"),
+    }
+}
+
+#[test]
 fn buffer_text_decoded_source_char_records_word_wrap_candidate() {
     let context = RowTransitionTestContext::new("decoded-source-char-word-wrap");
     let text = b" a";
@@ -2949,6 +3002,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
                 x_px: 80.0,
                 col: 10,
             },
+            source_item: None,
         },
     };
     let mut charpos = 21;
@@ -2973,7 +3027,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut font_metrics = None;
 
     let outcome = BufferTextOverflowRenderRequest::new(
-        prepared_append,
+        &prepared_append,
         decoded_source_char,
         BufferTextOverflowRenderContext {
             ch: 'a',
@@ -5527,6 +5581,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             0,
             DisplayRowPosition { x_px: 0.0, col: 0 },
             None,
+            None,
         )
         .into_text()
         .expect("ordinary buffer char should prepare text append");
@@ -5865,6 +5920,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
                 b"a",
                 0,
                 DisplayRowPosition { x_px: 0.0, col: 0 },
+                None,
             ),
             &mut preparation_state,
         )

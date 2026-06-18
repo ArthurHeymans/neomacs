@@ -1,6 +1,6 @@
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition, DisplayTextRun,
-    RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayRowBreakReason, DisplaySourcePosition,
+    DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_source::{
     BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
@@ -308,16 +308,16 @@ impl BufferTextDecodedSourceChar {
 
 /// A decoded event from a buffer text source: either a printable character/text
 /// run or a line-break character.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextDecodedSourceEvent {
     LineBreak(BufferTextLineBreakSourceEvent),
     Text(BufferTextSourceTextEvent),
 }
 
 impl BufferTextDecodedSourceEvent {
-    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+    pub(crate) fn decoded_char(&self) -> BufferTextDecodedSourceChar {
         match self {
-            Self::LineBreak(source_event) => source_event.decoded_char(),
+            Self::LineBreak(source_event) => (*source_event).decoded_char(),
             Self::Text(source_event) => source_event.decoded_char(),
         }
     }
@@ -339,22 +339,41 @@ impl BufferTextLineBreakSourceEvent {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceTextEvent {
     source_char: BufferTextDecodedSourceChar,
+    source_item: Option<DisplayItem>,
 }
 
 impl BufferTextSourceTextEvent {
     pub(crate) fn new(source_char: BufferTextDecodedSourceChar) -> Self {
         debug_assert_ne!(source_char.ch(), '\n');
-        Self { source_char }
+        Self {
+            source_char,
+            source_item: None,
+        }
     }
 
-    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
+    pub(crate) fn from_source_item(
+        source_char: BufferTextDecodedSourceChar,
+        source_item: DisplayItem,
+    ) -> Self {
+        debug_assert_ne!(source_char.ch(), '\n');
+        Self {
+            source_char,
+            source_item: Some(source_item),
+        }
+    }
+
+    pub(crate) fn decoded_char(&self) -> BufferTextDecodedSourceChar {
         self.source_char
     }
 
-    pub(crate) fn source_char(self, nobreak_display_policy: i32) -> BufferTextSourceChar {
+    pub(crate) fn source_item(&self) -> Option<&DisplayItem> {
+        self.source_item.as_ref()
+    }
+
+    pub(crate) fn source_char(&self, nobreak_display_policy: i32) -> BufferTextSourceChar {
         self.source_char.source_char(nobreak_display_policy)
     }
 }
@@ -393,16 +412,27 @@ impl BufferTextSourceEventAdapter {
             .checked_sub(self.text_start_byte)?
             .min(text.len());
 
-        match item.kind {
+        let DisplayItem {
+            span,
+            face,
+            kind,
+            layout,
+        } = item;
+        match kind {
             DisplayItemKind::TextRun(run) => {
                 let ch = run.text.chars().next()?;
                 *byte_idx = start_byte_idx + ch.len_utf8();
+                let source_item = DisplayItem {
+                    span: first_char_span(span, ch),
+                    face,
+                    kind: DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
+                    layout,
+                };
                 Some(BufferTextDecodedSourceEvent::Text(
-                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
-                        ch,
-                        start_byte_idx,
-                        charpos,
-                    )),
+                    text_event_for_source_item(
+                        BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
+                        source_item,
+                    ),
                 ))
             }
             DisplayItemKind::RowBreak(row_break)
@@ -417,15 +447,35 @@ impl BufferTextSourceEventAdapter {
                     )),
                 ))
             }
-            DisplayItemKind::ControlChar { ch }
-            | DisplayItemKind::Glyphless(crate::display_item::DisplayGlyphless { ch, .. }) => {
+            DisplayItemKind::ControlChar { ch } => {
                 *byte_idx = start_byte_idx + ch.len_utf8();
+                let source_item = DisplayItem {
+                    span,
+                    face,
+                    kind: DisplayItemKind::ControlChar { ch },
+                    layout,
+                };
                 Some(BufferTextDecodedSourceEvent::Text(
-                    BufferTextSourceTextEvent::new(BufferTextDecodedSourceChar::new(
-                        ch,
-                        start_byte_idx,
-                        charpos,
-                    )),
+                    text_event_for_source_item(
+                        BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
+                        source_item,
+                    ),
+                ))
+            }
+            DisplayItemKind::Glyphless(glyphless) => {
+                let ch = glyphless.ch;
+                *byte_idx = start_byte_idx + ch.len_utf8();
+                let source_item = DisplayItem {
+                    span,
+                    face,
+                    kind: DisplayItemKind::Glyphless(glyphless),
+                    layout,
+                };
+                Some(BufferTextDecodedSourceEvent::Text(
+                    text_event_for_source_item(
+                        BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
+                        source_item,
+                    ),
                 ))
             }
             _ => {
@@ -439,6 +489,44 @@ impl BufferTextSourceEventAdapter {
             }
         }
     }
+}
+
+fn text_event_for_source_item(
+    source_char: BufferTextDecodedSourceChar,
+    source_item: DisplayItem,
+) -> BufferTextSourceTextEvent {
+    if source_item.layout == DisplayItemLayout::default() {
+        BufferTextSourceTextEvent::from_source_item(source_char, source_item)
+    } else {
+        BufferTextSourceTextEvent::new(source_char)
+    }
+}
+
+fn first_char_span(span: SourceSpan, ch: char) -> SourceSpan {
+    let end = match &span.start {
+        DisplaySourcePosition::Buffer {
+            buffer_id,
+            char_pos,
+            byte_pos,
+        } => DisplaySourcePosition::buffer(
+            *buffer_id,
+            char_pos.add_len(CharLen::new(1)),
+            EmacsBytePos::new(byte_pos.get().saturating_add(ch.len_utf8())),
+        ),
+        DisplaySourcePosition::LispString {
+            source_id,
+            char_index,
+            byte_index,
+        } => DisplaySourcePosition::lisp_string(
+            source_id.get(),
+            char_index.saturating_add(1),
+            byte_index.saturating_add(ch.len_utf8()),
+        ),
+        DisplaySourcePosition::Synthetic { source_id, offset } => {
+            DisplaySourcePosition::synthetic(source_id.get(), offset.saturating_add(ch.len_utf8()))
+        }
+    };
+    SourceSpan::new(span.start, end)
 }
 
 /// A `DisplayItemSource` that reads plain buffer text (with face and display

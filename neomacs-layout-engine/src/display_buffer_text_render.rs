@@ -3391,8 +3391,8 @@ impl BufferTextSourceCharOverflowAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextOverflowRenderRequest {
-    prepared_append: BufferTextSourceCharPreparedAppend,
+pub(crate) struct BufferTextOverflowRenderRequest<'a> {
+    prepared_append: &'a BufferTextSourceCharPreparedAppend,
     decoded_source_char: BufferTextDecodedSourceChar,
     context: BufferTextOverflowRenderContext,
 }
@@ -3580,6 +3580,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let decoded_source_char = self.source_event.decoded_char();
         let ch = decoded_source_char.ch();
         decoded_source_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
+        let source_item = self.source_event.source_item();
 
         let buffer_source_char = self
             .source_event
@@ -3610,6 +3611,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     context.text,
                     decoded_source_char.start_byte_idx(),
                     append_position,
+                    source_item,
                 ),
                 &mut preparation_state,
             )
@@ -3689,7 +3691,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         prepared_append
             .update_cursor_info_for_main_char(cursor_info, decoded_source_char.start_byte_idx());
         let overflow_outcome = BufferTextOverflowRenderRequest::new(
-            prepared_append,
+            &prepared_append,
             decoded_source_char,
             BufferTextOverflowRenderContext {
                 ch,
@@ -3815,9 +3817,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
     }
 }
 
-impl BufferTextOverflowRenderRequest {
+impl<'a> BufferTextOverflowRenderRequest<'a> {
     pub(crate) fn new(
-        prepared_append: BufferTextSourceCharPreparedAppend,
+        prepared_append: &'a BufferTextSourceCharPreparedAppend,
         decoded_source_char: BufferTextDecodedSourceChar,
         context: BufferTextOverflowRenderContext,
     ) -> Self {
