@@ -1829,7 +1829,56 @@ fn buffer_text_source_event_adapter_preserves_single_char_source_item() {
 }
 
 #[test]
-fn buffer_text_source_event_adapter_rejects_non_buffer_items_without_raw_fallback() {
+fn buffer_text_source_event_adapter_splits_persistent_text_run() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("abc");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut cursor = BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::new(0),
+        CharPos0::new(3),
+        RenderFaceRef::Inherit,
+    );
+    let mut source_context = DisplaySourceContext::empty();
+    let mut adapter = BufferTextSourceEventAdapter::new(0);
+    let mut byte_idx = 0;
+
+    let first = adapter
+        .next_event_from_source(&mut cursor, &mut source_context, &mut byte_idx, 0)
+        .expect("first event");
+    assert_eq!(first.decoded_char().ch(), 'a');
+    assert_eq!(first.decoded_char().start_byte_idx(), 0);
+    assert_eq!(byte_idx, 1);
+    assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
+
+    let second = adapter
+        .next_event_from_source(&mut cursor, &mut source_context, &mut byte_idx, 1)
+        .expect("second event");
+    assert_eq!(second.decoded_char().ch(), 'b');
+    assert_eq!(second.decoded_char().start_byte_idx(), 1);
+    assert_eq!(byte_idx, 2);
+    assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
+
+    let third = adapter
+        .next_event_from_source(&mut cursor, &mut source_context, &mut byte_idx, 2)
+        .expect("third event");
+    assert_eq!(third.decoded_char().ch(), 'c');
+    assert_eq!(third.decoded_char().start_byte_idx(), 2);
+    assert_eq!(byte_idx, 3);
+    assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
+}
+
+#[test]
+fn buffer_text_source_event_adapter_rejects_non_buffer_items() {
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::Inherit,
@@ -1844,7 +1893,7 @@ fn buffer_text_source_event_adapter_rejects_non_buffer_items_without_raw_fallbac
 }
 
 #[test]
-fn buffer_text_source_event_adapter_rejects_replacement_items_without_raw_fallback() {
+fn buffer_text_source_event_adapter_rejects_replacement_items() {
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
             DisplaySourcePosition::buffer(

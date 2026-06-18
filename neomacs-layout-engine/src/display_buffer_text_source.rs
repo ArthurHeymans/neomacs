@@ -347,18 +347,137 @@ impl BufferTextSourceTextEvent {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
+struct PendingBufferTextRun {
+    buffer_id: BufferId,
+    text: Box<str>,
+    face: RenderFaceRef,
+    layout: DisplayItemLayout,
+    next_text_byte_offset: usize,
+    next_source_byte_idx: usize,
+    next_charpos: i64,
+}
+
+impl PendingBufferTextRun {
+    fn from_item(
+        text_start_byte: usize,
+        span: SourceSpan,
+        face: RenderFaceRef,
+        layout: DisplayItemLayout,
+        run: DisplayTextRun,
+    ) -> Option<Self> {
+        let DisplaySourcePosition::Buffer {
+            buffer_id,
+            char_pos,
+            byte_pos,
+        } = span.start
+        else {
+            return None;
+        };
+        Some(Self {
+            buffer_id,
+            text: run.text,
+            face,
+            layout,
+            next_text_byte_offset: 0,
+            next_source_byte_idx: byte_pos.get().checked_sub(text_start_byte)?,
+            next_charpos: char_pos.get() as i64,
+        })
+    }
+
+    fn next_event(
+        &mut self,
+        text_start_byte: usize,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextDecodedSourceEvent> {
+        if self.next_source_byte_idx != *byte_idx || self.next_charpos != charpos {
+            tracing::debug!(
+                "BufferTextSourceEventAdapter: pending text run at byte {} charpos {} did not \
+                 match buffer walk byte {} charpos {}",
+                self.next_source_byte_idx,
+                self.next_charpos,
+                *byte_idx,
+                charpos
+            );
+            return None;
+        }
+
+        let ch = self.text[self.next_text_byte_offset..].chars().next()?;
+        let start_byte_idx = self.next_source_byte_idx;
+        let start_charpos = self.next_charpos;
+        self.next_text_byte_offset += ch.len_utf8();
+        self.next_source_byte_idx += ch.len_utf8();
+        self.next_charpos += 1;
+        *byte_idx = self.next_source_byte_idx;
+
+        let source_item = DisplayItem::new(
+            SourceSpan::new(
+                DisplaySourcePosition::buffer(
+                    self.buffer_id,
+                    CharPos0::new(start_charpos.max(0) as usize),
+                    EmacsBytePos::new(text_start_byte.saturating_add(start_byte_idx)),
+                ),
+                DisplaySourcePosition::buffer(
+                    self.buffer_id,
+                    CharPos0::new(start_charpos.max(0) as usize).add_len(CharLen::new(1)),
+                    EmacsBytePos::new(text_start_byte.saturating_add(self.next_source_byte_idx)),
+                ),
+            ),
+            self.face,
+            DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
+        )
+        .with_layout(self.layout);
+
+        Some(BufferTextDecodedSourceEvent::Text(
+            text_event_for_source_item(
+                BufferTextDecodedSourceChar::new(ch, start_byte_idx, start_charpos),
+                source_item,
+            ),
+        ))
+    }
+
+    fn is_finished(&self) -> bool {
+        self.next_text_byte_offset >= self.text.len()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceEventAdapter {
     text_start_byte: usize,
+    pending_text_run: Option<PendingBufferTextRun>,
 }
 
 impl BufferTextSourceEventAdapter {
     pub(crate) fn new(text_start_byte: usize) -> Self {
-        Self { text_start_byte }
+        Self {
+            text_start_byte,
+            pending_text_run: None,
+        }
+    }
+
+    pub(crate) fn next_event_from_source<B: LayoutBufferView + ?Sized>(
+        &mut self,
+        source: &mut BufferTextSourceCursor<'_, B>,
+        context: &mut DisplaySourceContext<'_>,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextDecodedSourceEvent> {
+        if let Some(event) = self.next_pending_event(byte_idx, charpos) {
+            return Some(event);
+        }
+
+        let expected_source_pos = CharPos0::new(charpos.max(0) as usize);
+        if source.current_char_pos() != expected_source_pos {
+            source.reset_to(expected_source_pos);
+        }
+
+        let item = source.next_item(context)?;
+        self.event_from_item(item, byte_idx, charpos)
     }
 
     pub(crate) fn event_from_item(
-        self,
+        &mut self,
         item: DisplayItem,
         byte_idx: &mut usize,
         charpos: i64,
@@ -392,20 +511,9 @@ impl BufferTextSourceEventAdapter {
         } = item;
         match kind {
             DisplayItemKind::TextRun(run) => {
-                let ch = run.text.chars().next()?;
-                *byte_idx = start_byte_idx + ch.len_utf8();
-                let source_item = DisplayItem {
-                    span: first_char_span(span, ch),
-                    face,
-                    kind: DisplayItemKind::TextRun(DisplayTextRun::new(ch.to_string())),
-                    layout,
-                };
-                Some(BufferTextDecodedSourceEvent::Text(
-                    text_event_for_source_item(
-                        BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
-                        source_item,
-                    ),
-                ))
+                self.pending_text_run =
+                    PendingBufferTextRun::from_item(self.text_start_byte, span, face, layout, run);
+                self.next_pending_event(byte_idx, charpos)
             }
             DisplayItemKind::RowBreak(row_break)
                 if row_break.reason == DisplayRowBreakReason::ExplicitNewline =>
@@ -459,6 +567,19 @@ impl BufferTextSourceEventAdapter {
             }
         }
     }
+
+    fn next_pending_event(
+        &mut self,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextDecodedSourceEvent> {
+        let pending = self.pending_text_run.as_mut()?;
+        let event = pending.next_event(self.text_start_byte, byte_idx, charpos);
+        if pending.is_finished() || event.is_none() {
+            self.pending_text_run = None;
+        }
+        event
+    }
 }
 
 fn text_event_for_source_item(
@@ -472,38 +593,11 @@ fn text_event_for_source_item(
     }
 }
 
-fn first_char_span(span: SourceSpan, ch: char) -> SourceSpan {
-    let end = match &span.start {
-        DisplaySourcePosition::Buffer {
-            buffer_id,
-            char_pos,
-            byte_pos,
-        } => DisplaySourcePosition::buffer(
-            *buffer_id,
-            char_pos.add_len(CharLen::new(1)),
-            EmacsBytePos::new(byte_pos.get().saturating_add(ch.len_utf8())),
-        ),
-        DisplaySourcePosition::LispString {
-            source_id,
-            char_index,
-            byte_index,
-        } => DisplaySourcePosition::lisp_string(
-            source_id.get(),
-            char_index.saturating_add(1),
-            byte_index.saturating_add(ch.len_utf8()),
-        ),
-        DisplaySourcePosition::Synthetic { source_id, offset } => {
-            DisplaySourcePosition::synthetic(source_id.get(), offset.saturating_add(ch.len_utf8()))
-        }
-    };
-    SourceSpan::new(span.start, end)
-}
-
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
 /// property boundaries) and emits `DisplayItem` values for the shared row
-/// renderer. This is the new-path buffer source; the old monolithic walker in
-/// `display_buffer_text_walk.rs` should eventually route through it.
-#[allow(dead_code)]
+/// renderer. The main buffer walk consumes this cursor through
+/// `BufferTextSourceEventAdapter` while the remaining row lifecycle is migrated
+/// from character-at-a-time events to direct display items.
 pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     buffer_id: BufferId,
     buffer: &'a B,
@@ -513,7 +607,6 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     replacement_strings: LispStringSourceStack,
 }
 
-#[allow(dead_code)]
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     pub(crate) fn new(
         buffer_id: BufferId,
@@ -537,10 +630,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
 
     pub(crate) fn current_char_pos(&self) -> CharPos0 {
         self.char_pos
-    }
-
-    pub(crate) fn current_byte_pos(&self) -> EmacsBytePos {
-        self.byte_pos(self.char_pos)
     }
 
     pub(crate) fn reset_to(&mut self, char_pos: CharPos0) {
@@ -632,6 +721,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         end.max(start.add_len(CharLen::new(1))).min(limit)
     }
 
+    #[cfg(test)]
     pub(crate) fn source_position(&self) -> DisplaySourcePosition {
         if !self.replacement_strings.is_empty() {
             return self.replacement_strings.source_position();

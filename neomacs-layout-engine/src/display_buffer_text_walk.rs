@@ -53,7 +53,7 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
     WordWrapRenderState,
 };
-use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use crate::display_source::DisplaySourceContext;
 use crate::display_status_line::{
     ChromeRowRenderServices, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
 };
@@ -884,6 +884,16 @@ impl BufferTextWindowWalkSetup {
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
         buffer: &B,
     ) {
+        let mut source_cursor = BufferTextSourceCursor::new(
+            loop_context.buffer_id(),
+            buffer,
+            CharPos0::new(self.charpos.max(0) as usize),
+            CharPos0::new(usize::MAX),
+            RenderFaceRef::Inherit,
+        );
+        let mut source_context = DisplaySourceContext::empty();
+        let mut source_adapter = BufferTextSourceEventAdapter::new(loop_context.text_start_byte());
+
         BufferTextWindowLoopRenderState::new(
             &mut self.buffer_text_append_state,
             &mut self.text_property_checkpoints,
@@ -911,6 +921,9 @@ impl BufferTextWindowWalkSetup {
             &mut self.height_span,
         )
         .render_visible_steps(
+            &mut source_cursor,
+            &mut source_context,
+            &mut source_adapter,
             row_prelude_context,
             loop_context,
             face_resolution_context,
@@ -2577,6 +2590,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
+        source_cursor: &mut BufferTextSourceCursor<'request, B>,
+        source_context: &mut DisplaySourceContext<'_>,
+        source_adapter: &mut BufferTextSourceEventAdapter,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -2594,6 +2610,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         {
             if matches!(
                 self.render_next_step(
+                    source_cursor,
+                    source_context,
+                    source_adapter,
                     row_prelude_context,
                     loop_context,
                     face_resolution_context.clone(),
@@ -2613,6 +2632,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
     pub(crate) fn render_next_step<'request, B: LayoutBufferView>(
         &mut self,
+        source_cursor: &mut BufferTextSourceCursor<'request, B>,
+        source_context: &mut DisplaySourceContext<'_>,
+        source_adapter: &mut BufferTextSourceEventAdapter,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -2671,7 +2693,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        let Some(source_event) = self.consume_source_event(loop_context, buffer) else {
+        let Some(source_event) =
+            self.consume_source_event(source_cursor, source_context, source_adapter)
+        else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
@@ -2768,31 +2792,19 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             );
     }
 
-    pub(crate) fn consume_source_event<'buf, B: LayoutBufferView>(
+    pub(crate) fn consume_source_event<B: LayoutBufferView>(
         &mut self,
-        loop_context: BufferTextWindowLoopRequestContext,
-        buffer: &B,
+        source_cursor: &mut BufferTextSourceCursor<'_, B>,
+        source_context: &mut DisplaySourceContext<'_>,
+        source_adapter: &mut BufferTextSourceEventAdapter,
     ) -> Option<BufferTextDecodedSourceEvent> {
-        // Native path: the typed `BufferTextSourceCursor` is the sole main-buffer
-        // text source. The display-property / invisible / hscroll checkpoints in
-        // `render_next_step` pre-empt every replacement / non-buffer-span item
-        // before sourcing, so the typed cursor only ever yields plain text /
-        // control / glyphless / newline here. A `None` means the buffer is
-        // exhausted (stop the walk).
-        let start_charpos = CharPos0::new((*self.charpos).max(0) as usize);
-        let mut cursor = BufferTextSourceCursor::new(
-            loop_context.buffer_id(),
-            buffer,
-            start_charpos,
-            CharPos0::new(usize::MAX),
-            RenderFaceRef::Inherit,
-        );
-        let mut context = DisplaySourceContext::empty();
-        // End-of-buffer: the only legitimate `None`. Reached at the end of the
-        // walk and must keep returning None to stop it.
-        let item = cursor.next_item(&mut context)?;
-        BufferTextSourceEventAdapter::new(loop_context.text_start_byte()).event_from_item(
-            item,
+        // Native path: one persistent typed source cursor feeds the legacy
+        // character-at-a-time walk. The adapter splits text-run items while
+        // preserving source spans, so the row walk no longer rebuilds a source
+        // cursor for every character.
+        source_adapter.next_event_from_source(
+            source_cursor,
+            source_context,
             self.byte_idx,
             *self.charpos,
         )
