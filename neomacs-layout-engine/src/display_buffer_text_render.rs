@@ -24,16 +24,18 @@ use crate::display_row_append::{
     BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
-    DisplayRowLineBreakTransitionPlan, DisplayRowOverflowTransitionPlan, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTextWindowEmitContext, DisplayRowTransitionContinuation,
-    DisplayRowTransitionRenderState, LispStringRowAppendContext,
-    append_synthetic_text_to_display_row,
+    DisplayRowLineBreakTransitionPlan, DisplayRowOverflowTransitionPlan,
+    DisplayRowTextWindowEmitContext, DisplayRowTransitionContinuation,
+    DisplayRowTransitionRenderState, append_synthetic_text_to_display_row,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowTextPosition, DisplayRowVisibilityLimit,
     DisplayRowYPositions,
+};
+use crate::display_row_lisp_string::{
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
 };
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,

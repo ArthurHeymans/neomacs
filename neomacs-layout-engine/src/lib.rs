@@ -30,6 +30,7 @@ pub(crate) mod display_row_builder;
 pub(crate) mod display_row_finalizer;
 pub(crate) mod display_row_geometry;
 pub(crate) mod display_row_line_number_margin;
+pub(crate) mod display_row_lisp_string;
 pub(crate) mod display_row_overlay_string;
 pub(crate) mod display_row_source_render;
 pub(crate) mod display_row_special_glyphs;

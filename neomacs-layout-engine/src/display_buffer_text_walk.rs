@@ -36,8 +36,7 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append::{
-    BufferTextRowAppendState, DisplayRowAppendSurface, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTransitionContinuation,
+    BufferTextRowAppendState, DisplayRowAppendSurface, DisplayRowTransitionContinuation,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
@@ -45,6 +44,7 @@ use crate::display_row_geometry::{
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
+use crate::display_row_lisp_string::{DisplayRowPrefixRequest, DisplayRowPrefixValues};
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::FaceScanCheckpoint;

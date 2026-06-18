@@ -38,6 +38,11 @@ use crate::display_row_geometry::{
     DisplayRowScopedValue, DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
+use crate::display_row_lisp_string::{
+    DisplayRowPrefixValues, LispStringRowAppendContext, LispStringSourceAppendRequest,
+    LispStringSourceId, LispStringSourceRowAppendSession, append_lisp_string_to_text_row,
+    apply_pending_display_source_faces,
+};
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
     OverlayStringRenderState, OverlayStringRowBreakRenderContext,

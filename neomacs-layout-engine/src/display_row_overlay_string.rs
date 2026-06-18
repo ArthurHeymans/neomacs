@@ -11,14 +11,14 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::{DisplayRowActiveFaceState, DisplayRowRenderStop};
-use crate::display_row_append::{
-    DisplayRowAppendSurface, DisplayRowLineBreakTransitionRequest, LispStringSourceAppendRequest,
-    LispStringSourceId, LispStringSourceRowAppendSession,
-};
+use crate::display_row_append::{DisplayRowAppendSurface, DisplayRowLineBreakTransitionRequest};
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
     DisplayRowYRecording,
+};
+use crate::display_row_lisp_string::{
+    LispStringSourceAppendRequest, LispStringSourceId, LispStringSourceRowAppendSession,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::HitRowRangeTracker;
