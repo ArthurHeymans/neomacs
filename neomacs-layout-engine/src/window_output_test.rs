@@ -2,6 +2,8 @@ use super::ChromeRowOutput;
 use super::DisplayProgressSink;
 use super::TextMatrixRowBegin;
 use super::TextMatrixRowGeometryTransition;
+use super::TextMatrixRowLifecycleOutcome;
+use super::TextMatrixRowLifecycleRequest;
 use super::TextMatrixRowMetrics;
 use super::TextMatrixRowOutput;
 use super::TextMatrixRowTransition;
@@ -510,13 +512,19 @@ fn text_matrix_row_output_surface_begins_row() {
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
-    TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).begin(TextMatrixRowBegin {
-        matrix_row: 0,
-        row: 0,
-        col: 0,
-        y: 0.0,
-        x: 0.0,
-    });
+    let outcome =
+        TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval).begin(TextMatrixRowBegin {
+            matrix_row: 0,
+            row: 0,
+            col: 0,
+            y: 0.0,
+            x: 0.0,
+        });
+
+    assert_eq!(
+        outcome,
+        TextMatrixRowLifecycleOutcome::Began { matrix_row: 0 }
+    );
 
     let display = eval
         .frame_manager()
@@ -532,6 +540,60 @@ fn text_matrix_row_output_surface_begins_row() {
             row: 0,
             col: 0,
         })
+    );
+
+    builder.end_row();
+    builder.end_window();
+}
+
+#[test]
+fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("output-emitter-row-apply", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(0.0, 4.0, 80.0, 16.0), true);
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    emitter.begin_update(&mut eval);
+    let mut output = TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval);
+    output.apply(TextMatrixRowLifecycleRequest::Begin(TextMatrixRowBegin {
+        matrix_row: 0,
+        row: 0,
+        col: 0,
+        y: 4.0,
+        x: 0.0,
+    }));
+    let outcome = output.apply(TextMatrixRowLifecycleRequest::Finish(
+        TextMatrixRowMetrics {
+            y: 20.0,
+            height: 16.0,
+            ascent: 11.0,
+        },
+    ));
+
+    assert_eq!(
+        outcome,
+        TextMatrixRowLifecycleOutcome::Finished {
+            matrix_row: 0,
+            metrics: crate::matrix_builder::MatrixRowMetricsRequest {
+                pixel_y: 16.0,
+                height_px: 16.0,
+                ascent_px: 11.0,
+            },
+        }
     );
 
     builder.end_row();
@@ -687,7 +749,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     write_char_to_current_row(&mut builder, 'H', 3, 100);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
-    publish_text_window_cursor(
+    let outcome = publish_text_window_cursor(
         &mut builder,
         &mut emitter,
         TextWindowCursor {
@@ -722,6 +784,10 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     let phys = state.phys_cursor.expect("selected phys cursor");
     assert_eq!(phys.slot_id.col, 2);
     assert_eq!(state.window_matrices[0].matrix.rows[0].cursor_col, Some(2));
+    assert_eq!(outcome.installed_matrix_cursor, false);
+    assert_eq!(outcome.stored_phys_cursor, true);
+    assert_eq!(outcome.row, 0);
+    assert_eq!(outcome.row_col, 2);
 
     let live = snapshot.phys_cursor.expect("live phys cursor");
     assert_eq!(live.x, 24);

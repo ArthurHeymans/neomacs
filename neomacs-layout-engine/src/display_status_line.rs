@@ -320,6 +320,29 @@ pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
     pub(crate) buffer_name: &'params str,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WindowChromeTargetColumns {
+    width: f32,
+    char_width: f32,
+    reserve_right_border_col: bool,
+}
+
+impl WindowChromeTargetColumns {
+    pub(crate) fn new(width: f32, char_width: f32, reserve_right_border_col: bool) -> Self {
+        Self {
+            width,
+            char_width,
+            reserve_right_border_col,
+        }
+    }
+
+    pub(crate) fn columns(self) -> usize {
+        ((self.width / self.char_width.max(1.0)).round().max(1.0) as usize)
+            .saturating_sub(usize::from(self.reserve_right_border_col))
+            .max(1)
+    }
+}
+
 pub(crate) struct WindowChromeRowsPlan {
     tab_line_face: Option<ResolvedFace>,
     header_line_face: Option<ResolvedFace>,
@@ -429,12 +452,16 @@ impl WindowChromeRowsPlan {
 }
 
 impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
-    fn target_cols(&self) -> usize {
-        window_chrome_target_cols(
+    fn target_columns(&self) -> WindowChromeTargetColumns {
+        WindowChromeTargetColumns::new(
             self.params.bounds.width,
             self.char_width,
             self.reserve_right_border_col,
         )
+    }
+
+    fn target_cols(&self) -> usize {
+        self.target_columns().columns()
     }
 
     pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_>) {
@@ -977,12 +1004,6 @@ fn window_chrome_display_origin(kind: WindowChromeKind, selected: bool) -> Displ
         WindowChromeKind::HeaderLine => DisplayOrigin::HeaderLine { selected },
         WindowChromeKind::ModeLine => DisplayOrigin::ModeLine { selected },
     }
-}
-
-fn window_chrome_target_cols(width: f32, char_width: f32, reserve_right_border_col: bool) -> usize {
-    ((width / char_width.max(1.0)).round().max(1.0) as usize)
-        .saturating_sub(usize::from(reserve_right_border_col))
-        .max(1)
 }
 
 pub(crate) fn window_chrome_row_height_for_face(

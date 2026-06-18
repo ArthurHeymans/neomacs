@@ -393,6 +393,34 @@ fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum TextMatrixRowLifecycleRequest {
+    Begin(TextMatrixRowBegin),
+    Finish(TextMatrixRowMetrics),
+    FinishAndEnd(TextMatrixRowMetrics),
+    Transition(TextMatrixRowGeometryTransition),
+    TransitionWithLimit {
+        transition: TextMatrixRowGeometryTransition,
+        max_rows: usize,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum TextMatrixRowLifecycleOutcome {
+    Began {
+        matrix_row: usize,
+    },
+    Finished {
+        matrix_row: usize,
+        metrics: MatrixRowMetricsRequest,
+    },
+    FinishedAndFinalized {
+        matrix_row: usize,
+        metrics: MatrixRowMetricsRequest,
+    },
+    Transitioned(TextMatrixRowTransition),
+}
+
 pub(crate) struct TextMatrixRowOutput<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
@@ -412,7 +440,23 @@ impl<'a> TextMatrixRowOutput<'a> {
         }
     }
 
-    pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) {
+    pub(crate) fn apply(
+        &mut self,
+        request: TextMatrixRowLifecycleRequest,
+    ) -> TextMatrixRowLifecycleOutcome {
+        match request {
+            TextMatrixRowLifecycleRequest::Begin(begin) => self.begin(begin),
+            TextMatrixRowLifecycleRequest::Finish(metrics) => self.finish(metrics),
+            TextMatrixRowLifecycleRequest::FinishAndEnd(metrics) => self.finish_and_end(metrics),
+            TextMatrixRowLifecycleRequest::Transition(transition) => self.emit(transition),
+            TextMatrixRowLifecycleRequest::TransitionWithLimit {
+                transition,
+                max_rows,
+            } => self.emit_with_row_limit(transition, max_rows),
+        }
+    }
+
+    pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) -> TextMatrixRowLifecycleOutcome {
         self.builder.begin_text_row(begin.matrix_row);
         self.output_emitter.begin_text_matrix_row(
             self.evaluator,
@@ -422,38 +466,62 @@ impl<'a> TextMatrixRowOutput<'a> {
             begin.y,
             begin.x,
         );
+        TextMatrixRowLifecycleOutcome::Began {
+            matrix_row: begin.matrix_row,
+        }
     }
 
-    pub(crate) fn finish(&mut self, metrics: TextMatrixRowMetrics) {
+    pub(crate) fn finish(
+        &mut self,
+        metrics: TextMatrixRowMetrics,
+    ) -> TextMatrixRowLifecycleOutcome {
         let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
         let matrix_row = self.output_emitter.current_text_matrix_row();
         self.builder.set_row_metrics(matrix_row, matrix_metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
+        TextMatrixRowLifecycleOutcome::Finished {
+            matrix_row,
+            metrics: matrix_metrics,
+        }
     }
 
-    pub(crate) fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) {
+    pub(crate) fn finish_and_end(
+        &mut self,
+        metrics: TextMatrixRowMetrics,
+    ) -> TextMatrixRowLifecycleOutcome {
         let matrix_row = self.output_emitter.current_text_matrix_row();
-        self.finish(metrics);
+        let TextMatrixRowLifecycleOutcome::Finished { metrics, .. } = self.finish(metrics) else {
+            unreachable!("finish returns a finished row outcome");
+        };
         self.builder.finalize_row(matrix_row);
+        TextMatrixRowLifecycleOutcome::FinishedAndFinalized {
+            matrix_row,
+            metrics,
+        }
     }
 
-    pub(crate) fn emit(&mut self, transition: TextMatrixRowGeometryTransition) {
+    pub(crate) fn emit(
+        &mut self,
+        transition: TextMatrixRowGeometryTransition,
+    ) -> TextMatrixRowLifecycleOutcome {
         self.finish_and_end(transition.finished_row);
         self.begin(transition.begin_row);
+        TextMatrixRowLifecycleOutcome::Transitioned(TextMatrixRowTransition::BeganNextRow)
     }
 
     pub(crate) fn emit_with_row_limit(
         &mut self,
         transition: TextMatrixRowGeometryTransition,
         max_rows: usize,
-    ) -> TextMatrixRowTransition {
+    ) -> TextMatrixRowLifecycleOutcome {
         if transition.begin_row.row >= max_rows {
             self.finish_and_end(transition.finished_row);
-            return TextMatrixRowTransition::ExhaustedRows;
+            return TextMatrixRowLifecycleOutcome::Transitioned(
+                TextMatrixRowTransition::ExhaustedRows,
+            );
         }
-        self.emit(transition);
-        TextMatrixRowTransition::BeganNextRow
+        self.emit(transition)
     }
 }
 
@@ -465,7 +533,8 @@ pub(crate) fn begin_text_window_output(
 ) {
     let first_row = request.first_row;
     begin_text_window_matrix(builder, request.into());
-    TextMatrixRowOutput::new(builder, output_emitter, evaluator).begin(first_row);
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator)
+        .apply(TextMatrixRowLifecycleRequest::Begin(first_row));
 }
 
 pub(crate) fn begin_text_window_matrix(
@@ -552,7 +621,8 @@ pub(crate) fn finish_text_matrix_row_output(
     evaluator: &mut Context,
     metrics: TextMatrixRowMetrics,
 ) {
-    TextMatrixRowOutput::new(builder, output_emitter, evaluator).finish(metrics);
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator)
+        .apply(TextMatrixRowLifecycleRequest::Finish(metrics));
 }
 
 pub(crate) fn finish_pending_text_window_row(
@@ -594,7 +664,8 @@ pub(crate) fn finish_and_end_text_matrix_row_output(
     evaluator: &mut Context,
     metrics: TextMatrixRowMetrics,
 ) {
-    TextMatrixRowOutput::new(builder, output_emitter, evaluator).finish_and_end(metrics);
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator)
+        .apply(TextMatrixRowLifecycleRequest::FinishAndEnd(metrics));
 }
 
 pub(crate) fn emit_text_matrix_row_transition(
@@ -603,7 +674,8 @@ pub(crate) fn emit_text_matrix_row_transition(
     evaluator: &mut Context,
     transition: TextMatrixRowGeometryTransition,
 ) {
-    TextMatrixRowOutput::new(builder, output_emitter, evaluator).emit(transition);
+    TextMatrixRowOutput::new(builder, output_emitter, evaluator)
+        .apply(TextMatrixRowLifecycleRequest::Transition(transition));
 }
 
 pub(crate) fn emit_text_matrix_row_transition_with_limit(
@@ -613,8 +685,15 @@ pub(crate) fn emit_text_matrix_row_transition_with_limit(
     transition: TextMatrixRowGeometryTransition,
     max_rows: usize,
 ) -> TextMatrixRowTransition {
-    TextMatrixRowOutput::new(builder, output_emitter, evaluator)
-        .emit_with_row_limit(transition, max_rows)
+    match TextMatrixRowOutput::new(builder, output_emitter, evaluator).apply(
+        TextMatrixRowLifecycleRequest::TransitionWithLimit {
+            transition,
+            max_rows,
+        },
+    ) {
+        TextMatrixRowLifecycleOutcome::Transitioned(transition) => transition,
+        _ => unreachable!("transition with limit returns a transition outcome"),
+    }
 }
 
 #[cfg(test)]
@@ -760,9 +839,32 @@ pub(crate) fn publish_text_window_cursor(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     cursor: TextWindowCursor,
-) {
-    if !cursor.selected {
-        builder.install_cursor(MatrixCursorInstallRequest {
+) -> TextWindowCursorPublicationOutcome {
+    TextWindowCursorPublication::resolve(builder, cursor).publish(builder, output_emitter)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TextWindowCursorPublication {
+    matrix_cursor: Option<MatrixCursorInstallRequest>,
+    row: usize,
+    row_col: u16,
+    style: CursorStyle,
+    live_cursor: WindowCursorSnapshot,
+    selected_phys_cursor: Option<PhysCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TextWindowCursorPublicationOutcome {
+    pub(crate) installed_matrix_cursor: bool,
+    pub(crate) stored_phys_cursor: bool,
+    pub(crate) row: usize,
+    pub(crate) row_col: u16,
+    pub(crate) live_cursor: WindowCursorSnapshot,
+}
+
+impl TextWindowCursorPublication {
+    fn resolve(builder: &GlyphMatrixBuilder, cursor: TextWindowCursor) -> Self {
+        let matrix_cursor = (!cursor.selected).then_some(MatrixCursorInstallRequest {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,
             x: cursor.x,
@@ -772,22 +874,48 @@ pub(crate) fn publish_text_window_cursor(
             style: cursor.style,
             color: cursor.color,
         });
-    }
-    let mut phys_cursor = cursor.phys_cursor();
-    let cursor_col = if cursor.selected && !cursor.glyph_row_resolved {
-        if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
-            .resolve_phys_cursor_placement(builder.cursor_visual_column_context())
-        {
-            placement.apply_to(&mut phys_cursor);
+        let mut phys_cursor = cursor.phys_cursor();
+        let row_col = if cursor.selected && !cursor.glyph_row_resolved {
+            if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
+                .resolve_phys_cursor_placement(builder.cursor_visual_column_context())
+            {
+                placement.apply_to(&mut phys_cursor);
+            }
+            phys_cursor.col
+        } else {
+            cursor.col()
+        };
+
+        Self {
+            matrix_cursor,
+            row: cursor.row(),
+            row_col,
+            style: cursor.style,
+            live_cursor: cursor.window_snapshot(),
+            selected_phys_cursor: cursor.selected.then_some(phys_cursor),
         }
-        phys_cursor.col
-    } else {
-        cursor.col()
-    };
-    builder.set_row_cursor(cursor.row(), cursor_col, cursor.style);
-    output_emitter.set_phys_cursor(cursor.window_snapshot());
-    if cursor.selected {
-        builder.store_phys_cursor(phys_cursor);
+    }
+
+    fn publish(
+        self,
+        builder: &mut GlyphMatrixBuilder,
+        output_emitter: &mut WindowOutputEmitter,
+    ) -> TextWindowCursorPublicationOutcome {
+        if let Some(cursor) = self.matrix_cursor {
+            builder.install_cursor(cursor);
+        }
+        builder.set_row_cursor(self.row, self.row_col, self.style);
+        output_emitter.set_phys_cursor(self.live_cursor.clone());
+        if let Some(cursor) = self.selected_phys_cursor.clone() {
+            builder.store_phys_cursor(cursor);
+        }
+        TextWindowCursorPublicationOutcome {
+            installed_matrix_cursor: self.matrix_cursor.is_some(),
+            stored_phys_cursor: self.selected_phys_cursor.is_some(),
+            row: self.row,
+            row_col: self.row_col,
+            live_cursor: self.live_cursor,
+        }
     }
 }
 

@@ -80,10 +80,16 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
 
 #[test]
 fn window_chrome_target_cols_reserves_right_border_column() {
-    assert_eq!(window_chrome_target_cols(80.0, 8.0, false), 10);
-    assert_eq!(window_chrome_target_cols(80.0, 8.0, true), 9);
-    assert_eq!(window_chrome_target_cols(3.0, 8.0, true), 1);
-    assert_eq!(window_chrome_target_cols(80.0, 0.0, false), 80);
+    assert_eq!(
+        WindowChromeTargetColumns::new(80.0, 8.0, false).columns(),
+        10
+    );
+    assert_eq!(WindowChromeTargetColumns::new(80.0, 8.0, true).columns(), 9);
+    assert_eq!(WindowChromeTargetColumns::new(3.0, 8.0, true).columns(), 1);
+    assert_eq!(
+        WindowChromeTargetColumns::new(80.0, 0.0, false).columns(),
+        80
+    );
 }
 
 #[test]
