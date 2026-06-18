@@ -8,6 +8,7 @@ use crate::display_buffer_text_append::{
     BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
     TextWindowAppendSurfaceRequest,
 };
+use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_render::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
     BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
@@ -35,7 +36,7 @@ use crate::display_item::{DisplayItemKind, DisplayRowBreakReason, RenderFaceRef}
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
-use crate::display_row_append::{BufferTextRowAppendState, DisplayRowAppendSurface};
+use crate::display_row_append::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,

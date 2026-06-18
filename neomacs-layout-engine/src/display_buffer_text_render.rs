@@ -1,5 +1,10 @@
 //! Buffer-text source rendering requests and actions.
 
+use crate::display_buffer_text_item_append::{
+    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
+    BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
+    BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
+};
 use crate::display_buffer_text_source::{
     BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceTextEvent,
 };
@@ -19,9 +24,6 @@ use crate::display_row::{
     DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append::{
-    BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
-    BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
     append_synthetic_text_to_display_row,
 };

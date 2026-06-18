@@ -8,8 +8,9 @@ use crate::display_buffer_text_append::{
     BufferTextWindowTailFinalizeState, BufferTextWindowTerminalRightBorderRequest,
     BufferTextWindowVisibilityRetryRequest,
 };
+use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_render::*;
-use crate::display_buffer_text_source::BufferTextDecodedSourceEvent;
+use crate::display_buffer_text_source::*;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -23,10 +24,11 @@ use crate::display_property::{
     classify_display_property,
 };
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics,
-    DisplayRowGeometry, DisplayRowItemSourceRenderRequest, DisplayRowMeasuredFaceMetrics,
-    DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderPolicy,
-    DisplayRowRenderer, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
+    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowCurrentTextRenderState,
+    DisplayRowFallbackMetrics, DisplayRowGeometry, DisplayRowItemSourceRenderRequest,
+    DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
+    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceRequestPolicy,
+    DisplayRowSourceState,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
@@ -41,20 +43,22 @@ use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{
     DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
     LispStringSourceAppendRequest, LispStringSourceId, LispStringSourceRowAppendSession,
-    append_lisp_string_to_text_row, apply_pending_display_source_faces,
+    append_lisp_string_to_text_row, apply_pending_display_source_faces, render_face_ref_id,
 };
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
     OverlayStringRenderState, OverlayStringRowBreakRenderContext,
 };
 use crate::display_row_replacement::*;
-use crate::display_row_source_render::TextRowOutputRenderState;
+use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceMeasureState};
 use crate::display_row_transition::*;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
-    TextPropertyScanCheckpoints, WordWrapBreakCandidate, WordWrapRenderState,
+    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapBreakCandidate,
+    WordWrapRenderState,
 };
+use crate::display_source::*;
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,
     BufferDisplayReplacementStringRequest, BufferTextSourceAdvanceRequest,
@@ -66,9 +70,11 @@ use crate::display_source::{
     DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
+use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::TextMatrixRowTransition;
+use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;

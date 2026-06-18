@@ -1,3 +1,4 @@
+use crate::display_buffer_text_item_append::DisplayRowSourceAppendOperation;
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
@@ -8,8 +9,7 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
-    DisplayRowAppendMetrics, DisplayRowAppendSurface, DisplayRowSourceAppendOperation,
-    DisplayRowTextAppendContext,
+    DisplayRowAppendMetrics, DisplayRowAppendSurface, DisplayRowTextAppendContext,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;

@@ -1,3 +1,4 @@
+use crate::display_buffer_text_item_append::DisplayRowSourceAppendOperation;
 use crate::display_cursor::{CapturedCursorInfo, display_property_replacement_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
@@ -12,7 +13,7 @@ use crate::display_row::{
 };
 use crate::display_row_append::{
     DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
-    DisplayRowAppendPlacement, DisplayRowAppendSurface, DisplayRowSourceAppendOperation,
+    DisplayRowAppendPlacement, DisplayRowAppendSurface,
 };
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowPosition,
