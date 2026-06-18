@@ -188,6 +188,11 @@ struct CharsetInfo {
 /// Registry of known charsets, keyed by name.
 pub(crate) struct CharsetRegistry {
     charsets: HashMap<SymId, CharsetInfo>,
+    /// Aliases mapping an alias name to its canonical charset name. Aliases
+    /// resolve to the target dynamically (like GNU `define-charset-alias`), so
+    /// later mutations of the target's plist (e.g. characters.el setting
+    /// `preferred-coding-system`) are visible through the alias.
+    aliases: HashMap<SymId, SymId>,
     /// Priority-ordered list of charset names.
     priority: Vec<SymId>,
     /// Next auto-assigned charset ID.
@@ -199,11 +204,25 @@ impl CharsetRegistry {
     pub fn new() -> Self {
         let mut reg = Self {
             charsets: HashMap::new(),
+            aliases: HashMap::new(),
             priority: Vec::new(),
             next_id: 256, // start above the Emacs built-in range
         };
         reg.init_standard_charsets();
         reg
+    }
+
+    /// Resolve a charset name through any alias chain to its canonical name.
+    fn resolve_name(&self, name: SymId) -> SymId {
+        let mut current = name;
+        // Aliases form a short chain in practice; cap iterations defensively.
+        for _ in 0..8 {
+            match self.aliases.get(&current) {
+                Some(&target) if target != current => current = target,
+                _ => break,
+            }
+        }
+        current
     }
 
     fn make_default(id: i64, name: &str) -> CharsetInfo {
@@ -352,15 +371,6 @@ impl CharsetRegistry {
         if !info.plist.iter().any(|(k, _)| *k == dim_sym) {
             info.plist.push((dim_sym, Value::fixnum(info.dimension)));
         }
-        // GNU define-charset stores :code-space as an 8-element vector
-        // [min1 max1 min2 max2 min3 max3 min4 max4] (charset.c). The Lisp
-        // `charset-chars` reads it via (plist-get (charset-plist cs) :code-space),
-        // so built-in charsets must expose it too.
-        let cs_sym = intern(":code-space");
-        if !info.plist.iter().any(|(k, _)| *k == cs_sym) {
-            let cs_vec = info.code_space.iter().map(|&n| Value::fixnum(n)).collect();
-            info.plist.push((cs_sym, Value::vector(cs_vec)));
-        }
         self.charsets.insert(info.name, info);
     }
 
@@ -373,11 +383,11 @@ impl CharsetRegistry {
 
     /// Return true if a charset with the given name exists.
     pub fn contains(&self, name: &str) -> bool {
-        lookup_interned(name).is_some_and(|id| self.charsets.contains_key(&id))
+        lookup_interned(name).is_some_and(|id| self.contains_symbol(id))
     }
 
     pub fn contains_symbol(&self, name: SymId) -> bool {
-        self.charsets.contains_key(&name)
+        self.charsets.contains_key(&self.resolve_name(name))
     }
 
     /// Return the list of all charset names (unordered).
@@ -417,29 +427,50 @@ impl CharsetRegistry {
 
     /// Return the plist for a charset, or None if not found.
     pub fn plist(&self, name: SymId) -> Option<&[(SymId, Value)]> {
-        self.charsets.get(&name).map(|info| info.plist.as_slice())
+        self.charsets
+            .get(&self.resolve_name(name))
+            .map(|info| info.plist.as_slice())
     }
 
     /// Return the internal ID for a charset, if known.
     pub fn id(&self, name: SymId) -> Option<i64> {
-        self.charsets.get(&name).map(|info| info.id)
+        self.charsets
+            .get(&self.resolve_name(name))
+            .map(|info| info.id)
     }
 
     /// Register ALIAS as another name for TARGET.
+    ///
+    /// Unlike a copy, the alias resolves to the target dynamically, so any
+    /// later change to the target charset (plist, unification, …) is reflected
+    /// through the alias — matching GNU `define-charset-alias`, where an alias
+    /// is simply another name for the same charset.
     pub fn define_alias(&mut self, alias: SymId, target: SymId) {
-        let Some(target_info) = self.charsets.get(&target) else {
-            return;
-        };
-        let mut aliased = target_info.clone();
-        aliased.name = alias;
-        self.charsets.insert(alias, aliased);
+        let canonical = self.resolve_name(target);
+        if self.charsets.contains_key(&canonical) {
+            self.aliases.insert(alias, canonical);
+        }
     }
 
     fn snapshot(&self) -> CharsetRegistrySnapshot {
+        // Materialize aliases as concrete charset entries so they survive the
+        // pdump (which serializes only `charsets`).  Snapshots are taken after
+        // loadup, so the resolved target's plist is already final (e.g. it
+        // includes `preferred-coding-system`); a materialized clone therefore
+        // carries the same data the dynamic alias would resolve to.
+        let alias_clones = self.aliases.iter().filter_map(|(&alias, &target)| {
+            let canonical = self.resolve_name(target);
+            self.charsets.get(&canonical).map(|info| {
+                let mut clone = info.clone();
+                clone.name = alias;
+                clone
+            })
+        });
         let mut charsets = self
             .charsets
             .values()
             .cloned()
+            .chain(alias_clones)
             .map(|info| CharsetInfoSnapshot {
                 id: info.id,
                 name: info.name,
@@ -527,6 +558,9 @@ impl CharsetRegistry {
 
         Self {
             charsets,
+            // Aliases were materialized into `charsets` at snapshot time, so
+            // none remain to resolve dynamically after a restore.
+            aliases: HashMap::new(),
             priority: snapshot.priority,
             next_id: snapshot.next_id,
         }
@@ -534,6 +568,7 @@ impl CharsetRegistry {
 
     /// Replace the plist for a charset.
     pub fn set_plist(&mut self, name: SymId, plist: Vec<(SymId, Value)>) {
+        let name = self.resolve_name(name);
         if let Some(info) = self.charsets.get_mut(&name) {
             info.plist = plist;
         }
@@ -550,7 +585,7 @@ impl CharsetRegistry {
     /// character code.  Returns `None` when the code-point is outside
     /// the charset's valid range or the charset method cannot handle it.
     pub fn decode_char(&self, name: SymId, code_point: i64) -> Option<i64> {
-        let info = self.charsets.get(&name)?;
+        let info = self.charsets.get(&self.resolve_name(name))?;
         if info.ascii_compatible_p && (0..=0x7f).contains(&code_point) {
             return Some(code_point);
         }
@@ -592,7 +627,7 @@ impl CharsetRegistry {
     /// the given charset.  Returns `None` when the character cannot be
     /// represented in the charset.
     pub fn encode_char(&self, name: SymId, ch: i64) -> Option<i64> {
-        let info = self.charsets.get(&name)?;
+        let info = self.charsets.get(&self.resolve_name(name))?;
         if info.unified_p
             && let Some(unify_map) = charset_value_text(&info.unify_map)
             && let Some(encoded) =
@@ -1770,6 +1805,7 @@ pub(crate) fn builtin_unify_charset(args: Vec<Value>) -> EvalResult {
 
     CHARSET_REGISTRY.with(|slot| {
         let mut reg = slot.borrow_mut();
+        let name = reg.resolve_name(name);
         let info = reg.charsets.get_mut(&name).expect("known charset");
 
         if args.get(2).is_some_and(|value| value.is_truthy()) {

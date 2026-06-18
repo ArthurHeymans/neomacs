@@ -26,9 +26,15 @@ fn registry_names_returns_all() {
     crate::test_utils::init_test_tracing();
     let reg = CharsetRegistry::new();
     let names = reg.names();
-    assert_eq!(names.len(), 8);
+    // The seven concrete built-in charsets. `ucs` is registered as an alias of
+    // `unicode` (like GNU `define-charset-alias`), not a separate entry, so it
+    // is resolved dynamically rather than listed here.
+    assert_eq!(names.len(), 7);
     assert!(names.contains(&"ascii".to_string()));
     assert!(names.contains(&"unicode".to_string()));
+    assert!(!names.contains(&"ucs".to_string()));
+    // The alias still resolves and is recognized as a charset.
+    assert!(reg.contains_symbol(intern("ucs")));
 }
 
 #[test]
@@ -42,13 +48,30 @@ fn registry_priority_list() {
 }
 
 #[test]
-fn registry_plist_returns_empty_for_standard() {
+fn registry_plist_canonical_for_standard() {
     crate::test_utils::init_test_tracing();
     let reg = CharsetRegistry::new();
     let plist = reg.plist(intern("ascii")).unwrap();
-    assert_eq!(plist.len(), 1);
-    assert_eq!(resolve_sym(plist[0].0), ":dimension");
-    assert_eq!(plist[0].1, Value::fixnum(1));
+    // Built-in charsets carry GNU's canonical charset plist (charset.c:1268):
+    // :name :dimension :code-space :iso-final-char :emacs-mule-id
+    // :ascii-compatible-p :code-offset.  (:docstring/:short-name/:long-name are
+    // appended later by mule-conf.el, which is not loaded in this bare registry.)
+    let keys: Vec<&str> = plist.iter().map(|(k, _)| resolve_sym(*k)).collect();
+    assert_eq!(
+        keys,
+        vec![
+            ":name",
+            ":dimension",
+            ":code-space",
+            ":iso-final-char",
+            ":emacs-mule-id",
+            ":ascii-compatible-p",
+            ":code-offset",
+        ]
+    );
+    assert_eq!(plist[1].1, Value::fixnum(1)); // :dimension
+    assert_eq!(plist[3].1, Value::fixnum(66)); // :iso-final-char 'B'
+    assert_eq!(plist[5].1, Value::T); // :ascii-compatible-p
 }
 
 #[test]
@@ -242,8 +265,8 @@ fn char_charset_wrong_arg_count() {
 fn charset_plist_known() {
     crate::test_utils::init_test_tracing();
     let r = builtin_charset_plist(vec![Value::symbol("ascii")]).unwrap();
-    // Standard charsets now include :dimension (matching GNU define-charset).
-    assert_eq!(list_length(&r), Some(2)); // (:dimension 1)
+    // Built-in charsets carry GNU's canonical 7-key charset plist.
+    assert_eq!(list_length(&r), Some(14)); // 7 key/value pairs
 }
 
 #[test]
