@@ -1,12 +1,9 @@
 //! Right-edge truncation/continuation markers and the right window border — GNU's special glyphs (`produce_special_glyphs`, xdisp.c; `IT_TRUNCATION`/`IT_CONTINUATION`). Relocated out of display_row_append.rs (pure move, no behavior change).
 
-use crate::display_row::{
-    DisplayRowGeometry, DisplayRowMaxX, DisplayRowRenderBounds, DisplayRowSourceFragmentFrame,
-    DisplayRowSourceState,
-};
+use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
 use crate::display_row_builder::{
-    DisplayRowPosition, DisplayTabPolicy, display_row_total_glyph_count,
-    pop_display_row_trailing_text_char, trim_display_row_text_to_total_glyph_count,
+    display_row_total_glyph_count, pop_display_row_trailing_text_char,
+    trim_display_row_text_to_total_glyph_count,
 };
 use crate::display_row_geometry::DisplayRowFlagKind;
 use crate::display_status_line::ChromeRowRenderServices;
@@ -22,22 +19,6 @@ use crate::window_output::{
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 
-fn current_row_marker_geometry(
-    row: &GlyphRow,
-    width_cols: usize,
-    char_width: f32,
-) -> DisplayRowGeometry {
-    let char_width = char_width.max(1.0);
-    DisplayRowGeometry {
-        y: row.pixel_y,
-        width: width_cols.max(1) as f32 * char_width,
-        height: row.height_px.max(1.0),
-        ascent: row.ascent_px.max(0.0).min(row.height_px.max(1.0)),
-        char_width,
-        tab_policy: DisplayTabPolicy::every(8),
-    }
-}
-
 fn render_right_edge_marker_source(
     row: &mut GlyphRow,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
@@ -47,23 +28,17 @@ fn render_right_edge_marker_source(
     char_width: f32,
     matrix_cols: usize,
 ) {
-    let char_width = char_width.max(1.0);
     let start_col = display_row_total_glyph_count(row);
-    let start = DisplayRowPosition {
-        x_px: start_col as f32 * char_width,
-        col: start_col,
-    };
     let mut source_state = DisplayRowSourceState::default();
-    let request = DisplayRowSourceFragmentFrame::new(
-        current_row_marker_geometry(row, matrix_cols, char_width),
+    let request = DisplayRowSourceFragmentFrame::from_glyph_row_columns(
+        row,
+        matrix_cols,
+        char_width,
         GlyphRowRole::Text,
         face_id,
         base_face,
     )
-    .render_request(DisplayRowRenderBounds {
-        start,
-        max_x: DisplayRowMaxX::Bounded(matrix_cols as f32 * char_width),
-    });
+    .render_request_from_column(start_col, matrix_cols);
     render_services.render_item_source_fragment_into_row(request, row, source, &mut source_state);
 }
 
@@ -179,26 +154,17 @@ fn render_right_border_text(
     if request.text.is_empty() {
         return;
     }
-    let char_width = request.char_width.max(1.0);
-    let start = DisplayRowPosition {
-        x_px: request.start_col as f32 * char_width,
-        col: request.start_col,
-    };
     let mut source = right_border_text_source(request.text, request.face_id, request.source_offset);
     let mut source_state = DisplayRowSourceState::default();
-    let row_request = DisplayRowSourceFragmentFrame::new(
-        current_row_marker_geometry(row, request.matrix_cols, char_width),
+    let row_request = DisplayRowSourceFragmentFrame::from_glyph_row_columns(
+        row,
+        request.matrix_cols,
+        request.char_width,
         GlyphRowRole::Text,
         request.face_id,
         request.base_face,
     )
-    .render_request_for_area(
-        DisplayRowRenderBounds {
-            start,
-            max_x: DisplayRowMaxX::Bounded(request.matrix_cols as f32 * char_width),
-        },
-        request.area,
-    );
+    .render_request_from_column_for_area(request.start_col, request.matrix_cols, request.area);
     render_services.render_item_source_fragment_into_row(
         row_request,
         row,

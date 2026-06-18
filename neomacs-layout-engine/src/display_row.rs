@@ -1304,6 +1304,56 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
     ) -> DisplayRowSourceFragmentRenderRequest<'face> {
         self.render_request(render_bounds).with_glyph_area(area)
     }
+
+    pub(crate) fn from_glyph_row_columns(
+        row: &GlyphRow,
+        matrix_cols: usize,
+        char_width: f32,
+        role: GlyphRowRole,
+        base_face_id: u32,
+        base_face: &'face ResolvedFace,
+    ) -> Self {
+        let char_width = char_width.max(1.0);
+        let height = row.height_px.max(1.0);
+        Self::new(
+            DisplayRowGeometry {
+                y: row.pixel_y,
+                width: matrix_cols.max(1) as f32 * char_width,
+                height,
+                ascent: row.ascent_px.max(0.0).min(height),
+                char_width,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
+            role,
+            base_face_id,
+            base_face,
+        )
+    }
+
+    pub(crate) fn render_request_from_column(
+        self,
+        start_col: usize,
+        max_col: usize,
+    ) -> DisplayRowSourceFragmentRenderRequest<'face> {
+        let char_width = self.policy.geometry.char_width;
+        self.render_request(DisplayRowRenderBounds {
+            start: DisplayRowPosition {
+                x_px: start_col as f32 * char_width,
+                col: start_col,
+            },
+            max_x: DisplayRowMaxX::Bounded(max_col as f32 * char_width),
+        })
+    }
+
+    pub(crate) fn render_request_from_column_for_area(
+        self,
+        start_col: usize,
+        max_col: usize,
+        area: GlyphArea,
+    ) -> DisplayRowSourceFragmentRenderRequest<'face> {
+        self.render_request_from_column(start_col, max_col)
+            .with_glyph_area(area)
+    }
 }
 
 pub(crate) struct DisplayRowLispStringSourceSessionRequest {
@@ -1530,6 +1580,21 @@ impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {
 
     fn into_item_request(self) -> DisplayRowItemSourceRenderRequest<'a> {
         self.item_request
+    }
+
+    #[cfg(test)]
+    pub(crate) fn geometry(&self) -> &DisplayRowGeometry {
+        self.item_request.row_request.geometry()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_bounds(&self) -> DisplayRowRenderBounds {
+        self.item_request.row_request.render_bounds()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn glyph_area(&self) -> GlyphArea {
+        self.item_request.row_request.area
     }
 
     #[cfg(test)]

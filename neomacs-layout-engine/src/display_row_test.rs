@@ -337,6 +337,45 @@ fn display_row_source_geometry_request_overrides_render_bounds() {
 }
 
 #[test]
+fn display_row_source_fragment_frame_builds_column_bounds_from_glyph_row() {
+    let face = base_face();
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.pixel_y = 6.0;
+    row.height_px = 18.0;
+    row.ascent_px = 13.0;
+
+    let request = DisplayRowSourceFragmentFrame::from_glyph_row_columns(
+        &row,
+        12,
+        7.5,
+        GlyphRowRole::Text,
+        9,
+        &face,
+    )
+    .render_request_from_column_for_area(3, 12, GlyphArea::RightMargin);
+
+    assert_eq!(
+        request.geometry(),
+        &DisplayRowGeometry {
+            y: 6.0,
+            width: 90.0,
+            height: 18.0,
+            char_width: 7.5,
+            ascent: 13.0,
+            tab_policy: DisplayTabPolicy::every(8),
+        }
+    );
+    assert_eq!(
+        request.render_bounds(),
+        DisplayRowRenderBounds {
+            start: DisplayRowPosition { x_px: 22.5, col: 3 },
+            max_x: DisplayRowMaxX::Bounded(90.0),
+        }
+    );
+    assert_eq!(request.glyph_area(), GlyphArea::RightMargin);
+}
+
+#[test]
 fn display_row_render_context_builds_source_resolve_params() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
