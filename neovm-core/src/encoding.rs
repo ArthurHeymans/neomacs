@@ -2657,7 +2657,12 @@ fn builtin_coding_string_in_context(
     let hz_coding = chinese_hz_charset(ctx, &coding);
     let emacs_mule = is_emacs_mule(ctx, &coding);
     let no_conv_multibyte = coding_system_base(&coding) == "no-conversion-multibyte";
-    let utf8_signature = coding_system_base(&coding) == "utf-8-with-signature";
+    // utf-8-with-signature and utf-8-auto both write the BOM on encode and
+    // strip an optional BOM on decode.
+    let utf8_signature = matches!(
+        coding_system_base(&coding),
+        "utf-8-with-signature" | "utf-8-auto"
+    );
     let full_iso = full_iso2022_spec(ctx, &coding);
     let euc_coding = euc_iso2022_spec(ctx, &coding);
     let sjis_coding = sjis_charsets(ctx, &coding);
