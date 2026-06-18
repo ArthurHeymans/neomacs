@@ -2387,6 +2387,7 @@ mod divergence_syntax_parsing;
 mod divergence_system_info_env;
 mod divergence_terminal_eshell;
 mod divergence_testing_debug;
+mod divergence_text_motion_unicode_runtime;
 mod divergence_text_processing_real;
 mod divergence_textprop_deep;
 mod divergence_textprop_manipulation;
