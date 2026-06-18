@@ -148,6 +148,7 @@ impl BufferTextItemSource {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn single_char(
         buffer_id: BufferId,
         char_pos: CharPos0,
@@ -198,6 +199,7 @@ impl BufferTextSourceRange {
         self.end
     }
 
+    #[cfg(test)]
     pub(crate) fn is_single_char(self) -> bool {
         self.end == self.start.add_len(CharLen::new(1))
     }
@@ -482,6 +484,7 @@ impl BufferTextSourceTextItemRequest {
         Self::new(range, cluster.ch())
     }
 
+    #[cfg(test)]
     pub(crate) fn range(self) -> BufferTextSourceRange {
         self.range
     }
@@ -490,10 +493,12 @@ impl BufferTextSourceTextItemRequest {
         self.ch
     }
 
+    #[cfg(test)]
     pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
         DisplayItemKind::TextRun(DisplayTextRun::new(self.ch.to_string()))
     }
 
+    #[cfg(test)]
     pub(crate) fn into_display_item<B: LayoutBufferView + ?Sized>(
         self,
         buffer_id: BufferId,

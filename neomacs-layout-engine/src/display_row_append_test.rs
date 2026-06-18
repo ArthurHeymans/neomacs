@@ -106,6 +106,27 @@ fn write_char_to_current_row_with_width(
         .expect("current row");
 }
 
+fn buffer_source_mapped_display_item(
+    buffer_id: BufferId,
+    start: usize,
+    end: usize,
+    text: &str,
+    face: RenderFaceRef,
+) -> crate::display_item::DisplayItem {
+    crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                buffer_id,
+                CharPos0::new(start),
+                EmacsBytePos::new(start),
+            ),
+            DisplaySourcePosition::buffer(buffer_id, CharPos0::new(end), EmacsBytePos::new(end)),
+        ),
+        face,
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text)),
+    )
+}
+
 fn emitted_row(
     row: i64,
     y: i64,
@@ -3046,6 +3067,12 @@ fn buffer_text_character_wrap_source_action_reports_hidden_after_state_sync() {
 #[test]
 fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut context = RowTransitionTestContext::new("text-overflow-character-wrap-request");
+    let buf_id = context
+        .eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
     let text = b"a";
     let mut byte_idx = 0;
     let source_step_char = BufferTextSourceStepChar::new('a', 0, 21);
@@ -3060,7 +3087,13 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
                 x_px: 80.0,
                 col: 10,
             },
-            source_item: None,
+            source_item: buffer_source_mapped_display_item(
+                buf_id,
+                21,
+                22,
+                "a",
+                RenderFaceRef::Inherit,
+            ),
         },
     };
     let mut charpos = 21;
@@ -3602,6 +3635,8 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let mut append_state = BufferTextRowAppendState::default();
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let source_item =
+        buffer_source_mapped_display_item(buf_id, 0, 1, "x", RenderFaceRef::FaceId(7));
 
     let resolved = append_context.resolve_source_advance_request_to_text_row(
         &geometry,
@@ -3620,6 +3655,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
                 BufferTextSourceClusterState::for_char('x', None),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
+            &source_item,
         ),
     );
 
@@ -3646,6 +3682,8 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let mut append_state = BufferTextRowAppendState::default();
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let source_item =
+        buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(7));
 
     let resolved = append_context.resolve_source_advance_request_to_text_row(
         &geometry,
@@ -3664,6 +3702,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
                 BufferTextSourceClusterState::for_char('\u{0633}', None),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
+            &source_item,
         ),
     );
 
@@ -5624,9 +5663,11 @@ fn buffer_text_source_append_context_appends_source_char() {
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
+    let source_item =
+        buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
     let mut append_state = BufferTextRowAppendState::default();
     let prepared_append = append_context
-        .prepare_source_char_at(
+        .prepare_source_item_char_at(
             &geometry,
             &mut append_state,
             &mut TextRowSourceMeasureState::new(
@@ -5639,7 +5680,7 @@ fn buffer_text_source_append_context_appends_source_char() {
             b"a",
             0,
             DisplayRowPosition { x_px: 0.0, col: 0 },
-            None,
+            &source_item,
             None,
         )
         .into_text()
@@ -5987,6 +6028,8 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let source_char = BufferTextSourceChar::new('a', CharPos0::new(0), 2);
+    let source_item =
+        buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
     let mut append_state = BufferTextRowAppendState::default();
     let mut source_render = TextRowSourceRenderState::new(
         &mut builder,
@@ -6001,14 +6044,14 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     );
 
     let prepared_append = append_context
-        .prepare_source_char_for_current_text_row(
-            BufferTextSourceCharPreparationRequest::new(
+        .prepare_source_item_for_current_text_row(
+            BufferTextSourceDisplayItemPreparationRequest::new(
                 geometry,
                 &source_char,
                 b"a",
                 0,
                 DisplayRowPosition { x_px: 0.0, col: 0 },
-                None,
+                &source_item,
             ),
             &mut preparation_state,
         )
@@ -6846,6 +6889,8 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
     let source_range = BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2));
+    let source_item =
+        buffer_source_mapped_display_item(buf_id, 1, 2, "b", RenderFaceRef::FaceId(7));
 
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
@@ -6868,6 +6913,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
                     BufferTextSourceClusterState::for_char('b', None),
                 ),
                 position,
+                &source_item,
             ),
         )
         .advance_px();
