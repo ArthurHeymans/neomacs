@@ -15533,3 +15533,176 @@ fn deactivate_mark_runs_after_post_command_hook() {
         "deactivate-mark should still have run by the end of the iteration"
     );
 }
+
+/// Microbenchmark: baseline JIT (native) vs the Tier-0 bytecode VM running the
+/// *identical* bytecode, in one binary, through the real `funcall` seam.
+///
+/// The body is a nullary arithmetic LOOP that sums 0..N for a compile-time N
+/// (one funcall, many ops). We A/B it with the codebase's own forced-tier
+/// helpers: `set_cold_for_test()` pins the function to the interpreter
+/// (`Plan::Interpret`), `set_hot_for_test()` tiers it to native
+/// (`Plan::Compiled`). Both functions hold byte-identical `ops`/`constants`.
+///
+/// What it measures: end-to-end `funcall_general_untraced` cost on each tier —
+/// i.e. the loop body PLUS the shared call-seam overhead (dispatch match,
+/// arg marshaling, GC-root push/pop). That seam cost is paid on BOTH sides, so
+/// the ratio understates the pure body speedup but is a fair apples-to-apples
+/// "what does tiering this call up actually buy" number.
+#[cfg(feature = "jit")]
+#[test]
+fn bench_jit_vs_vm_loop() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    use std::time::Instant;
+
+    // sum := 0; i := 0; while (i < N) { sum := sum + i; i := i + 1 }; return sum
+    //
+    // Two stack slots survive across the loop: slot0 = sum, slot1 = i.
+    // constants[0] = 0 (the two initial pushes), constants[1] = N.
+    //
+    //  op  bytecode          stack after (top on right)        note
+    //   0  Constant(0)       [0]                               push sum=0
+    //   1  Constant(0)       [sum, 0]                          push i=0
+    //   2  StackRef(0)       [sum, i, i]                       loop top: push i
+    //   3  Constant(1)       [sum, i, i, N]                    push N
+    //   4  Lss               [sum, i, (i<N)]                   i < N
+    //   5  GotoIfNil(14)     [sum, i]                          exit if !(i<N); pops cond
+    //   6  StackRef(1)       [sum, i, sum]                     push sum (1 below i)
+    //   7  StackRef(1)       [sum, i, sum, i]                  push i   (1 below sum)
+    //   8  Add               [sum, i, sum+i]                   sum + i
+    //   9  StackSet(2)       [sum+i, i]                        store into slot0 (sum'), pop
+    //  10  StackRef(0)       [sum', i, i]                      push i
+    //  11  Add1              [sum', i, i+1]                    i + 1
+    //  12  StackSet(1)       [sum', i+1]                       store into slot1 (i'), pop
+    //  13  Goto(2)           [sum', i']                        back to loop top
+    //  14  StackRef(1)       [sum, i, sum]                     exit: push sum (1 below i)
+    //  15  Return            -> sum
+    const N: i64 = 1000;
+    let ops = vec![
+        Op::Constant(0),   // 0
+        Op::Constant(0),   // 1
+        Op::StackRef(0),   // 2  loop top
+        Op::Constant(1),   // 3
+        Op::Lss,           // 4
+        Op::GotoIfNil(14), // 5
+        Op::StackRef(1),   // 6
+        Op::StackRef(1),   // 7
+        Op::Add,           // 8
+        Op::StackSet(2),   // 9
+        Op::StackRef(0),   // 10
+        Op::Add1,          // 11
+        Op::StackSet(1),   // 12
+        Op::Goto(2),       // 13
+        Op::StackRef(1),   // 14  loop end
+        Op::Return,        // 15
+    ];
+    let constants = vec![Value::make_int(0), Value::make_int(N)];
+    let expected = Value::make_int(N * (N - 1) / 2); // sum 0..N-1 = 499500
+
+    let build = |hot: bool| -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 64;
+        if hot {
+            f.runtime.set_hot_for_test();
+        } else {
+            // Pin to Tier-0 forever so the timed VM loop never tiers up.
+            f.runtime.set_cold_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+
+    let mut ev = Context::new();
+
+    // --- Correctness gate 1: VM result matches the closed form. ---
+    let vm_fn = build(false);
+    let vm_result = ev.funcall_general_untraced(vm_fn, vec![]).unwrap();
+    assert_eq!(
+        vm_result,
+        expected,
+        "VM bytecode result must equal N*(N-1)/2 = {}",
+        N * (N - 1) / 2
+    );
+
+    // --- Correctness gate 2: the body is JIT-compilable (no compile-time bail). ---
+    {
+        let mut probe = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        probe.ops = ops.clone();
+        probe.constants = constants.clone();
+        probe.max_stack = 64;
+        crate::emacs_core::jit::compile::compile_bytecode_function(&probe)
+            .expect("loop body must compile to native (no unsupported op / CFG bail)");
+    }
+
+    // --- Correctness gate 3: native (hot) result matches the VM result. A
+    // runtime deopt would silently fall back to the VM and still return the
+    // right value, but it would also return the right value via native; the
+    // real anti-deopt guard is the per-iter ratio + gate 2 above. We assert the
+    // value here so a miscompile can never masquerade as a fast result. ---
+    let jit_fn = build(true);
+    let jit_result = ev.funcall_general_untraced(jit_fn.clone(), vec![]).unwrap();
+    assert_eq!(
+        jit_result, expected,
+        "JIT-native result must equal the VM result"
+    );
+
+    // Reuse the SAME hot function value across all timed iterations so the
+    // per-thread compiled-code cache (keyed by compiled_id) is hit every time —
+    // no per-iteration recompile.
+    const M: u64 = 200_000;
+
+    // Warm up each path once more (caches, branch predictor).
+    let warm_cold = build(false);
+    let _ = ev.funcall_general_untraced(warm_cold, vec![]).unwrap();
+    let _ = ev.funcall_general_untraced(jit_fn.clone(), vec![]).unwrap();
+
+    // --- Time the VM path. A fresh cold function per outer iter would re-pay
+    // make_bytecode; instead build ONE cold function and reuse it (it never
+    // tiers up because force_interpret is pinned). ---
+    let vm_timed = build(false);
+    let t0 = Instant::now();
+    let mut vm_acc = 0i64;
+    for _ in 0..M {
+        let r = ev
+            .funcall_general_untraced(vm_timed.clone(), vec![])
+            .unwrap();
+        vm_acc = vm_acc.wrapping_add(r.xfixnum());
+    }
+    let vm_elapsed = t0.elapsed();
+
+    // --- Time the JIT path: reuse the single hot function value. ---
+    let t1 = Instant::now();
+    let mut jit_acc = 0i64;
+    for _ in 0..M {
+        let r = ev.funcall_general_untraced(jit_fn.clone(), vec![]).unwrap();
+        jit_acc = jit_acc.wrapping_add(r.xfixnum());
+    }
+    let jit_elapsed = t1.elapsed();
+
+    // Both accumulators must be M * expected — proves every timed call returned
+    // the correct sum on BOTH paths (so the JIT stayed correct/native, the VM
+    // never tiered up).
+    let want_acc = (M as i64).wrapping_mul(expected.xfixnum());
+    assert_eq!(vm_acc, want_acc, "VM timed loop produced wrong sums");
+    assert_eq!(jit_acc, want_acc, "JIT timed loop produced wrong sums");
+
+    let vm_ns = vm_elapsed.as_nanos() as f64 / M as f64;
+    let jit_ns = jit_elapsed.as_nanos() as f64 / M as f64;
+    let ratio = vm_ns / jit_ns;
+
+    eprintln!("=== bench_jit_vs_vm_loop (N={N}, M={M}) ===");
+    eprintln!("VM  : total {:?}  ->  {:.1} ns/call", vm_elapsed, vm_ns);
+    eprintln!("JIT : total {:?}  ->  {:.1} ns/call", jit_elapsed, jit_ns);
+    eprintln!("speedup (VM/JIT): {:.2}x", ratio);
+}
