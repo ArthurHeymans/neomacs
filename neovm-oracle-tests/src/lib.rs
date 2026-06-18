@@ -2293,6 +2293,7 @@ mod divergence_misc_subsystems_coverage;
 mod divergence_mode_line_misc;
 mod divergence_modeline_modes_deep;
 mod divergence_motion_search_deep;
+mod divergence_multi_subsystem_combo_runtime;
 mod divergence_multibyte_bidi_deep;
 mod divergence_narrowing_edge;
 mod divergence_narrowing_multibyte;
