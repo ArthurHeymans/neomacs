@@ -226,6 +226,19 @@ fn build_decode_table(alphabet: &[u8; 64]) -> [i8; 256] {
 // Base64 encode (manual implementation)
 // ---------------------------------------------------------------------------
 
+/// Standard-alphabet Base64 with no padding and no line breaks — used by the
+/// UTF-7 codec (RFC 2152 modified Base64).
+pub(crate) fn base64_standard_encode_unpadded(input: &[u8]) -> String {
+    base64_encode(input, B64_STD, false, false)
+}
+
+/// Decode standard-alphabet Base64 (the caller re-pads to a multiple of 4),
+/// returning the bytes or `None` on malformed input. Used by the UTF-7 codec.
+pub(crate) fn base64_standard_decode(input: &[u8]) -> Option<Vec<u8>> {
+    let table = build_decode_table(B64_STD);
+    base64_decode(input, &table, false, false).ok()
+}
+
 fn base64_encode(input: &[u8], alphabet: &[u8; 64], pad: bool, line_break: bool) -> String {
     let mut out = Vec::with_capacity(input.len().div_ceil(3) * 4 + input.len() / 57);
     let mut col = 0usize;

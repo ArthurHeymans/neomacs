@@ -1874,6 +1874,257 @@ fn decode_via_sjis(bytes: &[u8], charsets: &[SymId]) -> Vec<u8> {
     out
 }
 
+/// Returns `Some(imap)` if `coding` is utf-7 (`imap=false`) or utf-7-imap.
+fn utf7_variant(coding: &str) -> Option<bool> {
+    match coding_system_base(coding) {
+        "utf-7" => Some(false),
+        "utf-7-imap" => Some(true),
+        _ => None,
+    }
+}
+
+/// Whether a byte is in UTF-7's directly-encoded set (passed through literally).
+fn utf7_direct(c: u8, imap: bool) -> bool {
+    matches!(c, b'\t' | b'\n' | b'\r')
+        || if imap {
+            (0x20..=0x25).contains(&c) || (0x27..=0x7E).contains(&c)
+        } else {
+            (0x20..=0x2A).contains(&c) || (0x2C..=0x5B).contains(&c) || (0x5D..=0x7D).contains(&c)
+        }
+}
+
+/// Encode `s` as UTF-7 (RFC 2152) / modified UTF-7 (IMAP, RFC 2060): direct
+/// characters pass through; runs of other characters are emitted as modified
+/// Base64 of their UTF-16BE units between the shift char (`+`/`&`) and `-`.
+fn encode_via_utf7(s: &crate::heap_types::LispString, imap: bool) -> Vec<u8> {
+    let esc = if imap { b'&' } else { b'+' };
+    let chars: Vec<u32> = lisp_string_codepoints(s);
+    let mut out = Vec::with_capacity(chars.len());
+    let mut i = 0usize;
+    while i < chars.len() {
+        let c = chars[i];
+        if c < 0x80 && utf7_direct(c as u8, imap) {
+            out.push(c as u8);
+            i += 1;
+        } else if c == u32::from(esc) {
+            out.push(esc);
+            out.push(b'-');
+            i += 1;
+        } else {
+            out.push(esc);
+            let mut units = Vec::new();
+            while i < chars.len() {
+                let cc = chars[i];
+                if (cc < 0x80 && utf7_direct(cc as u8, imap)) || cc == u32::from(esc) {
+                    break;
+                }
+                push_utf16_codepoint(&mut units, Utf16Endian::Big, cc);
+                i += 1;
+            }
+            let mut b64 = crate::emacs_core::fns::base64_standard_encode_unpadded(&units);
+            if imap {
+                b64 = b64.replace('/', ",");
+            }
+            out.extend_from_slice(b64.as_bytes());
+            if imap || i < chars.len() {
+                out.push(b'-');
+            }
+        }
+    }
+    out
+}
+
+/// Decode UTF-7 / modified UTF-7 to Emacs internal bytes.
+fn decode_via_utf7(bytes: &[u8], imap: bool) -> Vec<u8> {
+    let esc = if imap { b'&' } else { b'+' };
+    let is_b64 = |c: u8| {
+        c.is_ascii_alphanumeric() || c == b'+' || (if imap { c == b',' } else { c == b'/' })
+    };
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut emit = |code: u32, out: &mut Vec<u8>| {
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+    };
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b != esc {
+            // Direct byte; high bytes are not valid UTF-7 and become eight-bit raw.
+            let code = if b < 0x80 {
+                u32::from(b)
+            } else {
+                crate::emacs_core::emacs_char::unibyte_to_char(b)
+            };
+            emit(code, &mut out);
+            i += 1;
+            continue;
+        }
+        i += 1; // consume the shift char
+        let run_start = i;
+        while i < bytes.len() && is_b64(bytes[i]) {
+            i += 1;
+        }
+        let mut run = bytes[run_start..i].to_vec();
+        if i < bytes.len() && bytes[i] == b'-' {
+            i += 1; // consume explicit terminator
+        }
+        if run.is_empty() {
+            emit(u32::from(esc), &mut out); // `+-` / `&-` -> literal shift char
+            continue;
+        }
+        if imap {
+            for x in run.iter_mut() {
+                if *x == b',' {
+                    *x = b'/';
+                }
+            }
+        }
+        while run.len() % 4 != 0 {
+            run.push(b'=');
+        }
+        if let Some(decoded) = crate::emacs_core::fns::base64_standard_decode(&run) {
+            let mut j = 0usize;
+            while j + 1 < decoded.len() {
+                let unit = u16::from_be_bytes([decoded[j], decoded[j + 1]]);
+                j += 2;
+                let code = if (0xD800..=0xDBFF).contains(&unit) && j + 1 < decoded.len() {
+                    let lo = u16::from_be_bytes([decoded[j], decoded[j + 1]]);
+                    if (0xDC00..=0xDFFF).contains(&lo) {
+                        j += 2;
+                        0x10000 + ((u32::from(unit) - 0xD800) << 10) + (u32::from(lo) - 0xDC00)
+                    } else {
+                        u32::from(unit)
+                    }
+                } else {
+                    u32::from(unit)
+                };
+                emit(code, &mut out);
+            }
+        }
+    }
+    out
+}
+
+/// Charset list of the chinese-hz (HZ-GB-2312) coding system, or `None`.
+fn chinese_hz_charset(ctx: &crate::emacs_core::eval::Context, coding: &str) -> Option<SymId> {
+    if coding_system_base(coding) != "chinese-hz" {
+        return None;
+    }
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    // charset-list = (ascii chinese-gb2312)
+    info.charset_list.get(1).copied()
+}
+
+/// Encode `s` as HZ-GB-2312 (RFC 1843): ASCII by default, `~{` switches to
+/// GB2312 (7-bit GL bytes), `~}` back, `~` doubled to `~~`.
+fn encode_via_hz(s: &crate::heap_types::LispString, gb2312: SymId) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.sbytes());
+    let mut in_gb = false;
+    for code in lisp_string_codepoints(s) {
+        if code < 0x80 {
+            if in_gb {
+                out.extend_from_slice(b"~}");
+                in_gb = false;
+            }
+            if code == u32::from(b'~') {
+                out.extend_from_slice(b"~~");
+            } else {
+                out.push(code as u8);
+            }
+        } else if let Some(gbcode) =
+            crate::emacs_core::charset::charset_encode_char(gb2312, i64::from(code))
+        {
+            if !in_gb {
+                out.extend_from_slice(b"~{");
+                in_gb = true;
+            }
+            out.push(((gbcode >> 8) & 0x7F) as u8);
+            out.push((gbcode & 0x7F) as u8);
+        } else {
+            // Non-ASCII, non-GB2312: GNU emits a \uXXXX literal (rare); leave a
+            // space rather than mis-encode.
+            if in_gb {
+                out.extend_from_slice(b"~}");
+                in_gb = false;
+            }
+            out.push(b' ');
+        }
+    }
+    if in_gb {
+        out.extend_from_slice(b"~}");
+    }
+    out
+}
+
+/// Decode HZ-GB-2312 to Emacs internal bytes.
+fn decode_via_hz(bytes: &[u8], gb2312: SymId) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut emit = |code: u32, out: &mut Vec<u8>| {
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+    };
+    let mut in_gb = false;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'~' && i + 1 < bytes.len() {
+            match bytes[i + 1] {
+                b'{' => {
+                    in_gb = true;
+                    i += 2;
+                    continue;
+                }
+                b'}' => {
+                    in_gb = false;
+                    i += 2;
+                    continue;
+                }
+                b'~' => {
+                    emit(u32::from(b'~'), &mut out);
+                    i += 2;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if in_gb && b >= 0x21 && b < 0x7F && i + 1 < bytes.len() {
+            let code = (i64::from(b) << 8) | i64::from(bytes[i + 1]);
+            if let Some(ch) = crate::emacs_core::charset::charset_decode_char(gb2312, code) {
+                emit(ch as u32, &mut out);
+                i += 2;
+                continue;
+            }
+        }
+        let code = if b < 0x80 {
+            u32::from(b)
+        } else {
+            crate::emacs_core::emacs_char::unibyte_to_char(b)
+        };
+        emit(code, &mut out);
+        i += 1;
+    }
+    out
+}
+
+/// Code points (chars) of a Lisp string, decoding the Emacs internal bytes.
+fn lisp_string_codepoints(s: &crate::heap_types::LispString) -> Vec<u32> {
+    let mut codes = Vec::new();
+    if s.is_multibyte() {
+        let bytes = s.as_bytes();
+        let mut pos = 0usize;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            codes.push(code);
+            pos += len;
+        }
+    } else {
+        codes.extend(s.as_bytes().iter().map(|&b| u32::from(b)));
+    }
+    codes
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1904,6 +2155,8 @@ fn builtin_coding_string_in_context(
     // ISO-2022 coding systems (euc-jp/kr/…) through their G0-G3 designations;
     // the legacy family-based paths leave them empty / undecoded.  Other
     // families keep their existing handling.
+    let utf7_coding = utf7_variant(&coding);
+    let hz_coding = chinese_hz_charset(ctx, &coding);
     let euc_coding = euc_iso2022_spec(ctx, &coding);
     let sjis_coding = sjis_charsets(ctx, &coding);
     let charset_coding = general_charset_coding_list(ctx, &coding, encode);
@@ -1914,7 +2167,13 @@ fn builtin_coding_string_in_context(
             .clone()
     };
     let result = if encode {
-        if let Some((spec, charsets)) = &euc_coding {
+        if let Some(imap) = utf7_coding {
+            let bytes = encode_via_utf7(&source_string(), imap);
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if let Some(gb2312) = hz_coding {
+            let bytes = encode_via_hz(&source_string(), gb2312);
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if let Some((spec, charsets)) = &euc_coding {
             let bytes = encode_via_euc(&source_string(), spec, charsets, &coding);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some(charsets) = &sjis_coding {
@@ -1926,6 +2185,12 @@ fn builtin_coding_string_in_context(
         } else {
             builtin_encode_coding_string_with_known(args, |_| true)?
         }
+    } else if let Some(imap) = utf7_coding {
+        let bytes = decode_via_utf7(&lisp_string_coding_source_bytes(&source_string()), imap);
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+    } else if let Some(gb2312) = hz_coding {
+        let bytes = decode_via_hz(&lisp_string_coding_source_bytes(&source_string()), gb2312);
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some((spec, _)) = &euc_coding {
         let source_bytes =
             decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
