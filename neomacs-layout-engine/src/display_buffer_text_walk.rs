@@ -525,8 +525,26 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
     face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
+pub(crate) struct BufferTextSourceItemStepRenderRequest<'a> {
+    loop_context: BufferTextWindowLoopRequestContext,
+    layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+    source_step: BufferTextSourceItemStep,
+    text: &'a [u8],
+    append_surface: &'a DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    params: &'a WindowParams,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextWindowLoopStepOutcome {
+    ContinueBufferWalk,
+    StopBufferWalk,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferTextWindowPreSourceOutcome {
+    ReadyForSourceItem,
     ContinueBufferWalk,
     StopBufferWalk,
 }
@@ -2637,6 +2655,61 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &B,
     ) -> BufferTextWindowLoopStepOutcome {
+        match self.render_pre_source_checkpoints_for_context(
+            row_prelude_context,
+            loop_context,
+            face_resolution_context,
+            text,
+            params,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            buffer,
+        ) {
+            BufferTextWindowPreSourceOutcome::ReadyForSourceItem => {}
+            BufferTextWindowPreSourceOutcome::ContinueBufferWalk => {
+                return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+            }
+            BufferTextWindowPreSourceOutcome::StopBufferWalk => {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            }
+        }
+
+        let Some(source_step) =
+            self.consume_source_item_step(source_cursor, source_context, item_stepper)
+        else {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        };
+
+        self.render_source_item_step_for_context(
+            BufferTextSourceItemStepRenderRequest {
+                loop_context,
+                layout_resolution_context: face_resolution_context
+                    .source_item_layout_resolution_context(),
+                source_step,
+                text,
+                append_surface,
+                overlay_context,
+                active_face_state,
+                params,
+            },
+            buffer,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_pre_source_checkpoints_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+        loop_context: BufferTextWindowLoopRequestContext,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
+        text: &'request [u8],
+        params: &'request WindowParams,
+        append_surface: &'request DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
+        active_face_state: &mut DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferTextWindowPreSourceOutcome {
         self.render_row_prelude(
             row_prelude_context,
             append_surface,
@@ -2655,7 +2728,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             )
             .should_continue_buffer_walk()
         {
-            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+            return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
         }
 
         if self.hscroll_should_skip() {
@@ -2668,9 +2741,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 )
                 .should_break()
             {
-                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+                return BufferTextWindowPreSourceOutcome::StopBufferWalk;
             }
-            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+            return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
         }
 
         self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
@@ -2684,15 +2757,27 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             buffer,
         );
         if display_property_walk.should_continue_buffer_walk() {
-            return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
+            return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
         }
 
-        let Some(source_step) =
-            self.consume_source_item_step(source_cursor, source_context, item_stepper)
-        else {
-            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-        };
+        BufferTextWindowPreSourceOutcome::ReadyForSourceItem
+    }
 
+    pub(crate) fn render_source_item_step_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextSourceItemStepRenderRequest<'request>,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome {
+        let BufferTextSourceItemStepRenderRequest {
+            loop_context,
+            layout_resolution_context,
+            source_step,
+            text,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+        } = request;
         let selective_display_outcome = self.render_selective_display_tail_for_context(
             loop_context,
             source_step.source_char(),
@@ -2726,7 +2811,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         } else {
             let char_render_outcome = self.render_source_char_for_context(
                 loop_context,
-                face_resolution_context.source_item_layout_resolution_context(),
+                layout_resolution_context,
                 source_char,
                 source_item,
                 text,
