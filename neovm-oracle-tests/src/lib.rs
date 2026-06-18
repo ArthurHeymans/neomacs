@@ -2441,6 +2441,7 @@ mod divergence_window_config_deep;
 mod divergence_window_frame;
 mod divergence_window_frame2;
 mod divergence_window_frame3;
+mod divergence_window_frame_batch_runtime;
 mod divergence_window_frame_display;
 mod divergence_window_frame_real;
 mod divergence_window_geometry;
