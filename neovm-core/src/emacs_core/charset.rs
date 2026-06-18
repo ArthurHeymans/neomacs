@@ -668,6 +668,23 @@ impl CharsetRegistry {
             }
         }
     }
+
+    /// Encode `ch` in the charset and return the code point as its big-endian
+    /// byte sequence (one byte per charset dimension) — the bytes a simple
+    /// charset-based coding system emits for that character. Returns `None`
+    /// when `ch` is not representable in the charset.
+    pub fn encode_char_bytes(&self, name: SymId, ch: i64) -> Option<Vec<u8>> {
+        let code = self.encode_char(name, ch)?;
+        let dimension = self
+            .charsets
+            .get(&self.resolve_name(name))
+            .map(|info| info.dimension.clamp(1, 4) as u32)?;
+        let bytes = (0..dimension)
+            .rev()
+            .map(|i| ((code >> (8 * i)) & 0xFF) as u8)
+            .collect();
+        Some(bytes)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -878,6 +895,12 @@ pub(crate) fn charset_contains_char(name: &str, ch: u32) -> Option<bool> {
         reg.charsets.get(&name)?;
         Some(reg.encode_char(name, i64::from(ch)).is_some())
     })
+}
+
+/// Encode `ch` in the charset named by `charset` and return the code point's
+/// big-endian bytes (one per dimension), or `None` if it is not encodable.
+pub(crate) fn charset_encode_char_bytes(charset: SymId, ch: i64) -> Option<Vec<u8>> {
+    CHARSET_REGISTRY.with(|slot| slot.borrow().encode_char_bytes(charset, ch))
 }
 
 // ---------------------------------------------------------------------------

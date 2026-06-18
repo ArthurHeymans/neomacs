@@ -4,7 +4,7 @@
 //! character classification, width calculation, and encoding conversion
 //! APIs.
 
-use crate::emacs_core::intern::resolve_sym;
+use crate::emacs_core::intern::{SymId, resolve_sym};
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
 use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
 use crate::emacs_core::value::{StringTextPropertyRun, Value, ValueKind};
@@ -1095,7 +1095,10 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
             } else if crate::emacs_core::emacs_char::char_byte8_p(code) {
                 out.push(crate::emacs_core::emacs_char::char_to_byte8(code));
             } else {
-                out.push(b'?');
+                // GNU substitutes an unencodable character with a space (0x20)
+                // for the Latin charset coding systems (the ASCII coding uses
+                // `?`).
+                out.push(b' ');
             }
         }
         "ascii" | "us-ascii" => {
@@ -1152,8 +1155,10 @@ pub fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
         "latin-1" | "iso-8859-1" | "iso-latin-1" | "iso-latin-5" | "iso-latin-9" => eol_text
             .chars()
             .map(|c| {
+                // GNU substitutes a space (0x20) for unencodable characters in
+                // the Latin charset coding systems.
                 encode_single_byte_family_char(coding_system_family(coding_system), c as u32)
-                    .unwrap_or(b'?')
+                    .unwrap_or(b' ')
             })
             .collect(),
         "ascii" | "us-ascii" => eol_text
@@ -1508,6 +1513,80 @@ fn coding_string_destination(
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("bufferp"), value]))
 }
 
+/// If `coding` is a plain charset-type coding system that the family branches
+/// of `encode_lisp_string` do not already handle, return its ordered
+/// `:charset-list` so the caller can encode each character through
+/// `charset_encode_char_bytes`. Returns `None` for utf-8, the single-byte /
+/// Big5 / GBK families handled elsewhere, and for non-charset coding types
+/// (iso-2022/ccl/shift-jis) that need a state machine rather than a flat
+/// charset lookup.
+fn general_charset_encode_list(
+    ctx: &crate::emacs_core::eval::Context,
+    coding: &str,
+) -> Option<Vec<SymId>> {
+    if matches!(
+        coding_system_family(coding),
+        "utf-8"
+            | "utf-8-emacs"
+            | "undecided"
+            | "prefer-utf-8"
+            | "latin-1"
+            | "iso-8859-1"
+            | "iso-latin-1"
+            | "iso-latin-5"
+            | "iso-latin-9"
+            | "ascii"
+            | "us-ascii"
+            | "chinese-iso-8bit"
+            | "chinese-big5"
+            | "chinese-big5-hkscs"
+    ) {
+        return None;
+    }
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    if resolve_sym(info.coding_type) != "charset" || info.charset_list.is_empty() {
+        return None;
+    }
+    Some(info.charset_list.clone())
+}
+
+/// Encode `s` through an explicit ordered charset list (a charset-type coding
+/// system): each character is emitted as the bytes of the first charset that
+/// can represent it, and characters that no charset can encode are replaced by
+/// a space (0x20), matching GNU `encode-coding-string`.
+fn encode_via_charset_list(
+    s: &crate::heap_types::LispString,
+    charset_list: &[SymId],
+    coding_system: &str,
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.sbytes());
+    let mut emit = |code: u32, out: &mut Vec<u8>| {
+        for &charset in charset_list {
+            if let Some(bytes) =
+                crate::emacs_core::charset::charset_encode_char_bytes(charset, i64::from(code))
+            {
+                out.extend(bytes);
+                return;
+            }
+        }
+        out.push(b' ');
+    };
+    if s.is_multibyte() {
+        let bytes = s.as_bytes();
+        let mut pos = 0usize;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            emit(code, &mut out);
+            pos += len;
+        }
+    } else {
+        for &byte in s.as_bytes() {
+            emit(u32::from(byte), &mut out);
+        }
+    }
+    encode_eol_bytes(&out, coding_system)
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1534,7 +1613,19 @@ fn builtin_coding_string_in_context(
     let coding = context_coding_name(ctx, args[1])?;
     let destination = coding_string_destination(args.get(3).copied())?;
     let result = if encode {
-        builtin_encode_coding_string_with_known(args, |_| true)?
+        // Charset-type coding systems (cp437, koi8-r, chinese-gbk, …) encode
+        // each character through its charset list; the legacy family-based path
+        // leaves them empty.  Other families keep their existing handling.
+        if let Some(charset_list) = general_charset_encode_list(ctx, &coding) {
+            let source = args[0]
+                .as_lisp_string()
+                .expect("string argument validated above")
+                .clone();
+            let bytes = encode_via_charset_list(&source, &charset_list, &coding);
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else {
+            builtin_encode_coding_string_with_known(args, |_| true)?
+        }
     } else {
         builtin_decode_coding_string_with_known(args, |_| true)?
     };
