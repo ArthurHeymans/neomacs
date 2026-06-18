@@ -1253,6 +1253,7 @@ mod divergence_coding_plist_matrix;
 mod divergence_coding_process;
 mod divergence_coding_system_plist_runtime;
 mod divergence_coding_systems_roundtrip_runtime;
+mod divergence_collate_keymap_iter_runtime;
 mod divergence_color_values_matrix;
 mod divergence_column_indent_motion_runtime;
 mod divergence_combo_abbrev_completion_syntax;
