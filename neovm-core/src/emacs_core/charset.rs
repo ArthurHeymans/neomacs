@@ -953,6 +953,47 @@ pub(crate) fn charset_decode_char(charset: SymId, code: i64) -> Option<i64> {
     CHARSET_REGISTRY.with(|slot| slot.borrow().decode_char(charset, code))
 }
 
+/// Highest-priority charset that has an emacs-mule id and can encode `ch`,
+/// returned as (emacs-mule-id, dimension, code point). The emacs-mule codec
+/// selects charsets through the same priority order GNU uses.
+pub(crate) fn emacs_mule_encode_char(ch: i64) -> Option<(i64, i64, i64)> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        // GNU selects from `Vemacs_mule_charset_list` in charset-priority order.
+        // The emacs-mule ids are assigned to roughly follow that priority
+        // (latin < CJK < CNS), so iterate every emacs-mule charset by ascending
+        // id and take the first that can represent the character.
+        let jisx0208_1978 = lookup_interned("japanese-jisx0208-1978");
+        let mut candidates: Vec<(i64, SymId, i64)> = reg
+            .charsets
+            .iter()
+            // GNU's charset priority ranks the deprecated 1978 JIS after gb2312
+            // and the 1990 JIS, but its emacs-mule id (144) sorts ahead of
+            // gb2312's (145). Its repertoire is covered by those, so drop it
+            // from the candidates to keep the priority order GNU uses.
+            .filter(|(name, _)| Some(**name) != jisx0208_1978)
+            .filter_map(|(name, info)| info.emacs_mule_id.map(|id| (id, *name, info.dimension)))
+            .collect();
+        candidates.sort_by_key(|(id, _, _)| *id);
+        for (id, name, dimension) in candidates {
+            if let Some(code) = reg.encode_char(name, ch) {
+                return Some((id, dimension, code));
+            }
+        }
+        None
+    })
+}
+
+/// The charset (name, dimension) carrying a given emacs-mule id, or `None`.
+pub(crate) fn charset_by_emacs_mule_id(id: i64) -> Option<(SymId, i64)> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        reg.charsets.iter().find_map(|(name, info)| {
+            (info.emacs_mule_id == Some(id)).then_some((*name, info.dimension))
+        })
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------

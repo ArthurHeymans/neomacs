@@ -2125,6 +2125,104 @@ fn lisp_string_codepoints(s: &crate::heap_types::LispString) -> Vec<u32> {
     codes
 }
 
+/// Whether `coding` is the emacs-mule coding system (Emacs's old internal
+/// multibyte representation as a coding system).
+fn is_emacs_mule(ctx: &crate::emacs_core::eval::Context, coding: &str) -> bool {
+    ctx.coding_systems
+        .get(coding_system_base(coding))
+        .is_some_and(|info| resolve_sym(info.coding_type) == "emacs-mule")
+}
+
+/// The emacs-mule leading byte(s) for a charset's emacs-mule id
+/// (`EMACS_MULE_LEADING_CODES`, coding.c): direct (`id`) for id < 0xA0, else a
+/// private leading code 0x9A-0x9D followed by `id`.
+fn emacs_mule_leading(id: i64) -> Vec<u8> {
+    let id = id as u8;
+    match id {
+        _ if id < 0xA0 => vec![id],
+        0xA0..=0xDF => vec![0x9A, id],
+        0xE0..=0xEF => vec![0x9B, id],
+        0xF0..=0xF4 => vec![0x9C, id],
+        _ => vec![0x9D, id],
+    }
+}
+
+/// Encode `s` as emacs-mule.
+fn encode_via_emacs_mule(s: &crate::heap_types::LispString) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.sbytes());
+    for code in lisp_string_codepoints(s) {
+        if code < 0x80 {
+            out.push(code as u8);
+        } else if crate::emacs_core::emacs_char::char_byte8_p(code) {
+            out.push(crate::emacs_core::emacs_char::char_to_byte8(code));
+        } else if let Some((id, dim, cs_code)) =
+            crate::emacs_core::charset::emacs_mule_encode_char(i64::from(code))
+        {
+            out.extend(emacs_mule_leading(id));
+            if dim >= 2 {
+                let c = (cs_code | 0x8080) as u32;
+                out.push((c >> 8) as u8);
+                out.push((c & 0xFF) as u8);
+            } else {
+                out.push((cs_code | 0x80) as u8);
+            }
+        } else {
+            out.push(b' ');
+        }
+    }
+    out
+}
+
+/// Decode emacs-mule to Emacs internal bytes.
+fn decode_via_emacs_mule(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut emit = |code: u32, out: &mut Vec<u8>| {
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+    };
+    // Decode a charset character: read `dim` position bytes from `bytes[at..]`,
+    // strip the high bit, look the code up in the charset.
+    let read_charset = |id: i64, at: usize| -> Option<(u32, usize)> {
+        let (cs, dim) = crate::emacs_core::charset::charset_by_emacs_mule_id(id)?;
+        let dim = dim.clamp(1, 2) as usize;
+        if at + dim > bytes.len() {
+            return None;
+        }
+        let mut code = 0i64;
+        for k in 0..dim {
+            code = (code << 8) | i64::from(bytes[at + k] & 0x7F);
+        }
+        let ch = crate::emacs_core::charset::charset_decode_char(cs, code)?;
+        Some((ch as u32, dim))
+    };
+    let raw = |b: u8| crate::emacs_core::emacs_char::unibyte_to_char(b);
+    let mut pos = 0usize;
+    while pos < bytes.len() {
+        let b = bytes[pos];
+        let (code, consumed) = if b < 0x80 {
+            (u32::from(b), 1)
+        } else if (0x9A..=0x9D).contains(&b) && pos + 1 < bytes.len() {
+            // Private leading code: next byte is the charset's emacs-mule id.
+            match read_charset(i64::from(bytes[pos + 1]), pos + 2) {
+                Some((ch, dim)) => (ch, 2 + dim),
+                None => (raw(b), 1),
+            }
+        } else if (0x81..=0x99).contains(&b) {
+            // Direct leading code == the charset's emacs-mule id.
+            match read_charset(i64::from(b), pos + 1) {
+                Some((ch, dim)) => (ch, 1 + dim),
+                None => (raw(b), 1),
+            }
+        } else {
+            (raw(b), 1)
+        };
+        emit(code, &mut out);
+        pos += consumed;
+    }
+    out
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -2157,6 +2255,7 @@ fn builtin_coding_string_in_context(
     // families keep their existing handling.
     let utf7_coding = utf7_variant(&coding);
     let hz_coding = chinese_hz_charset(ctx, &coding);
+    let emacs_mule = is_emacs_mule(ctx, &coding);
     let euc_coding = euc_iso2022_spec(ctx, &coding);
     let sjis_coding = sjis_charsets(ctx, &coding);
     let charset_coding = general_charset_coding_list(ctx, &coding, encode);
@@ -2172,6 +2271,9 @@ fn builtin_coding_string_in_context(
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some(gb2312) = hz_coding {
             let bytes = encode_via_hz(&source_string(), gb2312);
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if emacs_mule {
+            let bytes = encode_via_emacs_mule(&source_string());
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some((spec, charsets)) = &euc_coding {
             let bytes = encode_via_euc(&source_string(), spec, charsets, &coding);
@@ -2190,6 +2292,9 @@ fn builtin_coding_string_in_context(
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some(gb2312) = hz_coding {
         let bytes = decode_via_hz(&lisp_string_coding_source_bytes(&source_string()), gb2312);
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+    } else if emacs_mule {
+        let bytes = decode_via_emacs_mule(&lisp_string_coding_source_bytes(&source_string()));
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some((spec, _)) = &euc_coding {
         let source_bytes =
