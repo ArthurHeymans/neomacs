@@ -176,11 +176,11 @@ fn builder_tracks_multiple_rows() {
 }
 
 #[test]
-fn builder_stores_row_metrics_window_relative() {
+fn builder_stores_row_metrics_as_provided() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(5.0, 20.0, 80.0, 40.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    builder.set_current_row_metrics(26.0, 18.0, 13.0);
+    builder.set_current_row_metrics(6.0, 18.0, 13.0);
     write_char_to_current_row(&mut builder, 'x', 0, 0);
     builder.end_row();
     builder.end_window();

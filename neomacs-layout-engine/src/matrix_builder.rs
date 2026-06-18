@@ -318,6 +318,7 @@ pub(crate) struct MatrixRowBeginRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct MatrixRowMetricsRequest {
+    /// Stored row Y, relative to the window matrix origin.
     pub(crate) pixel_y: f32,
     pub(crate) height_px: f32,
     pub(crate) ascent_px: f32,
@@ -374,24 +375,14 @@ impl MatrixRowLifecycleRequest {
                 if let Some(ref mut matrix) = builder.current_matrix
                     && builder.current_row < matrix.rows.len()
                 {
-                    let pixel_y_rel = metrics.pixel_y - builder.current_pixel_bounds.y;
-                    Self::write_metrics(
-                        &mut matrix.rows[builder.current_row],
-                        pixel_y_rel,
-                        metrics,
-                    );
+                    Self::write_metrics(&mut matrix.rows[builder.current_row], metrics);
                 }
             }
             Self::RowMetrics(indexed) => {
                 if let Some(ref mut matrix) = builder.current_matrix
                     && indexed.row < matrix.rows.len()
                 {
-                    let pixel_y_rel = indexed.metrics.pixel_y - builder.current_pixel_bounds.y;
-                    Self::write_metrics(
-                        &mut matrix.rows[indexed.row],
-                        pixel_y_rel,
-                        indexed.metrics,
-                    );
+                    Self::write_metrics(&mut matrix.rows[indexed.row], indexed.metrics);
                 }
             }
             Self::CursorAt(cursor) => {
@@ -405,10 +396,10 @@ impl MatrixRowLifecycleRequest {
         }
     }
 
-    fn write_metrics(row: &mut GlyphRow, pixel_y_rel: f32, metrics: MatrixRowMetricsRequest) {
+    fn write_metrics(row: &mut GlyphRow, metrics: MatrixRowMetricsRequest) {
         GlyphMatrixBuilder::write_row_metrics(
             row,
-            pixel_y_rel,
+            metrics.pixel_y,
             metrics.height_px,
             metrics.ascent_px,
         );
@@ -627,10 +618,7 @@ impl GlyphMatrixBuilder {
         self.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
     }
 
-    /// Record authoritative geometry for the currently open row.
-    ///
-    /// `pixel_y` is frame-absolute; the builder stores rows
-    /// window-relative to match GNU `struct glyph_row::y`.
+    /// Record stored geometry for the currently open row.
     #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
         self.install_row_lifecycle(MatrixRowLifecycleRequest::CurrentMetrics(
