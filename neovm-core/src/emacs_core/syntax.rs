@@ -867,6 +867,194 @@ pub fn backward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> EmacsByte
     backward_word_with_options(buf, table, count, false).0
 }
 
+/// Whether `find-word-boundary-function-table` has any binding (i.e. some mode
+/// like subword/superword installed boundary functions). When empty (the
+/// common case) word motion uses the plain syntax scan unchanged.
+fn word_boundary_table_active(table: &Value) -> bool {
+    if !super::chartable::is_char_table(table) {
+        return false;
+    }
+    // Probe a few representative word constituents; subword/superword install
+    // the boundary function across word characters.
+    [b'a' as i64, b'A' as i64, b'0' as i64, b'_' as i64]
+        .into_iter()
+        .any(|ch| {
+            super::chartable::char_table_ref_and_range(table, ch)
+                .map(|(v, _, _)| !v.is_nil())
+                .unwrap_or(false)
+        })
+}
+
+/// Move over `count` words honoring `find-word-boundary-function-table`
+/// (GNU `scan_words`, syntax.c): after locating the character that begins (or,
+/// going backward, ends) the next word, if that character has a bound boundary
+/// function call it with (pos, limit) and jump to the returned boundary;
+/// otherwise fall back to a one-word syntax scan. Returns the destination byte
+/// position and whether all `count` motions completed.
+fn word_motion_with_table(
+    eval: &mut super::eval::Context,
+    count: i64,
+    honor_properties: bool,
+    wbtable: Value,
+) -> (EmacsBytePos, bool) {
+    let forward = count > 0;
+    let n = count.unsigned_abs();
+    let mut completed = true;
+    let current_id = match eval.buffers.current_buffer_id() {
+        Some(id) => id,
+        None => return (EmacsBytePos::new(0), false),
+    };
+
+    for _ in 0..n {
+        // Locate the boundary character and its 1-based char position, plus the
+        // accessible-region limit, all from the current point.
+        let probe = {
+            let buf = match eval.buffers.get(current_id) {
+                Some(b) => b,
+                None => return (EmacsBytePos::new(0), false),
+            };
+            let table = SyntaxTable::for_buffer(buf);
+            let acc_chars = buf.accessible_char_region();
+            let acc_start = acc_chars.start().get();
+            let acc_len = acc_chars.len().get();
+            let chars = BufferChars::new(buf, acc_chars.start());
+            let point_char = buffer_byte_to_char_pos(buf, buf.point_emacs_byte_pos());
+            let mut idx = point_char.saturating_sub(acc_start);
+            let is_word = |i: usize| {
+                matches!(
+                    effective_syntax_entry_for_abs_char(
+                        buf,
+                        &table,
+                        chars.char_at(i),
+                        acc_start + i,
+                        honor_properties,
+                    )
+                    .class,
+                    SyntaxClass::Word
+                )
+            };
+            if forward {
+                while idx < acc_len && !is_word(idx) {
+                    idx += 1;
+                }
+                if idx >= acc_len {
+                    None
+                } else {
+                    // ch0 begins a word; its 1-based char position.
+                    let ch0 = chars.char_at(idx);
+                    let pos1 = (acc_start + idx + 1) as i64;
+                    let limit1 = (acc_start + acc_len + 1) as i64; // ZV (1-based)
+                    Some((ch0, pos1, limit1))
+                }
+            } else {
+                while idx > 0 && !is_word(idx - 1) {
+                    idx -= 1;
+                }
+                if idx == 0 {
+                    None
+                } else {
+                    // ch1 ends a word; GNU passes its 1-based position.
+                    let ch1 = chars.char_at(idx - 1);
+                    let pos1 = (acc_start + idx) as i64;
+                    let limit1 = (acc_start + 1) as i64; // BEGV (1-based)
+                    Some((ch1, pos1, limit1))
+                }
+            }
+        };
+
+        let Some((ch, pos1, limit1)) = probe else {
+            completed = false;
+            break;
+        };
+
+        // Look the character up in the boundary-function table.
+        let func = super::chartable::char_table_ref_and_range(&wbtable, i64::from(ch as u32))
+            .map(|(v, _, _)| v)
+            .unwrap_or(Value::NIL);
+        let mut handled = false;
+        let callable = match func.as_symbol_id() {
+            Some(id) => eval.obarray.fboundp_id(id),
+            None => super::subr_info::subr_is_callable_function_value(&func),
+        };
+        if callable {
+            if let Ok(result) =
+                eval.funcall_general(func, vec![Value::fixnum(pos1), Value::fixnum(limit1)])
+                && let ValueKind::Fixnum(new_pos1) = result.kind()
+            {
+                let valid = if forward {
+                    new_pos1 > pos1 && new_pos1 <= limit1
+                } else {
+                    new_pos1 < pos1 && new_pos1 >= limit1
+                };
+                if valid {
+                    let zero_based = (new_pos1 - 1).max(0) as usize;
+                    let byte = {
+                        let buf = eval.buffers.get(current_id).expect("buffer");
+                        buffer_char_to_emacs_byte_pos(buf, CharPos0::new(zero_based))
+                    };
+                    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, byte);
+                    handled = true;
+                }
+            }
+        }
+
+        if !handled {
+            // Plain syntax scan of a single word from the current point.
+            let (byte, ok) = {
+                let buf = eval.buffers.get(current_id).expect("buffer");
+                let table = SyntaxTable::for_buffer(buf);
+                forward_word_with_options(
+                    buf,
+                    &table,
+                    if forward { 1 } else { -1 },
+                    honor_properties,
+                )
+            };
+            let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, byte);
+            if !ok {
+                completed = false;
+                break;
+            }
+        }
+    }
+
+    let byte = eval
+        .buffers
+        .get(current_id)
+        .map(|b| b.point_emacs_byte_pos())
+        .unwrap_or(EmacsBytePos::new(0));
+    (byte, completed)
+}
+
+/// Compute where `forward-word`/`backward-word` over `count` words would land,
+/// honoring `find-word-boundary-function-table`, WITHOUT moving point. Used by
+/// the word-casing commands that operate on the [point, destination] region.
+pub(crate) fn forward_word_destination(
+    eval: &mut super::eval::Context,
+    count: i64,
+    honor_properties: bool,
+) -> EmacsBytePos {
+    let wbtable = eval.visible_variable_value_or_nil("find-word-boundary-function-table");
+    if word_boundary_table_active(&wbtable) {
+        let current_id = eval.buffers.current_buffer_id();
+        let saved =
+            current_id.and_then(|id| eval.buffers.get(id).map(|b| b.point_emacs_byte_pos()));
+        let (dest, _) = word_motion_with_table(eval, count, honor_properties, wbtable);
+        // word_motion_with_table moves point as it scans; restore it.
+        if let (Some(id), Some(saved)) = (current_id, saved) {
+            let _ = eval.buffers.goto_buffer_emacs_byte_pos(id, saved);
+        }
+        dest
+    } else {
+        let buf = match eval.buffers.current_buffer() {
+            Some(b) => b,
+            None => return EmacsBytePos::new(0),
+        };
+        let table = SyntaxTable::for_buffer(buf);
+        forward_word_with_options(buf, &table, count, honor_properties).0
+    }
+}
+
 fn backward_word_with_options(
     buf: &Buffer,
     table: &SyntaxTable,
@@ -2156,7 +2344,7 @@ fn effective_syntax_entry_for_abs_char(
     effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, honor_properties)
 }
 
-fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -> bool {
+pub(crate) fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -> bool {
     ctx.eval_symbol("parse-sexp-lookup-properties")
         .unwrap_or(Value::NIL)
         .is_truthy()
@@ -3378,17 +3566,37 @@ pub(crate) fn builtin_forward_word(
         }
     };
 
-    let (raw_byte, completed, orig_char, raw_char) = {
+    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
+    let orig_byte = {
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        buf.point_emacs_byte_pos()
+    };
+    // When `find-word-boundary-function-table` is active (subword/superword),
+    // GNU's scan_words consults it per word; otherwise the plain syntax scan is
+    // used unchanged.
+    let wbtable = eval.visible_variable_value_or_nil("find-word-boundary-function-table");
+    let (raw_byte, completed) = if word_boundary_table_active(&wbtable) {
+        word_motion_with_table(eval, count, honor_properties, wbtable)
+    } else {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let table = SyntaxTable::for_buffer(buf);
-        let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-        let (raw_byte, completed) = forward_word_with_options(buf, &table, count, honor_properties);
-        let orig_char = buffer_byte_to_lisp_pos(buf, buf.point_emacs_byte_pos());
-        let raw_char = buffer_byte_to_lisp_pos(buf, raw_byte);
-        (raw_byte, completed, orig_char, raw_char)
+        forward_word_with_options(buf, &table, count, honor_properties)
+    };
+    let (orig_char, raw_char) = {
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        (
+            buffer_byte_to_lisp_pos(buf, orig_byte),
+            buffer_byte_to_lisp_pos(buf, raw_byte),
+        )
     };
 
     // GNU `Fforward_word` (syntax.c:1561) constrains the destination via

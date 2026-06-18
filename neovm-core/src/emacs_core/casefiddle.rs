@@ -6,7 +6,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
 use super::syntax::forward_word;
 use super::value::*;
-use crate::buffer::EmacsByteRange;
+use crate::buffer::{EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -558,14 +558,16 @@ fn casify_word_in_state(
     expect_args(name, &args, 1)?;
     let n = expect_int(&args[0])?;
 
+    // Honor `find-word-boundary-function-table` (subword/superword) for the
+    // word boundary, mirroring GNU's forward-word; computed without moving point.
+    let honor = crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval);
+    let target = crate::emacs_core::syntax::forward_word_destination(eval, n, honor);
     let (byte_range, text, buffer_name, read_only) = {
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let table = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);
         let pt = buf.point_emacs_byte_pos();
-        let target = forward_word(buf, &table, n);
         let byte_range = EmacsByteRange::ordered(pt, target);
         let text = buf.buffer_substring_lisp_string_range(byte_range);
         (
@@ -577,14 +579,26 @@ fn casify_word_in_state(
     };
 
     let replacement = transform(&text);
-    if replacement == text {
-        return Ok(Value::NIL);
+    let changed = replacement != text;
+    if changed {
+        if read_only {
+            return Err(signal("buffer-read-only", vec![buffer_name]));
+        }
+        replace_current_buffer_region_in_buffers(eval, byte_range, &replacement, false)?;
     }
-    if read_only {
-        return Err(signal("buffer-read-only", vec![buffer_name]));
+    // GNU `casify_word` sets point to `casify_region(PT, farend)`, i.e. the
+    // greater of point and the forward-word destination (the end of the cased
+    // region), shifted by any length change. For a negative ARG this leaves
+    // point at the original PT ("convert previous words but do not move").
+    let _ = n;
+    if let Some(id) = eval.buffers.current_buffer_id() {
+        let delta = replacement.sbytes() as i64 - text.sbytes() as i64;
+        let new_pt = (byte_range.end().get() as i64 + delta).max(0) as usize;
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(id, EmacsBytePos::new(new_pt));
     }
-
-    replace_current_buffer_region_in_buffers(eval, byte_range, &replacement, false)
+    Ok(Value::NIL)
 }
 
 // ---------------------------------------------------------------------------
