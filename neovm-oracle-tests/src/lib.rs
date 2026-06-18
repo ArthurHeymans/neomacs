@@ -1208,6 +1208,7 @@ mod divergence_audit_fileio;
 mod divergence_audit_generators;
 mod divergence_audit_quotes_casefold;
 mod divergence_audit_regex;
+mod divergence_bidi_grapheme_runtime;
 mod divergence_bignum_fixnum_deep;
 mod divergence_bookmark_register_text;
 mod divergence_bool_vector_runtime;
