@@ -50,9 +50,8 @@ use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
-    LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
-    WordWrapRenderState,
+    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
+    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::DisplaySourceContext;
 use crate::display_status_line::{
@@ -163,7 +162,6 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
     pub(crate) text_property_checkpoints: TextPropertyScanCheckpoints,
-    pub(crate) raise_span: ActiveDisplayPropertySpan<f32>,
     pub(crate) row_flags: DisplayRowFlags,
     pub(crate) hscroll_skip: HorizontalScrollSkipState,
     pub(crate) word_wrap: WordWrapRenderState,
@@ -525,7 +523,6 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
     row_y_positions: &'rows mut DisplayRowYPositions,
     cursor_info: &'emit mut CursorCaptureState,
     face_ids: &'emit mut FrameFaceIdAllocator,
-    raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -830,7 +827,6 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             text_area_left: self.text_x,
             window_top: self.window_top,
             text_property_checkpoints: TextPropertyScanCheckpoints::new(self.window_start),
-            raise_span: ActiveDisplayPropertySpan::inactive(),
             row_flags: DisplayRowFlags::new(self.max_rows),
             hscroll_skip: HorizontalScrollSkipState::new(self.wrap_mode, self.hscroll),
             word_wrap: WordWrapRenderState::new(self.word_wrap),
@@ -915,7 +911,6 @@ impl BufferTextWindowWalkSetup {
             &mut self.row_y_positions,
             &mut self.cursor_info,
             state.face_ids,
-            &mut self.raise_span,
         )
         .render_visible_steps(
             &mut source_cursor,
@@ -2554,7 +2549,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         row_y_positions: &'rows mut DisplayRowYPositions,
         cursor_info: &'emit mut CursorCaptureState,
         face_ids: &'emit mut FrameFaceIdAllocator,
-        raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
     ) -> Self {
         Self {
             append_state,
@@ -2579,7 +2573,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             row_y_positions,
             cursor_info,
             face_ids,
-            raise_span,
         }
     }
 
@@ -2779,7 +2772,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 append_surface,
                 self.row_geometry,
                 active_face_state,
-                self.raise_span.value_or(0.0),
+                0.0,
                 DisplayRowPosition {
                     x_px: *self.x,
                     col: *self.col,
@@ -2828,7 +2821,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             append_surface,
             overlay_context,
             active_face_state,
-            self.raise_span.value_or(0.0),
+            0.0,
         );
         self.render_invisible_text_at_checkpoint(request, buffer)
     }
@@ -2860,7 +2853,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             *self.col,
             *self.charpos,
             *self.byte_idx,
-            self.raise_span.value_or(0.0),
+            0.0,
         );
         self.render_display_property_checkpoint(
             request,
@@ -2884,7 +2877,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             text,
             append_surface,
             active_face_state,
-            self.raise_span.value_or(0.0),
+            0.0,
         );
         self.render_selective_display_tail(request, buffer)
     }
@@ -2923,7 +2916,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             overlay_context,
             active_face_state,
             params,
-            self.raise_span.value_or(0.0),
+            0.0,
         );
         self.render_source_char(request, buffer)
     }
@@ -3090,7 +3083,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 row_y_positions: self.row_y_positions,
                 cursor_info: self.cursor_info,
                 face_ids: self.face_ids,
-                raise_span: self.raise_span,
             },
         )
     }

@@ -74,9 +74,8 @@ use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_row_walk_state::WordWrapBreakCandidate;
 #[cfg(test)]
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState,
-    LineNumberRenderState, TextPropertyScanCheckpoints, TrailingWhitespaceRenderState,
-    WordWrapRenderState,
+    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
+    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::fontconfig::FontSizing;

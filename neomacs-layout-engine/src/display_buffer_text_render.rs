@@ -47,11 +47,10 @@ use crate::display_row_transition::{
     DisplayRowTransitionRenderState,
 };
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
-    HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
-    SpecialTextRowOverflowDecision, TextPropertyScanCheckpoints, TextRowTransitionStatePolicy,
-    TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
-    skip_text_to_charpos, skip_to_newline,
+    BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
+    HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
+    TextPropertyScanCheckpoints, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
+    WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,
@@ -3075,16 +3074,6 @@ impl BufferDisplayPropertyTextReplacementOutcome {
     }
 }
 
-impl BufferDisplayPropertyTextModifierAction {
-    pub(crate) fn clear_expired_raise_span(
-        raise_span: &mut ActiveDisplayPropertySpan<f32>,
-        charpos: i64,
-        inactive_end_charpos: i64,
-    ) {
-        let _ = raise_span.clear_if_expired(charpos, inactive_end_charpos);
-    }
-}
-
 #[cfg(test)]
 pub(crate) struct DisplayPropertyReplacementAppendResolveRequest<'a> {
     display_property: &'a DisplayPropertyClassification,
@@ -3310,7 +3299,6 @@ pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-    pub(crate) raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -3529,7 +3517,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             row_y_positions,
             cursor_info,
             face_ids,
-            raise_span,
         } = state;
         let mut source_render = source_render;
         let context = self.context;
@@ -3699,12 +3686,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         if overflow_outcome.should_continue_buffer_walk() {
             return BufferTextSourceCharRenderOutcome::ContinueBufferWalk;
         }
-
-        BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(
-            raise_span,
-            *charpos,
-            context.params.window_start,
-        );
 
         {
             let mut overlay_state = OverlayStringRenderState::from_source_render(

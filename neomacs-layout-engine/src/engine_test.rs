@@ -328,25 +328,6 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
 }
 
 #[test]
-fn active_display_property_span_returns_value_until_expired() {
-    let mut span = ActiveDisplayPropertySpan::inactive();
-
-    assert_eq!(span.value(), None);
-
-    span.set(1.25, 9);
-
-    assert_eq!(span.value(), Some(1.25));
-    assert!(!span.clear_if_expired(8, 1));
-    assert_eq!(span.value(), Some(1.25));
-    assert!(span.clear_if_expired(9, 1));
-    assert_eq!(span.value(), None);
-
-    span.set(0.5, 12);
-    assert!(!span.clear_if_expired(12, 12));
-    assert_eq!(span.value(), Some(0.5));
-}
-
-#[test]
 fn text_property_scan_checkpoints_track_next_visibility_and_display_changes() {
     let mut checkpoints = TextPropertyScanCheckpoints::new(10);
 

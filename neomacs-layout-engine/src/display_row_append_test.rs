@@ -55,10 +55,9 @@ use crate::display_row_replacement::*;
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceMeasureState};
 use crate::display_row_transition::*;
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
-    HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
-    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapBreakCandidate,
-    WordWrapRenderState,
+    BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
+    HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
+    TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::*;
 use crate::display_source::{
@@ -5839,7 +5838,6 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(7);
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
             DisplaySourcePosition::buffer(
@@ -5926,7 +5924,6 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
             row_y_positions: &mut context.row_y_positions,
             cursor_info: &mut cursor_info,
             face_ids: &mut face_ids,
-            raise_span: &mut raise_span,
         },
     );
 
@@ -8882,16 +8879,6 @@ fn buffer_display_property_append_action_none_keeps_walk_state() {
     assert_eq!(col, 1);
     assert!(cursor_info.captured().is_none());
     assert!(!face_scan.should_resolve_at(0));
-}
-
-#[test]
-fn buffer_display_property_text_modifier_action_clears_expired_raise_span() {
-    let mut raise_span = ActiveDisplayPropertySpan::inactive();
-    raise_span.set(-3.0, 7);
-
-    BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(&mut raise_span, 7, 1);
-
-    assert_eq!(raise_span.value(), None);
 }
 
 #[test]

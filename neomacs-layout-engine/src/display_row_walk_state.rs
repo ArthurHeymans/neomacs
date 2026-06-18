@@ -89,12 +89,6 @@ pub(crate) enum BoxFaceRowState {
     Active { row: DisplayRowMarker, start_x: f32 },
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(crate) struct ActiveDisplayPropertySpan<T> {
-    value: Option<T>,
-    end_charpos: i64,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TrailingWhitespaceRenderState {
     background: Option<Color>,
@@ -575,47 +569,6 @@ impl BoxFaceRowState {
             Self::Active { row, .. } => *row,
             Self::Inactive => DisplayRowMarker::Inactive,
         }
-    }
-}
-
-impl<T: Copy> ActiveDisplayPropertySpan<T> {
-    pub(crate) fn inactive() -> Self {
-        Self {
-            value: None,
-            end_charpos: 0,
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set(&mut self, value: T, end_charpos: i64) {
-        self.value = Some(value);
-        self.end_charpos = end_charpos;
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.value = None;
-        self.end_charpos = 0;
-    }
-
-    pub(crate) fn clear_if_expired(&mut self, charpos: i64, inactive_end_charpos: i64) -> bool {
-        if self.value.is_some()
-            && self.end_charpos > inactive_end_charpos
-            && charpos >= self.end_charpos
-        {
-            self.clear();
-            true
-        } else {
-            false
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn value(&self) -> Option<T> {
-        self.value
-    }
-
-    pub(crate) fn value_or(&self, default: T) -> T {
-        self.value.unwrap_or(default)
     }
 }
 
