@@ -1237,6 +1237,7 @@ mod divergence_cllib_deep;
 mod divergence_cllib_seq_map;
 mod divergence_coding_charset_deep;
 mod divergence_coding_detection_runtime;
+mod divergence_coding_encodability_runtime;
 mod divergence_coding_plist_matrix;
 mod divergence_coding_process;
 mod divergence_coding_system_plist_runtime;
