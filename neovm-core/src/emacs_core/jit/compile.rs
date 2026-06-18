@@ -463,42 +463,43 @@ static JIT_BUILTIN_SLICE: [JitBuiltinSlice; 3] = [
     b::builtin_substring_slice,    // 2
 ];
 
-/// `(nargs, table_index, mutates)` for ops lowered through the slice-builtin
-/// shim. `Concat`'s arity rides in the opcode; `Nconc`/`Substring` are fixed.
-fn slice_builtin_spec(op: &Op) -> Option<(usize, usize, bool)> {
+/// `(nargs, table_index)` for ops lowered through the slice-builtin shim.
+/// `Concat`'s arity rides in the opcode; `Nconc`/`Substring` are fixed.
+fn slice_builtin_spec(op: &Op) -> Option<(usize, usize)> {
     Some(match op {
-        Op::Nconc => (2, 0, true),
-        Op::Concat(n) => (*n as usize, 1, false),
-        Op::Substring => (3, 2, false),
+        Op::Nconc => (2, 0),
+        Op::Concat(n) => (*n as usize, 1),
+        Op::Substring => (3, 2),
         _ => return None,
     })
 }
 
-/// `(table_arity, table_index, mutates)` for ops lowered through the generic
-/// direct-builtin shims. `mutates` ops poison later guards (a deopt-rerun would
-/// replay the mutation); pure ones are rerun-safe.
-fn direct_builtin_spec(op: &Op) -> Option<(u8, usize, bool)> {
+/// `(table_arity, table_index)` for ops lowered through the generic
+/// direct-builtin shims. (There is no longer a per-op "mutates" flag: every op
+/// that needs runtime re-entry already sets `needs_rt`, and these ops always
+/// route through the precise-deopt path, so there is nothing to poison.)
+fn direct_builtin_spec(op: &Op) -> Option<(u8, usize)> {
     Some(match op {
-        Op::Length => (1, 0, false),
-        Op::SymbolValue => (1, 1, false),
-        Op::SymbolFunction => (1, 2, false),
-        Op::Nreverse => (1, 3, true),
-        Op::Nth => (2, 0, false),
-        Op::Nthcdr => (2, 1, false),
-        Op::Elt => (2, 2, false),
-        Op::Member => (2, 3, false),
-        Op::Memq => (2, 4, false),
-        Op::Assq => (2, 5, false),
-        Op::Equal => (2, 6, false),
-        Op::Setcar => (2, 7, true),
-        Op::Setcdr => (2, 8, true),
-        Op::Aref => (2, 9, false),
-        Op::Set => (2, 10, true),
-        Op::Fset => (2, 11, true),
-        Op::Get => (2, 12, false),
-        Op::StringEqual => (2, 13, false),
-        Op::StringLessp => (2, 14, false),
-        Op::Put => (3, 0, true),
+        Op::Length => (1, 0),
+        Op::SymbolValue => (1, 1),
+        Op::SymbolFunction => (1, 2),
+        Op::Nreverse => (1, 3),
+        Op::Nth => (2, 0),
+        Op::Nthcdr => (2, 1),
+        Op::Elt => (2, 2),
+        Op::Member => (2, 3),
+        Op::Memq => (2, 4),
+        Op::Assq => (2, 5),
+        Op::Equal => (2, 6),
+        Op::Setcar => (2, 7),
+        Op::Setcdr => (2, 8),
+        Op::Aref => (2, 9),
+        Op::Set => (2, 10),
+        Op::Fset => (2, 11),
+        Op::Get => (2, 12),
+        Op::StringEqual => (2, 13),
+        Op::StringLessp => (2, 14),
+        Op::Put => (3, 0),
         _ => return None,
     })
 }
@@ -3393,7 +3394,7 @@ fn lower_simple_op(
             // operands and call the generic slice shim with the table index
             // baked in — the SAME builtins::*_slice function the interpreter
             // arm calls.
-            if let Some((nargs, idx, _mutates)) = slice_builtin_spec(other) {
+            if let Some((nargs, idx)) = slice_builtin_spec(other) {
                 let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
                 if stack.len() < nargs {
                     return Err(CompileError::StackUnderflow);
@@ -3438,7 +3439,7 @@ fn lower_simple_op(
             // frame, and call the arity-shaped generic shim with the table
             // index baked in — the shim invokes the SAME builtins::* function
             // the interpreter arm calls.
-            let Some((arity, idx, _mutates)) = direct_builtin_spec(other) else {
+            let Some((arity, idx)) = direct_builtin_spec(other) else {
                 return Err(CompileError::UnsupportedOp(op_category(other)));
             };
             let rt = rt.ok_or(CompileError::UnsupportedOp("builtin"))?;
@@ -3493,11 +3494,11 @@ fn lower_simple_op(
 /// Minimum operand-stack depth a simple op requires, and its net depth change.
 /// `Err` for anything outside the supported simple subset.
 pub(crate) fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
-    if let Some((arity, _, _)) = direct_builtin_spec(op) {
+    if let Some((arity, _)) = direct_builtin_spec(op) {
         // N operands -> one result.
         return Ok((arity as usize, 1 - arity as i64));
     }
-    if let Some((nargs, _, _)) = slice_builtin_spec(op) {
+    if let Some((nargs, _)) = slice_builtin_spec(op) {
         return Ok((nargs, 1 - nargs as i64));
     }
     Ok(match op {

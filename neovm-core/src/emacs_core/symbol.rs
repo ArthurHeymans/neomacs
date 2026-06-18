@@ -2164,12 +2164,17 @@ impl Obarray {
         removed_symbol
     }
 
-    /// Monotonic epoch for function-cell mutations.
+    /// Function-cell mutation epoch: a `u64` counter bumped on every `fset`. The
+    /// JIT's speculative direct-call guards compare against a snapshot of this
+    /// value, so it is "monotonic" only modulo 2^64. A wrap could falsely
+    /// validate a stale baked call, but at ~1e7 fsets/s that is ~58,000 years
+    /// away — physically unreachable; widen to u128 if that ever stops holding.
     pub fn function_epoch(&self) -> u64 {
         self.function_epoch
     }
 
-    /// Monotonic epoch for value-cell mutations.
+    /// Value-cell mutation epoch — a `u64` counter bumped on every `set` (see
+    /// `function_epoch` for the wrap caveat).
     pub fn value_epoch(&self) -> u64 {
         self.value_epoch
     }
