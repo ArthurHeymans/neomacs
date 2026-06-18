@@ -51,7 +51,6 @@ use crate::display_row_walk_state::{
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::display_status_line::{
     ChromeRowRenderServices, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
-    max_mini_window_lines, minibuffer_resize_line_count,
 };
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
@@ -79,6 +78,13 @@ pub(crate) struct BufferTextWindowGeometryRequest {
     bottom_chrome_rows: usize,
     char_width: f32,
     char_height: f32,
+    /// Ceiling (in display rows) from `max-mini-window-height` for a
+    /// minibuffer window.  `None` for ordinary windows; set via
+    /// `with_max_mini_window_rows`.  GNU `resize_mini_window` measures the
+    /// mini-window's content height with `move_it_to(ZV)` UNCLAMPED and only
+    /// clips the result to this ceiling, so the walk must be allowed to emit
+    /// up to this many rows even when the window is currently one row tall.
+    max_mini_window_rows: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -97,6 +103,13 @@ pub(crate) struct BufferTextWindowGeometry {
     pub(crate) cols: usize,
     pub(crate) line_number_pixel_width: f32,
     pub(crate) content_x: f32,
+    /// Y at which a row stops being "visible" during the walk.  For ordinary
+    /// windows this is `text_y + text_height` (the physical text area).  For a
+    /// minibuffer it is lifted to span `max_rows` rows so the unclamped GNU
+    /// `resize_mini_window` measurement can emit content rows beyond the
+    /// window's current (often one-row) physical height; `max_rows` still hard
+    /// caps the row count at the `max-mini-window-height` ceiling.
+    pub(crate) visibility_bottom_y: f32,
 }
 
 pub(crate) struct BufferTextWindowGeometryPlan {
@@ -176,16 +189,7 @@ pub(crate) struct BufferTextWindowOutputSetupRequest {
     selected: bool,
     text_y: f32,
     text_height: f32,
-}
-
-pub(crate) struct BufferTextWindowContentRowsRequest<'a> {
-    params: &'a WindowParams,
-    /// The buffer whose content height is estimated. For an inactive
-    /// mini-window this is the echo-area buffer it is displaying (GNU
-    /// `with_echo_area_buffer`), not the window record's own buffer.
-    effective_buf_id: BufferId,
-    frame_height: f32,
-    char_height: f32,
+    visibility_bottom_y: f32,
 }
 
 pub(crate) struct BufferTextWindowOutputSetup {
@@ -595,7 +599,19 @@ impl BufferTextWindowGeometryRequest {
             bottom_chrome_rows: usize::from(mode_line_height > 0.0),
             char_width,
             char_height,
+            max_mini_window_rows: None,
         }
+    }
+
+    /// Record the `max-mini-window-height` ceiling (in display rows) so the
+    /// minibuffer walk measures its full content height up to that ceiling,
+    /// the way GNU `resize_mini_window` does.  No-op for non-minibuffer
+    /// windows.
+    pub(crate) fn with_max_mini_window_rows(mut self, max_mini_window_rows: usize) -> Self {
+        if self.kind.is_minibuffer() {
+            self.max_mini_window_rows = Some(max_mini_window_rows.max(1));
+        }
+        self
     }
 
     pub(crate) fn line_number_row_capacity(self) -> usize {
@@ -608,18 +624,26 @@ impl BufferTextWindowGeometryRequest {
         self.base_max_rows()
     }
 
-    pub(crate) fn into_geometry(
-        self,
-        line_number_columns: i32,
-        minibuffer_content_rows: Option<usize>,
-    ) -> BufferTextWindowGeometry {
-        let max_rows = minibuffer_content_rows.unwrap_or_else(|| self.visible_max_rows());
+    pub(crate) fn into_geometry(self, line_number_columns: i32) -> BufferTextWindowGeometry {
+        let max_rows = self.visible_max_rows();
         let line_number_pixel_width = line_number_columns as f32 * self.char_width;
         let text_matrix_row_base = self.top_chrome_rows;
         let text_matrix_rows = max_rows.max(1);
         let mode_line_matrix_row = text_matrix_row_base + text_matrix_rows;
         let cols = ((self.text_width - line_number_pixel_width) / self.char_width).floor() as usize;
         let content_x = self.text_x + line_number_pixel_width;
+
+        // For a minibuffer measured with the GNU `move_it_to(ZV)` policy, lift
+        // the visibility bottom to span `max_rows` so the walk can emit content
+        // rows past the window's current physical height; `max_rows` (the
+        // ceiling) still hard caps the count.  Ordinary windows keep the
+        // physical text-area bottom.
+        let physical_bottom_y = self.text_y + self.text_height;
+        let visibility_bottom_y = if self.kind.is_minibuffer() {
+            physical_bottom_y.max(self.text_y + max_rows as f32 * self.char_height)
+        } else {
+            physical_bottom_y
+        };
 
         BufferTextWindowGeometry {
             text_x: self.text_x,
@@ -636,6 +660,7 @@ impl BufferTextWindowGeometryRequest {
             cols,
             line_number_pixel_width,
             content_x,
+            visibility_bottom_y,
         }
     }
 
@@ -644,6 +669,19 @@ impl BufferTextWindowGeometryRequest {
     }
 
     fn visible_max_rows(self) -> usize {
+        // GNU `resize_mini_window` measures the mini-window's full content
+        // height with an unclamped `move_it_to(ZV)` and clips it only to the
+        // `max-mini-window-height` ceiling.  Mirror that: when the ceiling is
+        // known, let the walk emit up to that many rows (not just the rows that
+        // physically fit the current, often one-row, window).  vscroll != 0
+        // means content is intentionally hidden (e.g. vertico-posframe), so
+        // fall back to the physical row count there.
+        if self.kind.is_minibuffer() && self.vscroll == 0.0 && self.text_height > 0.0 {
+            if let Some(ceiling) = self.max_mini_window_rows {
+                return ceiling.max(1);
+            }
+        }
+
         let max_rows = self.base_max_rows();
         // The minibuffer must always render at least 1 row.  Its pixel
         // height may be fractionally smaller than char_height (e.g. 24px vs
@@ -665,12 +703,10 @@ impl BufferTextWindowGeometryRequest {
         self,
         local_display_policy: &BufferTextWindowLocalDisplayPolicy,
         buffer_access: &RustBufferAccess<'_, B>,
-        content_rows: BufferTextWindowContentRowsRequest<'_>,
-        evaluator: &Context,
     ) -> BufferTextWindowGeometryPlan {
         let line_number_columns = local_display_policy
             .line_number_columns(buffer_access, self.line_number_row_capacity());
-        let geometry = self.into_geometry(line_number_columns, content_rows.resolve(evaluator));
+        let geometry = self.into_geometry(line_number_columns);
         BufferTextWindowGeometryPlan {
             geometry,
             line_number_columns,
@@ -685,52 +721,6 @@ impl BufferTextWindowChromeHeights {
             header_line,
             tab_line,
         }
-    }
-}
-
-impl<'a> BufferTextWindowContentRowsRequest<'a> {
-    pub(crate) fn new(
-        params: &'a WindowParams,
-        effective_buf_id: BufferId,
-        frame_height: f32,
-        char_height: f32,
-    ) -> Self {
-        Self {
-            params,
-            effective_buf_id,
-            frame_height,
-            char_height,
-        }
-    }
-
-    pub(crate) fn resolve(self, evaluator: &Context) -> Option<usize> {
-        if !self.params.is_minibuffer() {
-            return None;
-        }
-
-        // GNU `resize_mini_window` (`xdisp.c:13161-13301`) pre-grows the
-        // minibuffer BEFORE layout by running `move_it_to` to walk all
-        // content (buffer text + overlay strings) and measuring the resulting
-        // pixel height.
-        //
-        // This approximation counts newlines in the buffer text plus
-        // resize-relevant overlay strings to estimate the display line count.
-        // GNU redisplay can render zero-length EOB overlay strings (see
-        // `overlay_strings' in buffer.c and `load_overlay_strings' in
-        // xdisp.c), but `resize_mini_window' does not grow the parent
-        // minibuffer for a zero-length EOB `before-string'. Pre-expanding
-        // max_rows to the matching count avoids the boot-time tall echo-area
-        // case while allowing fido/vertico multi-line overlays that GNU
-        // counts during mini-window resize to render.
-        let buf_id = self.effective_buf_id;
-        let content_lines = evaluator
-            .buffer_manager()
-            .get(buf_id)
-            .map(|buffer| minibuffer_resize_line_count(buffer, self.params.window_id as u64))
-            .unwrap_or(1);
-        let frame_rows = self.frame_height / self.char_height;
-        let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil() as usize;
-        Some(content_lines.clamp(1, max_mini))
     }
 }
 
@@ -1331,6 +1321,7 @@ impl BufferTextWindowOutputSetupRequest {
         selected: bool,
         text_y: f32,
         text_height: f32,
+        visibility_bottom_y: f32,
     ) -> Self {
         Self {
             frame_id,
@@ -1345,6 +1336,7 @@ impl BufferTextWindowOutputSetupRequest {
             selected,
             text_y,
             text_height,
+            visibility_bottom_y,
         }
     }
 
@@ -1367,6 +1359,7 @@ impl BufferTextWindowOutputSetupRequest {
             params.selected,
             geometry.text_y,
             geometry.text_height,
+            geometry.visibility_bottom_y,
         )
     }
 
@@ -1397,7 +1390,11 @@ impl BufferTextWindowOutputSetupRequest {
             ),
             row_visibility_limit: DisplayRowVisibilityLimit {
                 max_rows,
-                bottom_y: self.text_y + self.text_height,
+                // Lifted to span `max_rows` for a minibuffer so the unclamped
+                // GNU `resize_mini_window` measurement can emit content rows
+                // beyond the window's current physical height (see
+                // `BufferTextWindowGeometry::visibility_bottom_y`).
+                bottom_y: self.visibility_bottom_y,
             },
             row_limit: DisplayRowLimit { max_rows },
             body_install_context: BufferTextWindowBodyInstallContext {
@@ -1955,7 +1952,6 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
             self.params.point_charpos().get(),
             charpos,
             point_is_visible_eob,
-            self.params.is_minibuffer(),
             self.retry_bounds.text_area_top,
             self.retry_bounds.text_area_bottom,
             buf_access,

@@ -612,7 +612,6 @@ pub(crate) struct BufferTextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBuff
     point_charpos: i64,
     charpos: i64,
     point_is_visible_eob: bool,
-    is_minibuffer: bool,
     text_area_top: i64,
     text_area_bottom: i64,
     buf_access: &'a RustBufferAccess<'buf, B>,
@@ -5191,7 +5190,6 @@ impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, '
         point_charpos: i64,
         charpos: i64,
         point_is_visible_eob: bool,
-        is_minibuffer: bool,
         text_area_top: i64,
         text_area_bottom: i64,
         buf_access: &'a RustBufferAccess<'buf, B>,
@@ -5204,7 +5202,6 @@ impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, '
             point_charpos,
             charpos,
             point_is_visible_eob,
-            is_minibuffer,
             text_area_top,
             text_area_bottom,
             buf_access,
@@ -5226,15 +5223,20 @@ impl<'a, 'buf, B: LayoutBufferView> BufferTextWindowVisibilityRetryRequest<'a, '
             .map(|end_lisp| point_lisp > end_lisp)
             .unwrap_or(self.point_charpos > self.charpos);
 
-        let scroll_down_window_start = if point_beyond_visible_span
-            && visible_progress > self.window_start
-            && !self.is_minibuffer
-        {
-            next_window_start_from_visible_rows(self.rows, self.window_start)
-                .map(|new_ws| new_ws.min(self.point_charpos.max(self.accessible_start)))
-        } else {
-            None
-        };
+        // GNU `resize_mini_window` (src/xdisp.c:13361) scrolls a mini-window
+        // whose measured content exceeds `max-mini-window-height` so the END
+        // (where point sits in an active fido/vertico minibuffer) shows.  This
+        // is the same point-driven scroll an ordinary window uses, so the
+        // minibuffer is no longer excluded.  An inactive echo-area mini-window
+        // has point reset to BEGV, so `point_beyond_visible_span` is false and
+        // it never scrolls.
+        let scroll_down_window_start =
+            if point_beyond_visible_span && visible_progress > self.window_start {
+                next_window_start_from_visible_rows(self.rows, self.window_start)
+                    .map(|new_ws| new_ws.min(self.point_charpos.max(self.accessible_start)))
+            } else {
+                None
+            };
         let point_row_window_start = next_window_start_for_partially_visible_point_row(
             self.rows,
             self.point_charpos,

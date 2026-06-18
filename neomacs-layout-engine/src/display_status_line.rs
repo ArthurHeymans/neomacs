@@ -33,7 +33,7 @@ use crate::types::WindowParams;
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
 use neomacs_display_protocol::types::Rect;
-use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
+use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -940,69 +940,6 @@ pub(crate) fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32
         neovm_core::emacs_core::value::ValueKind::Fixnum(_) => raw.as_int().unwrap_or(1) as f32,
         _ => 1.0,
     }
-}
-
-pub(crate) fn minibuffer_resize_line_count(
-    buffer: &neovm_core::buffer::Buffer,
-    window_id: u64,
-) -> usize {
-    let text_lines = buffer
-        .buffer_substring_bytes_range(buffer.accessible_emacs_byte_range())
-        .into_iter()
-        .filter(|&byte| byte == b'\n')
-        .count();
-
-    let window_sym = Value::symbol("window");
-    let accessible_end_byte = buffer.accessible_emacs_byte_region().end();
-    let overlays = buffer.overlays();
-    let overlay_lines: usize = overlays
-        .overlays_in_emacs_byte_range(EmacsByteRange::new(
-            EmacsBytePos::ZERO,
-            EmacsBytePos::ZERO.add_len(buffer.total_emacs_byte_len()),
-        ))
-        .iter()
-        .filter(|ov| match overlays.overlay_get_named(**ov, window_sym) {
-            Some(prop) => prop
-                .as_window_id()
-                .is_none_or(|overlay_window_id| overlay_window_id == window_id),
-            None => true,
-        })
-        .map(|ov| {
-            let before_lines = if overlays
-                .overlay_start_emacs_byte_pos(*ov)
-                .is_some_and(|start| start < accessible_end_byte)
-            {
-                overlays
-                    .overlay_get_named(*ov, Value::symbol("before-string"))
-                    .and_then(|value| value.as_lisp_string())
-                    .map(|string| {
-                        string
-                            .as_bytes()
-                            .iter()
-                            .filter(|&&byte| byte == b'\n')
-                            .count()
-                    })
-                    .unwrap_or(0)
-            } else {
-                0
-            };
-
-            let after_lines = overlays
-                .overlay_get_named(*ov, Value::symbol("after-string"))
-                .and_then(|value| value.as_lisp_string())
-                .map(|string| {
-                    string
-                        .as_bytes()
-                        .iter()
-                        .filter(|&&byte| byte == b'\n')
-                        .count()
-                })
-                .unwrap_or(0);
-            before_lines + after_lines
-        })
-        .sum();
-
-    text_lines + overlay_lines + 1
 }
 
 fn window_chrome_display_origin(kind: WindowChromeKind, selected: bool) -> DisplayOrigin {

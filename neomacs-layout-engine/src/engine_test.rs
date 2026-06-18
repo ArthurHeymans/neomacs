@@ -9688,7 +9688,11 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
 }
 
 #[test]
-fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
+fn layout_frame_rust_grows_minibuffer_for_eob_before_string_like_gnu() {
+    // GNU `load_overlay_strings` (src/xdisp.c:~7164) DOES measure a non-empty
+    // EOB `before-string`, so `resize_mini_window` grows the parent minibuffer
+    // to display it. With the unclamped walk measurement (no estimator), the
+    // minibuffer grows and renders the overlay's `before-string` lines.
     let mut eval = Context::new();
     eval.obarray_mut()
         .set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
@@ -9767,9 +9771,14 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
         "expected minibuffer prompt row to render, rows={rows:?}"
     );
     assert!(
-        rows.iter()
-            .all(|row| !row.contains("init.el") && !row.contains("config.el")),
-        "GNU does not grow the parent minibuffer for a zero-length EOB before-string, rows={rows:?}"
+        rows.iter().any(|row| row.contains("init.el")),
+        "GNU grows the minibuffer for a non-empty EOB before-string \
+         (load_overlay_strings), so init.el must render, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("config.el")),
+        "GNU grows the minibuffer for a non-empty EOB before-string \
+         (load_overlay_strings), so config.el must render, rows={rows:?}"
     );
 }
 
@@ -9843,13 +9852,10 @@ fn layout_active_minibuffer_rows(
     enabled_window_row_texts(entry)
 }
 
-/// CHARACTERIZATION (STEP 0): an active minibuffer holding a prompt line plus
-/// several candidate lines must NOT flatten multi-line content into one row,
-/// must render the prompt line, and must grow past one row.  Pins the
-/// active-fido/vertico measure path before the estimator removal.  (The
-/// stricter "grow to one row per logical line" target is asserted by
-/// `active_minibuffer_grows_to_full_content_*`, made green once the walk
-/// measures unclamped in STEP 1.)
+/// An active minibuffer holding a prompt line plus several candidate lines
+/// must grow to one display row per logical line, render every line, and never
+/// flatten content into one row.  Exercises the active-fido/vertico measure
+/// path the unclamped GNU `resize_mini_window` walk now drives.
 fn assert_active_minibuffer_grows_for_multiline_content(use_gui_metrics: bool) {
     let rows = layout_active_minibuffer_rows(
         "Find file: cand\nalpha.el\nbeta.el\ngamma.el",
@@ -9857,18 +9863,20 @@ fn assert_active_minibuffer_grows_for_multiline_content(use_gui_metrics: bool) {
         use_gui_metrics,
     );
 
-    assert!(
-        rows.iter().any(|row| row.contains("Find file: cand")),
-        "expected the active minibuffer prompt row to render, rows={rows:?}"
-    );
+    for needle in ["Find file: cand", "alpha.el", "beta.el", "gamma.el"] {
+        assert!(
+            rows.iter().any(|row| row.contains(needle)),
+            "expected active minibuffer to grow and render {needle:?}, rows={rows:?}"
+        );
+    }
     assert!(
         !rows.iter().any(|row| row.contains("candalpha")),
         "multiline minibuffer content was flattened into one row: {rows:?}"
     );
     let content_rows = rows.iter().filter(|row| !row.trim().is_empty()).count();
     assert!(
-        content_rows >= 2,
-        "expected the active minibuffer to grow past one row, got {content_rows}: {rows:?}"
+        content_rows >= 4,
+        "expected four content rows (one per logical line), got {content_rows}: {rows:?}"
     );
 }
 
@@ -9880,6 +9888,70 @@ fn active_minibuffer_grows_for_multiline_content_tty() {
 #[test]
 fn active_minibuffer_grows_for_multiline_content_gui() {
     assert_active_minibuffer_grows_for_multiline_content(true);
+}
+
+/// Content taller than `max-mini-window-height` must clamp to the max row
+/// count AND scroll so the END shows (GNU `resize_mini_window` sets `w->start`
+/// to the end when the measured height exceeds `max_height`).  Point is at EOB,
+/// as it is in an active fido/vertico minibuffer.
+fn assert_active_minibuffer_overflow_clamps_and_shows_end(use_gui_metrics: bool) {
+    // Eight candidate lines but max-mini-window-height = 3 lines.
+    let rows = layout_active_minibuffer_rows(
+        "PROMPT\ncand1\ncand2\ncand3\ncand4\ncand5\ncand6\nLASTCAND",
+        3,
+        use_gui_metrics,
+    );
+    let content_rows = rows.iter().filter(|row| !row.trim().is_empty()).count();
+    assert!(
+        content_rows <= 3,
+        "expected minibuffer height clamped to <= 3 rows, got {content_rows}: {rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("LASTCAND")),
+        "expected overflow minibuffer to show the END (LASTCAND), rows={rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains("PROMPT")),
+        "expected the first line to scroll off the top on overflow, rows={rows:?}"
+    );
+}
+
+#[test]
+fn active_minibuffer_overflow_clamps_and_shows_end_tty() {
+    assert_active_minibuffer_overflow_clamps_and_shows_end(false);
+}
+
+#[test]
+fn active_minibuffer_overflow_clamps_and_shows_end_gui() {
+    assert_active_minibuffer_overflow_clamps_and_shows_end(true);
+}
+
+/// A single logical line (no newline) wider than the window wraps to more rows
+/// than `max-mini-window-height`; it must clamp to the max and show the END of
+/// the wrapped line (GNU's bottom-clamped path snapping `w->start` to a
+/// screen-line boundary with `move_it_by_lines`).
+#[test]
+fn active_minibuffer_wrapped_overflow_clamps_and_shows_end_tty() {
+    // 640px / 1px char => 640 cols.  Build a single line far wider than that
+    // with unique START and END markers so we can detect which screen line is
+    // shown.  max-mini-window-height = 2 lines.
+    let mut line = String::from("WRAPSTART");
+    line.push_str(&"x".repeat(640 * 6));
+    line.push_str("WRAPEND");
+    let rows = layout_active_minibuffer_rows(&line, 2, false);
+    let content_rows = rows.iter().filter(|row| !row.trim().is_empty()).count();
+    assert!(
+        content_rows <= 2,
+        "expected wrapped overflow clamped to <= 2 rows, got {content_rows}: {rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("WRAPEND")),
+        "expected wrapped overflow to show the END of the line, rows={rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains("WRAPSTART")),
+        "expected the START of the wrapped line to scroll off, rows={rows:?}"
+    );
 }
 
 #[test]

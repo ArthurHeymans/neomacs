@@ -23,8 +23,7 @@ use super::window_output::{
 use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyPassState, BufferTextWindowChromeHeights,
-    BufferTextWindowContentRowsRequest, BufferTextWindowDefaultFacePlan,
+    BufferTextWindowBodyPassState, BufferTextWindowChromeHeights, BufferTextWindowDefaultFacePlan,
     BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
     BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
     BufferTextWindowRenderedBodyCompleteState, BufferTextWindowRetryRenderCheckpoint,
@@ -596,29 +595,34 @@ impl LayoutEngine {
                                 }
                             } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
                                 // --- Shrink ---
-                                // GNU `resize_mini_window` shrinks a grow-only
-                                // mini-window when its buffer is empty
-                                // (`BEGV == ZV`). neomacs renders echo-area
-                                // messages from the evaluator's `current_message`
-                                // overlay rather than from the minibuffer buffer,
-                                // and leaves the idle ` *Minibuf-0*` buffer holding
-                                // a blank placeholder. Treat an empty OR
-                                // whitespace-only minibuffer buffer as empty so an
-                                // over-allocated idle echo area shrinks back to one
-                                // line; `mini_rows_used` already reflects any real
-                                // (multi-line) message, so a genuine tall message
-                                // is preserved by the `used < allocated` guard.
-                                let buf_id = neovm_core::buffer::BufferId(mini_params.buffer_id);
+                                // GNU `resize_mini_window` (src/xdisp.c:13399)
+                                // shrinks a grow-only mini-window only when its
+                                // displayed buffer is empty (`BEGV == ZV`).
+                                // Mirror that emptiness test on the buffer the
+                                // mini-window is actually displaying: the swapped
+                                // ` *Echo Area 0*` buffer for an inactive
+                                // mini-window (GNU `with_echo_area_buffer`), or
+                                // the window's own buffer when the minibuffer is
+                                // active. `mini_rows_used < allocated` already
+                                // bounds the genuine (multi-line) message case.
+                                let mini_window_id =
+                                    neovm_core::window::WindowId(mini_params.window_id as u64);
+                                let buf_id =
+                                    if !evaluator.minibuffer_window_is_active(mini_window_id) {
+                                        evaluator.ensure_echo_area_buffers();
+                                        evaluator
+                                            .buffer_manager()
+                                            .find_buffer_by_name(" *Echo Area 0*")
+                                            .unwrap_or(neovm_core::buffer::BufferId(
+                                                mini_params.buffer_id,
+                                            ))
+                                    } else {
+                                        neovm_core::buffer::BufferId(mini_params.buffer_id)
+                                    };
                                 let visible_region_empty = evaluator
                                     .buffer_manager()
                                     .get(buf_id)
-                                    .map(|b| {
-                                        b.buffer_substring_bytes_range(
-                                            b.accessible_emacs_byte_range(),
-                                        )
-                                        .iter()
-                                        .all(|byte| byte.is_ascii_whitespace())
-                                    })
+                                    .map(|b| b.accessible_emacs_byte_range().is_empty())
                                     .unwrap_or(true);
                                 let should_shrink = resize_mode.should_shrink(visible_region_empty);
 
@@ -935,6 +939,14 @@ impl LayoutEngine {
             header_line_height,
             tab_line_height,
         );
+        // GNU `resize_mini_window` clips the measured mini-window height to the
+        // `max-mini-window-height` ceiling.  Compute that ceiling in display
+        // rows and thread it into the geometry so the minibuffer walk measures
+        // its content unclamped up to (and no further than) the ceiling.
+        let max_mini_window_rows = {
+            let frame_rows = frame_params.height / char_h.max(1.0);
+            max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize
+        };
         let geometry_request = BufferTextWindowGeometryRequest::new(
             params,
             char_w,
@@ -942,16 +954,12 @@ impl LayoutEngine {
             mode_line_height,
             header_line_height,
             tab_line_height,
-        );
+        )
+        .with_max_mini_window_rows(max_mini_window_rows);
         let BufferTextWindowGeometryPlan {
             geometry,
             line_number_columns: lnum_cols,
-        } = geometry_request.into_window_plan(
-            &local_display_policy,
-            &buf_access,
-            BufferTextWindowContentRowsRequest::new(params, buf_id, frame_params.height, char_h),
-            evaluator,
-        );
+        } = geometry_request.into_window_plan(&local_display_policy, &buf_access);
 
         // GNU Emacs redisplay advances iterators until the visible window is
         // fully resolved; it does not stop at an arbitrary "rows * cols"

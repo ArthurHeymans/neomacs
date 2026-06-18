@@ -2,7 +2,6 @@ use super::*;
 use crate::display_row_geometry::DisplayRowMarker;
 use crate::types::WindowKind;
 use neomacs_display_protocol::types::Rect;
-use neovm_core::emacs_core::Context;
 use neovm_core::window::{FrameId, WindowId};
 
 fn window_params() -> WindowParams {
@@ -99,7 +98,7 @@ fn geometry_request_derives_text_area_and_matrix_rows() {
 
     assert_eq!(request.line_number_row_capacity(), 5);
 
-    let geometry = request.into_geometry(3, None);
+    let geometry = request.into_geometry(3);
 
     assert_eq!(geometry.text_x, 16.0);
     assert_eq!(geometry.text_y, 48.0);
@@ -123,45 +122,53 @@ fn geometry_request_only_forces_fractional_row_for_minibuffer() {
     params.bounds.height = 15.0;
     params.text_bounds.height = 15.0;
 
-    let ordinary = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
-        .into_geometry(0, None);
+    let ordinary =
+        BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
     assert_eq!(ordinary.max_rows, 0);
 
     params.kind = WindowKind::Minibuffer;
-    let minibuffer = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
-        .into_geometry(0, None);
+    let minibuffer =
+        BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
     assert_eq!(minibuffer.max_rows, 1);
 }
 
 #[test]
-fn geometry_request_uses_minibuffer_resize_rows_when_supplied() {
+fn geometry_request_measures_minibuffer_up_to_max_mini_window_rows() {
+    // GNU `resize_mini_window` measures the mini-window content unclamped and
+    // clips only to `max-mini-window-height`. `with_max_mini_window_rows` lets
+    // the walk emit up to that ceiling even when the window is one row tall.
     let mut params = window_params();
     params.kind = WindowKind::Minibuffer;
-    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0);
+    // One physical row tall (16px), but a ceiling of 3 rows.
+    params.bounds.height = 16.0;
+    params.text_bounds.height = 16.0;
+    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
+        .with_max_mini_window_rows(3);
 
-    let geometry = request.into_geometry(0, Some(2));
+    let geometry = request.into_geometry(0);
 
-    assert_eq!(geometry.max_rows, 2);
-    assert_eq!(geometry.text_matrix_rows, 2);
-    assert_eq!(geometry.mode_line_matrix_row, 2);
+    assert_eq!(geometry.max_rows, 3);
+    assert_eq!(geometry.text_matrix_rows, 3);
+    assert_eq!(geometry.mode_line_matrix_row, 3);
+    // The visibility bottom is lifted so the walk can emit all three rows even
+    // though the window is physically one row tall.
+    assert_eq!(geometry.visibility_bottom_y, geometry.text_y + 3.0 * 16.0);
 }
 
 #[test]
-fn content_rows_request_only_applies_to_minibuffer_windows() {
-    let evaluator = Context::new();
+fn geometry_request_does_not_apply_max_mini_window_rows_to_ordinary_windows() {
     let mut params = window_params();
+    params.bounds.height = 16.0;
+    params.text_bounds.height = 16.0;
+    let request = BufferTextWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
+        .with_max_mini_window_rows(5);
 
-    let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
-    assert_eq!(
-        BufferTextWindowContentRowsRequest::new(&params, buf_id, 80.0, 16.0).resolve(&evaluator),
-        None
-    );
+    let geometry = request.into_geometry(0);
 
-    params.kind = WindowKind::Minibuffer;
-    assert_eq!(
-        BufferTextWindowContentRowsRequest::new(&params, buf_id, 80.0, 16.0).resolve(&evaluator),
-        Some(1)
-    );
+    // Ordinary windows ignore the minibuffer ceiling and keep the physical
+    // row count and physical visibility bottom.
+    assert_eq!(geometry.max_rows, 1);
+    assert_eq!(geometry.visibility_bottom_y, geometry.text_y + 16.0);
 }
 
 #[test]
@@ -210,6 +217,7 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
         true,
         32.0,
         48.0,
+        80.0,
     )
     .into_setup(5, &walk_setup);
 
@@ -238,6 +246,7 @@ fn loop_request_context_carries_buffer_and_window_policy() {
         params.selected,
         32.0,
         48.0,
+        80.0,
     )
     .into_setup(5, &walk_setup);
     let context = BufferTextWindowLoopRequestContext::new(
@@ -320,6 +329,7 @@ fn tail_decoration_request_reports_rows_considered_for_decorations() {
         params.selected,
         32.0,
         80.0,
+        112.0,
     )
     .into_setup(5, &setup);
 
