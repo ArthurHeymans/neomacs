@@ -197,16 +197,18 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
     };
     let side_effects = (|| {
         let displayed_message = message_echo_result(ctx, &msg)?;
+        // GNU order (Fmessage): log to *Messages* and materialize the echo-area
+        // buffers FIRST, then echo. set_current_message mirrors the message into
+        // the ` *Echo Area 0*` buffer, so that buffer must already exist here.
+        message_dolog(ctx, &msg);
+        if matches!(displayed_message, EchoMessageSetResult::EchoArea(_)) && !ctx.noninteractive() {
+            ctx.ensure_echo_area_buffers();
+        }
         match &displayed_message {
             EchoMessageSetResult::EchoArea(displayed) => {
                 ctx.set_current_message(Some(displayed.clone()))
             }
             EchoMessageSetResult::LispHandled => ctx.discard_current_message_without_clear_hook(),
-        }
-        // GNU Emacs message_dolog: log to *Messages* buffer
-        message_dolog(ctx, &msg);
-        if matches!(displayed_message, EchoMessageSetResult::EchoArea(_)) && !ctx.noninteractive() {
-            ctx.ensure_echo_area_buffers();
         }
         tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes()));
         // GNU Emacs editfns.c: in batch mode, message prints to stderr with newline.

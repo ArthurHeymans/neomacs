@@ -7758,8 +7758,44 @@ impl Context {
     pub fn set_current_message(&mut self, message: Option<crate::heap_types::LispString>) {
         self.message_buf_print = false;
         if self.current_message != message {
+            self.mirror_message_to_echo_area_buffer(message.as_ref());
             self.current_message = message;
             self.invalidate_redisplay();
+        }
+    }
+
+    /// Mirror the current echo message into the ` *Echo Area 0*` buffer, the way
+    /// GNU `set_message_1` (`src/xdisp.c`) does: clear the echo buffer and insert
+    /// the message text at BEG. This keeps the echo-area buffer as the single
+    /// source of truth for the message text so redisplay can render it as
+    /// ordinary buffer text (the GNU `display_echo_area_1` model). Additive for
+    /// now — the layout still renders from `current_message` until the echo
+    /// reroute lands.
+    fn mirror_message_to_echo_area_buffer(
+        &mut self,
+        message: Option<&crate::heap_types::LispString>,
+    ) {
+        // GNU set_message_1 assumes the echo-area buffer already exists (it is
+        // materialized by the message-display setup AFTER logging to *Messages*);
+        // it does not create it. Mirror only when the buffer is present, so we
+        // never materialize the echo buffers out of order.
+        let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
+            return;
+        };
+        match message {
+            Some(message) => {
+                // GNU toggles the echo buffer's multibyteness to the message's
+                // before inserting (set_message_1).
+                let _ = self
+                    .buffers
+                    .set_buffer_multibyte_flag(id, message.is_multibyte());
+                let _ = self
+                    .buffers
+                    .replace_buffer_contents_lisp_string(id, message);
+            }
+            None => {
+                let _ = self.buffers.replace_buffer_contents(id, "");
+            }
         }
     }
 
@@ -7795,6 +7831,8 @@ impl Context {
             Some(message) => *message = message.concat(text),
             None => self.current_message = Some(text.clone()),
         }
+        let current = self.current_message.clone();
+        self.mirror_message_to_echo_area_buffer(current.as_ref());
         self.invalidate_redisplay();
     }
 
@@ -7830,6 +7868,7 @@ impl Context {
     pub(crate) fn discard_current_message_without_clear_hook(&mut self) {
         self.message_buf_print = false;
         if self.current_message.take().is_some() {
+            self.mirror_message_to_echo_area_buffer(None);
             self.invalidate_redisplay();
         }
     }
@@ -7886,6 +7925,9 @@ impl Context {
         }
 
         let changed = self.current_message.take().is_some();
+        if changed {
+            self.mirror_message_to_echo_area_buffer(None);
+        }
         if changed || called_clear_function {
             self.invalidate_redisplay();
         }

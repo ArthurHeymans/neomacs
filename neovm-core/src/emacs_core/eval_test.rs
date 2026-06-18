@@ -14978,3 +14978,39 @@ fn adjust_point_for_property_relocates_out_of_display_intangible_run_backward() 
         "backward into display-intangible run relocates to its start (GNU 31.0.50)"
     );
 }
+
+#[test]
+fn set_current_message_mirrors_into_echo_area_buffer() {
+    // GNU set_message_1: the echo message is written into the ` *Echo Area 0*`
+    // buffer so redisplay can render it as ordinary buffer text. Slice 8 step 1
+    // stages this additively; the layout still renders from current_message.
+    let mut ev = Context::new();
+    // The echo-area buffers are materialized by the message-display setup, not by
+    // set_current_message (GNU set_message_1 assumes they exist).
+    ev.ensure_echo_area_buffers();
+    let message = crate::emacs_core::builtins::runtime_string_to_lisp_string("hello echo", true);
+    ev.set_current_message(Some(message));
+
+    let id = ev
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo-area buffer should exist");
+    assert_eq!(
+        ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .full_text_string(),
+        "hello echo",
+        "echo buffer mirrors the message text"
+    );
+
+    ev.set_current_message(None);
+    assert_eq!(
+        ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .full_text_string(),
+        "",
+        "echo buffer is cleared when the message is cleared"
+    );
+}
