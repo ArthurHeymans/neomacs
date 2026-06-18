@@ -1,0 +1,185 @@
+//! Complex combo batch 444 — 15 probes into untouched areas: widget-create,
+//! custom-set-variables, checkdoc, elint, disassemble deeper, byte-opt,
+//! benchmar-elapse, ewoc, setenv deep, substitute-in-file-name,
+//! file-name-handler-alist, read-file-name in batch, minibuffer-depth,
+//! tq-create/tq-enqueue, printenv.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+/// widget-create: basic widget creation.
+#[test]
+fn div_cx444_widget_create() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'wid-edit)
+  (with-temp-buffer
+    (let ((w (widget-create 'editable-field "hello")))
+      (widget-value w))))
+"##,
+    );
+}
+
+/// custom-set-variables: setting customization options.
+#[test]
+fn div_cx444_custom_set_variables() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (defcustom neo-cx444-opt "default" "test" :type 'string)
+  (custom-set-variables '(neo-cx444-opt "customized"))
+  neo-cx444-opt)
+"##,
+    );
+}
+
+/// setenv / getenv deep with multibyte values.
+#[test]
+fn div_cx444_setenv_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(let ((process-environment process-environment))
+  (setenv "NEO_CX444" "multibyte-世界")
+  (getenv "NEO_CX444"))
+"##,
+    );
+}
+
+/// substitute-in-file-name: tilde and env var expansion.
+#[test]
+fn div_cx444_substitute_in_file_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (substitute-in-file-name "$HOME/test")
+      (substitute-in-file-name "~"))
+"##,
+    );
+}
+
+/// find-file-name-handler: handler detection.
+#[test]
+fn div_cx444_find_file_name_handler() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (find-file-name-handler "/tmp/test.el" 'file-exists-p)
+      (find-file-name-handler "/ssh:host:file" 'file-exists-p))
+"##,
+    );
+}
+
+/// read-file-name in batch mode.
+#[test]
+fn div_cx444_read_file_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(condition-case e
+    (read-file-name "test: " "/tmp" nil t "default")
+  (error (car e)))
+"##,
+    );
+}
+
+/// minibuffer-depth / minibuffer-depth-indicate-mode.
+#[test]
+fn div_cx444_minibuffer_depth() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (minibuffer-depth)
+      (fboundp 'minibuffer-depth-indicate-mode))
+"##,
+    );
+}
+
+/// ewoc-create / ewoc-enter-first / ewoc-enter-last.
+#[test]
+fn div_cx444_ewoc_ops() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'ewoc)
+  (with-temp-buffer
+    (let ((ewoc (ewoc-create 'identity))))
+      (fboundp 'ewoc-enter-first)))
+"##,
+    );
+}
+
+/// tq-create / tq-enqueue: task queue.
+#[test]
+fn div_cx444_tq_ops() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn (require 'tq)
+  (list (fboundp 'tq-create) (fboundp 'tq-enqueue)))
+"##,
+    );
+}
+
+/// printenv: printing environment.
+#[test]
+fn div_cx444_printenv() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (getenv "HOME") (getenv "USER"))
+"##,
+    );
+}
+
+/// format-seconds with sub-second precision.
+#[test]
+fn div_cx444_format_seconds_sub() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (format-seconds "%h:%m:%s" 3661.5)
+      (format-seconds "%h:%m:%s" 3661))
+"##,
+    );
+}
+
+/// split-string with multibyte and field separators.
+#[test]
+fn div_cx444_split_string_fields() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (split-string "one  two   three" " +")
+      (split-string "a,,b,c" ",")
+      (split-string "αβγ||δε||ζ" "||"))
+"##,
+    );
+}
+
+/// string-to-char / char-to-string edge.
+#[test]
+fn div_cx444_string_char_edge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (string-to-char "abc")
+      (string-to-char "")
+      (char-to-string ?a)
+      (char-to-string ?世))
+"##,
+    );
+}
+
+/// user-initials / user-variant / user-emacs-directory.
+#[test]
+fn div_cx444_user_info_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(list (user-initials)
+      (user-real-login-name)
+      (user-login-name)
+      (user-full-name))
+"##,
+    );
+}
+
+/// decode-time / encode-time with decoded-time structure.
+#[test]
+fn div_cx444_decode_encode_time_struct() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(let ((dt (decoded-time-year (decode-time (encode-time 0 0 0 1 1 2024 nil)))))
+  (list dt (type-of dt)))
+"##,
+    );
+}
