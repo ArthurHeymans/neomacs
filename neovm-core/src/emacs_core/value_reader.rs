@@ -1554,6 +1554,18 @@ impl<'a> Reader<'a> {
                 restore_scratch_gc_roots(saved);
                 Ok(result)
             }
+            x if x == b'_' as u32 => {
+                // #_NAME reads NAME as a literal symbol, bypassing
+                // `read-symbol-shorthands` and number/t/nil interpretation
+                // (GNU lread.c). So `#_foo` -> foo, `#_2` -> the symbol named "2".
+                self.bump();
+                let token = self.read_symbol_token();
+                if token.bytes.is_empty() {
+                    return Err(self.error("#_"));
+                }
+                let name = token.to_lisp_string();
+                Ok(Value::from_sym_id(intern_lisp_string(&name)))
+            }
             x if x == b'(' as u32 => {
                 // #("string" START END (PROPS...) ...) — propertized string.
                 //
@@ -2142,6 +2154,19 @@ impl<'a> Reader<'a> {
                 }
                 if token_text == "nil" {
                     return Ok(Value::NIL);
+                }
+
+                // A bare `.` is the symbol `.` only when it directly precedes a
+                // closing delimiter (e.g. `(a .)` => `(a \.)`, matching GNU
+                // lread.c which does not treat `)`/`]` as dot terminators).
+                // Otherwise — at top level (`(read ".")`) or as a dotted
+                // separator with no following element — GNU signals
+                // invalid-read-syntax instead of reading the symbol `\.`.
+                if token_text == "." {
+                    match self.current_code() {
+                        Some(c) if c == b')' as u32 || c == b']' as u32 => {}
+                        _ => return Err(self.error(".")),
+                    }
                 }
 
                 // Emacs reader shorthand: bare ## reads as the symbol with empty name.
