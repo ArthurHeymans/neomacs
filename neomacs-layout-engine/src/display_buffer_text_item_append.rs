@@ -12,7 +12,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
+    DisplaySourceAppendRenderPolicy,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -20,7 +20,7 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
-use crate::display_row_source_append::DisplayRowSourceAppendOperation;
+use crate::display_row_source_append::DisplayRowSingleItemAppendContext;
 use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, FaceScanCheckpoint, SpecialTextRowOverflowDecision,
@@ -121,16 +121,15 @@ impl BufferTextSourceNaturalAdvanceRequest {
         position: DisplayRowPosition,
         source_item: Option<&DisplayItem>,
     ) -> Option<f32> {
+        let append_context = DisplayRowSingleItemAppendContext::new(base_face, face_id, frame);
         if let Some(item) = source_item {
-            let kind = display_item_append_kind(item, self.source_item().append_kind());
             let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-            return Some(
-                DisplayRowSourceAppendOperation::for_single_item(
-                    item, base_face, face_id, frame, position, kind,
-                )
-                .measure_single_item_to_text_row(state, item.clone(), &mut render_policy)?
-                .metrics
-                .width_px,
+            return append_context.measure_item_width_with_policy(
+                state,
+                item,
+                position,
+                self.source_item().append_kind(),
+                &mut render_policy,
             );
         }
 
@@ -143,13 +142,12 @@ impl BufferTextSourceNaturalAdvanceRequest {
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        Some(
-            DisplayRowSourceAppendOperation::for_single_item(
-                &item, base_face, face_id, frame, position, kind,
-            )
-            .measure_single_item_to_text_row(state, item, &mut render_policy)?
-            .metrics
-            .width_px,
+        append_context.measure_item_width_with_policy(
+            state,
+            &item,
+            position,
+            kind,
+            &mut render_policy,
         )
     }
 
@@ -204,20 +202,6 @@ impl BufferTextSourceRangeItemAppendRequest {
 
     pub(crate) fn into_item(self) -> DisplayItem {
         self.item
-    }
-}
-
-fn display_item_append_kind(
-    item: &DisplayItem,
-    fallback: DisplayRowAppendKind,
-) -> DisplayRowAppendKind {
-    match &item.kind {
-        DisplayItemKind::TextRun(run) if run.text.as_ref() == "\t" => DisplayRowAppendKind::Tab,
-        DisplayItemKind::TextRun(_) => DisplayRowAppendKind::SourceText,
-        DisplayItemKind::SourceMappedText(_) => DisplayRowAppendKind::SourceMappedText,
-        DisplayItemKind::ControlChar { .. } => DisplayRowAppendKind::ControlChar,
-        DisplayItemKind::Glyphless(_) => DisplayRowAppendKind::Glyphless,
-        _ => fallback,
     }
 }
 
@@ -514,15 +498,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         let mut render_policy = source_text.append_render_policy();
-        DisplayRowSourceAppendOperation::for_single_item(
-            &item,
-            self.active_face.resolved_face(),
-            face_id,
-            frame,
-            position,
-            kind,
-        )
-        .render_single_item_to_text_row_and_emit(state, item, &mut render_policy)
+        DisplayRowSingleItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
+            .render_item_with_policy(state, item, position, kind, &mut render_policy)
     }
 
     fn append_source_display_item_to_text_row(
@@ -536,16 +513,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let face_id = self.active_face.face_id();
-        let kind = display_item_append_kind(&item, fallback_kind);
-        DisplayRowSourceAppendOperation::for_single_item(
-            &item,
-            self.active_face.resolved_face(),
-            face_id,
-            frame,
-            position,
-            kind,
-        )
-        .render_single_item_to_text_row_and_emit(state, item, render_policy)
+        DisplayRowSingleItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
+            .render_item_with_policy(state, item, position, fallback_kind, render_policy)
     }
 
     fn append_source_char_plan_to_text_row(
@@ -1296,6 +1265,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         }
     }
 
+    fn single_item_context(&self) -> DisplayRowSingleItemAppendContext<'a> {
+        DisplayRowSingleItemAppendContext::new(self.base_face, self.face_id, self.frame.clone())
+    }
+
     pub(crate) fn append_source_request_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
@@ -1310,16 +1283,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-        DisplayRowSourceAppendOperation::for_single_item(
-            &item,
-            self.base_face,
-            self.face_id,
-            self.frame.clone(),
-            position,
-            kind,
-        )
-        .render_single_item_to_text_row_and_emit(state, item, &mut render_policy)
+        self.single_item_context()
+            .render_item_naturally(state, item, position, kind)
     }
 
     pub(crate) fn append_display_item_to_text_row_and_emit(
@@ -1329,17 +1294,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let kind = display_item_append_kind(&item, fallback_kind);
-        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-        DisplayRowSourceAppendOperation::for_single_item(
-            &item,
-            self.base_face,
-            self.face_id,
-            self.frame.clone(),
-            position,
-            kind,
-        )
-        .render_single_item_to_text_row_and_emit(state, item, &mut render_policy)
+        self.single_item_context()
+            .render_item_naturally(state, item, position, fallback_kind)
     }
 
     pub(crate) fn measure_source_request_width_to_text_row(
@@ -1356,20 +1312,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         )?;
         let kind = append_item.append_kind();
         let item = append_item.into_item();
-        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        Some(
-            DisplayRowSourceAppendOperation::for_single_item(
-                &item,
-                self.base_face,
-                self.face_id,
-                self.frame.clone(),
-                position,
-                kind,
-            )
-            .measure_single_item_to_text_row(state, item, &mut render_policy)?
-            .metrics
-            .width_px,
-        )
+        self.single_item_context()
+            .measure_item_width_naturally(state, &item, position, kind)
     }
 
     pub(crate) fn measure_display_item_width_to_text_row(
@@ -1379,20 +1323,11 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<f32> {
-        let kind = display_item_append_kind(item, fallback_kind);
-        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        Some(
-            DisplayRowSourceAppendOperation::for_single_item(
-                item,
-                self.base_face,
-                self.face_id,
-                self.frame.clone(),
-                position,
-                kind,
-            )
-            .measure_single_item_to_text_row(state, item.clone(), &mut render_policy)?
-            .metrics
-            .width_px,
+        self.single_item_context().measure_item_width_naturally(
+            state,
+            item,
+            position,
+            fallback_kind,
         )
     }
 

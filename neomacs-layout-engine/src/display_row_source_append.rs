@@ -1,6 +1,6 @@
 use crate::display_buffer_text_render::SyntheticTextSource;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::{DisplayItem, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 #[cfg(test)]
 use crate::display_row::DisplayRowRenderStop;
 #[cfg(test)]
@@ -9,7 +9,7 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowCurrentTextMeasureState,
     DisplayRowCurrentTextRenderState, DisplayRowGeometry, DisplayRowRenderBounds,
     DisplayRowRenderPolicy, DisplayRowSourceRenderRequest, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState, NaturalDisplayRowAppendRenderPolicy,
+    DisplayRowSourceState, DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
     measure_display_item_source_against_current_text_row,
     render_display_item_source_into_current_text_row_and_emit,
 };
@@ -270,6 +270,99 @@ pub(crate) struct DisplayRowSourceAppendOperation<'face> {
     kind: DisplayRowAppendKind,
 }
 
+#[derive(Clone)]
+pub(crate) struct DisplayRowSingleItemAppendContext<'face> {
+    base_face: &'face ResolvedFace,
+    fallback_face_id: u32,
+    frame: DisplayRowAppendFrame,
+}
+
+impl<'face> DisplayRowSingleItemAppendContext<'face> {
+    pub(crate) fn new(
+        base_face: &'face ResolvedFace,
+        fallback_face_id: u32,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            base_face,
+            fallback_face_id,
+            frame,
+        }
+    }
+
+    pub(crate) fn render_item_with_policy<P: DisplayRowRenderPolicy>(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let kind = display_item_append_kind(&item, fallback_kind);
+        DisplayRowSourceAppendOperation::for_single_item(
+            &item,
+            self.base_face,
+            self.fallback_face_id,
+            self.frame.clone(),
+            position,
+            kind,
+        )
+        .render_single_item_to_text_row_and_emit(state, item, render_policy)
+    }
+
+    pub(crate) fn render_item_naturally(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+        self.render_item_with_policy(state, item, position, fallback_kind, &mut render_policy)
+    }
+
+    pub(crate) fn measure_item_width_with_policy<P: DisplayRowRenderPolicy>(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: &DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<f32> {
+        let kind = display_item_append_kind(item, fallback_kind);
+        Some(
+            DisplayRowSourceAppendOperation::for_single_item(
+                item,
+                self.base_face,
+                self.fallback_face_id,
+                self.frame.clone(),
+                position,
+                kind,
+            )
+            .measure_single_item_to_text_row(state, item.clone(), render_policy)?
+            .metrics
+            .width_px,
+        )
+    }
+
+    pub(crate) fn measure_item_width_naturally(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: &DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+    ) -> Option<f32> {
+        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+        self.measure_item_width_with_policy(
+            state,
+            item,
+            position,
+            fallback_kind,
+            &mut render_policy,
+        )
+    }
+}
+
 impl<'face> DisplayRowSourceAppendOperation<'face> {
     pub(crate) fn new(
         base_face: &'face ResolvedFace,
@@ -410,6 +503,20 @@ fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     match face {
         RenderFaceRef::FaceId(face_id) => face_id,
         RenderFaceRef::Inherit => fallback,
+    }
+}
+
+pub(crate) fn display_item_append_kind(
+    item: &DisplayItem,
+    fallback: DisplayRowAppendKind,
+) -> DisplayRowAppendKind {
+    match &item.kind {
+        DisplayItemKind::TextRun(run) if run.text.as_ref() == "\t" => DisplayRowAppendKind::Tab,
+        DisplayItemKind::TextRun(_) => DisplayRowAppendKind::SourceText,
+        DisplayItemKind::SourceMappedText(_) => DisplayRowAppendKind::SourceMappedText,
+        DisplayItemKind::ControlChar { .. } => DisplayRowAppendKind::ControlChar,
+        DisplayItemKind::Glyphless(_) => DisplayRowAppendKind::Glyphless,
+        _ => fallback,
     }
 }
 

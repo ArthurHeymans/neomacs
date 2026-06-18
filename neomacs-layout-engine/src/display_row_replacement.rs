@@ -7,7 +7,6 @@ use crate::display_item::{DisplayItem, DisplayItemKind};
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
-    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row_append_context::{
     DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
@@ -19,7 +18,9 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 #[cfg(test)]
 use crate::display_row_lisp_string::LispStringSourceId;
-use crate::display_row_source_append::DisplayRowSourceAppendOperation;
+use crate::display_row_source_append::{
+    DisplayRowSingleItemAppendContext, DisplayRowSourceAppendOperation,
+};
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
@@ -785,15 +786,12 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         position: DisplayRowPosition,
     ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
         let item = item.into_display_item(self.replacement_source, self.face_id);
-        let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-        DisplayRowSourceAppendOperation::for_single_item(
-            &item,
-            self.base_face,
-            self.face_id,
-            self.frame.clone(),
-            position,
-            DisplayRowAppendKind::DisplayReplacement,
-        )
-        .render_single_item_to_text_row_and_emit(state, item, &mut render_policy)
+        DisplayRowSingleItemAppendContext::new(self.base_face, self.face_id, self.frame.clone())
+            .render_item_naturally(
+                state,
+                item,
+                position,
+                DisplayRowAppendKind::DisplayReplacement,
+            )
     }
 }
