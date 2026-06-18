@@ -6,9 +6,9 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
-use crate::display_cursor::{
-    CursorVisualColumnResolutionContext, CursorVisualColumnResolutionRequest,
-};
+use crate::display_cursor::CursorVisualColumnResolutionContext;
+#[cfg(test)]
+use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
@@ -711,7 +711,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
+    pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
         CursorVisualColumnResolutionContext::new(
             self.current_window_id,
             self.current_pixel_bounds,
@@ -719,6 +719,11 @@ impl GlyphMatrixBuilder {
         )
     }
 
+    pub(crate) fn store_phys_cursor(&mut self, cursor: PhysCursor) {
+        self.phys_cursor = Some(cursor);
+    }
+
+    #[cfg(test)]
     pub(crate) fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
         let placement = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
@@ -740,7 +745,7 @@ impl GlyphMatrixBuilder {
         // window output no longer installs a redundant per-window CursorItem
         // for it (see the `!cursor.selected` guard around install_cursor), so
         // there is nothing to keep in sync here.
-        self.phys_cursor = Some(cursor);
+        self.store_phys_cursor(cursor);
     }
 
     pub(crate) fn set_glyph_row_resolved_phys_cursor(&mut self, cursor: PhysCursor) {

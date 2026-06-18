@@ -8,6 +8,7 @@
 use super::display_status_line::DisplayRowOutputProgress;
 use crate::composition::last_text_cluster_tail_in_row;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
+use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
@@ -790,20 +791,27 @@ pub(crate) fn publish_text_window_cursor(
             color: cursor.color,
         });
     }
+    let mut phys_cursor = cursor.phys_cursor();
+    let cursor_col = if cursor.selected && !cursor.glyph_row_resolved {
+        if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
+            .resolve_phys_cursor_placement(builder.cursor_visual_column_context())
+        {
+            placement.apply_to(&mut phys_cursor);
+        }
+        phys_cursor.col
+    } else {
+        cursor.col()
+    };
     builder.install_row_lifecycle(MatrixRowLifecycleRequest::CursorAt(
         MatrixRowCursorRequest {
             row: cursor.row(),
-            col: cursor.col(),
+            col: cursor_col,
             style: cursor.style,
         },
     ));
     output_emitter.set_phys_cursor(cursor.window_snapshot());
     if cursor.selected {
-        if cursor.glyph_row_resolved {
-            builder.set_glyph_row_resolved_phys_cursor(cursor.phys_cursor());
-        } else {
-            builder.set_phys_cursor(cursor.phys_cursor());
-        }
+        builder.store_phys_cursor(phys_cursor);
     }
 }
 

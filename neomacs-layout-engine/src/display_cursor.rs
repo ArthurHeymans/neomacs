@@ -213,6 +213,7 @@ impl CursorVisualColumnResolutionRequest {
 }
 
 impl ResolvedPhysCursorPlacement {
+    #[cfg(test)]
     pub(crate) fn col(self) -> u16 {
         self.col
     }
