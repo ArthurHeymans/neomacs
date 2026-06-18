@@ -3250,18 +3250,207 @@ pub(crate) fn builtin_lookup_image_map(args: Vec<Value>) -> EvalResult {
 /// (current-bidi-paragraph-direction &optional BUFFER) -> symbol
 ///
 /// Get the bidi paragraph direction. Returns the symbol 'left-to-right.
-pub(crate) fn builtin_current_bidi_paragraph_direction(args: Vec<Value>) -> EvalResult {
-    expect_args_range("current-bidi-paragraph-direction", &args, 0, 1)?;
-    if let Some(bufferish) = args.first() {
-        if !bufferish.is_nil() && !bufferish.is_buffer() {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("bufferp"), *bufferish],
-            ));
+/// A UTF-8 lead byte / ASCII byte (GNU `CHAR_HEAD_P`): not a `0x80..=0xBF`
+/// continuation byte.
+fn bidi_is_char_head(byte: u8) -> bool {
+    !(0x80..=0xBF).contains(&byte)
+}
+
+/// Byte position of the beginning of the line containing `pos`.
+fn bidi_line_bol(buf: &Buffer, mut pos: usize, begv: usize) -> usize {
+    while pos > begv {
+        if buf.emacs_byte_at_pos(EmacsBytePos::new(pos - 1)) == Some(b'\n') {
+            break;
+        }
+        pos -= 1;
+    }
+    pos
+}
+
+/// Byte position of the newline (or ZV) ending the line containing `pos`.
+fn bidi_line_eol(buf: &Buffer, mut pos: usize, zv: usize) -> usize {
+    while pos < zv {
+        if buf.emacs_byte_at_pos(EmacsBytePos::new(pos)) == Some(b'\n') {
+            break;
+        }
+        pos += 1;
+    }
+    pos
+}
+
+/// Whether `[bol, eol)` contains only whitespace — a bidi paragraph separator
+/// (the default `bidi-paragraph-separate-re` is an empty/whitespace-only line).
+fn bidi_line_blank(buf: &Buffer, bol: usize, eol: usize) -> bool {
+    let mut b = bol;
+    while b < eol {
+        match buf.emacs_byte_at_pos(EmacsBytePos::new(b)) {
+            Some(b' ') | Some(b'\t') | Some(0x0c) => b += 1,
+            _ => return false,
         }
     }
-    // Return 'left-to-right
-    Ok(Value::symbol("left-to-right"))
+    true
+}
+
+/// Start (byte) of the bidi paragraph containing `point`, mirroring GNU's
+/// `bidi_paragraph_init` / `Fcurrent_bidi_paragraph_direction`: from point
+/// (stepped back from end of buffer, and off a trailing whitespace-only line),
+/// walk back across consecutive non-blank lines to the line after the previous
+/// blank line (or BEGV). A single newline does not separate paragraphs.
+fn bidi_paragraph_start(buf: &Buffer, point: usize, begv: usize, zv: usize) -> usize {
+    let mut pos = point;
+    if pos >= zv && pos > begv {
+        pos -= 1;
+        while pos > begv
+            && !bidi_is_char_head(buf.emacs_byte_at_pos(EmacsBytePos::new(pos)).unwrap_or(0))
+        {
+            pos -= 1;
+        }
+    }
+    let mut start = bidi_line_bol(buf, pos, begv);
+    // If point sits on a blank line, use the previous non-blank line's paragraph.
+    let eol = bidi_line_eol(buf, start, zv);
+    if start > begv && bidi_line_blank(buf, start, eol) {
+        while start > begv {
+            let prev_bol = bidi_line_bol(buf, start - 1, begv);
+            let blank = bidi_line_blank(buf, prev_bol, start - 1);
+            start = prev_bol;
+            if !blank {
+                break;
+            }
+        }
+    }
+    // Walk back to the paragraph start over consecutive non-blank lines.
+    while start > begv {
+        let prev_eol = start - 1;
+        let prev_bol = bidi_line_bol(buf, prev_eol, begv);
+        if bidi_line_blank(buf, prev_bol, prev_eol) {
+            break;
+        }
+        start = prev_bol;
+    }
+    start
+}
+
+fn bidi_buffer_var(ctx: &super::eval::Context, buf_id: BufferId, name: &str) -> Value {
+    // `bidi-display-reordering` / `bidi-paragraph-direction` are per-buffer slot
+    // variables (BUFFER_OBJFWD), so read the slot directly (like indent.rs),
+    // falling back to a buffer-local binding then the global value.
+    if let Some(buf) = ctx.buffers.get(buf_id) {
+        if let Some(info) = crate::buffer::buffer::lookup_buffer_slot(name) {
+            return buf.slots[info.offset.index()];
+        }
+        if let Some(value) = buf.get_buffer_local(name) {
+            return value;
+        }
+    }
+    ctx.obarray
+        .symbol_value(name)
+        .copied()
+        .unwrap_or(Value::NIL)
+}
+
+pub(crate) fn builtin_current_bidi_paragraph_direction(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("current-bidi-paragraph-direction", &args, 0, 1)?;
+    let ltr = Value::symbol("left-to-right");
+    let rtl = Value::symbol("right-to-left");
+
+    let buf_id = match args.first() {
+        Some(b) if b.is_buffer() => match b.as_buffer_id() {
+            Some(id) => id,
+            None => return Ok(ltr),
+        },
+        Some(b) if !b.is_nil() => {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("bufferp"), *b],
+            ));
+        }
+        _ => match ctx.buffers.current_buffer_id() {
+            Some(id) => id,
+            None => return Ok(ltr),
+        },
+    };
+
+    // GNU returns left-to-right when reordering is off or the buffer is unibyte.
+    let multibyte = ctx
+        .buffers
+        .get(buf_id)
+        .map(|b| b.get_multibyte())
+        .unwrap_or(false);
+    if bidi_buffer_var(ctx, buf_id, "bidi-display-reordering").is_nil() || !multibyte {
+        return Ok(ltr);
+    }
+    // An explicit `bidi-paragraph-direction` wins.
+    let para_dir = bidi_buffer_var(ctx, buf_id, "bidi-paragraph-direction");
+    if !para_dir.is_nil() {
+        return Ok(para_dir);
+    }
+
+    // Auto-detect: scan the paragraph at point for the first strong character.
+    let (begv, zv, point) = {
+        let Some(buf) = ctx.buffers.get(buf_id) else {
+            return Ok(ltr);
+        };
+        let acc = buf.accessible_emacs_byte_region();
+        (
+            acc.start().get(),
+            acc.end().get(),
+            buf.point_emacs_byte_pos().get(),
+        )
+    };
+    let para_start = {
+        let Some(buf) = ctx.buffers.get(buf_id) else {
+            return Ok(ltr);
+        };
+        bidi_paragraph_start(buf, point, begv, zv)
+    };
+
+    let l = intern("L");
+    let r = intern("R");
+    let al = intern("AL");
+    let mut p = para_start;
+    let mut at_bol = true;
+    while p < zv {
+        let (code, len) = {
+            let Some(buf) = ctx.buffers.get(buf_id) else {
+                break;
+            };
+            // A blank line after the paragraph start ends the paragraph.
+            if at_bol && p > para_start {
+                let eol = bidi_line_eol(buf, p, zv);
+                if bidi_line_blank(buf, p, eol) {
+                    break;
+                }
+            }
+            match buf.char_code_after_emacs_byte_pos(EmacsBytePos::new(p)) {
+                Some(c) => {
+                    let len = buf
+                        .char_after_emacs_byte_len(EmacsBytePos::new(p))
+                        .map(|x| x.get().max(1))
+                        .unwrap_or(1);
+                    (c, len)
+                }
+                None => break,
+            }
+        };
+        if code != b'\n' as u32 {
+            let cls = ctx.funcall_general(
+                Value::symbol("get-char-code-property"),
+                vec![Value::fixnum(code as i64), Value::symbol("bidi-class")],
+            )?;
+            match cls.as_symbol_id() {
+                Some(s) if s == l => return Ok(ltr),
+                Some(s) if s == r || s == al => return Ok(rtl),
+                _ => {}
+            }
+        }
+        at_bol = code == b'\n' as u32;
+        p += len;
+    }
+    Ok(ltr)
 }
 
 /// `(bidi-resolved-levels &optional PARAGRAPH-DIRECTION)` -> nil

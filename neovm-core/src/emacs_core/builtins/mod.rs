@@ -9207,7 +9207,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "current-bidi-paragraph-direction",
-        |_ctx, args| super::xdisp::builtin_current_bidi_paragraph_direction(args),
+        |ctx, args| super::xdisp::builtin_current_bidi_paragraph_direction(ctx, args),
         0,
         Some(1),
     );
