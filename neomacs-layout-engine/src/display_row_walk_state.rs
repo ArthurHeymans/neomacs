@@ -674,6 +674,7 @@ impl TextPropertyScanCheckpoints {
         self.display_next.min(accessible_end)
     }
 
+    #[cfg(test)]
     pub(crate) fn display_next(self) -> i64 {
         self.display_next
     }

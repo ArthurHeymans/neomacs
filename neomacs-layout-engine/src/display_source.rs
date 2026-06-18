@@ -1554,15 +1554,7 @@ pub(crate) struct BufferDisplayPropertyTextSourceEvent<'a> {
     anchor_charpos: CharPos0,
     anchor_bytepos: EmacsBytePos,
     source_text: &'a [u8],
-    next_change: i64,
     skip_to: i64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferDisplayPropertyTextModifierAction {
-    raise_offset_px: Option<f32>,
-    height_factor: Option<f32>,
-    next_change: i64,
 }
 
 impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
@@ -1573,7 +1565,6 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
         text: &'a [u8],
         charpos: i64,
         byte_idx: usize,
-        next_change: i64,
         skip_to: i64,
     ) -> Self {
         Self {
@@ -1581,7 +1572,6 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
             anchor_charpos: CharPos0::new(charpos.max(0) as usize),
             anchor_bytepos: EmacsBytePos::new(text_start_byte + byte_idx),
             source_text: text.get(byte_idx..).unwrap_or(&[]),
-            next_change,
             skip_to,
         }
     }
@@ -1592,7 +1582,6 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
         anchor_charpos: CharPos0,
         anchor_bytepos: EmacsBytePos,
         source_text: &'a [u8],
-        next_change: i64,
         skip_to: i64,
     ) -> Self {
         Self {
@@ -1600,7 +1589,6 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
             anchor_charpos,
             anchor_bytepos,
             source_text,
-            next_change,
             skip_to,
         }
     }
@@ -1621,59 +1609,8 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
         self.source_text
     }
 
-    pub(crate) fn next_change(self) -> i64 {
-        self.next_change
-    }
-
     pub(crate) fn skip_to(self) -> i64 {
         self.skip_to
-    }
-}
-
-impl BufferDisplayPropertyTextModifierAction {
-    #[cfg(test)]
-    pub(crate) fn new_for_test(
-        raise_offset_px: Option<f32>,
-        height_factor: Option<f32>,
-        next_change: i64,
-    ) -> Self {
-        Self {
-            raise_offset_px,
-            height_factor,
-            next_change,
-        }
-    }
-
-    pub(crate) fn for_display_property(
-        display_property: &DisplayPropertyClassification,
-        row_height: f32,
-        next_change: i64,
-    ) -> Option<Self> {
-        let modifiers = display_property.modifiers();
-        let raise_offset_px = modifiers.raise.map(|factor| -(factor * row_height));
-        let height_factor = modifiers
-            .height
-            .filter(|factor| factor.is_finite() && *factor > 0.0);
-        (raise_offset_px.is_some() || height_factor.is_some()).then_some(Self {
-            raise_offset_px,
-            height_factor,
-            next_change,
-        })
-    }
-
-    #[cfg(test)]
-    pub(crate) fn raise_offset_px(self) -> Option<f32> {
-        self.raise_offset_px
-    }
-
-    #[cfg(test)]
-    pub(crate) fn height_factor(self) -> Option<f32> {
-        self.height_factor
-    }
-
-    #[cfg(test)]
-    pub(crate) fn next_change(self) -> i64 {
-        self.next_change
     }
 }
 

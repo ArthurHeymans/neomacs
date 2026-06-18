@@ -61,14 +61,14 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::*;
 use crate::display_source::{
-    BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,
-    BufferDisplayReplacementStringRequest, BufferTextSourceAdvanceRequest,
-    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementSourceItem, DisplayReplacementAppendItem, DisplayReplacementBox,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
-    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementStringRequest,
+    BufferTextSourceAdvanceRequest, BufferTextSourceSpecialDisplay,
+    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
+    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::font_metrics::FontMetricsService;
@@ -8094,7 +8094,6 @@ fn test_display_property_replacement_resolve_context<'a>(
             EmacsBytePos::new(4),
             b"x",
             0,
-            0,
         ),
         active_face,
         font_metrics,
@@ -8587,7 +8586,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
 }
 
 #[test]
-fn buffer_display_property_render_context_returns_modifier_action_from_checkpoint() {
+fn buffer_display_property_render_context_ignores_modifier_only_checkpoint() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -8674,19 +8673,15 @@ fn buffer_display_property_render_context_returns_modifier_action_from_checkpoin
         3,
     );
 
-    match action {
-        BufferDisplayPropertyTextAppendAction::Modifiers(modifiers) => {
-            assert_eq!(modifiers.raise_offset_px(), Some(-8.0));
-            assert_eq!(modifiers.height_factor(), None);
-            assert_eq!(modifiers.next_change(), 1);
-        }
-        _ => panic!("expected modifier action"),
-    }
+    assert!(matches!(
+        action,
+        BufferDisplayPropertyTextAppendAction::None
+    ));
     assert_eq!(checkpoints.display_next(), 1);
 }
 
 #[test]
-fn buffer_display_property_checkpoint_render_request_applies_modifier_and_resolves_face() {
+fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_display_property() {
     let mut context = RowTransitionTestContext::new("display-property-checkpoint-request");
     let buf_id = context
         .eval
@@ -8807,43 +8802,6 @@ fn buffer_display_property_checkpoint_render_request_applies_modifier_and_resolv
     assert_eq!(byte_idx, 0);
     assert_eq!(charpos, 0);
     assert_eq!(checkpoints.display_next(), 1);
-}
-
-#[test]
-fn buffer_display_property_append_action_applies_modifier_walk_state() {
-    let action = BufferDisplayPropertyTextAppendAction::Modifiers(
-        BufferDisplayPropertyTextModifierAction::new_for_test(Some(-4.0), Some(1.5), 11),
-    );
-    let active_face = test_active_face_state(7, 8.0);
-    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let mut cursor_info = CursorCaptureState::new();
-    let mut face_scan = FaceScanCheckpoint::initial();
-    *face_scan.next_check_mut() = 99;
-    let mut byte_idx = 1;
-    let mut charpos = 1;
-    let mut x = 4.0;
-    let mut col = 1;
-
-    let walk_outcome = action.apply_to_buffer_walk_state(
-        b"abc",
-        &mut byte_idx,
-        &mut charpos,
-        &mut x,
-        &mut col,
-        &mut cursor_info,
-        &active_face,
-        &geometry,
-        2,
-    );
-
-    assert_eq!(walk_outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
-    assert!(!walk_outcome.should_continue_buffer_walk());
-    assert_eq!(byte_idx, 1);
-    assert_eq!(charpos, 1);
-    assert_eq!(x, 4.0);
-    assert_eq!(col, 1);
-    assert!(cursor_info.captured().is_none());
-    assert!(!face_scan.should_resolve_at(0));
 }
 
 #[test]

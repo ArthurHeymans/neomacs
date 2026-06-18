@@ -53,10 +53,10 @@ use crate::display_row_walk_state::{
     WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{
-    BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,
-    BufferDisplayReplacementSource, DisplayPropertyReplacementSourceInputs,
-    DisplayPropertyReplacementSourceItem, DisplayPropertyReplacementSourceMetrics,
-    DisplayReplacementMediaSourceItem, SyntheticTextItemSource,
+    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource,
+    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
+    DisplayPropertyReplacementSourceMetrics, DisplayReplacementMediaSourceItem,
+    SyntheticTextItemSource,
 };
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::HitRow;
@@ -2545,8 +2545,6 @@ impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
 
 pub(crate) enum BufferDisplayPropertyTextAppendAction {
     Replacement(BufferDisplayPropertyTextReplacementOutcome),
-    #[allow(dead_code)]
-    Modifiers(BufferDisplayPropertyTextModifierAction),
     None,
 }
 
@@ -2674,7 +2672,6 @@ impl BufferDisplayPropertyTextAppendAction {
                 replacement_outcome.apply_to_walk_state(text, byte_idx, charpos, x, col);
                 BufferDisplayPropertyTextWalkOutcome::ReplacementConsumed
             }
-            Self::Modifiers(_) => BufferDisplayPropertyTextWalkOutcome::Continue,
             Self::None => BufferDisplayPropertyTextWalkOutcome::Continue,
         }
     }
@@ -2825,7 +2822,6 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
             self.text,
             charpos,
             byte_idx,
-            checkpoints.display_next(),
             checkpoints.display_skip_to(accessible_end),
         );
         BufferDisplayPropertyTextAppendRequest::for_source_event(
@@ -2993,13 +2989,7 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
             );
         }
 
-        BufferDisplayPropertyTextModifierAction::for_display_property(
-            &display_property,
-            context.default_row_height,
-            self.source_event.next_change(),
-        )
-        .map(BufferDisplayPropertyTextAppendAction::Modifiers)
-        .unwrap_or(BufferDisplayPropertyTextAppendAction::None)
+        BufferDisplayPropertyTextAppendAction::None
     }
 }
 
@@ -3165,7 +3155,6 @@ impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
             self.anchor_charpos,
             self.replacement_source.byte_pos(),
             self.source_text,
-            0,
             0,
         );
         let item = DisplayPropertyReplacementSourceResolveRequest::new(
