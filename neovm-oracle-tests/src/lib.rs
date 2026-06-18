@@ -1238,6 +1238,7 @@ mod divergence_charset_split_priority_runtime;
 mod divergence_chartab_charset_deep;
 mod divergence_chartab_syntax_deep;
 mod divergence_cl_lib_advanced;
+mod divergence_cl_numeric_loop_seq_runtime;
 mod divergence_cllib_deep;
 mod divergence_cllib_seq_map;
 mod divergence_coding_charset_deep;
