@@ -234,6 +234,21 @@ pub fn hot_threshold() -> u32 {
     })
 }
 
+/// Whether the JIT is active at runtime. The `jit` cargo feature compiles the
+/// JIT *in*; this switch turns tier-up on/off WITHOUT a recompile, so a single
+/// binary can run pure-interpreter or JIT-backed. Default on; `NEOVM_JIT=0`
+/// (also `off`/`false`/`no`) forces the interpreter — a kill switch and the
+/// A/B-measurement knob (no more `NEOVM_JIT_THRESHOLD=<huge>` hack).
+pub fn jit_runtime_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        !matches!(
+            std::env::var("NEOVM_JIT").ok().as_deref(),
+            Some("0" | "off" | "false" | "no")
+        )
+    })
+}
+
 impl Runtime {
     /// Invocations before a function is "hot" enough to tier up. Placeholder —
     /// tuned against the benchmark harness in Phase 8.
@@ -260,6 +275,12 @@ impl Runtime {
     /// bodies and on deopt.
     #[inline]
     pub fn dispatch(&self) -> Plan {
+        // Runtime kill switch (NEOVM_JIT=0): never tier up — pure interpreter,
+        // no recompile. The early return also skips the heat bump, so a disabled
+        // JIT is strictly cheaper than an enabled-but-cold one.
+        if !jit_runtime_enabled() {
+            return Plan::Interpret;
+        }
         // Test-only: a forced-cold function never tiers up (benchmark A/B).
         #[cfg(test)]
         if self.force_interpret.load(Ordering::Relaxed) {
