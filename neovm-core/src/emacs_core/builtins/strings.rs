@@ -1381,6 +1381,20 @@ fn ensure_float_alternate_decimal(mut s: String) -> String {
 
 /// Format a float with the given spec.
 fn format_float_spec(f: f64, spec: &FormatSpec) -> String {
+    // C printf spells non-finite values nan/inf (NAN/INF for the uppercase
+    // conversions), with the sign bit preserved (e.g. 0.0/0.0 -> "-nan").
+    if !f.is_finite() {
+        let upper = matches!(spec.conversion, 'E' | 'G' | 'F');
+        let body = if f.is_nan() {
+            if upper { "NAN" } else { "nan" }
+        } else if upper {
+            "INF"
+        } else {
+            "inf"
+        };
+        let sign = if f.is_sign_negative() { "-" } else { "" };
+        return apply_width(&format!("{sign}{body}"), spec);
+    }
     let prec = spec.precision.unwrap_or(6);
     let alternate = spec.sharp && f.is_finite();
     let s = match spec.conversion {
