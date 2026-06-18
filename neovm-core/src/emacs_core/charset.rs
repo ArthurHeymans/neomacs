@@ -984,6 +984,38 @@ pub(crate) fn emacs_mule_encode_char(ch: i64) -> Option<(i64, i64, i64)> {
     })
 }
 
+/// All charsets that can be designated in ISO-2022 (they have an iso-final
+/// char), in ascending charset-id order, excluding the deprecated
+/// japanese-jisx0208-1978. Used as the candidate set for FULL_SUPPORT ISO-2022
+/// coding systems (those whose `:charset-list` is the symbol `iso-2022`).
+pub(crate) fn iso2022_full_charset_candidates() -> Vec<SymId> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        let jisx0208_1978 = lookup_interned("japanese-jisx0208-1978");
+        let mut out: Vec<(i64, SymId)> = reg
+            .charsets
+            .iter()
+            .filter(|(name, info)| info.iso_final_char.is_some() && Some(**name) != jisx0208_1978)
+            .map(|(name, info)| (info.id, *name))
+            .collect();
+        out.sort_by_key(|(id, _)| *id);
+        out.into_iter().map(|(_, name)| name).collect()
+    })
+}
+
+/// ISO-2022 designation properties of a charset: `(iso-final-char, dimension,
+/// chars_96)`. `chars_96` is true for a 96-character set (its code space starts
+/// at 0x20), false for a 94-character set. Returns `None` if the charset has no
+/// ISO-2022 final char (cannot be designated).
+pub(crate) fn charset_iso2022_designation(charset: SymId) -> Option<(i64, i64, bool)> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        let info = reg.charsets.get(&reg.resolve_name(charset))?;
+        let final_char = info.iso_final_char?;
+        Some((final_char, info.dimension, info.code_space[0] == 0x20))
+    })
+}
+
 /// The charset (name, dimension) carrying a given emacs-mule id, or `None`.
 pub(crate) fn charset_by_emacs_mule_id(id: i64) -> Option<(SymId, i64)> {
     CHARSET_REGISTRY.with(|slot| {

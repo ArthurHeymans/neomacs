@@ -259,6 +259,7 @@ fn non_nil_symbol_id(value: &Value) -> Option<SymId> {
 const ISO2022_KEY_INITIAL: i64 = i64::MIN;
 const ISO2022_KEY_REQUEST: i64 = i64::MIN + 1;
 const ISO2022_KEY_FLAGS: i64 = i64::MIN + 2;
+const ISO2022_KEY_REG_USAGE: i64 = i64::MIN + 3;
 
 /// ISO-2022 control flags, one variant per bit. Bit values match
 /// `coding-system-iso-2022-flags` (mule.el) and `CODING_ISO_FLAG_*` (coding.c).
@@ -276,6 +277,8 @@ pub enum IsoFlag {
     SingleShift = 0x0020,
     Designation = 0x0040,
     Revision = 0x0080,
+    InitAtBol = 0x0200,
+    DesignateAtBol = 0x0400,
     Composition = 0x2000,
 }
 
@@ -285,6 +288,10 @@ pub enum IsoFlag {
 pub struct Iso2022Spec {
     pub initial: [Option<SymId>; 4],
     pub request: Vec<(SymId, u8)>,
+    /// `(reg94, reg96)` — the graphic register that 94- and 96-character sets
+    /// are designated to while encoding (GNU `coding_attr_iso_usage`). A value
+    /// of 4 means "no fixed register"; such charsets fall back to G0.
+    pub reg_usage: (u8, u8),
     pub flags: enumflags2::BitFlags<IsoFlag>,
 }
 
@@ -295,6 +302,19 @@ impl Iso2022Spec {
             .iter()
             .find(|(cs, _)| *cs == charset)
             .map(|(_, reg)| *reg)
+    }
+
+    /// The graphic register a charset of the given set size is encoded into,
+    /// following GNU's reg-usage rule (`setup_iso_safe_charsets`): a 96-set
+    /// uses `reg96`, any other set uses `reg94`; a register of 4 ("none")
+    /// falls back to G0.
+    pub fn encode_register(&self, chars_96: bool) -> usize {
+        let reg = if chars_96 {
+            self.reg_usage.1
+        } else {
+            self.reg_usage.0
+        };
+        if reg < 4 { usize::from(reg) } else { 0 }
     }
 }
 
@@ -327,9 +347,20 @@ pub(crate) fn iso2022_spec(info: &CodingSystemInfo) -> Option<Iso2022Spec> {
         }
     }
 
+    let reg_usage = info
+        .int_properties
+        .get(&ISO2022_KEY_REG_USAGE)
+        .map(|v| {
+            let car = v.cons_car().as_int().unwrap_or(4);
+            let cdr = v.cons_cdr().as_int().unwrap_or(4);
+            (car.clamp(0, 255) as u8, cdr.clamp(0, 255) as u8)
+        })
+        .unwrap_or((4, 4));
+
     Some(Iso2022Spec {
         initial,
         request,
+        reg_usage,
         flags: enumflags2::BitFlags::from_bits_truncate(flags_bits as u32),
     })
 }
@@ -1961,6 +1992,7 @@ pub(crate) fn builtin_define_coding_system_internal(
     // the G0-G3 designations; see `iso2022_spec`.
     if resolve_sym(coding_type) == "iso-2022" && args.len() > 16 {
         info.int_properties.insert(ISO2022_KEY_INITIAL, args[13]);
+        info.int_properties.insert(ISO2022_KEY_REG_USAGE, args[14]);
         info.int_properties.insert(ISO2022_KEY_REQUEST, args[15]);
         info.int_properties.insert(ISO2022_KEY_FLAGS, args[16]);
     }

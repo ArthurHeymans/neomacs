@@ -4,7 +4,7 @@
 //! character classification, width calculation, and encoding conversion
 //! APIs.
 
-use crate::emacs_core::intern::{SymId, resolve_sym};
+use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
 use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
 use crate::emacs_core::value::{StringTextPropertyRun, Value, ValueKind};
@@ -2223,6 +2223,204 @@ fn decode_via_emacs_mule(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+/// If `coding` is an ISO-2022 coding system that uses escape-sequence
+/// designations and/or 7-bit output (iso-2022-jp/cn/kr, the 7bit / 8bit-ss2
+/// variants, compound-text/ctext), return its designation state + charset list.
+/// The fixed-designation 8-bit EUC profile is handled by `euc_iso2022_spec`.
+fn full_iso2022_spec(
+    ctx: &crate::emacs_core::eval::Context,
+    coding: &str,
+) -> Option<(crate::emacs_core::coding::Iso2022Spec, Vec<SymId>)> {
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    if resolve_sym(info.coding_type) != "iso-2022" {
+        return None;
+    }
+    let spec = crate::emacs_core::coding::iso2022_spec(info)?;
+    use crate::emacs_core::coding::IsoFlag;
+    if !(spec.flags.contains(IsoFlag::SevenBits) || spec.flags.contains(IsoFlag::Designation)) {
+        return None;
+    }
+    Some((spec, info.charset_list.clone()))
+}
+
+/// The ESC designation sequence loading `charset` into graphic register `reg`
+/// (`ENCODE_DESIGNATION`, coding.c): `ESC <I> F` for 94/96-sets, `ESC $ [I] F`
+/// for the multi-byte sets (the intermediate `I` is omitted only for the
+/// short-form dim-2 G0 case).
+fn iso2022_designation_escape(
+    reg: usize,
+    final_char: i64,
+    dim: i64,
+    chars_96: bool,
+    long_form: bool,
+) -> Vec<u8> {
+    const I94: [u8; 4] = [b'(', b')', b'*', b'+'];
+    const I96: [u8; 4] = [b',', b'-', b'.', b'/'];
+    let mut out = vec![0x1B];
+    if dim <= 1 {
+        out.push(if chars_96 { I96[reg] } else { I94[reg] });
+    } else {
+        out.push(b'$');
+        if chars_96 {
+            out.push(I96[reg]);
+        } else if long_form || reg != 0 || !(0x40..=0x42).contains(&final_char) {
+            out.push(I94[reg]);
+        }
+    }
+    out.push(final_char as u8);
+    out
+}
+
+/// Append a character's position code as ISO-2022 bytes: graphic-left
+/// (`& 0x7F`) or graphic-right (`| 0x80`), one byte per charset dimension.
+fn iso2022_emit_code(out: &mut Vec<u8>, code: i64, dim: i64, graphic_right: bool) {
+    let mask = |b: i64| {
+        if graphic_right {
+            (b | 0x80) as u8
+        } else {
+            (b & 0x7F) as u8
+        }
+    };
+    if dim >= 2 {
+        out.push(mask((code >> 8) & 0xFF));
+    }
+    out.push(mask(code & 0xFF));
+}
+
+/// Encode `s` through the full ISO-2022 escape-sequence machine.
+fn encode_via_iso2022(
+    s: &crate::heap_types::LispString,
+    spec: &crate::emacs_core::coding::Iso2022Spec,
+    charset_list: &[SymId],
+    _coding: &str,
+) -> Vec<u8> {
+    use crate::emacs_core::charset::{charset_encode_char, charset_iso2022_designation};
+    use crate::emacs_core::coding::IsoFlag;
+    let seven = spec.flags.contains(IsoFlag::SevenBits);
+    let single_shift = spec.flags.contains(IsoFlag::SingleShift);
+    let long_form = spec.flags.contains(IsoFlag::LongForm);
+    let reset_eol = spec.flags.contains(IsoFlag::AsciiAtEol);
+    let reset_cntl = spec.flags.contains(IsoFlag::AsciiAtCntl);
+    let ascii = intern("ascii");
+    let jisx0208_1978 = lookup_interned("japanese-jisx0208-1978");
+    // FULL_SUPPORT coding systems store `:charset-list` as the symbol
+    // `iso-2022`; substitute the full ISO-2022 charset candidate set.
+    let full_support = charset_list.len() == 1 && resolve_sym(charset_list[0]) == "iso-2022";
+    let candidates: Vec<SymId> = if full_support {
+        crate::emacs_core::charset::iso2022_full_charset_candidates()
+    } else {
+        charset_list.to_vec()
+    };
+
+    let initial = spec.initial;
+    let mut desig: [Option<SymId>; 4] = initial;
+    let mut gl: usize = 0; // register currently invoked to the GL plane
+    let gr: i32 = if seven { -1 } else { 1 }; // G1 -> GR plane in 8-bit
+
+    let mut out = Vec::with_capacity(s.sbytes());
+    // Reset planes/registers to their initial designations (used at EOL and at
+    // end of input when RESET_AT_EOL is set).
+    let reset = |out: &mut Vec<u8>, desig: &mut [Option<SymId>; 4], gl: &mut usize| {
+        if *gl != 0 {
+            out.push(0x0F); // SI
+            *gl = 0;
+        }
+        for r in 0..4 {
+            if initial[r].is_some() && desig[r] != initial[r] {
+                if let Some((fc, d, c96)) = initial[r].and_then(charset_iso2022_designation) {
+                    out.extend(iso2022_designation_escape(r, fc, d, c96, long_form));
+                }
+                desig[r] = initial[r];
+            }
+        }
+    };
+
+    for c in lisp_string_codepoints(s) {
+        if c < 0x20 || c == 0x7F {
+            if c == 0x0A {
+                if reset_eol {
+                    reset(&mut out, &mut desig, &mut gl);
+                }
+            } else if reset_cntl {
+                reset(&mut out, &mut desig, &mut gl);
+            }
+            out.push(c as u8);
+            continue;
+        }
+        if crate::emacs_core::emacs_char::char_byte8_p(c) {
+            out.push(crate::emacs_core::emacs_char::char_to_byte8(c));
+            continue;
+        }
+        // Select the charset (and its position code, dimension, set size).
+        let (charset, code, dim, chars_96) = if c < 0x80 {
+            (ascii, i64::from(c), 1, false)
+        } else {
+            let mut found = None;
+            for &cs in &candidates {
+                if Some(cs) == jisx0208_1978 {
+                    continue; // deprecated; superseded by jisx0208 in priority
+                }
+                if let Some((_, dim, c96)) = charset_iso2022_designation(cs)
+                    && let Some(code) = charset_encode_char(cs, i64::from(c))
+                {
+                    found = Some((cs, code, dim, c96));
+                    break;
+                }
+            }
+            found.unwrap_or((ascii, 0x20, 1, false)) // unencodable -> space
+        };
+        // Register the charset is designated to: an existing designation, else
+        // the reg-usage rule for its set size (GNU `setup_iso_safe_charsets`).
+        let reg = desig
+            .iter()
+            .position(|&d| d == Some(charset))
+            .unwrap_or_else(|| spec.encode_register(chars_96));
+        if desig[reg] != Some(charset) {
+            if let Some((fc, d, c96)) = charset_iso2022_designation(charset) {
+                out.extend(iso2022_designation_escape(reg, fc, d, c96, long_form));
+            }
+            desig[reg] = Some(charset);
+        }
+        if gl == reg {
+            iso2022_emit_code(&mut out, code, dim, false);
+        } else if gr == reg as i32 {
+            iso2022_emit_code(&mut out, code, dim, true);
+        } else {
+            match reg {
+                0 => {
+                    out.push(0x0F); // SI
+                    gl = 0;
+                    iso2022_emit_code(&mut out, code, dim, false);
+                }
+                1 => {
+                    out.push(0x0E); // SO
+                    gl = 1;
+                    iso2022_emit_code(&mut out, code, dim, false);
+                }
+                _ if single_shift => {
+                    if seven {
+                        out.push(0x1B);
+                        out.push(if reg == 2 { 0x4E } else { 0x4F }); // ESC N / ESC O
+                    } else {
+                        out.push(if reg == 2 { 0x8E } else { 0x8F }); // SS2 / SS3
+                    }
+                    iso2022_emit_code(&mut out, code, dim, !seven);
+                }
+                _ => {
+                    out.push(0x1B);
+                    out.push(if reg == 2 { 0x6E } else { 0x6F }); // LS2 / LS3
+                    gl = reg;
+                    iso2022_emit_code(&mut out, code, dim, false);
+                }
+            }
+        }
+    }
+    if reset_eol {
+        reset(&mut out, &mut desig, &mut gl);
+    }
+    out
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -2256,6 +2454,7 @@ fn builtin_coding_string_in_context(
     let utf7_coding = utf7_variant(&coding);
     let hz_coding = chinese_hz_charset(ctx, &coding);
     let emacs_mule = is_emacs_mule(ctx, &coding);
+    let full_iso = full_iso2022_spec(ctx, &coding);
     let euc_coding = euc_iso2022_spec(ctx, &coding);
     let sjis_coding = sjis_charsets(ctx, &coding);
     let charset_coding = general_charset_coding_list(ctx, &coding, encode);
@@ -2274,6 +2473,9 @@ fn builtin_coding_string_in_context(
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if emacs_mule {
             let bytes = encode_via_emacs_mule(&source_string());
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if let Some((spec, charsets)) = &full_iso {
+            let bytes = encode_via_iso2022(&source_string(), spec, charsets, &coding);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some((spec, charsets)) = &euc_coding {
             let bytes = encode_via_euc(&source_string(), spec, charsets, &coding);
