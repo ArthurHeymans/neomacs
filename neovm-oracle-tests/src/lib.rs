@@ -2316,6 +2316,7 @@ mod divergence_network_tls_url;
 mod divergence_number_format_read_runtime;
 mod divergence_number_print;
 mod divergence_obarray_symbol_deep;
+mod divergence_optional_args_runtime;
 mod divergence_org_mode;
 mod divergence_overlay_deep;
 mod divergence_overlay_face_combo;
