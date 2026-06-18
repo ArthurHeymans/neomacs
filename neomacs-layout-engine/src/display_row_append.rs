@@ -8,7 +8,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_buffer_text_render::{
     BufferTextSourceAppendContinuation, BufferTextSourceCharOverflowAction,
     BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
-    BufferTextSpecialSourceCharRenderState,
+    BufferTextSpecialSourceCharRenderState, SyntheticTextSource,
 };
 use crate::display_buffer_text_source::BufferTextDecodedSourceChar;
 #[cfg(test)]
@@ -58,7 +58,7 @@ use crate::display_source::{
     DisplayReplacementAppendItem, DisplayReplacementMediaSourceItem,
     DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
     DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
-    LispStringSourceCursor, ResolvedBufferTextSourceAdvance, SyntheticTextItemSource,
+    LispStringSourceCursor, ResolvedBufferTextSourceAdvance,
 };
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -78,7 +78,6 @@ use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowTransition, WindowOutputEmitter,
     current_text_window_cluster_tail, emit_text_matrix_row_transition_with_limit,
 };
-use neomacs_display_protocol::face::BasicFaceId;
 use neovm_core::buffer::{BufferId, CharPos0};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::{Context, Value};
@@ -99,10 +98,6 @@ impl LispStringSourceId {
         self.0
     }
 }
-
-const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
-const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
-const SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS: u64 = 5;
 
 impl ResolvedBufferTextSourceAdvance {
     fn append_render_policy(self) -> DisplaySourceAppendRenderPolicy {
@@ -1851,370 +1846,6 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SyntheticTextSource {
-    source_id: u64,
-    text: Box<str>,
-}
-
-impl SyntheticTextSource {
-    #[cfg(test)]
-    pub(crate) fn new(source_id: u64, text: impl Into<Box<str>>) -> Self {
-        Self {
-            source_id,
-            text: text.into(),
-        }
-    }
-
-    fn marker(marker: SyntheticTextMarker) -> Self {
-        Self {
-            source_id: marker.source_id(),
-            text: marker.text().into(),
-        }
-    }
-
-    fn into_item_source(self, face_id: u32) -> SyntheticTextItemSource {
-        SyntheticTextItemSource::new(self.source_id, self.text, RenderFaceRef::FaceId(face_id), 0)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct SyntheticTextAppendRequest {
-    position: DisplayRowPosition,
-    source: SyntheticTextSource,
-    face: SyntheticTextAppendFace,
-}
-
-#[derive(Clone, Debug)]
-enum SyntheticTextAppendFace {
-    ActiveFace,
-    TextRowMetrics {
-        face_id: u32,
-        base_face: ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
-    },
-}
-
-impl SyntheticTextAppendRequest {
-    #[cfg(test)]
-    pub(crate) fn active_source(position: DisplayRowPosition, source: SyntheticTextSource) -> Self {
-        Self {
-            position,
-            source,
-            face: SyntheticTextAppendFace::ActiveFace,
-        }
-    }
-
-    pub(crate) fn active_marker(position: DisplayRowPosition, marker: SyntheticTextMarker) -> Self {
-        Self {
-            position,
-            source: SyntheticTextSource::marker(marker),
-            face: SyntheticTextAppendFace::ActiveFace,
-        }
-    }
-
-    #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn text_row_metrics_source(
-        position: DisplayRowPosition,
-        source: SyntheticTextSource,
-        face_id: u32,
-        base_face: &ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
-    ) -> Self {
-        Self {
-            position,
-            source,
-            face: SyntheticTextAppendFace::TextRowMetrics {
-                face_id,
-                base_face: base_face.clone(),
-                height_px,
-                ascent_px,
-                char_width_px,
-            },
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn text_row_metrics_marker(
-        position: DisplayRowPosition,
-        marker: SyntheticTextMarker,
-        face_id: u32,
-        base_face: &ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
-    ) -> Self {
-        Self {
-            position,
-            source: SyntheticTextSource::marker(marker),
-            face: SyntheticTextAppendFace::TextRowMetrics {
-                face_id,
-                base_face: base_face.clone(),
-                height_px,
-                ascent_px,
-                char_width_px,
-            },
-        }
-    }
-
-    fn into_parts(
-        self,
-    ) -> (
-        DisplayRowPosition,
-        SyntheticTextSource,
-        SyntheticTextAppendFace,
-    ) {
-        (self.position, self.source, self.face)
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct SyntheticTextAppendContext<'a> {
-    face_id: u32,
-    base_face: &'a ResolvedFace,
-    frame: DisplayRowAppendFrame,
-}
-
-impl<'a> SyntheticTextAppendContext<'a> {
-    pub(crate) fn new(
-        face_id: u32,
-        base_face: &'a ResolvedFace,
-        frame: DisplayRowAppendFrame,
-    ) -> Self {
-        Self {
-            face_id,
-            base_face,
-            frame,
-        }
-    }
-
-    pub(crate) fn append_to_text_row_and_emit(
-        &self,
-        state: &mut TextRowSourceRenderState<'_>,
-        position: DisplayRowPosition,
-        source: SyntheticTextSource,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        append_synthetic_text_to_display_row(
-            state,
-            self.base_face,
-            self.frame.clone(),
-            position,
-            source,
-            self.face_id,
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SyntheticTextMarker {
-    InvisibleEllipsis,
-    HscrollTruncation,
-    SelectiveEllipsis,
-}
-
-impl SyntheticTextMarker {
-    fn source_id(self) -> u64 {
-        match self {
-            Self::InvisibleEllipsis => SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS,
-            Self::HscrollTruncation => SYNTHETIC_SOURCE_HSCROLL_TRUNCATION,
-            Self::SelectiveEllipsis => SYNTHETIC_SOURCE_SELECTIVE_ELLIPSIS,
-        }
-    }
-
-    fn text(self) -> &'static str {
-        match self {
-            Self::InvisibleEllipsis | Self::SelectiveEllipsis => "...",
-            Self::HscrollTruncation => "$",
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct SyntheticTextRowAppendContext<'a> {
-    active_face_context: DisplayRowActiveFaceAppendContext<'a, 'a>,
-}
-
-impl<'a> SyntheticTextRowAppendContext<'a> {
-    pub(crate) fn new(
-        append_surface: &'a DisplayRowAppendSurface,
-        geometry: &'a DisplayRowGeometryState,
-        active_face: &'a DisplayRowActiveFaceState,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-    ) -> Self {
-        Self {
-            active_face_context: DisplayRowActiveFaceAppendContext::new(
-                append_surface,
-                geometry,
-                active_face,
-                glyph_y_offset,
-                default_row_height,
-            ),
-        }
-    }
-
-    fn active_face(
-        self,
-        face_id: u32,
-        base_face: &'a ResolvedFace,
-    ) -> SyntheticTextAppendContext<'a> {
-        SyntheticTextAppendContext::new(
-            face_id,
-            base_face,
-            self.active_face_context.active_face_frame(),
-        )
-    }
-
-    fn text_row<'face>(
-        self,
-        face_id: u32,
-        base_face: &'face ResolvedFace,
-        height_px: f32,
-        ascent_px: f32,
-        char_width_px: f32,
-    ) -> SyntheticTextAppendContext<'face> {
-        SyntheticTextAppendContext::new(
-            face_id,
-            base_face,
-            self.active_face_context
-                .text_row_frame(height_px, ascent_px, char_width_px),
-        )
-    }
-
-    pub(crate) fn append_request_to_text_row_and_emit(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        request: SyntheticTextAppendRequest,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        let (position, source, face) = request.into_parts();
-        match face {
-            SyntheticTextAppendFace::ActiveFace => {
-                let active_face = self.active_face_context.active_face;
-                self.active_face(active_face.face_id(), active_face.resolved_face())
-                    .append_to_text_row_and_emit(state, position, source)
-            }
-            SyntheticTextAppendFace::TextRowMetrics {
-                face_id,
-                base_face,
-                height_px,
-                ascent_px,
-                char_width_px,
-            } => self
-                .text_row(face_id, &base_face, height_px, ascent_px, char_width_px)
-                .append_to_text_row_and_emit(state, position, source),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BufferSyntheticTextRenderContext<'a> {
-    append_surface: &'a DisplayRowAppendSurface,
-    active_face: &'a DisplayRowActiveFaceState,
-    glyph_y_offset: f32,
-    default_row_height: f32,
-    default_row_ascent: f32,
-    default_char_width: f32,
-}
-
-impl<'a> BufferSyntheticTextRenderContext<'a> {
-    pub(crate) fn new(
-        append_surface: &'a DisplayRowAppendSurface,
-        active_face: &'a DisplayRowActiveFaceState,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        default_row_ascent: f32,
-        default_char_width: f32,
-    ) -> Self {
-        Self {
-            append_surface,
-            active_face,
-            glyph_y_offset,
-            default_row_height,
-            default_row_ascent,
-            default_char_width,
-        }
-    }
-
-    pub(crate) fn active_face(self) -> &'a DisplayRowActiveFaceState {
-        self.active_face
-    }
-
-    fn row_context(
-        self,
-        geometry: &'a DisplayRowGeometryState,
-    ) -> SyntheticTextRowAppendContext<'a> {
-        SyntheticTextRowAppendContext::new(
-            self.append_surface,
-            geometry,
-            self.active_face,
-            self.glyph_y_offset,
-            self.default_row_height,
-        )
-    }
-
-    pub(crate) fn render_request_to_text_row<'face>(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        geometry: &'a DisplayRowGeometryState,
-        request: SyntheticTextAppendRequest,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
-        self.row_context(geometry)
-            .append_request_to_text_row_and_emit(state, request)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_active_marker_to_text_row(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        geometry: &'a DisplayRowGeometryState,
-        position: DisplayRowPosition,
-        marker: SyntheticTextMarker,
-    ) -> Option<DisplayRowPosition> {
-        self.render_request_to_text_row(
-            state,
-            geometry,
-            SyntheticTextAppendRequest::active_marker(position, marker),
-        )
-        .map(|(_progress, position)| position)
-    }
-
-    pub(crate) fn hscroll_truncation_request(
-        self,
-        base_face: ResolvedFace,
-        content_x: f32,
-    ) -> SyntheticTextAppendRequest {
-        SyntheticTextAppendRequest::text_row_metrics_marker(
-            DisplayRowPosition {
-                x_px: content_x,
-                col: 0,
-            },
-            SyntheticTextMarker::HscrollTruncation,
-            BasicFaceId::Default.into(),
-            &base_face,
-            self.default_row_height,
-            self.default_row_ascent,
-            self.default_char_width,
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn render_hscroll_truncation_marker_to_text_row(
-        self,
-        state: &mut TextRowSourceRenderState<'_>,
-        geometry: &'a DisplayRowGeometryState,
-        content_x: f32,
-    ) -> Option<DisplayRowPosition> {
-        let request = self.hscroll_truncation_request(state.default_face(), content_x);
-        self.render_request_to_text_row(state, geometry, request)
-            .map(|(_progress, position)| position)
-    }
-}
-
 pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     match face {
         RenderFaceRef::FaceId(face_id) => face_id,
@@ -3014,62 +2645,6 @@ impl BufferTextSourceChar {
             self.advance_request(text, byte_idx, tail),
             position,
         )
-    }
-}
-
-pub(crate) struct BufferSyntheticTextRenderState<'a> {
-    source_render: TextRowSourceRenderState<'a>,
-    x: &'a mut f32,
-    col: &'a mut usize,
-}
-
-impl<'a> BufferSyntheticTextRenderState<'a> {
-    pub(crate) fn new(
-        source_render: TextRowSourceRenderState<'a>,
-        x: &'a mut f32,
-        col: &'a mut usize,
-    ) -> Self {
-        Self {
-            source_render,
-            x,
-            col,
-        }
-    }
-
-    pub(crate) fn position(&self) -> DisplayRowPosition {
-        DisplayRowPosition {
-            x_px: *self.x,
-            col: *self.col,
-        }
-    }
-
-    pub(crate) fn append_request_to_text_row<'ctx>(
-        &mut self,
-        render_context: BufferSyntheticTextRenderContext<'ctx>,
-        row_geometry: &'ctx DisplayRowGeometryState,
-        request: SyntheticTextAppendRequest,
-    ) {
-        let Some((_progress, position)) = render_context.render_request_to_text_row(
-            &mut self.source_render,
-            row_geometry,
-            request,
-        ) else {
-            return;
-        };
-        *self.x = position.x_px;
-        *self.col = position.col;
-    }
-
-    pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(
-        &mut self,
-        render_context: BufferSyntheticTextRenderContext<'ctx>,
-        row_geometry: &'ctx DisplayRowGeometryState,
-        content_x: f32,
-    ) {
-        let request =
-            render_context.hscroll_truncation_request(self.source_render.default_face(), content_x);
-        self.append_request_to_text_row(render_context, row_geometry, request);
-        self.source_render.mark_current_text_row_truncated_left();
     }
 }
 
@@ -4479,6 +4054,10 @@ impl<'row, 'face> DisplayRowActiveFaceAppendContext<'row, 'face> {
             )
     }
 
+    pub(crate) fn active_face(self) -> &'face DisplayRowActiveFaceState {
+        self.active_face
+    }
+
     #[cfg(test)]
     pub(crate) fn full_text_width_active_face_frame(self) -> DisplayRowAppendFrame {
         self.text_context
@@ -4695,7 +4274,7 @@ impl DisplayRowAppendKind {
     }
 }
 
-fn append_synthetic_text_to_display_row(
+pub(crate) fn append_synthetic_text_to_display_row(
     state: &mut TextRowSourceRenderState<'_>,
     base_face: &ResolvedFace,
     frame: DisplayRowAppendFrame,
