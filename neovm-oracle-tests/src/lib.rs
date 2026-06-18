@@ -2215,6 +2215,7 @@ mod divergence_eieio_keymap_real;
 mod divergence_eieio_method_deep;
 mod divergence_eieio_object_system;
 mod divergence_eieio_oop;
+mod divergence_eight_bit_rawbyte_runtime;
 mod divergence_encoding_process_real;
 mod divergence_error_conditions_deep;
 mod divergence_error_data_runtime;
