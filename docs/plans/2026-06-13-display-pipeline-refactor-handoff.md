@@ -668,37 +668,55 @@ Status legend: ✅ done · ⬜ remaining.
       same role the active-minibuffer walk already produces; the mock-frame path
       still uses `GlyphRowRole::Minibuffer`). Suppression unit tests deleted
       (tested a deleted internal helper; inactive-render covered end-to-end).
-   6. ⬜ (med) Delete the pre-layout estimator `minibuffer_resize_line_count` +
-      `BufferTextWindowContentRowsRequest::resolve`. BLOCKED on the real step 3:
-      relax the minibuffer (vscroll==0) `visible_max_rows`
-      (display_buffer_text_walk.rs:642) so the walk measures full content (GNU
-      `move_it_to(ZV)`) + add the overflow `window_start`-to-end computation; then
-      the estimator is redundant. Verify active fido/vertico still clamp.
-   7. ⬜ (low) Replace the `visible_region_empty` shrink heuristic (engine.rs:613,
-      currently reads the mini-window's OWN buffer, guarded by the `mini_rows_used
-      < allocated` branch so it's not wrong today) with GNU `BEGV==ZV` emptiness of
-      the swapped echo buffer (now truthful + direct). Keep `should_shrink`.
-   8. ⬜ (low) Confirm keyboard.rs keystroke echo drives the buffer-backed
-      `set_current_message` (it does — step 1 mirror is unconditional). GUI smoke
-      (echo wrap/truncate markers; resize) on a rebuilt binary.
-   _Status 2026-06-17: **steps 1, 2, 4, 5 DONE + green; step 3 partial.** The
-   architecturally meaningful change — echo renders through the unified buffer-text
-   walk, parallel machinery deleted (~1062 lines) — is landed (`942d113be`,
-   `2e754c4e0`). Done by reading GNU first (`with_echo_area_buffer` /
-   `resize_mini_window` / `display_echo_area_1`): the two risks that made this look
-   scary (stale swap; chicken-and-egg height) were non-issues in GNU's design.
-   Remaining 6-8 = estimator removal (needs the full GNU unclamped-measure) +
-   shrink-heuristic purity + GUI smoke — cleanup, not correctness. 1214 layout-engine
-   + 228 neovm-core message/echo green._
-9. ⬜ **Relocate non-append clusters out of `display_row_append.rs` (~10k lines).**
-   Risk medium. Deps: 5, 6 (so relocated clusters call the unified lifecycle, not
-   just move duplication). The right-edge-marker / right-border move is
-   independent + low-risk and **can be pulled forward anytime**.
-10. ⬜ **Collapse the two-layer append-operation indirection + unify
-    decoration-face resolution** (merge-over-`DEFAULT_FACE_ID`, GNU-style;
-    retire `FaceResolver::next_dynamic_id`). Risk medium. Deps: 3, 6. Lowest
-    payoff; do last. The `#[cfg(test)]`-only `for_buffer_text_range` constructor
-    is deletable independently anytime.
+   6. ✅ **DONE (`05ec88d2f`):** deleted the pre-layout estimator
+      (`BufferTextWindowContentRowsRequest` struct+`resolve`+`new`,
+      `minibuffer_resize_line_count`, the `effective_buf_id` plumbing, and the
+      `into_geometry` minibuffer-rows override param). Minibuffer height is now
+      measured by the walk itself (GNU `resize_mini_window` `move_it_to(ZV)`):
+      `with_max_mini_window_rows` setter + relaxed `visible_max_rows` +
+      `visibility_bottom_y` lifted to span the ceiling so the walk emits past the
+      window's current physical height; `max_rows` still hard-caps at
+      `max-mini-window-height`. Overflow shows the END by un-excluding the
+      point-driven `scroll_down_window_start` for the minibuffer (point at EOB for
+      active fido/vertico; BEGV for inactive echo so it never scrolls).
+   7. ✅ **DONE (`05ec88d2f`):** the shrink path now reflects true buffer
+      emptiness (the walk measures the displayed buffer directly), GNU `BEGV==ZV`.
+   8. ✅ **DONE — GUI-validated 2026-06-18.** Release build + pdump regen + X11
+      smoke: echo startup message renders 1-line; active `Eval:` minibuffer renders
+      (prompt+cursor); a multi-line `(message "AA\nBB\nCC")` GROWS the echo area to
+      3 rows (mode-line shifts up); a single-line message SHRINKS it back to 1 —
+      exactly GNU grow/shrink_mini_window. Plus active-minibuffer + overflow matrix
+      characterization tests (`be325295b`).
+   _Status 2026-06-18: **SLICE 8 COMPLETE + GUI-validated.** Echo/minibuffer now
+   renders entirely through the unified buffer-text walk (GNU `display_echo_area_1`
+   / `resize_mini_window`); the parallel echo machinery (~1062 lines) AND the
+   pre-layout estimator are deleted. Done by reading GNU first — every invented risk
+   (stale swap, chicken-and-egg height) dissolved against GNU's actual design. 1218
+   layout-engine + 228 neovm-core message/echo green._
+9. ◑ **PARTIAL — 2 relocations DONE.** `e7b717a53` right-edge/right-border installer
+   → `display_row_special_glyphs.rs` (GNU `produce_special_glyphs`, −284);
+   `e423748df` line-number margin → `display_row_line_number_margin.rs` (GNU
+   `maybe_produce_line_number`, −108). `display_row_append.rs` 10150 → 9538. More
+   cohesive clusters (walk-state action clusters) remain relocatable, pure-move +
+   low-risk, anytime.
+10. ◑ **PARTIAL — A+C DONE (`5f7be8d8a`, −222), B held.** Collapsed
+    `BufferTextSourceAppendOperation` (inlined into 4 production callers via the
+    existing `append_request`/`for_single_item`) + deleted the `cfg(test)`
+    `for_buffer_text_range`/`BufferTextSourceRangeAppendContext` cluster (6 unique
+    assertions retargeted onto the production path, 1 true duplicate dropped).
+    **B (retire `FaceResolver::next_dynamic_id`) HELD** — verified to be a ~15-line
+    TTY-only latent fix, but face-id collision is silent in single-window unit
+    fixtures, so it needs a `-nw` MULTI-WINDOW border smoke before deletion; low
+    payoff, do not delete blind.
+
+**Slice 7 step 2 — EXCLUDED (do not implement).** Adversarial verification
+(workflow `wiqlkm18n`) found a FATAL flaw: `*charpos += 1` (display_row_append.rs,
+in `append_to_text_row_and_apply`) executes BETWEEN `render_before_at` (charpos N)
+and `render_after_at` (charpos N+1) — they are two DISTINCT GNU stop positions, not
+one, so collapsing them into a single `render_overlay_strings_at` is semantically
+impossible and empirically breaks the cursor canary. The GNU interleaving the plan
+wanted to "activate" is ALREADY live via `overlay_strings_at` + per-iteration
+adjacency. Only the batch scaffolding is deletable (low-value containment).
 
 **Risk note for slices 5–10:** these touch live redisplay in exactly the areas
 validated visually (posframe, tab-bar/tab-line, bidi, echo/minibuffer). Do them
