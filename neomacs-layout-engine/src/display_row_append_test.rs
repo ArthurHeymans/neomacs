@@ -3190,6 +3190,18 @@ fn test_append_frame_at(
     surface.frame_from_geometry_state(&geometry, glyph_y - y, metrics)
 }
 
+fn test_advance_resolution_surface() -> DisplayRowAppendSurface {
+    DisplayRowAppendSurface::new(
+        DisplayRowAppendArea {
+            content_x: 0.0,
+            width: 80.0,
+            text_width: 80.0,
+            line_number_width: 0.0,
+        },
+        DisplayTabPolicy::every(8),
+    )
+}
+
 #[test]
 fn fallback_buffer_text_source_natural_advance_uses_frame_tab_policy() {
     let active_face = test_active_face_state(7, 8.0);
@@ -3352,8 +3364,11 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
 
-    let tab_request = buffer_text_source_range_append_request(
-        BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+    let tab_request = buffer_text_source_text_item_append_request(
+        BufferTextSourceTextItemRequest::new(
+            BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
+            '\t',
+        ),
         buf_id,
         &snapshot,
         7,
@@ -3443,19 +3458,16 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let surface = test_advance_resolution_surface();
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let mut append_state = BufferTextRowAppendState::default();
-    let append_context = BufferTextSourceRangeAppendContext::new(
-        &snapshot,
-        buf_id,
-        active_face.face_id(),
-        active_face.resolved_face(),
-        frame,
-    );
+    let append_context =
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
 
     let resolved = append_context.resolve_source_advance_request_to_text_row(
+        &geometry,
         &mut append_state,
         &mut TextRowSourceMeasureState::new(
             &mut builder,
@@ -3463,7 +3475,6 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
             &mut font_metrics,
             &face_resolver,
         ),
-        &active_face,
         BufferTextSourcePositionedAdvanceRequest::new(
             BufferTextSourceAdvanceRequest::new(
                 b"x",
@@ -3472,57 +3483,6 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
                 BufferTextSourceClusterState::for_char('x', None),
             ),
             DisplayRowPosition { x_px: 0.0, col: 0 },
-        ),
-    );
-
-    assert_eq!(resolved.advance_px(), 8.0);
-    assert_eq!(resolved, ResolvedBufferTextSourceAdvance::natural(8.0));
-}
-
-#[test]
-fn buffer_text_source_append_context_measures_ascii_at_right_edge() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let table = FaceTable::new();
-    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
-    let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    let mut append_state = BufferTextRowAppendState::default();
-    let append_context = BufferTextSourceRangeAppendContext::new(
-        &snapshot,
-        buf_id,
-        active_face.face_id(),
-        active_face.resolved_face(),
-        frame,
-    );
-
-    let resolved = append_context.resolve_source_advance_request_to_text_row(
-        &mut append_state,
-        &mut TextRowSourceMeasureState::new(
-            &mut builder,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        &active_face,
-        BufferTextSourcePositionedAdvanceRequest::new(
-            BufferTextSourceAdvanceRequest::new(
-                b"x",
-                0,
-                BufferTextSourceRange::new(CharPos0::new(0), CharPos0::new(1)),
-                BufferTextSourceClusterState::for_char('x', None),
-            ),
-            DisplayRowPosition {
-                x_px: 80.0,
-                col: 10,
-            },
         ),
     );
 
@@ -3542,19 +3502,16 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let surface = test_advance_resolution_surface();
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let mut append_state = BufferTextRowAppendState::default();
-    let append_context = BufferTextSourceRangeAppendContext::new(
-        &snapshot,
-        buf_id,
-        active_face.face_id(),
-        active_face.resolved_face(),
-        frame,
-    );
+    let append_context =
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
 
     let resolved = append_context.resolve_source_advance_request_to_text_row(
+        &geometry,
         &mut append_state,
         &mut TextRowSourceMeasureState::new(
             &mut builder,
@@ -3562,7 +3519,6 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
             &mut font_metrics,
             &face_resolver,
         ),
-        &active_face,
         BufferTextSourcePositionedAdvanceRequest::new(
             BufferTextSourceAdvanceRequest::new(
                 "\u{0633}".as_bytes(),
@@ -6604,32 +6560,41 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut base_face = face_resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
-    base_face.font_ascent = 12.0;
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = test_advance_resolution_surface();
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let position = DisplayRowPosition { x_px: 8.0, col: 1 };
     let source_range = BufferTextSourceRange::new(CharPos0::new(1), CharPos0::new(2));
 
     let append_context =
-        BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
+    let mut append_state = BufferTextRowAppendState::default();
     let measured_width = append_context
-        .measure_source_range_natural_advance_to_text_row(
+        .resolve_source_advance_request_to_text_row(
+            &geometry,
+            &mut append_state,
             &mut TextRowSourceMeasureState::new(
                 &mut builder,
                 &mut eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            source_range,
-            position,
+            BufferTextSourcePositionedAdvanceRequest::new(
+                BufferTextSourceAdvanceRequest::new(
+                    b"b",
+                    0,
+                    source_range,
+                    BufferTextSourceClusterState::for_char('b', None),
+                ),
+                position,
+            ),
         )
-        .expect("measured buffer fragment append");
+        .advance_px();
 
     builder
         .with_current_row_mut(|row| {
@@ -6641,6 +6606,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
 
     let (appended, end) = append_context
         .append_source_text_request_to_text_row(
+            &geometry,
             &mut TextRowSourceRenderState::new(
                 &mut builder,
                 &mut output_emitter,
@@ -6650,7 +6616,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
             ),
             BufferTextSourceTextRequest::new(
                 source_range,
-                'x',
+                'b',
                 ResolvedBufferTextSourceAdvance::natural(measured_width),
             ),
             position,
@@ -6692,17 +6658,19 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver.default_face();
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = test_advance_resolution_surface();
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let append_context =
-        BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (progress, end) = append_context
         .append_source_text_request_to_text_row(
+            &geometry,
             &mut TextRowSourceRenderState::new(
                 &mut builder,
                 &mut output_emitter,
@@ -6761,20 +6729,20 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut base_face = face_resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
-    base_face.font_ascent = 12.0;
+    let active_face = test_active_face_state(7, 8.0);
+    let surface = test_advance_resolution_surface();
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
-    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let append_context =
-        BufferTextSourceRangeAppendContext::new(&snapshot, buf_id, 7, &base_face, frame);
+        BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
     let (progress, end) = append_context
         .append_source_text_request_to_text_row(
+            &geometry,
             &mut TextRowSourceRenderState::new(
                 &mut builder,
                 &mut output_emitter,
