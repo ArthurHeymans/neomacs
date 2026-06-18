@@ -2254,6 +2254,7 @@ mod divergence_face_underline_matrix;
 mod divergence_face_weight_matrix;
 mod divergence_faces;
 mod divergence_file_attributes;
+mod divergence_file_io_builtin_runtime;
 mod divergence_file_io_real;
 mod divergence_file_name_runtime;
 mod divergence_file_ops_deep;
