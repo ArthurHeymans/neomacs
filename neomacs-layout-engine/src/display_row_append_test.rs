@@ -3765,7 +3765,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let append_context =
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 16.0);
-    let (progress, end) = append_context
+    let progress = append_context
         .append_request_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -3780,6 +3780,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
             ),
         )
         .expect("synthetic text progress");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
     assert_eq!(progress.metrics.width_px, 24.0);
@@ -4158,7 +4159,7 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
     let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
-    let (progress, end) = append_context
+    let progress = append_context
         .append_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -4171,6 +4172,7 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
             SyntheticTextSource::new(100, "\u{301}"),
         )
         .expect("combining fragment progress");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 0.0);
@@ -4488,7 +4490,8 @@ fn current_text_row_render_outcome_builds_append_progress() {
     };
     let start = DisplayRowPosition { x_px: 8.0, col: 1 };
 
-    let (progress, end) = outcome.into_append_progress_and_position(start);
+    let progress = outcome.into_append_progress(start);
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
     assert_eq!(progress.start, start);
@@ -6823,7 +6826,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         })
         .expect("current row");
 
-    let (appended, end) = append_context
+    let appended = append_context
         .append_source_text_request_to_text_row(
             &geometry,
             &mut TextRowSourceRenderState::new(
@@ -6841,6 +6844,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
             position,
         )
         .expect("appended buffer fragment");
+    let end = appended.end;
 
     assert_eq!(end.x_px - position.x_px, measured_width);
     assert_eq!(appended.metrics.width_px, measured_width);
@@ -6887,7 +6891,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
 
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let (progress, end) = append_context
+    let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
             &mut TextRowSourceRenderState::new(
@@ -6905,6 +6909,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended resolved buffer fragment");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 13.0);
@@ -6959,7 +6964,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
 
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
-    let (progress, end) = append_context
+    let progress = append_context
         .append_source_text_request_to_text_row(
             &geometry,
             &mut TextRowSourceRenderState::new(
@@ -6977,6 +6982,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
             DisplayRowPosition { x_px: 8.0, col: 1 },
         )
         .expect("appended combining buffer char");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 0.0);
@@ -7079,7 +7085,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         },
     );
 
-    let (progress, end) = append_context
+    let progress = append_context
         .append_source_request_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -7092,6 +7098,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("appended buffer text item fragment");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(measured_width, 16.0);
@@ -9325,7 +9332,7 @@ fn display_replacement_append_context_uses_face_fallback() {
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 7, base_face, frame);
 
-    let (progress, end) = append_context
+    let progress = append_context
         .append_replacement_item_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -9338,6 +9345,7 @@ fn display_replacement_append_context_uses_face_fallback() {
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("append progress");
+    let end = progress.end;
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
@@ -9411,7 +9419,7 @@ fn display_replacement_append_context_advances_stretch_output() {
     let request = DisplayReplacementStretchSourceItem::from_extents(13.0, 16.0, 12.0)
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 })
         .expect("stretch append request");
-    let (_progress, end) = append_context
+    let progress = append_context
         .append_item_request_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -9423,6 +9431,7 @@ fn display_replacement_append_context_advances_stretch_output() {
             request,
         )
         .expect("append progress");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
     let display = eval
@@ -9497,7 +9506,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
     );
     let request = DisplayReplacementSourceMappedTextItem::new("??")
         .append_request(DisplayRowPosition { x_px: 0.0, col: 0 });
-    let (_progress, end) = append_context
+    let progress = append_context
         .append_item_request_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -9509,6 +9518,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
             request,
         )
         .expect("append progress");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
@@ -9571,7 +9581,7 @@ fn synthetic_text_append_context_uses_source_append_request() {
 
     let append_context =
         SyntheticTextRowAppendContext::new(&surface, &geometry, &active_face, 0.0, 10.0);
-    let (_progress, end) = append_context
+    let progress = append_context
         .append_request_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -9591,6 +9601,7 @@ fn synthetic_text_append_context_uses_source_append_request() {
             ),
         )
         .expect("append progress");
+    let end = progress.end;
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
@@ -9674,7 +9685,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         16.0,
     );
     let request = media_item.append_request(DisplayRowPosition { x_px: 16.0, col: 2 });
-    let (progress, end) = append_context
+    let progress = append_context
         .append_item_request_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -9686,6 +9697,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
             request,
         )
         .expect("append progress");
+    let end = progress.end;
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(progress.metrics.width_px, 96.0);
@@ -9807,7 +9819,7 @@ fn display_replacement_append_context_installs_image_replacements() {
     );
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
-    let (progress, end) = append_context
+    let progress = append_context
         .append_replacement_item_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -9820,6 +9832,7 @@ fn display_replacement_append_context_installs_image_replacements() {
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
+    let end = progress.end;
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(progress.metrics.width_px, 64.0);
@@ -9943,7 +9956,7 @@ fn display_replacement_append_context_installs_video_replacements() {
     );
     let append_context =
         DisplayReplacementAppendContext::new(replacement_source, 3, base_face, frame);
-    let (progress, end) = append_context
+    let progress = append_context
         .append_replacement_item_to_text_row_and_emit(
             &mut TextRowSourceRenderState::new(
                 &mut builder,
@@ -9956,6 +9969,7 @@ fn display_replacement_append_context_installs_video_replacements() {
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
+    let end = progress.end;
 
     assert_eq!(progress.start, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(progress.metrics.width_px, 80.0);

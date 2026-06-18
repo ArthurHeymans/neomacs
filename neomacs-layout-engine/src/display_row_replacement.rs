@@ -530,7 +530,7 @@ impl DisplayReplacementStretchSourceItem {
         row_geometry.include_glyph_vertical_metrics(self.height_px(), self.ascent_px());
         replacement_append_context
             .append_item_request_to_text_row_and_emit(state, request)
-            .map(|(_progress, position)| position)
+            .map(|progress| progress.end)
             .unwrap_or(position)
     }
 }
@@ -565,12 +565,12 @@ impl DisplayReplacementMediaSourceItem {
         state: &mut TextRowSourceRenderState<'_>,
         position: DisplayRowPosition,
     ) -> DisplayRowPosition {
-        if let Some((progress, appended_position)) = replacement_append_context
+        if let Some(progress) = replacement_append_context
             .append_item_request_to_text_row_and_emit(state, self.append_request(position))
             && let Some((height, ascent)) = self.row_extents_after_append(&progress)
         {
             row_geometry.include_row_extents(height, ascent);
-            appended_position
+            progress.end
         } else {
             position
         }
@@ -586,7 +586,7 @@ impl DisplayReplacementSourceMappedTextItem {
     ) -> DisplayRowPosition {
         replacement_append_context
             .append_item_request_to_text_row_and_emit(state, self.append_request(position))
-            .map(|(_progress, position)| position)
+            .map(|progress| progress.end)
             .unwrap_or(position)
     }
 }
@@ -732,7 +732,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         self,
         state: &mut TextRowSourceRenderState<'_>,
         request: DisplayReplacementItemAppendRequest,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let DisplayReplacementItemAppendRequest {
             item,
             frame,
@@ -784,7 +784,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         state: &mut TextRowSourceRenderState<'_>,
         item: DisplayReplacementAppendItem,
         position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let item = item.into_display_item(self.replacement_source, self.face_id);
         DisplayRowSingleItemAppendContext::new(self.base_face, self.face_id, self.frame.clone())
             .render_item_naturally(

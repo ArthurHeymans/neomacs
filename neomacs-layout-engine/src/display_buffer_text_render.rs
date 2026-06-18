@@ -1892,7 +1892,7 @@ impl<'a> SyntheticTextAppendContext<'a> {
         state: &mut TextRowSourceRenderState<'_>,
         position: DisplayRowPosition,
         source: SyntheticTextSource,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         append_synthetic_text_to_display_row(
             state,
             self.base_face,
@@ -1984,7 +1984,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         self,
         state: &mut TextRowSourceRenderState<'_>,
         request: SyntheticTextAppendRequest,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let (position, source, face) = request.into_parts();
         match face {
             SyntheticTextAppendFace::ActiveFace => {
@@ -2056,7 +2056,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         state: &mut TextRowSourceRenderState<'_>,
         geometry: &'a DisplayRowGeometryState,
         request: SyntheticTextAppendRequest,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         self.row_context(geometry)
             .append_request_to_text_row_and_emit(state, request)
     }
@@ -2074,7 +2074,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
             geometry,
             SyntheticTextAppendRequest::active_marker(position, marker),
         )
-        .map(|(_progress, position)| position)
+        .map(|progress| progress.end)
     }
 
     pub(crate) fn hscroll_truncation_request(
@@ -2105,7 +2105,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
     ) -> Option<DisplayRowPosition> {
         let request = self.hscroll_truncation_request(state.default_face(), content_x);
         self.render_request_to_text_row(state, geometry, request)
-            .map(|(_progress, position)| position)
+            .map(|progress| progress.end)
     }
 }
 
@@ -2141,15 +2141,15 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
         row_geometry: &'ctx DisplayRowGeometryState,
         request: SyntheticTextAppendRequest,
     ) {
-        let Some((_progress, position)) = render_context.render_request_to_text_row(
+        let Some(progress) = render_context.render_request_to_text_row(
             &mut self.source_render,
             row_geometry,
             request,
         ) else {
             return;
         };
-        *self.x = position.x_px;
-        *self.col = position.col;
+        *self.x = progress.end.x_px;
+        *self.col = progress.end.col;
     }
 
     pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(

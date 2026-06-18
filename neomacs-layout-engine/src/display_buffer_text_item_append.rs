@@ -340,7 +340,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         state: &mut TextRowSourceRenderState<'_>,
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         self.item_active_face(geometry)
             .append_source_request_to_text_row_and_emit(state, source_item, position)
     }
@@ -350,7 +350,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
         plan: BufferTextSpecialSourceCharAppendPlan,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let position = plan.position();
         let fallback_kind = plan.source_item().append_kind();
         if let Some(item) = plan.display_item {
@@ -491,7 +491,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         state: &mut TextRowSourceRenderState<'_>,
         source_text: BufferTextSourceTextRequest,
         position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let face_id = self.active_face.face_id();
         let append_item = source_text.append_request(self.buffer_id, self.buffer, face_id)?;
@@ -510,7 +510,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
         render_policy: &mut DisplaySourceAppendRenderPolicy,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let face_id = self.active_face.face_id();
         DisplayRowSingleItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
@@ -522,7 +522,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
         plan: BufferTextSourceCharAppendPlan,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let position = plan.position();
         let source_text = plan.source_text();
         if let Some(item) = plan.source_item {
@@ -720,14 +720,8 @@ impl BufferTextSourceCharPreparedAppend {
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
     ) -> Option<BufferTextSourceCharAppendOutcome> {
-        let advance_px = self.advance_px();
-        let (progress, position) =
-            context.append_source_char_plan_to_text_row(geometry, state, self.plan)?;
-        Some(BufferTextSourceCharAppendOutcome {
-            progress,
-            position,
-            advance_px,
-        })
+        let progress = context.append_source_char_plan_to_text_row(geometry, state, self.plan)?;
+        Some(BufferTextSourceCharAppendOutcome { progress })
     }
 
     pub(crate) fn append_to_text_row_and_apply<B: LayoutBufferView + ?Sized>(
@@ -757,8 +751,6 @@ impl BufferTextSourceCharPreparedAppend {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceCharAppendOutcome {
     progress: DisplayRowAppendProgress,
-    position: DisplayRowPosition,
-    advance_px: f32,
 }
 
 impl BufferTextSourceCharAppendOutcome {
@@ -770,12 +762,10 @@ impl BufferTextSourceCharAppendOutcome {
         x: &mut f32,
         col: &mut usize,
     ) {
-        trailing_whitespace.track_rendered_char(
-            ch,
-            geometry.start_marker_at_x(self.position.x_px - self.advance_px),
-        );
-        *x = self.position.x_px;
-        *col = self.position.col;
+        trailing_whitespace
+            .track_rendered_char(ch, geometry.start_marker_at_x(self.progress.start.x_px));
+        *x = self.progress.end.x_px;
+        *col = self.progress.end.col;
     }
 
     pub(crate) fn apply_rendered_char_to_walk_state(
@@ -1002,14 +992,13 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         state: &mut TextRowSourceRenderState<'_>,
     ) -> Option<BufferTextSpecialSourceCharAppendOutcome> {
         let append_policy = self.prepare_append_policy(params, face_ids);
-        let (progress, position) = context.append_special_source_char_plan_to_text_row_and_emit(
+        let progress = context.append_special_source_char_plan_to_text_row_and_emit(
             geometry,
             state,
             self.append_plan,
         )?;
         Some(BufferTextSpecialSourceCharAppendOutcome {
             progress,
-            position,
             append_policy,
         })
     }
@@ -1055,7 +1044,6 @@ impl BufferTextSpecialSourceCharAppendPolicy {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextSpecialSourceCharAppendOutcome {
     progress: DisplayRowAppendProgress,
-    position: DisplayRowPosition,
     append_policy: BufferTextSpecialSourceCharAppendPolicy,
 }
 
@@ -1069,8 +1057,8 @@ impl BufferTextSpecialSourceCharAppendOutcome {
         if self.append_policy.invalidates_face_after_append() {
             face_scan.invalidate();
         }
-        *x = self.position.x_px;
-        *col = self.position.col;
+        *x = self.progress.end.x_px;
+        *col = self.progress.end.col;
     }
 
     pub(crate) fn apply_rendered_special_char_to_walk_state(
@@ -1274,7 +1262,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         state: &mut TextRowSourceRenderState<'_>,
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         let append_item = buffer_text_source_item_append_request(
             source_item,
             self.buffer_id,
@@ -1293,7 +1281,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         item: DisplayItem,
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
-    ) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    ) -> Option<DisplayRowAppendProgress> {
         self.single_item_context()
             .render_item_naturally(state, item, position, fallback_kind)
     }

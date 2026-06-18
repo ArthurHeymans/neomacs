@@ -2064,14 +2064,6 @@ impl CurrentTextRowRenderOutcome {
             self.source_slots,
         )
     }
-
-    pub(crate) fn into_append_progress_and_position(
-        self,
-        start: DisplayRowPosition,
-    ) -> (DisplayRowAppendProgress, DisplayRowPosition) {
-        let end = self.end;
-        (self.into_append_progress(start), end)
-    }
 }
 
 fn display_row_append_progress_from_render_result(
