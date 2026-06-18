@@ -2258,6 +2258,7 @@ mod divergence_file_remote_tramp;
 mod divergence_file_variables_deep;
 mod divergence_fileio_deep;
 mod divergence_fill_abbrev_comment;
+mod divergence_float_format_runtime;
 mod divergence_fontlock_jitlock_highlight;
 mod divergence_format_char_pua;
 mod divergence_format_char_pua_matrix;
