@@ -1,0 +1,79 @@
+use super::*;
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphMatrix, GlyphType};
+use neomacs_display_protocol::types::{Color, Rect};
+
+fn push_text(row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow, text: &str) {
+    for (idx, ch) in text.chars().enumerate() {
+        crate::glyph_row_writer::push_char_to_row(row, ch, 0, idx, 0.0);
+    }
+}
+
+fn phys_cursor(window_id: i64, row: usize, col: u16) -> PhysCursor {
+    PhysCursor {
+        window_id,
+        charpos: 0,
+        row,
+        col,
+        slot_id: DisplaySlotId {
+            window_id,
+            row: row as u32,
+            col,
+        },
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: Color::WHITE,
+        cursor_fg: Color::BLACK,
+    }
+}
+
+#[test]
+fn finalizes_matrix_row_with_bidi_reorder() {
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0].role = GlyphRowRole::Text;
+    push_text(&mut matrix.rows[0], "אב");
+
+    GlyphRowFinalizationContext::new(1, 0, Rect::new(0.0, 0.0, 80.0, 16.0))
+        .finalize_matrix_row(&mut matrix, None);
+
+    let glyphs = &matrix.rows[0].glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'ב' });
+    assert_eq!(glyphs[1].glyph_type, GlyphType::Char { ch: 'א' });
+    assert!(matrix.rows[0].reversed_p);
+}
+
+#[test]
+fn remaps_matching_phys_cursor_after_bidi_reorder() {
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0].role = GlyphRowRole::Text;
+    matrix.rows[0].cursor_col = Some(0);
+    push_text(&mut matrix.rows[0], "אב");
+
+    let mut cursor = phys_cursor(1, 0, 0);
+    GlyphRowFinalizationContext::new(1, 0, Rect::new(4.0, 0.0, 80.0, 16.0))
+        .finalize_matrix_row(&mut matrix, Some(&mut cursor));
+
+    assert_eq!(matrix.rows[0].cursor_col, Some(1));
+    assert_eq!(cursor.col, 1);
+    assert_eq!(cursor.slot_id.col, 1);
+    assert_eq!(cursor.x, 12.0);
+}
+
+#[test]
+fn leaves_nonmatching_phys_cursor_unchanged() {
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0].role = GlyphRowRole::Text;
+    push_text(&mut matrix.rows[0], "אב");
+
+    let mut cursor = phys_cursor(2, 0, 0);
+    GlyphRowFinalizationContext::new(1, 0, Rect::new(4.0, 0.0, 80.0, 16.0))
+        .finalize_matrix_row(&mut matrix, Some(&mut cursor));
+
+    assert_eq!(cursor.col, 0);
+    assert_eq!(cursor.slot_id.col, 0);
+    assert_eq!(cursor.x, 0.0);
+}

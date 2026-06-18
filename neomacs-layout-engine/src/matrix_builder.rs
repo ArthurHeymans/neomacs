@@ -8,8 +8,8 @@
 
 use crate::display_cursor::{
     CursorVisualColumnResolutionContext, CursorVisualColumnResolutionRequest,
-    cursor_window_matches_current,
 };
+use crate::display_row_finalizer::GlyphRowFinalizationContext;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -360,7 +360,14 @@ impl MatrixRowLifecycleRequest {
                 }
             }
             Self::EndIncremental => {
-                builder.reorder_current_row_bidi();
+                if let Some(ref mut matrix) = builder.current_matrix {
+                    GlyphRowFinalizationContext::new(
+                        builder.current_window_id,
+                        builder.current_row,
+                        builder.current_pixel_bounds,
+                    )
+                    .finalize_matrix_row(matrix, builder.phys_cursor.as_mut());
+                }
                 builder.in_row = false;
             }
             Self::CurrentMetrics(metrics) => {
@@ -882,45 +889,6 @@ impl GlyphMatrixBuilder {
         state.frame_pixel_width = frame_pixel_width;
         state.frame_pixel_height = frame_pixel_height;
         state
-    }
-
-    fn reorder_current_row_bidi(&mut self) {
-        let remapped_cursor_col = if let Some(ref mut matrix) = self.current_matrix {
-            if self.current_row >= matrix.rows.len() {
-                return;
-            }
-
-            let phys_cursor_col = self
-                .phys_cursor
-                .as_ref()
-                .filter(|cursor| {
-                    cursor_window_matches_current(cursor.window_id, self.current_window_id)
-                        && cursor.row == self.current_row
-                })
-                .map(|cursor| cursor.col);
-
-            crate::glyph_row_writer::reorder_row_bidi(
-                &mut matrix.rows[self.current_row],
-                phys_cursor_col,
-            )
-        } else {
-            None
-        };
-
-        if let Some(col) = remapped_cursor_col
-            && let Some(ref mut cursor) = self.phys_cursor
-            && cursor_window_matches_current(cursor.window_id, self.current_window_id)
-            && cursor.row == self.current_row
-        {
-            cursor.col = col;
-            cursor.slot_id.col = col;
-            if let Some(ref matrix) = self.current_matrix
-                && matrix.ncols > 0
-            {
-                let char_w = self.current_pixel_bounds.width / matrix.ncols as f32;
-                cursor.x = self.current_pixel_bounds.x + col as f32 * char_w;
-            }
-        }
     }
 }
 
