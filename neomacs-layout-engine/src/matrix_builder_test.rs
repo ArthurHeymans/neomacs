@@ -95,7 +95,7 @@ fn write_left_margin_stretch_to_current_row(
         .expect("current row");
 }
 
-fn prebuilt_text_row(role: GlyphRowRole, glyphs: Vec<Glyph>) -> GlyphRow {
+fn external_text_row(role: GlyphRowRole, glyphs: Vec<Glyph>) -> GlyphRow {
     let mut row = GlyphRow::new(role);
     row.mode_line = matches!(
         role,
@@ -271,8 +271,8 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
         Glyph::char('U', 5, 0),
         Glyph::char(':', 5, 0),
     ];
-    let row = prebuilt_text_row(GlyphRowRole::ModeLine, glyphs);
-    builder.install_prebuilt_row(3, &row);
+    let row = external_text_row(GlyphRowRole::ModeLine, glyphs);
+    builder.install_display_row(3, &row);
     builder.end_window();
 
     let state = builder.finish(80, 4, 8.0, 16.0);
@@ -295,18 +295,18 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
 }
 
 #[test]
-fn builder_install_prebuilt_row_preserves_row_and_relative_metrics() {
+fn builder_install_display_row_preserves_row_and_relative_metrics() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 20.0, 640.0, 60.0), true);
 
-    let mut row = prebuilt_text_row(GlyphRowRole::Text, vec![Glyph::char('z', 7, 42)]);
+    let mut row = external_text_row(GlyphRowRole::Text, vec![Glyph::char('z', 7, 42)]);
     row.pixel_y = 44.0;
     row.height_px = 18.0;
     row.ascent_px = 13.0;
     row.start_charpos = 42;
     row.end_charpos = 43;
 
-    builder.install_prebuilt_row(1, &row);
+    builder.install_display_row(1, &row);
     builder.end_window();
 
     let state = builder.finish(80, 3, 8.0, 16.0);
@@ -329,8 +329,8 @@ fn builder_status_line_empty_row_when_no_chars_pushed() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 40, Rect::new(0.0, 0.0, 320.0, 48.0), true);
 
-    let row = prebuilt_text_row(GlyphRowRole::ModeLine, Vec::new());
-    builder.install_prebuilt_row(2, &row);
+    let row = external_text_row(GlyphRowRole::ModeLine, Vec::new());
+    builder.install_display_row(2, &row);
     builder.end_window();
 
     let state = builder.finish(40, 3, 8.0, 16.0);
@@ -339,10 +339,10 @@ fn builder_status_line_empty_row_when_no_chars_pushed() {
 }
 
 #[test]
-fn builder_prebuilt_row_without_window_is_noop() {
+fn builder_display_row_without_window_is_noop() {
     let mut builder = GlyphMatrixBuilder::new();
-    let row = prebuilt_text_row(GlyphRowRole::ModeLine, vec![Glyph::char('x', 0, 0)]);
-    builder.install_prebuilt_row(0, &row);
+    let row = external_text_row(GlyphRowRole::ModeLine, vec![Glyph::char('x', 0, 0)]);
+    builder.install_display_row(0, &row);
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert!(state.window_matrices.is_empty());
 }
@@ -970,11 +970,11 @@ fn builder_reorders_status_line_rtl_row() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
 
-    let row = prebuilt_text_row(
+    let row = external_text_row(
         GlyphRowRole::ModeLine,
         vec![Glyph::char('א', 5, 0), Glyph::char('ב', 5, 1)],
     );
-    builder.install_prebuilt_row(1, &row);
+    builder.install_display_row(1, &row);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);
@@ -989,14 +989,13 @@ fn builder_reorders_status_line_rtl_row() {
 /// Cross-row-kind RTL bidi parity (Slice 4 characterization; guards Slice 5).
 ///
 /// A buffer `Text` row (incremental path — reorders at `EndIncremental`) and a
-/// `ModeLine` chrome row (prebuilt path — reorders via `normalize_external_row`)
+/// `ModeLine` chrome row (copied row path — reorders at `EndIncremental`)
 /// built from the SAME Hebrew string must reorder to the SAME visual glyph
 /// order, per-glyph `bidi_level`, and `reversed_p`. Today the two paths run the
-/// same `reorder_row_bidi` at different times, so these axes are identical;
-/// Slice 5 collapses them onto one finalizer and must preserve this parity.
+/// same `reorder_row_bidi` finalizer, so these axes are identical.
 ///
 /// The cursor column is the ONE axis that legitimately differs (the Text path
-/// threads `phys_cursor`; the prebuilt/chrome path passes `None`), so it is
+/// threads `phys_cursor`; the copied chrome path passes `None`), so it is
 /// deliberately NOT asserted here.
 #[test]
 fn rtl_text_and_chrome_rows_reorder_identically() {
@@ -1009,12 +1008,12 @@ fn rtl_text_and_chrome_rows_reorder_identically() {
     write_char_to_current_row(&mut builder, 'ב', 0, 1);
     builder.end_row();
 
-    // Row 1 — ModeLine chrome row via the prebuilt path (normalize_external_row).
-    let chrome = prebuilt_text_row(
+    // Row 1 — ModeLine chrome row copied into the matrix row.
+    let chrome = external_text_row(
         GlyphRowRole::ModeLine,
         vec![Glyph::char('א', 5, 0), Glyph::char('ב', 5, 1)],
     );
-    builder.install_prebuilt_row(1, &chrome);
+    builder.install_display_row(1, &chrome);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);

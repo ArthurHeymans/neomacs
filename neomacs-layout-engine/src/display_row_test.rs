@@ -2737,7 +2737,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
 }
 
 #[test]
-fn prebuilt_display_row_install_preserves_row_metadata() {
+fn display_row_matrix_install_preserves_row_metadata() {
     let mut row = GlyphRow::new(GlyphRowRole::ModeLine);
     row.enabled = true;
     row.pixel_y = 40.0;
@@ -2749,7 +2749,7 @@ fn prebuilt_display_row_install_preserves_row_metadata() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 16.0, 80.0, 40.0), true);
-    PrebuiltDisplayRowInstall::new(1, &row).install(&mut builder);
+    install_display_row_in_matrix_row(&mut builder, 1, &row);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);

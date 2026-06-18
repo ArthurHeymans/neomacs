@@ -10,7 +10,7 @@ use crate::display_item::{
     DisplayImageItem, DisplayItemKind, DisplayMediaReplacement, DisplaySourceMappedText,
     DisplaySourcePosition, DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
-use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
     classify_display_property,
@@ -31,9 +31,7 @@ use crate::display_row_geometry::{
     DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
-use crate::display_row_overlay_string::{
-    OverlayStringRenderBatchSource, OverlayStringRowBreakRenderContext, render_overlay_string_batch,
-};
+use crate::display_row_overlay_string::OverlayStringRowBreakRenderContext;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
@@ -49,9 +47,7 @@ use crate::display_source::{
     DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
-use crate::neovm_bridge::{
-    FaceResolver, LayoutBufferSnapshot, OverlayDisplayString, RustBufferAccess,
-};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::TextMatrixRowTransition;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -4168,77 +4164,6 @@ fn overlay_string_row_break_context_finishes_current_row() {
     assert_eq!(ctx.hit_rows[0].charpos_start, 2);
     assert_eq!(ctx.hit_rows[0].charpos_end, 5);
     assert_eq!(hit_row_range.start(), 5);
-}
-
-#[test]
-fn overlay_string_render_batch_empty_keeps_render_state() {
-    let mut ctx = RowTransitionTestContext::new("overlay-empty-render-state");
-    let buf_id = ctx
-        .eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let buffer = current_buffer_snapshot(&ctx.eval, buf_id);
-    let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
-    let active_face = test_active_face_state(7, 8.0);
-    let row_context =
-        OverlayStringRenderRowContext::new(&surface, &active_face, 16.0, 12.0, 0.0, 0, 4);
-    let table = FaceTable::new();
-    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut x = 24.0;
-    let mut col = 3;
-    let mut cursor_info = CursorCaptureState::new();
-    let mut hit_row_range = HitRowRangeTracker::new(2);
-    let overlay_strings: [OverlayDisplayString; 0] = [];
-
-    {
-        let source_render = TextRowSourceRenderState::new(
-            &mut ctx.builder,
-            &mut ctx.output_emitter,
-            &mut ctx.eval,
-            &mut font_metrics,
-            &face_resolver,
-        );
-        let mut state = OverlayStringRenderState::from_source_render(
-            source_render,
-            &mut x,
-            &mut col,
-            &mut ctx.geometry,
-            &mut cursor_info,
-            &mut ctx.hit_rows,
-            &mut hit_row_range,
-            &mut ctx.row_y_positions,
-            &mut face_ids,
-        );
-        render_overlay_string_batch(
-            &buffer,
-            OverlayStringRenderBatchSource::new(
-                &overlay_strings,
-                CharPos0::new(5),
-                OverlayStringKind::Before,
-            ),
-            row_context,
-            &mut state,
-        );
-    }
-
-    assert_eq!(x, 24.0);
-    assert_eq!(col, 3);
-    assert_eq!(ctx.geometry.row(), 0);
-    assert!(cursor_info.captured().is_none());
-    assert!(ctx.hit_rows.is_empty());
-    assert_eq!(hit_row_range.start(), 2);
 }
 
 #[test]

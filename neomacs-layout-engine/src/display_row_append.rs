@@ -41,9 +41,7 @@ use crate::display_row_geometry::{
     DisplayRowScopedValue, DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions,
     DisplayRowYRecording,
 };
-use crate::display_row_overlay_string::{
-    OverlayStringRenderBatchSource, render_overlay_string_batch,
-};
+use crate::display_row_overlay_string::render_overlay_string;
 use crate::display_row_source_render::{
     TextRowOutputRenderState, TextRowSourceMeasureState, TextRowSourceRenderState,
     current_text_measure_state, current_text_render_state,
@@ -2239,16 +2237,18 @@ impl<'a> BufferOverlayStringRenderContext<'a> {
             .into_iter()
             .filter(|entry| entry.after_string_p == want_after)
             .collect();
-        render_overlay_string_batch(
-            buffer,
-            OverlayStringRenderBatchSource::new(
-                &overlay_strings,
-                CharPos0::new(anchor_charpos as usize),
-                kind,
-            ),
-            self.row_context,
-            state,
-        );
+        for overlay_string in overlay_strings {
+            render_overlay_string(
+                buffer,
+                OverlayStringRenderSource::new(
+                    overlay_string,
+                    CharPos0::new(anchor_charpos as usize),
+                    kind,
+                ),
+                self.row_context,
+                state,
+            );
+        }
     }
 }
 

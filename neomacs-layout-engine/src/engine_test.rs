@@ -18,7 +18,6 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::DisplayRowMaxX;
-use crate::display_row_overlay_string::OverlayStringRenderBatchSource;
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     next_window_start_for_partially_visible_point_row,
@@ -666,41 +665,6 @@ fn overlay_string_render_source_exposes_typed_render_inputs() {
     assert_eq!(
         source.base_face_policy(),
         BaseFacePolicy::OverlayStringAtAnchor
-    );
-}
-
-#[test]
-fn overlay_string_render_batch_source_builds_typed_sources() {
-    let _eval = Context::new();
-    let first = crate::neovm_bridge::OverlayDisplayString {
-        string: Value::string("before"),
-        overlay_id: Value::symbol("overlay-a"),
-        after_string_p: false,
-        priority: 0,
-    };
-    let second = crate::neovm_bridge::OverlayDisplayString {
-        string: Value::string("after"),
-        overlay_id: Value::symbol("overlay-b"),
-        after_string_p: true,
-        priority: 0,
-    };
-    let overlay_strings = [first, second];
-    let batch = OverlayStringRenderBatchSource::new(
-        &overlay_strings,
-        CharPos0::new(3),
-        OverlayStringKind::Before,
-    );
-
-    assert!(!batch.is_empty());
-    let source = batch.source_for(second);
-    assert_eq!(source.value(), second.string);
-    assert_eq!(
-        source.origin(),
-        DisplayOrigin::OverlayString {
-            overlay_id: second.overlay_id,
-            anchor_charpos: CharPos0::new(3),
-            kind: OverlayStringKind::Before,
-        }
     );
 }
 

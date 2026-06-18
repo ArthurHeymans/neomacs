@@ -33,7 +33,7 @@ use crate::glyph_row_writer;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCurrentWindowMediaClip, MatrixFrameStateInstallRequest,
     MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixMediaInstallTarget,
-    MatrixPrebuiltRowRequest, MatrixRowBeginRequest, MatrixRowLifecycleRequest,
+    MatrixRowBeginRequest, MatrixRowLifecycleRequest,
 };
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
@@ -2417,29 +2417,17 @@ fn finish_current_text_row_render(
     }
 }
 
-pub(crate) struct PrebuiltDisplayRowInstall<'row> {
+pub(crate) fn install_display_row_in_matrix_row(
+    builder: &mut GlyphMatrixBuilder,
     matrix_row: usize,
-    row: &'row GlyphRow,
-}
-
-impl<'row> PrebuiltDisplayRowInstall<'row> {
-    pub(crate) fn new(matrix_row: usize, row: &'row GlyphRow) -> Self {
-        Self { matrix_row, row }
-    }
-
-    pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
-        builder.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
-            row: self.matrix_row,
-            role: self.row.role,
-        }));
-        builder.install_row_lifecycle(MatrixRowLifecycleRequest::PrebuiltCurrent(
-            MatrixPrebuiltRowRequest { source: self.row },
-        ));
-        // Single bidi finalizer for all row kinds: chrome/prebuilt rows now
-        // reorder at install (EndIncremental) like buffer rows, instead of
-        // during render. The source glyphs are copied un-reordered above.
-        builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
-    }
+    row: &GlyphRow,
+) {
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+        row: matrix_row,
+        role: row.role,
+    }));
+    builder.copy_display_row_to_current_row(row);
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
 }
 
 pub(crate) fn install_measured_window_display_row(
@@ -2467,7 +2455,7 @@ pub(crate) fn install_measured_window_display_row(
     row.pixel_y = measured.bounds.y;
     row.height_px = measured.row_height();
     row.ascent_px = measured.row_ascent();
-    PrebuiltDisplayRowInstall::new(matrix_row, &row).install(builder);
+    install_display_row_in_matrix_row(builder, matrix_row, &row);
 }
 
 pub(crate) fn install_measured_frame_chrome_row(

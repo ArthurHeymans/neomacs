@@ -6,7 +6,6 @@ use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
     CapturedCursorVisualState, CursorCaptureState,
 };
-use crate::display_origin::OverlayStringKind;
 use crate::display_row::DisplayRowRenderStop;
 use crate::display_row_append::{
     DisplayRowLineBreakTransitionRequest, LispStringSourceId, LispStringSourceRowAppendSession,
@@ -14,65 +13,10 @@ use crate::display_row_append::{
 };
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::DisplayRowYRecording;
-use crate::neovm_bridge::{LayoutBufferView, OverlayDisplayString};
+use crate::neovm_bridge::LayoutBufferView;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
-
-#[derive(Clone, Copy)]
-pub(crate) struct OverlayStringRenderBatchSource<'a> {
-    overlay_strings: &'a [OverlayDisplayString],
-    anchor_charpos: CharPos0,
-    kind: OverlayStringKind,
-}
-
-impl<'a> OverlayStringRenderBatchSource<'a> {
-    pub(crate) fn new(
-        overlay_strings: &'a [OverlayDisplayString],
-        anchor_charpos: CharPos0,
-        kind: OverlayStringKind,
-    ) -> Self {
-        Self {
-            overlay_strings,
-            anchor_charpos,
-            kind,
-        }
-    }
-
-    pub(crate) fn is_empty(self) -> bool {
-        self.overlay_strings.is_empty()
-    }
-
-    pub(crate) fn overlay_strings(self) -> &'a [OverlayDisplayString] {
-        self.overlay_strings
-    }
-
-    pub(crate) fn source_for(
-        self,
-        overlay_string: OverlayDisplayString,
-    ) -> OverlayStringRenderSource {
-        OverlayStringRenderSource::new(overlay_string, self.anchor_charpos, self.kind)
-    }
-}
-
-pub(crate) fn render_overlay_string_batch<B: LayoutBufferView>(
-    buffer: &B,
-    source_batch: OverlayStringRenderBatchSource<'_>,
-    row_context: OverlayStringRenderRowContext<'_>,
-    state: &mut OverlayStringRenderState<'_>,
-) {
-    if source_batch.is_empty() {
-        return;
-    }
-    for overlay_string in source_batch.overlay_strings() {
-        render_overlay_string(
-            buffer,
-            source_batch.source_for(*overlay_string),
-            row_context,
-            state,
-        );
-    }
-}
 
 #[derive(Clone, Copy)]
 pub(crate) struct OverlayStringRowBreakRenderContext<'a> {
@@ -125,7 +69,7 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
     }
 }
 
-fn render_overlay_string<B: LayoutBufferView>(
+pub(crate) fn render_overlay_string<B: LayoutBufferView>(
     buffer: &B,
     source_request: OverlayStringRenderSource,
     row_context: OverlayStringRenderRowContext<'_>,
