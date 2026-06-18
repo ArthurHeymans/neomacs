@@ -1,0 +1,369 @@
+//! Complex combo batch 422 — 20 probes into remaining edge areas:
+//! marker insertion-type with edit patterns, overlay priority face
+//! merging, text-property front/rear sticky, keymap precedence
+//! ordering, hash-table all weakness types, syntax pps nested
+//! comments/strings, regex symbol boundaries, char syntax classes,
+//! process filter modifying its buffer, bidi paragraph-start/end,
+//! and multi-level keymap inheritance.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+/// marker insertion-type: before vs after insert at marker.
+#[test]
+fn div_cx422_marker_insertion_type_edit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcde")
+  (let ((m-before (make-marker))
+        (m-after (make-marker)))
+    (set-marker m-before 3)
+    (set-marker m-after 3)
+    (set-marker-insertion-type m-before nil)
+    (set-marker-insertion-type m-after t)
+    (goto-char 3)
+    (insert "XY")
+    (list (marker-position m-before)
+          (marker-position m-after))))
+"##,
+    );
+}
+
+/// overlay priority: multiple overlays with same priority.
+#[test]
+fn div_cx422_overlay_priority_same() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdef")
+  (let ((o1 (make-overlay 2 5)) (o2 (make-overlay 2 5)))
+    (overlay-put o1 'face 'bold)
+    (overlay-put o2 'face 'italic)
+    (overlay-put o1 'priority 5)
+    (overlay-put o2 'priority 5)
+    (get-char-property 3 'face)))
+"##,
+    );
+}
+
+/// text-property front-sticky / rear-sticky across insert.
+#[test]
+fn div_cx422_text_prop_sticky_inherit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcde")
+  (put-text-property 1 3 'face 'bold)
+  (put-text-property 3 5 'face 'italic)
+  (put-text-property 1 5 'front-sticky '(face))
+  (put-text-property 1 5 'rear-nonsticky '(face))
+  (goto-char 3)
+  (insert "X")
+  (list (get-text-property 3 'face)
+        (get-text-property 4 'face)))
+"##,
+    );
+}
+
+/// keymap precedence: minor-mode, local, global ordering.
+#[test]
+fn div_cx422_keymap_precedence_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (let ((minor (make-sparse-keymap))
+        (local (make-sparse-keymap)))
+    (define-key minor "a" 'backward-char)
+    (define-key local "a" 'forward-char)
+    (use-local-map local)
+    (let ((minor-mode-map-alist (list (cons (make-symbol "test") minor))))
+      (key-binding "a"))))
+"##,
+    );
+}
+
+/// hash-table weakness: all 4 weakness types.
+#[test]
+fn div_cx422_hash_weakness_all_types() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((k1 (cons 1 nil))
+      (k2 (cons 2 nil))
+      (v1 (cons 'a nil))
+      (v2 (cons 'b nil)))
+  (let ((ht-key (make-hash-table :weakness 'key :test 'eq))
+        (ht-val (make-hash-table :weakness 'value :test 'eq))
+        (ht-ko (make-hash-table :weakness 'key-or-value :test 'eq))
+        (ht-ka (make-hash-table :weakness 'key-and-value :test 'eq)))
+    (puthash k1 v1 ht-key)
+    (puthash k2 v2 ht-val)
+    (puthash k1 v1 ht-ko)
+    (puthash k1 v1 ht-ka)
+    (list (hash-table-count ht-key)
+          (hash-table-count ht-val)
+          (hash-table-count ht-ko)
+          (hash-table-count ht-ka))))
+"##,
+    );
+}
+
+/// syntax pps with nested comments and strings.
+#[test]
+fn div_cx422_syntax_pps_nested() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "(defun f () \"hello /* comment */ world\" ; (not a comment)
+          42)")
+  (list (parse-partial-sexp 1 8)
+        (parse-partial-sexp 1 18)
+        (parse-partial-sexp 1 35)))
+"##,
+    );
+}
+
+/// regex with symbol boundaries \\_< \\_>.
+#[test]
+fn div_cx422_regex_symbol_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "foo_bar foo-bar foo_bar")
+  (let (results)
+    (goto-char 1)
+    (while (re-search-forward "\\_<foo_bar\\_>" nil t)
+      (push (match-string 0) results))
+    (nreverse results)))
+"##,
+    );
+}
+
+/// char syntax classes for various syntax types.
+#[test]
+fn div_cx422_char_syntax_classes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (char-syntax ?a)
+      (char-syntax ?\()
+      (char-syntax ?\))
+      (char-syntax ?\")
+      (char-syntax ?\;)
+      (char-syntax ?\ )
+      (char-syntax ?_)
+      (char-syntax ?\()))
+"##,
+    );
+}
+
+/// process filter modifying its own buffer.
+#[test]
+fn div_cx422_process_filter_modify_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((buf (get-buffer-create " *cx422-pfmb*")))
+  (with-current-buffer buf (insert "initial: "))
+  (let ((proc (make-process :name "neo-cx422-pf"
+                            :command '("echo" "hello")
+                            :connection-type 'pipe :buffer buf)))
+    (accept-process-output proc 2)
+    (prog1 (with-current-buffer buf
+             (string-trim-right (buffer-string)))
+      (kill-buffer buf))))
+"##,
+    );
+}
+
+/// bidi paragraph-start / paragraph-end.
+#[test]
+fn div_cx422_bidi_paragraph_direction() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abc العربية def\n")
+  (list (current-bidi-paragraph-direction)
+        (progn (goto-char 1)
+               (forward-paragraph 1)
+               (point))))
+"##,
+    );
+}
+
+/// multi-level keymap inheritance chain.
+#[test]
+fn div_cx422_keymap_multi_level_inherit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((base (make-sparse-keymap))
+      (mid (make-sparse-keymap))
+      (top (make-sparse-keymap)))
+  (define-key base "a" 'base-fn)
+  (define-key mid "b" 'mid-fn)
+  (define-key top "c" 'top-fn)
+  (set-keymap-parent mid base)
+  (set-keymap-parent top mid)
+  (list (key-binding "a" nil nil top)
+        (key-binding "b" nil nil top)
+        (key-binding "c" nil nil top)))
+"##,
+    );
+}
+
+/// text-property with multiple overlapping properties.
+#[test]
+fn div_cx422_text_prop_overlap_multiple() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcdefghij")
+  (put-text-property 1 10 'face 'bold)
+  (put-text-property 3 7 'face 'italic)
+  (put-text-property 4 6 'face 'underline)
+  (put-text-property 5 8 'mouse-face 'highlight)
+  (list (get-text-property 2 'face)
+        (get-text-property 4 'face)
+        (get-text-property 5 'face)
+        (get-text-property 7 'face)))
+"##,
+    );
+}
+
+/// overlay with before-string and after-string simultaneously.
+#[test]
+fn div_cx422_overlay_both_strings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abc")
+  (let ((ov (make-overlay 2 3)))
+    (overlay-put ov 'before-string ">>")
+    (overlay-put ov 'after-string "<<")
+    (list (buffer-string)
+          (overlay-start ov)
+          (overlay-end ov))))
+"##,
+    );
+}
+
+/// regex with optional matching: \? after various constructs.
+#[test]
+fn div_cx422_regex_optional_quantifier() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (string-match "ab?c" "ac")
+      (match-string 0 "ac")
+      (string-match "ab?c" "abc")
+      (match-string 0 "abc")
+      (string-match "a\\(bc\\)?d" "ad")
+      (match-string 0 "ad")
+      (string-match "a\\(bc\\)?d" "abcd")
+      (match-string 0 "abcd"))
+"##,
+    );
+}
+
+/// float arithmetic with NaN and Inf.
+#[test]
+fn div_cx422_float_nan_inf() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (condition-case e (/ 0.0 0) (error (car e)))
+      (condition-case e (/ 1.0 0) (error (car e)))
+      (condition-case e (/ -1.0 0) (error (car e))))
+"##,
+    );
+}
+
+/// format with %e %f %g scientific notation.
+#[test]
+fn div_cx422_format_scientific() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((pi 3.141592653589793))
+  (list (format "%e" pi)
+        (format "%f" pi)
+        (format "%g" pi)
+        (format "%.2e" 1000000.0)
+        (format "%.2f" pi)))
+"##,
+    );
+}
+
+/// process-coding-system for stdin/stdout/stderr.
+#[test]
+fn div_cx422_process_coding_std() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((proc (make-process :name "neo-cx422-pcs"
+                          :command '("cat")
+                          :connection-type 'pipe :buffer nil
+                          :coding '(utf-8-unix . latin-1))))
+  (process-send-string proc "test\n")
+  (accept-process-output proc 1)
+  (let ((coding (process-coding-system proc)))
+    (delete-process proc)
+    (list (car coding) (cdr coding))))
+"##,
+    );
+}
+
+/// char-after/char-before with display property substitution.
+#[test]
+fn div_cx422_char_after_before_display() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abcde")
+  (put-text-property 2 3 'display "XYZ")
+  (list (char-after 1)
+        (char-after 2)
+        (progn (goto-char 4) (char-before))))
+"##,
+    );
+}
+
+/// list notation with dotted pair printing.
+#[test]
+fn div_cx422_dotted_pair_print() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (prin1-to-string '(a . b))
+      (prin1-to-string '(a b . c))
+      (prin1-to-string '(a b c)))
+"##,
+    );
+}
+
+/// vector operations: vconcat, vector, aref, aset edge.
+#[test]
+fn div_cx422_vector_ops_edge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((v (vector 1 2 3)))
+  (aset v 1 99)
+  (list v
+        (vconcat v [4 5])
+        (aref (vconcat [1] [2] [3]) 1)))
+"##,
+    );
+}
