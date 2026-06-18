@@ -26,7 +26,8 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTe
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
-    MatrixRowMetricsRequest, MatrixWindowBeginRequest, MatrixWindowLifecycleRequest,
+    MatrixRowBeginRequest, MatrixRowLifecycleRequest, MatrixRowMetricsRequest,
+    MatrixWindowBeginRequest, MatrixWindowLifecycleRequest,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
@@ -457,7 +458,12 @@ impl<'a> TextMatrixRowOutput<'a> {
     }
 
     pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) -> TextMatrixRowLifecycleOutcome {
-        self.builder.begin_text_row(begin.matrix_row);
+        self.builder
+            .install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+                row: begin.matrix_row,
+                role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+                mode_line: false,
+            }));
         self.output_emitter.begin_text_matrix_row(
             self.evaluator,
             begin.matrix_row,
@@ -477,7 +483,11 @@ impl<'a> TextMatrixRowOutput<'a> {
     ) -> TextMatrixRowLifecycleOutcome {
         let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
         let matrix_row = self.output_emitter.current_text_matrix_row();
-        self.builder.set_row_metrics(matrix_row, matrix_metrics);
+        self.builder
+            .install_row_lifecycle(MatrixRowLifecycleRequest::Metrics {
+                row: matrix_row,
+                metrics: matrix_metrics,
+            });
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
         TextMatrixRowLifecycleOutcome::Finished {
@@ -494,7 +504,8 @@ impl<'a> TextMatrixRowOutput<'a> {
         let TextMatrixRowLifecycleOutcome::Finished { metrics, .. } = self.finish(metrics) else {
             unreachable!("finish returns a finished row outcome");
         };
-        self.builder.finalize_row(matrix_row);
+        self.builder
+            .install_row_lifecycle(MatrixRowLifecycleRequest::Finalize { row: matrix_row });
         TextMatrixRowLifecycleOutcome::FinishedAndFinalized {
             matrix_row,
             metrics,
@@ -904,7 +915,11 @@ impl TextWindowCursorPublication {
         if let Some(cursor) = self.matrix_cursor {
             builder.install_cursor(cursor);
         }
-        builder.set_row_cursor(self.row, self.row_col, self.style);
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::Cursor {
+            row: self.row,
+            col: self.row_col,
+            style: self.style,
+        });
         output_emitter.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
             builder.store_phys_cursor(cursor);
@@ -968,17 +983,19 @@ pub(crate) fn finish_text_window_output_rows(
 ) {
     let window_y = builder.current_window_row_install_context().pixel_bounds.y;
     for metric in output_emitter.row_metrics() {
-        builder.set_row_metrics(
-            metric.matrix_row,
-            MatrixRowMetricsRequest {
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::Metrics {
+            row: metric.matrix_row,
+            metrics: MatrixRowMetricsRequest {
                 pixel_y: metric.pixel_y - window_y,
                 height_px: metric.height,
                 ascent_px: metric.ascent,
             },
-        );
+        });
     }
     if let Some(metric) = output_emitter.row_metrics().last() {
-        builder.finalize_row(metric.matrix_row);
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::Finalize {
+            row: metric.matrix_row,
+        });
     }
 }
 

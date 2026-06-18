@@ -324,6 +324,43 @@ pub(crate) struct MatrixRowMetricsRequest {
     pub(crate) ascent_px: f32,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum MatrixRowLifecycleRequest {
+    Begin(MatrixRowBeginRequest),
+    InstallPrebuilt {
+        begin: MatrixRowBeginRequest,
+        row: GlyphRow,
+    },
+    Metrics {
+        row: usize,
+        metrics: MatrixRowMetricsRequest,
+    },
+    Finalize {
+        row: usize,
+    },
+    Cursor {
+        row: usize,
+        col: u16,
+        style: CursorStyle,
+    },
+}
+
+impl MatrixRowLifecycleRequest {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        match self {
+            Self::Begin(begin) => builder.begin_current_row(begin),
+            Self::InstallPrebuilt { begin, row } => {
+                builder.begin_current_row(begin);
+                builder.replace_current_row(row);
+                builder.end_current_row();
+            }
+            Self::Metrics { row, metrics } => builder.write_row_metrics_at(row, metrics),
+            Self::Finalize { row } => builder.finalize_matrix_row(row),
+            Self::Cursor { row, col, style } => builder.write_row_cursor(row, col, style),
+        }
+    }
+}
+
 pub(crate) trait MatrixRowDecorator {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
 }
@@ -541,13 +578,17 @@ impl GlyphMatrixBuilder {
         request.install(self);
     }
 
+    pub(crate) fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest) {
+        request.install(self);
+    }
+
     #[cfg(test)]
     pub(crate) fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
-        self.begin_current_row(MatrixRowBeginRequest {
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
             row,
             role,
             mode_line: matches!(role, GlyphRowRole::ModeLine),
-        });
+        }));
     }
 
     #[cfg(test)]
@@ -558,14 +599,14 @@ impl GlyphMatrixBuilder {
     /// Record stored geometry for the currently open row.
     #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        self.set_row_metrics(
-            self.current_row,
-            MatrixRowMetricsRequest {
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::Metrics {
+            row: self.current_row,
+            metrics: MatrixRowMetricsRequest {
                 pixel_y,
                 height_px,
                 ascent_px,
             },
-        );
+        });
     }
 
     pub(crate) fn with_current_row_mut<R>(
@@ -582,7 +623,7 @@ impl GlyphMatrixBuilder {
         matrix.rows.get(self.current_row)
     }
 
-    pub(crate) fn set_row_metrics(&mut self, row: usize, metrics: MatrixRowMetricsRequest) {
+    fn write_row_metrics_at(&mut self, row: usize, metrics: MatrixRowMetricsRequest) {
         if let Some(ref mut matrix) = self.current_matrix
             && row < matrix.rows.len()
         {
@@ -595,7 +636,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub(crate) fn set_row_cursor(
+    fn write_row_cursor(
         &mut self,
         row: usize,
         col: u16,
@@ -618,33 +659,19 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub(crate) fn install_prebuilt_row(&mut self, begin: MatrixRowBeginRequest, source: GlyphRow) {
-        self.begin_current_row(begin);
-        self.replace_current_row(source);
-        self.end_current_row();
-    }
-
-    pub(crate) fn begin_text_row(&mut self, row: usize) {
-        self.begin_current_row(MatrixRowBeginRequest {
-            row,
-            role: GlyphRowRole::Text,
-            mode_line: false,
-        });
-    }
-
     #[cfg(test)]
     fn install_display_row(&mut self, row_index: usize, source: &GlyphRow) {
         let context = self.current_window_row_install_context();
         let mut row = source.clone();
         row.pixel_y -= context.pixel_bounds.y;
-        self.install_prebuilt_row(
-            MatrixRowBeginRequest {
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
+            begin: MatrixRowBeginRequest {
                 row: row_index,
                 role: row.role,
                 mode_line: row.mode_line,
             },
             row,
-        );
+        });
     }
 
     fn end_current_row(&mut self) {
@@ -663,10 +690,12 @@ impl GlyphMatrixBuilder {
     }
 
     fn finalize_current_row(&mut self) {
-        self.finalize_row(self.current_row);
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::Finalize {
+            row: self.current_row,
+        });
     }
 
-    pub(crate) fn finalize_row(&mut self, row: usize) {
+    fn finalize_matrix_row(&mut self, row: usize) {
         if let Some(ref mut matrix) = self.current_matrix {
             let matrix_ncols = matrix.ncols;
             let Some(matrix_row) = matrix.rows.get_mut(row) else {
@@ -688,7 +717,7 @@ impl GlyphMatrixBuilder {
         col: u16,
         style: neomacs_display_protocol::frame_glyphs::CursorStyle,
     ) {
-        self.set_row_cursor(row, col, style);
+        self.install_row_lifecycle(MatrixRowLifecycleRequest::Cursor { row, col, style });
     }
 
     // -----------------------------------------------------------------------

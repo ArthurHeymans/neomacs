@@ -33,7 +33,7 @@ use crate::glyph_row_writer;
 use crate::matrix_builder::{
     FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixFrameStateInstallRequest,
     MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixRowBeginRequest,
-    ResolvedMatrixMediaInstallTarget,
+    MatrixRowLifecycleRequest, ResolvedMatrixMediaInstallTarget,
 };
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
@@ -2400,14 +2400,14 @@ pub(crate) fn install_display_row_in_matrix_row(
     let context = builder.current_window_row_install_context();
     let mut row = row.clone();
     row.pixel_y -= context.pixel_bounds.y;
-    builder.install_prebuilt_row(
-        MatrixRowBeginRequest {
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
+        begin: MatrixRowBeginRequest {
             row: matrix_row,
             role: row.role,
             mode_line: row.mode_line,
         },
         row,
-    );
+    });
 }
 
 pub(crate) fn install_measured_window_display_row(

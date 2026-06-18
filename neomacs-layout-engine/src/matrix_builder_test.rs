@@ -153,6 +153,48 @@ fn builder_tracks_single_window_single_row() {
 }
 
 #[test]
+fn row_lifecycle_request_installs_prebuilt_row_metrics_and_cursor() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    crate::glyph_row_writer::push_char_to_row(&mut row, 'x', 3, 11, 8.0);
+
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 2, 10, Rect::new(0.0, 4.0, 80.0, 32.0), true);
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
+        begin: MatrixRowBeginRequest {
+            row: 0,
+            role: GlyphRowRole::Text,
+            mode_line: false,
+        },
+        row,
+    });
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::Metrics {
+        row: 0,
+        metrics: MatrixRowMetricsRequest {
+            pixel_y: 12.0,
+            height_px: 18.0,
+            ascent_px: 13.0,
+        },
+    });
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::Cursor {
+        row: 0,
+        col: 1,
+        style: CursorStyle::Bar(2.0),
+    });
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::Finalize { row: 0 });
+    builder.end_window();
+
+    let state = builder.finish(10, 2, 8.0, 16.0);
+    let row = &state.window_matrices[0].matrix.rows[0];
+    assert_eq!(row.used(GlyphArea::Text), 1);
+    assert_eq!(row.pixel_y, 12.0);
+    assert_eq!(row.height_px, 18.0);
+    assert_eq!(row.ascent_px, 13.0);
+    assert_eq!(row.cursor_col, Some(1));
+    assert_eq!(row.cursor_type, Some(CursorStyle::Bar(2.0)));
+    assert_ne!(row.hash, 0);
+}
+
+#[test]
 fn builder_tracks_multiple_rows() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 3, 10, Rect::new(0.0, 0.0, 80.0, 48.0), true);
