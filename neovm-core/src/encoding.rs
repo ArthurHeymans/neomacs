@@ -1560,7 +1560,7 @@ fn encode_via_charset_list(
     coding_system: &str,
 ) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.sbytes());
-    let mut emit = |code: u32, out: &mut Vec<u8>| {
+    let emit = |code: u32, out: &mut Vec<u8>| {
         for &charset in charset_list {
             if let Some(bytes) =
                 crate::emacs_core::charset::charset_encode_char_bytes(charset, i64::from(code))
