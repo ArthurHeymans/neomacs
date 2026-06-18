@@ -1,7 +1,7 @@
 //! Buffer-text source rendering requests and actions.
 
 use crate::display_buffer_text_source::{
-    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent,
+    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceTextEvent,
 };
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
@@ -11,28 +11,36 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_append::{
     BufferOverlayStringTextRowRenderContext, BufferSyntheticTextRenderContext,
-    BufferSyntheticTextRenderState, DisplayRowAppendSurface, DisplayRowLineBreakTransitionPlan,
-    DisplayRowPrefixRequest, DisplayRowTextWindowEmitContext, DisplayRowTransitionContinuation,
+    BufferSyntheticTextRenderState, BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext,
+    BufferTextRowAppendState, BufferTextSourceCharPreparationRequest,
+    BufferTextSourceCharPreparationState, BufferTextSourceCharPreparedAppend,
+    BufferTextSpecialSourceCharPreparedAppend, DisplayRowAppendSurface,
+    DisplayRowLineBreakTransitionPlan, DisplayRowOverflowTransitionPlan, DisplayRowPrefixRequest,
+    DisplayRowTextWindowEmitContext, DisplayRowTransitionContinuation,
     DisplayRowTransitionRenderState, OverlayStringRenderState, SyntheticTextAppendRequest,
     SyntheticTextMarker,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
-    DisplayRowLimit, DisplayRowScopedValue, DisplayRowYPositions,
+    DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{
-    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
-    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
-    skip_text_to_charpos,
+    ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
+    HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
+    SpecialTextRowOverflowDecision, TextPropertyScanCheckpoints, TextRowTransitionStatePolicy,
+    TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
+    skip_text_to_charpos, skip_to_newline,
 };
+use crate::display_source::BufferDisplayPropertyTextModifierAction;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
+use crate::types::{LineWrapMode, WindowParams};
 use crate::unicode::{decode_utf8, is_wide_char};
 use crate::window_output::{TextMatrixRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
-use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
+use neovm_core::buffer::{BufferId, EmacsBytePos, LispCharPos1};
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
@@ -1720,5 +1728,1255 @@ impl BufferTextLineBreakSourceAction {
             target,
             self.cursor_info(active_face_state, row_geometry, x, col),
         );
+    }
+}
+
+pub(crate) struct BufferTextOverflowRenderState<'a, 'emit> {
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
+    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) row_flags: &'emit mut DisplayRowFlags,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
+    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
+    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
+    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+}
+
+pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
+    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) row_flags: &'emit mut DisplayRowFlags,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
+    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
+    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+}
+
+pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
+    source_event: BufferTextSourceTextEvent,
+    context: BufferTextSourceCharRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextSourceCharRenderContext<'a> {
+    pub(crate) text: &'a [u8],
+    pub(crate) text_start_byte: usize,
+    pub(crate) buffer_id: BufferId,
+    pub(crate) append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) params: &'a WindowParams,
+    pub(crate) glyph_y_offset: f32,
+    pub(crate) char_h: f32,
+    pub(crate) point_charpos: i64,
+    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
+    pub(crate) content_x: f32,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
+}
+
+pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
+    pub(crate) append_state: &'emit mut BufferTextRowAppendState,
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
+    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) row_flags: &'emit mut DisplayRowFlags,
+    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
+    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
+    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
+    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
+    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
+    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) raise_span: &'emit mut ActiveDisplayPropertySpan<f32>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum BufferTextSourceCharOverflowAction {
+    Fits,
+    Truncate {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+    WordWrap {
+        break_candidate: WordWrapBreakCandidate,
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+    CharacterWrap {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+}
+
+impl BufferTextSourceCharOverflowAction {
+    pub(crate) fn for_decision(decision: BufferTextRowOverflowDecision) -> Self {
+        match decision {
+            BufferTextRowOverflowDecision::Fits => Self::Fits,
+            BufferTextRowOverflowDecision::Truncate => Self::Truncate {
+                transition: DisplayRowOverflowTransitionPlan::truncation(
+                    TextRowTransitionStatePolicy::truncation(),
+                ),
+            },
+            BufferTextRowOverflowDecision::WordWrap { break_candidate } => Self::WordWrap {
+                break_candidate,
+                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    TextRowTransitionStatePolicy::visual_wrap(),
+                ),
+            },
+            BufferTextRowOverflowDecision::CharacterWrap => Self::CharacterWrap {
+                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    TextRowTransitionStatePolicy::character_wrap(),
+                ),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextOverflowRenderRequest {
+    prepared_append: BufferTextSourceCharPreparedAppend,
+    decoded_source_char: BufferTextDecodedSourceChar,
+    context: BufferTextOverflowRenderContext,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextOverflowRenderContext {
+    pub(crate) ch: char,
+    pub(crate) right_edge_px: f32,
+    pub(crate) wrap_mode: LineWrapMode,
+    pub(crate) word_wrap: WordWrapRenderState,
+    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
+    pub(crate) content_x: f32,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextOverflowRenderOutcome {
+    Fits,
+    Transition(DisplayRowTransitionContinuation),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceAppendContinuation {
+    Rendered,
+    Stopped,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSourceCharRenderOutcome {
+    Rendered,
+    ContinueBufferWalk,
+    Stop,
+}
+
+pub(crate) struct BufferTextSourceCharRenderState<'a> {
+    pub(crate) source_render: TextRowSourceRenderState<'a>,
+    pub(crate) trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
+    pub(crate) word_wrap: &'a mut WordWrapRenderState,
+    pub(crate) x: &'a mut f32,
+    pub(crate) col: &'a mut usize,
+    pub(crate) charpos: &'a mut i64,
+}
+
+impl<'a> BufferTextSourceCharRenderState<'a> {
+    pub(crate) fn new(
+        source_render: TextRowSourceRenderState<'a>,
+        trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
+        word_wrap: &'a mut WordWrapRenderState,
+        x: &'a mut f32,
+        col: &'a mut usize,
+        charpos: &'a mut i64,
+    ) -> Self {
+        Self {
+            source_render,
+            trailing_whitespace,
+            word_wrap,
+            x,
+            col,
+            charpos,
+        }
+    }
+}
+
+pub(crate) struct BufferTextSpecialSourceCharRenderState<'a> {
+    pub(crate) face_ids: &'a mut FrameFaceIdAllocator,
+    pub(crate) source_render: TextRowSourceRenderState<'a>,
+    pub(crate) face_scan: &'a mut FaceScanCheckpoint,
+    pub(crate) word_wrap: &'a mut WordWrapRenderState,
+    pub(crate) x: &'a mut f32,
+    pub(crate) col: &'a mut usize,
+    pub(crate) charpos: &'a mut i64,
+}
+
+impl<'a> BufferTextSpecialSourceCharRenderState<'a> {
+    pub(crate) fn new(
+        face_ids: &'a mut FrameFaceIdAllocator,
+        source_render: TextRowSourceRenderState<'a>,
+        face_scan: &'a mut FaceScanCheckpoint,
+        word_wrap: &'a mut WordWrapRenderState,
+        x: &'a mut f32,
+        col: &'a mut usize,
+        charpos: &'a mut i64,
+    ) -> Self {
+        Self {
+            face_ids,
+            source_render,
+            face_scan,
+            word_wrap,
+            x,
+            col,
+            charpos,
+        }
+    }
+}
+
+impl BufferTextSourceAppendContinuation {
+    pub(crate) fn should_break(self) -> bool {
+        matches!(self, Self::Stopped)
+    }
+}
+
+impl BufferTextSourceCharRenderOutcome {
+    pub(crate) fn should_break(self) -> bool {
+        matches!(self, Self::Stop)
+    }
+
+    pub(crate) fn should_continue_buffer_walk(self) -> bool {
+        matches!(self, Self::ContinueBufferWalk)
+    }
+}
+
+impl BufferTextOverflowRenderOutcome {
+    pub(crate) fn should_break(self) -> bool {
+        matches!(
+            self,
+            Self::Transition(
+                DisplayRowTransitionContinuation::Exhausted
+                    | DisplayRowTransitionContinuation::Hidden
+            )
+        )
+    }
+
+    pub(crate) fn should_continue_buffer_walk(self) -> bool {
+        matches!(
+            self,
+            Self::Transition(DisplayRowTransitionContinuation::Continue)
+        )
+    }
+}
+
+impl<'a> BufferTextSourceCharRenderRequest<'a> {
+    #[cfg(test)]
+    pub(crate) fn new(
+        decoded_source_char: BufferTextDecodedSourceChar,
+        context: BufferTextSourceCharRenderContext<'a>,
+    ) -> Self {
+        Self::from_source_event(BufferTextSourceTextEvent::new(decoded_source_char), context)
+    }
+
+    pub(crate) fn from_source_event(
+        source_event: BufferTextSourceTextEvent,
+        context: BufferTextSourceCharRenderContext<'a>,
+    ) -> Self {
+        Self {
+            source_event,
+            context,
+        }
+    }
+
+    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: BufferTextSourceCharRenderRequestState<'_, '_>,
+    ) -> BufferTextSourceCharRenderOutcome {
+        let BufferTextSourceCharRenderRequestState {
+            append_state,
+            byte_idx,
+            charpos,
+            col,
+            source_render,
+            row_extend,
+            x,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            face_scan,
+            row_y_positions,
+            cursor_info,
+            face_ids,
+            raise_span,
+        } = state;
+        let mut source_render = source_render;
+        let context = self.context;
+
+        let decoded_source_char = self.source_event.decoded_char();
+        let ch = decoded_source_char.ch();
+        decoded_source_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
+
+        let buffer_source_char = self
+            .source_event
+            .source_char(context.params.nobreak_char_display);
+        let buffer_row_append_context = BufferTextRowAppendContext::new(
+            buffer,
+            context.buffer_id,
+            context.append_surface,
+            context.active_face_state,
+            context.glyph_y_offset,
+            context.char_h,
+        );
+        let append_position = DisplayRowPosition {
+            x_px: *x,
+            col: *col,
+        };
+        let append_geometry = *row_geometry;
+
+        let prepared_append = {
+            let mut preparation_state = BufferTextSourceCharPreparationState::from_source_render(
+                append_state,
+                &mut source_render,
+            );
+            buffer_row_append_context.prepare_source_char_for_current_text_row(
+                BufferTextSourceCharPreparationRequest::new(
+                    append_geometry,
+                    &buffer_source_char,
+                    context.text,
+                    decoded_source_char.start_byte_idx(),
+                    append_position,
+                ),
+                &mut preparation_state,
+            )
+        };
+
+        let prepared_append = match prepared_append {
+            BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
+                let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
+                    &special_prepared_append,
+                    BufferTextSpecialOverflowRenderContext {
+                        text: context.text,
+                        text_start_byte: context.text_start_byte,
+                        x_px: *x,
+                        right_edge_px: context.append_surface.full_text_right_edge(),
+                        wrap_mode: context.params.wrap_mode,
+                        row_visibility_limit: context.row_visibility_limit,
+                        content_x: context.content_x,
+                        has_prefix: context.has_prefix,
+                        row_geometry_defaults: context.row_geometry_defaults,
+                        text_matrix_row_base: context.text_matrix_row_base,
+                        max_rows: context.max_rows,
+                        row_limit: context.row_limit,
+                    },
+                )
+                .render_if_needed_and_apply(
+                    buffer,
+                    BufferTextSpecialOverflowRenderState {
+                        byte_idx,
+                        charpos,
+                        col,
+                        source_render: source_render.reborrow(),
+                        row_extend,
+                        x,
+                        line_numbers,
+                        row_geometry,
+                        row_flags,
+                        hit_rows,
+                        hit_row_range,
+                        prefix_request,
+                        hscroll_skip,
+                        word_wrap,
+                        trailing_whitespace,
+                        row_y_positions,
+                    },
+                );
+                if special_overflow_outcome.should_break() {
+                    return BufferTextSourceCharRenderOutcome::Stop;
+                }
+                if special_overflow_outcome.should_continue_buffer_walk() {
+                    return BufferTextSourceCharRenderOutcome::ContinueBufferWalk;
+                }
+
+                if special_prepared_append
+                    .append_to_text_row_and_apply(
+                        &buffer_row_append_context,
+                        row_geometry,
+                        context.params,
+                        &mut BufferTextSpecialSourceCharRenderState::new(
+                            face_ids,
+                            source_render.reborrow(),
+                            face_scan,
+                            word_wrap,
+                            x,
+                            col,
+                            charpos,
+                        ),
+                    )
+                    .should_break()
+                {
+                    return BufferTextSourceCharRenderOutcome::Stop;
+                }
+                return BufferTextSourceCharRenderOutcome::ContinueBufferWalk;
+            }
+            BufferTextPreparedSourceCharAppend::Text(prepared_append) => prepared_append,
+        };
+
+        prepared_append
+            .update_cursor_info_for_main_char(cursor_info, decoded_source_char.start_byte_idx());
+        let overflow_outcome = BufferTextOverflowRenderRequest::new(
+            prepared_append,
+            decoded_source_char,
+            BufferTextOverflowRenderContext {
+                ch,
+                right_edge_px: context.append_surface.right_edge(),
+                wrap_mode: context.params.wrap_mode,
+                word_wrap: *word_wrap,
+                row_visibility_limit: context.row_visibility_limit,
+                content_x: context.content_x,
+                has_prefix: context.has_prefix,
+                row_geometry_defaults: context.row_geometry_defaults,
+                text_matrix_row_base: context.text_matrix_row_base,
+                max_rows: context.max_rows,
+                row_limit: context.row_limit,
+            },
+        )
+        .render_if_needed_and_apply(
+            context.text,
+            BufferTextOverflowRenderState {
+                byte_idx,
+                charpos,
+                col,
+                source_render: source_render.reborrow(),
+                row_extend,
+                x,
+                line_numbers,
+                row_geometry,
+                row_flags,
+                hit_rows,
+                hit_row_range,
+                prefix_request,
+                hscroll_skip,
+                word_wrap,
+                trailing_whitespace,
+                face_scan,
+                row_y_positions,
+            },
+        );
+        if overflow_outcome.should_break() {
+            return BufferTextSourceCharRenderOutcome::Stop;
+        }
+        if overflow_outcome.should_continue_buffer_walk() {
+            return BufferTextSourceCharRenderOutcome::ContinueBufferWalk;
+        }
+
+        BufferDisplayPropertyTextModifierAction::clear_expired_raise_span(
+            raise_span,
+            *charpos,
+            context.params.window_start,
+        );
+
+        {
+            let mut overlay_state = OverlayStringRenderState::from_source_render(
+                source_render.reborrow(),
+                x,
+                col,
+                row_geometry,
+                cursor_info,
+                hit_rows,
+                hit_row_range,
+                row_y_positions,
+                face_ids,
+            );
+            context.overlay_context.render_before_at(
+                buffer,
+                *charpos,
+                context.active_face_state,
+                &mut overlay_state,
+            );
+        }
+
+        prepared_append.capture_cursor_info_for_main_char_if_point(
+            cursor_info,
+            context.active_face_state,
+            row_geometry,
+            *x,
+            decoded_source_char.start_byte_idx(),
+            *col,
+            ch == '\t',
+            *charpos,
+            context.point_charpos,
+        );
+
+        if prepared_append
+            .append_to_text_row_and_apply(
+                &buffer_row_append_context,
+                &append_geometry,
+                ch,
+                &mut BufferTextSourceCharRenderState::new(
+                    source_render.reborrow(),
+                    trailing_whitespace,
+                    word_wrap,
+                    x,
+                    col,
+                    charpos,
+                ),
+            )
+            .should_break()
+        {
+            return BufferTextSourceCharRenderOutcome::Stop;
+        }
+
+        {
+            let mut overlay_state = OverlayStringRenderState::from_source_render(
+                source_render.reborrow(),
+                x,
+                col,
+                row_geometry,
+                cursor_info,
+                hit_rows,
+                hit_row_range,
+                row_y_positions,
+                face_ids,
+            );
+            context.overlay_context.render_after_at(
+                buffer,
+                *charpos,
+                context.active_face_state,
+                &mut overlay_state,
+            );
+        }
+
+        BufferTextSourceCharRenderOutcome::Rendered
+    }
+}
+
+impl BufferTextOverflowRenderRequest {
+    pub(crate) fn new(
+        prepared_append: BufferTextSourceCharPreparedAppend,
+        decoded_source_char: BufferTextDecodedSourceChar,
+        context: BufferTextOverflowRenderContext,
+    ) -> Self {
+        Self {
+            prepared_append,
+            decoded_source_char,
+            context,
+        }
+    }
+
+    pub(crate) fn render_if_needed_and_apply(
+        self,
+        text: &[u8],
+        state: BufferTextOverflowRenderState<'_, '_>,
+    ) -> BufferTextOverflowRenderOutcome {
+        let BufferTextOverflowRenderState {
+            byte_idx,
+            charpos,
+            col,
+            source_render,
+            row_extend,
+            x,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            face_scan,
+            row_y_positions,
+        } = state;
+        let mut source_render = source_render;
+        let context = self.context;
+
+        match self.prepared_append.overflow_action(
+            context.ch,
+            context.right_edge_px,
+            context.wrap_mode,
+            context.word_wrap,
+        ) {
+            BufferTextSourceCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
+            BufferTextSourceCharOverflowAction::Truncate { transition } => {
+                let truncation_skip =
+                    BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+                        text, byte_idx, charpos,
+                    );
+                truncation_skip.apply_before_row_transition(
+                    line_numbers,
+                    row_extend,
+                    x,
+                    context.content_x,
+                );
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
+                    row_y_positions,
+                    context.max_rows,
+                    row_geometry,
+                    row_flags,
+                    context.row_limit,
+                    hit_rows,
+                    &mut source_render,
+                )
+                .emit_overflow_then_row_start(
+                    transition,
+                    hit_row_range.range_to(*charpos),
+                    DisplayRowPosition {
+                        x_px: *x,
+                        col: *col,
+                    },
+                    DisplayRowTransitionRenderState::new(
+                        prefix_request,
+                        context.has_prefix,
+                        line_numbers,
+                        hscroll_skip,
+                        word_wrap,
+                        trailing_whitespace,
+                    ),
+                    col,
+                );
+                BufferTextOverflowRenderOutcome::Transition(
+                    truncation_skip.transition_continuation(row_transition),
+                )
+            }
+            BufferTextSourceCharOverflowAction::WordWrap {
+                break_candidate: wrap_break,
+                transition,
+            } => {
+                let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
+                word_wrap_action.apply_before_row_transition(
+                    source_render.output_emitter(),
+                    byte_idx,
+                    charpos,
+                    col,
+                    row_extend,
+                    x,
+                    context.content_x,
+                );
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
+                    row_y_positions,
+                    context.max_rows,
+                    row_geometry,
+                    row_flags,
+                    context.row_limit,
+                    hit_rows,
+                    &mut source_render,
+                )
+                .emit_overflow(
+                    transition,
+                    hit_row_range.range_to(*charpos),
+                    DisplayRowPosition {
+                        x_px: *x,
+                        col: *col,
+                    },
+                );
+                BufferTextOverflowRenderOutcome::Transition(
+                    word_wrap_action.apply_after_row_transition_and_prefix(
+                        row_transition,
+                        transition,
+                        charpos,
+                        hit_row_range,
+                        face_scan,
+                        row_geometry,
+                        context.row_visibility_limit,
+                        DisplayRowTransitionRenderState::new(
+                            prefix_request,
+                            context.has_prefix,
+                            line_numbers,
+                            hscroll_skip,
+                            word_wrap,
+                            trailing_whitespace,
+                        ),
+                    ),
+                )
+            }
+            BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
+                let character_wrap_action = BufferTextCharacterWrapSourceAction::from_decoded_char(
+                    self.decoded_source_char,
+                );
+                character_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
+                    row_y_positions,
+                    context.max_rows,
+                    row_geometry,
+                    row_flags,
+                    context.row_limit,
+                    hit_rows,
+                    &mut source_render,
+                )
+                .emit_overflow_then_row_start(
+                    transition,
+                    hit_row_range.range_to(*charpos),
+                    DisplayRowPosition {
+                        x_px: *x,
+                        col: *col,
+                    },
+                    DisplayRowTransitionRenderState::new(
+                        prefix_request,
+                        context.has_prefix,
+                        line_numbers,
+                        hscroll_skip,
+                        word_wrap,
+                        trailing_whitespace,
+                    ),
+                    col,
+                );
+                BufferTextOverflowRenderOutcome::Transition(
+                    character_wrap_action.apply_after_visible_row_transition(
+                        row_transition,
+                        byte_idx,
+                        charpos,
+                        hit_row_range,
+                        face_scan,
+                        row_geometry,
+                        context.row_visibility_limit,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextTruncationSkipAction {
+    pub(crate) charpos: i64,
+    pub(crate) reached_line_break: bool,
+}
+
+impl BufferTextTruncationSkipAction {
+    pub(crate) fn consume_decoded_char_and_rest_of_line(
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+    ) -> Self {
+        *charpos += 1;
+        let reached_line_break = skip_to_newline(text, byte_idx, charpos);
+        Self {
+            charpos: *charpos,
+            reached_line_break,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn charpos(self) -> i64 {
+        self.charpos
+    }
+
+    pub(crate) fn reached_line_break(self) -> bool {
+        self.reached_line_break
+    }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        line_numbers: &mut LineNumberRenderState,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        if self.reached_line_break() {
+            line_numbers.advance_line();
+        }
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn sync_after_row_transition(
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) {
+        *charpos = synced_charpos;
+        hit_row_range.advance_to(*charpos);
+    }
+
+    pub(crate) fn transition_continuation(
+        self,
+        row_transition: TextMatrixRowTransition,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            DisplayRowTransitionContinuation::Exhausted
+        } else {
+            DisplayRowTransitionContinuation::Continue
+        }
+    }
+
+    pub(crate) fn sync_after_row_transition_if_visible(
+        self,
+        row_transition: TextMatrixRowTransition,
+        synced_charpos: i64,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        Self::sync_after_row_transition(synced_charpos, charpos, hit_row_range);
+        DisplayRowTransitionContinuation::Continue
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWordWrapSourceAction {
+    break_candidate: WordWrapBreakCandidate,
+}
+
+impl BufferTextWordWrapSourceAction {
+    pub(crate) fn new(break_candidate: WordWrapBreakCandidate) -> Self {
+        Self { break_candidate }
+    }
+
+    pub(crate) fn restore_row_output_progress(self, output_emitter: &mut WindowOutputEmitter) {
+        output_emitter.truncate_display_points(self.break_candidate.display_point_count());
+        let (row_first_display_pos, row_last_display_pos) =
+            self.break_candidate.row_display_positions();
+        output_emitter
+            .restore_current_row_display_positions(row_first_display_pos, row_last_display_pos);
+    }
+
+    pub(crate) fn rewind_source_state(
+        self,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        col: &mut usize,
+    ) {
+        *byte_idx = self.break_candidate.byte_idx();
+        *charpos = self.break_candidate.charpos();
+        *col = 0;
+    }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        output_emitter: &mut WindowOutputEmitter,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        col: &mut usize,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        self.restore_row_output_progress(output_emitter);
+        self.rewind_source_state(byte_idx, charpos, col);
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn apply_after_row_transition(
+        self,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+    ) {
+        *charpos = self.charpos();
+        hit_row_range.advance_to(*charpos);
+        face_scan.invalidate();
+    }
+
+    pub(crate) fn apply_after_row_transition_and_prefix(
+        self,
+        row_transition: TextMatrixRowTransition,
+        transition: DisplayRowOverflowTransitionPlan,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+        row_geometry: &DisplayRowGeometryState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+        render_state: DisplayRowTransitionRenderState<'_>,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        self.apply_after_row_transition(charpos, hit_row_range, face_scan);
+        render_state.apply_overflow_prefix(transition);
+        DisplayRowTransitionContinuation::after_visible_row_transition(
+            row_transition,
+            row_geometry,
+            row_visibility_limit,
+        )
+    }
+
+    pub(crate) fn charpos(self) -> i64 {
+        self.break_candidate.charpos()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn byte_idx(self) -> usize {
+        self.break_candidate.byte_idx()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextSpecialWrapSourceAction {
+    charpos: i64,
+}
+
+impl BufferTextSpecialWrapSourceAction {
+    pub(crate) fn new(charpos: i64) -> Self {
+        Self { charpos }
+    }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn hit_range_and_advance(
+        self,
+        hit_row_range: &mut HitRowRangeTracker,
+    ) -> DisplayRowHitRange {
+        let hit_range = hit_row_range.range_to(self.charpos);
+        hit_row_range.advance_to(self.charpos);
+        hit_range
+    }
+
+    pub(crate) fn transition_continuation(
+        self,
+        row_transition: TextMatrixRowTransition,
+        row_geometry: &DisplayRowGeometryState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+    ) -> DisplayRowTransitionContinuation {
+        DisplayRowTransitionContinuation::after_visible_row_transition(
+            row_transition,
+            row_geometry,
+            row_visibility_limit,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn charpos(self) -> i64 {
+        self.charpos
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextCharacterWrapSourceAction {
+    ch_start_byte_idx: usize,
+    ch_start_charpos: i64,
+}
+
+impl BufferTextCharacterWrapSourceAction {
+    pub(crate) fn new(ch_start_byte_idx: usize, ch_start_charpos: i64) -> Self {
+        Self {
+            ch_start_byte_idx,
+            ch_start_charpos,
+        }
+    }
+
+    pub(crate) fn from_decoded_char(source_char: BufferTextDecodedSourceChar) -> Self {
+        Self::new(source_char.start_byte_idx(), source_char.start_charpos())
+    }
+
+    pub(crate) fn rewind_source_state(self, byte_idx: &mut usize, charpos: &mut i64) {
+        *byte_idx = self.ch_start_byte_idx;
+        *charpos = self.ch_start_charpos;
+    }
+
+    pub(crate) fn apply_before_row_transition(
+        self,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        x: &mut f32,
+        content_x: f32,
+    ) {
+        *x = content_x;
+        row_extend.clear();
+    }
+
+    pub(crate) fn apply_after_row_transition(
+        self,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+    ) {
+        self.rewind_source_state(byte_idx, charpos);
+        hit_row_range.advance_to(*charpos);
+        face_scan.invalidate();
+    }
+
+    pub(crate) fn apply_after_visible_row_transition(
+        self,
+        row_transition: TextMatrixRowTransition,
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+        hit_row_range: &mut HitRowRangeTracker,
+        face_scan: &mut FaceScanCheckpoint,
+        row_geometry: &DisplayRowGeometryState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+    ) -> DisplayRowTransitionContinuation {
+        if row_transition.is_exhausted() {
+            return DisplayRowTransitionContinuation::Exhausted;
+        }
+        self.apply_after_row_transition(byte_idx, charpos, hit_row_range, face_scan);
+        DisplayRowTransitionContinuation::after_visible_row_transition(
+            row_transition,
+            row_geometry,
+            row_visibility_limit,
+        )
+    }
+}
+
+pub(crate) struct BufferTextSpecialOverflowRenderRequest<'a> {
+    prepared_append: &'a BufferTextSpecialSourceCharPreparedAppend,
+    context: BufferTextSpecialOverflowRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextSpecialOverflowRenderContext<'a> {
+    pub(crate) text: &'a [u8],
+    pub(crate) text_start_byte: usize,
+    pub(crate) x_px: f32,
+    pub(crate) right_edge_px: f32,
+    pub(crate) wrap_mode: LineWrapMode,
+    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
+    pub(crate) content_x: f32,
+    pub(crate) has_prefix: bool,
+    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) max_rows: usize,
+    pub(crate) row_limit: DisplayRowLimit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextSpecialOverflowRenderOutcome {
+    Fits,
+    AppendPrepared(DisplayRowTransitionContinuation),
+    ContinueBufferWalk(DisplayRowTransitionContinuation),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum BufferTextSpecialSourceCharOverflowAction {
+    Fits,
+    Truncate {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+    Wrap {
+        transition: DisplayRowOverflowTransitionPlan,
+    },
+}
+
+impl BufferTextSpecialSourceCharOverflowAction {
+    pub(crate) fn for_decision(decision: SpecialTextRowOverflowDecision) -> Self {
+        match decision {
+            SpecialTextRowOverflowDecision::Fits => Self::Fits,
+            SpecialTextRowOverflowDecision::Truncate => Self::Truncate {
+                transition: DisplayRowOverflowTransitionPlan::truncation(
+                    TextRowTransitionStatePolicy::special_truncation(),
+                ),
+            },
+            SpecialTextRowOverflowDecision::Wrap => Self::Wrap {
+                transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    TextRowTransitionStatePolicy::special_visual_wrap(),
+                ),
+            },
+        }
+    }
+}
+
+impl BufferTextSpecialOverflowRenderOutcome {
+    pub(crate) fn should_break(self) -> bool {
+        matches!(
+            self,
+            Self::AppendPrepared(
+                DisplayRowTransitionContinuation::Exhausted
+                    | DisplayRowTransitionContinuation::Hidden
+            ) | Self::ContinueBufferWalk(
+                DisplayRowTransitionContinuation::Exhausted
+                    | DisplayRowTransitionContinuation::Hidden
+            )
+        )
+    }
+
+    pub(crate) fn should_continue_buffer_walk(self) -> bool {
+        matches!(
+            self,
+            Self::ContinueBufferWalk(DisplayRowTransitionContinuation::Continue)
+        )
+    }
+}
+
+impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
+    pub(crate) fn new(
+        prepared_append: &'a BufferTextSpecialSourceCharPreparedAppend,
+        context: BufferTextSpecialOverflowRenderContext<'a>,
+    ) -> Self {
+        Self {
+            prepared_append,
+            context,
+        }
+    }
+
+    pub(crate) fn render_if_needed_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        state: BufferTextSpecialOverflowRenderState<'_, '_>,
+    ) -> BufferTextSpecialOverflowRenderOutcome {
+        let BufferTextSpecialOverflowRenderState {
+            byte_idx,
+            charpos,
+            col,
+            source_render,
+            row_extend,
+            x,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            row_y_positions,
+        } = state;
+        let mut source_render = source_render;
+        let context = self.context;
+
+        match self.prepared_append.overflow_action(
+            context.x_px,
+            context.right_edge_px,
+            context.wrap_mode,
+        ) {
+            None | Some(BufferTextSpecialSourceCharOverflowAction::Fits) => {
+                BufferTextSpecialOverflowRenderOutcome::Fits
+            }
+            Some(BufferTextSpecialSourceCharOverflowAction::Truncate { transition }) => {
+                let truncation_skip =
+                    BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+                        context.text,
+                        byte_idx,
+                        charpos,
+                    );
+                truncation_skip.apply_before_row_transition(
+                    line_numbers,
+                    row_extend,
+                    x,
+                    context.content_x,
+                );
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
+                    row_y_positions,
+                    context.max_rows,
+                    row_geometry,
+                    row_flags,
+                    context.row_limit,
+                    hit_rows,
+                    &mut source_render,
+                )
+                .emit_overflow_then_row_start(
+                    transition,
+                    hit_row_range.range_to(*charpos),
+                    DisplayRowPosition {
+                        x_px: *x,
+                        col: *col,
+                    },
+                    DisplayRowTransitionRenderState::new(
+                        prefix_request,
+                        context.has_prefix,
+                        line_numbers,
+                        hscroll_skip,
+                        word_wrap,
+                        trailing_whitespace,
+                    ),
+                    col,
+                );
+                let synced_charpos = buffer
+                    .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+                        context.text_start_byte + *byte_idx,
+                    ))
+                    .get() as i64;
+                BufferTextSpecialOverflowRenderOutcome::ContinueBufferWalk(
+                    truncation_skip.sync_after_row_transition_if_visible(
+                        row_transition,
+                        synced_charpos,
+                        charpos,
+                        hit_row_range,
+                    ),
+                )
+            }
+            Some(BufferTextSpecialSourceCharOverflowAction::Wrap { transition }) => {
+                let special_wrap_action = BufferTextSpecialWrapSourceAction::new(*charpos);
+                special_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
+                let hit_range = special_wrap_action.hit_range_and_advance(hit_row_range);
+                let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
+                    context.row_geometry_defaults,
+                    context.text_matrix_row_base,
+                    row_y_positions,
+                    context.max_rows,
+                    row_geometry,
+                    row_flags,
+                    context.row_limit,
+                    hit_rows,
+                    &mut source_render,
+                )
+                .emit_overflow_then_row_start(
+                    transition,
+                    hit_range,
+                    DisplayRowPosition {
+                        x_px: *x,
+                        col: *col,
+                    },
+                    DisplayRowTransitionRenderState::new(
+                        prefix_request,
+                        context.has_prefix,
+                        line_numbers,
+                        hscroll_skip,
+                        word_wrap,
+                        trailing_whitespace,
+                    ),
+                    col,
+                );
+                BufferTextSpecialOverflowRenderOutcome::AppendPrepared(
+                    special_wrap_action.transition_continuation(
+                        row_transition,
+                        row_geometry,
+                        context.row_visibility_limit,
+                    ),
+                )
+            }
+        }
     }
 }

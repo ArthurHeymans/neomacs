@@ -17,6 +17,8 @@ use crate::display_buffer_text_render::{
     BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
     BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderContext,
     BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
+    BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
+    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
@@ -34,10 +36,8 @@ use crate::display_row_append::{
     BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
     BufferDisplayPropertyTextWalkOutcome, BufferLinePrefixRenderContext,
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
-    BufferTextRowAppendState, BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
-    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
-    DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTransitionContinuation,
+    BufferTextRowAppendState, DisplayRowAppendSurface, DisplayRowPrefixRequest,
+    DisplayRowPrefixValues, DisplayRowTransitionContinuation,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
