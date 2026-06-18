@@ -1,0 +1,106 @@
+//! Kill-ring/yank, kill-append, registers, rectangle extract/insert,
+//! transpose-words, and abbrev expansion/table queries parity.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn kill_append() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (let ((kill-ring nil) (kill-ring-yank-pointer nil))
+    (kill-new "one") (kill-append " two" nil)
+    (list (current-kill 0) (length kill-ring))))"##,
+    );
+}
+
+#[test]
+fn kill_yank() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (insert "abcdefgh") (goto-char 1)
+  (kill-region 1 4)
+  (goto-char (point-max)) (yank)
+  (list (buffer-string) (current-kill 0)))"##,
+    );
+}
+
+#[test]
+fn rectangle_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (insert "12\n34\n56\n")
+  (goto-char 1)
+  (insert-rectangle '("XX" "YY" "ZZ"))
+  (buffer-string))"##,
+    );
+}
+
+#[test]
+fn rectangle_ops() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (insert "abc\ndef\nghi\n")
+  (list (extract-rectangle 1 11)))"##,
+    );
+}
+
+#[test]
+fn registers() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(let ((register-alist nil))
+  (set-register ?a "hello")
+  (set-register ?b 42)
+  (list (get-register ?a) (get-register ?b) (get-register ?z)))"##,
+    );
+}
+
+#[test]
+fn transpose_ops() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (insert "abc def")
+  (goto-char 4) (transpose-words 1)
+  (buffer-string))"##,
+    );
+}
+
+#[test]
+fn abbrev_expand() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(with-temp-buffer
+  (define-abbrev-table 'neo-abbrev-table '(("teh" "the") ("recv" "receive")))
+  (setq local-abbrev-table neo-abbrev-table)
+  (abbrev-mode 1)
+  (insert "teh") (expand-abbrev)
+  (insert " recv") (expand-abbrev)
+  (buffer-string))"##,
+    );
+}
+
+#[test]
+fn abbrev_table_query() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (define-abbrev-table 'neo-at2 '(("btw" "by the way")))
+  (list (abbrev-expansion "btw" neo-at2)
+        (abbrev-expansion "nope" neo-at2)
+        (abbrev-table-p neo-at2)))"##,
+    );
+}
