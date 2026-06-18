@@ -282,7 +282,7 @@ pub(crate) enum BufferTextSourceStep {
     LineBreak(BufferTextSourceStepChar),
     Text {
         source_char: BufferTextSourceStepChar,
-        source_item: BufferTextSourceStepItem,
+        source_item: DisplayItem,
     },
 }
 
@@ -291,31 +291,6 @@ impl BufferTextSourceStep {
         match self {
             Self::LineBreak(source_char) => *source_char,
             Self::Text { source_char, .. } => *source_char,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceStepItem {
-    RowItem(DisplayItem),
-    LegacyLayoutFallback { layout: DisplayItemLayout },
-}
-
-impl BufferTextSourceStepItem {
-    pub(crate) fn from_display_item(source_item: DisplayItem) -> Self {
-        if source_item.layout.height.is_none() {
-            Self::RowItem(source_item)
-        } else {
-            Self::LegacyLayoutFallback {
-                layout: source_item.layout,
-            }
-        }
-    }
-
-    pub(crate) fn row_item(&self) -> Option<&DisplayItem> {
-        match self {
-            Self::RowItem(item) => Some(item),
-            Self::LegacyLayoutFallback { .. } => None,
         }
     }
 }
@@ -404,7 +379,7 @@ impl PendingBufferTextRun {
 
         Some(BufferTextSourceStep::Text {
             source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
-            source_item: BufferTextSourceStepItem::from_display_item(source_item),
+            source_item,
         })
     }
 
@@ -504,7 +479,7 @@ impl BufferTextSourceStepAdapter {
                 };
                 Some(BufferTextSourceStep::Text {
                     source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, charpos),
-                    source_item: BufferTextSourceStepItem::from_display_item(source_item),
+                    source_item,
                 })
             }
             DisplayItemKind::Glyphless(glyphless) => {
@@ -518,7 +493,7 @@ impl BufferTextSourceStepAdapter {
                 };
                 Some(BufferTextSourceStep::Text {
                     source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, charpos),
-                    source_item: BufferTextSourceStepItem::from_display_item(source_item),
+                    source_item,
                 })
             }
             _ => {

@@ -1818,7 +1818,6 @@ fn buffer_text_source_step_adapter_preserves_single_char_source_item() {
     };
     assert_eq!(source_char.ch(), 'a');
     assert_eq!(byte_idx, 1);
-    let source_item = source_item.row_item().expect("typed source item");
     assert_eq!(
         source_item.span.end,
         DisplaySourcePosition::buffer(
@@ -1834,30 +1833,20 @@ fn buffer_text_source_step_adapter_preserves_single_char_source_item() {
 }
 
 #[test]
-fn buffer_text_source_step_item_keeps_raise_layout_as_row_item() {
+fn buffer_text_source_step_adapter_keeps_display_item_layout() {
     let source_item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(1, 0, 1),
-        RenderFaceRef::Inherit,
-        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("x")),
-    )
-    .with_layout(DisplayItemLayout {
-        raise: Some(0.25),
-        height: None,
-    });
-
-    let step_item = BufferTextSourceStepItem::from_display_item(source_item);
-
-    let Some(row_item) = step_item.row_item() else {
-        panic!("raise-only display layout should remain a typed row item");
-    };
-    assert_eq!(row_item.layout.raise, Some(0.25));
-    assert_eq!(row_item.layout.height, None);
-}
-
-#[test]
-fn buffer_text_source_step_item_falls_back_for_height_layout() {
-    let source_item = crate::display_item::DisplayItem::new(
-        crate::display_item::SourceSpan::synthetic(1, 0, 1),
+        crate::display_item::SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(0),
+                neovm_core::buffer::EmacsBytePos::new(0),
+            ),
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(1),
+                neovm_core::buffer::EmacsBytePos::new(1),
+            ),
+        ),
         RenderFaceRef::Inherit,
         DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("x")),
     )
@@ -1865,19 +1854,17 @@ fn buffer_text_source_step_item_falls_back_for_height_layout() {
         raise: Some(0.25),
         height: Some(1.5),
     });
+    let mut byte_idx = 0;
 
-    let step_item = BufferTextSourceStepItem::from_display_item(source_item);
+    let step = BufferTextSourceStepAdapter::new(0)
+        .step_from_item(source_item, &mut byte_idx, 0)
+        .expect("source step");
 
-    assert!(step_item.row_item().is_none());
-    assert_eq!(
-        step_item,
-        BufferTextSourceStepItem::LegacyLayoutFallback {
-            layout: DisplayItemLayout {
-                raise: Some(0.25),
-                height: Some(1.5),
-            }
-        }
-    );
+    let BufferTextSourceStep::Text { source_item, .. } = step else {
+        panic!("expected text step");
+    };
+    assert_eq!(source_item.layout.raise, Some(0.25));
+    assert_eq!(source_item.layout.height, Some(1.5));
 }
 
 #[test]
@@ -5855,12 +5842,26 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut cursor_info = CursorCaptureState::new();
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut raise_span = ActiveDisplayPropertySpan::inactive();
+    let source_item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                buf_id,
+                CharPos0::new(0),
+                neovm_core::buffer::EmacsBytePos::new(0),
+            ),
+            DisplaySourcePosition::buffer(
+                buf_id,
+                CharPos0::new(1),
+                neovm_core::buffer::EmacsBytePos::new(1),
+            ),
+        ),
+        RenderFaceRef::FaceId(active_face.face_id()),
+        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("a")),
+    );
 
     let outcome = BufferTextSourceCharRenderRequest::new(
         source_step_char,
-        BufferTextSourceStepItem::LegacyLayoutFallback {
-            layout: DisplayItemLayout::default(),
-        },
+        source_item,
         BufferTextSourceCharRenderContext {
             text,
             text_start_byte: 0,

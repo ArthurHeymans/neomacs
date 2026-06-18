@@ -5,14 +5,14 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
     BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
 };
-use crate::display_buffer_text_source::{BufferTextSourceStepChar, BufferTextSourceStepItem};
+use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
@@ -3294,7 +3294,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
 
 pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
     source_char: BufferTextSourceStepChar,
-    source_item: BufferTextSourceStepItem,
+    source_item: DisplayItem,
     context: BufferTextSourceCharRenderContext<'a>,
 }
 
@@ -3522,7 +3522,7 @@ impl BufferTextOverflowRenderOutcome {
 impl<'a> BufferTextSourceCharRenderRequest<'a> {
     pub(crate) fn new(
         source_step_char: BufferTextSourceStepChar,
-        source_item: BufferTextSourceStepItem,
+        source_item: DisplayItem,
         context: BufferTextSourceCharRenderContext<'a>,
     ) -> Self {
         debug_assert_ne!(source_step_char.ch(), '\n');
@@ -3563,11 +3563,17 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         } = state;
         let mut source_render = source_render;
         let context = self.context;
+        let mut source_item = self.source_item;
+        if matches!(source_item.face, RenderFaceRef::Inherit) {
+            source_item.face = RenderFaceRef::FaceId(context.active_face_state.face_id());
+        }
+        // Buffer display height is still resolved by the checkpoint active
+        // face path; do not resolve it a second time through the append item.
+        source_item.layout.height = None;
 
         let source_step_char = self.source_char;
         let ch = source_step_char.ch();
         source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
-        let source_item = self.source_item.row_item();
 
         let buffer_source_char = source_step_char.source_char(context.params.nobreak_char_display);
         let buffer_row_append_context = BufferTextRowAppendContext::new(
@@ -3596,7 +3602,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     context.text,
                     source_step_char.start_byte_idx(),
                     append_position,
-                    source_item,
+                    Some(&source_item),
                 ),
                 &mut preparation_state,
             )
