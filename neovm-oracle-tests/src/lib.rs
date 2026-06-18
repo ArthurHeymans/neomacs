@@ -2386,6 +2386,7 @@ mod divergence_string_ops;
 mod divergence_string_ops_deep;
 mod divergence_string_regex_real;
 mod divergence_subr_bytecode_deep;
+mod divergence_subword_output_message_runtime;
 mod divergence_symbol_obarray_real;
 mod divergence_symbol_reader_deep;
 mod divergence_syntax_chartable_runtime;
