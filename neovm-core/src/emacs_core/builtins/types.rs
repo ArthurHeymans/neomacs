@@ -342,7 +342,11 @@ pub(crate) fn builtin_type_of(args: Vec<Value>) -> EvalResult {
     // then delegates to `cl-type-of` for everything else.
     match args[0].kind() {
         ValueKind::Nil | ValueKind::T | ValueKind::Symbol(_) => Ok(Value::symbol("symbol")),
-        ValueKind::Fixnum(_) => Ok(Value::symbol("integer")),
+        // GNU `type-of` returns `integer` for both fixnums and bignums; only
+        // `cl-type-of` distinguishes `bignum`.
+        ValueKind::Fixnum(_) | ValueKind::Veclike(VecLikeType::Bignum) => {
+            Ok(Value::symbol("integer"))
+        }
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => Ok(Value::symbol("subr")),
         _ => builtin_cl_type_of(args),
     }

@@ -1227,6 +1227,23 @@ fn process_status_exit_value(code: i32) -> Value {
     Value::list(vec![Value::symbol("exit"), Value::fixnum(code as i64)])
 }
 
+/// Convert a finished `std::process::ExitStatus` to an Emacs process status:
+/// `(exit CODE)` for a normal exit, `(signal N ...)` for signal death (GNU
+/// distinguishes the two via `WIFSIGNALED`/`WTERMSIG`).
+fn process_status_from_exit(status: &std::process::ExitStatus) -> Value {
+    if let Some(code) = status.code() {
+        return process_status_exit_value(code);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(sig) = status.signal() {
+            return process_status_signal_value(sig);
+        }
+    }
+    process_status_exit_value(1)
+}
+
 fn process_status_signal_value(signal_num: i32) -> Value {
     Value::list(vec![
         Value::symbol("signal"),
@@ -1920,7 +1937,7 @@ impl ProcessManager {
         };
         match child.try_wait() {
             Ok(Some(status)) => {
-                proc.status = process_status_exit_value(status.code().unwrap_or(1));
+                proc.status = process_status_from_exit(&status);
                 true
             }
             Ok(None) => false, // Still running
