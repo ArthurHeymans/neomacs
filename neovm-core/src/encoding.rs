@@ -1523,9 +1523,11 @@ fn coding_string_destination(
 fn general_charset_coding_list(
     ctx: &crate::emacs_core::eval::Context,
     coding: &str,
+    for_encode: bool,
 ) -> Option<Vec<SymId>> {
+    let family = coding_system_family(coding);
     if matches!(
-        coding_system_family(coding),
+        family,
         "utf-8"
             | "utf-8-emacs"
             | "undecided"
@@ -1535,17 +1537,37 @@ fn general_charset_coding_list(
             | "iso-latin-1"
             | "iso-latin-5"
             | "iso-latin-9"
-            | "ascii"
-            | "us-ascii"
             | "chinese-iso-8bit"
-            | "chinese-big5"
-            | "chinese-big5-hkscs"
     ) {
         return None;
     }
-    let info = ctx.coding_systems.get(coding_system_base(coding))?;
-    if resolve_sym(info.coding_type) != "charset" || info.charset_list.is_empty() {
+    // Big5: the existing `encoding_rs` decoder already matches GNU, but its
+    // encoder substitutes HTML entity references for unencodable characters;
+    // route only *encode* through the charset codec, which substitutes a space.
+    if matches!(family, "chinese-big5" | "chinese-big5-hkscs") && !for_encode {
         return None;
+    }
+    // The ASCII coding systems substitute `?` for unencodable characters on
+    // *encode* (GNU), so keep the existing encoder; on *decode* they emit
+    // eight-bit raw characters, which the general charset decoder produces.
+    if for_encode && matches!(family, "ascii" | "us-ascii") {
+        return None;
+    }
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    if !matches!(resolve_sym(info.coding_type), "charset" | "big5") || info.charset_list.is_empty()
+    {
+        return None;
+    }
+    // GNU's Big5 encoder emits only base `big5` code points (HKSCS-only code
+    // points are recognized on decode but not produced on encode), so encode
+    // every Big5 coding through `(ascii big5)` regardless of whether its charset
+    // list names `big5-hkscs`. (neomacs types chinese-big5-hkscs as `charset`,
+    // not `big5`, so gate on the family rather than the coding type.)
+    if matches!(family, "chinese-big5" | "chinese-big5-hkscs") {
+        return Some(vec![
+            crate::emacs_core::intern::intern("ascii"),
+            crate::emacs_core::intern::intern("big5"),
+        ]);
     }
     Some(info.charset_list.clone())
 }
@@ -1644,7 +1666,7 @@ fn builtin_coding_string_in_context(
     // decode each character through their charset list; the legacy family-based
     // paths leave them empty / undecoded.  Other families keep their existing
     // handling.
-    let charset_coding = general_charset_coding_list(ctx, &coding);
+    let charset_coding = general_charset_coding_list(ctx, &coding, encode);
     let result = if encode {
         if let Some(charset_list) = &charset_coding {
             let source = args[0]
