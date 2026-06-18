@@ -1,5 +1,13 @@
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
-use crate::display_buffer_text_append::TextWindowAppendSurfaceRequest;
+use crate::display_buffer_text_append::{
+    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
+    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
+    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
+    TextWindowAppendSurfaceRequest,
+};
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
     BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakSourceEvent,
@@ -26,12 +34,6 @@ use crate::display_row_append::{
     BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
     BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
     BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
-    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
-    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
     DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     DisplayRowTransitionContinuation,
 };

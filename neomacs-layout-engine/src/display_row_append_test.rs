@@ -1,6 +1,12 @@
 use super::*;
 use crate::display_buffer_text_append::{
-    BufferTextWindowCursorEffectsRequest, BufferTextWindowTerminalRightBorderRequest,
+    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
+    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowTailFinalizeState, BufferTextWindowTerminalRightBorderRequest,
+    BufferTextWindowVisibilityRetryRequest,
 };
 use crate::display_buffer_text_source::BufferTextDecodedSourceEvent;
 use crate::display_cursor::CursorCaptureState;
