@@ -1264,6 +1264,48 @@ pub(crate) struct DisplayRowSourceFragmentRenderRequest<'a> {
     item_request: DisplayRowItemSourceRenderRequest<'a>,
 }
 
+#[derive(Clone)]
+pub(crate) struct DisplayRowSourceFragmentFrame<'face> {
+    policy: DisplayRowSourceRequestPolicy,
+    base_face_id: u32,
+    base_face: &'face ResolvedFace,
+}
+
+impl<'face> DisplayRowSourceFragmentFrame<'face> {
+    pub(crate) fn new(
+        geometry: DisplayRowGeometry,
+        role: GlyphRowRole,
+        base_face_id: u32,
+        base_face: &'face ResolvedFace,
+    ) -> Self {
+        Self {
+            policy: DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role),
+            base_face_id,
+            base_face,
+        }
+    }
+
+    pub(crate) fn render_request(
+        self,
+        render_bounds: DisplayRowRenderBounds,
+    ) -> DisplayRowSourceFragmentRenderRequest<'face> {
+        DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
+            self.policy,
+            self.base_face_id,
+            self.base_face,
+            render_bounds,
+        )
+    }
+
+    pub(crate) fn render_request_for_area(
+        self,
+        render_bounds: DisplayRowRenderBounds,
+        area: GlyphArea,
+    ) -> DisplayRowSourceFragmentRenderRequest<'face> {
+        self.render_request(render_bounds).with_glyph_area(area)
+    }
+}
+
 pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     source_id: DisplayRowLispStringSourceId,
     value: Value,
@@ -1464,7 +1506,7 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
 }
 
 impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {
-    pub(crate) fn from_base_face_id_policy_with_render_bounds(
+    fn from_base_face_id_policy_with_render_bounds(
         policy: DisplayRowSourceRequestPolicy,
         base_face_id: u32,
         base_face: &'a ResolvedFace,

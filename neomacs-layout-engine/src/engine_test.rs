@@ -11,7 +11,7 @@ use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurer,
     DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderer,
-    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
+    DisplayRowSourceFragmentFrame,
 };
 use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::DisplayRowMaxX;
@@ -1481,25 +1481,23 @@ fn render_buffer_text_source_shadow_row(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
-        DisplayRowSourceRequestPolicy::from_display_row_geometry(
-            DisplayRowGeometry {
-                y: 0.0,
-                width: width_px,
-                height: height_px,
-                char_width: char_width_px,
-                ascent: ascent_px,
-                tab_policy: DisplayTabPolicy::every(8),
-            },
-            GlyphRowRole::Text,
-        ),
+    DisplayRowSourceFragmentFrame::new(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: width_px,
+            height: height_px,
+            char_width: char_width_px,
+            ascent: ascent_px,
+            tab_policy: DisplayTabPolicy::every(8),
+        },
+        GlyphRowRole::Text,
         0,
         resolver.default_face(),
-        DisplayRowRenderBounds {
-            start: DisplayRowPosition { x_px: 0.0, col: 0 },
-            max_x: DisplayRowMaxX::Bounded(width_px),
-        },
     )
+    .render_request(DisplayRowRenderBounds {
+        start: DisplayRowPosition { x_px: 0.0, col: 0 },
+        max_x: DisplayRowMaxX::Bounded(width_px),
+    })
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
     .expect("typed buffer text source row")
     .row

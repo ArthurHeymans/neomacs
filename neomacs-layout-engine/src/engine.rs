@@ -55,8 +55,8 @@ use crate::display_item::{
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderExecutor,
-    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
-    insert_resolved_display_row_face, install_display_row_in_matrix_row,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState, insert_resolved_display_row_face,
+    install_display_row_in_matrix_row,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::DisplayRowMaxX;
@@ -1403,16 +1403,14 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
     let render_width = geometry.width;
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
-        DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
-            DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role),
-            base_face.face_id,
-            base_face,
-            DisplayRowRenderBounds {
-                start: DisplayRowPosition { x_px: 0.0, col: 0 },
-                max_x: DisplayRowMaxX::Bounded(render_width),
-            },
-        )
-        .with_glyph_area(area);
+        DisplayRowSourceFragmentFrame::new(geometry, role, base_face.face_id, base_face)
+            .render_request_for_area(
+                DisplayRowRenderBounds {
+                    start: DisplayRowPosition { x_px: 0.0, col: 0 },
+                    max_x: DisplayRowMaxX::Bounded(render_width),
+                },
+                area,
+            );
     let mut executor = DisplayRowRenderExecutor::new(font_metrics, face_resolver, None, face_ids);
     executor.render_item_source_fragment_into_row(row_request, row, &mut source, &mut source_state);
 }

@@ -3,7 +3,7 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
     DisplayRowCurrentSourceFragmentRenderState, DisplayRowGeometry, DisplayRowRenderBounds,
-    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState,
 };
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -74,26 +74,24 @@ impl BufferLineNumberMarginRenderRequest {
         };
         let mut source = LineNumberMarginItemSource::new(&margin_request);
         let mut source_state = DisplayRowSourceState::default();
-        let request =
-            DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
-                DisplayRowSourceRequestPolicy::from_display_row_geometry(
-                    DisplayRowGeometry {
-                        y: margin_request.row_y,
-                        width: (margin_request.cols.max(1) as f32 + 1.0) * char_width.max(1.0),
-                        height: margin_request.row_height,
-                        char_width,
-                        ascent: margin_request.row_ascent,
-                        tab_policy: DisplayTabPolicy::every(8),
-                    },
-                    neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
-                ),
-                line_number_face_id,
-                &line_number_face,
-                DisplayRowRenderBounds::whole_row(
-                    (margin_request.cols.max(1) as f32 + 1.0) * char_width.max(1.0),
-                ),
-            )
-            .with_glyph_area(GlyphArea::LeftMargin);
+        let width = (margin_request.cols.max(1) as f32 + 1.0) * char_width.max(1.0);
+        let request = DisplayRowSourceFragmentFrame::new(
+            DisplayRowGeometry {
+                y: margin_request.row_y,
+                width,
+                height: margin_request.row_height,
+                char_width,
+                ascent: margin_request.row_ascent,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
+            neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+            line_number_face_id,
+            &line_number_face,
+        )
+        .render_request_for_area(
+            DisplayRowRenderBounds::whole_row(width),
+            GlyphArea::LeftMargin,
+        );
         request.render_natural_fragment_into_current_row(
             &mut DisplayRowCurrentSourceFragmentRenderState {
                 builder: source_render.output_render.builder,

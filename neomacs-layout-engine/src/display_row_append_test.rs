@@ -28,8 +28,7 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowCurrentTextRenderState,
     DisplayRowFallbackMetrics, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
     DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderPolicy,
-    DisplayRowRenderer, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState,
+    DisplayRowRenderer, DisplayRowSourceFragmentFrame, DisplayRowSourceState,
 };
 use crate::display_row_append_context::*;
 use crate::display_row_builder::{
@@ -4543,25 +4542,23 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         );
         let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
         let mut source_state = DisplayRowSourceState::default();
-        DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
-            DisplayRowSourceRequestPolicy::from_display_row_geometry(
-                DisplayRowGeometry {
-                    y: 0.0,
-                    width: 160.0,
-                    height: 16.0,
-                    char_width: 8.0,
-                    ascent: 12.0,
-                    tab_policy: DisplayTabPolicy::every(8),
-                },
-                GlyphRowRole::Text,
-            ),
+        DisplayRowSourceFragmentFrame::new(
+            DisplayRowGeometry {
+                y: 0.0,
+                width: 160.0,
+                height: 16.0,
+                char_width: 8.0,
+                ascent: 12.0,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
+            GlyphRowRole::Text,
             7,
             &base_face,
-            DisplayRowRenderBounds {
-                start: DisplayRowPosition { x_px: 16.0, col: 2 },
-                max_x: DisplayRowMaxX::Bounded(160.0),
-            },
         )
+        .render_request(DisplayRowRenderBounds {
+            start: DisplayRowPosition { x_px: 16.0, col: 2 },
+            max_x: DisplayRowMaxX::Bounded(160.0),
+        })
         .render_fragment_step_with_display_host(
             &mut renderer,
             &mut source,
