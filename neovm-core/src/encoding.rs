@@ -1674,7 +1674,15 @@ fn encode_via_euc(
             return;
         }
         for &charset in charset_list {
-            let Some(reg) = spec.register_of(charset) else {
+            // Prefer the register this charset is the *initial* designation of
+            // (GNU's ISO-2022 engine designates by initial/reg-usage, not by the
+            // request alist): e.g. euc-tw's cns11643-1 is G1, so it must use the
+            // GR high-bit form rather than the SS2 (0x8E) the request would pick.
+            let reg = (0..4)
+                .find(|&g| spec.initial[g] == Some(charset))
+                .map(|g| g as u8)
+                .or_else(|| spec.register_of(charset));
+            let Some(reg) = reg else {
                 continue;
             };
             let Some(bytes) =
@@ -2337,6 +2345,7 @@ fn encode_via_iso2022(
     let long_form = spec.flags.contains(IsoFlag::LongForm);
     let reset_eol = spec.flags.contains(IsoFlag::AsciiAtEol);
     let reset_cntl = spec.flags.contains(IsoFlag::AsciiAtCntl);
+    let use_roman = spec.flags.contains(IsoFlag::UseRoman);
     let ascii = intern("ascii");
     // FULL_SUPPORT coding systems store `:charset-list` as the symbol
     // `iso-2022`; substitute the full ISO-2022 charset candidate set.
@@ -2388,7 +2397,15 @@ fn encode_via_iso2022(
         }
         // Select the charset (and its position code, dimension, set size).
         let (charset, code, dim, chars_96) = if c < 0x80 {
-            (ascii, i64::from(c), 1, false)
+            // The use-roman flag (japanese-iso-7bit-1978-irv / old-jis) maps
+            // ASCII through latin-jisx0201 — the G0 initial designation — so the
+            // byte is emitted with no re-designation. GNU keeps the position
+            // code = c (it does not re-encode through latin-jisx0201).
+            if use_roman {
+                (intern("latin-jisx0201"), i64::from(c), 1, false)
+            } else {
+                (ascii, i64::from(c), 1, false)
+            }
         } else {
             // Iterate the coding's charset list in order (GNU char_charset
             // over `:charset-list`): the first charset that can represent the
@@ -2623,9 +2640,57 @@ fn decode_via_iso2022(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spe
     out
 }
 
+/// Resolve `undecided` / `prefer-utf-8` to a concrete coding system by
+/// inspecting the byte pattern, mirroring GNU's `detect_coding`: walk the
+/// detection categories in priority order and return the first that accepts the
+/// bytes. The categories beyond raw-text are not auto-detected.
+fn detect_undecided_coding(bytes: &[u8], prefer_utf_8: bool) -> &'static str {
+    let mut eight_bit = false;
+    let mut null_byte = false;
+    let mut saw_iso_escape = false;
+    for &c in bytes {
+        if c >= 0x80 {
+            eight_bit = true;
+        } else if c == 0x1B || c == 0x0E || c == 0x0F {
+            saw_iso_escape = true; // ESC / SO / SI -> ISO-2022 candidate
+        } else if c == 0 {
+            null_byte = true;
+        }
+    }
+    let valid_utf8_multibyte =
+        std::str::from_utf8(bytes).is_ok() && bytes.iter().any(|&b| b >= 0x80);
+    // prefer-utf-8 raises the UTF-8 category to the top.
+    if prefer_utf_8 && valid_utf8_multibyte {
+        return "utf-8";
+    }
+    // Pure ASCII (no high byte, no NUL, no escapes): UTF-8 handles it.
+    if !eight_bit && !null_byte && !saw_iso_escape {
+        return "utf-8";
+    }
+    // Category walk in GNU priority order: utf-8, iso-2022, charset(latin-1).
+    if valid_utf8_multibyte {
+        return "utf-8";
+    }
+    if saw_iso_escape {
+        return "iso-2022-7bit";
+    }
+    // charset category is bound to iso-latin-1; it accepts when every high byte
+    // is a valid Latin-1 graphic (>= 0xA0). 0x80-0x9F would need the
+    // latin-extra-code-table; treat them as non-Latin-1 here.
+    if eight_bit && bytes.iter().all(|&b| b < 0x80 || b >= 0xA0) {
+        return "iso-latin-1";
+    }
+    // NUL or otherwise undetectable -> raw passthrough.
+    if null_byte {
+        "no-conversion"
+    } else {
+        "raw-text"
+    }
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
+    mut args: Vec<Value>,
     encode: bool,
 ) -> EvalResult {
     let name = if encode {
@@ -2646,7 +2711,22 @@ fn builtin_coding_string_in_context(
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
-    let coding = context_coding_name(ctx, args[1])?;
+    let mut coding = context_coding_name(ctx, args[1])?;
+    // `undecided` / `prefer-utf-8` decode by detecting the byte pattern and
+    // decoding as the resolved concrete coding system (GNU detect_coding).
+    if !encode {
+        let base = coding_system_base(&coding);
+        if (base == "undecided" || base == "prefer-utf-8")
+            && let Some(src) = args[0].as_lisp_string()
+        {
+            let bytes = lisp_string_coding_source_bytes(src);
+            coding = detect_undecided_coding(&bytes, base == "prefer-utf-8").to_string();
+            // Rewrite the coding argument too, so the fallback decode path
+            // (which re-reads args[1]) uses the detected system rather than the
+            // original `undecided`/`prefer-utf-8`.
+            args[1] = Value::symbol(&coding);
+        }
+    }
     let destination = coding_string_destination(args.get(3).copied())?;
     // Charset-type coding systems (cp437, koi8-r, chinese-gbk, …) encode and
     // decode each character through their charset list, and EUC-profile

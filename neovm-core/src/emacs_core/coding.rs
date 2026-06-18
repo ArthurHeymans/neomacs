@@ -280,6 +280,8 @@ pub enum IsoFlag {
     InitAtBol = 0x0200,
     DesignateAtBol = 0x0400,
     Composition = 0x2000,
+    UseRoman = 0x8000,
+    UseOldjis = 0x10000,
 }
 
 /// The ISO-2022 designation state of a coding system: the charset initially
