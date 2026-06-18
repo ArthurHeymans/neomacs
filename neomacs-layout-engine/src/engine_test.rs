@@ -2062,12 +2062,11 @@ fn layout_frame_rust_lays_out_word_wrap() {
 }
 
 // Walk-state coverage guards: these scenarios exercise the typed-source walk
-// through its *translated* arms (control chars, NBSP/SHY, selective-display
-// '\r') or *bypass* sourcing entirely (invisible/hscroll short-circuit before
-// consume_source_step). They were the typed-vs-raw parity tests before the raw
-// decoder was removed; they remain as single-path regression guards so the
-// NBSP / selective-display / invisible / hscroll / complex-text scenarios keep
-// being laid out.
+// through item-step arms (control chars, NBSP/SHY, selective-display '\r') or
+// bypass item consumption entirely (invisible/hscroll short-circuit before
+// consume_source_item_step). They remain as single-path regression guards so
+// the NBSP / selective-display / invisible / hscroll / complex-text scenarios
+// keep being laid out.
 
 #[test]
 fn layout_frame_rust_lays_out_invisible_text() {

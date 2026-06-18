@@ -27,7 +27,7 @@ use crate::display_buffer_text_render::{
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
-    BufferTextSourceCursor, BufferTextSourceStep, BufferTextSourceStepAdapter,
+    BufferTextSourceCursor, BufferTextSourceItemStep, BufferTextSourceItemStepper,
     BufferTextSourceStepChar,
 };
 use crate::display_cursor::CursorCaptureState;
@@ -886,7 +886,7 @@ impl BufferTextWindowWalkSetup {
             RenderFaceRef::Inherit,
         );
         let mut source_context = DisplaySourceContext::empty();
-        let mut source_adapter = BufferTextSourceStepAdapter::new(loop_context.text_start_byte());
+        let mut item_stepper = BufferTextSourceItemStepper::new(loop_context.text_start_byte());
 
         BufferTextWindowLoopRenderState::new(
             &mut self.buffer_text_append_state,
@@ -915,7 +915,7 @@ impl BufferTextWindowWalkSetup {
         .render_visible_steps(
             &mut source_cursor,
             &mut source_context,
-            &mut source_adapter,
+            &mut item_stepper,
             row_prelude_context,
             loop_context,
             face_resolution_context,
@@ -2584,7 +2584,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'request, B>,
         source_context: &mut DisplaySourceContext<'_>,
-        source_adapter: &mut BufferTextSourceStepAdapter,
+        item_stepper: &mut BufferTextSourceItemStepper,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -2604,7 +2604,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 self.render_next_step(
                     source_cursor,
                     source_context,
-                    source_adapter,
+                    item_stepper,
                     row_prelude_context,
                     loop_context,
                     face_resolution_context.clone(),
@@ -2626,7 +2626,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'request, B>,
         source_context: &mut DisplaySourceContext<'_>,
-        source_adapter: &mut BufferTextSourceStepAdapter,
+        item_stepper: &mut BufferTextSourceItemStepper,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
@@ -2688,7 +2688,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         }
 
         let Some(source_step) =
-            self.consume_source_step(source_cursor, source_context, source_adapter)
+            self.consume_source_item_step(source_cursor, source_context, item_stepper)
         else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
@@ -2708,43 +2708,39 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        match source_step {
-            BufferTextSourceStep::LineBreak(source_char) => {
-                if self
-                    .render_line_break_for_context(
-                        loop_context,
-                        source_char,
-                        text,
-                        active_face_state,
-                        buffer,
-                    )
-                    .should_break()
-                {
-                    return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-                }
+        let is_explicit_line_break = source_step.is_explicit_line_break();
+        let (source_char, source_item) = source_step.into_parts();
+        if is_explicit_line_break {
+            if self
+                .render_line_break_for_context(
+                    loop_context,
+                    source_char,
+                    text,
+                    active_face_state,
+                    buffer,
+                )
+                .should_break()
+            {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
             }
-            BufferTextSourceStep::Text {
+        } else {
+            let char_render_outcome = self.render_source_char_for_context(
+                loop_context,
+                face_resolution_context.source_item_layout_resolution_context(),
                 source_char,
                 source_item,
-            } => {
-                let char_render_outcome = self.render_source_char_for_context(
-                    loop_context,
-                    face_resolution_context.source_item_layout_resolution_context(),
-                    source_char,
-                    source_item,
-                    text,
-                    append_surface,
-                    overlay_context,
-                    active_face_state,
-                    params,
-                    buffer,
-                );
-                if char_render_outcome.should_break() {
-                    return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-                }
-                if char_render_outcome.should_continue_buffer_walk() {
-                    return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
-                }
+                text,
+                append_surface,
+                overlay_context,
+                active_face_state,
+                params,
+                buffer,
+            );
+            if char_render_outcome.should_break() {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            }
+            if char_render_outcome.should_continue_buffer_walk() {
+                return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
             }
         }
 
@@ -2791,17 +2787,17 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             );
     }
 
-    pub(crate) fn consume_source_step<B: LayoutBufferView>(
+    pub(crate) fn consume_source_item_step<B: LayoutBufferView>(
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'_, B>,
         source_context: &mut DisplaySourceContext<'_>,
-        source_adapter: &mut BufferTextSourceStepAdapter,
-    ) -> Option<BufferTextSourceStep> {
+        item_stepper: &mut BufferTextSourceItemStepper,
+    ) -> Option<BufferTextSourceItemStep> {
         // One persistent typed source cursor feeds the remaining
-        // character-at-a-time row walk. The adapter splits text-run items while
-        // preserving source spans, so the row walk no longer rebuilds a source
-        // cursor for every character.
-        source_adapter.next_step_from_source(
+        // character-at-a-time row walk. The item_stepper splits text-run items into
+        // typed item steps while preserving source spans, so the row walk no
+        // longer rebuilds a source cursor for every character.
+        item_stepper.next_item_step_from_source(
             source_cursor,
             source_context,
             self.byte_idx,

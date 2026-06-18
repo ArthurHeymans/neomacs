@@ -1775,7 +1775,7 @@ fn buffer_selective_display_context_keeps_visible_indented_line() {
 }
 
 #[test]
-fn buffer_text_source_step_adapter_preserves_single_char_source_item() {
+fn buffer_text_source_item_stepper_preserves_single_char_source_item() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1803,17 +1803,12 @@ fn buffer_text_source_step_adapter_preserves_single_char_source_item() {
     };
     let mut byte_idx = 0;
 
-    let step = BufferTextSourceStepAdapter::new(text_start_byte)
-        .step_from_item(item, &mut byte_idx, 0)
+    let step = BufferTextSourceItemStepper::new(text_start_byte)
+        .item_step_from_item(item, &mut byte_idx, 0)
         .expect("source step");
 
-    let BufferTextSourceStep::Text {
-        source_char,
-        source_item,
-    } = step
-    else {
-        panic!("expected text step");
-    };
+    let source_char = step.source_char();
+    let (_, source_item) = step.into_parts();
     assert_eq!(source_char.ch(), 'a');
     assert_eq!(byte_idx, 1);
     assert_eq!(
@@ -1831,7 +1826,7 @@ fn buffer_text_source_step_adapter_preserves_single_char_source_item() {
 }
 
 #[test]
-fn buffer_text_source_step_adapter_keeps_display_item_layout() {
+fn buffer_text_source_item_stepper_keeps_display_item_layout() {
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
             DisplaySourcePosition::buffer(
@@ -1854,19 +1849,17 @@ fn buffer_text_source_step_adapter_keeps_display_item_layout() {
     });
     let mut byte_idx = 0;
 
-    let step = BufferTextSourceStepAdapter::new(0)
-        .step_from_item(source_item, &mut byte_idx, 0)
+    let step = BufferTextSourceItemStepper::new(0)
+        .item_step_from_item(source_item, &mut byte_idx, 0)
         .expect("source step");
 
-    let BufferTextSourceStep::Text { source_item, .. } = step else {
-        panic!("expected text step");
-    };
+    let (_, source_item) = step.into_parts();
     assert_eq!(source_item.layout.raise, Some(0.25));
     assert_eq!(source_item.layout.height, Some(1.5));
 }
 
 #[test]
-fn buffer_text_source_step_adapter_splits_persistent_text_run() {
+fn buffer_text_source_item_stepper_splits_persistent_text_run() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1886,27 +1879,27 @@ fn buffer_text_source_step_adapter_splits_persistent_text_run() {
         RenderFaceRef::Inherit,
     );
     let mut source_context = DisplaySourceContext::empty();
-    let mut adapter = BufferTextSourceStepAdapter::new(0);
+    let mut item_stepper = BufferTextSourceItemStepper::new(0);
     let mut byte_idx = 0;
 
-    let first = adapter
-        .next_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 0)
+    let first = item_stepper
+        .next_item_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 0)
         .expect("first step");
     assert_eq!(first.source_char().ch(), 'a');
     assert_eq!(first.source_char().start_byte_idx(), 0);
     assert_eq!(byte_idx, 1);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
 
-    let second = adapter
-        .next_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 1)
+    let second = item_stepper
+        .next_item_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 1)
         .expect("second step");
     assert_eq!(second.source_char().ch(), 'b');
     assert_eq!(second.source_char().start_byte_idx(), 1);
     assert_eq!(byte_idx, 2);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
 
-    let third = adapter
-        .next_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 2)
+    let third = item_stepper
+        .next_item_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 2)
         .expect("third step");
     assert_eq!(third.source_char().ch(), 'c');
     assert_eq!(third.source_char().start_byte_idx(), 2);
@@ -1915,7 +1908,7 @@ fn buffer_text_source_step_adapter_splits_persistent_text_run() {
 }
 
 #[test]
-fn buffer_text_source_step_adapter_rejects_non_buffer_items() {
+fn buffer_text_source_item_stepper_rejects_non_buffer_items() {
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(9, 0, 1),
         RenderFaceRef::Inherit,
@@ -1923,14 +1916,14 @@ fn buffer_text_source_step_adapter_rejects_non_buffer_items() {
     );
     let mut byte_idx = 3;
 
-    let step = BufferTextSourceStepAdapter::new(0).step_from_item(item, &mut byte_idx, 7);
+    let step = BufferTextSourceItemStepper::new(0).item_step_from_item(item, &mut byte_idx, 7);
 
     assert!(step.is_none());
     assert_eq!(byte_idx, 3);
 }
 
 #[test]
-fn buffer_text_source_step_adapter_rejects_replacement_items() {
+fn buffer_text_source_item_stepper_rejects_replacement_items() {
     let item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
             DisplaySourcePosition::buffer(
@@ -1955,7 +1948,7 @@ fn buffer_text_source_step_adapter_rejects_replacement_items() {
     );
     let mut byte_idx = 0;
 
-    let step = BufferTextSourceStepAdapter::new(0).step_from_item(item, &mut byte_idx, 0);
+    let step = BufferTextSourceItemStepper::new(0).item_step_from_item(item, &mut byte_idx, 0);
 
     assert!(step.is_none());
     assert_eq!(byte_idx, 0);
