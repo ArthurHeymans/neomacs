@@ -5,16 +5,14 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
     BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
 };
-use crate::display_buffer_text_source::{
-    BufferTextDecodedSourceChar, BufferTextLineBreakSourceEvent, BufferTextSourceTextEvent,
-};
+use crate::display_buffer_text_source::BufferTextDecodedSourceChar;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
@@ -1467,7 +1465,7 @@ pub(crate) struct BufferTextLineBreakSourceAction {
 }
 
 pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
-    source_event: BufferTextLineBreakSourceEvent,
+    source_char: BufferTextDecodedSourceChar,
     context: BufferTextLineBreakRenderContext<'a>,
 }
 
@@ -1490,20 +1488,13 @@ pub(crate) struct BufferTextLineBreakRenderContext<'a> {
 }
 
 impl<'a> BufferTextLineBreakRenderRequest<'a> {
-    #[cfg(test)]
     pub(crate) fn new(
         source_char: BufferTextDecodedSourceChar,
         context: BufferTextLineBreakRenderContext<'a>,
     ) -> Self {
-        Self::from_source_event(BufferTextLineBreakSourceEvent::new(source_char), context)
-    }
-
-    pub(crate) fn from_source_event(
-        source_event: BufferTextLineBreakSourceEvent,
-        context: BufferTextLineBreakRenderContext<'a>,
-    ) -> Self {
+        debug_assert_eq!(source_char.ch(), '\n');
         Self {
-            source_event,
+            source_char,
             context,
         }
     }
@@ -1538,7 +1529,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
 
         let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
             buffer,
-            self.source_event.decoded_char(),
+            self.source_char,
             context.char_h,
             context.extra_line_spacing,
         );
@@ -3302,7 +3293,8 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
-    source_event: BufferTextSourceTextEvent,
+    source_char: BufferTextDecodedSourceChar,
+    source_item: Option<DisplayItem>,
     context: BufferTextSourceCharRenderContext<'a>,
 }
 
@@ -3528,20 +3520,15 @@ impl BufferTextOverflowRenderOutcome {
 }
 
 impl<'a> BufferTextSourceCharRenderRequest<'a> {
-    #[cfg(test)]
     pub(crate) fn new(
         decoded_source_char: BufferTextDecodedSourceChar,
+        source_item: Option<DisplayItem>,
         context: BufferTextSourceCharRenderContext<'a>,
     ) -> Self {
-        Self::from_source_event(BufferTextSourceTextEvent::new(decoded_source_char), context)
-    }
-
-    pub(crate) fn from_source_event(
-        source_event: BufferTextSourceTextEvent,
-        context: BufferTextSourceCharRenderContext<'a>,
-    ) -> Self {
+        debug_assert_ne!(decoded_source_char.ch(), '\n');
         Self {
-            source_event,
+            source_char: decoded_source_char,
+            source_item,
             context,
         }
     }
@@ -3577,14 +3564,13 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
 
-        let decoded_source_char = self.source_event.decoded_char();
+        let decoded_source_char = self.source_char;
         let ch = decoded_source_char.ch();
         decoded_source_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
-        let source_item = self.source_event.source_item();
+        let source_item = self.source_item.as_ref();
 
-        let buffer_source_char = self
-            .source_event
-            .source_char(context.params.nobreak_char_display);
+        let buffer_source_char =
+            decoded_source_char.source_char(context.params.nobreak_char_display);
         let buffer_row_append_context = BufferTextRowAppendContext::new(
             buffer,
             context.buffer_id,

@@ -1,10 +1,9 @@
 //! Display-walker chrome row rendering.
 //!
 //! Mode-line, header-line, tab-line, tab-bar, and minibuffer echo rows share
-//! the face realization helpers defined here. The generic display-row spec,
-//! property harvester, and row renderer live in `display_row`; this module
-//! retains the status-line filename because it grew from the older
-//! mode-line-only path.
+//! the face realization helpers defined here. The shared row renderer and
+//! property harvester live in `display_row`; this module retains the status-line
+//! filename because it grew from the older mode-line-only path.
 //!
 //! History: this module started as a divergent
 //! parallel implementation of display-line rendering that did not

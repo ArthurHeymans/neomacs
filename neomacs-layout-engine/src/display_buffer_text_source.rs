@@ -279,71 +279,19 @@ impl BufferTextDecodedSourceChar {
 /// run or a line-break character.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextDecodedSourceEvent {
-    LineBreak(BufferTextLineBreakSourceEvent),
-    Text(BufferTextSourceTextEvent),
+    LineBreak(BufferTextDecodedSourceChar),
+    Text {
+        source_char: BufferTextDecodedSourceChar,
+        source_item: Option<DisplayItem>,
+    },
 }
 
 impl BufferTextDecodedSourceEvent {
     pub(crate) fn decoded_char(&self) -> BufferTextDecodedSourceChar {
         match self {
-            Self::LineBreak(source_event) => (*source_event).decoded_char(),
-            Self::Text(source_event) => source_event.decoded_char(),
+            Self::LineBreak(source_char) => *source_char,
+            Self::Text { source_char, .. } => *source_char,
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextLineBreakSourceEvent {
-    source_char: BufferTextDecodedSourceChar,
-}
-
-impl BufferTextLineBreakSourceEvent {
-    pub(crate) fn new(source_char: BufferTextDecodedSourceChar) -> Self {
-        debug_assert_eq!(source_char.ch(), '\n');
-        Self { source_char }
-    }
-
-    pub(crate) fn decoded_char(self) -> BufferTextDecodedSourceChar {
-        self.source_char
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSourceTextEvent {
-    source_char: BufferTextDecodedSourceChar,
-    source_item: Option<DisplayItem>,
-}
-
-impl BufferTextSourceTextEvent {
-    pub(crate) fn new(source_char: BufferTextDecodedSourceChar) -> Self {
-        debug_assert_ne!(source_char.ch(), '\n');
-        Self {
-            source_char,
-            source_item: None,
-        }
-    }
-
-    pub(crate) fn from_source_item(
-        source_char: BufferTextDecodedSourceChar,
-        source_item: DisplayItem,
-    ) -> Self {
-        debug_assert_ne!(source_char.ch(), '\n');
-        Self {
-            source_char,
-            source_item: Some(source_item),
-        }
-    }
-
-    pub(crate) fn decoded_char(&self) -> BufferTextDecodedSourceChar {
-        self.source_char
-    }
-
-    pub(crate) fn source_item(&self) -> Option<&DisplayItem> {
-        self.source_item.as_ref()
-    }
-
-    pub(crate) fn source_char(&self, nobreak_display_policy: i32) -> BufferTextSourceChar {
-        self.source_char.source_char(nobreak_display_policy)
     }
 }
 
@@ -429,12 +377,10 @@ impl PendingBufferTextRun {
         )
         .with_layout(self.layout);
 
-        Some(BufferTextDecodedSourceEvent::Text(
-            text_event_for_source_item(
-                BufferTextDecodedSourceChar::new(ch, start_byte_idx, start_charpos),
-                source_item,
-            ),
-        ))
+        Some(BufferTextDecodedSourceEvent::Text {
+            source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, start_charpos),
+            source_item: text_event_source_item(source_item),
+        })
     }
 
     fn is_finished(&self) -> bool {
@@ -520,11 +466,7 @@ impl BufferTextSourceEventAdapter {
             {
                 *byte_idx = start_byte_idx + 1;
                 Some(BufferTextDecodedSourceEvent::LineBreak(
-                    BufferTextLineBreakSourceEvent::new(BufferTextDecodedSourceChar::new(
-                        '\n',
-                        start_byte_idx,
-                        charpos,
-                    )),
+                    BufferTextDecodedSourceChar::new('\n', start_byte_idx, charpos),
                 ))
             }
             DisplayItemKind::ControlChar { ch } => {
@@ -535,12 +477,10 @@ impl BufferTextSourceEventAdapter {
                     kind: DisplayItemKind::ControlChar { ch },
                     layout,
                 };
-                Some(BufferTextDecodedSourceEvent::Text(
-                    text_event_for_source_item(
-                        BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
-                        source_item,
-                    ),
-                ))
+                Some(BufferTextDecodedSourceEvent::Text {
+                    source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
+                    source_item: text_event_source_item(source_item),
+                })
             }
             DisplayItemKind::Glyphless(glyphless) => {
                 let ch = glyphless.ch;
@@ -551,12 +491,10 @@ impl BufferTextSourceEventAdapter {
                     kind: DisplayItemKind::Glyphless(glyphless),
                     layout,
                 };
-                Some(BufferTextDecodedSourceEvent::Text(
-                    text_event_for_source_item(
-                        BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
-                        source_item,
-                    ),
-                ))
+                Some(BufferTextDecodedSourceEvent::Text {
+                    source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
+                    source_item: text_event_source_item(source_item),
+                })
             }
             _ => {
                 tracing::error!(
@@ -582,14 +520,11 @@ impl BufferTextSourceEventAdapter {
     }
 }
 
-fn text_event_for_source_item(
-    source_char: BufferTextDecodedSourceChar,
-    source_item: DisplayItem,
-) -> BufferTextSourceTextEvent {
+fn text_event_source_item(source_item: DisplayItem) -> Option<DisplayItem> {
     if source_item.layout == DisplayItemLayout::default() {
-        BufferTextSourceTextEvent::from_source_item(source_char, source_item)
+        Some(source_item)
     } else {
-        BufferTextSourceTextEvent::new(source_char)
+        None
     }
 }
 
