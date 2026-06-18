@@ -988,8 +988,8 @@ fn builder_reorders_status_line_rtl_row() {
 
 /// Cross-row-kind RTL bidi parity (Slice 4 characterization; guards Slice 5).
 ///
-/// A buffer `Text` row (incremental path — reorders at `EndIncremental`) and a
-/// `ModeLine` chrome row (copied row path — reorders at `EndIncremental`)
+/// A buffer `Text` row (incremental path — reorders at `end_current_row`) and a
+/// `ModeLine` chrome row (copied row path — reorders at `end_current_row`)
 /// built from the SAME Hebrew string must reorder to the SAME visual glyph
 /// order, per-glyph `bidi_level`, and `reversed_p`. Today the two paths run the
 /// same `reorder_row_bidi` finalizer, so these axes are identical.
@@ -1002,7 +1002,7 @@ fn rtl_text_and_chrome_rows_reorder_identically() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
 
-    // Row 0 — buffer Text row via the incremental path (EndIncremental reorder).
+    // Row 0 — buffer Text row via the incremental path (`end_current_row` reorder).
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'א', 0, 0);
     write_char_to_current_row(&mut builder, 'ב', 0, 1);

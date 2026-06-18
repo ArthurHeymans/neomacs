@@ -408,7 +408,7 @@ pub(crate) fn push_stretch_to_area(
 /// Normalize a standalone row built outside the window-matrix walker.
 ///
 /// Bidi reorder is intentionally NOT performed here. Reordering happens once,
-/// at row install (`EndIncremental` -> row finalization), uniformly for
+/// at row install (`end_current_row` -> row finalization), uniformly for
 /// buffer-text and chrome rows, so every row is reordered exactly once by a
 /// single finalizer. This only normalizes `displays_text` for rows built outside
 /// the walker.

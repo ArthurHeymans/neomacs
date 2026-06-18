@@ -2212,7 +2212,7 @@ pub(crate) fn install_display_row_in_matrix_row(
         mode_line: row.mode_line,
     }));
     builder.replace_current_row(row);
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
+    builder.end_current_row();
 }
 
 pub(crate) fn install_measured_window_display_row(
@@ -2268,7 +2268,7 @@ pub(crate) fn install_measured_frame_chrome_row(
     apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
     // Frame chrome (tab-bar) rows are stored in a side vector and never pass
     // through the matrix-row lifecycle, so they reorder here. Render no longer
-    // reorders (the single matrix-row finalizer is EndIncremental), so the
+    // reorders (the single matrix-row finalizer is `end_current_row`), so the
     // cloned row is un-reordered and must be finalized once on the clone.
     let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
     row.pixel_y = measured.bounds.y;

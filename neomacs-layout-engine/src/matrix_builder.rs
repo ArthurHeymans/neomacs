@@ -341,7 +341,6 @@ pub(crate) struct MatrixRowCursorRequest {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum MatrixRowLifecycleRequest {
     Begin(MatrixRowBeginRequest),
-    EndIncremental,
     CurrentMetrics(MatrixRowMetricsRequest),
     RowMetrics(MatrixIndexedRowMetricsRequest),
     CursorAt(MatrixRowCursorRequest),
@@ -360,17 +359,6 @@ impl MatrixRowLifecycleRequest {
                     matrix.rows[begin.row].enabled = true;
                     matrix.rows[begin.row].mode_line = begin.mode_line;
                 }
-            }
-            Self::EndIncremental => {
-                if let Some(ref mut matrix) = builder.current_matrix {
-                    GlyphRowFinalizationContext::new(
-                        builder.current_window_id,
-                        builder.current_row,
-                        builder.current_pixel_bounds,
-                    )
-                    .finalize_matrix_row(matrix, builder.phys_cursor.as_mut());
-                }
-                builder.in_row = false;
             }
             Self::CurrentMetrics(metrics) => {
                 if let Some(ref mut matrix) = builder.current_matrix
@@ -617,7 +605,7 @@ impl GlyphMatrixBuilder {
 
     #[cfg(test)]
     pub(crate) fn end_row(&mut self) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
+        self.end_current_row();
     }
 
     /// Record stored geometry for the currently open row.
@@ -664,6 +652,22 @@ impl GlyphMatrixBuilder {
         row.pixel_y -= context.pixel_bounds.y;
         self.replace_current_row(row);
         self.end_row();
+    }
+
+    pub(crate) fn end_current_row(&mut self) {
+        self.finalize_current_row();
+        self.in_row = false;
+    }
+
+    pub(crate) fn finalize_current_row(&mut self) {
+        if let Some(ref mut matrix) = self.current_matrix {
+            GlyphRowFinalizationContext::new(
+                self.current_window_id,
+                self.current_row,
+                self.current_pixel_bounds,
+            )
+            .finalize_matrix_row(matrix, self.phys_cursor.as_mut());
+        }
     }
 
     #[cfg(test)]

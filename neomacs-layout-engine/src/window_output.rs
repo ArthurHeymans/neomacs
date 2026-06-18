@@ -443,8 +443,7 @@ impl<'a> TextMatrixRowOutput<'a> {
 
     pub(crate) fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) {
         self.finish(metrics);
-        self.builder
-            .install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
+        self.builder.end_current_row();
     }
 
     pub(crate) fn emit(&mut self, transition: TextMatrixRowGeometryTransition) {
@@ -875,7 +874,7 @@ pub(crate) fn finish_text_window_output_rows(
             },
         ));
     }
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
+    builder.end_current_row();
 }
 
 fn text_matrix_row_metrics_request(
