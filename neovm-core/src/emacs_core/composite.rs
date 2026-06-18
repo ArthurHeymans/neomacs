@@ -229,6 +229,30 @@ fn composition_unregistered_parts(prop: Value) -> Option<(i64, Value, Value)> {
     Some((length, components, mod_func))
 }
 
+/// Display width and character length of the composition whose `composition`
+/// text property begins at 1-based buffer position `charpos1`, or None if there
+/// is no valid composition there. This is what GNU's `current_column_1` /
+/// display scan derives from a composition (the composed glyphs' width over its
+/// covered characters); the column engine consults it so composed text lays out
+/// at the glyphs' width, not the underlying chars'.
+pub(crate) fn composition_width_at(
+    ctx: &super::eval::Context,
+    charpos1: i64,
+) -> Option<(i64, i64)> {
+    let prop = super::textprop::builtin_get_text_property_in_state(
+        &ctx.obarray,
+        &ctx.buffers,
+        vec![Value::fixnum(charpos1), Value::symbol("composition")],
+    )
+    .ok()?;
+    let (length, components, _) = composition_unregistered_parts(prop)?;
+    if length <= 0 {
+        return None;
+    }
+    let key = composition_components_key(ctx, components, Value::NIL, charpos1, length);
+    Some((composition_relative_width(&key), length))
+}
+
 /// GNU `composition_valid_p` restricted to the unregistered form: PROP is a
 /// well-formed composition property whose stored length equals `end - start`.
 fn composition_valid_unregistered(start: i64, end: i64, prop: Value) -> bool {

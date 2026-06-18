@@ -253,6 +253,25 @@ fn display_table_glyph_width(dt: &Value, code: u32) -> Option<usize> {
     Some(total)
 }
 
+/// If a `composition` property begins at buffer byte `byte`, return
+/// `(composed_width, run_end_byte)` — the composed glyphs' display width and the
+/// byte position just past the composed characters. Returns None otherwise.
+fn composition_run_at(
+    ctx: &super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    byte: usize,
+) -> Option<(usize, usize)> {
+    let buf = ctx.buffers.get(buffer_id)?;
+    let charpos0 = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte));
+    let charpos1 = charpos0.get() as i64 + 1;
+    let (width, length) = super::composite::composition_width_at(ctx, charpos1)?;
+    let end_charpos0 = charpos0.get() + length.max(0) as usize;
+    let end_byte = buf
+        .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(end_charpos0))
+        .get();
+    Some((width.max(0) as usize, end_byte))
+}
+
 /// Total display columns of a Lisp string (sum of per-character display widths).
 fn lisp_string_display_columns(text: &LispString) -> usize {
     let mut total = 0usize;
@@ -368,6 +387,20 @@ fn scan_for_column(
                 previous_code = None;
                 column = column.saturating_add(disp_width);
                 scan = run_end_byte.min(end);
+                continue;
+            }
+        }
+
+        // A `composition` property lays its covered characters out as the
+        // composed glyphs (GNU's display scan via get_composition_id), so the
+        // run advances by the glyphs' width over the composed character count.
+        if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, scan) {
+            if comp_end > scan {
+                previous_byte_pos = scan;
+                previous_column = column;
+                previous_code = None;
+                column = column.saturating_add(comp_width);
+                scan = comp_end.min(end);
                 continue;
             }
         }
