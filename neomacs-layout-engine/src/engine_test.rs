@@ -9773,6 +9773,115 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
     );
 }
 
+/// Lay out a frame whose ACTIVE minibuffer displays `content` (the
+/// minibuffer buffer's own text), with `max-mini-window-height` set to
+/// `max_mini_lines` (a fixnum). Returns the enabled minibuffer row texts.
+///
+/// Models the active fido/vertico path: an active mini-window renders its
+/// own buffer text (GNU `resize_mini_window` measures `move_it_to(ZV)` over
+/// that buffer), as opposed to the inactive echo-area path that swaps in
+/// ` *Echo Area 0*`.
+fn layout_active_minibuffer_rows(
+    content: &str,
+    max_mini_lines: i64,
+    use_gui_metrics: bool,
+) -> Vec<String> {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
+    eval.obarray_mut()
+        .set_symbol_value("max-mini-window-height", Value::fixnum(max_mini_lines));
+
+    let root_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let minibuf_id = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    {
+        let buf = eval
+            .buffer_manager_mut()
+            .get_mut(minibuf_id)
+            .expect("buffer");
+        buf.insert(content);
+        let eob = buf.point_max_emacs_byte_pos().get();
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(eob));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-active-minibuffer", 640, 200, root_buf_id);
+
+    let mut engine = if use_gui_metrics {
+        let mut e = LayoutEngine::new();
+        e.enable_cosmic_metrics();
+        e
+    } else {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.shrink_mini_window();
+        LayoutEngine::new_without_font_metrics()
+    };
+
+    let minibuffer_window_id = eval
+        .activate_minibuffer_window_for_buffer(minibuf_id, LispString::from_utf8(""), None)
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == minibuffer_window_id.0)
+        .expect("minibuffer matrix entry");
+    enabled_window_row_texts(entry)
+}
+
+/// CHARACTERIZATION (STEP 0): an active minibuffer holding a prompt line plus
+/// several candidate lines must NOT flatten multi-line content into one row,
+/// must render the prompt line, and must grow past one row.  Pins the
+/// active-fido/vertico measure path before the estimator removal.  (The
+/// stricter "grow to one row per logical line" target is asserted by
+/// `active_minibuffer_grows_to_full_content_*`, made green once the walk
+/// measures unclamped in STEP 1.)
+fn assert_active_minibuffer_grows_for_multiline_content(use_gui_metrics: bool) {
+    let rows = layout_active_minibuffer_rows(
+        "Find file: cand\nalpha.el\nbeta.el\ngamma.el",
+        10,
+        use_gui_metrics,
+    );
+
+    assert!(
+        rows.iter().any(|row| row.contains("Find file: cand")),
+        "expected the active minibuffer prompt row to render, rows={rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains("candalpha")),
+        "multiline minibuffer content was flattened into one row: {rows:?}"
+    );
+    let content_rows = rows.iter().filter(|row| !row.trim().is_empty()).count();
+    assert!(
+        content_rows >= 2,
+        "expected the active minibuffer to grow past one row, got {content_rows}: {rows:?}"
+    );
+}
+
+#[test]
+fn active_minibuffer_grows_for_multiline_content_tty() {
+    assert_active_minibuffer_grows_for_multiline_content(false);
+}
+
+#[test]
+fn active_minibuffer_grows_for_multiline_content_gui() {
+    assert_active_minibuffer_grows_for_multiline_content(true);
+}
+
 #[test]
 fn build_tab_bar_display_roots_transient_string_across_gc() {
     let mut eval =
