@@ -12,7 +12,8 @@ use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferManager, CharLen, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
+    Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    TextExtent,
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
@@ -191,6 +192,66 @@ fn raw_unibyte_display_width(byte: u8) -> usize {
     if byte < 0o40 || byte >= 0o177 { 4 } else { 1 }
 }
 
+/// If the buffer position `byte` carries a `display` text property whose value
+/// is a string, return `(display_width, run_end_byte)` where `display_width` is
+/// the string's total display columns and `run_end_byte` is the end of the
+/// `display`-property run. Used by the column engine so display-string text
+/// lays out at the replacement string's width, not the underlying text's.
+fn display_string_run_at(
+    ctx: &super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    byte: usize,
+) -> Option<(usize, usize)> {
+    let buf = ctx.buffers.get(buffer_id)?;
+    let charpos0 = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte));
+    let charpos1 = charpos0.get() as i64 + 1;
+    let display = super::textprop::builtin_get_text_property_in_state(
+        &ctx.obarray,
+        &ctx.buffers,
+        vec![Value::fixnum(charpos1), Value::symbol("display")],
+    )
+    .ok()?;
+    let disp_str = display.as_lisp_string()?;
+    let width: usize = lisp_string_display_columns(disp_str);
+    // End of the `display`-property run (nil result means end of accessible text).
+    let run_end_char1 = super::textprop::builtin_next_single_property_change_in_state(
+        &ctx.obarray,
+        &ctx.buffers,
+        vec![Value::fixnum(charpos1), Value::symbol("display")],
+    )
+    .ok()
+    .and_then(|v| match v.kind() {
+        ValueKind::Fixnum(n) => Some(n),
+        _ => None,
+    })
+    .unwrap_or_else(|| buf.accessible_char_region().end().get() as i64 + 1);
+    let run_end_byte = buf
+        .char_pos_to_emacs_byte_pos_clamped(CharPos0::new((run_end_char1 - 1).max(0) as usize))
+        .get();
+    Some((width, run_end_byte))
+}
+
+/// Total display columns of a Lisp string (sum of per-character display widths).
+fn lisp_string_display_columns(text: &LispString) -> usize {
+    let mut total = 0usize;
+    if text.is_multibyte() {
+        let bytes = text.as_bytes();
+        let mut pos = 0usize;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            total += char::from_u32(code)
+                .map(crate::encoding::char_width)
+                .unwrap_or(1);
+            pos += len;
+        }
+    } else {
+        for &b in text.as_bytes() {
+            total += raw_unibyte_display_width(b);
+        }
+    }
+    total
+}
+
 fn buffer_char_display_width(buf: &Buffer, byte_pos: EmacsBytePos, code: u32) -> usize {
     if !buf.get_multibyte() {
         return buf
@@ -262,6 +323,21 @@ fn scan_for_column(
 
         if column >= goal {
             break;
+        }
+
+        // A `display` text property whose value is a string replaces the covered
+        // text with that string for layout (GNU's `current_column_1` /
+        // `Fmove_to_column` consult `display` specs). Advance by the string's
+        // display width over the whole property run, atomically.
+        if let Some((disp_width, run_end_byte)) = display_string_run_at(ctx, buffer_id, scan) {
+            if run_end_byte > scan {
+                previous_byte_pos = scan;
+                previous_column = column;
+                previous_code = None;
+                column = column.saturating_add(disp_width);
+                scan = run_end_byte.min(end);
+                continue;
+            }
         }
 
         let (code, char_len, width) = {
