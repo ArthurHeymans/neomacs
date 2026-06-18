@@ -27,7 +27,7 @@ fn div_cx402_face_remapping_add_relative() {
 }
 
 /// Process output collected into a buffer using :buffer argument
-/// directly — no filter closure needed.
+/// directly — uses string-trim to normalize trailing whitespace.
 #[test]
 fn div_cx402_process_buffer_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
@@ -37,9 +37,10 @@ fn div_cx402_process_buffer_output() {
   (let ((proc (make-process :name "neo-cx402-out"
                             :command '("sh" "-c" "echo hello from 402")
                             :connection-type 'pipe :buffer buf)))
-    (accept-process-output proc 2))
+    (accept-process-output proc 2)
+    (delete-process proc))
   (prog1 (with-current-buffer buf
-           (string-trim-right (buffer-string)))
+           (string-trim-right (buffer-string) "\n"))
     (kill-buffer buf)))
 "##,
     );
