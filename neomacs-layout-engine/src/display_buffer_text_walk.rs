@@ -19,17 +19,16 @@ use crate::display_row_append::{
     BufferHscrollSkipRenderContext, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
     BufferInvisibleTextRenderContext, BufferInvisibleTextRenderOutcome,
     BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
-    BufferLineNumberMarginRenderRequest, BufferLinePrefixRenderContext,
-    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
-    BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderOutcome,
-    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
-    BufferTextLineBreakRenderState, BufferTextRowAppendState, BufferTextSourceCharRenderContext,
-    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, BufferTextWindowBeginRequest,
-    BufferTextWindowBeginState, BufferTextWindowBodyInstallRenderContext,
-    BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
+    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayTailRenderContext,
+    BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
+    BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderContext,
+    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
+    BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
+    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
+    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
+    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
     BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
@@ -41,6 +40,7 @@ use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
+use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_row_walk_state::{

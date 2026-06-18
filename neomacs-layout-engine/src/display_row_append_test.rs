@@ -30,6 +30,7 @@ use crate::display_row_geometry::{
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
     DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
+use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,

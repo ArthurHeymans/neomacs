@@ -27,6 +27,7 @@ pub(crate) mod display_row;
 pub(crate) mod display_row_append;
 pub(crate) mod display_row_builder;
 pub(crate) mod display_row_geometry;
+pub(crate) mod display_row_line_number_margin;
 pub(crate) mod display_row_source_render;
 pub(crate) mod display_row_special_glyphs;
 pub(crate) mod display_row_walk_state;
