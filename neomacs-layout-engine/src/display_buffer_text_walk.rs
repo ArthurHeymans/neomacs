@@ -9,16 +9,20 @@ use crate::display_buffer_text_append::{
     TextWindowAppendSurfaceRequest,
 };
 use crate::display_buffer_text_render::{
-    BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
-    BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderContext,
-    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderContext,
-    BufferInvisibleTextRenderOutcome, BufferInvisibleTextRenderRequest,
-    BufferInvisibleTextRenderRequestState, BufferSelectiveDisplayTailRenderContext,
-    BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
-    BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderContext,
-    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
-    BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
-    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
+    BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
+    BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
+    BufferDisplayPropertyTextWalkOutcome, BufferEndOfBufferTailRenderContext,
+    BufferEndOfBufferTailRenderRequest, BufferEndOfBufferTailRenderState,
+    BufferHscrollSkipRenderContext, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
+    BufferInvisibleTextRenderContext, BufferInvisibleTextRenderOutcome,
+    BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
+    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
+    BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderOutcome,
+    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
+    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
+    BufferTextLineBreakRenderState, BufferTextSourceCharRenderContext,
+    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
+    BufferTextSourceCharRenderRequestState,
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
@@ -32,12 +36,8 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append::{
-    BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
-    BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
-    BufferDisplayPropertyTextWalkOutcome, BufferLinePrefixRenderContext,
-    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
-    BufferTextRowAppendState, DisplayRowAppendSurface, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTransitionContinuation,
+    BufferOverlayStringTextRowRenderContext, BufferTextRowAppendState, DisplayRowAppendSurface,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, DisplayRowTransitionContinuation,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{

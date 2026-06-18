@@ -35,23 +35,24 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
-    DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
+    DisplayRowScopedValue, DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_overlay_string::OverlayStringRowBreakRenderContext;
 use crate::display_row_walk_state::{
-    ActiveDisplayPropertySpan, BufferTextRowOverflowDecision, FaceScanCheckpoint,
-    HitRowRangeTracker, LineNumberRenderState, WordWrapBreakCandidate, WordWrapRenderState,
+    ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
+    HitRowRangeTracker, LineNumberRenderState, TextPropertyScanCheckpoints, WordWrapBreakCandidate,
+    WordWrapRenderState,
 };
 use crate::display_source::{
-    BufferDisplayPropertyTextModifierAction, BufferDisplayReplacementStringRequest,
-    BufferTextSourceAdvanceRequest, BufferTextSourceSpecialDisplay,
-    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
-    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem,
+    BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,
+    BufferDisplayReplacementStringRequest, BufferTextSourceAdvanceRequest,
+    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementAppendItem, DisplayReplacementBox,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
+    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
