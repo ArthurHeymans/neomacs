@@ -1,0 +1,102 @@
+//! Process coding/lifecycle parity: set/get coding-system, filter-multibyte,
+//! tty-name, send+eof through wc, call-process exit/signal, plus two
+//! permissiveness divergences (unibyte high-byte send, :stop flag).
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+#[ignore = "DIVERGENCE: process-send-string of a unibyte string with a high byte (233) under :coding latin-1 - GNU signals \"Cannot convert character ... to unibyte\", neomacs transmits the bytes unchanged."]
+fn divergence_proc_send_unibyte_highbyte_latin1() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(let ((acc ""))
+  (let ((proc (make-process :name "neo-cl1-xxx" :command '("cat")
+               :connection-type 'pipe :coding 'latin-1
+               :filter (lambda (_p s) (setq acc (concat acc s))))))
+    (set-process-query-on-exit-flag proc nil)
+    (process-send-string proc (unibyte-string 72 233 108 108 111 10))
+    (process-send-eof proc)
+    (while (process-live-p proc) (accept-process-output proc 1))
+    (list (length acc) (multibyte-string-p acc) (append (string-to-unibyte acc) nil))))"##,
+    );
+}
+
+#[test]
+fn proc_exit_code_via_call() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(list (call-process "sh" nil nil nil "-c" "exit 0")
+        (call-process "sh" nil nil nil "-c" "kill -TERM $$")
+        (call-process-shell-command "true"))"##,
+    );
+}
+
+#[test]
+fn proc_filter_multibyte_flag() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(let ((proc (make-process :name "neo-fmb-xxx" :command '("cat") :connection-type 'pipe :noquery t)))
+  (set-process-filter-multibyte proc nil)
+  (prog1 (list (process-filter-multibyte-p proc))
+    (set-process-filter-multibyte proc t)
+    (list (process-filter-multibyte-p proc))
+    (delete-process proc)))"##,
+    );
+}
+
+#[test]
+#[ignore = "DIVERGENCE: make-process :stop t on a pipe process - GNU signals (wrong-type-argument null t), neomacs accepts it and the process runs."]
+fn divergence_proc_make_process_stop_flag() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(let ((proc (make-process :name "neo-stp-xxx" :command '("cat")
+                          :connection-type 'pipe :stop t :noquery t)))
+  (prog1 (list (process-status proc) (processp proc))
+    (continue-process proc) (delete-process proc)))"##,
+    );
+}
+
+#[test]
+fn proc_send_then_close() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(let ((acc ""))
+  (let ((proc (make-process :name "neo-stc-xxx" :command '("wc" "-c")
+               :connection-type 'pipe
+               :filter (lambda (_p s) (setq acc (concat acc s))))))
+    (set-process-query-on-exit-flag proc nil)
+    (process-send-string proc "12345")
+    (process-send-eof proc)
+    (while (process-live-p proc) (accept-process-output proc 1))
+    (string-to-number (string-trim acc))))"##,
+    );
+}
+
+#[test]
+fn proc_set_coding_system() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(let ((proc (make-process :name "neo-scs-xxx" :command '("cat") :connection-type 'pipe :noquery t)))
+  (set-process-coding-system proc 'utf-8-unix 'latin-1-unix)
+  (prog1 (let ((cs (process-coding-system proc))) (list (car cs) (cdr cs)))
+    (delete-process proc)))"##,
+    );
+}
+
+#[test]
+fn proc_tty_name_nil() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(let ((proc (make-process :name "neo-tty-xxx" :command '("cat") :connection-type 'pipe :noquery t)))
+  (prog1 (list (process-tty-name proc) (null (process-tty-name proc)))
+    (delete-process proc)))"##,
+    );
+}
