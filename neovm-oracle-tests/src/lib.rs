@@ -1222,6 +1222,7 @@ mod divergence_buffer_manip_rect;
 mod divergence_buffer_motion_search;
 mod divergence_buffer_undo_search_runtime;
 mod divergence_bufferlocal_frame_deep;
+mod divergence_builtin_modules_hash_runtime;
 mod divergence_bytecomp_deep;
 mod divergence_bytecomp_real;
 mod divergence_calc;
