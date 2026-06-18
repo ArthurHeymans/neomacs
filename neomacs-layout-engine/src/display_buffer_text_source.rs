@@ -236,16 +236,16 @@ fn visible_cols_for_window_params(params: &WindowParams) -> i64 {
         .max(1.0) as i64
 }
 
-/// A single character decoded from raw buffer text, together with its byte and
-/// char positions in the original buffer.
+/// A single source character aligned with the current buffer byte and char
+/// positions for the row walk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextDecodedSourceChar {
+pub(crate) struct BufferTextSourceStepChar {
     ch: char,
     start_byte_idx: usize,
     start_charpos: i64,
 }
 
-impl BufferTextDecodedSourceChar {
+impl BufferTextSourceStepChar {
     pub(crate) const fn new(ch: char, start_byte_idx: usize, start_charpos: i64) -> Self {
         Self {
             ch,
@@ -279,15 +279,15 @@ impl BufferTextDecodedSourceChar {
 /// source items have been aligned with the current buffer byte/char cursor.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceStep {
-    LineBreak(BufferTextDecodedSourceChar),
+    LineBreak(BufferTextSourceStepChar),
     Text {
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         source_item: Option<DisplayItem>,
     },
 }
 
 impl BufferTextSourceStep {
-    pub(crate) fn decoded_char(&self) -> BufferTextDecodedSourceChar {
+    pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
         match self {
             Self::LineBreak(source_char) => *source_char,
             Self::Text { source_char, .. } => *source_char,
@@ -378,7 +378,7 @@ impl PendingBufferTextRun {
         .with_layout(self.layout);
 
         Some(BufferTextSourceStep::Text {
-            source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, start_charpos),
+            source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
             source_item: text_step_source_item(source_item),
         })
     }
@@ -466,7 +466,7 @@ impl BufferTextSourceStepAdapter {
             {
                 *byte_idx = start_byte_idx + 1;
                 Some(BufferTextSourceStep::LineBreak(
-                    BufferTextDecodedSourceChar::new('\n', start_byte_idx, charpos),
+                    BufferTextSourceStepChar::new('\n', start_byte_idx, charpos),
                 ))
             }
             DisplayItemKind::ControlChar { ch } => {
@@ -478,7 +478,7 @@ impl BufferTextSourceStepAdapter {
                     layout,
                 };
                 Some(BufferTextSourceStep::Text {
-                    source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
+                    source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, charpos),
                     source_item: text_step_source_item(source_item),
                 })
             }
@@ -492,7 +492,7 @@ impl BufferTextSourceStepAdapter {
                     layout,
                 };
                 Some(BufferTextSourceStep::Text {
-                    source_char: BufferTextDecodedSourceChar::new(ch, start_byte_idx, charpos),
+                    source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, charpos),
                     source_item: text_step_source_item(source_item),
                 })
             }

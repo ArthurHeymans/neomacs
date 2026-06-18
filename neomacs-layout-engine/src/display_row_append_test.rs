@@ -1859,24 +1859,24 @@ fn buffer_text_source_step_adapter_splits_persistent_text_run() {
     let first = adapter
         .next_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 0)
         .expect("first step");
-    assert_eq!(first.decoded_char().ch(), 'a');
-    assert_eq!(first.decoded_char().start_byte_idx(), 0);
+    assert_eq!(first.source_char().ch(), 'a');
+    assert_eq!(first.source_char().start_byte_idx(), 0);
     assert_eq!(byte_idx, 1);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
 
     let second = adapter
         .next_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 1)
         .expect("second step");
-    assert_eq!(second.decoded_char().ch(), 'b');
-    assert_eq!(second.decoded_char().start_byte_idx(), 1);
+    assert_eq!(second.source_char().ch(), 'b');
+    assert_eq!(second.source_char().start_byte_idx(), 1);
     assert_eq!(byte_idx, 2);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
 
     let third = adapter
         .next_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 2)
         .expect("third step");
-    assert_eq!(third.decoded_char().ch(), 'c');
-    assert_eq!(third.decoded_char().start_byte_idx(), 2);
+    assert_eq!(third.source_char().ch(), 'c');
+    assert_eq!(third.source_char().start_byte_idx(), 2);
     assert_eq!(byte_idx, 3);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
 }
@@ -1929,9 +1929,9 @@ fn buffer_text_source_step_adapter_rejects_replacement_items() {
 }
 
 #[test]
-fn buffer_text_decoded_source_char_records_word_wrap_candidate() {
-    let context = RowTransitionTestContext::new("decoded-source-char-word-wrap");
-    let source_char = BufferTextDecodedSourceChar::new('a', 1, 6);
+fn buffer_text_source_step_char_records_word_wrap_candidate() {
+    let context = RowTransitionTestContext::new("source-step-char-word-wrap");
+    let source_char = BufferTextSourceStepChar::new('a', 1, 6);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
 
@@ -1945,7 +1945,7 @@ fn buffer_text_decoded_source_char_records_word_wrap_candidate() {
 }
 
 #[test]
-fn buffer_text_decoded_source_char_builds_line_break_action() {
+fn buffer_text_source_step_char_builds_line_break_action() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1957,10 +1957,10 @@ fn buffer_text_decoded_source_char_builds_line_break_action() {
         buffer.insert("a\nb");
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let source_char = BufferTextDecodedSourceChar::new('\n', 1, 1);
+    let source_char = BufferTextSourceStepChar::new('\n', 1, 1);
 
     let action =
-        BufferTextLineBreakSourceAction::for_decoded_newline(&snapshot, source_char, 16.0, 5.0);
+        BufferTextLineBreakSourceAction::for_source_step_newline(&snapshot, source_char, 16.0, 5.0);
 
     assert_eq!(source_char.ch(), '\n');
     assert!(action.point_matches(1));
@@ -2221,7 +2221,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let active_face = test_active_face_state(9, 8.0);
     let text = b"\nnext";
     let mut byte_idx = 1;
-    let source_char = BufferTextDecodedSourceChar::new('\n', 0, 0);
+    let source_char = BufferTextSourceStepChar::new('\n', 0, 0);
     let mut charpos = 0;
     let mut cursor_info = CursorCaptureState::new();
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -2394,7 +2394,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     );
     let text = b"a\rb\nc";
     let mut byte_idx = 2;
-    let decoded_source_char = BufferTextDecodedSourceChar::new('\r', 1, 1);
+    let source_step_char = BufferTextSourceStepChar::new('\r', 1, 1);
     let mut charpos = 1;
     let mut col = 0;
     let mut row_extend = DisplayRowScopedValue::inactive();
@@ -2409,7 +2409,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut font_metrics = None;
 
     let outcome = BufferSelectiveDisplayTailRenderRequest::new(
-        decoded_source_char,
+        source_step_char,
         BufferSelectiveDisplayTailRenderContext {
             text,
             text_start_byte: 0,
@@ -2474,12 +2474,12 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
 }
 
 #[test]
-fn buffer_text_truncation_skip_action_consumes_decoded_char_and_reaches_newline() {
+fn buffer_text_truncation_skip_action_consumes_source_step_char_and_reaches_newline() {
     let text = b"abc\nnext";
     let mut byte_idx = 1;
     let mut charpos = 0;
 
-    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut byte_idx,
         &mut charpos,
@@ -2497,7 +2497,7 @@ fn buffer_text_truncation_skip_action_consumes_to_text_end_without_newline() {
     let mut byte_idx = 1;
     let mut charpos = 0;
 
-    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut byte_idx,
         &mut charpos,
@@ -2515,7 +2515,7 @@ fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
     let mut byte_idx = "a".len();
     let mut charpos = 0;
 
-    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut byte_idx,
         &mut charpos,
@@ -2533,7 +2533,7 @@ fn buffer_text_truncation_skip_action_applies_transition_state() {
     let text = b"abc\nnext";
     let mut byte_idx = 1;
     let mut charpos = 0;
-    let action = BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+    let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
         &mut byte_idx,
         &mut charpos,
@@ -2904,9 +2904,9 @@ fn buffer_text_character_wrap_source_action_rewinds_to_current_char_start() {
 }
 
 #[test]
-fn buffer_text_character_wrap_source_action_rewinds_decoded_source_char() {
-    let source_char = BufferTextDecodedSourceChar::new('界', "a".len(), 9);
-    let action = BufferTextCharacterWrapSourceAction::from_decoded_char(source_char);
+fn buffer_text_character_wrap_source_action_rewinds_source_step_char() {
+    let source_char = BufferTextSourceStepChar::new('界', "a".len(), 9);
+    let action = BufferTextCharacterWrapSourceAction::from_source_step_char(source_char);
     let mut rewind_byte_idx = "a界".len();
     let mut rewind_charpos = 10;
 
@@ -3023,7 +3023,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut context = RowTransitionTestContext::new("text-overflow-character-wrap-request");
     let text = b"a";
     let mut byte_idx = 0;
-    let decoded_source_char = BufferTextDecodedSourceChar::new('a', 0, 21);
+    let source_step_char = BufferTextSourceStepChar::new('a', 0, 21);
     let prepared_append = BufferTextSourceCharPreparedAppend {
         plan: BufferTextSourceCharAppendPlan {
             source_text: BufferTextSourceTextRequest::new(
@@ -3061,7 +3061,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
 
     let outcome = BufferTextOverflowRenderRequest::new(
         &prepared_append,
-        decoded_source_char,
+        source_step_char,
         BufferTextOverflowRenderContext {
             ch: 'a',
             right_edge_px: 80.0,
@@ -3525,7 +3525,7 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
 }
 
 #[test]
-fn buffer_text_source_text_request_uses_decoded_char_payload() {
+fn buffer_text_source_text_request_uses_source_step_char_payload() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -5790,7 +5790,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let params = test_display_space_window_params();
     let text = b"ab";
     let mut byte_idx = 1;
-    let decoded_source_char = BufferTextDecodedSourceChar::new('a', 0, 0);
+    let source_step_char = BufferTextSourceStepChar::new('a', 0, 0);
     let mut append_state = BufferTextRowAppendState::default();
     let mut charpos = 0;
     let mut col = 0;
@@ -5809,7 +5809,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let mut raise_span = ActiveDisplayPropertySpan::inactive();
 
     let outcome = BufferTextSourceCharRenderRequest::new(
-        decoded_source_char,
+        source_step_char,
         None,
         BufferTextSourceCharRenderContext {
             text,

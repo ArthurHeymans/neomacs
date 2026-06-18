@@ -5,7 +5,7 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
     BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
 };
-use crate::display_buffer_text_source::BufferTextDecodedSourceChar;
+use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
@@ -713,7 +713,7 @@ pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
-    source_char: BufferTextDecodedSourceChar,
+    source_char: BufferTextSourceStepChar,
     context: BufferSelectiveDisplayTailRenderContext<'a>,
 }
 
@@ -821,7 +821,7 @@ impl BufferInvisibleTextRenderOutcome {
 
 impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
     pub(crate) fn new(
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         context: BufferSelectiveDisplayTailRenderContext<'a>,
     ) -> Self {
         Self {
@@ -1465,7 +1465,7 @@ pub(crate) struct BufferTextLineBreakSourceAction {
 }
 
 pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
-    source_char: BufferTextDecodedSourceChar,
+    source_char: BufferTextSourceStepChar,
     context: BufferTextLineBreakRenderContext<'a>,
 }
 
@@ -1489,7 +1489,7 @@ pub(crate) struct BufferTextLineBreakRenderContext<'a> {
 
 impl<'a> BufferTextLineBreakRenderRequest<'a> {
     pub(crate) fn new(
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         context: BufferTextLineBreakRenderContext<'a>,
     ) -> Self {
         debug_assert_eq!(source_char.ch(), '\n');
@@ -1527,7 +1527,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
 
-        let line_break_action = BufferTextLineBreakSourceAction::for_decoded_newline(
+        let line_break_action = BufferTextLineBreakSourceAction::for_source_step_newline(
             buffer,
             self.source_char,
             context.char_h,
@@ -1635,9 +1635,9 @@ impl BufferTextLineBreakSourceAction {
         }
     }
 
-    pub(crate) fn for_decoded_newline<B: LayoutBufferView>(
+    pub(crate) fn for_source_step_newline<B: LayoutBufferView>(
         buffer: &B,
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         char_h: f32,
         extra_line_spacing: f32,
     ) -> Self {
@@ -3293,7 +3293,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
-    source_char: BufferTextDecodedSourceChar,
+    source_char: BufferTextSourceStepChar,
     source_item: Option<DisplayItem>,
     context: BufferTextSourceCharRenderContext<'a>,
 }
@@ -3385,7 +3385,7 @@ impl BufferTextSourceCharOverflowAction {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextOverflowRenderRequest<'a> {
     prepared_append: &'a BufferTextSourceCharPreparedAppend,
-    decoded_source_char: BufferTextDecodedSourceChar,
+    source_step_char: BufferTextSourceStepChar,
     context: BufferTextOverflowRenderContext,
 }
 
@@ -3521,13 +3521,13 @@ impl BufferTextOverflowRenderOutcome {
 
 impl<'a> BufferTextSourceCharRenderRequest<'a> {
     pub(crate) fn new(
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_step_char: BufferTextSourceStepChar,
         source_item: Option<DisplayItem>,
         context: BufferTextSourceCharRenderContext<'a>,
     ) -> Self {
-        debug_assert_ne!(decoded_source_char.ch(), '\n');
+        debug_assert_ne!(source_step_char.ch(), '\n');
         Self {
-            source_char: decoded_source_char,
+            source_char: source_step_char,
             source_item,
             context,
         }
@@ -3564,13 +3564,12 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
 
-        let decoded_source_char = self.source_char;
-        let ch = decoded_source_char.ch();
-        decoded_source_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
+        let source_step_char = self.source_char;
+        let ch = source_step_char.ch();
+        source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
         let source_item = self.source_item.as_ref();
 
-        let buffer_source_char =
-            decoded_source_char.source_char(context.params.nobreak_char_display);
+        let buffer_source_char = source_step_char.source_char(context.params.nobreak_char_display);
         let buffer_row_append_context = BufferTextRowAppendContext::new(
             buffer,
             context.buffer_id,
@@ -3595,7 +3594,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     append_geometry,
                     &buffer_source_char,
                     context.text,
-                    decoded_source_char.start_byte_idx(),
+                    source_step_char.start_byte_idx(),
                     append_position,
                     source_item,
                 ),
@@ -3675,10 +3674,10 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         };
 
         prepared_append
-            .update_cursor_info_for_main_char(cursor_info, decoded_source_char.start_byte_idx());
+            .update_cursor_info_for_main_char(cursor_info, source_step_char.start_byte_idx());
         let overflow_outcome = BufferTextOverflowRenderRequest::new(
             &prepared_append,
-            decoded_source_char,
+            source_step_char,
             BufferTextOverflowRenderContext {
                 ch,
                 right_edge_px: context.append_surface.right_edge(),
@@ -3753,7 +3752,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             context.active_face_state,
             row_geometry,
             *x,
-            decoded_source_char.start_byte_idx(),
+            source_step_char.start_byte_idx(),
             *col,
             ch == '\t',
             *charpos,
@@ -3806,12 +3805,12 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
 impl<'a> BufferTextOverflowRenderRequest<'a> {
     pub(crate) fn new(
         prepared_append: &'a BufferTextSourceCharPreparedAppend,
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_step_char: BufferTextSourceStepChar,
         context: BufferTextOverflowRenderContext,
     ) -> Self {
         Self {
             prepared_append,
-            decoded_source_char,
+            source_step_char,
             context,
         }
     }
@@ -3852,7 +3851,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
             BufferTextSourceCharOverflowAction::Fits => BufferTextOverflowRenderOutcome::Fits,
             BufferTextSourceCharOverflowAction::Truncate { transition } => {
                 let truncation_skip =
-                    BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+                    BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
                         text, byte_idx, charpos,
                     );
                 truncation_skip.apply_before_row_transition(
@@ -3947,9 +3946,10 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 )
             }
             BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
-                let character_wrap_action = BufferTextCharacterWrapSourceAction::from_decoded_char(
-                    self.decoded_source_char,
-                );
+                let character_wrap_action =
+                    BufferTextCharacterWrapSourceAction::from_source_step_char(
+                        self.source_step_char,
+                    );
                 character_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
@@ -4002,7 +4002,7 @@ pub(crate) struct BufferTextTruncationSkipAction {
 }
 
 impl BufferTextTruncationSkipAction {
-    pub(crate) fn consume_decoded_char_and_rest_of_line(
+    pub(crate) fn consume_source_step_char_and_rest_of_line(
         text: &[u8],
         byte_idx: &mut usize,
         charpos: &mut i64,
@@ -4224,7 +4224,7 @@ impl BufferTextCharacterWrapSourceAction {
         }
     }
 
-    pub(crate) fn from_decoded_char(source_char: BufferTextDecodedSourceChar) -> Self {
+    pub(crate) fn from_source_step_char(source_char: BufferTextSourceStepChar) -> Self {
         Self::new(source_char.start_byte_idx(), source_char.start_charpos())
     }
 
@@ -4403,7 +4403,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
             }
             Some(BufferTextSpecialSourceCharOverflowAction::Truncate { transition }) => {
                 let truncation_skip =
-                    BufferTextTruncationSkipAction::consume_decoded_char_and_rest_of_line(
+                    BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
                         context.text,
                         byte_idx,
                         charpos,

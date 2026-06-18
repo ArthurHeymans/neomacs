@@ -3,7 +3,7 @@ use crate::display_buffer_text_render::{
     BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
     BufferTextSpecialSourceCharRenderState,
 };
-use crate::display_buffer_text_source::BufferTextDecodedSourceChar;
+use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info, update_cursor_info_for_main_char,
@@ -886,7 +886,7 @@ pub(crate) fn buffer_text_source_item_append_request<B: LayoutBufferView + ?Size
     ))
 }
 
-impl BufferTextDecodedSourceChar {
+impl BufferTextSourceStepChar {
     pub(crate) fn record_word_wrap_candidate(
         self,
         word_wrap: &mut WordWrapRenderState,

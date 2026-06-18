@@ -27,8 +27,8 @@ use crate::display_buffer_text_render::{
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
-    BufferTextDecodedSourceChar, BufferTextSourceCursor, BufferTextSourceStep,
-    BufferTextSourceStepAdapter,
+    BufferTextSourceCursor, BufferTextSourceStep, BufferTextSourceStepAdapter,
+    BufferTextSourceStepChar,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -2389,14 +2389,14 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn selective_display_tail_request<'a>(
         self,
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_step_char: BufferTextSourceStepChar,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
     ) -> BufferSelectiveDisplayTailRenderRequest<'a> {
         BufferSelectiveDisplayTailRenderRequest::new(
-            decoded_source_char,
+            source_step_char,
             BufferSelectiveDisplayTailRenderContext {
                 text,
                 text_start_byte: self.text_start_byte,
@@ -2420,7 +2420,7 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn line_break_request<'a>(
         self,
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         text: &'a [u8],
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferTextLineBreakRenderRequest<'a> {
@@ -2447,7 +2447,7 @@ impl BufferTextWindowLoopRequestContext {
 
     pub(crate) fn source_char_request<'a>(
         self,
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         source_item: Option<DisplayItem>,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
@@ -2703,7 +2703,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
         let selective_display_outcome = self.render_selective_display_tail_for_context(
             loop_context,
-            source_step.decoded_char(),
+            source_step.source_char(),
             text,
             append_surface,
             active_face_state,
@@ -2875,14 +2875,14 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
-        decoded_source_char: BufferTextDecodedSourceChar,
+        source_step_char: BufferTextSourceStepChar,
         text: &'request [u8],
         append_surface: &'request DisplayRowAppendSurface,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
     ) -> BufferSelectiveDisplayTailRenderOutcome {
         let request = context.selective_display_tail_request(
-            decoded_source_char,
+            source_step_char,
             text,
             append_surface,
             active_face_state,
@@ -2894,7 +2894,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_line_break_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
@@ -2906,7 +2906,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_source_char_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
-        source_char: BufferTextDecodedSourceChar,
+        source_char: BufferTextSourceStepChar,
         source_item: Option<DisplayItem>,
         text: &'request [u8],
         append_surface: &'request DisplayRowAppendSurface,
