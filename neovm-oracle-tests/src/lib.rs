@@ -2339,6 +2339,7 @@ mod divergence_read_symbol_obarray;
 mod divergence_reader_print_deep;
 mod divergence_reader_printer;
 mod divergence_reader_printer_edge_runtime;
+mod divergence_reader_syntax_file_coding_runtime;
 mod divergence_regex_charset_runtime;
 mod divergence_regex_deep;
 mod divergence_regex_string_search;
