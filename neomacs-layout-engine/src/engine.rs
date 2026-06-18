@@ -54,8 +54,8 @@ use crate::display_item::{
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowItemSourceRenderRequest, DisplayRowRenderBounds,
-    DisplayRowRenderExecutor, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
+    DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderExecutor,
+    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
     insert_resolved_display_row_face, install_display_row_in_matrix_row,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
@@ -1403,7 +1403,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
     let render_width = geometry.width;
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
-        DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+        DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
             DisplayRowSourceRequestPolicy::from_display_row_geometry(geometry, role),
             base_face.face_id,
             base_face,

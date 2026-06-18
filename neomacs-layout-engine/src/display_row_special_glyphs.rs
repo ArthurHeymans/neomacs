@@ -1,8 +1,8 @@
 //! Right-edge truncation/continuation markers and the right window border — GNU's special glyphs (`produce_special_glyphs`, xdisp.c; `IT_TRUNCATION`/`IT_CONTINUATION`). Relocated out of display_row_append.rs (pure move, no behavior change).
 
 use crate::display_row::{
-    DisplayRowGeometry, DisplayRowItemSourceRenderRequest, DisplayRowMaxX, DisplayRowRenderBounds,
-    DisplayRowSourceRequestPolicy, DisplayRowSourceState,
+    DisplayRowGeometry, DisplayRowMaxX, DisplayRowRenderBounds,
+    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
 };
 use crate::display_row_builder::{
     DisplayRowPosition, DisplayTabPolicy, display_row_total_glyph_count,
@@ -51,18 +51,19 @@ fn render_right_edge_marker_source(
         col: start_col,
     };
     let mut source_state = DisplayRowSourceState::default();
-    let request = DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
-        DisplayRowSourceRequestPolicy::from_display_row_geometry(
-            current_row_marker_geometry(row, matrix_cols, char_width),
-            GlyphRowRole::Text,
-        ),
-        face_id,
-        base_face,
-        DisplayRowRenderBounds {
-            start,
-            max_x: DisplayRowMaxX::Bounded(matrix_cols as f32 * char_width),
-        },
-    );
+    let request =
+        DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
+            DisplayRowSourceRequestPolicy::from_display_row_geometry(
+                current_row_marker_geometry(row, matrix_cols, char_width),
+                GlyphRowRole::Text,
+            ),
+            face_id,
+            base_face,
+            DisplayRowRenderBounds {
+                start,
+                max_x: DisplayRowMaxX::Bounded(matrix_cols as f32 * char_width),
+            },
+        );
     render_services.render_item_source_fragment_into_row(request, row, source, &mut source_state);
 }
 
@@ -165,7 +166,7 @@ fn render_right_border_text(
     let mut source = right_border_text_source(request.text, request.face_id, request.source_offset);
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
-        DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+        DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
             DisplayRowSourceRequestPolicy::from_display_row_geometry(
                 current_row_marker_geometry(row, request.matrix_cols, char_width),
                 GlyphRowRole::Text,

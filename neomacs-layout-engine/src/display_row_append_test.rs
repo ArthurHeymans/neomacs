@@ -26,9 +26,9 @@ use crate::display_property::{
 };
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowCurrentTextRenderState,
-    DisplayRowFallbackMetrics, DisplayRowGeometry, DisplayRowItemSourceRenderRequest,
-    DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceRequestPolicy,
+    DisplayRowFallbackMetrics, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
+    DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderPolicy,
+    DisplayRowRenderer, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
     DisplayRowSourceState,
 };
 use crate::display_row_append_context::*;
@@ -4550,7 +4550,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         );
         let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
         let mut source_state = DisplayRowSourceState::default();
-        DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+        DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
             DisplayRowSourceRequestPolicy::from_display_row_geometry(
                 DisplayRowGeometry {
                     y: 0.0,

@@ -2,9 +2,8 @@
 
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
-    DisplayRowCurrentSourceFragmentRenderState, DisplayRowGeometry,
-    DisplayRowItemSourceRenderRequest, DisplayRowRenderBounds, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState,
+    DisplayRowCurrentSourceFragmentRenderState, DisplayRowGeometry, DisplayRowRenderBounds,
+    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy, DisplayRowSourceState,
 };
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::DisplayRowGeometryState;
@@ -76,7 +75,7 @@ impl BufferLineNumberMarginRenderRequest {
         let mut source = LineNumberMarginItemSource::new(&margin_request);
         let mut source_state = DisplayRowSourceState::default();
         let request =
-            DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+            DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
                 DisplayRowSourceRequestPolicy::from_display_row_geometry(
                     DisplayRowGeometry {
                         y: margin_request.row_y,

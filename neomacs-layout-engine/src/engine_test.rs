@@ -10,8 +10,8 @@ use crate::display_item::RenderFaceRef;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurer,
-    DisplayRowItemSourceRenderRequest, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
-    DisplayRowRenderer, DisplayRowSourceRequestPolicy,
+    DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderer,
+    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
 };
 use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::DisplayRowMaxX;
@@ -1481,7 +1481,7 @@ fn render_buffer_text_source_shadow_row(
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(1);
-    DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+    DisplayRowSourceFragmentRenderRequest::from_base_face_id_policy_with_render_bounds(
         DisplayRowSourceRequestPolicy::from_display_row_geometry(
             DisplayRowGeometry {
                 y: 0.0,

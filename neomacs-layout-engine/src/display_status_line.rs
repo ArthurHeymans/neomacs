@@ -17,8 +17,8 @@ use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmi
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowItemSourceRenderRequest, DisplayRowLispStringRenderRequest,
-    DisplayRowOwner, DisplayRowRenderExecutor, DisplayRowSourceRequestPolicy,
+    DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowOwner,
+    DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
     DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
     WindowChromeKind, install_measured_frame_chrome_row, install_measured_window_display_row,
 };
@@ -97,7 +97,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
 
     pub(crate) fn render_item_source_fragment_into_row(
         &mut self,
-        request: DisplayRowItemSourceRenderRequest<'_>,
+        request: DisplayRowSourceFragmentRenderRequest<'_>,
         row: &mut GlyphRow,
         source: &mut impl DisplayItemSource,
         source_state: &mut DisplayRowSourceState,

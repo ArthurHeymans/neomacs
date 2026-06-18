@@ -1260,6 +1260,10 @@ pub(crate) struct DisplayRowItemSourceRenderRequest<'a> {
     row_request: DisplayRowSourceRenderRequest<'a>,
 }
 
+pub(crate) struct DisplayRowSourceFragmentRenderRequest<'a> {
+    item_request: DisplayRowItemSourceRenderRequest<'a>,
+}
+
 pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     source_id: DisplayRowLispStringSourceId,
     value: Value,
@@ -1334,7 +1338,7 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
         Self { row_request }
     }
 
-    pub(crate) fn from_base_face_id_policy_with_render_bounds(
+    fn from_base_face_id_policy_with_render_bounds(
         policy: DisplayRowSourceRequestPolicy,
         base_face_id: u32,
         base_face: &'a ResolvedFace,
@@ -1347,7 +1351,7 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
         )
     }
 
-    pub(crate) fn with_glyph_area(mut self, area: GlyphArea) -> Self {
+    fn with_glyph_area(mut self, area: GlyphArea) -> Self {
         self.row_request = self.row_request.with_glyph_area(area);
         self
     }
@@ -1456,6 +1460,67 @@ impl<'a> DisplayRowItemSourceRenderRequest<'a> {
             context,
             policy,
         )
+    }
+}
+
+impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {
+    pub(crate) fn from_base_face_id_policy_with_render_bounds(
+        policy: DisplayRowSourceRequestPolicy,
+        base_face_id: u32,
+        base_face: &'a ResolvedFace,
+        render_bounds: DisplayRowRenderBounds,
+    ) -> Self {
+        Self {
+            item_request:
+                DisplayRowItemSourceRenderRequest::from_base_face_id_policy_with_render_bounds(
+                    policy,
+                    base_face_id,
+                    base_face,
+                    render_bounds,
+                ),
+        }
+    }
+
+    pub(crate) fn with_glyph_area(mut self, area: GlyphArea) -> Self {
+        self.item_request = self.item_request.with_glyph_area(area);
+        self
+    }
+
+    fn into_item_request(self) -> DisplayRowItemSourceRenderRequest<'a> {
+        self.item_request
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render<S: DisplayItemSource>(
+        self,
+        renderer: &mut DisplayRowRenderer<'_>,
+        source: &mut S,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<RenderedDisplayRow> {
+        self.into_item_request()
+            .render(renderer, source, face_resolver, face_ids)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_fragment_step_with_display_host<S: DisplayItemSource>(
+        self,
+        renderer: &mut DisplayRowRenderer<'_>,
+        source: &mut S,
+        state: &mut DisplayRowSourceState,
+        face_resolver: &FaceResolver,
+        display_host: Option<&dyn DisplayHost>,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<DisplayRowRenderResult> {
+        self.into_item_request()
+            .render_fragment_step_with_display_host(
+                renderer,
+                source,
+                state,
+                face_resolver,
+                display_host,
+                face_ids,
+            )
     }
 }
 
@@ -2759,19 +2824,21 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
 
     pub(crate) fn render_item_source_fragment_into_row<S: DisplayItemSource>(
         &mut self,
-        request: DisplayRowItemSourceRenderRequest<'_>,
+        request: DisplayRowSourceFragmentRenderRequest<'_>,
         row: &mut GlyphRow,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
     ) -> Option<DisplayRowRenderIntoRowResult> {
-        request.render_fragment_step_into_row_with_policy(
-            &mut self.renderer,
-            row,
-            source,
-            source_state,
-            &mut self.context,
-            &mut NaturalDisplayRowRenderPolicy,
-        )
+        request
+            .into_item_request()
+            .render_fragment_step_into_row_with_policy(
+                &mut self.renderer,
+                row,
+                source,
+                source_state,
+                &mut self.context,
+                &mut NaturalDisplayRowRenderPolicy,
+            )
     }
 }
 
@@ -2783,7 +2850,7 @@ pub(crate) struct DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-impl<'a> DisplayRowItemSourceRenderRequest<'a> {
+impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {
     pub(crate) fn render_natural_fragment_into_current_row<S: DisplayItemSource>(
         self,
         state: &mut DisplayRowCurrentSourceFragmentRenderState<'_, '_>,
