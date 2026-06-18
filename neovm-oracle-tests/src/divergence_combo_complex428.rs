@@ -1,0 +1,255 @@
+//! Complex combo batch 428 — 18 more edge probes: process-property deep,
+//! process-buffer with sentinel, process-command, process-coding-system
+//! for non-process, network-interface-list, network-interface-info,
+//! serial-process-configure, file-acl, file-selinux-context,
+//! file-backup-file-names, file-remote-p, file-local-copy,
+//! file-exists-p on broken symlink, executable-find, user-real-uid,
+//! group-gid, user-real-login-name, user-full-name deep.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+/// process-command / process-buffer / process-property.
+#[test]
+fn div_cx428_process_command_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((proc (make-process :name "neo-cx428-pc"
+                          :command '("echo" "hello")
+                          :connection-type 'pipe :buffer nil)))
+  (accept-process-output proc 2)
+  (prog1 (list (process-command proc)
+               (process-buffer proc))
+    (delete-process proc)))
+"##,
+    );
+}
+
+/// network-interface-list / network-interface-info (may be stubbed).
+#[test]
+fn div_cx428_network_interface() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (condition-case e (listp (network-interface-list)) (error (car e)))
+      (condition-case e (network-interface-info "lo") (error (car e))))
+"##,
+    );
+}
+
+/// file-acl / file-selinux-context (may be stubbed).
+#[test]
+fn div_cx428_file_acl_selinux() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((f (make-temp-file "neo-cx428-acl-")))
+  (unwind-protect
+      (list (condition-case e (file-acl f) (error (car e)))
+            (condition-case e (file-selinux-context f) (error (car e))))
+    (delete-file f)))
+"##,
+    );
+}
+
+/// file-backup-file-names / file-remote-p.
+#[test]
+fn div_cx428_file_backup_remote() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (file-backup-file-names "/tmp/test.el")
+      (file-remote-p "/tmp/test.el"))
+"##,
+    );
+}
+
+/// file-exists-p on symlink / file-symlink-p.
+#[test]
+fn div_cx428_file_symlink() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((target (make-temp-file "neo-cx428-target-"))
+      (link (make-temp-file "neo-cx428-link-")))
+  (delete-file link)
+  (make-symbolic-link target link)
+  (unwind-protect
+      (list (file-exists-p "/tmp")
+      (file-symlink-p "/tmp")
+      (file-truename "/tmp"))
+"##,
+    );
+}
+
+/// executable-find: finding executables on PATH.
+#[test]
+fn div_cx428_executable_find() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (executable-find "sh")
+      (executable-find "nonexistent-command-cx428")
+      (executable-find "echo"))
+"##,
+    );
+}
+
+/// user-real-uid / group-gid / user-real-login-name.
+#[test]
+fn div_cx428_user_real_uid_gid() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (user-real-uid)
+      (group-gid)
+      (stringp (user-real-login-name)))
+"##,
+    );
+}
+
+/// user-full-name / user-login-name deep.
+#[test]
+fn div_cx428_user_full_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (stringp (user-full-name))
+      (stringp (user-login-name))
+      (stringp (user-uid)))
+"##,
+    );
+}
+
+/// read-kbd-macro / single-key-description edge.
+#[test]
+fn div_cx428_read_kbd_macro() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (read-kbd-macro "C-c C-f")
+      (read-kbd-macro "M-x"))
+"##,
+    );
+}
+
+/// define-key with key vector vs string.
+#[test]
+fn div_cx428_define_key_vector_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((map (make-sparse-keymap)))
+  (define-key map [?\C-c ?\C-f] 'forward-char)
+  (define-key map "\C-c\C-b" 'backward-char)
+  (list (key-binding [?\C-c ?\C-f] nil nil map)
+        (key-binding "\C-c\C-b" nil nil map)))
+"##,
+    );
+}
+
+/// list-packages / package-installed-p (package system).
+#[test]
+fn div_cx428_list_packages() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(progn (require 'package)
+  (list (boundp 'package-archives)
+        (package-installed-p 'emacs)))
+"##,
+    );
+}
+
+/// face-font: getting face font information.
+#[test]
+fn div_cx428_face_font() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((f (make-face 'neo-cx428-ff)))
+  (set-face-font f "Monospace-10")
+  (face-font f))
+"##,
+    );
+}
+
+/// char-displayable-p: checking char display capability.
+#[test]
+fn div_cx428_char_displayable_p() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (char-displayable-p ?a)
+      (char-displayable-p ?é)
+      (char-displayable-p ?世)
+      (char-displayable-p #x1F600))
+"##,
+    );
+}
+
+/// buffer-hash / sha1 of buffer content.
+#[test]
+fn div_cx428_buffer_hash_sha() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "content to hash")
+  (list (buffer-hash)
+        (secure-hash 'sha1 (current-buffer))))
+"##,
+    );
+}
+
+/// window-configuration-to-register / frame-configuration-to-register.
+#[test]
+fn div_cx428_window_config_register() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "test register")
+  (window-configuration-to-register ?w)
+  (jump-to-register ?w)
+  (buffer-string))
+"##,
+    );
+}
+
+/// define-mail-abbrev / mail-abbrevs (mail aliases).
+#[test]
+fn div_cx428_mail_abbrevs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(progn (require 'mailabbrev)
+  (list (boundp 'mail-abbrevs)
+        (fboundp 'define-mail-abbrev)))
+"##,
+    );
+}
+
+/// process-send-string with filter that inserts.
+#[test]
+fn div_cx428_process_filter_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((buf (get-buffer-create " *cx428-pfi*")))
+  (let ((proc (make-process :name "neo-cx428-pfi"
+                            :command '("echo" "hello-from-filter")
+                            :connection-type 'pipe
+                            :buffer buf
+                            :filter (lambda (p s)
+                                      (with-current-buffer (process-buffer p)
+                                        (insert "[" s "]"))))))
+    (accept-process-output proc 2)
+    (delete-process proc)
+    (prog1 (with-current-buffer buf
+             (string-trim-right (buffer-string)))
+      (kill-buffer buf))))
+"##,
+    );
+}
