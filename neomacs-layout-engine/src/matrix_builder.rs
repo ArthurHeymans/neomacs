@@ -61,6 +61,11 @@ pub(crate) struct MatrixCurrentWindowMediaInstallContext {
     pub(crate) text_pixel_bounds: Rect,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixCurrentWindowRowInstallContext {
+    pub(crate) pixel_bounds: Rect,
+}
+
 impl MatrixMediaInstallRequest {
     pub(crate) fn new(
         target: ResolvedMatrixMediaInstallTarget,
@@ -644,35 +649,22 @@ impl GlyphMatrixBuilder {
         matrix.rows.get(self.current_row)
     }
 
-    pub(crate) fn copy_display_row_to_current_row(&mut self, source: &GlyphRow) {
+    pub(crate) fn replace_current_row(&mut self, source: GlyphRow) {
         let current_row = self.current_row;
-        let pixel_y_rel = source.pixel_y - self.current_pixel_bounds.y;
         if let Some(ref mut matrix) = self.current_matrix
             && current_row < matrix.rows.len()
         {
-            let row = &mut matrix.rows[current_row];
-            row.glyphs = source.glyphs.clone();
-            row.hash = source.hash;
-            row.enabled = source.enabled;
-            row.role = source.role;
-            row.cursor_col = source.cursor_col;
-            row.cursor_type = source.cursor_type;
-            row.truncated_left = source.truncated_left;
-            row.continued = source.continued;
-            row.reversed_p = source.reversed_p;
-            row.displays_text = source.displays_text;
-            row.ends_at_zv = source.ends_at_zv;
-            row.mode_line = source.mode_line;
-            row.start_charpos = source.start_charpos;
-            row.end_charpos = source.end_charpos;
-            Self::write_row_metrics(row, pixel_y_rel, source.height_px, source.ascent_px);
+            matrix.rows[current_row] = source;
         }
     }
 
     #[cfg(test)]
     fn install_display_row(&mut self, row: usize, source: &GlyphRow) {
         self.begin_row(row, source.role);
-        self.copy_display_row_to_current_row(source);
+        let context = self.current_window_row_install_context();
+        let mut row = source.clone();
+        row.pixel_y -= context.pixel_bounds.y;
+        self.replace_current_row(row);
         self.end_row();
     }
 
@@ -710,6 +702,14 @@ impl GlyphMatrixBuilder {
         MatrixCurrentWindowMediaInstallContext {
             window_id: self.current_window_id as i64,
             text_pixel_bounds: self.current_text_pixel_bounds,
+        }
+    }
+
+    pub(crate) fn current_window_row_install_context(
+        &self,
+    ) -> MatrixCurrentWindowRowInstallContext {
+        MatrixCurrentWindowRowInstallContext {
+            pixel_bounds: self.current_pixel_bounds,
         }
     }
 

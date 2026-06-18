@@ -2422,11 +2422,14 @@ pub(crate) fn install_display_row_in_matrix_row(
     matrix_row: usize,
     row: &GlyphRow,
 ) {
+    let context = builder.current_window_row_install_context();
+    let mut row = row.clone();
+    row.pixel_y -= context.pixel_bounds.y;
     builder.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
         row: matrix_row,
         role: row.role,
     }));
-    builder.copy_display_row_to_current_row(row);
+    builder.replace_current_row(row);
     builder.install_row_lifecycle(MatrixRowLifecycleRequest::EndIncremental);
 }
 
