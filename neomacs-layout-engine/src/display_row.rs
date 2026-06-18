@@ -2009,11 +2009,9 @@ impl<'a> DisplayRowCurrentSourceSlotBoundsMergeRequest<'a> {
     }
 
     fn install(self, builder: &mut GlyphMatrixBuilder) {
-        let Some(mut row) = builder.current_row().cloned() else {
-            return;
-        };
-        merge_display_row_source_slot_bounds(&mut row, self.slots);
-        builder.replace_current_row(row);
+        builder.with_current_row_mut(|row| {
+            merge_display_row_source_slot_bounds(row, self.slots);
+        });
     }
 }
 
