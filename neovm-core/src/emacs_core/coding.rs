@@ -252,6 +252,88 @@ fn non_nil_symbol_id(value: &Value) -> Option<SymId> {
 // ---------------------------------------------------------------------------
 
 /// Information about a single coding system.
+/// Reserved `int_properties` keys carrying a coding system's ISO-2022
+/// designation/flags data. `int_properties` is pdump-serialized but not
+/// surfaced by `coding-system-plist`, and these out-of-range keys cannot
+/// collide with any integer a `coding-system-put` would use.
+const ISO2022_KEY_INITIAL: i64 = i64::MIN;
+const ISO2022_KEY_REQUEST: i64 = i64::MIN + 1;
+const ISO2022_KEY_FLAGS: i64 = i64::MIN + 2;
+
+/// ISO-2022 control flags, one variant per bit. Bit values match
+/// `coding-system-iso-2022-flags` (mule.el) and `CODING_ISO_FLAG_*` (coding.c).
+/// Modelled as a real enum (via enumflags2) so individual flags can be matched
+/// and a flag set is a `BitFlags<IsoFlag>`.
+#[enumflags2::bitflags]
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IsoFlag {
+    LongForm = 0x0001,
+    AsciiAtEol = 0x0002,
+    AsciiAtCntl = 0x0004,
+    SevenBits = 0x0008,
+    LockingShift = 0x0010,
+    SingleShift = 0x0020,
+    Designation = 0x0040,
+    Revision = 0x0080,
+    Composition = 0x2000,
+}
+
+/// The ISO-2022 designation state of a coding system: the charset initially
+/// loaded into each graphic register G0-G3 (`initial`), the charset->register
+/// map consulted while encoding (`request`), and the control `flags`.
+pub struct Iso2022Spec {
+    pub initial: [Option<SymId>; 4],
+    pub request: Vec<(SymId, u8)>,
+    pub flags: enumflags2::BitFlags<IsoFlag>,
+}
+
+impl Iso2022Spec {
+    /// The graphic register (0-3) a charset is designated to while encoding.
+    pub fn register_of(&self, charset: SymId) -> Option<u8> {
+        self.request
+            .iter()
+            .find(|(cs, _)| *cs == charset)
+            .map(|(_, reg)| *reg)
+    }
+}
+
+/// Parse a coding system's stored ISO-2022 designation/flags data, if present.
+pub(crate) fn iso2022_spec(info: &CodingSystemInfo) -> Option<Iso2022Spec> {
+    let initial_val = info.int_properties.get(&ISO2022_KEY_INITIAL)?;
+    let request_val = info.int_properties.get(&ISO2022_KEY_REQUEST)?;
+    let flags_bits = info.int_properties.get(&ISO2022_KEY_FLAGS)?.as_int()?;
+
+    let mut initial = [None; 4];
+    if let Some(vec) = initial_val.as_vector_data() {
+        for (slot, elem) in initial.iter_mut().zip(vec.iter()) {
+            *slot = if elem.is_nil() {
+                None
+            } else {
+                elem.as_symbol_id()
+            };
+        }
+    }
+
+    let mut request = Vec::new();
+    if let Some(pairs) = super::value::list_to_vec(request_val) {
+        for pair in pairs {
+            if let (Some(cs), Some(reg)) =
+                (pair.cons_car().as_symbol_id(), pair.cons_cdr().as_int())
+                && (0..4).contains(&reg)
+            {
+                request.push((cs, reg as u8));
+            }
+        }
+    }
+
+    Some(Iso2022Spec {
+        initial,
+        request,
+        flags: enumflags2::BitFlags::from_bits_truncate(flags_bits as u32),
+    })
+}
+
 #[derive(Clone, Debug)]
 pub struct CodingSystemInfo {
     /// Canonical name of the coding system (e.g. "utf-8").
@@ -1873,6 +1955,15 @@ pub(crate) fn builtin_define_coding_system_internal(
     info.default_char = default_char;
     info.for_unibyte = for_unibyte;
     info.properties = properties;
+
+    // arg[13..17] (iso-2022 only): [initial-designation-vector, reg-usage,
+    // request-alist, flags-bitmask].  Stash them so the ISO-2022 codec can read
+    // the G0-G3 designations; see `iso2022_spec`.
+    if resolve_sym(coding_type) == "iso-2022" && args.len() > 16 {
+        info.int_properties.insert(ISO2022_KEY_INITIAL, args[13]);
+        info.int_properties.insert(ISO2022_KEY_REQUEST, args[15]);
+        info.int_properties.insert(ISO2022_KEY_FLAGS, args[16]);
+    }
 
     // Register the base coding system.
     mgr.register(info);

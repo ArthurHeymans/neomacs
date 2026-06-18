@@ -1637,6 +1637,122 @@ fn decode_via_charset_list(bytes: &[u8], charset_list: &[SymId]) -> Vec<u8> {
     out
 }
 
+/// If `coding` is an EUC-profile ISO-2022 coding system, return its designation
+/// state and charset list. The EUC profile is 8-bit with fixed designations
+/// (graphic registers loaded once, characters selected by the high bit and the
+/// SS2/SS3 single shifts) — euc-jp, euc-kr, … The full ISO-2022 escape-sequence
+/// machine (iso-2022-jp/cn/kr, 7-bit, escape designations) is not handled here.
+fn euc_iso2022_spec(
+    ctx: &crate::emacs_core::eval::Context,
+    coding: &str,
+) -> Option<(crate::emacs_core::coding::Iso2022Spec, Vec<SymId>)> {
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    if resolve_sym(info.coding_type) != "iso-2022" {
+        return None;
+    }
+    let spec = crate::emacs_core::coding::iso2022_spec(info)?;
+    use crate::emacs_core::coding::IsoFlag;
+    if spec.flags.contains(IsoFlag::SevenBits) || spec.flags.contains(IsoFlag::Designation) {
+        return None;
+    }
+    Some((spec, info.charset_list.clone()))
+}
+
+/// Encode `s` as 8-bit EUC: ASCII stays in G0; a character of the charset
+/// designated to G1 is emitted with the high bit set, and a character of the G2
+/// or G3 charset is prefixed by SS2 (`0x8E`) or SS3 (`0x8F`).
+fn encode_via_euc(
+    s: &crate::heap_types::LispString,
+    spec: &crate::emacs_core::coding::Iso2022Spec,
+    charset_list: &[SymId],
+    coding_system: &str,
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.sbytes());
+    let emit = |code: u32, out: &mut Vec<u8>| {
+        if code < 0x80 {
+            out.push(code as u8);
+            return;
+        }
+        for &charset in charset_list {
+            let Some(reg) = spec.register_of(charset) else {
+                continue;
+            };
+            let Some(bytes) =
+                crate::emacs_core::charset::charset_encode_char_bytes(charset, i64::from(code))
+            else {
+                continue;
+            };
+            match reg {
+                0 => out.extend(bytes),
+                1 => out.extend(bytes.iter().map(|b| b | 0x80)),
+                2 => {
+                    out.push(0x8E);
+                    out.extend(bytes.iter().map(|b| b | 0x80));
+                }
+                3 => {
+                    out.push(0x8F);
+                    out.extend(bytes.iter().map(|b| b | 0x80));
+                }
+                _ => out.push(b' '),
+            }
+            return;
+        }
+        out.push(b' ');
+    };
+    if s.is_multibyte() {
+        let bytes = s.as_bytes();
+        let mut pos = 0usize;
+        while pos < bytes.len() {
+            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+            emit(code, &mut out);
+            pos += len;
+        }
+    } else {
+        for &byte in s.as_bytes() {
+            emit(u32::from(byte), &mut out);
+        }
+    }
+    encode_eol_bytes(&out, coding_system)
+}
+
+/// Decode the GR bytes of a single-shifted / G1 EUC sequence: strip the high
+/// bit to recover the GL code, then look the character up in the charset.
+fn decode_euc_register(charset: Option<SymId>, bytes: &[u8]) -> Option<(u32, usize)> {
+    let charset = charset?;
+    let stripped: Vec<u8> = bytes.iter().take(3).map(|byte| byte & 0x7F).collect();
+    let (ch, consumed) =
+        crate::emacs_core::charset::charset_decode_char_from_bytes(charset, &stripped)?;
+    Some((ch as u32, consumed))
+}
+
+/// Decode 8-bit EUC bytes through the coding system's G0-G3 designations.
+fn decode_via_euc(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spec) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut pos = 0usize;
+    while pos < bytes.len() {
+        let b = bytes[pos];
+        let (code, consumed) = if b < 0x80 {
+            (u32::from(b), 1)
+        } else if b == 0x8E {
+            decode_euc_register(spec.initial[2], &bytes[pos + 1..])
+                .map(|(ch, n)| (ch, n + 1))
+                .unwrap_or_else(|| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1))
+        } else if b == 0x8F {
+            decode_euc_register(spec.initial[3], &bytes[pos + 1..])
+                .map(|(ch, n)| (ch, n + 1))
+                .unwrap_or_else(|| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1))
+        } else {
+            decode_euc_register(spec.initial[1], &bytes[pos..])
+                .unwrap_or_else(|| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1))
+        };
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+        pos += consumed;
+    }
+    out
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1663,27 +1779,36 @@ fn builtin_coding_string_in_context(
     let coding = context_coding_name(ctx, args[1])?;
     let destination = coding_string_destination(args.get(3).copied())?;
     // Charset-type coding systems (cp437, koi8-r, chinese-gbk, …) encode and
-    // decode each character through their charset list; the legacy family-based
-    // paths leave them empty / undecoded.  Other families keep their existing
-    // handling.
+    // decode each character through their charset list, and EUC-profile
+    // ISO-2022 coding systems (euc-jp/kr/…) through their G0-G3 designations;
+    // the legacy family-based paths leave them empty / undecoded.  Other
+    // families keep their existing handling.
+    let euc_coding = euc_iso2022_spec(ctx, &coding);
     let charset_coding = general_charset_coding_list(ctx, &coding, encode);
+    let source_string = || {
+        args[0]
+            .as_lisp_string()
+            .expect("string argument validated above")
+            .clone()
+    };
     let result = if encode {
-        if let Some(charset_list) = &charset_coding {
-            let source = args[0]
-                .as_lisp_string()
-                .expect("string argument validated above")
-                .clone();
-            let bytes = encode_via_charset_list(&source, charset_list, &coding);
+        if let Some((spec, charsets)) = &euc_coding {
+            let bytes = encode_via_euc(&source_string(), spec, charsets, &coding);
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if let Some(charset_list) = &charset_coding {
+            let bytes = encode_via_charset_list(&source_string(), charset_list, &coding);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else {
             builtin_encode_coding_string_with_known(args, |_| true)?
         }
+    } else if let Some((spec, _)) = &euc_coding {
+        let source_bytes =
+            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
+        let bytes = decode_via_euc(&source_bytes, spec);
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some(charset_list) = &charset_coding {
-        let source = args[0]
-            .as_lisp_string()
-            .expect("string argument validated above")
-            .clone();
-        let source_bytes = decode_eol_text(&lisp_string_coding_source_bytes(&source), &coding);
+        let source_bytes =
+            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
         let bytes = decode_via_charset_list(&source_bytes, charset_list);
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else {
