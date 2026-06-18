@@ -1259,6 +1259,11 @@ pub enum CompileError {
     StackUnderflow,
     /// A `Constant`/`StackRef` operand was out of range for the pool/stack.
     BadOperand,
+    /// The body is call-dominated, so native codegen would only add overhead
+    /// (per-call operand GC-rooting + a runtime call shim) without an offsetting
+    /// win — the baseline tier removes per-op dispatch, not call cost. Measured
+    /// net-negative on real workloads; keep it on the interpreter.
+    NotProfitable,
     /// The Cranelift backend failed to build or finalize the code.
     Backend(BackendError),
 }
@@ -1271,6 +1276,7 @@ impl core::fmt::Display for CompileError {
             CompileError::NoReturn => write!(f, "body does not end in Return"),
             CompileError::StackUnderflow => write!(f, "operand stack underflow"),
             CompileError::BadOperand => write!(f, "operand out of range"),
+            CompileError::NotProfitable => write!(f, "call-dominated body, not JIT-profitable"),
             CompileError::Backend(e) => write!(f, "backend: {e}"),
         }
     }
@@ -1741,6 +1747,76 @@ fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: b
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Per-thread override for the profitability gate, set by tests that need to
+    /// compile a deliberately call-dominated body to exercise the call/spec
+    /// machinery (which production would correctly decline to compile).
+    static PROFIT_GATE_TEST_OVERRIDE: std::cell::Cell<Option<bool>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Force the profitability gate on/off on the current thread (tests only).
+#[cfg(test)]
+pub(crate) fn force_profit_gate_for_test(on: bool) {
+    PROFIT_GATE_TEST_OVERRIDE.with(|c| c.set(Some(on)));
+}
+
+/// Is the JIT profitability gate enabled? Default yes; `NEOVM_JIT_PROFIT=off`
+/// disables it, so the gate can be A/B-measured against the old behavior in a
+/// single build.
+fn jit_profit_gate_on() -> bool {
+    #[cfg(test)]
+    if let Some(o) = PROFIT_GATE_TEST_OVERRIDE.with(|c| c.get()) {
+        return o;
+    }
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NEOVM_JIT_PROFIT").as_deref() != Ok("off"))
+}
+
+/// Decide whether a bytecode body is worth compiling.
+///
+/// The baseline tier only removes per-op interpreter *dispatch*. A function call
+/// costs MORE in native code than in the VM — each call GC-roots its live
+/// operands and trampolines through a runtime shim (`neovm_jit_gc_push` +
+/// `neovm_jit_call`). So a call-dominated body pays that overhead with nothing
+/// to offset it: measured ~32% SLOWER on real workloads (byte-compilation,
+/// font-lock), where ~36 of 48 tiered bodies had zero arithmetic and ~10 calls
+/// each — pure call/control code the native frame can only shuffle, not speed
+/// up. Compile only when arithmetic is not outnumbered by calls; the genuine win
+/// shape (hot arithmetic/control loops — the 7x microbenchmark) clears this, and
+/// call-free bodies always pass (`0 <= 0`).
+fn body_is_jit_profitable(ops: &[Op]) -> bool {
+    if !jit_profit_gate_on() {
+        return true;
+    }
+    let mut arith = 0u32;
+    let mut calls = 0u32;
+    for op in ops {
+        match op {
+            Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Div
+            | Op::Rem
+            | Op::Add1
+            | Op::Sub1
+            | Op::Negate
+            | Op::Max
+            | Op::Min
+            | Op::Eqlsign
+            | Op::Lss
+            | Op::Gtr
+            | Op::Leq
+            | Op::Geq => arith += 1,
+            Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) | Op::CallBuiltinSym(..) => calls += 1,
+            _ => {}
+        }
+    }
+    calls <= arith
+}
+
 pub fn compile_bytecode_function_with(
     f: &ByteCodeFunction,
     obarray: Option<&Obarray>,
@@ -1764,6 +1840,11 @@ fn compile_bytecode_function_inner(
         // Params are dynamically bound, not on the stack — `StackRef` would not
         // find them.
         return Err(CompileError::TakesArguments);
+    }
+    if !body_is_jit_profitable(&f.ops) {
+        // Call-dominated body: native codegen would only add rooting + call-shim
+        // overhead. Keep it on the interpreter (cached as NotCompilable).
+        return Err(CompileError::NotProfitable);
     }
     let mut leaf = lower_leaf_full(
         &f.ops,

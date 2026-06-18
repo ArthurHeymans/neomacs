@@ -12951,6 +12951,10 @@ fn jit_save_window_excursion_through_funcall_seam() {
 #[test]
 fn jit_direct_call_speculation_tracks_redefinition() {
     crate::test_utils::init_test_tracing();
+    // Compiles a deliberately call-only forwarder to exercise direct-call
+    // speculation; production would decline it as unprofitable, so disable the
+    // profitability gate for this machinery test.
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     use crate::emacs_core::bytecode::ByteCodeFunction;
     use crate::emacs_core::bytecode::opcode::Op;
     use crate::emacs_core::value::LambdaParams;
@@ -13404,6 +13408,10 @@ fn jit_native_to_native_optional_callee_pure_and_marshaled() {
 #[test]
 fn jit_v3_fast_path_engages_and_tracks_redefinition() {
     crate::test_utils::init_test_tracing();
+    // Compiles a deliberately call-only forwarder to exercise the V3 fast-path
+    // speculation; production would decline it as unprofitable, so disable the
+    // profitability gate for this machinery test.
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     use crate::emacs_core::bytecode::ByteCodeFunction;
     use crate::emacs_core::bytecode::opcode::Op;
     use crate::emacs_core::value::LambdaParams;
