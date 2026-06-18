@@ -419,12 +419,11 @@ impl<'a> TextMatrixRowOutput<'a> {
     }
 
     pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) {
-        self.builder
-            .install_row_update(MatrixRowUpdateRequest::Begin(MatrixRowBeginRequest {
-                row: begin.matrix_row,
-                role: GlyphRowRole::Text,
-                mode_line: false,
-            }));
+        self.builder.begin_current_row(MatrixRowBeginRequest {
+            row: begin.matrix_row,
+            role: GlyphRowRole::Text,
+            mode_line: false,
+        });
         self.output_emitter
             .begin_text_row(self.evaluator, begin.row, begin.col, begin.y, begin.x);
     }

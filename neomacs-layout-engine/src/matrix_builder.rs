@@ -340,7 +340,6 @@ pub(crate) struct MatrixRowCursorRequest {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum MatrixRowUpdateRequest {
-    Begin(MatrixRowBeginRequest),
     CurrentMetrics(MatrixRowMetricsRequest),
     RowMetrics(MatrixIndexedRowMetricsRequest),
     CursorAt(MatrixRowCursorRequest),
@@ -349,17 +348,6 @@ pub(crate) enum MatrixRowUpdateRequest {
 impl MatrixRowUpdateRequest {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         match self {
-            Self::Begin(begin) => {
-                builder.current_row = begin.row;
-                builder.in_row = true;
-                if let Some(ref mut matrix) = builder.current_matrix
-                    && begin.row < matrix.rows.len()
-                {
-                    matrix.rows[begin.row].role = begin.role;
-                    matrix.rows[begin.row].enabled = true;
-                    matrix.rows[begin.row].mode_line = begin.mode_line;
-                }
-            }
             Self::CurrentMetrics(metrics) => {
                 if let Some(ref mut matrix) = builder.current_matrix
                     && builder.current_row < matrix.rows.len()
@@ -596,11 +584,11 @@ impl GlyphMatrixBuilder {
 
     #[cfg(test)]
     pub(crate) fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
-        self.install_row_update(MatrixRowUpdateRequest::Begin(MatrixRowBeginRequest {
+        self.begin_current_row(MatrixRowBeginRequest {
             row,
             role,
             mode_line: matches!(role, GlyphRowRole::ModeLine),
-        }));
+        });
     }
 
     #[cfg(test)]
@@ -656,6 +644,18 @@ impl GlyphMatrixBuilder {
     pub(crate) fn end_current_row(&mut self) {
         self.finalize_current_row();
         self.in_row = false;
+    }
+
+    pub(crate) fn begin_current_row(&mut self, begin: MatrixRowBeginRequest) {
+        self.current_row = begin.row;
+        self.in_row = true;
+        if let Some(ref mut matrix) = self.current_matrix
+            && begin.row < matrix.rows.len()
+        {
+            matrix.rows[begin.row].role = begin.role;
+            matrix.rows[begin.row].enabled = true;
+            matrix.rows[begin.row].mode_line = begin.mode_line;
+        }
     }
 
     pub(crate) fn finalize_current_row(&mut self) {
