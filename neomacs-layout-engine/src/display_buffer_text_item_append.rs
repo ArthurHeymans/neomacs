@@ -403,6 +403,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         request.append_plan(resolved_advance)
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     fn prepare_text_source_char_at(
         &self,
@@ -428,6 +429,75 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_text_source_item_char_at(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        append_state: &mut BufferTextRowAppendState,
+        measure_state: &mut TextRowSourceMeasureState<'_>,
+        source_char: &BufferTextSourceChar,
+        text: &[u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
+        cluster_tail: Option<(char, bool)>,
+    ) -> BufferTextSourceCharPreparedAppend {
+        let request = source_char.advance_request_for_item_at(
+            text,
+            byte_idx,
+            position,
+            source_item,
+            cluster_tail,
+        );
+        BufferTextSourceCharPreparedAppend {
+            plan: self.prepare_source_char_append_plan(
+                geometry,
+                append_state,
+                measure_state,
+                request,
+            ),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare_source_item_char_at(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        append_state: &mut BufferTextRowAppendState,
+        measure_state: &mut TextRowSourceMeasureState<'_>,
+        source_char: &BufferTextSourceChar,
+        text: &[u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
+        cluster_tail: Option<(char, bool)>,
+    ) -> BufferTextPreparedSourceCharAppend {
+        if let Some(request) = source_char.special_request(cluster_tail) {
+            let source_item = matching_special_display_item(source_item, request.kind());
+            return BufferTextPreparedSourceCharAppend::Special(
+                self.prepare_special_source_char_at(
+                    geometry,
+                    measure_state,
+                    request,
+                    position,
+                    source_item,
+                ),
+            );
+        }
+        BufferTextPreparedSourceCharAppend::Text(self.prepare_text_source_item_char_at(
+            geometry,
+            append_state,
+            measure_state,
+            source_char,
+            text,
+            byte_idx,
+            position,
+            source_item,
+            cluster_tail,
+        ))
+    }
+
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_source_char_at(
         &self,
@@ -466,6 +536,26 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         ))
     }
 
+    pub(crate) fn prepare_source_item_for_current_text_row(
+        &self,
+        request: BufferTextSourceDisplayItemPreparationRequest<'_>,
+        state: &mut BufferTextSourceCharPreparationState<'_>,
+    ) -> BufferTextPreparedSourceCharAppend {
+        let cluster_tail = current_text_window_cluster_tail(state.measure.builder);
+        self.prepare_source_item_char_at(
+            &request.geometry,
+            state.append_state,
+            &mut state.measure,
+            request.source_char,
+            request.text,
+            request.byte_idx,
+            request.position,
+            request.source_item,
+            cluster_tail,
+        )
+    }
+
+    #[cfg(test)]
     pub(crate) fn prepare_source_char_for_current_text_row(
         &self,
         request: BufferTextSourceCharPreparationRequest<'_>,
@@ -541,11 +631,19 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     }
 }
 
+#[cfg(test)]
 fn matching_special_source_item(
     source_item: Option<&DisplayItem>,
     kind: BufferTextSourceSpecialDisplayKind,
 ) -> Option<&DisplayItem> {
     let source_item = source_item?;
+    matching_special_display_item(source_item, kind)
+}
+
+fn matching_special_display_item(
+    source_item: &DisplayItem,
+    kind: BufferTextSourceSpecialDisplayKind,
+) -> Option<&DisplayItem> {
     match (&source_item.kind, kind) {
         (DisplayItemKind::ControlChar { .. }, BufferTextSourceSpecialDisplayKind::Control)
         | (DisplayItemKind::Glyphless(_), BufferTextSourceSpecialDisplayKind::Glyphless)
@@ -557,6 +655,37 @@ fn matching_special_source_item(
 }
 
 #[derive(Clone, Copy)]
+pub(crate) struct BufferTextSourceDisplayItemPreparationRequest<'a> {
+    geometry: DisplayRowGeometryState,
+    source_char: &'a BufferTextSourceChar,
+    text: &'a [u8],
+    byte_idx: usize,
+    position: DisplayRowPosition,
+    source_item: &'a DisplayItem,
+}
+
+impl<'a> BufferTextSourceDisplayItemPreparationRequest<'a> {
+    pub(crate) fn new(
+        geometry: DisplayRowGeometryState,
+        source_char: &'a BufferTextSourceChar,
+        text: &'a [u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        source_item: &'a DisplayItem,
+    ) -> Self {
+        Self {
+            geometry,
+            source_char,
+            text,
+            byte_idx,
+            position,
+            source_item,
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy)]
 pub(crate) struct BufferTextSourceCharPreparationRequest<'a> {
     geometry: DisplayRowGeometryState,
     source_char: &'a BufferTextSourceChar,
@@ -566,6 +695,7 @@ pub(crate) struct BufferTextSourceCharPreparationRequest<'a> {
     source_item: Option<&'a DisplayItem>,
 }
 
+#[cfg(test)]
 impl<'a> BufferTextSourceCharPreparationRequest<'a> {
     pub(crate) fn new(
         geometry: DisplayRowGeometryState,
@@ -864,6 +994,7 @@ impl BufferTextSourceStepChar {
 }
 
 impl BufferTextSourceChar {
+    #[cfg(test)]
     fn advance_request_at<'text, 'item>(
         &self,
         text: &'text [u8],
@@ -876,6 +1007,21 @@ impl BufferTextSourceChar {
             self.advance_request(text, byte_idx, tail),
             position,
             source_item,
+        )
+    }
+
+    fn advance_request_for_item_at<'text, 'item>(
+        &self,
+        text: &'text [u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        source_item: &'item DisplayItem,
+        tail: Option<(char, bool)>,
+    ) -> BufferTextSourcePositionedAdvanceRequest<'text, 'item> {
+        BufferTextSourcePositionedAdvanceRequest::with_source_item(
+            self.advance_request(text, byte_idx, tail),
+            position,
+            Some(source_item),
         )
     }
 }

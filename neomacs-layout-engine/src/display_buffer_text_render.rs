@@ -2,8 +2,8 @@
 
 use crate::display_buffer_text_item_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
-    BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
-    BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
+    BufferTextSourceCharPreparationState, BufferTextSourceCharPreparedAppend,
+    BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
 use crate::display_buffer_text_source::BufferTextSourceStepChar;
 use crate::display_cursor::{
@@ -3269,14 +3269,14 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 append_state,
                 &mut source_render,
             );
-            buffer_row_append_context.prepare_source_char_for_current_text_row(
-                BufferTextSourceCharPreparationRequest::new(
+            buffer_row_append_context.prepare_source_item_for_current_text_row(
+                BufferTextSourceDisplayItemPreparationRequest::new(
                     append_geometry,
                     &buffer_source_char,
                     context.text,
                     source_step_char.start_byte_idx(),
                     append_position,
-                    Some(&source_item),
+                    &source_item,
                 ),
                 &mut preparation_state,
             )
