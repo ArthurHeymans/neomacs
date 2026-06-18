@@ -44,8 +44,6 @@ pub(crate) enum DisplayOrigin {
     },
     TabLine,
     TabBar,
-    Minibuffer,
-    EchoArea,
 }
 
 impl DisplayOrigin {
@@ -59,7 +57,6 @@ impl DisplayOrigin {
             Self::HeaderLine { .. } => Some(GlyphRowRole::HeaderLine),
             Self::TabLine => Some(GlyphRowRole::TabLine),
             Self::TabBar => Some(GlyphRowRole::TabBar),
-            Self::Minibuffer | Self::EchoArea => Some(GlyphRowRole::Minibuffer),
             Self::BufferText { .. }
             | Self::OverlayString { .. }
             | Self::DisplayPropertyString { .. }
@@ -97,8 +94,6 @@ mod tests {
         let _ = DisplayOrigin::HeaderLine { selected: true };
         let _ = DisplayOrigin::TabLine;
         let _ = DisplayOrigin::TabBar;
-        let _ = DisplayOrigin::Minibuffer;
-        let _ = DisplayOrigin::EchoArea;
     }
 
     #[test]
@@ -118,14 +113,6 @@ mod tests {
         assert_eq!(
             DisplayOrigin::TabBar.glyph_row_role(),
             Some(GlyphRowRole::TabBar)
-        );
-        assert_eq!(
-            DisplayOrigin::Minibuffer.glyph_row_role(),
-            Some(GlyphRowRole::Minibuffer)
-        );
-        assert_eq!(
-            DisplayOrigin::EchoArea.glyph_row_role(),
-            Some(GlyphRowRole::Minibuffer)
         );
         assert_eq!(
             DisplayOrigin::BufferText {

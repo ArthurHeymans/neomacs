@@ -16,10 +16,9 @@ impl From<DisplayOrigin> for BaseFacePolicy {
             DisplayOrigin::BufferText { .. } => Self::BufferFaceIncludingOverlays,
             DisplayOrigin::OverlayString { .. } => Self::OverlayStringAtAnchor,
             DisplayOrigin::DisplayPropertyString { .. } => Self::DisplayPropertyUnderlyingFace,
-            DisplayOrigin::LinePrefix { .. }
-            | DisplayOrigin::WrapPrefix { .. }
-            | DisplayOrigin::Minibuffer
-            | DisplayOrigin::EchoArea => Self::DefaultFace,
+            DisplayOrigin::LinePrefix { .. } | DisplayOrigin::WrapPrefix { .. } => {
+                Self::DefaultFace
+            }
             DisplayOrigin::ModeLine { selected } => Self::FixedBasicFace(if selected {
                 BasicFaceId::ModeLineActive
             } else {
@@ -88,18 +87,6 @@ mod tests {
             BaseFacePolicy::from(DisplayOrigin::WrapPrefix {
                 anchor_charpos: CharPos0::new(7),
             }),
-            BaseFacePolicy::DefaultFace
-        );
-    }
-
-    #[test]
-    fn base_face_policy_derives_from_minibuffer_and_echo_area_origins() {
-        assert_eq!(
-            BaseFacePolicy::from(DisplayOrigin::Minibuffer),
-            BaseFacePolicy::DefaultFace
-        );
-        assert_eq!(
-            BaseFacePolicy::from(DisplayOrigin::EchoArea),
             BaseFacePolicy::DefaultFace
         );
     }

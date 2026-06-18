@@ -8,9 +8,8 @@
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
-    FrameTabBarDisplayRowRequest, MinibufferDisplayRenderState, MinibufferSpecialRowsPlan,
-    ResizeMiniWindowsMode, ScratchGcRootScope, WindowChromeRowsPlan, build_tab_bar_display,
-    max_mini_window_lines,
+    FrameTabBarDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope, WindowChromeRowsPlan,
+    build_tab_bar_display, max_mini_window_lines,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};

@@ -686,69 +686,6 @@ fn display_row_renderer_clips_from_render_bounds_start() {
 }
 
 #[test]
-fn lisp_string_source_session_renders_rows_from_typed_row_requests() {
-    let _eval = Context::new();
-    let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
-    let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut base_face = resolver.default_face().clone();
-    base_face.font_char_width = 8.0;
-    base_face.font_ascent = 12.0;
-    let mut face_ids = FrameFaceIdAllocator::new(8);
-    let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
-        Value::string("ABCD"),
-        &mut face_ids,
-        &base_face,
-    );
-    let mut session = DisplayRowLispStringSourceSession::new(session_request)
-        .expect("lisp string source session");
-    let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
-
-    let first_row_request = session.row_request(
-        DisplayRowSourceRequestPolicy::from_display_row_geometry(
-            DisplayRowGeometry {
-                y: 0.0,
-                width: 16.0,
-                height: 16.0,
-                char_width: 8.0,
-                ascent: 12.0,
-                tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-            },
-            GlyphRowRole::Minibuffer,
-        ),
-        &base_face,
-    );
-    let first = session
-        .render_next_row_with_context(&mut renderer, first_row_request, &mut context)
-        .expect("first session row");
-
-    assert_eq!(first.stop, DisplayRowRenderStop::Clipped);
-    assert_eq!(row_text_expanding_stretches(&first.rendered.row), "AB");
-
-    let second_row_request = session.row_request(
-        DisplayRowSourceRequestPolicy::from_display_row_geometry(
-            DisplayRowGeometry {
-                y: 16.0,
-                width: 16.0,
-                height: 16.0,
-                char_width: 8.0,
-                ascent: 12.0,
-                tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-            },
-            GlyphRowRole::Minibuffer,
-        ),
-        &base_face,
-    );
-    let second = session
-        .render_next_row_with_context(&mut renderer, second_row_request, &mut context)
-        .expect("second session row");
-
-    assert_eq!(second.stop, DisplayRowRenderStop::SourceExhausted);
-    assert_eq!(row_text_expanding_stretches(&second.rendered.row), "CD");
-}
-
-#[test]
 fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     let _eval = Context::new();
     let mut font_metrics = None;
@@ -858,9 +795,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     .render_step_with_context(&mut renderer, &mut source, &mut state, &mut context)
     .expect("second row");
 
-    assert_eq!(first.stop, DisplayRowRenderStop::Clipped);
     assert_eq!(row_text_expanding_stretches(&first.rendered.row), "AB");
-    assert_eq!(second.stop, DisplayRowRenderStop::SourceExhausted);
     assert_eq!(row_text_expanding_stretches(&second.rendered.row), "C");
 }
 
@@ -2542,42 +2477,6 @@ fn display_row_render_executor_renders_lisp_string_request() {
 }
 
 #[test]
-fn display_row_render_executor_renders_lisp_string_session_rows() {
-    let _eval = Context::new();
-    let mut font_metrics = None;
-    let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
-    let session_request = DisplayRowLispStringSourceSessionRequest::from_base_face(
-        Value::string("one\ntwo"),
-        &mut face_ids,
-        resolver.default_face(),
-    );
-    let mut session =
-        DisplayRowLispStringSourceSession::new(session_request).expect("lisp string session");
-    let row_policy = DisplayRowSourceRequestPolicy::from_origin(
-        0.0,
-        240.0,
-        16.0,
-        8.0,
-        12.0,
-        crate::display_row_builder::DisplayTabPolicy::every(8),
-        crate::display_origin::DisplayOrigin::Minibuffer,
-    );
-    let row_request = session.row_request(row_policy, resolver.default_face());
-    let mut executor =
-        DisplayRowRenderExecutor::new(&mut font_metrics, &resolver, None, &mut face_ids);
-
-    let result = executor
-        .render_lisp_string_session_row(&mut session, row_request)
-        .expect("executor rendered session row");
-
-    assert_eq!(result.stop, DisplayRowRenderStop::RowBreak);
-    assert_eq!(result.rendered.row.role, GlyphRowRole::Minibuffer);
-    assert_eq!(row_text_expanding_stretches(&result.rendered.row), "one");
-}
-
-#[test]
 fn display_row_tab_line_wide_char_uses_shared_wide_glyph() {
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("A中B"), GlyphRowRole::TabLine);
@@ -2786,49 +2685,6 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
 }
 
 #[test]
-fn install_rendered_display_row_finalizes_bidi_at_install() {
-    let _eval = Context::new();
-    let mut engine = crate::engine::LayoutEngine::new();
-    let table = FaceTable::new();
-    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
-    let spec = display_row_request_from_base_face(
-        DisplayRowGeometry {
-            y: 0.0,
-            width: 80.0,
-            height: 16.0,
-            char_width: 8.0,
-            ascent: 12.0,
-            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
-        },
-        &mut face_ids,
-        resolver.default_face(),
-        GlyphRowRole::TabLine,
-        std::collections::HashMap::new(),
-    );
-    let mut renderer = DisplayRowRenderer::new(&mut engine.font_metrics);
-    let rendered = DisplayRowLispStringRenderRequest::new(spec, Value::string("אב"))
-        .render(&mut renderer, &resolver, &mut face_ids)
-        .expect("display source row");
-
-    // Slice 5: render yields LOGICAL order; the matrix-row install is the sole
-    // bidi finalizer. So the rendered row is un-reordered here...
-    assert!(!rendered.row.reversed_p);
-    assert_eq!(row_text_expanding_stretches(&rendered.row), "אב");
-
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    install_rendered_display_row(&mut builder, &rendered, 0);
-    builder.end_window();
-
-    // ...and the install (EndIncremental) finalizes it into visual order.
-    let state = builder.finish(10, 1, 8.0, 16.0);
-    let row = &state.window_matrices[0].matrix.rows[0];
-    assert!(row.reversed_p);
-    assert_eq!(row_text_expanding_stretches(row), "בא");
-}
-
-#[test]
 fn prebuilt_display_row_install_preserves_row_metadata() {
     let mut row = GlyphRow::new(GlyphRowRole::ModeLine);
     row.enabled = true;
@@ -2856,58 +2712,6 @@ fn prebuilt_display_row_install_preserves_row_metadata() {
         installed.glyphs[GlyphArea::Text.index()][0].glyph_type,
         GlyphType::Char { ch: 'M' }
     ));
-}
-
-#[test]
-fn install_rendered_display_row_derives_buffer_bounds_from_source_slots() {
-    let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.enabled = true;
-    row.height_px = 16.0;
-    row.ascent_px = 12.0;
-    let rendered = RenderedDisplayRow {
-        row,
-        progress: DisplayRowOutputProgress {
-            end_x: 24.0,
-            end_col: 3,
-            y: 0.0,
-            height: 16.0,
-        },
-        source_slots: vec![
-            crate::display_row_builder::DisplayRowGlyphSlot {
-                source: DisplaySourcePosition::buffer(
-                    neovm_core::buffer::BufferId(7),
-                    CharPos0::new(5),
-                    EmacsBytePos::new(18),
-                ),
-                x_px: 16.0,
-                col: 2,
-                width_px: 8.0,
-                width_cols: 1,
-            },
-            crate::display_row_builder::DisplayRowGlyphSlot {
-                source: DisplaySourcePosition::buffer(
-                    neovm_core::buffer::BufferId(7),
-                    CharPos0::new(3),
-                    EmacsBytePos::new(10),
-                ),
-                x_px: 0.0,
-                col: 0,
-                width_px: 8.0,
-                width_cols: 1,
-            },
-        ],
-        faces: Vec::new(),
-        media: Vec::new(),
-    };
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    install_rendered_display_row(&mut builder, &rendered, 0);
-    builder.end_window();
-
-    let state = builder.finish(10, 1, 8.0, 16.0);
-    let row = &state.window_matrices[0].matrix.rows[0];
-    assert_eq!(row.start_charpos, 3);
-    assert_eq!(row.end_charpos, 6);
 }
 
 #[test]

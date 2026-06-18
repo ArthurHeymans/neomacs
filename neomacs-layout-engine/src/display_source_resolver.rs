@@ -563,6 +563,7 @@ mod tests {
     use super::*;
     use crate::display_item::DisplayXwidgetItem;
     use crate::neovm_bridge::LayoutBufferSnapshot;
+    use neovm_core::buffer::CharPos0;
     use neovm_core::emacs_core::Context;
     use neovm_core::face::FaceTable;
 
@@ -602,7 +603,9 @@ mod tests {
         let base_face = resolve_display_string_base_face(
             &buffer,
             &resolver,
-            DisplayOrigin::EchoArea,
+            DisplayOrigin::LinePrefix {
+                anchor_charpos: CharPos0::new(0),
+            },
             BaseFacePolicy::DefaultFace,
             Some(ActiveDisplayStringBaseFace::new(
                 500,
@@ -631,7 +634,9 @@ mod tests {
         let installed = resolve_display_string_base_face(
             &buffer,
             &resolver,
-            DisplayOrigin::EchoArea,
+            DisplayOrigin::LinePrefix {
+                anchor_charpos: CharPos0::new(0),
+            },
             BaseFacePolicy::DefaultFace,
             None,
             DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
@@ -640,7 +645,9 @@ mod tests {
         let reused = resolve_display_string_base_face(
             &buffer,
             &resolver,
-            DisplayOrigin::EchoArea,
+            DisplayOrigin::LinePrefix {
+                anchor_charpos: CharPos0::new(0),
+            },
             BaseFacePolicy::DefaultFace,
             None,
             DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,

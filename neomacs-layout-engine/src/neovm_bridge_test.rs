@@ -2012,7 +2012,9 @@ fn face_policy_resolves_display_origin_base_faces() {
     let mut next_check = buf.point_max_char_pos().get();
     let default_face = resolver.base_face_for_origin(
         Some(buf),
-        &DisplayOrigin::EchoArea,
+        &DisplayOrigin::LinePrefix {
+            anchor_charpos: CharPos0::new(0),
+        },
         BaseFacePolicy::DefaultFace,
         &mut next_check,
     );

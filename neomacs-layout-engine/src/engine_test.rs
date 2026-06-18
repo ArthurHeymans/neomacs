@@ -26,10 +26,6 @@ use crate::display_row_walk_state::{
     skip_text_to_charpos,
 };
 use crate::display_source::{DisplayReplacementSpaceGeometry, DisplayReplacementStretchSourceItem};
-use crate::display_status_line::{
-    ChromeRowRenderServices, EchoMinibufferRowsRenderRequest, MinibufferDisplayRenderState,
-    minibuffer_echo_message_for_window,
-};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
@@ -2820,33 +2816,6 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
 }
 
 #[test]
-fn minibuffer_echo_message_is_suppressed_while_minibuffer_is_active() {
-    let _eval = Context::new();
-    assert_eq!(
-        minibuffer_echo_message_for_window(true, true, Some(Value::string("C-h"))),
-        None
-    );
-}
-
-#[test]
-fn minibuffer_echo_message_still_renders_when_minibuffer_is_inactive() {
-    let _eval = Context::new();
-    assert_eq!(
-        minibuffer_echo_message_for_window(true, false, Some(Value::string("Echo")))
-            .and_then(Value::as_runtime_string_owned),
-        Some("Echo".to_string())
-    );
-    assert_eq!(
-        minibuffer_echo_message_for_window(true, false, Some(Value::string(""))),
-        None
-    );
-    assert_eq!(
-        minibuffer_echo_message_for_window(false, false, Some(Value::string("Echo"))),
-        None
-    );
-}
-
-#[test]
 fn layout_frame_rust_preserves_propertized_echo_message_faces() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -2926,64 +2895,6 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
             .all(|glyph| glyph.pixel_width > 0.0),
         "echo glyphs should carry real pixel widths: {echo_glyphs:?}"
     );
-}
-
-#[test]
-fn minibuffer_echo_rows_continue_after_display_property_clips() {
-    let eval = Context::new();
-    let resolver = crate::neovm_bridge::FaceResolver::new(
-        eval.face_table(),
-        0x00FFFFFF,
-        0x00000000,
-        14.0,
-        None,
-    );
-    let mut default_face = resolver.default_face().clone();
-    default_face.font_char_width = 8.0;
-    default_face.font_ascent = 12.0;
-    default_face.font_line_height = 16.0;
-    let echo = Value::string_with_text_properties(
-        "A B",
-        vec![StringTextPropertyRun {
-            start: 1,
-            end: 2,
-            plist: Value::list(vec![
-                Value::symbol("display"),
-                Value::list(vec![
-                    Value::symbol("space"),
-                    Value::keyword("relative-width"),
-                    Value::fixnum(2),
-                ]),
-            ]),
-        }],
-    );
-    let mut builder = GlyphMatrixBuilder::new();
-    let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
-
-    let rows = EchoMinibufferRowsRenderRequest {
-        y: 0.0,
-        text_width: 24.0,
-        char_width: 8.0,
-        ascent: 12.0,
-        row_height: 16.0,
-        base_face: &default_face,
-        message: echo,
-        max_rows: 2,
-        wrap_mode: LineWrapMode::Wrap,
-        reserve_right_special_col: false,
-    }
-    .render_rows(&mut MinibufferDisplayRenderState {
-        builder: &mut builder,
-        render_services: ChromeRowRenderServices::new(&mut font_metrics, &resolver, &mut face_ids),
-        display_host: None,
-    });
-    let rendered = rows
-        .iter()
-        .map(|row| glyphs_logical_text(&row.row.glyphs[1]))
-        .collect::<Vec<_>>();
-
-    assert_eq!(rendered, vec!["A  ".to_string(), "B".to_string()]);
 }
 
 fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) {

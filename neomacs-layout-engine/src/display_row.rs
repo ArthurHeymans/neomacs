@@ -1238,7 +1238,6 @@ impl DisplayRowRenderPolicy for DisplaySourceAppendRenderPolicy {
 
 pub(crate) struct DisplayRowRenderResult {
     pub(crate) rendered: RenderedDisplayRow,
-    pub(crate) stop: DisplayRowRenderStop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1265,10 +1264,6 @@ pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     source_id: DisplayRowLispStringSourceId,
     value: Value,
     base_face_id: u32,
-}
-
-pub(crate) struct DisplayRowLispStringSourceSessionRowRequest<'a> {
-    row_request: DisplayRowSourceRenderRequest<'a>,
 }
 
 impl<'a> DisplayRowLispStringRenderRequest<'a> {
@@ -1472,50 +1467,11 @@ impl DisplayRowLispStringSourceSessionRequest {
             base_face_id,
         }
     }
-
-    pub(crate) fn from_base_face(
-        value: Value,
-        face_ids: &mut FrameFaceIdAllocator,
-        base_face: &ResolvedFace,
-    ) -> Self {
-        let base_face_id = if base_face.face_id != 0 {
-            base_face.face_id
-        } else {
-            face_ids.allocate()
-        };
-        Self::for_base_face_id(value, base_face_id)
-    }
-}
-
-impl<'a> DisplayRowLispStringSourceSessionRowRequest<'a> {
-    fn new(row_request: DisplayRowSourceRenderRequest<'a>) -> Self {
-        Self { row_request }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn role(&self) -> GlyphRowRole {
-        self.row_request.role()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn geometry(&self) -> &DisplayRowGeometry {
-        self.row_request.geometry()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn base_face_id(&self) -> u32 {
-        self.row_request.base_face_id()
-    }
-
-    fn into_render_plan(self) -> DisplayRowRenderPlan<'a> {
-        self.row_request.into_render_plan()
-    }
 }
 
 pub(crate) struct DisplayRowLispStringSourceSession {
     source: LispStringSourceCursor,
     state: DisplayRowSourceState,
-    base_face_id: u32,
 }
 
 impl DisplayRowLispStringSourceSession {
@@ -1528,27 +1484,7 @@ impl DisplayRowLispStringSourceSession {
         Some(Self {
             source,
             state: DisplayRowSourceState::default(),
-            base_face_id: request.base_face_id,
         })
-    }
-
-    pub(crate) fn row_request<'face>(
-        &self,
-        policy: DisplayRowSourceRequestPolicy,
-        base_face: &'face ResolvedFace,
-    ) -> DisplayRowLispStringSourceSessionRowRequest<'face> {
-        DisplayRowLispStringSourceSessionRowRequest::new(
-            policy.source_request_for_base_face_id(self.base_face_id, base_face),
-        )
-    }
-
-    pub(crate) fn render_next_row_with_context(
-        &mut self,
-        renderer: &mut DisplayRowRenderer<'_>,
-        request: DisplayRowLispStringSourceSessionRowRequest<'_>,
-        context: &mut DisplayRowRenderContext<'_, '_>,
-    ) -> Option<DisplayRowRenderResult> {
-        self.render_next_row_plan_with_context(renderer, request.into_render_plan(), context)
     }
 
     fn render_next_row_plan_with_context(
@@ -1584,7 +1520,6 @@ impl DisplayRowRenderIntoRowResult {
                 faces: self.faces,
                 media: self.media,
             },
-            stop: self.stop,
         }
     }
 }
@@ -2482,20 +2417,6 @@ fn finish_current_text_row_render(
     }
 }
 
-pub(crate) fn install_rendered_display_row(
-    builder: &mut GlyphMatrixBuilder,
-    rendered: &RenderedDisplayRow,
-    matrix_row: usize,
-) {
-    RenderedDisplayRowAssetsInstall::from_rendered(
-        rendered,
-        RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row),
-    )
-    .install(builder);
-    let row = rendered_row_with_source_bounds(rendered);
-    PrebuiltDisplayRowInstall::new(matrix_row, &row).install(builder);
-}
-
 pub(crate) struct PrebuiltDisplayRowInstall<'row> {
     matrix_row: usize,
     row: &'row GlyphRow,
@@ -3042,14 +2963,6 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
         request: DisplayRowLispStringRenderRequest<'_>,
     ) -> Option<RenderedDisplayRow> {
         request.render_with_context(&mut self.renderer, &mut self.context)
-    }
-
-    pub(crate) fn render_lisp_string_session_row(
-        &mut self,
-        session: &mut DisplayRowLispStringSourceSession,
-        request: DisplayRowLispStringSourceSessionRowRequest<'_>,
-    ) -> Option<DisplayRowRenderResult> {
-        session.render_next_row_with_context(&mut self.renderer, request, &mut self.context)
     }
 
     pub(crate) fn render_item_source_fragment_into_row<S: DisplayItemSource>(
