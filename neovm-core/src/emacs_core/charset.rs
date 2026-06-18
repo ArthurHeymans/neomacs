@@ -230,31 +230,37 @@ impl CharsetRegistry {
     fn init_standard_charsets(&mut self) {
         let mut ascii = Self::make_default(0, "ascii");
         ascii.ascii_compatible_p = true;
-        self.register(ascii);
+        ascii.iso_final_char = Some(66); // ISO final char 'B'
+        ascii.emacs_mule_id = Some(0);
+        self.register_builtin(ascii);
 
         let mut unicode = Self::make_default(2, "unicode");
         unicode.dimension = 3;
         unicode.code_space = [0, 255, 0, 255, 0, 16, 0, 0];
         unicode.max_code = 0x10FFFF;
-        self.register(unicode);
+        unicode.ascii_compatible_p = true; // GNU charset-plist :ascii-compatible-p t
+        self.register_builtin(unicode);
 
         let mut bmp = Self::make_default(144, "unicode-bmp");
         bmp.dimension = 2;
         bmp.code_space = [0, 255, 0, 255, 0, 0, 0, 0];
         bmp.max_code = 0xFFFF;
-        self.register(bmp);
+        self.register_builtin(bmp);
 
         let mut latin1 = Self::make_default(5, "latin-iso8859-1");
         latin1.code_space = [32, 127, 0, 0, 0, 0, 0, 0];
         latin1.min_code = 32;
         latin1.method = CharsetMethod::Offset(160);
-        self.register(latin1);
+        latin1.iso_final_char = Some(65); // ISO final char 'A'
+        latin1.emacs_mule_id = Some(129);
+        self.register_builtin(latin1);
 
         let mut emacs = Self::make_default(3, "emacs");
         emacs.dimension = 3;
         emacs.code_space = [0, 255, 0, 255, 0, 63, 0, 0];
         emacs.max_code = 0x3FFF7F;
-        self.register(emacs);
+        emacs.ascii_compatible_p = true; // GNU charset-plist :ascii-compatible-p t
+        self.register_builtin(emacs);
 
         let mut eight_bit = Self::make_default(4, "eight-bit");
         eight_bit.code_space = [128, 255, 0, 0, 0, 0, 0, 0];
@@ -262,7 +268,7 @@ impl CharsetRegistry {
         eight_bit.max_code = 255;
         eight_bit.supplementary_p = true;
         eight_bit.method = CharsetMethod::Offset(0x3FFF80);
-        self.register(eight_bit);
+        self.register_builtin(eight_bit);
 
         // iso-8859-1 is a full 0-255 charset with identity mapping
         // (code_offset=0, min_code=0, max_code=255, ascii_compatible=true),
@@ -275,7 +281,7 @@ impl CharsetRegistry {
         iso_8859_1.max_code = 255;
         iso_8859_1.ascii_compatible_p = true;
         iso_8859_1.method = CharsetMethod::Offset(0);
-        self.register(iso_8859_1);
+        self.register_builtin(iso_8859_1);
 
         self.define_alias(intern("ucs"), intern("unicode"));
 
@@ -288,6 +294,51 @@ impl CharsetRegistry {
             intern("latin-iso8859-1"),
             intern("eight-bit"),
         ];
+    }
+
+    /// Register a built-in (C-level) charset, giving it GNU's canonical
+    /// charset plist before insertion.  GNU defines these charsets in C via
+    /// `define_charset_internal` (charset.c:1268), which builds the plist as
+    /// `:name :dimension :code-space :iso-final-char :emacs-mule-id
+    /// :ascii-compatible-p :code-offset` in that order; mule-conf.el then
+    /// appends `:docstring`/`:short-name`/`:long-name` via put-charset-property.
+    /// Charsets created from Lisp `define-charset` keep the plist they were
+    /// defined with, so they go through the plain `register`.
+    fn register_builtin(&mut self, mut info: CharsetInfo) {
+        if info.plist.is_empty() {
+            let code_offset = match info.method {
+                CharsetMethod::Offset(n) => n,
+                _ => 0,
+            };
+            let code_space = info
+                .code_space
+                .iter()
+                .map(|&n| Value::fixnum(n))
+                .collect::<Vec<_>>();
+            info.plist = vec![
+                (intern(":name"), Value::from_sym_id(info.name)),
+                (intern(":dimension"), Value::fixnum(info.dimension)),
+                (intern(":code-space"), Value::vector(code_space)),
+                (
+                    intern(":iso-final-char"),
+                    info.iso_final_char.map_or(Value::NIL, Value::fixnum),
+                ),
+                (
+                    intern(":emacs-mule-id"),
+                    info.emacs_mule_id.map_or(Value::NIL, Value::fixnum),
+                ),
+                (
+                    intern(":ascii-compatible-p"),
+                    if info.ascii_compatible_p {
+                        Value::T
+                    } else {
+                        Value::NIL
+                    },
+                ),
+                (intern(":code-offset"), Value::fixnum(code_offset)),
+            ];
+        }
+        self.register(info);
     }
 
     fn register(&mut self, mut info: CharsetInfo) {
