@@ -1153,10 +1153,16 @@ fn finish_text_area(builder: GlyphMatrixBuilder) -> Vec<Glyph> {
     state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::Text as usize].clone()
 }
 
+fn current_cluster_tail(builder: &GlyphMatrixBuilder) -> Option<(char, bool)> {
+    builder
+        .current_row()
+        .and_then(crate::composition::last_text_cluster_tail_in_row)
+}
+
 #[test]
 fn cluster_tail_is_none_at_row_start() {
     let builder = cluster_builder();
-    assert_eq!(builder.last_text_cluster_tail(), None);
+    assert_eq!(current_cluster_tail(&builder), None);
 }
 
 #[test]
@@ -1200,11 +1206,11 @@ fn cluster_tail_detects_lone_regional_indicator_then_pairs_flag() {
     let mut builder = cluster_builder();
     // Regional indicators J (U+1F1EF) + P (U+1F1F5) => 🇯🇵 flag.
     write_wide_char_to_current_row(&mut builder, '\u{1F1EF}', 0, 0);
-    assert_eq!(builder.last_text_cluster_tail(), Some(('\u{1F1EF}', true)));
+    assert_eq!(current_cluster_tail(&builder), Some(('\u{1F1EF}', true)));
     write_cluster_continuation_to_current_row(&mut builder, '\u{1F1F5}', 0, 1);
     // After pairing, the tail is a Composite — no longer a lone RI, so a
     // third regional indicator would start a fresh flag.
-    assert_eq!(builder.last_text_cluster_tail(), Some(('\u{1F1F5}', false)));
+    assert_eq!(current_cluster_tail(&builder), Some(('\u{1F1F5}', false)));
     let area = finish_text_area(builder);
     assert_eq!(
         area[0].glyph_type,
@@ -1236,7 +1242,7 @@ fn engine_style_loop_clusters_zwj_family_emoji() {
     let mut builder = cluster_builder();
     let seq = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
     for (i, ch) in seq.chars().enumerate() {
-        let tail = builder.last_text_cluster_tail();
+        let tail = current_cluster_tail(&builder);
         let is_cont = crate::composition::continues_cluster(ch, tail);
         if is_cont {
             write_cluster_continuation_to_current_row(&mut builder, ch, 0, i);

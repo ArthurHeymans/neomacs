@@ -10,7 +10,9 @@ use crate::window_output::{
     publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphMatrix, GlyphType};
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
 
 #[derive(Clone, Copy, Debug)]
@@ -60,6 +62,170 @@ pub(crate) struct CapturedCursorPlacement {
     pub(crate) matrix_row: usize,
     pub(crate) slot_width: CapturedCursorSlotWidth,
     pub(crate) stretch_like: bool,
+}
+
+pub(crate) fn cursor_window_matches_current(cursor_window_id: i64, current_window_id: u64) -> bool {
+    cursor_window_id >= 0 && cursor_window_id as u64 == current_window_id
+}
+
+/// Number of grid columns `glyph` advances the materialize column counter.
+///
+/// Must stay in lock-step with `FrameDisplayState::materialize_grid_row`'s
+/// `col +=` rule (glyph_matrix.rs): a stretch advances by its `width_cols`, a
+/// double-width glyph by 2, everything else by 1. Used to place the physical
+/// cursor on the same column index materialize assigns to the glyph at point.
+fn glyph_cell_span(glyph: &Glyph) -> u16 {
+    match glyph.glyph_type {
+        GlyphType::Stretch { width_cols } => width_cols,
+        _ => {
+            if glyph.wide {
+                2
+            } else {
+                1
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct CursorVisualColumnResolutionContext<'a> {
+    current_window_id: u64,
+    current_pixel_bounds: Rect,
+    matrix: Option<&'a GlyphMatrix>,
+}
+
+impl<'a> CursorVisualColumnResolutionContext<'a> {
+    pub(crate) fn new(
+        current_window_id: u64,
+        current_pixel_bounds: Rect,
+        matrix: Option<&'a GlyphMatrix>,
+    ) -> Self {
+        Self {
+            current_window_id,
+            current_pixel_bounds,
+            matrix,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CursorVisualColumnResolutionRequest {
+    window_id: i64,
+    row: usize,
+    charpos: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ResolvedPhysCursorPlacement {
+    col: u16,
+    x: Option<f32>,
+}
+
+impl CursorVisualColumnResolutionRequest {
+    pub(crate) fn new(window_id: i64, row: usize, charpos: usize) -> Self {
+        Self {
+            window_id,
+            row,
+            charpos,
+        }
+    }
+
+    pub(crate) fn from_cursor(cursor: &neomacs_display_protocol::frame_glyphs::PhysCursor) -> Self {
+        Self::new(cursor.window_id, cursor.row, cursor.charpos)
+    }
+
+    /// Resolve the materialize-grid column the cursor at `charpos` on `row`
+    /// actually occupies, or `None` when the cursor is not on the current
+    /// window's matrix.
+    ///
+    /// The column must equal the one `FrameDisplayState::materialize_grid_row`
+    /// assigns to point's glyph: a single running counter over the LeftMargin
+    /// (line numbers, fringe) area and then the Text area, skipping padding
+    /// cells and weighting each glyph by its cell span. Counting only the
+    /// Text-area index drops the line-number gutter, so the renderer would snap
+    /// the cursor to a glyph `lnum_cols` cells to the left (or into the gutter
+    /// on short lines), drawing a stray second cursor. GNU accounts for the
+    /// same gutter in `set_cursor_from_row`, where the line-number glyphs live
+    /// at the start of TEXT_AREA (src/xdisp.c).
+    ///
+    /// An exact charpos match places the cursor on point's own glyph. When point
+    /// sits on invisible/hidden text (e.g. an org heading's collapsed `#+title:`
+    /// or leading stars produce no glyph for that charpos), GNU's
+    /// set_cursor_from_row instead places the cursor on the first visible glyph
+    /// that follows point. We track the glyph with the smallest charpos greater
+    /// than point as that fallback, so the cursor never reverts to the captured
+    /// column (which would land on the line-number gutter and draw a stray
+    /// second cursor).
+    pub(crate) fn resolve(self, context: CursorVisualColumnResolutionContext<'_>) -> Option<u16> {
+        if !cursor_window_matches_current(self.window_id, context.current_window_id) {
+            return None;
+        }
+        let matrix = context.matrix?;
+        let row = matrix.rows.get(self.row)?;
+
+        let mut col_acc: u16 = 0;
+        for glyph in &row.glyphs[GlyphArea::LeftMargin.index()] {
+            if glyph.padding {
+                continue;
+            }
+            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+        }
+
+        let mut nearest_after: Option<(usize, u16)> = None;
+        for glyph in &row.glyphs[GlyphArea::Text.index()] {
+            if glyph.padding {
+                continue;
+            }
+            if glyph.charpos == self.charpos {
+                return Some(col_acc);
+            }
+            if glyph.charpos > self.charpos
+                && nearest_after.is_none_or(|(after, _)| glyph.charpos < after)
+            {
+                nearest_after = Some((glyph.charpos, col_acc));
+            }
+            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+        }
+        // No glyph carries point's charpos. Point is either before the first
+        // visible glyph (a hidden prefix -- use the first following glyph's
+        // column, tracked in nearest_after) or past the row's last glyph (end
+        // of line, or a blank line that has only gutter glyphs -- use col_acc,
+        // the first cell after all the gutter and text). Returning col_acc
+        // rather than None keeps a blank/EOL cursor out of the line-number
+        // gutter (where the captured Text-index 0 would land it), matching GNU
+        // set_cursor_from_row placing the cursor in the empty area after a row.
+        Some(nearest_after.map_or(col_acc, |(_, col)| col))
+    }
+
+    pub(crate) fn resolve_phys_cursor_placement(
+        self,
+        context: CursorVisualColumnResolutionContext<'_>,
+    ) -> Option<ResolvedPhysCursorPlacement> {
+        let col = self.resolve(context)?;
+        let x = context.matrix.and_then(|matrix| {
+            (matrix.ncols > 0).then(|| {
+                let char_w = context.current_pixel_bounds.width / matrix.ncols as f32;
+                context.current_pixel_bounds.x + col as f32 * char_w
+            })
+        });
+        Some(ResolvedPhysCursorPlacement { col, x })
+    }
+}
+
+impl ResolvedPhysCursorPlacement {
+    pub(crate) fn col(self) -> u16 {
+        self.col
+    }
+
+    pub(crate) fn apply_to(self, cursor: &mut neomacs_display_protocol::frame_glyphs::PhysCursor) {
+        if self.col != cursor.col {
+            cursor.col = self.col;
+            cursor.slot_id.col = self.col;
+            if let Some(x) = self.x {
+                cursor.x = x;
+            }
+        }
+    }
 }
 
 impl CapturedCursorPlacement {

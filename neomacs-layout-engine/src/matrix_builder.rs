@@ -6,6 +6,10 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
+use crate::display_cursor::{
+    CursorVisualColumnResolutionContext, CursorVisualColumnResolutionRequest,
+    cursor_window_matches_current,
+};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -16,153 +20,7 @@ use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::HashMap;
 
-const FRAME_CHROME_WINDOW_ID: i64 = 0;
-
-fn cursor_window_matches_current(cursor_window_id: i64, current_window_id: u64) -> bool {
-    cursor_window_id >= 0 && cursor_window_id as u64 == current_window_id
-}
-
-/// Number of grid columns `glyph` advances the materialize column counter.
-///
-/// Must stay in lock-step with `FrameDisplayState::materialize_grid_row`'s
-/// `col +=` rule (glyph_matrix.rs): a stretch advances by its `width_cols`, a
-/// double-width glyph by 2, everything else by 1. Used to place the physical
-/// cursor on the same column index materialize assigns to the glyph at point.
-fn glyph_cell_span(glyph: &Glyph) -> u16 {
-    match glyph.glyph_type {
-        GlyphType::Stretch { width_cols } => width_cols,
-        _ => {
-            if glyph.wide {
-                2
-            } else {
-                1
-            }
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct CursorVisualColumnResolutionContext<'a> {
-    current_window_id: u64,
-    current_pixel_bounds: Rect,
-    matrix: Option<&'a GlyphMatrix>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CursorVisualColumnResolutionRequest {
-    window_id: i64,
-    row: usize,
-    charpos: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct ResolvedPhysCursorPlacement {
-    col: u16,
-    x: Option<f32>,
-}
-
-impl CursorVisualColumnResolutionRequest {
-    fn new(window_id: i64, row: usize, charpos: usize) -> Self {
-        Self {
-            window_id,
-            row,
-            charpos,
-        }
-    }
-
-    fn from_cursor(cursor: &PhysCursor) -> Self {
-        Self::new(cursor.window_id, cursor.row, cursor.charpos)
-    }
-
-    /// Resolve the materialize-grid column the cursor at `charpos` on `row`
-    /// actually occupies, or `None` when the cursor is not on the current
-    /// window's matrix.
-    ///
-    /// The column must equal the one `FrameDisplayState::materialize_grid_row`
-    /// assigns to point's glyph: a single running counter over the LeftMargin
-    /// (line numbers, fringe) area and then the Text area, skipping padding
-    /// cells and weighting each glyph by its cell span. Counting only the
-    /// Text-area index drops the line-number gutter, so the renderer would snap
-    /// the cursor to a glyph `lnum_cols` cells to the left (or into the gutter
-    /// on short lines), drawing a stray second cursor. GNU accounts for the
-    /// same gutter in `set_cursor_from_row`, where the line-number glyphs live
-    /// at the start of TEXT_AREA (src/xdisp.c).
-    ///
-    /// An exact charpos match places the cursor on point's own glyph. When point
-    /// sits on invisible/hidden text (e.g. an org heading's collapsed `#+title:`
-    /// or leading stars produce no glyph for that charpos), GNU's
-    /// set_cursor_from_row instead places the cursor on the first visible glyph
-    /// that follows point. We track the glyph with the smallest charpos greater
-    /// than point as that fallback, so the cursor never reverts to the captured
-    /// column (which would land on the line-number gutter and draw a stray
-    /// second cursor).
-    fn resolve(self, context: CursorVisualColumnResolutionContext<'_>) -> Option<u16> {
-        if !cursor_window_matches_current(self.window_id, context.current_window_id) {
-            return None;
-        }
-        let matrix = context.matrix?;
-        let row = matrix.rows.get(self.row)?;
-
-        let mut col_acc: u16 = 0;
-        for glyph in &row.glyphs[GlyphArea::LeftMargin.index()] {
-            if glyph.padding {
-                continue;
-            }
-            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
-        }
-
-        let mut nearest_after: Option<(usize, u16)> = None;
-        for glyph in &row.glyphs[GlyphArea::Text.index()] {
-            if glyph.padding {
-                continue;
-            }
-            if glyph.charpos == self.charpos {
-                return Some(col_acc);
-            }
-            if glyph.charpos > self.charpos
-                && nearest_after.is_none_or(|(after, _)| glyph.charpos < after)
-            {
-                nearest_after = Some((glyph.charpos, col_acc));
-            }
-            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
-        }
-        // No glyph carries point's charpos. Point is either before the first
-        // visible glyph (a hidden prefix -- use the first following glyph's
-        // column, tracked in nearest_after) or past the row's last glyph (end
-        // of line, or a blank line that has only gutter glyphs -- use col_acc,
-        // the first cell after all the gutter and text). Returning col_acc
-        // rather than None keeps a blank/EOL cursor out of the line-number
-        // gutter (where the captured Text-index 0 would land it), matching GNU
-        // set_cursor_from_row placing the cursor in the empty area after a row.
-        Some(nearest_after.map_or(col_acc, |(_, col)| col))
-    }
-
-    fn resolve_phys_cursor_placement(
-        self,
-        context: CursorVisualColumnResolutionContext<'_>,
-    ) -> Option<ResolvedPhysCursorPlacement> {
-        let col = self.resolve(context)?;
-        let x = context.matrix.and_then(|matrix| {
-            (matrix.ncols > 0).then(|| {
-                let char_w = context.current_pixel_bounds.width / matrix.ncols as f32;
-                context.current_pixel_bounds.x + col as f32 * char_w
-            })
-        });
-        Some(ResolvedPhysCursorPlacement { col, x })
-    }
-}
-
-impl ResolvedPhysCursorPlacement {
-    fn apply_to(self, cursor: &mut PhysCursor) {
-        if self.col != cursor.col {
-            cursor.col = self.col;
-            cursor.slot_id.col = self.col;
-            if let Some(x) = self.x {
-                cursor.x = x;
-            }
-        }
-    }
-}
+pub(crate) const FRAME_CHROME_WINDOW_ID: i64 = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum MatrixMediaInstallKind {
@@ -180,30 +38,8 @@ pub(crate) enum MatrixMediaInstallKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum MatrixCurrentWindowMediaClip {
-    TextBounds,
-    Explicit(Rect),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum MatrixMediaInstallTarget {
-    CurrentWindow {
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: MatrixCurrentWindowMediaClip,
-    },
-    FrameChrome {
-        role: GlyphRowRole,
-        row: u32,
-        col: u16,
-        clip: Rect,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct MatrixMediaInstallRequest {
-    target: MatrixMediaInstallTarget,
+    target: ResolvedMatrixMediaInstallTarget,
     kind: MatrixMediaInstallKind,
     x: f32,
     y: f32,
@@ -212,16 +48,22 @@ pub(crate) struct MatrixMediaInstallRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct ResolvedMatrixMediaTarget {
-    window_id: i64,
-    role: GlyphRowRole,
-    clip: Option<Rect>,
-    slot_id: DisplaySlotId,
+pub(crate) struct ResolvedMatrixMediaInstallTarget {
+    pub(crate) window_id: i64,
+    pub(crate) role: GlyphRowRole,
+    pub(crate) clip: Option<Rect>,
+    pub(crate) slot_id: DisplaySlotId,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MatrixCurrentWindowMediaInstallContext {
+    pub(crate) window_id: i64,
+    pub(crate) text_pixel_bounds: Rect,
 }
 
 impl MatrixMediaInstallRequest {
     pub(crate) fn new(
-        target: MatrixMediaInstallTarget,
+        target: ResolvedMatrixMediaInstallTarget,
         kind: MatrixMediaInstallKind,
         x: f32,
         y: f32,
@@ -239,7 +81,7 @@ impl MatrixMediaInstallRequest {
     }
 
     fn install(self, builder: &mut GlyphMatrixBuilder) {
-        let target = self.target.resolve(builder);
+        let target = self.target;
         match self.kind {
             MatrixMediaInstallKind::Image { image_id } => builder.images.push(ImageItem {
                 window_id: target.window_id,
@@ -280,50 +122,6 @@ impl MatrixMediaInstallRequest {
                 width: self.width,
                 height: self.height,
             }),
-        }
-    }
-}
-
-impl MatrixMediaInstallTarget {
-    fn resolve(self, builder: &GlyphMatrixBuilder) -> ResolvedMatrixMediaTarget {
-        match self {
-            Self::CurrentWindow {
-                role,
-                row,
-                col,
-                clip,
-            } => {
-                let window_id = builder.current_window_id as i64;
-                let clip = match clip {
-                    MatrixCurrentWindowMediaClip::TextBounds => builder.current_text_pixel_bounds,
-                    MatrixCurrentWindowMediaClip::Explicit(clip) => clip,
-                };
-                ResolvedMatrixMediaTarget {
-                    window_id,
-                    role,
-                    clip: Some(clip),
-                    slot_id: DisplaySlotId {
-                        window_id,
-                        row,
-                        col,
-                    },
-                }
-            }
-            Self::FrameChrome {
-                role,
-                row,
-                col,
-                clip,
-            } => ResolvedMatrixMediaTarget {
-                window_id: FRAME_CHROME_WINDOW_ID,
-                role,
-                clip: Some(clip),
-                slot_id: DisplaySlotId {
-                    window_id: FRAME_CHROME_WINDOW_ID,
-                    row,
-                    col,
-                },
-            },
         }
     }
 }
@@ -841,6 +639,11 @@ impl GlyphMatrixBuilder {
         Some(f(row))
     }
 
+    pub(crate) fn current_row(&self) -> Option<&GlyphRow> {
+        let matrix = self.current_matrix.as_ref()?;
+        matrix.rows.get(self.current_row)
+    }
+
     pub(crate) fn copy_display_row_to_current_row(&mut self, source: &GlyphRow) {
         let current_row = self.current_row;
         let pixel_y_rel = source.pixel_y - self.current_pixel_bounds.y;
@@ -873,16 +676,6 @@ impl GlyphMatrixBuilder {
         self.end_row();
     }
 
-    pub(crate) fn last_text_cluster_tail_in_row(row: &GlyphRow) -> Option<(char, bool)> {
-        crate::composition::last_text_cluster_tail_in_row(row)
-    }
-
-    pub(crate) fn last_text_cluster_tail(&self) -> Option<(char, bool)> {
-        let matrix = self.current_matrix.as_ref()?;
-        let row = matrix.rows.get(self.current_row)?;
-        Self::last_text_cluster_tail_in_row(row)
-    }
-
     #[cfg(test)]
     pub(crate) fn set_cursor_at_row(
         &mut self,
@@ -911,12 +704,21 @@ impl GlyphMatrixBuilder {
         request.install(self);
     }
 
-    fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
-        CursorVisualColumnResolutionContext {
-            current_window_id: self.current_window_id,
-            current_pixel_bounds: self.current_pixel_bounds,
-            matrix: self.current_matrix.as_ref(),
+    pub(crate) fn current_window_media_install_context(
+        &self,
+    ) -> MatrixCurrentWindowMediaInstallContext {
+        MatrixCurrentWindowMediaInstallContext {
+            window_id: self.current_window_id as i64,
+            text_pixel_bounds: self.current_text_pixel_bounds,
         }
+    }
+
+    fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
+        CursorVisualColumnResolutionContext::new(
+            self.current_window_id,
+            self.current_pixel_bounds,
+            self.current_matrix.as_ref(),
+        )
     }
 
     pub(crate) fn set_phys_cursor(&mut self, cursor: PhysCursor) {
@@ -932,7 +734,7 @@ impl GlyphMatrixBuilder {
             && let Some(ref mut matrix) = self.current_matrix
             && cursor.row < matrix.rows.len()
         {
-            matrix.rows[cursor.row].cursor_col = Some(placement.col);
+            matrix.rows[cursor.row].cursor_col = Some(placement.col());
             matrix.rows[cursor.row].cursor_type = Some(cursor.style);
         }
 

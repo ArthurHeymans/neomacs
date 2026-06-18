@@ -6,6 +6,7 @@
 //! handoff.
 
 use super::display_status_line::DisplayRowOutputProgress;
+use crate::composition::last_text_cluster_tail_in_row;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
@@ -846,7 +847,9 @@ pub(crate) fn install_text_window_cursor_effects(
 pub(crate) fn current_text_window_cluster_tail(
     builder: &GlyphMatrixBuilder,
 ) -> Option<(char, bool)> {
-    builder.last_text_cluster_tail()
+    builder
+        .current_row()
+        .and_then(last_text_cluster_tail_in_row)
 }
 
 pub(crate) fn finish_text_window_output_rows(

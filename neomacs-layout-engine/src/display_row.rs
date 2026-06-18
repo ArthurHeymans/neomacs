@@ -31,15 +31,15 @@ use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::glyph_row_writer;
 use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCurrentWindowMediaClip, MatrixFrameStateInstallRequest,
-    MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixMediaInstallTarget,
-    MatrixRowBeginRequest, MatrixRowLifecycleRequest,
+    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixFrameStateInstallRequest,
+    MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixRowBeginRequest,
+    MatrixRowLifecycleRequest, ResolvedMatrixMediaInstallTarget,
 };
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
@@ -2438,6 +2438,10 @@ pub(crate) fn install_measured_window_display_row(
         panic!("frame chrome rows must use install_measured_frame_chrome_row");
     };
     debug_assert!(window_id > 0);
+    debug_assert_eq!(
+        builder.current_window_media_install_context().window_id,
+        window_id as i64
+    );
     debug_assert!(matches!(
         kind,
         WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
@@ -2604,16 +2608,19 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
 
 impl RenderedDisplayRowMedia {
     fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
+        let context = builder.current_window_media_install_context();
         let row = matrix_row.min(u32::MAX as usize) as u32;
-        self.install_with_target(
-            builder,
-            MatrixMediaInstallTarget::CurrentWindow {
-                role,
+        let target = ResolvedMatrixMediaInstallTarget {
+            window_id: context.window_id,
+            role,
+            clip: Some(context.text_pixel_bounds),
+            slot_id: DisplaySlotId {
+                window_id: context.window_id,
                 row,
                 col: self.col,
-                clip: MatrixCurrentWindowMediaClip::TextBounds,
             },
-        );
+        };
+        self.install_with_target(builder, target);
     }
 
     fn install_window_row(
@@ -2623,15 +2630,18 @@ impl RenderedDisplayRowMedia {
         row: u32,
         clip: Rect,
     ) {
-        self.install_with_target(
-            builder,
-            MatrixMediaInstallTarget::CurrentWindow {
-                role,
+        let context = builder.current_window_media_install_context();
+        let target = ResolvedMatrixMediaInstallTarget {
+            window_id: context.window_id,
+            role,
+            clip: Some(clip),
+            slot_id: DisplaySlotId {
+                window_id: context.window_id,
                 row,
                 col: self.col,
-                clip: MatrixCurrentWindowMediaClip::Explicit(clip),
             },
-        );
+        };
+        self.install_with_target(builder, target);
     }
 
     fn install_frame_chrome(
@@ -2641,21 +2651,23 @@ impl RenderedDisplayRowMedia {
         row: u32,
         clip: Rect,
     ) {
-        self.install_with_target(
-            builder,
-            MatrixMediaInstallTarget::FrameChrome {
-                role,
+        let target = ResolvedMatrixMediaInstallTarget {
+            window_id: FRAME_CHROME_WINDOW_ID,
+            role,
+            clip: Some(clip),
+            slot_id: DisplaySlotId {
+                window_id: FRAME_CHROME_WINDOW_ID,
                 row,
                 col: self.col,
-                clip,
             },
-        );
+        };
+        self.install_with_target(builder, target);
     }
 
     fn install_with_target(
         &self,
         builder: &mut GlyphMatrixBuilder,
-        target: MatrixMediaInstallTarget,
+        target: ResolvedMatrixMediaInstallTarget,
     ) {
         builder.install_media(MatrixMediaInstallRequest::new(
             target,
