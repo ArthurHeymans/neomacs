@@ -2353,6 +2353,7 @@ mod divergence_stress_combo;
 mod divergence_stress_combo_2;
 mod divergence_stress_combo_3;
 mod divergence_stress_large_deep;
+mod divergence_string_compare_gv_region_runtime;
 mod divergence_string_format_cl_seq_runtime;
 mod divergence_string_ops;
 mod divergence_string_ops_deep;
