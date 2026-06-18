@@ -23,9 +23,7 @@ use crate::display_row_append::{
     BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
     BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
-    DisplayRowLineBreakTransitionPlan, DisplayRowOverflowTransitionPlan,
-    DisplayRowTextWindowEmitContext, DisplayRowTransitionContinuation,
-    DisplayRowTransitionRenderState, append_synthetic_text_to_display_row,
+    append_synthetic_text_to_display_row,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{
@@ -43,6 +41,11 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_row_transition::{
+    DisplayRowLineBreakTransitionPlan, DisplayRowOverflowTransitionPlan,
+    DisplayRowTextWindowEmitContext, DisplayRowTransitionContinuation,
+    DisplayRowTransitionRenderState,
+};
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,

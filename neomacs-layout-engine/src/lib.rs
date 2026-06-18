@@ -35,6 +35,7 @@ pub(crate) mod display_row_overlay_string;
 pub(crate) mod display_row_replacement;
 pub(crate) mod display_row_source_render;
 pub(crate) mod display_row_special_glyphs;
+pub(crate) mod display_row_transition;
 pub(crate) mod display_row_walk_state;
 pub(crate) mod display_source;
 pub(crate) mod display_source_resolver;

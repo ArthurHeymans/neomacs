@@ -39,19 +39,21 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{
-    DisplayRowPrefixValues, LispStringRowAppendContext, LispStringSourceAppendRequest,
-    LispStringSourceId, LispStringSourceRowAppendSession, append_lisp_string_to_text_row,
-    apply_pending_display_source_faces,
+    DisplayRowPrefixRequest, DisplayRowPrefixValues, LispStringRowAppendContext,
+    LispStringSourceAppendRequest, LispStringSourceId, LispStringSourceRowAppendSession,
+    append_lisp_string_to_text_row, apply_pending_display_source_faces,
 };
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
     OverlayStringRenderState, OverlayStringRowBreakRenderContext,
 };
 use crate::display_row_replacement::*;
+use crate::display_row_source_render::TextRowOutputRenderState;
+use crate::display_row_transition::*;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
-    HitRowRangeTracker, LineNumberRenderState, TextPropertyScanCheckpoints, WordWrapBreakCandidate,
-    WordWrapRenderState,
+    HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
+    TextPropertyScanCheckpoints, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::{
     BufferDisplayPropertyTextModifierAction, BufferDisplayPropertyTextSourceEvent,

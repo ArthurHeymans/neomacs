@@ -13,11 +13,11 @@ use crate::display_row::{
     DisplayRowItemSourceRenderRequest, DisplayRowMeasurementPolicy, DisplayRowRenderBounds,
     DisplayRowRenderer, DisplayRowSourceRequestPolicy,
 };
-use crate::display_row_append::{
-    DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
-};
 use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::DisplayRowMaxX;
+use crate::display_row_transition::{
+    DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
+};
 use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     next_window_start_for_partially_visible_point_row,
