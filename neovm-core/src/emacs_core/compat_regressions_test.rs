@@ -379,6 +379,35 @@ fn define_hash_table_test_requires_symbol_name() {
 }
 
 #[test]
+fn custom_hash_table_test_closures_are_gc_roots() {
+    // Regression (JIT/GC audit): a `define-hash-table-test` comparison/hash
+    // function given as a lambda lives ONLY in the thread-local test-alias
+    // registry (and any table's user_cmp_function/user_hash_function). Neither
+    // was traced by the GC, so a collection swept the closure while it was still
+    // referenced and the next custom-test gethash/puthash called a freed
+    // function (use-after-free). The collector must now surface both closures.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    eval.eval_str(
+        "(define-hash-table-test 'gc-rooting-regression \
+           (lambda (a b) (equal a b)) \
+           (lambda (k) (sxhash-equal k)))",
+    )
+    .unwrap();
+    let mut roots: Vec<Value> = Vec::new();
+    crate::emacs_core::builtins::collections::collect_hash_table_test_alias_gc_roots(&mut roots);
+    assert_eq!(
+        roots.len(),
+        2,
+        "both the custom comparison and hash closures must be GC roots, got {roots:?}"
+    );
+    assert!(
+        roots.iter().all(|r| r.is_function()),
+        "the rooted values must be the registered closures: {roots:?}"
+    );
+}
+
+#[test]
 fn face_attributes_as_vector_shape() {
     crate::test_utils::init_test_tracing();
     let out =

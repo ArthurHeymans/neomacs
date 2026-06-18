@@ -361,6 +361,23 @@ pub(super) fn reset_collections_thread_locals() {
     HASH_TABLE_TEST_ALIASES.with(|slot| slot.borrow_mut().clear());
 }
 
+/// Root the custom comparison/hash closures registered via
+/// `define-hash-table-test`. They live only in this thread-local registry, so
+/// without rooting them the GC sweeps a still-referenced closure and the next
+/// custom-test `gethash`/`puthash` calls a freed function (use-after-free).
+pub(crate) fn collect_hash_table_test_alias_gc_roots(group: &mut Vec<Value>) {
+    HASH_TABLE_TEST_ALIASES.with(|slot| {
+        for alias in slot.borrow().values() {
+            if let Some(f) = alias.user_cmp_function {
+                group.push(f);
+            }
+            if let Some(f) = alias.user_hash_function {
+                group.push(f);
+            }
+        }
+    });
+}
+
 fn invalid_hash_table_keyword_argument(arg: Value) -> Flow {
     signal(
         "error",

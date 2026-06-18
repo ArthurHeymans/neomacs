@@ -3712,6 +3712,22 @@ impl TaggedHeap {
                         self.push_gray(val, "hash-table-key-snapshot");
                     }
                 }
+                // Custom test/hash closures (from `define-hash-table-test`) live
+                // ONLY in these fields. Without tracing them the closure is swept
+                // while the table is still live, and the next custom-test
+                // gethash/puthash calls a freed function (use-after-free). The
+                // fields are immutable after table creation, so a plain read is
+                // race-free during a concurrent mark.
+                if let Some(f) = ht.user_cmp_function
+                    && f.is_heap_object()
+                {
+                    self.push_gray(f, "hash-table-user-cmp");
+                }
+                if let Some(f) = ht.user_hash_function
+                    && f.is_heap_object()
+                {
+                    self.push_gray(f, "hash-table-user-hash");
+                }
             }
             VecLikeType::Obarray => {
                 let obj = unsafe { &*(ptr as *const ObarrayObj) };

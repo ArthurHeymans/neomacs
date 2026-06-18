@@ -1199,6 +1199,11 @@ fn collect_thread_local_gc_roots(roots: &mut Vec<(Value, &'static str)>, heap_id
         "dynamic-module-thread-local",
         super::dynamic_module::collect_dynamic_module_gc_roots,
     );
+    collect_group(
+        roots,
+        "hash-table-test-thread-local",
+        super::builtins::collections::collect_hash_table_test_alias_gc_roots,
+    );
     collect_group(roots, "symbol-name-thread-local", |group| {
         super::intern::collect_symbol_name_gc_roots(group, heap_id)
     });
