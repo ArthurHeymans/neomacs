@@ -2011,6 +2011,7 @@ mod divergence_combo_complex508;
 mod divergence_combo_complex509;
 mod divergence_combo_complex51;
 mod divergence_combo_complex510;
+mod divergence_combo_complex511;
 mod divergence_combo_complex52;
 mod divergence_combo_complex53;
 mod divergence_combo_complex54;
