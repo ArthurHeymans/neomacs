@@ -70,6 +70,9 @@ use crate::display_source::{
     DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
     DisplayReplacementStringSourceItem,
 };
+use crate::display_source_resolver::{
+    DisplayPropertyReplacementAppendRequestResolver, DisplayPropertyReplacementSourceResolveRequest,
+};
 use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunMeasurement};
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
@@ -8318,16 +8321,16 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
     let value = Value::string("ab");
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
-    let request = DisplayPropertyReplacementAppendResolveRequest::new(
+    let request = DisplayPropertyReplacementAppendRequestResolver::for_source_event(
         &classification,
-        value,
-        crate::display_source::BufferDisplayReplacementSource::new(
-            buf_id,
+        buf_id,
+        BufferDisplayPropertyTextSourceEvent::with_anchor(
+            value,
             CharPos0::new(3),
             EmacsBytePos::new(12),
+            b"x",
+            0,
         ),
-        CharPos0::new(3),
-        b"x",
         &active_face,
         24.0,
         8.0,
@@ -8532,13 +8535,16 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
 
-    let outcome = DisplayPropertyReplacementAppendResolveRequest::for_text_property(
+    let request = DisplayPropertyReplacementAppendRequestResolver::for_source_event(
         &classification,
-        value,
         buf_id,
-        CharPos0::new(3),
-        EmacsBytePos::new(12),
-        b"x",
+        BufferDisplayPropertyTextSourceEvent::with_anchor(
+            value,
+            CharPos0::new(3),
+            EmacsBytePos::new(12),
+            b"x",
+            0,
+        ),
         &active_face,
         24.0,
         8.0,
@@ -8547,7 +8553,9 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         18.0,
         DisplayRowPosition { x_px: 24.0, col: 4 },
     )
-    .resolve_and_append_to_text_row(
+    .resolve(&mut font_metrics, None)
+    .expect("display replacement append request");
+    let outcome = request.append_to_text_row(
         &buffer,
         &mut TextRowSourceRenderState::new(
             &mut builder,
@@ -8559,8 +8567,8 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         &mut face_ids,
         &surface,
         &mut geometry,
-    )
-    .expect("display replacement outcome");
+        &active_face,
+    );
 
     assert_eq!(
         outcome.start_position(),

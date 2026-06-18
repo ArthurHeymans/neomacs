@@ -4,12 +4,26 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayMediaReplacement, RenderFaceRef};
 use crate::display_media::{DisplayMediaResolveParams, resolve_display_media_property};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::DisplayMediaReplacementProperty;
+use crate::display_property::{
+    DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
+};
 use crate::display_row::{DisplayRowActiveFaceState, insert_resolved_display_row_face};
+use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_replacement::DisplayPropertyReplacementAppendRequest;
+use crate::display_source::{
+    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource,
+    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
+    DisplayPropertyReplacementSourceMetrics, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+};
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
+use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::types::WindowParams;
+use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::BasicFaceId;
+use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::HashMap;
@@ -377,6 +391,212 @@ pub(crate) fn resolve_display_replacement(
     replacement
         .media_fallback_placeholder()
         .map(ResolvedDisplayReplacement::Placeholder)
+}
+
+impl DisplayReplacementMediaSourceItem {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_display_property(
+        display_prop: Value,
+        replacement: &DisplayMediaReplacementProperty,
+        display_host: Option<&dyn DisplayHost>,
+        active_face_state: &DisplayRowActiveFaceState,
+        fallback_char_width: f32,
+        fallback_row_height: f32,
+    ) -> Option<DisplayReplacementMediaSourceResolution> {
+        match resolve_display_replacement(
+            display_prop,
+            replacement,
+            display_host,
+            active_face_state.resolved_face(),
+            fallback_char_width,
+            fallback_row_height,
+        )? {
+            ResolvedDisplayReplacement::Media(media) => {
+                Some(DisplayReplacementMediaSourceResolution::Media(Self::new(
+                    media,
+                    active_face_state.metrics().row_height,
+                    active_face_state.metrics().ascent,
+                    replacement.uses_xwidget_cursor_extents(),
+                )))
+            }
+            ResolvedDisplayReplacement::Placeholder(placeholder) => {
+                Some(DisplayReplacementMediaSourceResolution::Placeholder(
+                    DisplayReplacementSourceMappedTextItem::new(placeholder),
+                ))
+            }
+        }
+    }
+}
+
+pub(crate) struct DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
+    display_property: &'a DisplayPropertyClassification,
+    source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    current_x: f32,
+    content_x: f32,
+    params: &'a WindowParams,
+    display_host: Option<&'a dyn DisplayHost>,
+}
+
+impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        display_property: &'a DisplayPropertyClassification,
+        source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        current_x: f32,
+        content_x: f32,
+        params: &'a WindowParams,
+        display_host: Option<&'a dyn DisplayHost>,
+    ) -> Self {
+        Self {
+            display_property,
+            source_event,
+            active_face_state,
+            font_metrics,
+            current_x,
+            content_x,
+            params,
+            display_host,
+        }
+    }
+
+    fn face_metrics(&self) -> crate::display_row::DisplayRowMeasuredFaceMetrics {
+        self.active_face_state.metrics()
+    }
+
+    pub(crate) fn resolve(self) -> Option<DisplayPropertyReplacementSourceItem> {
+        let display_property = self.display_property;
+        let source_event = self.source_event;
+        let face_metrics = self.face_metrics();
+        let source_metrics = DisplayPropertyReplacementSourceMetrics::new(
+            face_metrics.char_width,
+            face_metrics.row_height,
+            face_metrics.ascent,
+        );
+        let source_inputs = match display_property.replacement()? {
+            DisplayReplacementProperty::String => {
+                let replacement = source_event.value().as_utf8_str()?;
+                let cursor_slot_width_px = replacement
+                    .chars()
+                    .next()
+                    .map(|ch| {
+                        self.active_face_state.advance_for_char(
+                            self.font_metrics,
+                            ch,
+                            face_metrics.char_width,
+                        )
+                    })
+                    .unwrap_or_else(|| face_metrics.char_width.max(1.0));
+                DisplayPropertyReplacementSourceInputs::empty()
+                    .with_string_cursor_slot_width_px(cursor_slot_width_px)
+            }
+            DisplayReplacementProperty::Stretch(_) => {
+                let (display_ch, _) = decode_utf8(source_event.source_text());
+                let display_char_width = self.active_face_state.advance_for_char(
+                    self.font_metrics,
+                    display_ch,
+                    face_metrics.char_width,
+                );
+                DisplayPropertyReplacementSourceInputs::empty()
+                    .with_stretch_display_char_width_px(display_char_width)
+            }
+            DisplayReplacementProperty::Media(media_replacement) => {
+                let media = DisplayReplacementMediaSourceItem::resolve_display_property(
+                    source_event.value(),
+                    media_replacement,
+                    self.display_host,
+                    self.active_face_state,
+                    face_metrics.char_width,
+                    face_metrics.row_height,
+                )?;
+                DisplayPropertyReplacementSourceInputs::empty().with_media(media)
+            }
+        };
+        DisplayPropertyReplacementSourceItem::from_display_property(
+            display_property,
+            source_event,
+            self.current_x,
+            self.content_x,
+            self.params,
+            source_metrics,
+            source_inputs,
+        )
+    }
+}
+
+pub(crate) struct DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
+    display_property: &'a DisplayPropertyClassification,
+    buffer_id: BufferId,
+    source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    current_x: f32,
+    content_x: f32,
+    params: &'a WindowParams,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    start_position: DisplayRowPosition,
+}
+
+impl<'a, 'source> DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn for_source_event(
+        display_property: &'a DisplayPropertyClassification,
+        buffer_id: BufferId,
+        source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        current_x: f32,
+        content_x: f32,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        start_position: DisplayRowPosition,
+    ) -> Self {
+        Self {
+            display_property,
+            buffer_id,
+            source_event,
+            active_face_state,
+            current_x,
+            content_x,
+            params,
+            glyph_y_offset,
+            default_row_height,
+            start_position,
+        }
+    }
+
+    pub(crate) fn resolve(
+        self,
+        font_metrics: &mut Option<FontMetricsService>,
+        display_host: Option<&dyn DisplayHost>,
+    ) -> Option<DisplayPropertyReplacementAppendRequest> {
+        let replacement_source = BufferDisplayReplacementSource::new(
+            self.buffer_id,
+            self.source_event.anchor_charpos(),
+            self.source_event.anchor_bytepos(),
+        );
+        let item = DisplayPropertyReplacementSourceResolveRequest::new(
+            self.display_property,
+            self.source_event,
+            self.active_face_state,
+            font_metrics,
+            self.current_x,
+            self.content_x,
+            self.params,
+            display_host,
+        )
+        .resolve()?;
+        Some(DisplayPropertyReplacementAppendRequest::new(
+            replacement_source,
+            item,
+            self.glyph_y_offset,
+            self.default_row_height,
+            self.start_position,
+        ))
+    }
 }
 
 pub(crate) struct DisplaySourcePropertyResolver<'a> {

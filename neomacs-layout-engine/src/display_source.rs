@@ -798,11 +798,6 @@ impl BufferDisplayReplacementSource {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn byte_pos(self) -> EmacsBytePos {
-        self.byte_pos
-    }
-
     fn span(self) -> SourceSpan {
         let end = self.char_pos.add_len(CharLen::new(1));
         SourceSpan::new(

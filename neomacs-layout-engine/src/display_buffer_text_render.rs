@@ -14,12 +14,9 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::{
-    DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
-};
+use crate::display_property::classify_display_property;
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics,
-    DisplayRowMeasurementPolicy,
+    DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
@@ -36,9 +33,7 @@ use crate::display_row_lisp_string::{
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
 };
-use crate::display_row_replacement::{
-    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
-};
+use crate::display_row_replacement::DisplayPropertyReplacementAppendOutcome;
 use crate::display_row_source_append::append_synthetic_text_to_display_row;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::{
@@ -52,13 +47,8 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
     WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
-use crate::display_source::{
-    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource,
-    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
-    DisplayPropertyReplacementSourceMetrics, DisplayReplacementMediaSourceItem,
-    SyntheticTextItemSource,
-};
-use crate::font_metrics::FontMetricsService;
+use crate::display_source::{BufferDisplayPropertyTextSourceEvent, SyntheticTextItemSource};
+use crate::display_source_resolver::DisplayPropertyReplacementAppendRequestResolver;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustTextPropAccess};
 use crate::types::{LineWrapMode, WindowParams};
@@ -68,7 +58,6 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
-use neovm_core::emacs_core::eval::DisplayHost;
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
@@ -2571,17 +2560,6 @@ pub(crate) struct BufferDisplayPropertyTextAppendContext<'a> {
     start_position: DisplayRowPosition,
 }
 
-pub(crate) struct DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
-    display_property: &'a DisplayPropertyClassification,
-    source_event: BufferDisplayPropertyTextSourceEvent<'source>,
-    active_face_state: &'a DisplayRowActiveFaceState,
-    font_metrics: &'a mut Option<FontMetricsService>,
-    current_x: f32,
-    content_x: f32,
-    params: &'a WindowParams,
-    display_host: Option<&'a dyn DisplayHost>,
-}
-
 pub(crate) struct BufferDisplayPropertyTextRenderContext<'a> {
     buffer_id: BufferId,
     text_start_byte: usize,
@@ -2671,94 +2649,6 @@ impl BufferDisplayPropertyTextAppendAction {
             }
             Self::None => BufferDisplayPropertyTextWalkOutcome::Continue,
         }
-    }
-}
-
-impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        display_property: &'a DisplayPropertyClassification,
-        source_event: BufferDisplayPropertyTextSourceEvent<'source>,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        font_metrics: &'a mut Option<FontMetricsService>,
-        current_x: f32,
-        content_x: f32,
-        params: &'a WindowParams,
-        display_host: Option<&'a dyn DisplayHost>,
-    ) -> Self {
-        Self {
-            display_property,
-            source_event,
-            active_face_state,
-            font_metrics,
-            current_x,
-            content_x,
-            params,
-            display_host,
-        }
-    }
-
-    fn face_metrics(&self) -> DisplayRowMeasuredFaceMetrics {
-        self.active_face_state.metrics()
-    }
-
-    pub(crate) fn resolve(self) -> Option<DisplayPropertyReplacementSourceItem> {
-        let display_property = self.display_property;
-        let source_event = self.source_event;
-        let face_metrics = self.face_metrics();
-        let source_metrics = DisplayPropertyReplacementSourceMetrics::new(
-            face_metrics.char_width,
-            face_metrics.row_height,
-            face_metrics.ascent,
-        );
-        let source_inputs = match display_property.replacement()? {
-            DisplayReplacementProperty::String => {
-                let replacement = self.source_event.value().as_utf8_str()?;
-                let cursor_slot_width_px = replacement
-                    .chars()
-                    .next()
-                    .map(|ch| {
-                        self.active_face_state.advance_for_char(
-                            self.font_metrics,
-                            ch,
-                            face_metrics.char_width,
-                        )
-                    })
-                    .unwrap_or_else(|| face_metrics.char_width.max(1.0));
-                DisplayPropertyReplacementSourceInputs::empty()
-                    .with_string_cursor_slot_width_px(cursor_slot_width_px)
-            }
-            DisplayReplacementProperty::Stretch(_) => {
-                let (display_ch, _) = decode_utf8(self.source_event.source_text());
-                let display_char_width = self.active_face_state.advance_for_char(
-                    self.font_metrics,
-                    display_ch,
-                    face_metrics.char_width,
-                );
-                DisplayPropertyReplacementSourceInputs::empty()
-                    .with_stretch_display_char_width_px(display_char_width)
-            }
-            DisplayReplacementProperty::Media(media_replacement) => {
-                let media = DisplayReplacementMediaSourceItem::resolve_display_property(
-                    self.source_event.value(),
-                    media_replacement,
-                    self.display_host,
-                    self.active_face_state,
-                    face_metrics.char_width,
-                    face_metrics.row_height,
-                )?;
-                DisplayPropertyReplacementSourceInputs::empty().with_media(media)
-            }
-        };
-        DisplayPropertyReplacementSourceItem::from_display_property(
-            display_property,
-            source_event,
-            self.current_x,
-            self.content_x,
-            self.params,
-            source_metrics,
-            source_inputs,
-        )
     }
 }
 
@@ -2928,32 +2818,23 @@ impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
     ) -> BufferDisplayPropertyTextAppendAction {
         let context = self.context;
         let display_property = classify_display_property(self.source_event.value());
-        let replacement_item = state.with_font_metrics_and_display_host(|font_metrics, host| {
-            DisplayPropertyReplacementSourceResolveRequest::new(
+        let replacement_request = state.with_font_metrics_and_display_host(|font_metrics, host| {
+            DisplayPropertyReplacementAppendRequestResolver::for_source_event(
                 &display_property,
+                context.buffer_id,
                 self.source_event,
                 context.active_face_state,
-                font_metrics,
                 context.current_x,
                 context.content_x,
                 context.params,
-                host,
-            )
-            .resolve()
-        });
-        if let Some(item) = replacement_item {
-            let replacement = DisplayPropertyReplacementAppendRequest::new(
-                BufferDisplayReplacementSource::new(
-                    context.buffer_id,
-                    self.source_event.anchor_charpos(),
-                    self.source_event.anchor_bytepos(),
-                ),
-                item,
                 context.glyph_y_offset,
                 context.default_row_height,
                 context.start_position,
             )
-            .append_to_text_row(
+            .resolve(font_metrics, host)
+        });
+        if let Some(request) = replacement_request {
+            let replacement = request.append_to_text_row(
                 buffer,
                 state,
                 face_ids,
@@ -3041,142 +2922,6 @@ impl BufferDisplayPropertyTextReplacementOutcome {
         position: DisplayRowTextPosition,
     ) -> CapturedCursorInfo {
         self.replacement.cursor_info(active_face_state, position)
-    }
-}
-
-#[cfg(test)]
-pub(crate) struct DisplayPropertyReplacementAppendResolveRequest<'a> {
-    display_property: &'a DisplayPropertyClassification,
-    value: Value,
-    replacement_source: BufferDisplayReplacementSource,
-    anchor_charpos: CharPos0,
-    source_text: &'a [u8],
-    active_face_state: &'a DisplayRowActiveFaceState,
-    current_x: f32,
-    content_x: f32,
-    params: &'a WindowParams,
-    glyph_y_offset: f32,
-    default_row_height: f32,
-    start_position: DisplayRowPosition,
-}
-
-#[cfg(test)]
-impl<'a> DisplayPropertyReplacementAppendResolveRequest<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        display_property: &'a DisplayPropertyClassification,
-        value: Value,
-        replacement_source: BufferDisplayReplacementSource,
-        anchor_charpos: CharPos0,
-        source_text: &'a [u8],
-        active_face_state: &'a DisplayRowActiveFaceState,
-        current_x: f32,
-        content_x: f32,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        start_position: DisplayRowPosition,
-    ) -> Self {
-        Self {
-            display_property,
-            value,
-            replacement_source,
-            anchor_charpos,
-            source_text,
-            active_face_state,
-            current_x,
-            content_x,
-            params,
-            glyph_y_offset,
-            default_row_height,
-            start_position,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn for_text_property(
-        display_property: &'a DisplayPropertyClassification,
-        value: Value,
-        buffer_id: BufferId,
-        anchor_charpos: CharPos0,
-        anchor_bytepos: EmacsBytePos,
-        source_text: &'a [u8],
-        active_face_state: &'a DisplayRowActiveFaceState,
-        current_x: f32,
-        content_x: f32,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        start_position: DisplayRowPosition,
-    ) -> Self {
-        Self::new(
-            display_property,
-            value,
-            BufferDisplayReplacementSource::new(buffer_id, anchor_charpos, anchor_bytepos),
-            anchor_charpos,
-            source_text,
-            active_face_state,
-            current_x,
-            content_x,
-            params,
-            glyph_y_offset,
-            default_row_height,
-            start_position,
-        )
-    }
-
-    pub(crate) fn resolve(
-        self,
-        font_metrics: &mut Option<FontMetricsService>,
-        display_host: Option<&dyn DisplayHost>,
-    ) -> Option<DisplayPropertyReplacementAppendRequest> {
-        let source_event = BufferDisplayPropertyTextSourceEvent::with_anchor(
-            self.value,
-            self.anchor_charpos,
-            self.replacement_source.byte_pos(),
-            self.source_text,
-            0,
-        );
-        let item = DisplayPropertyReplacementSourceResolveRequest::new(
-            self.display_property,
-            source_event,
-            self.active_face_state,
-            font_metrics,
-            self.current_x,
-            self.content_x,
-            self.params,
-            display_host,
-        )
-        .resolve()?;
-        Some(DisplayPropertyReplacementAppendRequest::new(
-            self.replacement_source,
-            item,
-            self.glyph_y_offset,
-            self.default_row_height,
-            self.start_position,
-        ))
-    }
-
-    pub(crate) fn resolve_and_append_to_text_row<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        append_surface: &DisplayRowAppendSurface,
-        row_geometry: &mut DisplayRowGeometryState,
-    ) -> Option<DisplayPropertyReplacementAppendOutcome> {
-        let active_face_state = self.active_face_state;
-        let request = state.with_font_metrics_and_display_host(|font_metrics, host| {
-            self.resolve(font_metrics, host)
-        })?;
-        Some(request.append_to_text_row(
-            buffer,
-            state,
-            face_ids,
-            append_surface,
-            row_geometry,
-            active_face_state,
-        ))
     }
 }
 

@@ -5,7 +5,6 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayItemKind};
 #[cfg(test)]
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::DisplayMediaReplacementProperty;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
     NaturalDisplayRowAppendRenderPolicy,
@@ -29,13 +28,11 @@ use crate::display_source::{
     DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
     DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
-use crate::display_source_resolver::{
-    DisplayStringBaseFace, ResolvedDisplayReplacement, resolve_display_replacement,
-};
+use crate::display_source_resolver::DisplayStringBaseFace;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
+#[cfg(test)]
 use neovm_core::emacs_core::Value;
-use neovm_core::emacs_core::eval::DisplayHost;
 
 pub(crate) struct DisplayReplacementStringItemMeasurer {
     active_face_state: DisplayRowActiveFaceState,
@@ -594,39 +591,6 @@ impl DisplayReplacementSourceMappedTextItem {
 }
 
 impl DisplayReplacementMediaSourceItem {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_display_property(
-        display_prop: Value,
-        replacement: &DisplayMediaReplacementProperty,
-        display_host: Option<&dyn DisplayHost>,
-        active_face_state: &DisplayRowActiveFaceState,
-        fallback_char_width: f32,
-        fallback_row_height: f32,
-    ) -> Option<DisplayReplacementMediaSourceResolution> {
-        match resolve_display_replacement(
-            display_prop,
-            replacement,
-            display_host,
-            active_face_state.resolved_face(),
-            fallback_char_width,
-            fallback_row_height,
-        )? {
-            ResolvedDisplayReplacement::Media(media) => {
-                Some(DisplayReplacementMediaSourceResolution::Media(Self::new(
-                    media,
-                    active_face_state.metrics().row_height,
-                    active_face_state.metrics().ascent,
-                    replacement.uses_xwidget_cursor_extents(),
-                )))
-            }
-            ResolvedDisplayReplacement::Placeholder(placeholder) => {
-                Some(DisplayReplacementMediaSourceResolution::Placeholder(
-                    DisplayReplacementSourceMappedTextItem::new(placeholder),
-                ))
-            }
-        }
-    }
-
     pub(crate) fn row_extents_after_append(
         self,
         progress: &DisplayRowAppendProgress,
