@@ -2,10 +2,9 @@
 
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row::{
-    DisplayRowCurrentSourceFragmentRenderState, DisplayRowGeometry, DisplayRowRenderBounds,
-    DisplayRowSourceFragmentFrame, DisplayRowSourceState,
+    DisplayRowCurrentSourceFragmentRenderState, DisplayRowSourceFragmentFrame,
+    DisplayRowSourceState,
 };
-use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
@@ -67,29 +66,20 @@ impl BufferLineNumberMarginRenderRequest {
             text: &text,
             cols: line_number_request.cols(),
             face_id: line_number_face_id,
-            row_y: row_geometry.y(),
-            row_height: row_geometry.height(),
-            row_ascent: row_geometry.ascent(),
-            char_width,
         };
         let mut source = LineNumberMarginItemSource::new(&margin_request);
         let mut source_state = DisplayRowSourceState::default();
-        let width = (margin_request.cols.max(1) as f32 + 1.0) * char_width.max(1.0);
-        let request = DisplayRowSourceFragmentFrame::new(
-            DisplayRowGeometry {
-                y: margin_request.row_y,
-                width,
-                height: margin_request.row_height,
-                char_width,
-                ascent: margin_request.row_ascent,
-                tab_policy: DisplayTabPolicy::every(8),
-            },
+        let request = DisplayRowSourceFragmentFrame::from_row_geometry_columns(
+            row_geometry,
+            margin_request.cols.max(1) as usize + 1,
+            char_width,
             neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
             line_number_face_id,
             &line_number_face,
         )
-        .render_request_for_area(
-            DisplayRowRenderBounds::whole_row(width),
+        .render_request_from_column_for_area(
+            0,
+            margin_request.cols.max(1) as usize + 1,
             GlyphArea::LeftMargin,
         );
         request.render_natural_fragment_into_current_row(

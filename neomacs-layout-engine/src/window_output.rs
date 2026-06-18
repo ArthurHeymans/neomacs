@@ -271,10 +271,6 @@ pub(crate) struct TextWindowLineNumberMargin<'a> {
     pub(crate) text: &'a str,
     pub(crate) cols: i32,
     pub(crate) face_id: u32,
-    pub(crate) row_y: f32,
-    pub(crate) row_height: f32,
-    pub(crate) row_ascent: f32,
-    pub(crate) char_width: f32,
 }
 
 pub(crate) enum TextWindowRowDecorationRequest {
@@ -638,12 +634,7 @@ fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -
     )
 }
 
-fn line_number_margin_stretch_item(
-    cols: u16,
-    face_id: u32,
-    char_width: f32,
-    start_offset: usize,
-) -> DisplayItem {
+fn line_number_margin_stretch_item(cols: u16, face_id: u32, start_offset: usize) -> DisplayItem {
     DisplayItem::new(
         SourceSpan::synthetic(
             LINE_NUMBER_MARGIN_SOURCE_ID,
@@ -652,9 +643,7 @@ fn line_number_margin_stretch_item(
         ),
         RenderFaceRef::FaceId(face_id),
         DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Pixels(
-                f32::from(cols) * char_width.max(1.0),
-            )),
+            width: DisplayStretchWidth::Length(DisplayLength::Columns(cols)),
             height: None,
             ascent: None,
         }),
@@ -675,7 +664,6 @@ impl LineNumberMarginItemSource {
             items.push(line_number_margin_stretch_item(
                 cols,
                 request.face_id,
-                request.char_width,
                 source_offset,
             ));
             source_offset = source_offset.saturating_add(usize::from(cols));
@@ -691,7 +679,6 @@ impl LineNumberMarginItemSource {
         items.push(line_number_margin_stretch_item(
             1,
             request.face_id,
-            request.char_width,
             source_offset,
         ));
         Self {

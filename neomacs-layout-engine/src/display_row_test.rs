@@ -376,6 +376,42 @@ fn display_row_source_fragment_frame_builds_column_bounds_from_glyph_row() {
 }
 
 #[test]
+fn display_row_source_fragment_frame_builds_column_bounds_from_row_geometry() {
+    let face = base_face();
+    let row_geometry = DisplayRowGeometryState::new(4, 11.0, 24.0, 20.0, 15.0);
+
+    let request = DisplayRowSourceFragmentFrame::from_row_geometry_columns(
+        &row_geometry,
+        5,
+        9.0,
+        GlyphRowRole::Text,
+        17,
+        &face,
+    )
+    .render_request_from_column_for_area(0, 5, GlyphArea::LeftMargin);
+
+    assert_eq!(
+        request.geometry(),
+        &DisplayRowGeometry {
+            y: 11.0,
+            width: 45.0,
+            height: 20.0,
+            char_width: 9.0,
+            ascent: 15.0,
+            tab_policy: DisplayTabPolicy::every(8),
+        }
+    );
+    assert_eq!(
+        request.render_bounds(),
+        DisplayRowRenderBounds {
+            start: DisplayRowPosition { x_px: 0.0, col: 0 },
+            max_x: DisplayRowMaxX::Bounded(45.0),
+        }
+    );
+    assert_eq!(request.glyph_area(), GlyphArea::LeftMargin);
+}
+
+#[test]
 fn display_row_render_context_builds_source_resolve_params() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);

@@ -1330,6 +1330,30 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
         )
     }
 
+    pub(crate) fn from_row_geometry_columns(
+        row_geometry: &DisplayRowGeometryState,
+        columns: usize,
+        char_width: f32,
+        role: GlyphRowRole,
+        base_face_id: u32,
+        base_face: &'face ResolvedFace,
+    ) -> Self {
+        let char_width = char_width.max(1.0);
+        Self::new(
+            DisplayRowGeometry {
+                y: row_geometry.y(),
+                width: columns.max(1) as f32 * char_width,
+                height: row_geometry.height(),
+                ascent: row_geometry.ascent(),
+                char_width,
+                tab_policy: DisplayTabPolicy::every(8),
+            },
+            role,
+            base_face_id,
+            base_face,
+        )
+    }
+
     pub(crate) fn render_request_from_column(
         self,
         start_col: usize,
