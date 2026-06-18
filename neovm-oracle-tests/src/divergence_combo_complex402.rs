@@ -26,21 +26,21 @@ fn div_cx402_face_remapping_add_relative() {
     );
 }
 
-/// Process filter that sends a message to the echo area:
-/// interaction between process output and message display.
+/// Process output collected into a buffer using :buffer argument
+/// directly — no filter closure needed.
 #[test]
-fn div_cx402_process_filter_echo_message() {
+fn div_cx402_process_buffer_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"
-(let ((messages nil)
-      (proc (make-process :name "neo-cx402-pm"
-                          :command '("sh" "-c" "echo hello")
-                          :connection-type 'pipe :buffer nil
-                          :filter (lambda (p s)
-                                    (push (format "got: %s" s) messages)))))
-  (accept-process-output proc 2)
-  (nreverse messages))
+(let ((buf (get-buffer-create " *neo-cx402-out*")))
+  (let ((proc (make-process :name "neo-cx402-out"
+                            :command '("sh" "-c" "echo hello from 402")
+                            :connection-type 'pipe :buffer buf)))
+    (accept-process-output proc 2))
+  (prog1 (with-current-buffer buf
+           (string-trim-right (buffer-string)))
+    (kill-buffer buf)))
 "##,
     );
 }
