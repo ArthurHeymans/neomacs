@@ -2133,6 +2133,42 @@ fn is_emacs_mule(ctx: &crate::emacs_core::eval::Context, coding: &str) -> bool {
         .is_some_and(|info| resolve_sym(info.coding_type) == "emacs-mule")
 }
 
+/// Standard UTF-8 encoding of a Lisp string (GNU `CHAR_STRING` per character):
+/// eight-bit characters become their single raw byte, everything else its
+/// plain UTF-8 bytes. This is what raw-text/no-conversion and the UTF-8 codec
+/// emit for the character payload.
+fn encode_utf8_plain(s: &crate::heap_types::LispString) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.sbytes());
+    for cp in lisp_string_codepoints(s) {
+        if crate::emacs_core::emacs_char::char_byte8_p(cp) {
+            out.push(crate::emacs_core::emacs_char::char_to_byte8(cp));
+        } else if let Some(ch) = char::from_u32(cp) {
+            let mut b = [0u8; 4];
+            out.extend_from_slice(ch.encode_utf8(&mut b).as_bytes());
+        } else {
+            encode_emacs_utf8_codepoint(cp, &mut out);
+        }
+    }
+    out
+}
+
+/// Decode raw-text / no-conversion: ASCII bytes stay ASCII, every other byte
+/// becomes an eight-bit raw character.
+fn decode_raw_text_multibyte(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    for &b in bytes {
+        let code = if b < 0x80 {
+            u32::from(b)
+        } else {
+            crate::emacs_core::emacs_char::unibyte_to_char(b)
+        };
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+    }
+    out
+}
+
 /// The emacs-mule leading byte(s) for a charset's emacs-mule id
 /// (`EMACS_MULE_LEADING_CODES`, coding.c): direct (`id`) for id < 0xA0, else a
 /// private leading code 0x9A-0x9D followed by `id`.
@@ -2302,7 +2338,6 @@ fn encode_via_iso2022(
     let reset_eol = spec.flags.contains(IsoFlag::AsciiAtEol);
     let reset_cntl = spec.flags.contains(IsoFlag::AsciiAtCntl);
     let ascii = intern("ascii");
-    let jisx0208_1978 = lookup_interned("japanese-jisx0208-1978");
     // FULL_SUPPORT coding systems store `:charset-list` as the symbol
     // `iso-2022`; substitute the full ISO-2022 charset candidate set.
     let full_support = charset_list.len() == 1 && resolve_sym(charset_list[0]) == "iso-2022";
@@ -2355,11 +2390,14 @@ fn encode_via_iso2022(
         let (charset, code, dim, chars_96) = if c < 0x80 {
             (ascii, i64::from(c), 1, false)
         } else {
+            // Iterate the coding's charset list in order (GNU char_charset
+            // over `:charset-list`): the first charset that can represent the
+            // character wins. The list order is what distinguishes, e.g.,
+            // iso-2022-jp (jisx0208 before -1978) from japanese-iso-7bit-1978-irv
+            // (-1978 first). For FULL_SUPPORT codings `candidates` is the broad
+            // id-ordered set (with -1978 already dropped).
             let mut found = None;
             for &cs in &candidates {
-                if Some(cs) == jisx0208_1978 {
-                    continue; // deprecated; superseded by jisx0208 in priority
-                }
                 if let Some((_, dim, c96)) = charset_iso2022_designation(cs)
                     && let Some(code) = charset_encode_char(cs, i64::from(c))
                 {
@@ -2618,6 +2656,8 @@ fn builtin_coding_string_in_context(
     let utf7_coding = utf7_variant(&coding);
     let hz_coding = chinese_hz_charset(ctx, &coding);
     let emacs_mule = is_emacs_mule(ctx, &coding);
+    let no_conv_multibyte = coding_system_base(&coding) == "no-conversion-multibyte";
+    let utf8_signature = coding_system_base(&coding) == "utf-8-with-signature";
     let full_iso = full_iso2022_spec(ctx, &coding);
     let euc_coding = euc_iso2022_spec(ctx, &coding);
     let sjis_coding = sjis_charsets(ctx, &coding);
@@ -2637,6 +2677,13 @@ fn builtin_coding_string_in_context(
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if emacs_mule {
             let bytes = encode_via_emacs_mule(&source_string());
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if no_conv_multibyte {
+            let bytes = encode_utf8_plain(&source_string());
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if utf8_signature {
+            let mut bytes = vec![0xEF, 0xBB, 0xBF];
+            bytes.extend(encode_utf8_plain(&source_string()));
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some((spec, charsets)) = &full_iso {
             let bytes = encode_via_iso2022(&source_string(), spec, charsets, &coding);
@@ -2661,6 +2708,16 @@ fn builtin_coding_string_in_context(
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if emacs_mule {
         let bytes = decode_via_emacs_mule(&lisp_string_coding_source_bytes(&source_string()));
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+    } else if no_conv_multibyte {
+        let bytes = decode_raw_text_multibyte(&lisp_string_coding_source_bytes(&source_string()));
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+    } else if utf8_signature {
+        let mut src = lisp_string_coding_source_bytes(&source_string());
+        if src.starts_with(&[0xEF, 0xBB, 0xBF]) {
+            src.drain(..3);
+        }
+        let bytes = decode_utf8_to_emacs_bytes(&src);
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some((spec, _)) = &full_iso {
         let source_bytes =
