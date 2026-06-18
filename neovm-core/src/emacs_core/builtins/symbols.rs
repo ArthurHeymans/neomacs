@@ -835,8 +835,20 @@ pub(crate) fn symbol_property_get(
     let symbols_with_pos_enabled = eval.symbols_with_pos_enabled;
     let sym = expect_symbol_id_checked(&symbol_value, symbols_with_pos_enabled)?;
 
-    let overrides = eval.visible_variable_value_or_nil_by_id(overriding_plist_environment_symbol());
-    if let Some(plist) = assq_cdr_swp(&symbol_value, overrides, symbols_with_pos_enabled)
+    // `overriding-plist-environment` is a special var (never lexically bound) and
+    // is virtually always nil, so read its dynamic value directly and bail on the
+    // common nil/non-cons case — matching GNU `Fget`'s single
+    // `Voverriding_plist_environment` global load (fns.c). The old
+    // `visible_variable_value_or_nil_by_id` ran a full lexenv-cache probe (which
+    // thrashes during byte-compilation as the lexenv changes per closure/let) +
+    // alias/redirect resolution on every `get`. `symbol_value_id_or_nil` still
+    // follows defvaralias and reads the slot `specbind` writes, so a let-bound
+    // override is honored.
+    let overrides = eval
+        .obarray()
+        .symbol_value_id_or_nil(overriding_plist_environment_symbol());
+    if overrides.is_cons()
+        && let Some(plist) = assq_cdr_swp(&symbol_value, overrides, symbols_with_pos_enabled)
         && let Some(propval) =
             crate::emacs_core::plist::plist_get_swp(plist, &prop, symbols_with_pos_enabled)
         && !propval.is_nil()
