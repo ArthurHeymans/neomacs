@@ -1226,6 +1226,7 @@ mod divergence_bytecomp_real;
 mod divergence_calc;
 mod divergence_calendar_keymap_runtime;
 mod divergence_calendar_time_deep;
+mod divergence_case_table_buffer_marker_overlay_runtime;
 mod divergence_casefold_matrix;
 mod divergence_category_unicode_props;
 mod divergence_charset_plist_matrix;
