@@ -4570,6 +4570,30 @@ impl<'a> Vm<'a> {
                 let bc_data = func_val.get_bytecode_data().unwrap();
                 self.execute_with_func_value(bc_data, args, func_val)
             }
+            // A symbol whose live function cell is *directly* a byte-compiled
+            // function: resolve the cell once and dispatch straight to the
+            // bytecode entry, skipping funcall_general → apply_symbol_callable's
+            // second resolution (an FxHashMap probe) and re-dispatch. The
+            // byte-compiler calls its byte-compiled cconv/macroexp/bytecomp
+            // helpers constantly, so this slice is hot. Only the clean
+            // direct-bytecode case is taken; aliases, autoloads, advice wrappers,
+            // interpreted closures, macros and special forms have non-bytecode
+            // cells and fall through to the full generic dispatch unchanged. The
+            // cell is re-read live every call so redefinition is honored; the
+            // compiler-override guard mirrors direct_subr_call_target. Both this
+            // and funcall_general converge on execute_with_func_value, so behavior
+            // is identical minus the redundant resolution.
+            ValueKind::Symbol(sym_id) if !self.ctx.compiler_function_overrides_active() => {
+                match self.ctx.obarray.symbol_function_id(sym_id) {
+                    Some(cell)
+                        if matches!(cell.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) =>
+                    {
+                        let bc_data = cell.get_bytecode_data().unwrap();
+                        self.execute_with_func_value(bc_data, args, cell)
+                    }
+                    _ => self.ctx.funcall_general_untraced(func_val, args),
+                }
+            }
             // Everything else: shared dispatch via funcall_general on Context.
             // Matches GNU Emacs where exec_byte_code delegates to funcall_general.
             _ => self.ctx.funcall_general_untraced(func_val, args),
