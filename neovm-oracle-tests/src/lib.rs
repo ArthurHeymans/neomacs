@@ -1230,6 +1230,7 @@ mod divergence_casefold_matrix;
 mod divergence_category_unicode_props;
 mod divergence_charset_plist_matrix;
 mod divergence_charset_roundtrip_runtime;
+mod divergence_charset_split_priority_runtime;
 mod divergence_chartab_charset_deep;
 mod divergence_chartab_syntax_deep;
 mod divergence_cl_lib_advanced;
