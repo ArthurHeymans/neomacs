@@ -14,7 +14,7 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
     DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
 };
-use crate::display_row_append::{
+use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
     DisplayRowAppendSurface,
 };

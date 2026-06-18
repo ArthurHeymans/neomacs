@@ -6,7 +6,7 @@
 //! source-agnostic while the buffer text walker owns its own setup logic.
 
 use crate::display_row::insert_resolved_display_row_face;
-use crate::display_row_append::{DisplayRowAppendArea, DisplayRowAppendSurface};
+use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,

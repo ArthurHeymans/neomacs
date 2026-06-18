@@ -23,9 +23,9 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics,
     DisplayRowMeasurementPolicy,
 };
-use crate::display_row_append::{
+use crate::display_row_append::append_synthetic_text_to_display_row;
+use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
-    append_synthetic_text_to_display_row,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{

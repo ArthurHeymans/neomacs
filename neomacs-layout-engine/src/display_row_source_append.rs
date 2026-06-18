@@ -4,7 +4,7 @@ use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowRenderBounds, DisplayRowRenderPolicy,
     DisplayRowSourceAppendRequest, DisplayRowSourceState,
 };
-use crate::display_row_append::{DisplayRowAppendFrame, DisplayRowAppendKind};
+use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_source_render::{
     TextRowSourceMeasureState, TextRowSourceRenderState, current_text_measure_state,

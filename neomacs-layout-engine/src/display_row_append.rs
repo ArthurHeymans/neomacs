@@ -5,11 +5,7 @@ use crate::display_row::DisplayRowRenderStop;
 use crate::display_row::NaturalDisplayRowAppendRenderPolicy;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
-pub(crate) use crate::display_row_append_context::{
-    DisplayRowActiveFaceAppendContext, DisplayRowAppendArea, DisplayRowAppendFrame,
-    DisplayRowAppendKind, DisplayRowAppendMetrics, DisplayRowAppendPlacement,
-    DisplayRowAppendSurface, DisplayRowTextAppendContext,
-};
+use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_source_append::DisplayRowSourceAppendOperation;
 use crate::display_row_source_render::TextRowSourceRenderState;

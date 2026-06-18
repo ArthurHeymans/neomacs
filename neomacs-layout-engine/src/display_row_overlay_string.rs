@@ -11,7 +11,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::{DisplayRowActiveFaceState, DisplayRowRenderStop};
-use crate::display_row_append::DisplayRowAppendSurface;
+use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,

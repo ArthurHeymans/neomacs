@@ -10,7 +10,7 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
     NaturalDisplayRowAppendRenderPolicy,
 };
-use crate::display_row_append::{
+use crate::display_row_append_context::{
     DisplayRowAppendFrame, DisplayRowAppendKind, DisplayRowAppendMetrics,
     DisplayRowAppendPlacement, DisplayRowAppendSurface,
 };

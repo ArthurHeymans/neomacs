@@ -36,7 +36,7 @@ use crate::display_item::{DisplayItemKind, DisplayRowBreakReason, RenderFaceRef}
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
-use crate::display_row_append::DisplayRowAppendSurface;
+use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
@@ -168,7 +168,7 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) hscroll_skip: HorizontalScrollSkipState,
     pub(crate) word_wrap: WordWrapRenderState,
     pub(crate) prefix_request: DisplayRowPrefixRequest,
-    pub(crate) text_append_surface: crate::display_row_append::DisplayRowAppendSurface,
+    pub(crate) text_append_surface: crate::display_row_append_context::DisplayRowAppendSurface,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
     pub(crate) row_geometry: DisplayRowGeometryState,
     pub(crate) row_y_positions: DisplayRowYPositions,

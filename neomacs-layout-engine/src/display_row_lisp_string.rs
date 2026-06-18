@@ -6,7 +6,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowSourceState,
 };
-use crate::display_row_append::{
+use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
     DisplayRowAppendMetrics, DisplayRowAppendSurface, DisplayRowTextAppendContext,
 };

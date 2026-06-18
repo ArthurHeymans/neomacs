@@ -30,6 +30,7 @@ use crate::display_row::{
     DisplayRowRenderPolicy, DisplayRowRenderer, DisplayRowSourceRequestPolicy,
     DisplayRowSourceState,
 };
+use crate::display_row_append_context::*;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowPosition, DisplayTabPolicy,
