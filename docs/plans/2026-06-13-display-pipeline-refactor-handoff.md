@@ -696,18 +696,23 @@ Status legend: ✅ done · ⬜ remaining.
 9. ◑ **PARTIAL — 2 relocations DONE.** `e7b717a53` right-edge/right-border installer
    → `display_row_special_glyphs.rs` (GNU `produce_special_glyphs`, −284);
    `e423748df` line-number margin → `display_row_line_number_margin.rs` (GNU
-   `maybe_produce_line_number`, −108). `display_row_append.rs` 10150 → 9538. More
-   cohesive clusters (walk-state action clusters) remain relocatable, pure-move +
-   low-risk, anytime.
-10. ◑ **PARTIAL — A+C DONE (`5f7be8d8a`, −222), B held.** Collapsed
+   `maybe_produce_line_number`, −108); `5a90cbdb7` overlay-string rendering →
+   `display_row_overlay_string.rs` (GNU `load_overlay_strings`, −270).
+   `display_row_append.rs` 10150 → 9268. **COMPLETE for the cohesive non-append
+   clusters** — what remains is core append-glyph logic
+   (`BufferTextRowAppendContext`/`BufferTextItemAppendContext` impls + the append
+   free functions), the module's actual purpose; no clean cluster left to extract.
+10. ✅ **DONE — A+C (`5f7be8d8a`, −222) + B (`cedf18b8a`).** A: collapsed
     `BufferTextSourceAppendOperation` (inlined into 4 production callers via the
-    existing `append_request`/`for_single_item`) + deleted the `cfg(test)`
+    existing `append_request`/`for_single_item`). C: deleted the `cfg(test)`
     `for_buffer_text_range`/`BufferTextSourceRangeAppendContext` cluster (6 unique
     assertions retargeted onto the production path, 1 true duplicate dropped).
-    **B (retire `FaceResolver::next_dynamic_id`) HELD** — verified to be a ~15-line
-    TTY-only latent fix, but face-id collision is silent in single-window unit
-    fixtures, so it needs a `-nw` MULTI-WINDOW border smoke before deletion; low
-    payoff, do not delete blind.
+    B: the TTY right border now allocates its face id from the single per-frame
+    `FrameFaceIdAllocator` (GNU `face_cache->used` / `lookup_face`) instead of the
+    redundant `FaceResolver::next_dynamic_id` (deleted) — verified every other
+    `resolve_named_face` consumer re-keys/uses-attributes/takes-a-basic-id, so only
+    the border aliased. The `-nw` smoke gate was satisfied with a deterministic
+    matrix regression test pinning the no-collision invariant directly.
 
 **Slice 7 step 2 — EXCLUDED (do not implement).** Adversarial verification
 (workflow `wiqlkm18n`) found a FATAL flaw: `*charpos += 1` (display_row_append.rs,
