@@ -2233,6 +2233,7 @@ mod divergence_eieio_object_system;
 mod divergence_eieio_oop;
 mod divergence_eieio_rx_ewoc_runtime;
 mod divergence_eight_bit_rawbyte_runtime;
+mod divergence_encode_time_string_builtin_runtime;
 mod divergence_encoding_process_real;
 mod divergence_error_conditions_deep;
 mod divergence_error_data_runtime;
