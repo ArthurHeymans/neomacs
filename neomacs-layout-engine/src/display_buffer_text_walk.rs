@@ -11,7 +11,12 @@ use crate::display_buffer_text_append::{
 use crate::display_buffer_text_render::{
     BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
     BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderContext,
-    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
+    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderContext,
+    BufferInvisibleTextRenderOutcome, BufferInvisibleTextRenderRequest,
+    BufferInvisibleTextRenderRequestState, BufferSelectiveDisplayTailRenderContext,
+    BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
+    BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderContext,
+    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
@@ -27,17 +32,12 @@ use crate::display_row::{
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
     BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
-    BufferDisplayPropertyTextWalkOutcome, BufferInvisibleTextRenderContext,
-    BufferInvisibleTextRenderOutcome, BufferInvisibleTextRenderRequest,
-    BufferInvisibleTextRenderRequestState, BufferLinePrefixRenderContext,
+    BufferDisplayPropertyTextWalkOutcome, BufferLinePrefixRenderContext,
     BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
-    BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderOutcome,
-    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
-    BufferTextLineBreakRenderState, BufferTextRowAppendState, BufferTextSourceCharRenderContext,
-    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
-    BufferTextSourceCharRenderRequestState, DisplayRowAppendSurface, DisplayRowPrefixRequest,
-    DisplayRowPrefixValues, DisplayRowTransitionContinuation,
+    BufferTextRowAppendState, BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
+    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
+    DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
+    DisplayRowTransitionContinuation,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{
