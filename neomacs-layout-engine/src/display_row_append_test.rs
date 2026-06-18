@@ -15,8 +15,9 @@ use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
-    DisplayImageItem, DisplayItemKind, DisplayMediaReplacement, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
+    DisplayImageItem, DisplayItemKind, DisplayItemLayout, DisplayMediaReplacement,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayVideoItem, DisplayXwidgetItem,
+    GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
@@ -1817,7 +1818,7 @@ fn buffer_text_source_step_adapter_preserves_single_char_source_item() {
     };
     assert_eq!(source_char.ch(), 'a');
     assert_eq!(byte_idx, 1);
-    let source_item = source_item.as_ref().expect("typed source item");
+    let source_item = source_item.row_item().expect("typed source item");
     assert_eq!(
         source_item.span.end,
         DisplaySourcePosition::buffer(
@@ -5810,7 +5811,9 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
 
     let outcome = BufferTextSourceCharRenderRequest::new(
         source_step_char,
-        None,
+        BufferTextSourceStepItem::LegacyLayoutFallback {
+            layout: DisplayItemLayout::default(),
+        },
         BufferTextSourceCharRenderContext {
             text,
             text_start_byte: 0,

@@ -282,7 +282,7 @@ pub(crate) enum BufferTextSourceStep {
     LineBreak(BufferTextSourceStepChar),
     Text {
         source_char: BufferTextSourceStepChar,
-        source_item: Option<DisplayItem>,
+        source_item: BufferTextSourceStepItem,
     },
 }
 
@@ -291,6 +291,31 @@ impl BufferTextSourceStep {
         match self {
             Self::LineBreak(source_char) => *source_char,
             Self::Text { source_char, .. } => *source_char,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BufferTextSourceStepItem {
+    RowItem(DisplayItem),
+    LegacyLayoutFallback { layout: DisplayItemLayout },
+}
+
+impl BufferTextSourceStepItem {
+    pub(crate) fn from_display_item(source_item: DisplayItem) -> Self {
+        if source_item.layout == DisplayItemLayout::default() {
+            Self::RowItem(source_item)
+        } else {
+            Self::LegacyLayoutFallback {
+                layout: source_item.layout,
+            }
+        }
+    }
+
+    pub(crate) fn row_item(&self) -> Option<&DisplayItem> {
+        match self {
+            Self::RowItem(item) => Some(item),
+            Self::LegacyLayoutFallback { .. } => None,
         }
     }
 }
@@ -379,7 +404,7 @@ impl PendingBufferTextRun {
 
         Some(BufferTextSourceStep::Text {
             source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
-            source_item: text_step_source_item(source_item),
+            source_item: BufferTextSourceStepItem::from_display_item(source_item),
         })
     }
 
@@ -479,7 +504,7 @@ impl BufferTextSourceStepAdapter {
                 };
                 Some(BufferTextSourceStep::Text {
                     source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, charpos),
-                    source_item: text_step_source_item(source_item),
+                    source_item: BufferTextSourceStepItem::from_display_item(source_item),
                 })
             }
             DisplayItemKind::Glyphless(glyphless) => {
@@ -493,7 +518,7 @@ impl BufferTextSourceStepAdapter {
                 };
                 Some(BufferTextSourceStep::Text {
                     source_char: BufferTextSourceStepChar::new(ch, start_byte_idx, charpos),
-                    source_item: text_step_source_item(source_item),
+                    source_item: BufferTextSourceStepItem::from_display_item(source_item),
                 })
             }
             _ => {
@@ -517,14 +542,6 @@ impl BufferTextSourceStepAdapter {
             self.pending_text_run = None;
         }
         step
-    }
-}
-
-fn text_step_source_item(source_item: DisplayItem) -> Option<DisplayItem> {
-    if source_item.layout == DisplayItemLayout::default() {
-        Some(source_item)
-    } else {
-        None
     }
 }
 

@@ -28,11 +28,11 @@ use crate::display_buffer_text_render::{
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
     BufferTextSourceCursor, BufferTextSourceStep, BufferTextSourceStepAdapter,
-    BufferTextSourceStepChar,
+    BufferTextSourceStepChar, BufferTextSourceStepItem,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::{DisplayItem, RenderFaceRef};
+use crate::display_item::RenderFaceRef;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -2448,7 +2448,7 @@ impl BufferTextWindowLoopRequestContext {
     pub(crate) fn source_char_request<'a>(
         self,
         source_char: BufferTextSourceStepChar,
-        source_item: Option<DisplayItem>,
+        source_item: BufferTextSourceStepItem,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
@@ -2907,7 +2907,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         &mut self,
         context: BufferTextWindowLoopRequestContext,
         source_char: BufferTextSourceStepChar,
-        source_item: Option<DisplayItem>,
+        source_item: BufferTextSourceStepItem,
         text: &'request [u8],
         append_surface: &'request DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
