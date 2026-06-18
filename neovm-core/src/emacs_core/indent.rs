@@ -231,6 +231,28 @@ fn display_string_run_at(
     Some((width, run_end_byte))
 }
 
+/// If display table `dt` remaps character `code` to a glyph vector, return the
+/// total display width of that glyph sequence (each glyph's character at its
+/// own width). Returns None when there is no glyph-vector entry for `code`.
+fn display_table_glyph_width(dt: &Value, code: u32) -> Option<usize> {
+    let entry = super::chartable::char_table_ref_and_range(dt, i64::from(code))
+        .ok()?
+        .0;
+    let glyphs = entry.as_vector_data()?;
+    let mut total = 0usize;
+    for glyph in glyphs.iter() {
+        let w = match glyph.kind() {
+            // A glyph code packs the character in the low 22 bits (face above).
+            ValueKind::Fixnum(n) => char::from_u32((n & 0x3F_FFFF) as u32)
+                .map(crate::encoding::char_width)
+                .unwrap_or(1),
+            _ => 1,
+        };
+        total += w;
+    }
+    Some(total)
+}
+
 /// Total display columns of a Lisp string (sum of per-character display widths).
 fn lisp_string_display_columns(text: &LispString) -> usize {
     let mut total = 0usize;
@@ -308,6 +330,16 @@ fn scan_for_column(
     let mut previous_column = 0usize;
     let mut previous_code = None;
 
+    // The active display table (buffer-display-table, else standard-display-table)
+    // remaps individual characters to glyph sequences; consulted per char below.
+    let display_table = {
+        let buf = ctx.buffers.get(buffer_id);
+        dynamic_buffer_or_global_symbol_value(&ctx.obarray, &[], buf, "buffer-display-table")
+            .filter(|v| !v.is_nil())
+            .or_else(|| ctx.obarray.symbol_value("standard-display-table").copied())
+            .filter(|v| !v.is_nil())
+    };
+
     while scan < end {
         if let Some(next_visible) =
             super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, scan)?
@@ -364,7 +396,15 @@ fn scan_for_column(
         previous_byte_pos = scan;
         previous_column = column;
         previous_code = Some(code);
-        column = next_column_for_code(column, code, width, tab_width);
+        // A display-table entry remaps the character to a glyph sequence,
+        // overriding its normal width (and tab expansion).
+        column = match display_table
+            .as_ref()
+            .and_then(|dt| display_table_glyph_width(dt, code))
+        {
+            Some(glyph_width) => column.saturating_add(glyph_width),
+            None => next_column_for_code(column, code, width, tab_width),
+        };
         scan += char_len.get();
     }
 
