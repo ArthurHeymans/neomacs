@@ -953,6 +953,28 @@ pub(crate) fn charset_decode_char(charset: SymId, code: i64) -> Option<i64> {
     CHARSET_REGISTRY.with(|slot| slot.borrow().decode_char(charset, code))
 }
 
+/// Whether `charset` is ASCII-compatible (`CHARSET_ASCII_COMPATIBLE_P`). Used
+/// by the coding-system plist to compute `:ascii-compatible-p` like GNU.
+pub(crate) fn charset_is_ascii_compatible(charset: SymId) -> bool {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        reg.charsets
+            .get(&reg.resolve_name(charset))
+            .is_some_and(|info| info.ascii_compatible_p)
+    })
+}
+
+/// The dimension of `charset` (1 or 2), or `None` if unknown. Used by the
+/// ISO-2022 category computation.
+pub(crate) fn charset_dimension_by_sym(charset: SymId) -> Option<i64> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        reg.charsets
+            .get(&reg.resolve_name(charset))
+            .map(|info| info.dimension)
+    })
+}
+
 /// Highest-priority charset that has an emacs-mule id and can encode `ch`,
 /// returned as (emacs-mule-id, dimension, code point). The emacs-mule codec
 /// selects charsets through the same priority order GNU uses.

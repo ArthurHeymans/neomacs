@@ -260,6 +260,9 @@ const ISO2022_KEY_INITIAL: i64 = i64::MIN;
 const ISO2022_KEY_REQUEST: i64 = i64::MIN + 1;
 const ISO2022_KEY_FLAGS: i64 = i64::MIN + 2;
 const ISO2022_KEY_REG_USAGE: i64 = i64::MIN + 3;
+/// Reserved int_properties key holding the verbatim define-coding-system plist
+/// (arg 11), used to reproduce GNU's stored plist order in coding-system-plist.
+const PLIST_VERBATIM_KEY: i64 = i64::MIN + 4;
 
 /// ISO-2022 control flags, one variant per bit. Bit values match
 /// `coding-system-iso-2022-flags` (mule.el) and `CODING_ISO_FLAG_*` (coding.c).
@@ -1355,6 +1358,101 @@ fn coding_mime_charset_for_base(base: &str) -> Option<&'static str> {
     }
 }
 
+/// Whether the coding system carries a byte-order mark (`:bom` non-nil).
+fn coding_has_bom(info: &CodingSystemInfo) -> bool {
+    info.properties
+        .get(&intern(":bom"))
+        .is_some_and(|v| v.is_truthy())
+}
+
+/// Whether `:charset-list` is the FULL_SUPPORT marker symbol `iso-2022`.
+fn coding_is_iso2022_full_support(info: &CodingSystemInfo) -> bool {
+    info.charset_list.len() == 1 && resolve_sym(info.charset_list[0]) == "iso-2022"
+}
+
+/// Compute the detector category symbol for a coding system, mirroring GNU's
+/// `Fdefine_coding_system_internal` (coding.c).
+fn compute_coding_category(info: &CodingSystemInfo) -> &'static str {
+    match resolve_sym(info.coding_type) {
+        "charset" => "coding-category-charset",
+        "ccl" => "coding-category-ccl",
+        "utf-8" => {
+            if coding_has_bom(info) {
+                "coding-category-utf-8-sig"
+            } else {
+                "coding-category-utf-8"
+            }
+        }
+        "utf-16" => {
+            let endian = info.properties.get(&intern(":endian")).copied();
+            match endian.and_then(|v| v.as_symbol_id()).map(resolve_sym) {
+                Some("little") => "coding-category-utf-16-le",
+                Some("big") => "coding-category-utf-16-be",
+                _ => "coding-category-utf-16-auto",
+            }
+        }
+        "iso-2022" => {
+            let Some(spec) = iso2022_spec(info) else {
+                return "coding-category-undecided";
+            };
+            let full = coding_is_iso2022_full_support(info);
+            let lock_or_single = spec.flags.contains(IsoFlag::LockingShift)
+                || spec.flags.contains(IsoFlag::SingleShift);
+            if spec.flags.contains(IsoFlag::SevenBits) {
+                if lock_or_single {
+                    "coding-category-iso-7-else"
+                } else if full {
+                    "coding-category-iso-7"
+                } else {
+                    "coding-category-iso-7-tight"
+                }
+            } else {
+                let g1_dim = spec.initial[1].and_then(super::charset::charset_dimension_by_sym);
+                if spec.flags.contains(IsoFlag::LockingShift) || full || spec.initial[1].is_none() {
+                    "coding-category-iso-8-else"
+                } else if g1_dim == Some(1) {
+                    "coding-category-iso-8-1"
+                } else {
+                    "coding-category-iso-8-2"
+                }
+            }
+        }
+        "emacs-mule" => "coding-category-emacs-mule",
+        "shift-jis" => "coding-category-sjis",
+        "big5" => "coding-category-big5",
+        "raw-text" => "coding-category-raw-text",
+        _ => "coding-category-undecided",
+    }
+}
+
+/// Compute `:ascii-compatible-p` for a coding system, mirroring GNU's
+/// per-type overrides (the stored value is the `:ascii-compatible-p` argument).
+fn compute_coding_ascii_compat(info: &CodingSystemInfo) -> bool {
+    let charsets = &info.charset_list;
+    let any_ascii = || {
+        charsets
+            .iter()
+            .any(|&c| super::charset::charset_is_ascii_compatible(c))
+    };
+    let first_ascii = || {
+        charsets
+            .first()
+            .is_some_and(|&c| super::charset::charset_is_ascii_compatible(c))
+    };
+    match resolve_sym(info.coding_type) {
+        "charset" => any_ascii() || info.ascii_compatible_p,
+        "utf-8" => !coding_has_bom(info),
+        "utf-16" => false,
+        "iso-2022" => matches!(
+            compute_coding_category(info),
+            "coding-category-iso-8-1" | "coding-category-iso-8-2"
+        ),
+        "emacs-mule" | "raw-text" => true,
+        "shift-jis" | "big5" => first_ascii(),
+        _ => info.ascii_compatible_p, // ccl, undecided
+    }
+}
+
 /// `(coding-system-plist CODING-SYSTEM)` -- return a plist describing
 /// CODING-SYSTEM metadata.
 pub(crate) fn builtin_coding_system_plist(
@@ -1377,6 +1475,27 @@ pub(crate) fn builtin_coding_system_plist(
     let info = mgr
         .get(&bucket)
         .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+
+    // Coding systems defined via `define-coding-system-internal` carry their
+    // verbatim plist (arg 11, already led with :name/:docstring by mule.el).
+    // Reproduce GNU's stored plist exactly: prepend `:ascii-compatible-p` then
+    // `:category` (computed per coding-type), followed by the verbatim plist.
+    if let Some(verbatim) = info.int_properties.get(&PLIST_VERBATIM_KEY) {
+        let mut plist = vec![
+            Value::symbol(":ascii-compatible-p"),
+            if compute_coding_ascii_compat(info) {
+                Value::T
+            } else {
+                Value::NIL
+            },
+            Value::symbol(":category"),
+            Value::symbol(compute_coding_category(info)),
+        ];
+        if let Some(items) = super::value::list_to_vec(verbatim) {
+            plist.extend(items);
+        }
+        return Ok(Value::list(plist));
+    }
 
     let base = strip_eol_suffix(&resolved_name);
     let display_name = display_base_name(base);
@@ -1988,6 +2107,14 @@ pub(crate) fn builtin_define_coding_system_internal(
     info.default_char = default_char;
     info.for_unibyte = for_unibyte;
     info.properties = properties;
+
+    // Stash the verbatim plist (arg 11) so coding-system-plist can reproduce
+    // GNU's stored plist order exactly: GNU prepends `:ascii-compatible-p` and
+    // `:category` onto this list (which mule.el already led with :name and
+    // :docstring). See `builtin_coding_system_plist`.
+    if args.len() > 11 {
+        info.int_properties.insert(PLIST_VERBATIM_KEY, args[11]);
+    }
 
     // arg[13..17] (iso-2022 only): [initial-designation-vector, reg-usage,
     // request-alist, flags-bitmask].  Stash them so the ISO-2022 codec can read
