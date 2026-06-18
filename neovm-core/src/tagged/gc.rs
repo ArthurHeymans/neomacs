@@ -22,6 +22,7 @@
 use super::header::*;
 use super::value::TaggedValue;
 use crate::emacs_core::intern::SymId;
+use crate::emacs_core::value::{HashKey, HashTableWeakness};
 use crate::gc_trace::GcTrace;
 use malachite::integer::Integer;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -883,6 +884,13 @@ pub struct TaggedHeap {
 
     /// Gray worklist for mark phase.
     gray_queue: Vec<TaggedValue>,
+    /// Weak hash tables discovered during this cycle's mark. Their entries are
+    /// NOT traced inline (so a weak key/value does not keep its entry alive);
+    /// `mark_and_sweep_weak_tables` instead processes them at the stop-the-world
+    /// `complete_collection`, after the main mark drains (GNU
+    /// `mark_and_sweep_weak_table_contents`). Holds raw object pointers, valid
+    /// only within a single collection; cleared each cycle.
+    weak_hash_tables: Vec<*mut HashTableObj>,
 
     /// Reclaimed cons cells threaded through the dead cells themselves,
     /// matching GNU alloc.c's `cons_free_list`.
@@ -1046,6 +1054,7 @@ impl TaggedHeap {
             bytes_since_gc: 0,
             live_bytes: 0,
             gray_queue: Vec::new(),
+            weak_hash_tables: Vec::new(),
             cons_free_list: std::ptr::null_mut(),
             mapped_cons_ranges: Vec::new(),
             mapped_float_ranges: Vec::new(),
@@ -2202,6 +2211,7 @@ impl TaggedHeap {
 
         // -- Seed gray queue from roots --
         self.gray_queue.clear();
+        self.weak_hash_tables.clear();
         self.mark_cons_block_cache = None;
         self.seed_internal_runtime_roots();
         if partitioned {
@@ -2916,9 +2926,131 @@ impl TaggedHeap {
         } else {
             self.mark_all();
         }
+        // Resolve weak hash tables now that the main mark has drained. Both the
+        // sync and concurrent paths converge here with the mutator stopped, so
+        // this is single-threaded and path-agnostic.
+        self.mark_and_sweep_weak_tables();
         let mark_us = mark_t0.elapsed().as_micros() as u64;
 
         self.finalize_collection(mark_us, bytes_before, t0);
+    }
+
+    /// Resolve the weak hash tables discovered during this cycle's mark — GNU
+    /// `mark_and_sweep_weak_table_contents` (alloc.c) + `sweep_weak_table`
+    /// (fns.c). Runs at the stop-the-world `complete_collection` after the main
+    /// mark drains. First a fixpoint marks the key/value of every entry that
+    /// survives per its table's weakness — iterate to stability because a value
+    /// in one weak table may be a key in another — then non-surviving entries
+    /// are removed.
+    fn mark_and_sweep_weak_tables(&mut self) {
+        if self.weak_hash_tables.is_empty() {
+            return;
+        }
+
+        // -- Mark phase: keep marking surviving entries until nothing changes. --
+        loop {
+            let mut marked = false;
+            // The worklist holds raw pointers, stable across this stop-the-world
+            // step; copy them so the body can call `&mut self` methods.
+            let tables = self.weak_hash_tables.clone();
+            for tptr in tables {
+                // SAFETY: `tptr` was recorded this cycle from a live veclike; the
+                // heap is exclusively owned here (mutator stopped). Snapshot the
+                // entries so the `ht` borrow is released before `push_gray`.
+                let (weakness, entries): (
+                    Option<HashTableWeakness>,
+                    Vec<(TaggedValue, TaggedValue)>,
+                ) = unsafe {
+                    let ht = &(*tptr).table;
+                    let entries = ht
+                        .data
+                        .iter()
+                        .map(|(hk, &value)| {
+                            let key = ht.key_snapshots.get(hk).copied().unwrap_or(value);
+                            (key, value)
+                        })
+                        .collect();
+                    (ht.weakness, entries)
+                };
+                for (key, value) in entries {
+                    let key_survives = self.is_value_marked(key);
+                    let value_survives = self.is_value_marked(value);
+                    if Self::keep_weak_entry(weakness, key_survives, value_survives) {
+                        if !key_survives {
+                            self.push_gray(key, "weak-hash-key");
+                            marked = true;
+                        }
+                        if !value_survives {
+                            self.push_gray(value, "weak-hash-value");
+                            marked = true;
+                        }
+                    }
+                }
+            }
+            // Drain whatever those surviving entries reached, then re-check.
+            self.mark_all();
+            if !marked {
+                break;
+            }
+        }
+
+        // -- Sweep phase: drop entries that did not survive. --
+        let tables = std::mem::take(&mut self.weak_hash_tables);
+        for tptr in tables {
+            // SAFETY: as above; exclusive heap access.
+            let (weakness, entries): (
+                Option<HashTableWeakness>,
+                Vec<(HashKey, TaggedValue, TaggedValue)>,
+            ) = unsafe {
+                let ht = &(*tptr).table;
+                let entries = ht
+                    .data
+                    .iter()
+                    .map(|(hk, &value)| {
+                        let key = ht.key_snapshots.get(hk).copied().unwrap_or(value);
+                        (hk.clone(), key, value)
+                    })
+                    .collect();
+                (ht.weakness, entries)
+            };
+            let dead: Vec<HashKey> = entries
+                .into_iter()
+                .filter_map(|(hk, key, value)| {
+                    let keep = Self::keep_weak_entry(
+                        weakness,
+                        self.is_value_marked(key),
+                        self.is_value_marked(value),
+                    );
+                    (!keep).then_some(hk)
+                })
+                .collect();
+            if dead.is_empty() {
+                continue;
+            }
+            // SAFETY: exclusive heap access. Mirror `builtin_remhash`'s removal.
+            let ht = unsafe { &mut (*tptr).table };
+            for hk in dead {
+                ht.data.remove(&hk);
+                ht.key_snapshots.remove(&hk);
+                ht.note_hash_key_removed(&hk);
+            }
+        }
+    }
+
+    /// GNU `keep_entry_p` (fns.c): does a weak-table entry survive, given whether
+    /// its key and value are independently reachable?
+    fn keep_weak_entry(
+        weakness: Option<HashTableWeakness>,
+        strong_key: bool,
+        strong_value: bool,
+    ) -> bool {
+        match weakness {
+            None => true,
+            Some(HashTableWeakness::Key) => strong_key,
+            Some(HashTableWeakness::Value) => strong_value,
+            Some(HashTableWeakness::KeyOrValue) => strong_key || strong_value,
+            Some(HashTableWeakness::KeyAndValue) => strong_key && strong_value,
+        }
     }
 
     /// Post-mark portion of a collection: verify, sweep, promote, account, and
@@ -3698,18 +3830,32 @@ impl TaggedHeap {
             VecLikeType::HashTable => {
                 let obj = ptr as *const HashTableObj;
                 let ht = unsafe { &(*obj).table };
-                // Trace all values in the hash table
-                for slot in ht.data.values() {
-                    let val = load_value_atomic(slot);
-                    if val.is_heap_object() {
-                        self.push_gray(val, "hash-table-value");
+                if ht.weakness.is_some() {
+                    // Weak table: DON'T trace its entries here — that would keep
+                    // every key/value alive and defeat weakness. Record it; the
+                    // per-entry survival decision happens in
+                    // `mark_and_sweep_weak_tables` at the stop-the-world
+                    // `complete_collection`, after the main mark drains (GNU
+                    // `mark_and_sweep_weak_table_contents`). The generational
+                    // remembered-set / SATB paths (`collect_veclike_children`)
+                    // still trace weak entries strongly — conservative
+                    // over-retention for a dump-tenured weak table, never a UAF;
+                    // precise weak semantics apply to runtime weak tables.
+                    self.weak_hash_tables.push(obj as *mut HashTableObj);
+                } else {
+                    // Trace all values in the hash table
+                    for slot in ht.data.values() {
+                        let val = load_value_atomic(slot);
+                        if val.is_heap_object() {
+                            self.push_gray(val, "hash-table-value");
+                        }
                     }
-                }
-                // Trace key snapshots (original key objects)
-                for slot in ht.key_snapshots.values() {
-                    let val = load_value_atomic(slot);
-                    if val.is_heap_object() {
-                        self.push_gray(val, "hash-table-key-snapshot");
+                    // Trace key snapshots (original key objects)
+                    for slot in ht.key_snapshots.values() {
+                        let val = load_value_atomic(slot);
+                        if val.is_heap_object() {
+                            self.push_gray(val, "hash-table-key-snapshot");
+                        }
                     }
                 }
                 // Custom test/hash closures (from `define-hash-table-test`) live

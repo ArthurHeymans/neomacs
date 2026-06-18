@@ -408,6 +408,107 @@ fn custom_hash_table_test_closures_are_gc_roots() {
 }
 
 #[test]
+fn weak_key_hash_table_drops_entry_when_key_unreachable() {
+    // GNU mark_and_sweep_weak_table_contents: a :weakness 'key table must drop an
+    // entry once its key is no longer reachable from anywhere else. The key here
+    // (a fresh cons) lives only inside the table.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    ev.eval_str(
+        "(progn \
+           (setq gc-weak-ht (make-hash-table :test 'equal :weakness 'key)) \
+           (puthash (list 'gc-weak-probe) t gc-weak-ht) \
+           nil)",
+    )
+    .unwrap();
+    assert_eq!(
+        ev.eval_str("(hash-table-count gc-weak-ht)")
+            .unwrap()
+            .as_fixnum(),
+        Some(1),
+        "entry present before GC"
+    );
+    ev.eval_str("(garbage-collect)").unwrap();
+    assert_eq!(
+        ev.eval_str("(hash-table-count gc-weak-ht)")
+            .unwrap()
+            .as_fixnum(),
+        Some(0),
+        "weak-key entry must be dropped once its key is unreachable"
+    );
+}
+
+#[test]
+fn weak_key_hash_table_keeps_entry_when_key_reachable() {
+    // The mirror case: while the key is reachable (held by a global), the
+    // weak-key entry must survive.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    ev.eval_str(
+        "(progn \
+           (setq gc-live-key (list 'gc-live-probe)) \
+           (setq gc-weak-ht2 (make-hash-table :test 'eq :weakness 'key)) \
+           (puthash gc-live-key t gc-weak-ht2) \
+           nil)",
+    )
+    .unwrap();
+    ev.eval_str("(garbage-collect)").unwrap();
+    assert_eq!(
+        ev.eval_str("(hash-table-count gc-weak-ht2)")
+            .unwrap()
+            .as_fixnum(),
+        Some(1),
+        "weak-key entry survives while its key is reachable (gc-live-key)"
+    );
+}
+
+#[test]
+fn weak_value_hash_table_drops_entry_when_value_unreachable() {
+    // :weakness 'value drops the entry once the VALUE is unreachable, regardless
+    // of the (reachable, interned) key.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    ev.eval_str(
+        "(progn \
+           (setq gc-wv-ht (make-hash-table :test 'eq :weakness 'value)) \
+           (puthash 'gc-wv-key (list 'gc-wv-value) gc-wv-ht) \
+           nil)",
+    )
+    .unwrap();
+    ev.eval_str("(garbage-collect)").unwrap();
+    assert_eq!(
+        ev.eval_str("(hash-table-count gc-wv-ht)")
+            .unwrap()
+            .as_fixnum(),
+        Some(0),
+        "weak-value entry must be dropped once its value is unreachable"
+    );
+}
+
+#[test]
+fn non_weak_hash_table_keeps_entry_after_gc() {
+    // Control: a non-weak table traces its entries, so an entry with an
+    // otherwise-unreachable key survives.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    ev.eval_str(
+        "(progn \
+           (setq gc-strong-ht (make-hash-table :test 'equal)) \
+           (puthash (list 'gc-strong-probe) t gc-strong-ht) \
+           nil)",
+    )
+    .unwrap();
+    ev.eval_str("(garbage-collect)").unwrap();
+    assert_eq!(
+        ev.eval_str("(hash-table-count gc-strong-ht)")
+            .unwrap()
+            .as_fixnum(),
+        Some(1),
+        "non-weak table must retain its entry across GC"
+    );
+}
+
+#[test]
 fn face_attributes_as_vector_shape() {
     crate::test_utils::init_test_tracing();
     let out =
