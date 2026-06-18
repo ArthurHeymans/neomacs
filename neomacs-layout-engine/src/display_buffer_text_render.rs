@@ -22,7 +22,6 @@ use crate::display_row_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceCharPreparationRequest, BufferTextSourceCharPreparationState,
     BufferTextSourceCharPreparedAppend, BufferTextSpecialSourceCharPreparedAppend,
-    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
     DisplayRowLineBreakTransitionPlan, DisplayRowOverflowTransitionPlan,
     DisplayRowTextWindowEmitContext, DisplayRowTransitionContinuation,
@@ -39,6 +38,9 @@ use crate::display_row_lisp_string::{
 };
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderState,
+};
+use crate::display_row_replacement::{
+    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{

@@ -47,6 +47,7 @@ use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
     OverlayStringRenderState, OverlayStringRowBreakRenderContext,
 };
+use crate::display_row_replacement::*;
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, LineNumberRenderState, TextPropertyScanCheckpoints, WordWrapBreakCandidate,

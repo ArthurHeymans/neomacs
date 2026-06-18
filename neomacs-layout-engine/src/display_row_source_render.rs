@@ -14,7 +14,7 @@ use crate::display_row::{
     DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy, DisplayRowResolvedMeasuredFace,
     insert_resolved_display_row_face,
 };
-use crate::display_row_append::{
+use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_source_resolver::{
