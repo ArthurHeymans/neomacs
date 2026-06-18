@@ -668,12 +668,16 @@ impl GlyphMatrixBuilder {
 
     pub(crate) fn finalize_row(&mut self, row: usize) {
         if let Some(ref mut matrix) = self.current_matrix {
+            let matrix_ncols = matrix.ncols;
+            let Some(matrix_row) = matrix.rows.get_mut(row) else {
+                return;
+            };
             GlyphRowFinalizationContext::new(
                 self.current_window_id,
                 row,
                 self.current_pixel_bounds,
             )
-            .finalize_matrix_row(matrix, self.phys_cursor.as_mut());
+            .finalize_row(matrix_row, matrix_ncols, self.phys_cursor.as_mut());
         }
     }
 

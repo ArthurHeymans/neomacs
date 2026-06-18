@@ -1,6 +1,6 @@
 use crate::display_cursor::cursor_window_matches_current;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
-use neomacs_display_protocol::glyph_matrix::{GlyphMatrix, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neomacs_display_protocol::types::Rect;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -19,16 +19,12 @@ impl GlyphRowFinalizationContext {
         }
     }
 
-    pub(crate) fn finalize_matrix_row(
+    pub(crate) fn finalize_row(
         self,
-        matrix: &mut GlyphMatrix,
+        row: &mut GlyphRow,
+        matrix_ncols: usize,
         phys_cursor: Option<&mut PhysCursor>,
     ) {
-        let matrix_ncols = matrix.ncols;
-        let Some(row) = matrix.rows.get_mut(self.row) else {
-            return;
-        };
-
         GlyphRowFinalizer::new(self, matrix_ncols, phys_cursor).finalize(row);
     }
 
