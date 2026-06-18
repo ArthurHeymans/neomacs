@@ -2376,6 +2376,7 @@ mod divergence_textprop_overlay;
 mod divergence_textprop_sticky_deep;
 mod divergence_textprop_sticky_time_edge_runtime;
 mod divergence_thin_subsystems;
+mod divergence_thingatpt_replace_cl_runtime;
 mod divergence_thread_concurrency;
 mod divergence_thread_elisp_deep;
 mod divergence_time_arithmetic_runtime;
