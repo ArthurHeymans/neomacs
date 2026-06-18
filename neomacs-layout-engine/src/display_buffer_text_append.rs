@@ -6,9 +6,9 @@
 //! source-agnostic while the buffer text walker owns its own setup logic.
 
 use crate::display_row::insert_resolved_display_row_face;
-use crate::display_row_append::install_last_window_right_border_from_source_requests;
 use crate::display_row_append::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
+use crate::display_row_special_glyphs::install_last_window_right_border_from_source_requests;
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::window_output::{
