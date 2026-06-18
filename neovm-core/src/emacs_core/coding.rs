@@ -1487,6 +1487,61 @@ fn compute_coding_ascii_compat(info: &CodingSystemInfo) -> bool {
     }
 }
 
+/// The exact `coding-system-plist` for the C-defined `no-conversion` and
+/// `undecided` coding systems, mirroring GNU `coding.c` `syms_of_coding`
+/// (field order, doubled `:ascii-compatible-p`, docstrings, `:eol-type`).
+fn c_init_coding_system_plist(name: &str) -> Option<Vec<Value>> {
+    match name {
+        "no-conversion" => Some(vec![
+            Value::symbol(":ascii-compatible-p"),
+            Value::T,
+            Value::symbol(":category"),
+            Value::symbol("coding-category-raw-text"),
+            Value::symbol(":name"),
+            Value::symbol("no-conversion"),
+            Value::symbol(":mnemonic"),
+            Value::fixnum(b'=' as i64),
+            Value::symbol(":coding-type"),
+            Value::symbol("raw-text"),
+            Value::symbol(":ascii-compatible-p"),
+            Value::T,
+            Value::symbol(":default-char"),
+            Value::fixnum(0),
+            Value::symbol(":for-unibyte"),
+            Value::T,
+            Value::symbol(":docstring"),
+            Value::string(
+                "Do no conversion.\n\nWhen you visit a file with this coding, the file is read into a\nunibyte buffer as is, thus each byte of a file is treated as a\ncharacter.",
+            ),
+            Value::symbol(":eol-type"),
+            Value::symbol("unix"),
+        ]),
+        "undecided" => Some(vec![
+            Value::symbol(":ascii-compatible-p"),
+            Value::T,
+            Value::symbol(":category"),
+            Value::symbol("coding-category-undecided"),
+            Value::symbol(":name"),
+            Value::symbol("undecided"),
+            Value::symbol(":mnemonic"),
+            Value::fixnum(b'-' as i64),
+            Value::symbol(":coding-type"),
+            Value::symbol("undecided"),
+            Value::symbol(":ascii-compatible-p"),
+            Value::T,
+            Value::symbol(":charset-list"),
+            Value::list(vec![Value::symbol("ascii")]),
+            Value::symbol(":for-unibyte"),
+            Value::NIL,
+            Value::symbol(":docstring"),
+            Value::string("No conversion on encoding, automatic conversion on decoding."),
+            Value::symbol(":eol-type"),
+            Value::NIL,
+        ]),
+        _ => None,
+    }
+}
+
 /// `(coding-system-plist CODING-SYSTEM)` -- return a plist describing
 /// CODING-SYSTEM metadata.
 pub(crate) fn builtin_coding_system_plist(
@@ -1528,6 +1583,14 @@ pub(crate) fn builtin_coding_system_plist(
         if let Some(items) = super::value::list_to_vec(verbatim) {
             plist.extend(items);
         }
+        return Ok(Value::list(plist));
+    }
+
+    // `no-conversion` and `undecided` are built in C (coding.c `syms_of_coding`)
+    // with a fixed plist that the generic reconstruction below cannot reproduce
+    // (specific field order, the doubled `:ascii-compatible-p`, the multi-line
+    // docstring, and `:eol-type`). Emit GNU's exact plist for them.
+    if let Some(plist) = c_init_coding_system_plist(&resolved_name) {
         return Ok(Value::list(plist));
     }
 
