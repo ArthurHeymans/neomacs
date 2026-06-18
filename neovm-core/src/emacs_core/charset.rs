@@ -1016,6 +1016,29 @@ pub(crate) fn charset_iso2022_designation(charset: SymId) -> Option<(i64, i64, b
     })
 }
 
+/// The charset (and its dimension) matching an ISO-2022 designation — final
+/// char, dimension and set size — or `None`. Used when decoding an ESC
+/// designation sequence. Prefers the lowest charset id, so the modern
+/// japanese-jisx0208 (final `B`) wins over duplicates.
+pub(crate) fn charset_by_iso_final(
+    final_char: i64,
+    dimension: i64,
+    chars_96: bool,
+) -> Option<(SymId, i64)> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        reg.charsets
+            .iter()
+            .filter(|(_, info)| {
+                info.iso_final_char == Some(final_char)
+                    && info.dimension == dimension
+                    && (info.code_space[0] == 0x20) == chars_96
+            })
+            .min_by_key(|(_, info)| info.id)
+            .map(|(name, info)| (*name, info.dimension))
+    })
+}
+
 /// The charset (name, dimension) carrying a given emacs-mule id, or `None`.
 pub(crate) fn charset_by_emacs_mule_id(id: i64) -> Option<(SymId, i64)> {
     CHARSET_REGISTRY.with(|slot| {

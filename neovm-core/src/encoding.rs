@@ -2421,6 +2421,170 @@ fn encode_via_iso2022(
     out
 }
 
+/// Decode bytes through the ISO-2022 escape-sequence machine to Emacs internal
+/// bytes (GNU `decode_coding_iso_2022`).
+fn decode_via_iso2022(bytes: &[u8], spec: &crate::emacs_core::coding::Iso2022Spec) -> Vec<u8> {
+    use crate::emacs_core::charset::{
+        charset_by_iso_final, charset_decode_char, charset_iso2022_designation,
+    };
+    use crate::emacs_core::coding::IsoFlag;
+    let seven = spec.flags.contains(IsoFlag::SevenBits);
+    let ascii = intern("ascii");
+
+    let mut desig: [Option<SymId>; 4] = spec.initial;
+    let mut gl: usize = 0;
+    let gr: i32 = if seven { -1 } else { 1 };
+    let mut single_shift: Option<usize> = None;
+
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let mut emit = |code: u32, out: &mut Vec<u8>| {
+        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+        out.extend_from_slice(&buf[..n]);
+    };
+    let raw = |b: u8| crate::emacs_core::emacs_char::unibyte_to_char(b);
+
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        // --- Escape sequences ---------------------------------------------
+        if b == 0x1B && i + 1 < bytes.len() {
+            let e = bytes[i + 1];
+            match e {
+                0x4E => {
+                    single_shift = Some(2);
+                    i += 2;
+                    continue;
+                }
+                0x4F => {
+                    single_shift = Some(3);
+                    i += 2;
+                    continue;
+                }
+                0x6E => {
+                    gl = 2;
+                    i += 2;
+                    continue;
+                }
+                0x6F => {
+                    gl = 3;
+                    i += 2;
+                    continue;
+                }
+                0x24 if i + 2 < bytes.len() => {
+                    // Multi-byte (dim-2) designations.
+                    let i2 = bytes[i + 2];
+                    let (reg, chars_96, final_at, consumed) = match i2 {
+                        0x28..=0x2B if i + 3 < bytes.len() => {
+                            (usize::from(i2 - 0x28), false, i + 3, 4)
+                        }
+                        0x2C..=0x2F if i + 3 < bytes.len() => {
+                            (usize::from(i2 - 0x2C), true, i + 3, 4)
+                        }
+                        // Short form `ESC $ F` (F in @ A B) -> dim-2 94-set, G0.
+                        0x40..=0x42 => (0, false, i + 2, 3),
+                        _ => {
+                            out.push(0x1B);
+                            i += 1;
+                            continue;
+                        }
+                    };
+                    if let Some((cs, _)) =
+                        charset_by_iso_final(i64::from(bytes[final_at]), 2, chars_96)
+                    {
+                        desig[reg] = Some(cs);
+                    }
+                    i += consumed;
+                    continue;
+                }
+                0x28..=0x2B if i + 2 < bytes.len() => {
+                    let reg = usize::from(e - 0x28);
+                    if let Some((cs, _)) = charset_by_iso_final(i64::from(bytes[i + 2]), 1, false) {
+                        desig[reg] = Some(cs);
+                    }
+                    i += 3;
+                    continue;
+                }
+                0x2C..=0x2F if i + 2 < bytes.len() => {
+                    let reg = usize::from(e - 0x2C);
+                    if let Some((cs, _)) = charset_by_iso_final(i64::from(bytes[i + 2]), 1, true) {
+                        desig[reg] = Some(cs);
+                    }
+                    i += 3;
+                    continue;
+                }
+                _ => {
+                    out.push(0x1B);
+                    i += 1;
+                    continue;
+                }
+            }
+        }
+        if b == 0x0E {
+            gl = 1;
+            i += 1;
+            continue;
+        }
+        if b == 0x0F {
+            gl = 0;
+            i += 1;
+            continue;
+        }
+        if !seven && b == 0x8E {
+            single_shift = Some(2);
+            i += 1;
+            continue;
+        }
+        if !seven && b == 0x8F {
+            single_shift = Some(3);
+            i += 1;
+            continue;
+        }
+        if b < 0x20 || b == 0x7F {
+            emit(u32::from(b), &mut out);
+            i += 1;
+            continue;
+        }
+        // --- Graphic character --------------------------------------------
+        let reg = if let Some(r) = single_shift.take() {
+            r
+        } else if b < 0x80 {
+            gl
+        } else if gr >= 0 {
+            gr as usize
+        } else {
+            emit(raw(b), &mut out); // 7-bit codec: stray high byte -> eight-bit raw
+            i += 1;
+            continue;
+        };
+        let charset = desig[reg];
+        if charset == Some(ascii) {
+            emit(u32::from(b & 0x7F), &mut out);
+            i += 1;
+            continue;
+        }
+        if let Some(cs) = charset
+            && let Some((_, dim, _)) = charset_iso2022_designation(cs)
+        {
+            let dim = dim.clamp(1, 2) as usize;
+            if i + dim <= bytes.len() {
+                let mut code = 0i64;
+                for k in 0..dim {
+                    code = (code << 8) | i64::from(bytes[i + k] & 0x7F);
+                }
+                if let Some(ch) = charset_decode_char(cs, code) {
+                    emit(ch as u32, &mut out);
+                    i += dim;
+                    continue;
+                }
+            }
+        }
+        emit(if b < 0x80 { u32::from(b) } else { raw(b) }, &mut out);
+        i += 1;
+    }
+    out
+}
+
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -2497,6 +2661,11 @@ fn builtin_coding_string_in_context(
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if emacs_mule {
         let bytes = decode_via_emacs_mule(&lisp_string_coding_source_bytes(&source_string()));
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+    } else if let Some((spec, _)) = &full_iso {
+        let source_bytes =
+            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
+        let bytes = decode_via_iso2022(&source_bytes, spec);
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some((spec, _)) = &euc_coding {
         let source_bytes =
