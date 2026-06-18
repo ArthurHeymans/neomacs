@@ -1190,6 +1190,7 @@ mod xml_semantics;
 mod yank_properties_semantics;
 mod zlib_decompress_region_semantics;
 
+mod divergence_abbrev_syntax_charfold_runtime;
 mod divergence_advice_deep;
 mod divergence_advice_hooks_deep;
 mod divergence_advice_hooks_locals;
