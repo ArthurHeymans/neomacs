@@ -1466,7 +1466,18 @@ fn transformed_region_string(
     encode: bool,
 ) -> Result<Value, crate::emacs_core::error::Flow> {
     if encode {
-        let bytes = encode_lisp_string(&source, coding);
+        let mut bytes = encode_lisp_string(&source, coding);
+        // utf-8-with-signature / utf-8-auto prepend a BOM on encode (the string
+        // codec does this directly; encode_lisp_string does not).
+        if matches!(
+            coding_system_base(coding),
+            "utf-8-with-signature" | "utf-8-auto"
+        ) && !bytes.starts_with(&[0xEF, 0xBB, 0xBF])
+        {
+            let mut with_bom = vec![0xEF, 0xBB, 0xBF];
+            with_bom.extend(bytes);
+            bytes = with_bom;
+        }
         Ok(Value::heap_string(
             crate::heap_types::LispString::from_unibyte(bytes),
         ))
@@ -2887,8 +2898,12 @@ fn coding_result_for_buffer_multibyte(
         return text.clone();
     }
     if target_multibyte {
+        // Encoded bytes stored into a multibyte buffer become eight-bit
+        // characters (GNU `string-to-multibyte` / BYTE8_STRING), NOT re-parsed
+        // as a UTF-8 sequence (`string-as-multibyte`), which would wrongly turn
+        // e.g. the UTF-8 encoding of "é" back into the character "é".
         crate::heap_types::LispString::from_emacs_bytes(
-            crate::emacs_core::emacs_char::str_as_multibyte(text.as_bytes()),
+            crate::emacs_core::emacs_char::str_to_multibyte(text.as_bytes()),
         )
     } else {
         crate::heap_types::LispString::from_unibyte(crate::emacs_core::emacs_char::str_as_unibyte(
