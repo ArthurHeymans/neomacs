@@ -1227,6 +1227,7 @@ mod divergence_builtin_modules_hash_runtime;
 mod divergence_bytecomp_deep;
 mod divergence_bytecomp_real;
 mod divergence_calc;
+mod divergence_calc_byte_position_runtime;
 mod divergence_calendar_keymap_runtime;
 mod divergence_calendar_time_deep;
 mod divergence_callback_function_args_runtime;
