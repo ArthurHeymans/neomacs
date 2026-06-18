@@ -1,5 +1,10 @@
+use crate::display_buffer_text_render::SyntheticTextSource;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, RenderFaceRef};
+#[cfg(test)]
+use crate::display_row::DisplayRowRenderStop;
+#[cfg(test)]
+use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowCurrentTextMeasureState,
     DisplayRowCurrentTextRenderState, DisplayRowGeometry, DisplayRowRenderBounds,
@@ -378,9 +383,36 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     }
 }
 
+pub(crate) fn append_synthetic_text_to_display_row(
+    state: &mut TextRowSourceRenderState<'_>,
+    base_face: &ResolvedFace,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+    source: SyntheticTextSource,
+    face_id: u32,
+) -> Option<(DisplayRowAppendProgress, DisplayRowPosition)> {
+    let source = source.into_item_source(face_id);
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    let start = position;
+    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+    let outcome = DisplayRowSourceAppendOperation::new(
+        base_face,
+        face_id,
+        frame,
+        position,
+        DisplayRowAppendKind::SourceText,
+    )
+    .render_source_to_text_row_and_emit(state, source, &mut face_ids, &mut render_policy)?;
+    Some(outcome.into_append_progress_and_position(start))
+}
+
 fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
     match face {
         RenderFaceRef::FaceId(face_id) => face_id,
         RenderFaceRef::Inherit => fallback,
     }
 }
+
+#[cfg(test)]
+#[path = "display_row_append_test.rs"]
+mod tests;

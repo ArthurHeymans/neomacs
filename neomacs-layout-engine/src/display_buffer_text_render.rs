@@ -23,7 +23,6 @@ use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics,
     DisplayRowMeasurementPolicy,
 };
-use crate::display_row_append::append_synthetic_text_to_display_row;
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
 };
@@ -42,6 +41,7 @@ use crate::display_row_overlay_string::{
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
+use crate::display_row_source_append::append_synthetic_text_to_display_row;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::{
     DisplayRowLineBreakTransitionPlan, DisplayRowOverflowTransitionPlan,

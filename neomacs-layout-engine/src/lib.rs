@@ -26,7 +26,6 @@ pub(crate) mod display_origin;
 pub mod display_pixel_calc;
 pub(crate) mod display_property;
 pub(crate) mod display_row;
-pub(crate) mod display_row_append;
 pub(crate) mod display_row_append_context;
 pub(crate) mod display_row_builder;
 pub(crate) mod display_row_finalizer;
