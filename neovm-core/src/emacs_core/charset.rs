@@ -324,7 +324,18 @@ impl CharsetRegistry {
     /// Charsets created from Lisp `define-charset` keep the plist they were
     /// defined with, so they go through the plain `register`.
     fn register_builtin(&mut self, mut info: CharsetInfo) {
-        if info.plist.is_empty() {
+        // The canonical plist holds Lisp `Value`s (the `:code-space` vector
+        // allocates on the tagged heap). `CharsetRegistry` is a thread-local
+        // lazily built on whatever thread first needs it — including the GUI
+        // render thread, which does font/char matching through the registry's
+        // plain fields but has no VM heap. Only materialize the Lisp plist when
+        // a heap is available (always so in tests via the fallback heap, and on
+        // the Lisp thread); the render thread keeps the fields and an empty
+        // plist (it never reads `charset-plist`). Without this guard,
+        // `Value::vector` panics with "no TaggedHeap set for this thread".
+        let heap_available =
+            cfg!(test) || crate::tagged::gc::current_tagged_heap_identity().is_some();
+        if info.plist.is_empty() && heap_available {
             let code_offset = match info.method {
                 CharsetMethod::Offset(n) => n,
                 _ => 0,
