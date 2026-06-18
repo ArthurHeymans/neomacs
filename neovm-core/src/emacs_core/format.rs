@@ -325,22 +325,32 @@ fn format_time(
                 break;
             }
 
-            // Handle optional '-' flag to suppress padding.
-            let suppress_pad = if chars[i] == '-' {
+            // Parse strftime flags: '-' (no pad), '_' (space pad), '0' (zero
+            // pad = default), '^' (upcase), '#' (swap case). The 'E'/'O' locale
+            // modifiers and a numeric field width are accepted and ignored.
+            let mut suppress_pad = false;
+            let mut space_pad = false;
+            let mut upcase = false;
+            let mut swapcase = false;
+            while i < chars.len() {
+                match chars[i] {
+                    '-' => suppress_pad = true,
+                    '_' => space_pad = true,
+                    '^' => upcase = true,
+                    '#' => swapcase = true,
+                    '0' | 'E' | 'O' => {}
+                    c if c.is_ascii_digit() => {}
+                    _ => break,
+                }
                 i += 1;
-                true
-            } else {
-                false
-            };
+            }
 
             if i >= chars.len() {
                 result.push('%');
-                if suppress_pad {
-                    result.push('-');
-                }
                 break;
             }
 
+            let piece_start = result.len();
             match chars[i] {
                 '%' => result.push('%'),
                 'Y' => result.push_str(&format!("{:04}", tm.year)),
@@ -523,6 +533,26 @@ fn format_time(
                     result.push(other);
                 }
             }
+            // Apply the post-conversion flags to the piece just produced.
+            if space_pad || upcase || swapcase {
+                let piece = result.split_off(piece_start);
+                let piece = if space_pad {
+                    // Re-pad a zero-padded numeric field with spaces.
+                    let trimmed = piece.trim_start_matches('0');
+                    let kept = if trimmed.is_empty() { "0" } else { trimmed };
+                    format!("{}{}", " ".repeat(piece.len() - kept.len()), kept)
+                } else {
+                    piece
+                };
+                let piece = if upcase {
+                    piece.to_uppercase()
+                } else if swapcase {
+                    piece.chars().map(swap_ascii_case).collect()
+                } else {
+                    piece
+                };
+                result.push_str(&piece);
+            }
             i += 1;
         } else {
             result.push(chars[i]);
@@ -531,6 +561,18 @@ fn format_time(
     }
 
     result
+}
+
+/// Swap the case of an ASCII letter (used by the strftime `#` flag); other
+/// characters are returned unchanged.
+fn swap_ascii_case(c: char) -> char {
+    if c.is_ascii_uppercase() {
+        c.to_ascii_lowercase()
+    } else if c.is_ascii_lowercase() {
+        c.to_ascii_uppercase()
+    } else {
+        c
+    }
 }
 // ---------------------------------------------------------------------------
 // Tests
