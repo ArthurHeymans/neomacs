@@ -26,8 +26,7 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTe
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
-    MatrixIndexedRowMetricsRequest, MatrixRowBeginRequest, MatrixRowCursorRequest,
-    MatrixRowMetricsRequest, MatrixRowUpdateRequest, MatrixWindowBeginRequest,
+    MatrixRowBeginRequest, MatrixRowMetricsRequest, MatrixWindowBeginRequest,
     MatrixWindowLifecycleRequest,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -430,8 +429,7 @@ impl<'a> TextMatrixRowOutput<'a> {
 
     pub(crate) fn finish(&mut self, metrics: TextMatrixRowMetrics) {
         let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
-        self.builder
-            .install_row_update(MatrixRowUpdateRequest::CurrentMetrics(matrix_metrics));
+        self.builder.set_open_row_metrics(matrix_metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
     }
@@ -796,11 +794,7 @@ pub(crate) fn publish_text_window_cursor(
     } else {
         cursor.col()
     };
-    builder.install_row_update(MatrixRowUpdateRequest::CursorAt(MatrixRowCursorRequest {
-        row: cursor.row(),
-        col: cursor_col,
-        style: cursor.style,
-    }));
+    builder.set_row_cursor(cursor.row(), cursor_col, cursor.style);
     output_emitter.set_phys_cursor(cursor.window_snapshot());
     if cursor.selected {
         builder.store_phys_cursor(phys_cursor);
@@ -856,16 +850,14 @@ pub(crate) fn finish_text_window_output_rows(
 ) {
     let window_y = builder.current_window_row_install_context().pixel_bounds.y;
     for metric in output_emitter.row_metrics() {
-        builder.install_row_update(MatrixRowUpdateRequest::RowMetrics(
-            MatrixIndexedRowMetricsRequest {
-                row: metric.row,
-                metrics: MatrixRowMetricsRequest {
-                    pixel_y: metric.pixel_y - window_y,
-                    height_px: metric.height,
-                    ascent_px: metric.ascent,
-                },
+        builder.set_row_metrics(
+            metric.row,
+            MatrixRowMetricsRequest {
+                pixel_y: metric.pixel_y - window_y,
+                height_px: metric.height,
+                ascent_px: metric.ascent,
             },
-        ));
+        );
     }
     builder.end_current_row();
 }
