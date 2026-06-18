@@ -8,6 +8,11 @@ use crate::display_buffer_text_append::{
     BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
     TextWindowAppendSurfaceRequest,
 };
+use crate::display_buffer_text_render::{
+    BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
+    BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderContext,
+    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
+};
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
     BufferTextDecodedSourceChar, BufferTextDecodedSourceEvent, BufferTextLineBreakSourceEvent,
@@ -22,20 +27,17 @@ use crate::display_row::{
 use crate::display_row_append::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
     BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
-    BufferDisplayPropertyTextWalkOutcome, BufferEndOfBufferTailRenderContext,
-    BufferEndOfBufferTailRenderRequest, BufferEndOfBufferTailRenderState,
-    BufferHscrollSkipRenderContext, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
-    BufferInvisibleTextRenderContext, BufferInvisibleTextRenderOutcome,
-    BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
-    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
-    BufferOverlayStringTextRowRenderContext, BufferSelectiveDisplayTailRenderContext,
-    BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
-    BufferSelectiveDisplayTailRenderState, BufferTextLineBreakRenderContext,
-    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState, BufferTextRowAppendState,
-    BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
-    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
-    DisplayRowAppendSurface, DisplayRowPrefixRequest, DisplayRowPrefixValues,
-    DisplayRowTransitionContinuation,
+    BufferDisplayPropertyTextWalkOutcome, BufferInvisibleTextRenderContext,
+    BufferInvisibleTextRenderOutcome, BufferInvisibleTextRenderRequest,
+    BufferInvisibleTextRenderRequestState, BufferLinePrefixRenderContext,
+    BufferLinePrefixRenderRequest, BufferOverlayStringTextRowRenderContext,
+    BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderOutcome,
+    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
+    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
+    BufferTextLineBreakRenderState, BufferTextRowAppendState, BufferTextSourceCharRenderContext,
+    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
+    BufferTextSourceCharRenderRequestState, DisplayRowAppendSurface, DisplayRowPrefixRequest,
+    DisplayRowPrefixValues, DisplayRowTransitionContinuation,
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::{

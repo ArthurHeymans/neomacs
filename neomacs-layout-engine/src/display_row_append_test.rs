@@ -8,6 +8,7 @@ use crate::display_buffer_text_append::{
     BufferTextWindowTailFinalizeState, BufferTextWindowTerminalRightBorderRequest,
     BufferTextWindowVisibilityRetryRequest,
 };
+use crate::display_buffer_text_render::*;
 use crate::display_buffer_text_source::BufferTextDecodedSourceEvent;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;

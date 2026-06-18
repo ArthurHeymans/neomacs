@@ -10,6 +10,7 @@ pub mod bidi;
 pub mod composition;
 pub(crate) mod coords;
 pub(crate) mod display_buffer_text_append;
+pub(crate) mod display_buffer_text_render;
 pub(crate) mod display_buffer_text_source;
 pub(crate) mod display_buffer_text_walk;
 pub(crate) mod display_cursor;
