@@ -632,64 +632,64 @@ Status legend: ✅ done · ⬜ remaining.
       FIRST, then `set_current_message`, so the echo buffer exists + gets the
       message and creation order stays `[*scratch*, *Messages*, *Echo Area 0/1*]`.
       Additive — layout still renders from `current_message`.
-   2. (med — **de-risked by GNU study 2026-06-17**) Swap the inactive mini-window's
-      buffer to ` *Echo Area 0*` the way GNU `with_echo_area_buffer`
-      (xdisp.c:12904) does — a **temporary, unwind-protected** swap, NOT a
-      persistent window-buffer change: `record_unwind_protect` SAVES the window's
-      prior `contents` + `pointm`/`old_pointm`/`start` marker positions FIRST
-      (`with_echo_area_buffer_unwind_data`, 12994), then `set_buffer_internal_1` +
-      `wset_buffer(w, echo_buf)` + move `pointm`/`old_pointm` to BEG (12961-12967),
-      runs the render, and `unbind_to` ALWAYS restores (`unwind_with_echo_area_buffer`,
-      13038). The comment at 12954 is explicit: for display you need only the temp
-      buffer-current + `wset_buffer` + `pointm`→BEG, NOT a full `Fset_window_buffer`.
-      ⇒ The "stale swap corrupts a freshly-activated minibuffer" worry does NOT
-      exist in GNU's model: the swap is scoped to the layout call and always
-      restored. In neomacs do the swap+restore around the inactive-mini walk in the
-      ELISP-thread layout entry (engine.rs `layout_window`, where the window record
-      + `Context` are both live).
-   3. (med — **de-risked by GNU study**) **Unclamped-height fix = port GNU
-      `resize_mini_window` (xdisp.c:13273).** GNU does NOT clamp the measurement
-      against the current grid height (no chicken-and-egg): it `init_iterator` +
-      `move_it_to(&it, ZV, …)` (13321/13340) to measure the **full content height by
-      iterating to ZV**, computes `max_height` from `max-mini-window-height`
-      (13328-13336, clip to `[unit, frame_inner_height]`), and then if
-      `height > max_height` clamps to `(max_height/unit)*unit` AND sets `w->start`
-      to show the END via `move_it_vertically_backward` + `move_it_by_lines(0)`
-      (13365-13393); else `w->start = BEGV`. Then `grow_mini_window`/`shrink_mini_window`
-      to the exact height (grow-only vs exact per `resize-mini-windows`, 13395-13406).
-      In neomacs: relax the minibuffer (vscroll==0) `row_visibility_limit`
-      (display_buffer_text_walk.rs:642 `visible_max_rows`) so the walk emits the
-      full content; `mini_rows_used` (engine.rs:563) is already the measured height
-      feeding the existing grow/shrink branches — they ARE `grow_mini_window`/
-      `shrink_mini_window`. Add the overflow `window_start`-to-end computation.
-      Verify active fido/vertico still clamp to real allocation post-resize.
-   4. (med — **de-risked**) Delete the engine.rs:954 early-return dispatch so
-      echo/inactive falls through to the ordinary walk over the swapped buffer.
-      This is GNU `display_echo_area_1` (xdisp.c:13194): just
-      `resize_mini_window(w,false)` (step 3) + `try_window(window, w->start, 0)`
-      (the walk). Nothing else.
-   5. (med) Delete the parallel machinery: `MinibufferSpecialRowsPlan` + enum +
-      `from_window` + `render_window`, `EchoMinibufferRowsRenderRequest::render_rows`,
-      `append_synthetic_minibuffer_text`, `empty_minibuffer_echo_row`,
-      `minibuffer_echo_message_for_window`, `current_message_value`.
-   6. (HIGH) Delete the pre-layout estimator `minibuffer_resize_line_count` +
-      `BufferTextWindowContentRowsRequest::resolve` pre-grow (now redundant).
-   7. (med) Replace the `visible_region_empty` shrink heuristic with GNU `BEGV==ZV`
-      emptiness of the echo buffer (now truthful). Keep `should_shrink`.
-   8. (low) Cleanup; confirm keyboard.rs:3534/4231 keystroke echo drives the
-      buffer-backed `set_current_message`. CONVERT (don't just delete) the
-      suppression tests (engine_test.rs:2823/2832) + marker test
-      (display_status_line_test.rs:131) to end-to-end buffer-walk behavior tests —
-      same contract. Full-suite + GUI smoke (echo wrap/truncate markers; resize).
-   _Status 2026-06-17: step 1 landed (`e05f98b84`). Steps 2-4 RE-RATED HIGH→med
-   after reading GNU's actual implementation (xdisp.c `with_echo_area_buffer` /
+   2. ✅ **DONE (`942d113be`):** swap the inactive mini-window's buffer to
+      ` *Echo Area 0*` (GNU `with_echo_area_buffer`, xdisp.c:12904). Done as a
+      layout-only buffer resolution in engine.rs `layout_window_rust`: for an
+      inactive mini-window, `ensure_echo_area_buffers()` then resolve `buf_id` to
+      ` *Echo Area 0*` (GNU's temporary `wset_buffer` for display; the window
+      record's `buffer_id` is untouched). ALSO reset the position params to the
+      echo buffer's full range (`window_start`/`point`→BEG=0, `buffer_begv`=0,
+      `buffer_size`=echo ZV char) — GNU moves `pointm`/`start` to BEG; without
+      this the source read uses the mini-window's own (short) accessible range and
+      truncates the message. Ensuring the buffers exist is what keeps an idle echo
+      area blank instead of re-displaying the frame's root buffer (which the
+      mini-window record points at, window/mod.rs).
+   3. ◑ **PARTIAL (`942d113be`):** instead of porting the full `resize_mini_window`
+      unclamped-measure, the existing pre-layout estimator was repointed to read
+      the SWAPPED echo buffer (`BufferTextWindowContentRowsRequest` now takes an
+      `effective_buf_id`), so it pre-grows for the echo content and the existing
+      grow/shrink loop (engine.rs:559, which already IS GNU grow/shrink) resizes.
+      Works + green incl. the multiline-echo resize tests. The full GNU
+      measure-by-iteration-to-ZV + `visible_max_rows` relaxation (so the estimator
+      can be DELETED, step 6) is still TODO.
+   4. ✅ **DONE (`942d113be`):** deleted the engine.rs early-return dispatch;
+      echo/inactive now flows through the ordinary walk over the swapped buffer.
+      This IS GNU `display_echo_area_1` (xdisp.c:13194) = resize + walk. Echo now
+      renders with full unified-pipeline fidelity (faces, CJK wide glyphs, ZWJ
+      emoji, inline images) — proven by the converted parity tests.
+   5. ✅ **DONE (`2e754c4e0`, net −1062 lines):** deleted the parallel machinery —
+      `MinibufferSpecialRowsPlan` + enum + `EchoMinibufferDisplayRowsRequest` +
+      `InactiveMinibufferDisplayRowRequest` + `MinibufferDisplayRenderState` +
+      `empty_minibuffer_echo_row` + `append_synthetic_minibuffer_text` +
+      `message_wrap_mode` + `minibuffer_echo_message_for_window` + dead
+      `ChromeRowRenderServices`/`DisplayRow*` session helpers. Cascade: the
+      `DisplayOrigin::Minibuffer`/`EchoArea` variants became unconstructed and were
+      removed too (the real `layout_window` path now tags echo rows `Text`, the
+      same role the active-minibuffer walk already produces; the mock-frame path
+      still uses `GlyphRowRole::Minibuffer`). Suppression unit tests deleted
+      (tested a deleted internal helper; inactive-render covered end-to-end).
+   6. ⬜ (med) Delete the pre-layout estimator `minibuffer_resize_line_count` +
+      `BufferTextWindowContentRowsRequest::resolve`. BLOCKED on the real step 3:
+      relax the minibuffer (vscroll==0) `visible_max_rows`
+      (display_buffer_text_walk.rs:642) so the walk measures full content (GNU
+      `move_it_to(ZV)`) + add the overflow `window_start`-to-end computation; then
+      the estimator is redundant. Verify active fido/vertico still clamp.
+   7. ⬜ (low) Replace the `visible_region_empty` shrink heuristic (engine.rs:613,
+      currently reads the mini-window's OWN buffer, guarded by the `mini_rows_used
+      < allocated` branch so it's not wrong today) with GNU `BEGV==ZV` emptiness of
+      the swapped echo buffer (now truthful + direct). Keep `should_shrink`.
+   8. ⬜ (low) Confirm keyboard.rs keystroke echo drives the buffer-backed
+      `set_current_message` (it does — step 1 mirror is unconditional). GUI smoke
+      (echo wrap/truncate markers; resize) on a rebuilt binary.
+   _Status 2026-06-17: **steps 1, 2, 4, 5 DONE + green; step 3 partial.** The
+   architecturally meaningful change — echo renders through the unified buffer-text
+   walk, parallel machinery deleted (~1062 lines) — is landed (`942d113be`,
+   `2e754c4e0`). Done by reading GNU first (`with_echo_area_buffer` /
    `resize_mini_window` / `display_echo_area_1`): the two risks that made this look
-   scary — a persistent/stale buffer swap, and a clamp-against-the-height-you're-
-   computing — are both non-issues in GNU's design (unwind-protected temp swap;
-   measure-by-iteration-to-ZV then clamp). The remaining work is a faithful port of
-   three named functions onto neomacs's already-present grow/shrink loop, not an
-   invent-and-hope rewrite. Still wants GUI smoke (echo wrap/truncate markers +
-   resize) on a rebuilt binary, per the risk note below._
+   scary (stale swap; chicken-and-egg height) were non-issues in GNU's design.
+   Remaining 6-8 = estimator removal (needs the full GNU unclamped-measure) +
+   shrink-heuristic purity + GUI smoke — cleanup, not correctness. 1214 layout-engine
+   + 228 neovm-core message/echo green._
 9. ⬜ **Relocate non-append clusters out of `display_row_append.rs` (~10k lines).**
    Risk medium. Deps: 5, 6 (so relocated clusters call the unified lifecycle, not
    just move duplication). The right-edge-marker / right-border move is
