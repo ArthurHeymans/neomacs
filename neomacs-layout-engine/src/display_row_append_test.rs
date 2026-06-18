@@ -38,7 +38,10 @@ use crate::display_row_geometry::{
     DisplayRowScopedValue, DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
-use crate::display_row_overlay_string::OverlayStringRowBreakRenderContext;
+use crate::display_row_overlay_string::{
+    BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
+    OverlayStringRenderState, OverlayStringRowBreakRenderContext,
+};
 use crate::display_row_walk_state::{
     ActiveDisplayPropertySpan, BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint,
     HitRowRangeTracker, LineNumberRenderState, TextPropertyScanCheckpoints, WordWrapBreakCandidate,

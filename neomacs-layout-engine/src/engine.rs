@@ -62,12 +62,12 @@ use crate::display_row::{
 use crate::display_row_append::DisplayRowPrefixRequest;
 #[cfg(test)]
 use crate::display_row_append::DisplayRowPrefixValues;
-#[cfg(test)]
-use crate::display_row_append::OverlayStringRenderSource;
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::DisplayRowMaxX;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
+#[cfg(test)]
+use crate::display_row_overlay_string::OverlayStringRenderSource;
 #[cfg(test)]
 use crate::display_row_walk_state::FaceScanCheckpoint;
 #[cfg(test)]

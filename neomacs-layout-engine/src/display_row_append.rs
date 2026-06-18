@@ -1,7 +1,7 @@
 use crate::display_cursor::{
-    CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
-    CapturedCursorVisualState, CursorCaptureState, capture_cursor_info,
-    display_property_replacement_cursor_info, update_cursor_info_for_main_char,
+    CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
+    capture_cursor_info, display_property_replacement_cursor_info,
+    update_cursor_info_for_main_char,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 
@@ -14,7 +14,7 @@ use crate::display_buffer_text_source::BufferTextDecodedSourceChar;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
-use crate::display_origin::{DisplayOrigin, OverlayStringKind};
+use crate::display_origin::DisplayOrigin;
 use crate::display_property::DisplayMediaReplacementProperty;
 #[cfg(test)]
 use crate::display_row::DisplayRowRenderStop;
@@ -36,16 +36,14 @@ use crate::display_row_geometry::{
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
     DisplayRowTextPosition, DisplayRowVisibilityLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
-use crate::display_row_overlay_string::render_overlay_string;
 use crate::display_row_source_render::{
     TextRowOutputRenderState, TextRowSourceMeasureState, TextRowSourceRenderState,
     current_text_measure_state, current_text_render_state,
 };
 use crate::display_row_walk_state::{
-    BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
-    TextRowTransitionPrefixAction, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
-    WordWrapRenderState,
+    BufferTextRowOverflowDecision, FaceScanCheckpoint, HorizontalScrollSkipState,
+    LineNumberRenderState, SpecialTextRowOverflowDecision, TextRowTransitionPrefixAction,
+    TextRowTransitionStatePolicy, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
@@ -69,9 +67,7 @@ use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::HitRow;
 use crate::matrix_builder::GlyphMatrixBuilder;
-use crate::neovm_bridge::{
-    LayoutBufferView, OverlayDisplayString, ResolvedFace, RustTextPropAccess,
-};
+use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use crate::types::LineWrapMode;
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -1096,7 +1092,11 @@ pub(crate) struct LispStringSourceAppendRequest {
 }
 
 impl LispStringSourceAppendRequest {
-    fn new(position: DisplayRowPosition, source_id: LispStringSourceId, value: Value) -> Self {
+    pub(crate) fn new(
+        position: DisplayRowPosition,
+        source_id: LispStringSourceId,
+        value: Value,
+    ) -> Self {
         Self {
             position,
             source_id,
@@ -1188,10 +1188,6 @@ enum DisplayRowPrefixKind {
 
 #[derive(Clone, Copy)]
 enum BufferAnchoredLispStringSourceKind {
-    OverlayString {
-        overlay_id: Value,
-        kind: OverlayStringKind,
-    },
     Prefix(DisplayRowPrefixKind),
 }
 
@@ -1329,36 +1325,13 @@ impl BufferAnchoredLispStringSource {
         }
     }
 
-    fn overlay_string(
-        value: Value,
-        overlay_id: Value,
-        anchor_charpos: CharPos0,
-        kind: OverlayStringKind,
-    ) -> Self {
-        Self {
-            value,
-            anchor_charpos,
-            kind: BufferAnchoredLispStringSourceKind::OverlayString { overlay_id, kind },
-        }
-    }
-
-    fn anchor_i64(self) -> i64 {
-        self.anchor_charpos.get() as i64
-    }
-
+    #[cfg(test)]
     fn value(self) -> Value {
         self.value
     }
 
     fn origin(self) -> DisplayOrigin {
         match self.kind {
-            BufferAnchoredLispStringSourceKind::OverlayString { overlay_id, kind } => {
-                DisplayOrigin::OverlayString {
-                    overlay_id,
-                    anchor_charpos: self.anchor_charpos,
-                    kind,
-                }
-            }
             BufferAnchoredLispStringSourceKind::Prefix(DisplayRowPrefixKind::Line) => {
                 DisplayOrigin::LinePrefix {
                     anchor_charpos: self.anchor_charpos,
@@ -1379,9 +1352,6 @@ impl BufferAnchoredLispStringSource {
 
     fn source_id(self) -> LispStringSourceId {
         match self.kind {
-            BufferAnchoredLispStringSourceKind::OverlayString { .. } => {
-                LispStringSourceId::OVERLAY_STRING
-            }
             BufferAnchoredLispStringSourceKind::Prefix(_) => LispStringSourceId::PREFIX,
         }
     }
@@ -1411,348 +1381,6 @@ impl DisplayRowPrefixSource {
         position: DisplayRowPosition,
     ) -> LispStringSourceAppendRequest {
         self.source.append_request(position)
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct OverlayStringRenderSource {
-    source: BufferAnchoredLispStringSource,
-}
-
-impl OverlayStringRenderSource {
-    pub(crate) fn new(
-        overlay_string: OverlayDisplayString,
-        anchor_charpos: CharPos0,
-        kind: OverlayStringKind,
-    ) -> Self {
-        Self {
-            source: BufferAnchoredLispStringSource::overlay_string(
-                overlay_string.string,
-                overlay_string.overlay_id,
-                anchor_charpos,
-                kind,
-            ),
-        }
-    }
-
-    pub(crate) fn anchor_i64(self) -> i64 {
-        self.source.anchor_i64()
-    }
-
-    pub(crate) fn value(self) -> Value {
-        self.source.value()
-    }
-
-    pub(crate) fn origin(self) -> DisplayOrigin {
-        self.source.origin()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
-        self.source.base_face_policy()
-    }
-
-    pub(crate) fn append_request(
-        self,
-        position: DisplayRowPosition,
-    ) -> LispStringSourceAppendRequest {
-        self.source.append_request(position)
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct OverlayStringRenderRowContext<'a> {
-    pub(crate) append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) face_char_w: f32,
-    pub(crate) char_h: f32,
-    pub(crate) default_row_ascent: f32,
-    text_y: f32,
-    pub(crate) row_base: usize,
-    pub(crate) max_rows: usize,
-}
-
-impl<'a> OverlayStringRenderRowContext<'a> {
-    pub(crate) fn new(
-        append_surface: &'a DisplayRowAppendSurface,
-        active_face_state: &DisplayRowActiveFaceState,
-        char_h: f32,
-        default_row_ascent: f32,
-        text_y: f32,
-        row_base: usize,
-        max_rows: usize,
-    ) -> Self {
-        Self {
-            append_surface,
-            face_char_w: active_face_state.metrics().char_width,
-            char_h,
-            default_row_ascent,
-            text_y,
-            row_base,
-            max_rows,
-        }
-    }
-
-    pub(crate) fn content_x(self) -> f32 {
-        self.append_surface.content_x()
-    }
-
-    pub(crate) fn right_edge(self) -> f32 {
-        self.append_surface.right_edge()
-    }
-
-    pub(crate) fn geometry_defaults(self) -> DisplayRowGeometryDefaults {
-        DisplayRowGeometryDefaults::new(self.text_y, self.char_h, self.default_row_ascent)
-    }
-
-    pub(crate) fn row_limit(self) -> DisplayRowLimit {
-        DisplayRowLimit {
-            max_rows: self.max_rows,
-        }
-    }
-
-    pub(crate) fn cursor_visual_state(self, base_face: &ResolvedFace) -> CapturedCursorVisualState {
-        CapturedCursorVisualState {
-            face_width: self.face_char_w,
-            face_height: self.char_h,
-            face_ascent: self.default_row_ascent,
-            background: neomacs_display_protocol::types::Color::from_pixel(base_face.bg),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BufferOverlayStringRenderContext<'a> {
-    enabled: bool,
-    window_id: u64,
-    row_context: OverlayStringRenderRowContext<'a>,
-}
-
-pub(crate) struct OverlayStringRenderState<'a> {
-    pub(crate) source_render: TextRowSourceRenderState<'a>,
-    pub(crate) x: &'a mut f32,
-    pub(crate) col: &'a mut usize,
-    pub(crate) geometry: &'a mut DisplayRowGeometryState,
-    pub(crate) cursor_info: &'a mut CursorCaptureState,
-    pub(crate) hit_rows: &'a mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'a mut HitRowRangeTracker,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) face_ids: &'a mut FrameFaceIdAllocator,
-}
-
-impl<'a> OverlayStringRenderState<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn from_source_render(
-        source_render: TextRowSourceRenderState<'a>,
-        x: &'a mut f32,
-        col: &'a mut usize,
-        geometry: &'a mut DisplayRowGeometryState,
-        cursor_info: &'a mut CursorCaptureState,
-        hit_rows: &'a mut Vec<HitRow>,
-        hit_row_range: &'a mut HitRowRangeTracker,
-        row_y_positions: &'a mut DisplayRowYPositions,
-        face_ids: &'a mut FrameFaceIdAllocator,
-    ) -> Self {
-        Self {
-            source_render,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BufferOverlayStringTextRowRenderContext<'a> {
-    enabled: bool,
-    window_id: u64,
-    append_surface: &'a DisplayRowAppendSurface,
-    char_h: f32,
-    default_row_ascent: f32,
-    text_y: f32,
-    row_base: usize,
-    max_rows: usize,
-}
-
-impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        enabled: bool,
-        window_id: u64,
-        append_surface: &'a DisplayRowAppendSurface,
-        char_h: f32,
-        default_row_ascent: f32,
-        text_y: f32,
-        row_base: usize,
-        max_rows: usize,
-    ) -> Self {
-        Self {
-            enabled,
-            window_id,
-            append_surface,
-            char_h,
-            default_row_ascent,
-            text_y,
-            row_base,
-            max_rows,
-        }
-    }
-
-    fn overlay_context(
-        self,
-        active_face_state: &DisplayRowActiveFaceState,
-    ) -> BufferOverlayStringRenderContext<'a> {
-        BufferOverlayStringRenderContext::for_text_row(
-            self.enabled,
-            self.window_id,
-            self.append_surface,
-            active_face_state,
-            self.char_h,
-            self.default_row_ascent,
-            self.text_y,
-            self.row_base,
-            self.max_rows,
-        )
-    }
-
-    pub(crate) fn render_before_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        active_face_state: &DisplayRowActiveFaceState,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.overlay_context(active_face_state)
-            .render_before_at(buffer, anchor_charpos, state);
-    }
-
-    pub(crate) fn render_after_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        active_face_state: &DisplayRowActiveFaceState,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.overlay_context(active_face_state)
-            .render_after_at(buffer, anchor_charpos, state);
-    }
-
-    pub(crate) fn render_both_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        active_face_state: &DisplayRowActiveFaceState,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.overlay_context(active_face_state)
-            .render_both_at(buffer, anchor_charpos, state);
-    }
-}
-
-impl<'a> BufferOverlayStringRenderContext<'a> {
-    pub(crate) fn new(
-        enabled: bool,
-        window_id: u64,
-        row_context: OverlayStringRenderRowContext<'a>,
-    ) -> Self {
-        Self {
-            enabled,
-            window_id,
-            row_context,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn for_text_row(
-        enabled: bool,
-        window_id: u64,
-        append_surface: &'a DisplayRowAppendSurface,
-        active_face_state: &DisplayRowActiveFaceState,
-        char_h: f32,
-        default_row_ascent: f32,
-        text_y: f32,
-        row_base: usize,
-        max_rows: usize,
-    ) -> Self {
-        Self::new(
-            enabled,
-            window_id,
-            OverlayStringRenderRowContext::new(
-                append_surface,
-                active_face_state,
-                char_h,
-                default_row_ascent,
-                text_y,
-                row_base,
-                max_rows,
-            ),
-        )
-    }
-
-    pub(crate) fn render_before_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.render_at_kind(buffer, anchor_charpos, OverlayStringKind::Before, state);
-    }
-
-    pub(crate) fn render_after_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.render_at_kind(buffer, anchor_charpos, OverlayStringKind::After, state);
-    }
-
-    pub(crate) fn render_both_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.render_before_at(buffer, anchor_charpos, state);
-        self.render_after_at(buffer, anchor_charpos, state);
-    }
-
-    fn render_at_kind<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        kind: OverlayStringKind,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        if !self.enabled {
-            return;
-        }
-        let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
-        // overlay_strings_at now returns one GNU-ordered interleaved list; pick
-        // the entries of this kind (within-kind order is preserved, so this is
-        // behavior-neutral vs the old per-kind sort).
-        let want_after = matches!(kind, OverlayStringKind::After);
-        let overlay_strings: Vec<_> = text_props
-            .overlay_strings_at(anchor_charpos)
-            .into_iter()
-            .filter(|entry| entry.after_string_p == want_after)
-            .collect();
-        for overlay_string in overlay_strings {
-            render_overlay_string(
-                buffer,
-                OverlayStringRenderSource::new(
-                    overlay_string,
-                    CharPos0::new(anchor_charpos as usize),
-                    kind,
-                ),
-                self.row_context,
-                state,
-            );
-        }
     }
 }
 
