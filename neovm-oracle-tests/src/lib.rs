@@ -2349,6 +2349,7 @@ mod divergence_textprop_sticky_deep;
 mod divergence_thin_subsystems;
 mod divergence_thread_concurrency;
 mod divergence_thread_elisp_deep;
+mod divergence_time_arithmetic_runtime;
 mod divergence_time_process_final;
 mod divergence_timer_eventloop;
 mod divergence_treesit_deep;
