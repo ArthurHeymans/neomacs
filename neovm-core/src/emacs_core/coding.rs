@@ -1269,15 +1269,30 @@ pub(crate) fn builtin_coding_system_plist(
     let mnemonic = default_mnemonic_for_base(base).unwrap_or(info.mnemonic as i64);
 
     let mut plist = Vec::new();
+    // NOTE: keep `:ascii-compatible-p` as t here. `coding-system-get` resolves
+    // through `coding-system-plist`, and the keyboard-coding suitability check
+    // (mule.el `set-keyboard-coding-system`) errors unless the coding system is
+    // ascii-compatible; `info.ascii_compatible_p` is not yet computed the way
+    // GNU does (it is unreliably nil for utf-8 and EOL variants), so reading it
+    // here would make startup fail. Correcting that field is a separate change.
     plist_push_key(&mut plist, intern(":ascii-compatible-p"), Value::T);
-    plist_push_key(
-        &mut plist,
-        intern(":category"),
-        Value::symbol(coding_category_for_base(base)),
-    );
+    // GNU derives the category from the coding type; charset-type coding
+    // systems are `coding-category-charset` (coding.c). Other types keep the
+    // per-base mapping.
+    let category = if coding_type == "charset" {
+        "coding-category-charset"
+    } else {
+        coding_category_for_base(base)
+    };
+    plist_push_key(&mut plist, intern(":category"), Value::symbol(category));
     plist_push_key(&mut plist, intern(":name"), Value::symbol(display_name));
-    if let Some(doc) = coding_docstring_for_base(base) {
-        plist_push_key(&mut plist, intern(":docstring"), Value::string(doc));
+    // `:docstring` keeps GNU's position right after `:name`; fall back to the
+    // stored property when there is no built-in docstring for this base.
+    if let Some(doc) = coding_docstring_for_base(base)
+        .map(Value::string)
+        .or_else(|| property_lookup(info, intern(":docstring")))
+    {
+        plist_push_key(&mut plist, intern(":docstring"), doc);
     }
     plist_push_key(
         &mut plist,
@@ -1300,12 +1315,11 @@ pub(crate) fn builtin_coding_system_plist(
             Value::list(charset_list),
         );
     }
-    if let Some(mime_charset) = coding_mime_charset_for_base(base) {
-        plist_push_key(
-            &mut plist,
-            intern(":mime-charset"),
-            Value::symbol(mime_charset),
-        );
+    if let Some(mime_charset) = coding_mime_charset_for_base(base)
+        .map(Value::symbol)
+        .or_else(|| property_lookup(info, intern(":mime-charset")))
+    {
+        plist_push_key(&mut plist, intern(":mime-charset"), mime_charset);
     }
     if let Some(post_read_conversion) = info.post_read_conversion {
         plist_push_key(
