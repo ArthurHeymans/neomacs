@@ -572,6 +572,7 @@ fn make_terminal_frame_is_eval_backed_frame_creation() {
     let mut eval = Context::new();
     let scratch = eval.buffers.create_buffer("*scratch*");
     eval.buffers.set_current(scratch);
+    super::pure::mark_selected_terminal_usable_for_test(&eval);
 
     let frame =
         crate::emacs_core::window_cmds::builtin_make_terminal_frame(&mut eval, vec![Value::NIL])

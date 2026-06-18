@@ -6612,6 +6612,17 @@ pub(crate) fn builtin_set_frame_position(
 /// explicitly requests a GUI window-system), delegate to the GUI boundary;
 /// otherwise create a plain frame directly.
 pub(crate) fn builtin_make_frame(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    // GNU creates a TTY frame via make-terminal-frame -> init_tty when there is
+    // no window system, which signals "Unknown terminal type" if the terminal
+    // has no type (e.g. --batch). Mirror that: with no GUI display host and no
+    // usable terminal, refuse rather than fabricate a frame.
+    if eval.display_host.is_none() && !super::terminal::pure::selected_terminal_is_usable_tty(eval)
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Unknown terminal type")],
+        ));
+    }
     let backend = resolve_make_frame_backend_request(args.first(), eval.display_host.is_some());
     tracing::debug!(
         "builtin_make_frame: backend={backend:?} display_host_available={} args={:?}",
@@ -6768,6 +6779,15 @@ pub(crate) fn builtin_make_terminal_frame(
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), args[0]],
+        ));
+    }
+    // GNU `Fmake_terminal_frame` -> `init_tty` signals "Unknown terminal type"
+    // when the terminal has no type (--batch). Mirror that.
+    if eval.display_host.is_none() && !super::terminal::pure::selected_terminal_is_usable_tty(eval)
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Unknown terminal type")],
         ));
     }
     make_frame_plain(&mut eval.frames, &mut eval.buffers, args)

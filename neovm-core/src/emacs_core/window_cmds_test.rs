@@ -20,6 +20,9 @@ fn eval_with_frame(src: &str) -> Vec<String> {
     ev.buffers.set_current(buf);
     // Create a frame so window/frame builtins have something to work with.
     ev.frames.create_frame("F1", 800, 600, buf);
+    // Tests that exercise `make-frame` need a usable terminal (production
+    // --batch deliberately has none, so frame creation errors like GNU).
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     ev.eval_str_each(src)
         .iter()
         .map(format_eval_result)
@@ -3035,6 +3038,7 @@ fn previous_window_wraps() {
 fn frame_ops_enforce_max_arity() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     let out = ev
         .eval_str_each(
             "(condition-case err (make-frame nil nil) (error (car err)))
@@ -3234,6 +3238,7 @@ fn frame_query_builtins_use_internal_window_system_state() {
 fn select_frame_arity_designators_and_selection() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     let out = ev
         .eval_str_each(
             "(condition-case err (select-frame) (error (car err)))
@@ -3286,6 +3291,7 @@ fn select_frame_set_input_focus_arity_designators_and_result() {
 fn set_frame_selected_window_matches_selection_and_error_semantics() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     let out = ev
         .eval_str_each(
         "(condition-case err (set-frame-selected-window) (error (car err)))
@@ -3528,6 +3534,7 @@ fn make_terminal_frame_creates_tty_child_frame_with_gnu_geometry_semantics() {
     let scratch = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(scratch);
     let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     {
         let root = ev.frames.get_mut(root_id).expect("root frame");
         root.char_width = 1.0;
@@ -3628,6 +3635,7 @@ fn make_terminal_frame_accepts_tty_minibuffer_window_parameter() {
     let scratch = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(scratch);
     let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     {
         let root = ev.frames.get_mut(root_id).expect("root frame");
         root.char_width = 1.0;
@@ -3670,6 +3678,7 @@ fn tty_child_frame_accepts_text_pixel_size_parameters() {
     let scratch = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(scratch);
     let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     {
         let root = ev.frames.get_mut(root_id).expect("root frame");
         root.char_width = 1.0;
@@ -3715,6 +3724,7 @@ fn modify_frame_parameters_accepts_text_pixel_size_on_tty_child_frame() {
     let scratch = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(scratch);
     let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     {
         let root = ev.frames.get_mut(root_id).expect("root frame");
         root.char_width = 1.0;
@@ -3766,6 +3776,7 @@ fn window_text_pixel_size_uses_supplied_child_window_frame() {
     let scratch = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(scratch);
     let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     {
         let root = ev.frames.get_mut(root_id).expect("root frame");
         root.char_width = 1.0;
@@ -3823,6 +3834,7 @@ fn shared_tty_child_minibuffer_window_apis_use_owner_frame() {
     let scratch = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(scratch);
     let root_id = ev.frames.create_frame("F1", 80, 25, scratch);
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     {
         let root = ev.frames.get_mut(root_id).expect("root frame");
         root.char_width = 1.0;

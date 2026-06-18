@@ -3967,6 +3967,7 @@ fn vm_window_deletion_and_frame_builtins_use_shared_runtime_state() {
                        (delete-frame f2)
                        (frame-live-p f2)))"#,
             |eval| {
+                crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(eval);
                 let fid = crate::emacs_core::window_cmds::ensure_selected_frame_id(eval);
                 let w1 = eval.frames.get(fid).expect("frame").selected_window;
                 let buffer_id = eval.buffers.current_buffer().expect("buffer").id;
@@ -3991,7 +3992,7 @@ fn vm_window_deletion_and_frame_builtins_use_shared_runtime_state() {
 fn vm_split_window_and_frame_selection_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_with_init_str(
             r#"(let* ((f1 (selected-frame))
                       (w1 (selected-window))
                       (w2 (split-window-internal w1 nil 'right nil))
@@ -4006,7 +4007,8 @@ fn vm_split_window_and_frame_selection_builtins_use_shared_runtime_state() {
                        (progn (iconify-frame f2) (frame-visible-p f2))
                        (length (visible-frame-list))
                        (progn (select-frame-set-input-focus f1)
-                              (eq (selected-frame) f1))))"#
+                              (eq (selected-frame) f1))))"#,
+            |eval| crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(eval),
         ),
         "OK (t 2 t t t 2 2 nil 1 t)"
     );

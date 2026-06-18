@@ -618,6 +618,34 @@ fn terminal_runtime_for_id(id: u64) -> TerminalRuntime {
     })
 }
 
+/// Mark the selected terminal as having a controlling tty, so it can host a
+/// text-terminal frame. Used by tests that exercise `make-frame` /
+/// `make-terminal-frame`, which in a real session run on an interactive
+/// terminal (the production batch path deliberately has neither a controlling
+/// tty nor a type, so frame creation errors like GNU).
+pub(crate) fn mark_selected_terminal_usable_for_test(eval: &crate::emacs_core::eval::Context) {
+    if let Some(id) = decode_terminal_id_eval(eval, &Value::NIL) {
+        TERMINAL_MANAGER.with(|slot| {
+            if let Some(record) = slot.borrow_mut().get_mut(id) {
+                record.runtime.controlling_tty = true;
+            }
+        });
+    }
+}
+
+/// Whether the selected terminal can host a text-terminal frame: it has a
+/// controlling tty or a known terminal type. GNU's `init_tty` signals
+/// "Unknown terminal type" when neither holds (batch / no real terminal), which
+/// is why `make-frame` / `make-terminal-frame` error in `--batch`.
+pub(crate) fn selected_terminal_is_usable_tty(eval: &crate::emacs_core::eval::Context) -> bool {
+    decode_terminal_id_eval(eval, &Value::NIL)
+        .map(|id| {
+            let runtime = terminal_runtime_for_id(id);
+            runtime.controlling_tty || runtime.tty_type.is_some()
+        })
+        .unwrap_or(false)
+}
+
 fn terminal_params_for_id(id: u64) -> Vec<(Value, Value)> {
     TERMINAL_MANAGER.with(|slot| {
         slot.borrow()

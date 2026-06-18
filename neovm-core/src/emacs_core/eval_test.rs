@@ -121,6 +121,9 @@ fn eval_one_with_frame(src: &str) -> String {
     let buf = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(buf);
     ev.frames.create_frame("F1", 800, 600, buf);
+    // These tests exercise `make-frame`, which requires a usable terminal (in
+    // production --batch deliberately has none, so it errors like GNU).
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
     let result = ev.eval_str(src);
     format_eval_result(&result)
 }
