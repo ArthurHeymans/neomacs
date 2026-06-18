@@ -3,10 +3,10 @@ use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBeginState,
     BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
     BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeRequest,
-    BufferTextWindowTailFinalizeState, BufferTextWindowTerminalRightBorderRequest,
-    BufferTextWindowVisibilityRetryRequest,
+    BufferTextWindowCursorPublishStatus, BufferTextWindowFinishRequest,
+    BufferTextWindowFinishState, BufferTextWindowTailFinalizeContext,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
+    BufferTextWindowTerminalRightBorderRequest, BufferTextWindowVisibilityRetryRequest,
 };
 use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_render::*;
@@ -6247,6 +6247,10 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     });
 
     assert!(outcome.cursor_requested());
+    assert_eq!(
+        outcome.cursor_publish_status(),
+        BufferTextWindowCursorPublishStatus::Published
+    );
     assert!(outcome.cursor_published());
     assert!(outcome.pending_row_finished());
     assert_eq!(outcome.visual_cursor_summary().requested, 1);
@@ -6263,6 +6267,56 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     assert_eq!(cursors[0].window_id, -42);
     assert_eq!(cursors[0].slot_id.row, 0);
     assert_eq!(cursors[0].slot_id.col, 4);
+}
+
+#[test]
+fn buffer_text_window_tail_finalize_reports_missing_cursor_capture() {
+    let mut context = RowTransitionTestContext::new("tail-finalize-missing-cursor");
+    let mut params = test_display_space_window_params();
+    params.window_id = 1;
+    params.selected = true;
+    params.cursor_color = 0x00ffffff;
+    params.text_bounds = Rect::new(0.0, 0.0, 160.0, 48.0);
+
+    let mut cursor_info = CursorCaptureState::new();
+    let mut hit_row_range = HitRowRangeTracker::new(0);
+
+    let outcome = BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
+        params: &params,
+        text: b"abc",
+        text_matrix_row_base: 0,
+        text_area_left: 0.0,
+        window_top: 0.0,
+        text_y: 0.0,
+        text_height: 48.0,
+        char_w: 8.0,
+        char_h: 16.0,
+        window_start: 0,
+        point_charpos: 0,
+        charpos: 3,
+        point_is_visible_eob: false,
+        row_limit: context.row_limit,
+    })
+    .finalize_and_apply(BufferTextWindowTailFinalizeState {
+        cursor_info: &mut cursor_info,
+        row_geometry: &context.geometry,
+        row_y_positions: &context.row_y_positions,
+        hit_row_range: &mut hit_row_range,
+        hit_rows: &mut context.hit_rows,
+        output_render: TextRowOutputRenderState::new(
+            &mut context.builder,
+            &mut context.output_emitter,
+            &mut context.eval,
+        ),
+    });
+
+    assert!(outcome.cursor_requested());
+    assert_eq!(
+        outcome.cursor_publish_status(),
+        BufferTextWindowCursorPublishStatus::MissingCapture
+    );
+    assert!(!outcome.cursor_published());
+    assert!(context.builder.phys_cursor().is_none());
 }
 
 #[test]

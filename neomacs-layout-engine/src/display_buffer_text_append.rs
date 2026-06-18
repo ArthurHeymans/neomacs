@@ -39,8 +39,8 @@ use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, Win
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::{
-    CapturedTextWindowCursorPublishContext, CursorCaptureState,
-    VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
+    CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
+    CursorCaptureState, VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -307,9 +307,28 @@ pub(crate) struct BufferTextWindowVisibilityRetryOutcome {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowTailFinalizeOutcome {
     cursor_requested: bool,
-    cursor_published: bool,
+    cursor_publish_status: BufferTextWindowCursorPublishStatus,
     visual_cursor_summary: VisualTextWindowCursorPublishSummary,
     pending_row_finished: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextWindowCursorPublishStatus {
+    NotRequested,
+    MissingCapture,
+    NoWindowCursor,
+    Clipped,
+    Published,
+}
+
+impl From<CapturedTextWindowCursorPublishOutcome> for BufferTextWindowCursorPublishStatus {
+    fn from(outcome: CapturedTextWindowCursorPublishOutcome) -> Self {
+        match outcome {
+            CapturedTextWindowCursorPublishOutcome::NoWindowCursor => Self::NoWindowCursor,
+            CapturedTextWindowCursorPublishOutcome::Clipped => Self::Clipped,
+            CapturedTextWindowCursorPublishOutcome::Published => Self::Published,
+        }
+    }
 }
 
 impl BufferTextWindowTailFinalizeOutcome {
@@ -320,7 +339,15 @@ impl BufferTextWindowTailFinalizeOutcome {
 
     #[cfg(test)]
     pub(crate) fn cursor_published(self) -> bool {
-        self.cursor_published
+        matches!(
+            self.cursor_publish_status,
+            BufferTextWindowCursorPublishStatus::Published
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cursor_publish_status(self) -> BufferTextWindowCursorPublishStatus {
+        self.cursor_publish_status
     }
 
     #[cfg(test)]
@@ -426,12 +453,16 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
 
         let cursor_requested = context.point_charpos >= context.window_start
             && (context.point_charpos <= context.charpos || context.point_is_visible_eob);
-        let mut cursor_published = false;
+        let mut cursor_publish_status = if cursor_requested {
+            BufferTextWindowCursorPublishStatus::MissingCapture
+        } else {
+            BufferTextWindowCursorPublishStatus::NotRequested
+        };
 
         if cursor_requested {
             if let Some(cursor) = cursor_info.captured() {
                 let cursor_row_metrics = output_emitter.row_metrics().to_vec();
-                CapturedTextWindowCursorPublishContext::new(
+                cursor_publish_status = CapturedTextWindowCursorPublishContext::new(
                     context.params,
                     context.text,
                     context.text_matrix_row_base,
@@ -450,8 +481,8 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                     row_geometry.row_metrics_snapshot(context.text_matrix_row_base),
                     builder,
                     output_emitter,
-                );
-                cursor_published = true;
+                )
+                .into();
             } else {
                 tracing::debug!(
                     "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",
@@ -490,7 +521,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
 
         BufferTextWindowTailFinalizeOutcome {
             cursor_requested,
-            cursor_published,
+            cursor_publish_status,
             visual_cursor_summary,
             pending_row_finished,
         }
