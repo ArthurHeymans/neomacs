@@ -12874,15 +12874,6 @@ impl Context {
     pub(crate) fn specbind(&mut self, sym_id: SymId, value: Value) {
         let resolved =
             builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
-        let name = resolve_sym(resolved);
-        // Debug: trace when macroexpand-all-environment gets a non-list value
-        if name == "macroexpand-all-environment" && !value.is_nil() && !value.is_cons() {
-            tracing::error!(
-                "specbind macroexpand-all-environment to non-list: {:?} bits={:#x}",
-                value.kind(),
-                value.bits()
-            );
-        }
 
         // `buffer-undo-list` is a per-buffer variable in GNU.  Neomacs stores
         // it in SharedUndoState instead of the generic buffer-local alist, so
