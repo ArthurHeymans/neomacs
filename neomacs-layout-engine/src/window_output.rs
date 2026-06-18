@@ -26,13 +26,10 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTe
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
-    MatrixRowBeginRequest, MatrixRowMetricsRequest, MatrixWindowBeginRequest,
-    MatrixWindowLifecycleRequest,
+    MatrixRowMetricsRequest, MatrixWindowBeginRequest, MatrixWindowLifecycleRequest,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
-};
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -47,6 +44,7 @@ const RIGHT_BORDER_SOURCE_ID: u64 = 0x7262_6f72;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
+    pub(crate) matrix_row: usize,
     pub(crate) row: usize,
     pub(crate) pixel_y: f32,
     pub(crate) height: f32,
@@ -55,6 +53,7 @@ pub(crate) struct RowMetricsSnapshot {
 
 #[derive(Clone, Copy, Debug)]
 struct CurrentRowProgress {
+    matrix_row: Option<usize>,
     row: i64,
     y: i64,
     col: i64,
@@ -418,25 +417,29 @@ impl<'a> TextMatrixRowOutput<'a> {
     }
 
     pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) {
-        self.builder.begin_current_row(MatrixRowBeginRequest {
-            row: begin.matrix_row,
-            role: GlyphRowRole::Text,
-            mode_line: false,
-        });
-        self.output_emitter
-            .begin_text_row(self.evaluator, begin.row, begin.col, begin.y, begin.x);
+        self.builder.begin_text_row(begin.matrix_row);
+        self.output_emitter.begin_text_matrix_row(
+            self.evaluator,
+            begin.matrix_row,
+            begin.row,
+            begin.col,
+            begin.y,
+            begin.x,
+        );
     }
 
     pub(crate) fn finish(&mut self, metrics: TextMatrixRowMetrics) {
         let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
-        self.builder.set_open_row_metrics(matrix_metrics);
+        let matrix_row = self.output_emitter.current_text_matrix_row();
+        self.builder.set_row_metrics(matrix_row, matrix_metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
     }
 
     pub(crate) fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) {
+        let matrix_row = self.output_emitter.current_text_matrix_row();
         self.finish(metrics);
-        self.builder.end_current_row();
+        self.builder.finalize_row(matrix_row);
     }
 
     pub(crate) fn emit(&mut self, transition: TextMatrixRowGeometryTransition) {
@@ -851,7 +854,7 @@ pub(crate) fn finish_text_window_output_rows(
     let window_y = builder.current_window_row_install_context().pixel_bounds.y;
     for metric in output_emitter.row_metrics() {
         builder.set_row_metrics(
-            metric.row,
+            metric.matrix_row,
             MatrixRowMetricsRequest {
                 pixel_y: metric.pixel_y - window_y,
                 height_px: metric.height,
@@ -859,7 +862,9 @@ pub(crate) fn finish_text_window_output_rows(
             },
         );
     }
-    builder.end_current_row();
+    if let Some(metric) = output_emitter.row_metrics().last() {
+        builder.finalize_row(metric.matrix_row);
+    }
 }
 
 fn text_matrix_row_metrics_request(
@@ -1083,8 +1088,16 @@ impl WindowOutputEmitter {
         })
     }
 
-    fn begin_current_row_progress(&mut self, row: i64, col: i64, y: i64, x: i64) {
+    fn begin_current_row_progress(
+        &mut self,
+        matrix_row: Option<usize>,
+        row: i64,
+        col: i64,
+        y: i64,
+        x: i64,
+    ) {
         self.current_row_progress = Some(CurrentRowProgress {
+            matrix_row,
             row,
             y,
             col,
@@ -1101,7 +1114,7 @@ impl WindowOutputEmitter {
                 progress.col = col;
                 progress.x = x;
             }
-            _ => self.begin_current_row_progress(row, col, y, x),
+            _ => self.begin_current_row_progress(None, row, col, y, x),
         }
     }
 
@@ -1208,12 +1221,44 @@ impl WindowOutputEmitter {
         y: i64,
         x: i64,
     ) {
-        self.begin_current_row_progress(row, col, y, x);
+        self.begin_current_row_progress(None, row, col, y, x);
         let _ = self.with_live_update(evaluator, |update| {
             update.output_cursor_to_coords(row, col, y, x)
         });
     }
 
+    pub(crate) fn begin_text_matrix_row(
+        &mut self,
+        evaluator: &mut Context,
+        matrix_row: usize,
+        row: usize,
+        col: usize,
+        y: f32,
+        x: f32,
+    ) {
+        let output_row = self.text_row_base + row as i64;
+        let output_col = col as i64;
+        let output_y = (y - self.window_top).round() as i64;
+        let output_x = (x - self.text_x).round() as i64;
+        self.begin_current_row_progress(
+            Some(matrix_row),
+            output_row,
+            output_col,
+            output_y,
+            output_x,
+        );
+        let _ = self.with_live_update(evaluator, |update| {
+            update.output_cursor_to_coords(output_row, output_col, output_y, output_x)
+        });
+    }
+
+    pub(crate) fn current_text_matrix_row(&self) -> usize {
+        self.current_row_progress
+            .and_then(|progress| progress.matrix_row)
+            .expect("text row must have matrix row progress before finishing")
+    }
+
+    #[cfg(test)]
     pub(crate) fn begin_text_row(
         &mut self,
         evaluator: &mut Context,
@@ -1222,13 +1267,7 @@ impl WindowOutputEmitter {
         y: f32,
         x: f32,
     ) {
-        self.begin_row_output(
-            evaluator,
-            self.text_row_base + row as i64,
-            col as i64,
-            (y - self.window_top).round() as i64,
-            (x - self.text_x).round() as i64,
-        );
+        self.begin_text_matrix_row(evaluator, self.text_row_base as usize + row, row, col, y, x);
     }
 
     fn begin_chrome_row(&mut self, evaluator: &mut Context, row: i64, y: f32) {
@@ -1302,6 +1341,9 @@ impl WindowOutputEmitter {
             end_buffer_pos: self.current_row_last_display_pos.take(),
         });
         self.row_metrics.push(RowMetricsSnapshot {
+            matrix_row: row_progress
+                .matrix_row
+                .expect("text row must have matrix row progress before recording metrics"),
             row: row_progress.row.max(0) as usize,
             pixel_y: row_y_start,
             height: row_height.max(1.0),

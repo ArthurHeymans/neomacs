@@ -2212,13 +2212,14 @@ pub(crate) fn install_display_row_in_matrix_row(
     let context = builder.current_window_row_install_context();
     let mut row = row.clone();
     row.pixel_y -= context.pixel_bounds.y;
-    builder.begin_current_row(MatrixRowBeginRequest {
-        row: matrix_row,
-        role: row.role,
-        mode_line: row.mode_line,
-    });
-    builder.replace_current_row(row);
-    builder.end_current_row();
+    builder.install_prebuilt_row(
+        MatrixRowBeginRequest {
+            row: matrix_row,
+            role: row.role,
+            mode_line: row.mode_line,
+        },
+        row,
+    );
 }
 
 pub(crate) fn install_measured_window_display_row(

@@ -592,6 +592,7 @@ impl DisplayRowGeometryState {
     pub(crate) fn row_metrics_snapshot(&self, row_base: usize) -> RowMetricsSnapshot {
         let height = self.height.max(1.0);
         RowMetricsSnapshot {
+            matrix_row: row_base + self.row,
             row: row_base + self.row,
             pixel_y: self.y,
             height,

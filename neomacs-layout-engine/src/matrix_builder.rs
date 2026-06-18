@@ -533,11 +533,14 @@ impl GlyphMatrixBuilder {
     /// Record stored geometry for the currently open row.
     #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        self.set_open_row_metrics(MatrixRowMetricsRequest {
-            pixel_y,
-            height_px,
-            ascent_px,
-        });
+        self.set_row_metrics(
+            self.current_row,
+            MatrixRowMetricsRequest {
+                pixel_y,
+                height_px,
+                ascent_px,
+            },
+        );
     }
 
     pub(crate) fn with_current_row_mut<R>(
@@ -552,19 +555,6 @@ impl GlyphMatrixBuilder {
     pub(crate) fn current_row(&self) -> Option<&GlyphRow> {
         let matrix = self.current_matrix.as_ref()?;
         matrix.rows.get(self.current_row)
-    }
-
-    pub(crate) fn set_open_row_metrics(&mut self, metrics: MatrixRowMetricsRequest) {
-        if let Some(ref mut matrix) = self.current_matrix
-            && self.current_row < matrix.rows.len()
-        {
-            Self::write_row_metrics(
-                &mut matrix.rows[self.current_row],
-                metrics.pixel_y,
-                metrics.height_px,
-                metrics.ascent_px,
-            );
-        }
     }
 
     pub(crate) fn set_row_metrics(&mut self, row: usize, metrics: MatrixRowMetricsRequest) {
@@ -594,7 +584,7 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub(crate) fn replace_current_row(&mut self, source: GlyphRow) {
+    fn replace_current_row(&mut self, source: GlyphRow) {
         let current_row = self.current_row;
         if let Some(ref mut matrix) = self.current_matrix
             && current_row < matrix.rows.len()
@@ -603,21 +593,40 @@ impl GlyphMatrixBuilder {
         }
     }
 
+    pub(crate) fn install_prebuilt_row(&mut self, begin: MatrixRowBeginRequest, source: GlyphRow) {
+        self.begin_current_row(begin);
+        self.replace_current_row(source);
+        self.end_current_row();
+    }
+
+    pub(crate) fn begin_text_row(&mut self, row: usize) {
+        self.begin_current_row(MatrixRowBeginRequest {
+            row,
+            role: GlyphRowRole::Text,
+            mode_line: false,
+        });
+    }
+
     #[cfg(test)]
-    fn install_display_row(&mut self, row: usize, source: &GlyphRow) {
-        self.begin_row(row, source.role);
+    fn install_display_row(&mut self, row_index: usize, source: &GlyphRow) {
         let context = self.current_window_row_install_context();
         let mut row = source.clone();
         row.pixel_y -= context.pixel_bounds.y;
-        self.replace_current_row(row);
-        self.end_row();
+        self.install_prebuilt_row(
+            MatrixRowBeginRequest {
+                row: row_index,
+                role: row.role,
+                mode_line: row.mode_line,
+            },
+            row,
+        );
     }
 
-    pub(crate) fn end_current_row(&mut self) {
+    fn end_current_row(&mut self) {
         self.finalize_current_row();
     }
 
-    pub(crate) fn begin_current_row(&mut self, begin: MatrixRowBeginRequest) {
+    fn begin_current_row(&mut self, begin: MatrixRowBeginRequest) {
         self.current_row = begin.row;
         if let Some(ref mut matrix) = self.current_matrix
             && begin.row < matrix.rows.len()
@@ -628,11 +637,15 @@ impl GlyphMatrixBuilder {
         }
     }
 
-    pub(crate) fn finalize_current_row(&mut self) {
+    fn finalize_current_row(&mut self) {
+        self.finalize_row(self.current_row);
+    }
+
+    pub(crate) fn finalize_row(&mut self, row: usize) {
         if let Some(ref mut matrix) = self.current_matrix {
             GlyphRowFinalizationContext::new(
                 self.current_window_id,
-                self.current_row,
+                row,
                 self.current_pixel_bounds,
             )
             .finalize_matrix_row(matrix, self.phys_cursor.as_mut());
