@@ -1193,6 +1193,7 @@ mod zlib_decompress_region_semantics;
 mod divergence_advice_deep;
 mod divergence_advice_hooks_deep;
 mod divergence_advice_hooks_locals;
+mod divergence_advice_method_buffersort_runtime;
 mod divergence_alist_plist_hash;
 mod divergence_arithmetic_float;
 mod divergence_arithmetic_real;
