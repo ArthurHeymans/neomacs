@@ -27,7 +27,7 @@ pub(crate) use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_source::{
-    BufferTextConsumedSourceItem, BufferTextSourceCharStep, BufferTextSourceCharStepper,
+    BufferTextConsumedDisplayItem, BufferTextConsumedItemAdapter, BufferTextConsumedSourceItem,
     BufferTextSourceCursor, BufferTextSourceItem, BufferTextSourcePosition,
     BufferTextSourceStepChar, BufferTextWindowSource, BufferTextWindowSourceReadRequest,
 };
@@ -380,7 +380,7 @@ struct BufferTextWindowBodyPassState<'emit> {
 struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
     source_cursor: BufferTextSourceCursor<'request, B>,
     source_resolve_state: DisplaySourceResolveState,
-    char_stepper: BufferTextSourceCharStepper,
+    source_adapter: BufferTextConsumedItemAdapter,
 }
 
 struct BufferTextWindowOutputState<'emit> {
@@ -690,9 +690,9 @@ struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
-struct BufferTextSourceCharStepRenderRequest<'a> {
+struct BufferTextConsumedDisplayItemRenderRequest<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-    source_step: BufferTextSourceCharStep,
+    source_item: BufferTextConsumedDisplayItem,
     text: &'a [u8],
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
@@ -860,8 +860,7 @@ impl BufferTextWindowLoopRequestContext {
     pub(crate) fn source_char_request<'a>(
         self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-        source_char: BufferTextSourceStepChar,
-        source_item: DisplayItem,
+        source_item: BufferTextConsumedDisplayItem,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
@@ -870,7 +869,6 @@ impl BufferTextWindowLoopRequestContext {
         glyph_y_offset: f32,
     ) -> BufferTextSourceCharRenderRequest<'a> {
         BufferTextSourceCharRenderRequest::new(
-            source_char,
             source_item,
             BufferTextSourceCharRenderContext::new(
                 layout_resolution_context,
@@ -1697,17 +1695,17 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
                 RenderFaceRef::Inherit,
             ),
             source_resolve_state: DisplaySourceResolveState::default(),
-            char_stepper: BufferTextSourceCharStepper::new(text_start_byte),
+            source_adapter: BufferTextConsumedItemAdapter::new(text_start_byte),
         }
     }
 
-    fn fallback_char_step_from_source_item(
+    fn fallback_consumed_display_item_from_source_item(
         &mut self,
         source_item: BufferTextSourceItem,
         position: &mut BufferTextSourcePosition,
-    ) -> Option<BufferTextSourceCharStep> {
-        self.char_stepper
-            .char_step_from_source_item(source_item, position)
+    ) -> Option<BufferTextConsumedDisplayItem> {
+        self.source_adapter
+            .consumed_display_item_from_source_item(source_item, position)
     }
 }
 
@@ -2896,12 +2894,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         };
 
         match consumed_source {
-            BufferTextConsumedSourceItem::CharStep(source_step) => {
-                return self.render_source_char_step_for_context(
-                    BufferTextSourceCharStepRenderRequest {
+            BufferTextConsumedSourceItem::DisplayItem(source_item) => {
+                return self.render_consumed_display_item_for_context(
+                    BufferTextConsumedDisplayItemRenderRequest {
                         layout_resolution_context: face_resolution_context
                             .source_item_layout_resolution_context(),
-                        source_step,
+                        source_item,
                         text,
                         active_face_state,
                         params,
@@ -2960,20 +2958,20 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         BufferTextWindowPreSourceOutcome::ReadyForSourceItem
     }
 
-    fn render_source_char_step_for_context<'request, B: LayoutBufferView>(
+    fn render_consumed_display_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        request: BufferTextSourceCharStepRenderRequest<'request>,
+        request: BufferTextConsumedDisplayItemRenderRequest<'request>,
         buffer: &B,
     ) -> BufferTextWindowLoopStepOutcome {
-        let BufferTextSourceCharStepRenderRequest {
+        let BufferTextConsumedDisplayItemRenderRequest {
             layout_resolution_context,
-            source_step,
+            source_item,
             text,
             active_face_state,
             params,
         } = request;
         let selective_display_outcome = self.render_selective_display_tail_for_context(
-            source_step.source_char(),
+            source_item.source_char(),
             text,
             active_face_state,
             buffer,
@@ -2985,9 +2983,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
         }
 
-        let is_explicit_line_break = source_step.is_explicit_line_break();
-        let end_charpos = source_step.end_charpos();
-        let (source_char, source_item) = source_step.into_parts();
+        let is_explicit_line_break = source_item.is_explicit_line_break();
+        let end_charpos = source_item.end_charpos();
+        let source_char = source_item.source_char();
         if is_explicit_line_break {
             if self
                 .render_line_break_for_context(source_char, text, active_face_state, buffer)
@@ -2998,7 +2996,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         } else {
             let char_render_outcome = self.render_source_char_for_context(
                 layout_resolution_context,
-                source_char,
                 source_item,
                 text,
                 active_face_state,
@@ -3071,15 +3068,18 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
                 let mut source_position = self.progress.source_position();
                 let Some(source_step) = source_walk
-                    .fallback_char_step_from_source_item(source_item, &mut source_position)
+                    .fallback_consumed_display_item_from_source_item(
+                        source_item,
+                        &mut source_position,
+                    )
                 else {
                     return BufferTextWindowLoopStepOutcome::StopBufferWalk;
                 };
                 self.progress.apply_source_position(source_position);
-                self.render_source_char_step_for_context(
-                    BufferTextSourceCharStepRenderRequest {
+                self.render_consumed_display_item_for_context(
+                    BufferTextConsumedDisplayItemRenderRequest {
                         layout_resolution_context,
-                        source_step,
+                        source_item: source_step,
                         text,
                         active_face_state,
                         params,
@@ -3149,7 +3149,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             );
             let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
             let mut source_position = self.progress.source_position();
-            let source_item = source_walk.char_stepper.next_consumed_source_item(
+            let source_item = source_walk.source_adapter.next_consumed_source_item(
                 &mut source_walk.source_cursor,
                 &mut source_context,
                 &mut source_position,
@@ -3261,8 +3261,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     fn render_source_char_for_context<'request, B: LayoutBufferView>(
         &mut self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
-        source_char: BufferTextSourceStepChar,
-        source_item: DisplayItem,
+        source_item: BufferTextConsumedDisplayItem,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
         params: &'request WindowParams,
@@ -3273,7 +3272,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     {
         let request = self.loop_context.source_char_request(
             layout_resolution_context,
-            source_char,
             source_item,
             text,
             self.append_surface,
@@ -6661,8 +6659,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
-    source_char: BufferTextSourceStepChar,
-    source_item: DisplayItem,
+    source_item: BufferTextConsumedDisplayItem,
     context: BufferTextSourceCharRenderContext<'a>,
 }
 
@@ -7065,13 +7062,11 @@ impl<'a> BufferTextSourceCharRenderContext<'a> {
 
 impl<'a> BufferTextSourceCharRenderRequest<'a> {
     pub(crate) fn new(
-        source_step_char: BufferTextSourceStepChar,
-        source_item: DisplayItem,
+        source_item: BufferTextConsumedDisplayItem,
         context: BufferTextSourceCharRenderContext<'a>,
     ) -> Self {
-        debug_assert_ne!(source_step_char.ch(), '\n');
+        debug_assert_ne!(source_item.source_char().ch(), '\n');
         Self {
-            source_char: source_step_char,
             source_item,
             context,
         }
@@ -7103,7 +7098,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         } = state;
         let mut source_render = source_render;
         let context = self.context;
-        let mut source_item = self.source_item;
+        let (source_step_char, mut source_item) = self.source_item.into_parts();
         let active_face_state = context
             .layout_resolution_context
             .resolve_source_item_layout_for_active_face(
@@ -7118,7 +7113,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             .buffer_end_charpos()
             .map(|char_pos| char_pos.get() as i64);
 
-        let source_step_char = self.source_char;
         let ch = source_step_char.ch();
         source_step_char.record_word_wrap_candidate(word_wrap, source_render.output_emitter());
 

@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_buffer_text_source::{
-    BufferTextConsumedSourceItem, BufferTextSourceCharStepper, BufferTextSourceCursor,
+    BufferTextConsumedItemAdapter, BufferTextConsumedSourceItem, BufferTextSourceCursor,
     BufferTextSourcePosition,
 };
 use crate::display_item::{
@@ -870,11 +870,11 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
         RenderFaceRef::FaceId(3),
     );
     let mut context = DisplaySourceContext::empty();
-    let mut stepper = BufferTextSourceCharStepper::new(0);
+    let mut adapter = BufferTextConsumedItemAdapter::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextConsumedSourceItem::CharStep(first)) =
-        stepper.next_consumed_source_item(&mut source, &mut context, &mut position)
+    let Some(BufferTextConsumedSourceItem::DisplayItem(first)) =
+        adapter.next_consumed_source_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected leading text step");
     };
@@ -884,7 +884,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
 
     let Some(BufferTextConsumedSourceItem::Replacement(replacement)) =
-        stepper.next_consumed_source_item(&mut source, &mut context, &mut position)
+        adapter.next_consumed_source_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected atomic replacement string item");
     };
@@ -933,11 +933,11 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
         RenderFaceRef::FaceId(3),
     );
     let mut context = DisplaySourceContext::empty();
-    let mut stepper = BufferTextSourceCharStepper::new(0);
+    let mut adapter = BufferTextConsumedItemAdapter::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextConsumedSourceItem::CharStep(first)) =
-        stepper.next_consumed_source_item(&mut source, &mut context, &mut position)
+    let Some(BufferTextConsumedSourceItem::DisplayItem(first)) =
+        adapter.next_consumed_source_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected leading text step");
     };
@@ -947,7 +947,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     position = BufferTextSourcePosition::new(position.byte_idx(), end_charpos);
 
     let Some(BufferTextConsumedSourceItem::Replacement(replacement)) =
-        stepper.next_consumed_source_item(&mut source, &mut context, &mut position)
+        adapter.next_consumed_source_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected atomic display space item");
     };
