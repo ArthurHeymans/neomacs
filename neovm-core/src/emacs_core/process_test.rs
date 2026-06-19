@@ -1031,9 +1031,8 @@ fn process_manager_list() {
     let id1 = pm.create_process("a".into(), Value::NIL, "p".into(), vec![]);
     let id2 = pm.create_process("b".into(), Value::NIL, "q".into(), vec![]);
     let ids = pm.list_processes();
-    assert!(ids.contains(&id1));
-    assert!(ids.contains(&id2));
-    assert_eq!(ids.len(), 2);
+    // Newest-first, like GNU's `process-list` (front-insertion `Vprocess_alist`).
+    assert_eq!(ids, vec![id2, id1]);
 }
 
 #[test]

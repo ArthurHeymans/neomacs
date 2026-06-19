@@ -2345,7 +2345,14 @@ impl ProcessManager {
 
     /// List all process ids.
     pub fn list_processes(&self) -> Vec<ProcessId> {
-        self.processes.keys().copied().collect()
+        // GNU `process-list` is `(mapcar #'cdr Vprocess_alist)`, and a new
+        // process is consed to the FRONT of `Vprocess_alist` (process.c:953), so
+        // the list is newest-first. `ProcessId` is a monotonic counter, so
+        // sorting by descending id reproduces GNU's order exactly (a deleted
+        // process is removed from both the alist and the map).
+        let mut ids: Vec<ProcessId> = self.processes.keys().copied().collect();
+        ids.sort_unstable_by(|a, b| b.cmp(a));
+        ids
     }
 
     /// Return IDs of processes that have a live OS child, PTY child, or network socket.
