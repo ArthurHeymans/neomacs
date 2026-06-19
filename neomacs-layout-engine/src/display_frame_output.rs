@@ -1,9 +1,9 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::MeasuredDisplayRow;
 use crate::display_row_output_install::{DisplayRowFaceInstallSurface, DisplayRowInstallSurface};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::{
@@ -59,38 +59,38 @@ pub(crate) struct FrameOutputIdentity {
 }
 
 pub(crate) struct FrameOutputSurface<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    builder: &'a mut DisplayOutputBuilder,
 }
 
 pub(crate) struct FrameTextWindowOutputSurface<'builder> {
-    builder: &'builder mut GlyphMatrixBuilder,
+    builder: &'builder mut DisplayOutputBuilder,
 }
 
 pub(crate) struct FrameChromeOutputSurface<'builder, 'rows> {
-    builder: &'builder mut GlyphMatrixBuilder,
+    builder: &'builder mut DisplayOutputBuilder,
     pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
 }
 
 pub(crate) struct FrameOutputOwner {
-    builder: GlyphMatrixBuilder,
+    builder: DisplayOutputBuilder,
     pending_frame_chrome_rows: Vec<FrameChromeRow>,
     pending_tab_bar: Option<FrameTabBarState>,
 }
 
 struct FrameOutputSession<'builder, 'chrome, 'tab> {
-    builder: &'builder mut GlyphMatrixBuilder,
+    builder: &'builder mut DisplayOutputBuilder,
     pending_frame_chrome_rows: &'chrome mut Vec<FrameChromeRow>,
     pending_tab_bar: &'tab mut Option<FrameTabBarState>,
 }
 
 pub(crate) struct FrameOutputView<'builder> {
-    builder: &'builder GlyphMatrixBuilder,
+    builder: &'builder DisplayOutputBuilder,
 }
 
 impl FrameOutputOwner {
     pub(crate) fn new() -> Self {
         Self {
-            builder: GlyphMatrixBuilder::new(),
+            builder: DisplayOutputBuilder::new(),
             pending_frame_chrome_rows: Vec::new(),
             pending_tab_bar: None,
         }
@@ -137,7 +137,7 @@ impl FrameOutputOwner {
 }
 
 impl<'a> FrameOutputSurface<'a> {
-    pub(crate) fn from_output_builder(builder: &'a mut GlyphMatrixBuilder) -> Self {
+    pub(crate) fn from_output_builder(builder: &'a mut DisplayOutputBuilder) -> Self {
         Self { builder }
     }
 
@@ -249,7 +249,7 @@ impl<'a> FrameOutputSurface<'a> {
 }
 
 impl<'builder> FrameTextWindowOutputSurface<'builder> {
-    fn from_output_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+    fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
         Self { builder }
     }
 
@@ -298,7 +298,7 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
 
 impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
     pub(crate) fn from_output_builder(
-        builder: &'builder mut GlyphMatrixBuilder,
+        builder: &'builder mut DisplayOutputBuilder,
         pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
     ) -> Self {
         Self {
@@ -318,7 +318,7 @@ impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
 
 impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
     fn new(
-        builder: &'builder mut GlyphMatrixBuilder,
+        builder: &'builder mut DisplayOutputBuilder,
         pending_frame_chrome_rows: &'chrome mut Vec<FrameChromeRow>,
         pending_tab_bar: &'tab mut Option<FrameTabBarState>,
     ) -> Self {
@@ -338,8 +338,8 @@ impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
     fn finish(self, frame_params: &FrameParams) -> FrameDisplayState {
         let frame_cols = (frame_params.width / frame_params.char_width.max(1.0)) as usize;
         let frame_rows = (frame_params.height / frame_params.char_height.max(1.0)) as usize;
-        let matrix_builder = std::mem::replace(self.builder, GlyphMatrixBuilder::new());
-        let mut frame_display_state = matrix_builder.finish_with_pixel_size(
+        let display_output_builder = std::mem::replace(self.builder, DisplayOutputBuilder::new());
+        let mut frame_display_state = display_output_builder.finish_with_pixel_size(
             frame_cols,
             frame_rows,
             frame_params.char_width,
@@ -356,7 +356,7 @@ impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
 }
 
 impl<'builder> FrameOutputView<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder GlyphMatrixBuilder) -> Self {
+    pub(crate) fn from_output_builder(builder: &'builder DisplayOutputBuilder) -> Self {
         Self { builder }
     }
 

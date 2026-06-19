@@ -4,12 +4,12 @@ use crate::display_item::{
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
     RenderFaceRef, SourceSpan,
 };
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, LispStringSourceCursor};
 use crate::display_text_run_measurement::{
     DisplayTextRunAdvance, DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
     DisplayTextRunMeasurementPlan,
 };
-use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
 use neomacs_display_protocol::types::Rect;
@@ -288,7 +288,7 @@ fn display_row_progress_writer_reports_control_char_as_single_source_slot() {
 #[test]
 fn append_display_item_to_current_text_row_returns_progress_and_updates_row() {
     let row_layout = layout();
-    let mut matrix = GlyphMatrixBuilder::new();
+    let mut matrix = DisplayOutputBuilder::new();
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
@@ -332,7 +332,7 @@ fn append_measured_display_item_to_current_text_row_uses_glyph_measurer() {
     }
 
     let row_layout = layout();
-    let mut matrix = GlyphMatrixBuilder::new();
+    let mut matrix = DisplayOutputBuilder::new();
     let mut measurer = TestMeasurer;
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
@@ -360,7 +360,7 @@ fn append_measured_display_item_to_current_text_row_uses_glyph_measurer() {
 #[test]
 fn display_row_append_cursor_updates_position_after_append() {
     let row_layout = layout();
-    let mut matrix = GlyphMatrixBuilder::new();
+    let mut matrix = DisplayOutputBuilder::new();
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
@@ -382,7 +382,7 @@ fn display_row_append_cursor_updates_position_after_append() {
 #[test]
 fn display_row_append_cursor_updates_position_to_clipped_end() {
     let row_layout = layout();
-    let mut matrix = GlyphMatrixBuilder::new();
+    let mut matrix = DisplayOutputBuilder::new();
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
 
@@ -404,7 +404,7 @@ fn display_row_append_cursor_updates_position_to_clipped_end() {
 #[test]
 fn display_row_append_cursor_uses_glyph_measurer() {
     let row_layout = layout();
-    let mut matrix = GlyphMatrixBuilder::new();
+    let mut matrix = DisplayOutputBuilder::new();
     let mut measurer = FixedGlyphAdvances::new();
     measurer.insert('m', 2, 12.0);
     measurer.insert('i', 2, 4.0);
@@ -436,7 +436,7 @@ fn display_row_append_cursor_uses_glyph_measurer() {
 fn display_row_append_cursor_appends_explicit_source_item() {
     let _eval = Context::new();
     let row_layout = layout();
-    let mut matrix = GlyphMatrixBuilder::new();
+    let mut matrix = DisplayOutputBuilder::new();
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
     let mut source = LispStringSourceCursor::new(1, Value::string("abc"), RenderFaceRef::FaceId(2))
@@ -463,7 +463,7 @@ fn display_row_append_cursor_appends_explicit_source_item() {
 fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() {
     let _eval = Context::new();
     let row_layout = layout();
-    let mut matrix = GlyphMatrixBuilder::new();
+    let mut matrix = DisplayOutputBuilder::new();
     let mut measurer = FixedGlyphAdvances::new();
     measurer.insert('m', 2, 12.0);
     measurer.insert('i', 2, 4.0);

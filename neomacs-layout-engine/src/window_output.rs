@@ -15,6 +15,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
@@ -34,7 +35,6 @@ use crate::display_row_special_glyphs::{
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
@@ -254,12 +254,12 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
 pub(crate) struct TextWindowOutputInstall;
 
 pub(crate) struct TextWindowOutputInstallSurface<'output_builder> {
-    output_builder: &'output_builder mut GlyphMatrixBuilder,
+    output_builder: &'output_builder mut DisplayOutputBuilder,
 }
 
 impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     pub(crate) fn from_output_builder(
-        output_builder: &'output_builder mut GlyphMatrixBuilder,
+        output_builder: &'output_builder mut DisplayOutputBuilder,
     ) -> Self {
         Self { output_builder }
     }
@@ -597,25 +597,25 @@ pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
 }
 
 pub(crate) struct TextWindowBeginOutputSurface<'a> {
-    output_builder: &'a mut GlyphMatrixBuilder,
+    output_builder: &'a mut DisplayOutputBuilder,
     evaluator: &'a mut Context,
 }
 
 pub(crate) struct TextWindowFinishOutputSurface<'a> {
-    output_builder: &'a mut GlyphMatrixBuilder,
+    output_builder: &'a mut DisplayOutputBuilder,
     output_emitter: WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
 
 pub(crate) struct TextWindowLiveOutputSurface<'a> {
-    output_builder: &'a mut GlyphMatrixBuilder,
+    output_builder: &'a mut DisplayOutputBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
 
 impl<'a> TextWindowBeginOutputSurface<'a> {
     pub(crate) fn from_output_builder(
-        output_builder: &'a mut GlyphMatrixBuilder,
+        output_builder: &'a mut DisplayOutputBuilder,
         evaluator: &'a mut Context,
     ) -> Self {
         Self {
@@ -640,7 +640,7 @@ impl<'a> TextWindowBeginOutputSurface<'a> {
 
 impl<'a> TextWindowFinishOutputSurface<'a> {
     pub(crate) fn from_output_builder(
-        output_builder: &'a mut GlyphMatrixBuilder,
+        output_builder: &'a mut DisplayOutputBuilder,
         output_emitter: WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
@@ -672,7 +672,7 @@ impl<'a> TextWindowFinishOutputSurface<'a> {
 
 impl<'a> TextWindowLiveOutputSurface<'a> {
     pub(crate) fn from_output_builder(
-        output_builder: &'a mut GlyphMatrixBuilder,
+        output_builder: &'a mut DisplayOutputBuilder,
         output_emitter: &'a mut WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
@@ -933,12 +933,12 @@ impl DisplayItemSource for LineNumberMarginItemSource {
 }
 
 pub(crate) struct TextWindowRowOutputSurface<'output_builder, 'output> {
-    output_builder: &'output_builder mut GlyphMatrixBuilder,
+    output_builder: &'output_builder mut DisplayOutputBuilder,
     output_emitter: &'output mut WindowOutputEmitter,
 }
 
 pub(crate) struct TextWindowArtifactOutputSurface<'output_builder> {
-    output_builder: &'output_builder mut GlyphMatrixBuilder,
+    output_builder: &'output_builder mut DisplayOutputBuilder,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -949,7 +949,7 @@ pub(crate) struct TextWindowOutputRetryCheckpoint {
 
 impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'output> {
     pub(crate) fn from_parts(
-        output_builder: &'output_builder mut GlyphMatrixBuilder,
+        output_builder: &'output_builder mut DisplayOutputBuilder,
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> Self {
         Self {
@@ -1176,7 +1176,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
 
 impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
     pub(crate) fn from_output_builder(
-        output_builder: &'output_builder mut GlyphMatrixBuilder,
+        output_builder: &'output_builder mut DisplayOutputBuilder,
     ) -> Self {
         Self { output_builder }
     }
@@ -1351,7 +1351,7 @@ struct TextWindowOutputInstaller<'output_builder, 'output> {
 
 impl<'output_builder, 'output> TextWindowOutputInstaller<'output_builder, 'output> {
     fn new(
-        output_builder: &'output_builder mut GlyphMatrixBuilder,
+        output_builder: &'output_builder mut DisplayOutputBuilder,
         output_emitter: &'output WindowOutputEmitter,
     ) -> Self {
         Self {

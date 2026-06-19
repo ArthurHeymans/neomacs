@@ -130,7 +130,7 @@ fn window_frame_info_request_emits_background_and_window_info() {
         buffer_file_name: "notes.org".to_string(),
         modified: true,
     };
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
     WindowFrameInfoRenderRequest::new(&params, metadata)
         .render_and_apply(&mut FrameOutputSurface::from_output_builder(&mut builder));
@@ -155,7 +155,7 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     let mut prev_infos = std::collections::HashMap::new();
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.artifact_installer().add_window_info(curr);
 
     WindowFrameInfoEffectsRenderRequest::new(&prev_infos).render_latest_and_apply(
@@ -179,7 +179,7 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
     curr_infos.insert(curr.window_id, curr);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.artifact_installer().add_cursor(
         params.window_id,
         DisplaySlotId {
@@ -216,7 +216,7 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let params = window_params();
     let info = window_info(&params);
     let mut prev_selected = 7;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.artifact_installer().add_window_info(info);
 
     FrameWindowSwitchHintRenderRequest::new(&mut prev_selected)
@@ -239,7 +239,7 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.is_minibuffer = true;
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder
         .artifact_installer()
         .set_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
@@ -267,7 +267,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
     curr_infos.insert(curr.window_id, curr);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
     FrameTopologyTransitionHintRenderRequest::new(&prev_infos, &curr_infos, 180.0, 140.0)
         .render_and_apply(&mut FrameOutputSurface::from_output_builder(&mut builder));
@@ -284,7 +284,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
 #[test]
 fn window_divider_request_splits_wide_vertical_divider() {
     let frame = frame_params();
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
     WindowDividerRectsRenderRequest::new(
         41,
@@ -319,7 +319,7 @@ fn vertical_scroll_bar_metrics_follow_visible_buffer_span() {
 fn window_scroll_bars_request_emits_vertical_and_horizontal_items() {
     let params = window_params();
     let info = window_info(&params);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
     WindowScrollBarsRenderRequest::new(&params, &info)
         .render_and_apply(&mut FrameOutputSurface::from_output_builder(&mut builder));
@@ -362,7 +362,7 @@ fn window_scroll_bars_request_skips_empty_vertical_track() {
         + params.scroll_bar_pixel_height;
     params.horizontal_scroll_bar = false;
     let info = window_info(&params);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
     WindowScrollBarsRenderRequest::new(&params, &info)
         .render_and_apply(&mut FrameOutputSurface::from_output_builder(&mut builder));

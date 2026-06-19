@@ -3,6 +3,7 @@ use crate::display_frame_output::{FrameOutputIdentity, FrameOutputSurface};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderExecutor,
     DisplayRowSourceFragmentFrame, DisplayRowSourceState,
@@ -12,7 +13,6 @@ use crate::display_row_geometry::DisplayRowMaxX;
 use crate::display_row_output_install::DisplayRowInstallSurface;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::font_metrics::FontMetricsService;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::mock_frame::{MockDisplayProperty, MockFrameContent, MockStyledLine};
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use crate::window_output::{TextWindowOutputBegin, TextWindowOutputInstallSurface};
@@ -22,7 +22,7 @@ use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, GlyphArea, Glyph
 use neomacs_display_protocol::types::Color;
 use neovm_core::face::FaceTable;
 
-fn install_mock_display_row(builder: &mut GlyphMatrixBuilder, row_index: usize, row: &GlyphRow) {
+fn install_mock_display_row(builder: &mut DisplayOutputBuilder, row_index: usize, row: &GlyphRow) {
     DisplayRowInstallSurface::from_output_builder(builder).install_row(row_index, row);
 }
 
@@ -310,7 +310,7 @@ pub(crate) fn layout_mock_frame_content(
     char_h: f32,
     font_metrics: &mut Option<FontMetricsService>,
 ) -> Vec<FrameDisplayState> {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
 
     FrameOutputSurface::from_output_builder(&mut builder).set_frame_identity(FrameOutputIdentity {
         frame_id: content.frame_id,
@@ -502,7 +502,7 @@ pub(crate) fn layout_mock_frame_content(
 
     let mut child_frames = Vec::new();
     for cf in &content.child_frames {
-        let mut cb = GlyphMatrixBuilder::new();
+        let mut cb = DisplayOutputBuilder::new();
         FrameOutputSurface::from_output_builder(&mut cb).set_frame_identity(FrameOutputIdentity {
             frame_id: cf.frame_id,
             parent_id: content.frame_id,

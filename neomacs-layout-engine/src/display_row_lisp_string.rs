@@ -3,6 +3,8 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::DisplayOrigin;
+#[cfg(test)]
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowSourceState,
 };
@@ -21,8 +23,6 @@ use crate::display_source::LispStringSourceCursor;
 use crate::display_source_resolver::DisplayStringBaseFace;
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
-#[cfg(test)]
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
@@ -569,7 +569,7 @@ pub(crate) fn render_face_ref_id(face: RenderFaceRef, fallback: u32) -> u32 {
 
 #[cfg(test)]
 pub(crate) fn apply_pending_display_source_faces(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
     let mut face_installer = DisplayRowFaceInstallSurface::from_output_builder(builder);

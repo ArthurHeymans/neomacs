@@ -3,6 +3,7 @@
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_output_builder::MatrixRowDecorator;
 use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
 use crate::display_row_builder::{
     display_row_total_glyph_count, pop_display_row_trailing_text_char,
@@ -11,7 +12,6 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::DisplayRowFlagKind;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_status_line::ChromeRowRenderServices;
-use crate::matrix_builder::MatrixRowDecorator;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::{TextWindowRightBorder, TextWindowRightEdgeMarkers};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;

@@ -722,7 +722,7 @@ impl LayoutEngine {
         let mut frame_display_state = self.finish_frame_output(&frame_params);
 
         // NOTE: GlyphMatrix vs FrameGlyphBuffer character count validation removed.
-        // FrameGlyphBuffer no longer receives glyph output; the GlyphMatrixBuilder
+        // FrameGlyphBuffer no longer receives glyph output; the DisplayOutputBuilder
         // is now the sole output path.
 
         // Populate the frame-level TTY menu bar.  Mirrors GNU

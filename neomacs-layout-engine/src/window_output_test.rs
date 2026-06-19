@@ -21,13 +21,13 @@ use super::TextWindowRowDecorationRequest;
 use super::TextWindowRowOutputSurface;
 use super::WindowOutputEmitter;
 use crate::display_item::DisplaySourcePosition;
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
 };
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_status_line::DisplayRowOutputProgress;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, WindowInfo,
@@ -43,7 +43,7 @@ fn assert_char_glyph(glyph: &Glyph, ch: char, face_id: u32) {
 }
 
 fn write_char_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     ch: char,
     face_id: u32,
     charpos: usize,
@@ -55,7 +55,11 @@ fn write_char_to_current_row(
         .expect("current row");
 }
 
-fn write_left_margin_char_to_current_row(builder: &mut GlyphMatrixBuilder, ch: char, face_id: u32) {
+fn write_left_margin_char_to_current_row(
+    builder: &mut DisplayOutputBuilder,
+    ch: char,
+    face_id: u32,
+) {
     builder
         .edit_current_row_for_test(|row| {
             row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::char(ch, face_id, 0));
@@ -64,7 +68,7 @@ fn write_left_margin_char_to_current_row(builder: &mut GlyphMatrixBuilder, ch: c
 }
 
 fn write_left_margin_stretch_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     width_cols: u16,
     face_id: u32,
 ) {
@@ -470,7 +474,7 @@ fn text_matrix_row_output_surface_begins_row() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
@@ -526,7 +530,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 4.0, 80.0, 16.0), true);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
@@ -564,7 +568,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
 
 #[test]
 fn record_text_window_display_range_updates_matching_last_window_info() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder
         .artifact_installer()
         .add_window_info(window_info(41));
@@ -614,7 +618,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
@@ -675,7 +679,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
 
 #[test]
 fn close_text_window_output_closes_active_matrix_window() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
 
     TextWindowOutputInstallSurface::from_output_builder(&mut builder).close_text_window_output();
@@ -701,7 +705,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(window_id.0, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_left_margin_char_to_current_row(&mut builder, '1', 7);
@@ -755,7 +759,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
 
 #[test]
 fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     let effects = EffectsConfig::default();
 
     TextWindowArtifactOutputSurface::from_output_builder(&mut builder).publish_decorative_cursor(
@@ -787,7 +791,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
 
 #[test]
 fn install_text_window_cursor_effects_records_window_effect_profile() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     let effects = EffectsConfig::default();
 
     TextWindowArtifactOutputSurface::from_output_builder(&mut builder).install_cursor_effects(
@@ -820,7 +824,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
@@ -886,7 +890,7 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
@@ -934,7 +938,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 20.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
@@ -999,7 +1003,7 @@ fn install_text_window_output_installs_row_metrics() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
@@ -1050,7 +1054,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder
         .artifact_installer()
         .add_window_info(window_info(41));
@@ -1106,7 +1110,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
 
 #[test]
 fn mark_current_text_row_truncated_left_sets_current_row_flag() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
     builder.begin_row(1, GlyphRowRole::Text);
 
@@ -1138,7 +1142,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
@@ -1199,7 +1203,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);

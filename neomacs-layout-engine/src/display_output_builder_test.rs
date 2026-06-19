@@ -5,7 +5,7 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::types::Rect;
 
 fn write_char_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     ch: char,
     face_id: u32,
     charpos: usize,
@@ -14,7 +14,7 @@ fn write_char_to_current_row(
 }
 
 fn write_char_to_current_row_with_width(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     ch: char,
     face_id: u32,
     charpos: usize,
@@ -28,7 +28,7 @@ fn write_char_to_current_row_with_width(
 }
 
 fn write_wide_char_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     ch: char,
     face_id: u32,
     charpos: usize,
@@ -41,7 +41,7 @@ fn write_wide_char_to_current_row(
 }
 
 fn write_cluster_continuation_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     ch: char,
     face_id: u32,
     charpos: usize,
@@ -54,7 +54,7 @@ fn write_cluster_continuation_to_current_row(
 }
 
 fn write_run_member_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     ch: char,
     face_id: u32,
     charpos: usize,
@@ -67,7 +67,7 @@ fn write_run_member_to_current_row(
         .expect("current row");
 }
 
-fn write_stretch_to_current_row(builder: &mut GlyphMatrixBuilder, width_cols: u16, face_id: u32) {
+fn write_stretch_to_current_row(builder: &mut DisplayOutputBuilder, width_cols: u16, face_id: u32) {
     builder
         .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_stretch_to_row(row, width_cols, face_id, 0.0, 0.0, 0.0);
@@ -75,7 +75,11 @@ fn write_stretch_to_current_row(builder: &mut GlyphMatrixBuilder, width_cols: u1
         .expect("current row");
 }
 
-fn write_left_margin_char_to_current_row(builder: &mut GlyphMatrixBuilder, ch: char, face_id: u32) {
+fn write_left_margin_char_to_current_row(
+    builder: &mut DisplayOutputBuilder,
+    ch: char,
+    face_id: u32,
+) {
     builder
         .edit_current_row_for_test(|row| {
             row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::char(ch, face_id, 0));
@@ -84,7 +88,7 @@ fn write_left_margin_char_to_current_row(builder: &mut GlyphMatrixBuilder, ch: c
 }
 
 fn write_left_margin_stretch_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     width_cols: u16,
     face_id: u32,
 ) {
@@ -109,14 +113,14 @@ fn external_text_row(role: GlyphRowRole, glyphs: Vec<Glyph>) -> GlyphRow {
 
 #[test]
 fn builder_starts_empty() {
-    let builder = GlyphMatrixBuilder::new();
+    let builder = DisplayOutputBuilder::new();
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert!(state.window_matrices.is_empty());
 }
 
 #[test]
 fn builder_can_preserve_exact_frame_pixel_size() {
-    let builder = GlyphMatrixBuilder::new();
+    let builder = DisplayOutputBuilder::new();
     let state = builder.finish_with_pixel_size(79, 36, 16.25, 33.0, 1300.0, 1188.0);
 
     assert_eq!(state.frame_cols, 79);
@@ -127,7 +131,7 @@ fn builder_can_preserve_exact_frame_pixel_size() {
 
 #[test]
 fn builder_tracks_single_window_single_row() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 24, 80, Rect::new(0.0, 0.0, 640.0, 384.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'H', 0, 0);
@@ -157,7 +161,7 @@ fn row_installer_installs_complete_row_metrics_and_cursor() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     crate::glyph_row_writer::push_char_to_row(&mut row, 'x', 3, 11, 8.0);
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 4.0, 80.0, 32.0), true);
     builder
         .row_installer()
@@ -184,7 +188,7 @@ fn row_installer_installs_complete_row_metrics_and_cursor() {
 
 #[test]
 fn builder_tracks_multiple_rows() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 10, Rect::new(0.0, 0.0, 80.0, 48.0), true);
 
     builder.begin_row(0, GlyphRowRole::Text);
@@ -207,7 +211,7 @@ fn builder_tracks_multiple_rows() {
 
 #[test]
 fn builder_stores_row_metrics_as_provided() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(5.0, 20.0, 80.0, 40.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     builder.set_current_row_metrics(6.0, 18.0, 13.0);
@@ -224,7 +228,7 @@ fn builder_stores_row_metrics_as_provided() {
 
 #[test]
 fn builder_tracks_wide_chars() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 5, 20, Rect::new(0.0, 0.0, 160.0, 80.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_wide_char_to_current_row(&mut builder, '\u{4e16}', 0, 0);
@@ -244,7 +248,7 @@ fn builder_tracks_wide_chars() {
 
 #[test]
 fn builder_handles_stretch_glyphs() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 5, 20, Rect::new(0.0, 0.0, 160.0, 80.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'a', 0, 0);
@@ -261,7 +265,7 @@ fn builder_handles_stretch_glyphs() {
 
 #[test]
 fn builder_computes_row_hashes_on_finish() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'x', 0, 0);
@@ -275,7 +279,7 @@ fn builder_computes_row_hashes_on_finish() {
 
 #[test]
 fn builder_resets_on_new_frame() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'x', 0, 0);
@@ -290,7 +294,7 @@ fn builder_resets_on_new_frame() {
 
 #[test]
 fn builder_installs_status_line_row_glyphs_wholesale() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 4, 80, Rect::new(0.0, 0.0, 640.0, 64.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'a', 0, 0);
@@ -326,7 +330,7 @@ fn builder_installs_status_line_row_glyphs_wholesale() {
 
 #[test]
 fn builder_install_display_row_preserves_row_and_relative_metrics() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 20.0, 640.0, 60.0), true);
 
     let mut row = external_text_row(GlyphRowRole::Text, vec![Glyph::char('z', 7, 42)]);
@@ -356,7 +360,7 @@ fn builder_install_display_row_preserves_row_and_relative_metrics() {
 
 #[test]
 fn builder_status_line_empty_row_when_no_chars_pushed() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 40, Rect::new(0.0, 0.0, 320.0, 48.0), true);
 
     let row = external_text_row(GlyphRowRole::ModeLine, Vec::new());
@@ -370,7 +374,7 @@ fn builder_status_line_empty_row_when_no_chars_pushed() {
 
 #[test]
 fn builder_display_row_without_window_is_noop() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     let row = external_text_row(GlyphRowRole::ModeLine, vec![Glyph::char('x', 0, 0)]);
     builder.install_display_row(0, &row);
     let state = builder.finish(80, 24, 8.0, 16.0);
@@ -379,7 +383,7 @@ fn builder_display_row_without_window_is_noop() {
 
 #[test]
 fn builder_left_margin_chars() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_left_margin_stretch_to_current_row(&mut builder, 2, 1);
@@ -408,7 +412,7 @@ fn builder_left_margin_chars() {
 
 #[test]
 fn builder_set_cursor_at_row() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'a', 0, 0);
@@ -431,7 +435,7 @@ fn builder_set_cursor_at_row() {
 
 #[test]
 fn builder_preserves_phys_cursor() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'a', 0, 0);
@@ -467,7 +471,7 @@ fn builder_preserves_phys_cursor() {
 #[test]
 fn builder_preserves_high_window_id_phys_cursor() {
     let high_window_id = 1_u64 << 48;
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(
         high_window_id,
         3,
@@ -508,7 +512,7 @@ fn builder_preserves_high_window_id_phys_cursor() {
 
 #[test]
 fn builder_reorders_simple_rtl_row() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'א', 0, 0);
@@ -527,7 +531,7 @@ fn builder_reorders_simple_rtl_row() {
 
 #[test]
 fn builder_keeps_stretch_fixed_while_reordering_rtl_chars() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'א', 0, 0);
@@ -549,7 +553,7 @@ fn builder_keeps_stretch_fixed_while_reordering_rtl_chars() {
 
 #[test]
 fn builder_reorders_wide_rtl_row() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_wide_char_to_current_row(&mut builder, 'א', 0, 0);
@@ -571,7 +575,7 @@ fn builder_reorders_wide_rtl_row() {
 
 #[test]
 fn builder_reorders_wide_rtl_row_across_stretch() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_wide_char_to_current_row(&mut builder, 'א', 0, 0);
@@ -596,7 +600,7 @@ fn builder_reorders_wide_rtl_row_across_stretch() {
 
 #[test]
 fn builder_remaps_phys_cursor_to_visual_bidi_column() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'א', 0, 0);
@@ -648,7 +652,7 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
     // GNU does the equivalent in `set_cursor_from_row`: the line-number glyphs
     // sit at the start of TEXT_AREA and the cursor walks past their pixel width
     // before landing on the buffer glyph (src/xdisp.c).
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     // Line-number gutter "12 ": two digits + a one-cell trailing stretch ->
@@ -722,7 +726,7 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
 
 #[test]
 fn glyph_row_resolved_phys_cursor_preserves_display_string_cursor_slot() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
 
@@ -771,7 +775,7 @@ fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
     // set_cursor_from_row places the cursor on the glyph that follows the hidden
     // run), NOT fall back to the captured column 0, which would snap it onto the
     // line-number gutter and draw a stray second cursor.
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     // Three-column line-number gutter (cols 0, 1, 2).
@@ -840,7 +844,7 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
     // for the selected window (push_cursor is guarded on !params.selected), so
     // set_phys_cursor has nothing to sync and must not reach into the
     // window-cursor list at all -- it only resolves and stores the phys cursor.
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_left_margin_char_to_current_row(&mut builder, '1', 1);
@@ -905,7 +909,7 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
 fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
     // Direct contract for the request that phys cursor installation resolves
     // through, so display column policy stays outside the builder setter.
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_left_margin_char_to_current_row(&mut builder, '1', 1);
@@ -960,7 +964,7 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
     // never the captured Text-index 0 (which materialize maps into the gutter),
     // matching GNU set_cursor_from_row placing the cursor in the empty area
     // after a row's text.
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_left_margin_stretch_to_current_row(&mut builder, 2, 1); // leading "  " before the digit
@@ -997,7 +1001,7 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
 
 #[test]
 fn builder_reorders_status_line_rtl_row() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
 
     let row = external_text_row(
@@ -1029,7 +1033,7 @@ fn builder_reorders_status_line_rtl_row() {
 /// deliberately NOT asserted here.
 #[test]
 fn rtl_text_and_chrome_rows_reorder_identically() {
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
 
     // Row 0 — buffer Text row via the incremental path (`end_current_row` reorder).
@@ -1097,7 +1101,7 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
     use neomacs_display_protocol::face::Face;
     use neomacs_display_protocol::types::Color;
 
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
 
     // Emulate the post-C-x-2 redisplay order: active mode-line
     // for the TOP (selected) window, then inactive mode-line for
@@ -1162,14 +1166,14 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
 
 // --- Grapheme-cluster composition (Phase 1: emoji ZWJ + flag pairs) ---
 
-fn cluster_builder() -> GlyphMatrixBuilder {
-    let mut builder = GlyphMatrixBuilder::new();
+fn cluster_builder() -> DisplayOutputBuilder {
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 40, Rect::new(0.0, 0.0, 320.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     builder
 }
 
-fn finish_text_area(builder: GlyphMatrixBuilder) -> Vec<Glyph> {
+fn finish_text_area(builder: DisplayOutputBuilder) -> Vec<Glyph> {
     let mut builder = builder;
     builder.end_row();
     builder.end_window();
@@ -1177,7 +1181,7 @@ fn finish_text_area(builder: GlyphMatrixBuilder) -> Vec<Glyph> {
     state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::Text as usize].clone()
 }
 
-fn current_cluster_tail(builder: &GlyphMatrixBuilder) -> Option<(char, bool)> {
+fn current_cluster_tail(builder: &DisplayOutputBuilder) -> Option<(char, bool)> {
     builder
         .current_row_for_test()
         .and_then(crate::composition::last_text_cluster_tail_in_row)

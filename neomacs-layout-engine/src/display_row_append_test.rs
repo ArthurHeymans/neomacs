@@ -99,7 +99,7 @@ use neovm_core::face::FaceTable;
 use std::sync::{Arc, Mutex};
 
 fn text_row_output_render_state<'a>(
-    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    builder: &'a mut crate::display_output_builder::DisplayOutputBuilder,
     output_emitter: &'a mut crate::window_output::WindowOutputEmitter,
     evaluator: &'a mut Context,
 ) -> TextRowOutputRenderState<'a> {
@@ -111,7 +111,7 @@ fn text_row_output_render_state<'a>(
 }
 
 fn text_row_source_render_state<'a>(
-    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    builder: &'a mut crate::display_output_builder::DisplayOutputBuilder,
     output_emitter: &'a mut crate::window_output::WindowOutputEmitter,
     evaluator: &'a mut Context,
     font_metrics: &'a mut Option<FontMetricsService>,
@@ -125,7 +125,7 @@ fn text_row_source_render_state<'a>(
 }
 
 fn text_row_source_measure_state<'a>(
-    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    builder: &'a mut crate::display_output_builder::DisplayOutputBuilder,
     evaluator: &'a mut Context,
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'a FaceResolver,
@@ -139,7 +139,7 @@ fn text_row_source_measure_state<'a>(
 }
 
 fn write_char_to_current_row_with_width(
-    builder: &mut crate::matrix_builder::GlyphMatrixBuilder,
+    builder: &mut crate::display_output_builder::DisplayOutputBuilder,
     ch: char,
     face_id: u32,
     charpos: usize,
@@ -230,7 +230,7 @@ struct RecordingAppendImageHost {
 struct RowTransitionTestContext {
     eval: Context,
     output_emitter: crate::window_output::WindowOutputEmitter,
-    builder: crate::matrix_builder::GlyphMatrixBuilder,
+    builder: crate::display_output_builder::DisplayOutputBuilder,
     defaults: DisplayRowGeometryDefaults,
     geometry: DisplayRowGeometryState,
     row_y_positions: DisplayRowYPositions,
@@ -260,7 +260,7 @@ impl RowTransitionTestContext {
         output_emitter.begin_update(&mut eval);
         output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
 
-        let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+        let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
         builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 48.0), true);
         builder.begin_row(0, GlyphRowRole::Text);
         let defaults = DisplayRowGeometryDefaults::new(0.0, 16.0, 12.0);
@@ -481,7 +481,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("face-resolution-not-due", 80, 40, buf_id);
@@ -560,7 +560,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("face-resolution-due", 80, 40, buf_id);
@@ -1366,7 +1366,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -3961,7 +3961,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut append_state = BufferTextRowAppendState::default();
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
@@ -4008,7 +4008,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut append_state = BufferTextRowAppendState::default();
     let append_context =
         BufferTextRowAppendContext::new(&snapshot, buf_id, &surface, &active_face, 0.0, 16.0);
@@ -4119,7 +4119,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -4207,7 +4207,7 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -4271,7 +4271,7 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -4356,7 +4356,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -4434,7 +4434,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -4521,7 +4521,7 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
@@ -4711,7 +4711,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(8);
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
@@ -4792,7 +4792,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
     let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(8);
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'a', 7, 0, 8.0);
@@ -4949,7 +4949,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
     output_emitter.begin_update(&mut eval);
     output_emitter.begin_text_row(&mut eval, 0, 2, 0.0, 16.0);
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'X', 7, 0, 8.0);
@@ -5741,7 +5741,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let face_value = Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]);
@@ -5820,7 +5820,7 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let value = Value::string_with_text_properties(
@@ -5898,7 +5898,7 @@ fn lisp_string_append_context_appends_fragment_items() {
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let active_face = test_active_face_state(0, 8.0);
@@ -5978,7 +5978,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -6348,7 +6348,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let mut output_emitter =
@@ -6716,7 +6716,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         .expect("frame")
         .selected_window;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(41, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
@@ -6803,7 +6803,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
         .expect("frame")
         .selected_window;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut output_emitter = BufferTextWindowBeginRequest::new(
         frame_id,
         window_id,
@@ -6854,7 +6854,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
 
 #[test]
 fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let effects = EffectsConfig::default();
 
     let installed = BufferTextWindowCursorEffectsRequest::new(42, Some(effects.clone()))
@@ -6869,7 +6869,7 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
 
 #[test]
 fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
     let installed = BufferTextWindowCursorEffectsRequest::new(42, None).install_and_apply(
         &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
@@ -6884,7 +6884,7 @@ fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
 fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "abcd".chars() {
@@ -6926,7 +6926,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     // collapse them onto one id — silent in single-window fixtures.
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "abcd".chars() {
@@ -6964,7 +6964,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
 fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserves_marker() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "ABCD$".chars() {
@@ -7029,7 +7029,7 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
         .expect("frame")
         .selected_window;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(41, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
     let output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 10.0, 5.0);
@@ -7218,7 +7218,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
@@ -7320,7 +7320,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
 
@@ -7392,7 +7392,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
@@ -7467,7 +7467,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
@@ -7834,7 +7834,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -7960,7 +7960,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let append_context =
@@ -8036,7 +8036,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(7, 8.0);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -8152,7 +8152,7 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
@@ -8217,7 +8217,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut font_metrics = None;
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -8329,7 +8329,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
         crate::neovm_bridge::FaceResolver::new(&table, 0x00112233, 0x00445566, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
     builder.begin_window_with_text_bounds(
         77,
@@ -8823,7 +8823,7 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("display-property-replacement-plan", 80, 40, buf_id);
@@ -8935,7 +8935,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 32.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -9608,7 +9608,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let value = Value::string_with_text_properties(
@@ -9698,7 +9698,7 @@ fn display_replacement_append_context_uses_face_fallback() {
     let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
@@ -9766,7 +9766,7 @@ fn display_replacement_append_context_advances_stretch_output() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -9854,7 +9854,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -9942,7 +9942,7 @@ fn synthetic_text_append_context_uses_source_append_request() {
     let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
@@ -10016,7 +10016,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
     builder.begin_window_with_text_bounds(
         77,
@@ -10148,7 +10148,7 @@ fn display_replacement_append_context_installs_image_replacements() {
     let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
     builder.begin_window_with_text_bounds(
         77,
@@ -10283,7 +10283,7 @@ fn display_replacement_append_context_installs_video_replacements() {
     let base_face = face_resolver.default_face();
     let mut font_metrics = None;
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
     builder.begin_window_with_text_bounds(
         77,

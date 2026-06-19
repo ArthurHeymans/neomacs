@@ -4,6 +4,8 @@ use crate::display_item::{
     DisplayLengthExpr, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod,
     RenderFaceRef, SourceSpan, control_char_caret_char,
 };
+#[cfg(test)]
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_append_context::{
     DisplayRowTextCharState, DisplayRowTextNaturalAdvanceKind, DisplayRowTextNaturalAdvancePolicy,
     DisplayRowTextNaturalAdvanceRequest,
@@ -11,8 +13,6 @@ use crate::display_row_append_context::{
 #[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::glyph_row_writer;
-#[cfg(test)]
-use crate::matrix_builder::GlyphMatrixBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
@@ -566,7 +566,7 @@ impl DisplayRowAppendCursor {
     #[cfg(test)]
     fn append_item_to_current_text_row(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
+        builder: &mut DisplayOutputBuilder,
         layout: &DisplayRowLayout,
         item: DisplayItem,
     ) -> Option<DisplayRowAppendProgress> {
@@ -583,7 +583,7 @@ impl DisplayRowAppendCursor {
 
     fn append_measured_item_to_current_text_row(
         &mut self,
-        builder: &mut GlyphMatrixBuilder,
+        builder: &mut DisplayOutputBuilder,
         layout: &DisplayRowLayout,
         item: DisplayItem,
         glyph_measurer: &mut dyn DisplayGlyphMeasurer,
@@ -603,7 +603,7 @@ impl DisplayRowAppendCursor {
 
 #[cfg(test)]
 fn append_display_item_to_current_text_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     layout: &DisplayRowLayout,
     item: DisplayItem,
     position: DisplayRowPosition,
@@ -617,7 +617,7 @@ fn append_display_item_to_current_text_row(
 
 #[cfg(test)]
 fn append_measured_display_item_to_current_text_row(
-    builder: &mut GlyphMatrixBuilder,
+    builder: &mut DisplayOutputBuilder,
     layout: &DisplayRowLayout,
     item: DisplayItem,
     glyph_measurer: &mut dyn DisplayGlyphMeasurer,

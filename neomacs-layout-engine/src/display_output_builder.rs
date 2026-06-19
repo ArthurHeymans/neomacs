@@ -1,4 +1,4 @@
-//! GlyphMatrixBuilder — records authoritative window matrices during layout.
+//! DisplayOutputBuilder — records authoritative window matrices during layout.
 //!
 //! The builder observes layout emissions and writes them into the per-window
 //! `GlyphMatrix` grids published through `FrameDisplayState`. Renderers then
@@ -77,7 +77,7 @@ impl MatrixMediaInstallRequest {
         }
     }
 
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
+    fn install(self, builder: &mut DisplayOutputBuilder) {
         let target = self.target;
         match self.kind {
             MatrixMediaInstallKind::Image { image_id } => builder.images.push(ImageItem {
@@ -171,7 +171,7 @@ enum MatrixFrameArtifactInstallRequest {
 }
 
 impl MatrixFrameArtifactInstallRequest {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
+    fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Background { bounds, color } => {
                 builder.backgrounds.push(BackgroundItem { bounds, color });
@@ -231,7 +231,7 @@ enum MatrixFrameStateInstallRequest {
 }
 
 impl MatrixFrameStateInstallRequest {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
+    fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Identity(identity) => {
                 builder.frame_id = identity.frame_id;
@@ -274,7 +274,7 @@ enum MatrixWindowLifecycleRequest {
 }
 
 impl MatrixWindowLifecycleRequest {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
+    fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Begin(begin) => {
                 builder.current_matrix = Some(GlyphMatrix::new(begin.nrows, begin.ncols));
@@ -341,7 +341,7 @@ enum MatrixRowLifecycleRequest {
 }
 
 impl MatrixRowLifecycleRequest {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
+    fn install(self, builder: &mut DisplayOutputBuilder) {
         match self {
             Self::Begin(begin) => builder.begin_current_row(begin),
             Self::ReplaceCurrent { row } => builder.replace_current_row(row),
@@ -357,7 +357,7 @@ pub(crate) trait MatrixRowDecorator {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
 }
 
-pub(crate) struct GlyphMatrixBuilder {
+pub(crate) struct DisplayOutputBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
     current_window_id: u64,
@@ -401,7 +401,7 @@ pub(crate) struct GlyphMatrixBuilder {
 }
 
 pub(crate) struct MatrixRowInstaller<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    builder: &'a mut DisplayOutputBuilder,
 }
 
 impl MatrixRowInstaller<'_> {
@@ -464,7 +464,7 @@ impl MatrixRowInstaller<'_> {
 }
 
 pub(crate) struct MatrixWindowInstaller<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    builder: &'a mut DisplayOutputBuilder,
 }
 
 impl MatrixWindowInstaller<'_> {
@@ -499,7 +499,7 @@ impl MatrixWindowInstaller<'_> {
 }
 
 pub(crate) struct MatrixArtifactInstaller<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    builder: &'a mut DisplayOutputBuilder,
 }
 
 impl MatrixArtifactInstaller<'_> {
@@ -755,7 +755,7 @@ impl MatrixArtifactInstaller<'_> {
     }
 }
 
-impl GlyphMatrixBuilder {
+impl DisplayOutputBuilder {
     fn write_row_metrics(row: &mut GlyphRow, pixel_y_rel: f32, height_px: f32, ascent_px: f32) {
         row.pixel_y = pixel_y_rel;
         row.height_px = height_px.max(0.0);
@@ -1261,5 +1261,5 @@ impl GlyphMatrixBuilder {
 }
 
 #[cfg(test)]
-#[path = "matrix_builder_test.rs"]
+#[path = "display_output_builder_test.rs"]
 mod tests;

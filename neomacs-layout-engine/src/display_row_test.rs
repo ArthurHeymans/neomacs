@@ -22,7 +22,7 @@ fn base_face() -> crate::neovm_bridge::ResolvedFace {
 }
 
 fn text_row_source_measure_state<'a>(
-    builder: &'a mut crate::matrix_builder::GlyphMatrixBuilder,
+    builder: &'a mut crate::display_output_builder::DisplayOutputBuilder,
     evaluator: &'a mut Context,
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'a FaceResolver,
@@ -180,7 +180,7 @@ fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
 
 #[test]
 fn current_display_row_cluster_tail_reports_live_text_row_tail() {
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let table = FaceTable::new();
@@ -219,7 +219,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
 
 #[test]
 fn insert_resolved_display_row_face_applies_metric_overrides() {
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let face = base_face();
 
     builder.artifact_installer().set_resolved_display_row_face(
@@ -488,7 +488,7 @@ fn display_row_render_context_builds_source_resolve_params() {
 
 #[test]
 fn display_row_resolved_measured_face_installs_render_and_measurement_identity() {
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let mut font_metrics = None;
     let policy = DisplayRowMeasurementPolicy::for_frame(true);
     let face = base_face();
@@ -2741,7 +2741,7 @@ fn display_row_tab_line_rtl_text_is_logical_order_at_render() {
     // the matrix-row install (`end_current_row`). A render-only chrome row keeps
     // logical order and is not yet flagged reversed. The end-to-end reorder is
     // verified by install_rendered_display_row_finalizes_bidi_at_install and
-    // (cross-row-kind) matrix_builder rtl_text_and_chrome_rows_reorder_identically.
+    // (cross-row-kind) display_output_builder rtl_text_and_chrome_rows_reorder_identically.
     let _eval = Context::new();
     let row = render_lisp_display_row(Value::string("אב"), GlyphRowRole::TabLine);
 
@@ -2880,7 +2880,7 @@ fn mock_display_row_output_install_preserves_row_metadata() {
     row.end_charpos = 8;
     row.glyphs[GlyphArea::Text.index()].push(Glyph::char('M', 3, 7));
 
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 16.0, 80.0, 40.0), true);
     DisplayRowInstallSurface::from_output_builder(&mut builder).install_row(1, &row);
     builder.end_window();
@@ -2925,7 +2925,7 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
             height: 54.0,
         }],
     };
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let window_bounds = Rect::new(0.0, 0.0, 200.0, 80.0);
     let row_bounds = Rect::new(0.0, 4.0, 200.0, 54.0);
     builder.begin_window_with_text_bounds(

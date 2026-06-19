@@ -8,6 +8,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurer,
     DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderer,
@@ -26,7 +27,6 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::{DisplayReplacementSpaceGeometry, DisplayReplacementStretchSourceItem};
 use crate::glyph_advance::GlyphAdvanceQuantization;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::{VisualCursorSpec, WindowKind};
 use crate::window_output::{TextWindowRowOutputSurface, WindowOutputEmitter};
@@ -1151,7 +1151,7 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
         .expect("frame")
         .selected_window;
     let mut output_emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 10.0, 20.0);
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(window_id.0, 1, 10, Rect::new(0.0, 0.0, 160.0, 64.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     let cursor = CapturedCursorInfo::from_visual_state(
@@ -1244,7 +1244,7 @@ fn visual_text_window_cursor_publish_context_publishes_decorative_cursor_from_di
         color: 0x00112233,
         effects: None,
     }];
-    let mut builder = GlyphMatrixBuilder::new();
+    let mut builder = DisplayOutputBuilder::new();
 
     let summary = VisualTextWindowCursorPublishContext::new(&params, 10.0, 20.0, 20.0, 80.0, 8.0)
         .publish_visual_cursors(&mut TextWindowRowOutputSurface::from_parts(
