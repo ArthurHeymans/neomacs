@@ -780,7 +780,7 @@ impl DisplayReplacementBox {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferDisplayReplacementSource {
     buffer_id: BufferId,
     char_pos: CharPos0,

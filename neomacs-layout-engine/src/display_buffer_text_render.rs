@@ -62,7 +62,6 @@ use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
-use neovm_core::emacs_core::value::string_has_text_properties_for_value;
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
@@ -2776,8 +2775,7 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
         if matches!(
             display_property.replacement(),
             Some(DisplayReplacementProperty::String)
-        ) && !string_has_text_properties_for_value(value)
-        {
+        ) {
             return BufferDisplayPropertyTextAppendAction::None;
         }
 

@@ -12,27 +12,30 @@ use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_render::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
     BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
-    BufferDisplayPropertyTextWalkOutcome, BufferEndOfBufferTailRenderContext,
-    BufferEndOfBufferTailRenderRequest, BufferEndOfBufferTailRenderState,
-    BufferHscrollSkipRenderContext, BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState,
-    BufferInvisibleTextRenderContext, BufferInvisibleTextRenderOutcome,
-    BufferInvisibleTextRenderRequest, BufferInvisibleTextRenderRequestState,
-    BufferLinePrefixRenderContext, BufferLinePrefixRenderRequest,
-    BufferSelectiveDisplayTailRenderContext, BufferSelectiveDisplayTailRenderOutcome,
-    BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
-    BufferSourceItemLayoutResolutionContext, BufferTextLineBreakRenderContext,
-    BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
-    BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
-    BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
+    BufferDisplayPropertyTextReplacementOutcome, BufferDisplayPropertyTextWalkOutcome,
+    BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
+    BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderContext,
+    BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderContext,
+    BufferInvisibleTextRenderOutcome, BufferInvisibleTextRenderRequest,
+    BufferInvisibleTextRenderRequestState, BufferLinePrefixRenderContext,
+    BufferLinePrefixRenderRequest, BufferSelectiveDisplayTailRenderContext,
+    BufferSelectiveDisplayTailRenderOutcome, BufferSelectiveDisplayTailRenderRequest,
+    BufferSelectiveDisplayTailRenderState, BufferSourceItemLayoutResolutionContext,
+    BufferTextLineBreakRenderContext, BufferTextLineBreakRenderRequest,
+    BufferTextLineBreakRenderState, BufferTextSourceCharRenderContext,
+    BufferTextSourceCharRenderOutcome, BufferTextSourceCharRenderRequest,
+    BufferTextSourceCharRenderRequestState,
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
-    BufferTextSourceCursor, BufferTextSourceItem, BufferTextSourceItemStep,
-    BufferTextSourceItemStepper, BufferTextSourceStepChar,
+    BufferTextConsumedCursorItem, BufferTextReplacementStringItem, BufferTextSourceCursor,
+    BufferTextSourceItem, BufferTextSourceItemStep, BufferTextSourceItemStepper,
+    BufferTextSourceStepChar,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, RenderFaceRef};
+use crate::display_origin::DisplayPropertySource;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -45,6 +48,7 @@ use crate::display_row_geometry::{
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{DisplayRowPrefixRequest, DisplayRowPrefixValues};
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
+use crate::display_row_replacement::DisplayPropertyReplacementAppendRequest;
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::display_row_walk_state::FaceScanCheckpoint;
@@ -52,7 +56,9 @@ use crate::display_row_walk_state::{
     BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
-use crate::display_source::DisplaySourceContext;
+use crate::display_source::{
+    DisplayPropertyReplacementSourceItem, DisplayReplacementStringSourceItem, DisplaySourceContext,
+};
 use crate::display_source_resolver::{DisplaySourcePropertyResolver, DisplaySourceResolveState};
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
 use crate::font_metrics::FontMetricsService;
@@ -710,6 +716,7 @@ pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
 pub(crate) enum BufferTextConsumedSourceItem {
     PendingStep(BufferTextSourceItemStep),
     SourceItem(BufferTextSourceItem),
+    ReplacementString(BufferTextReplacementStringItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2819,6 +2826,16 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 );
             }
             BufferTextConsumedSourceItem::SourceItem(source_item) => source_item,
+            BufferTextConsumedSourceItem::ReplacementString(replacement) => {
+                return self.render_replacement_string_source_item_for_context(
+                    replacement,
+                    loop_context,
+                    text,
+                    append_surface,
+                    active_face_state,
+                    buffer,
+                );
+            }
         };
 
         self.render_source_item_for_context(
@@ -3013,6 +3030,67 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         )
     }
 
+    pub(crate) fn render_replacement_string_source_item_for_context<
+        'request,
+        B: LayoutBufferView,
+    >(
+        &mut self,
+        replacement: BufferTextReplacementStringItem,
+        context: BufferTextWindowLoopRequestContext,
+        text: &'request [u8],
+        append_surface: &'request DisplayRowAppendSurface,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome {
+        let Some(string_item) = DisplayReplacementStringSourceItem::display_property_string(
+            replacement.value(),
+            CharPos0::new(replacement.start_charpos().max(0) as usize),
+            DisplayPropertySource::TextProperty,
+            1,
+            active_face_state.metrics().char_width,
+        ) else {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        };
+        let request = DisplayPropertyReplacementAppendRequest::new(
+            replacement.replacement_source(),
+            DisplayPropertyReplacementSourceItem::String(string_item),
+            0.0,
+            context.char_height,
+            DisplayRowPosition {
+                x_px: *self.x,
+                col: *self.col,
+            },
+        );
+        let outcome = request.append_to_text_row(
+            buffer,
+            &mut self.source_render.reborrow(),
+            self.face_ids,
+            append_surface,
+            self.row_geometry,
+            active_face_state,
+        );
+        let replacement_outcome = BufferDisplayPropertyTextReplacementOutcome {
+            replacement: outcome,
+            skip_to: replacement.end_charpos(),
+        };
+        replacement_outcome.capture_cursor_info_if_point(
+            self.cursor_info,
+            active_face_state,
+            self.row_geometry,
+            context.point_charpos,
+            replacement.start_charpos(),
+            *self.byte_idx,
+        );
+        replacement_outcome.apply_to_walk_state(
+            text,
+            self.byte_idx,
+            self.charpos,
+            self.x,
+            self.col,
+        );
+        BufferTextWindowLoopStepOutcome::ContinueBufferWalk
+    }
+
     pub(crate) fn render_row_prelude<B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowRowPreludeRequestContext,
@@ -3077,7 +3155,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 &mut pending_faces,
             );
             let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
-            item_stepper.next_item_from_source(
+            item_stepper.next_buffer_walk_item_from_source(
                 source_cursor,
                 &mut source_context,
                 *self.byte_idx,
@@ -3092,7 +3170,14 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 pending_faces,
             );
         }
-        source_item.map(BufferTextConsumedSourceItem::SourceItem)
+        source_item.map(|item| match item {
+            BufferTextConsumedCursorItem::SourceItem(item) => {
+                BufferTextConsumedSourceItem::SourceItem(item)
+            }
+            BufferTextConsumedCursorItem::ReplacementString(item) => {
+                BufferTextConsumedSourceItem::ReplacementString(item)
+            }
+        })
     }
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(

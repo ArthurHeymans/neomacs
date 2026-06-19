@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_buffer_text_source::BufferTextSourceCursor;
+use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourceCursorItem};
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
     DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplayRowBreakReason,
@@ -808,6 +808,65 @@ fn buffer_text_source_cursor_pushes_display_string_replacement_source() {
         items[1].span.end,
         DisplaySourcePosition::buffer(buffer_id, CharPos0::new(2), EmacsBytePos::new(2))
     );
+}
+
+#[test]
+fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacement() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("axb");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(2));
+        let replacement = Value::string_with_text_properties(
+            "YZ",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+            }],
+        );
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("display"),
+            replacement,
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+    let mut context = DisplaySourceContext::empty();
+
+    let Some(BufferTextSourceCursorItem::Item(first)) = source.next_buffer_walk_item(&mut context)
+    else {
+        panic!("expected leading text item");
+    };
+    assert_eq!(item_texts(&[first]), ["a"]);
+    let Some(BufferTextSourceCursorItem::ReplacementString(replacement)) =
+        source.next_buffer_walk_item(&mut context)
+    else {
+        panic!("expected atomic replacement string item");
+    };
+
+    assert_eq!(replacement.start_byte_idx(0), Some(1));
+    assert_eq!(replacement.start_charpos(), 1);
+    assert_eq!(replacement.end_charpos(), 2);
+    assert_eq!(replacement.value().as_utf8_str(), Some("YZ"));
 }
 
 #[test]
