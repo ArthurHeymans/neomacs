@@ -31,7 +31,7 @@ use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest, MatrixCursorInstallRequest,
+    GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest,
     MatrixLastWindowRowsDecorationRequest, MatrixRowBeginRequest, MatrixRowMetricsRequest,
     MatrixWindowBeginRequest,
 };
@@ -878,18 +878,16 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
                 effects,
             });
         }
-        self.builder
-            .artifact_installer()
-            .install_cursor(MatrixCursorInstallRequest {
-                window_id: cursor.window_id,
-                slot_id: cursor.slot_id,
-                x: cursor.x,
-                y: cursor.y,
-                width: cursor.width,
-                height: cursor.height,
-                style: cursor.style,
-                color: cursor.color,
-            });
+        self.builder.artifact_installer().add_cursor(
+            cursor.window_id,
+            cursor.slot_id,
+            cursor.x,
+            cursor.y,
+            cursor.width,
+            cursor.height,
+            cursor.style,
+            cursor.color,
+        );
     }
 
     pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
@@ -1092,12 +1090,39 @@ pub(crate) fn publish_text_window_cursor(
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublication {
-    matrix_cursor: Option<MatrixCursorInstallRequest>,
+    matrix_cursor: Option<TextWindowMatrixCursor>,
     row: usize,
     row_col: u16,
     style: CursorStyle,
     live_cursor: WindowCursorSnapshot,
     selected_phys_cursor: Option<PhysCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct TextWindowMatrixCursor {
+    window_id: i64,
+    slot_id: DisplaySlotId,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    style: CursorStyle,
+    color: Color,
+}
+
+impl TextWindowMatrixCursor {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        builder.artifact_installer().add_cursor(
+            self.window_id,
+            self.slot_id,
+            self.x,
+            self.y,
+            self.width,
+            self.height,
+            self.style,
+            self.color,
+        );
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1111,7 +1136,7 @@ pub(crate) struct TextWindowCursorPublicationOutcome {
 
 impl TextWindowCursorPublication {
     fn resolve(builder: &GlyphMatrixBuilder, cursor: TextWindowCursor) -> Self {
-        let matrix_cursor = (!cursor.selected).then_some(MatrixCursorInstallRequest {
+        let matrix_cursor = (!cursor.selected).then_some(TextWindowMatrixCursor {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,
             x: cursor.x,
@@ -1148,8 +1173,9 @@ impl TextWindowCursorPublication {
         builder: &mut GlyphMatrixBuilder,
         output_emitter: &mut WindowOutputEmitter,
     ) -> TextWindowCursorPublicationOutcome {
+        let installed_matrix_cursor = self.matrix_cursor.is_some();
         if let Some(cursor) = self.matrix_cursor {
-            builder.artifact_installer().install_cursor(cursor);
+            cursor.install(builder);
         }
         builder
             .row_installer()
@@ -1159,7 +1185,7 @@ impl TextWindowCursorPublication {
             builder.artifact_installer().store_phys_cursor(cursor);
         }
         TextWindowCursorPublicationOutcome {
-            installed_matrix_cursor: self.matrix_cursor.is_some(),
+            installed_matrix_cursor,
             stored_phys_cursor: self.selected_phys_cursor.is_some(),
             row: self.row,
             row_col: self.row_col,

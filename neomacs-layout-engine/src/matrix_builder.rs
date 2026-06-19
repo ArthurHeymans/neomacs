@@ -23,7 +23,7 @@ use std::collections::HashMap;
 pub(crate) const FRAME_CHROME_WINDOW_ID: i64 = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum MatrixMediaInstallKind {
+enum MatrixMediaInstallKind {
     Image {
         image_id: u32,
     },
@@ -38,7 +38,7 @@ pub(crate) enum MatrixMediaInstallKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MatrixMediaInstallRequest {
+struct MatrixMediaInstallRequest {
     target: ResolvedMatrixMediaInstallTarget,
     kind: MatrixMediaInstallKind,
     x: f32,
@@ -67,7 +67,7 @@ pub(crate) struct MatrixCurrentWindowRowInstallContext {
 }
 
 impl MatrixMediaInstallRequest {
-    pub(crate) fn new(
+    fn new(
         target: ResolvedMatrixMediaInstallTarget,
         kind: MatrixMediaInstallKind,
         x: f32,
@@ -132,15 +132,15 @@ impl MatrixMediaInstallRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MatrixCursorInstallRequest {
-    pub(crate) window_id: i64,
-    pub(crate) slot_id: DisplaySlotId,
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
-    pub(crate) style: CursorStyle,
-    pub(crate) color: Color,
+struct MatrixCursorInstallRequest {
+    window_id: i64,
+    slot_id: DisplaySlotId,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    style: CursorStyle,
+    color: Color,
 }
 
 impl MatrixCursorInstallRequest {
@@ -577,12 +577,112 @@ impl MatrixArtifactInstaller<'_> {
         self.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(hint));
     }
 
-    pub(crate) fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
+    fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
         self.builder.install_cursor(request);
     }
 
-    pub(crate) fn install_media(&mut self, request: MatrixMediaInstallRequest) {
+    pub(crate) fn add_cursor(
+        &mut self,
+        window_id: i64,
+        slot_id: DisplaySlotId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        style: CursorStyle,
+        color: Color,
+    ) {
+        self.install_cursor(MatrixCursorInstallRequest {
+            window_id,
+            slot_id,
+            x,
+            y,
+            width,
+            height,
+            style,
+            color,
+        });
+    }
+
+    fn install_media(&mut self, request: MatrixMediaInstallRequest) {
         self.builder.install_media(request);
+    }
+
+    fn add_media(
+        &mut self,
+        target: ResolvedMatrixMediaInstallTarget,
+        kind: MatrixMediaInstallKind,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.install_media(MatrixMediaInstallRequest::new(
+            target, kind, x, y, width, height,
+        ));
+    }
+
+    pub(crate) fn add_image_media(
+        &mut self,
+        target: ResolvedMatrixMediaInstallTarget,
+        image_id: u32,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.add_media(
+            target,
+            MatrixMediaInstallKind::Image { image_id },
+            x,
+            y,
+            width,
+            height,
+        );
+    }
+
+    pub(crate) fn add_video_media(
+        &mut self,
+        target: ResolvedMatrixMediaInstallTarget,
+        video_id: u32,
+        loop_count: i32,
+        autoplay: bool,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.add_media(
+            target,
+            MatrixMediaInstallKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            },
+            x,
+            y,
+            width,
+            height,
+        );
+    }
+
+    pub(crate) fn add_xwidget_media(
+        &mut self,
+        target: ResolvedMatrixMediaInstallTarget,
+        xwidget_id: u32,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.add_media(
+            target,
+            MatrixMediaInstallKind::Xwidget { xwidget_id },
+            x,
+            y,
+            width,
+            height,
+        );
     }
 
     pub(crate) fn store_phys_cursor(&mut self, cursor: PhysCursor) {

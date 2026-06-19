@@ -12,8 +12,8 @@ use crate::display_row_builder::{
 };
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::{
-    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixMediaInstallKind, MatrixMediaInstallRequest,
-    MatrixRowBeginRequest, ResolvedMatrixMediaInstallTarget,
+    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixRowBeginRequest,
+    ResolvedMatrixMediaInstallTarget,
 };
 use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
@@ -390,34 +390,42 @@ impl RenderedDisplayRowMedia {
         builder: &mut GlyphMatrixBuilder,
         target: ResolvedMatrixMediaInstallTarget,
     ) {
-        builder
-            .artifact_installer()
-            .install_media(MatrixMediaInstallRequest::new(
-                target,
-                self.matrix_media_kind(),
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-            ));
-    }
-
-    fn matrix_media_kind(&self) -> MatrixMediaInstallKind {
         match self.kind {
             RenderedDisplayRowMediaKind::Image { image_id } => {
-                MatrixMediaInstallKind::Image { image_id }
+                builder.artifact_installer().add_image_media(
+                    target,
+                    image_id,
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                );
             }
             RenderedDisplayRowMediaKind::Video {
                 video_id,
                 loop_count,
                 autoplay,
-            } => MatrixMediaInstallKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            },
+            } => {
+                builder.artifact_installer().add_video_media(
+                    target,
+                    video_id,
+                    loop_count,
+                    autoplay,
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                );
+            }
             RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
-                MatrixMediaInstallKind::Xwidget { xwidget_id }
+                builder.artifact_installer().add_xwidget_media(
+                    target,
+                    xwidget_id,
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                );
             }
         }
     }
