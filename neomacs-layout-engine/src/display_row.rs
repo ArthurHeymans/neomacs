@@ -1981,7 +1981,7 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
 }
 
 pub(crate) struct DisplayRowCurrentTextRenderState<'face, 'emit> {
-    builder: &'emit mut GlyphMatrixBuilder,
+    row_surface: DisplayRowCurrentRowSurface<'emit>,
     output_emitter: &'emit mut WindowOutputEmitter,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
@@ -1990,7 +1990,7 @@ pub(crate) struct DisplayRowCurrentTextRenderState<'face, 'emit> {
 }
 
 pub(crate) struct DisplayRowCurrentTextMeasureState<'face, 'emit> {
-    builder: &'emit mut GlyphMatrixBuilder,
+    row_surface: DisplayRowCurrentRowSurface<'emit>,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
@@ -2008,7 +2008,7 @@ impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> Self {
         Self {
-            builder,
+            row_surface: DisplayRowCurrentRowSurface::new(builder),
             output_emitter,
             evaluator,
             font_metrics,
@@ -2027,7 +2027,7 @@ impl<'face, 'emit> DisplayRowCurrentTextMeasureState<'face, 'emit> {
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> Self {
         Self {
-            builder,
+            row_surface: DisplayRowCurrentRowSurface::new(builder),
             evaluator,
             font_metrics,
             face_resolver,
@@ -2264,6 +2264,17 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         });
     }
 
+    fn install_fragment_assets(
+        &mut self,
+        role: GlyphRowRole,
+        matrix_row: usize,
+        faces: &[Face],
+        media: &[RenderedDisplayRowMedia],
+    ) {
+        RenderedDisplayRowAssetsInstall::fragment(role, matrix_row, faces, media)
+            .install(self.builder);
+    }
+
     fn render_source_step_with_policy<S, P>(
         &mut self,
         row_request: DisplayRowSourceRenderRequest<'_>,
@@ -2455,7 +2466,7 @@ impl<'state, 'face, 'emit> DisplayRowCurrentTextSourceRenderer<'state, 'face, 'e
     {
         let role = row_request.role();
         let DisplayRowCurrentTextRenderState {
-            builder,
+            row_surface,
             evaluator,
             font_metrics,
             face_resolver,
@@ -2468,8 +2479,7 @@ impl<'state, 'face, 'emit> DisplayRowCurrentTextSourceRenderer<'state, 'face, 'e
             evaluator.display_host.as_deref(),
             face_ids,
         );
-        let mut surface = DisplayRowCurrentRowSurface::new(builder);
-        let (result, row_height_px, row_ascent_px) = surface.render_source_step_with_policy(
+        let (result, row_height_px, row_ascent_px) = row_surface.render_source_step_with_policy(
             row_request,
             &mut renderer,
             source,
@@ -2513,15 +2523,15 @@ impl<'state, 'face, 'emit> DisplayRowCurrentTextSourceMeasurer<'state, 'face, 'e
             self.state.evaluator.display_host.as_deref(),
             self.state.face_ids,
         );
-        let mut surface = DisplayRowCurrentRowSurface::new(self.state.builder);
-        let (result, row_height_px, row_ascent_px) = surface.measure_source_step_with_policy(
-            row_request,
-            &mut renderer,
-            source,
-            source_state,
-            &mut context,
-            render_policy,
-        )?;
+        let (result, row_height_px, row_ascent_px) =
+            self.state.row_surface.measure_source_step_with_policy(
+                row_request,
+                &mut renderer,
+                source,
+                source_state,
+                &mut context,
+                render_policy,
+            )?;
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -2600,9 +2610,12 @@ fn finish_current_text_row_render(
     row_ascent_px: f32,
 ) -> CurrentTextRowRenderOutcome {
     let end = display_row_output_end_position(result.progress);
-    RenderedDisplayRowAssetsInstall::fragment(role, output.row, &result.faces, &result.media)
-        .install(state.builder);
-    DisplayRowCurrentRowSurface::new(state.builder).merge_source_slot_bounds(&result.source_slots);
+    state
+        .row_surface
+        .install_fragment_assets(role, output.row, &result.faces, &result.media);
+    state
+        .row_surface
+        .merge_source_slot_bounds(&result.source_slots);
     let source_slots = result.source_slots;
     state
         .output_emitter
