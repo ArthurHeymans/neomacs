@@ -23,13 +23,15 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_output_install::{
-    DisplayOutputRowStoredMetrics, DisplayOutputTextRowMetricsInstallRequest,
-    DisplayOutputTextWindowBeginInstallRequest, TextWindowRowDecorationRequest,
-    begin_text_output_row, begin_text_output_window, end_text_output_window,
-    finalize_text_output_row, finish_text_output_row, install_current_text_output_row_decoration,
-    install_last_text_output_rows_decoration, install_text_output_display_range,
+    DisplayOutputCursorArtifactInstallRequest, DisplayOutputRowStoredMetrics,
+    DisplayOutputTextRowMetricsInstallRequest, DisplayOutputTextWindowBeginInstallRequest,
+    TextWindowRowDecorationRequest, begin_text_output_row, begin_text_output_window,
+    end_text_output_window, finalize_text_output_row, finish_text_output_row,
+    install_current_text_output_row_decoration, install_last_text_output_rows_decoration,
+    install_text_output_cursor_artifact, install_text_output_cursor_effects,
+    install_text_output_display_range, install_text_output_row_cursor,
     install_text_output_row_decoration, install_text_output_row_metrics,
-    restore_text_output_retry_checkpoint,
+    restore_text_output_retry_checkpoint, store_text_output_phys_cursor,
 };
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
@@ -838,7 +840,7 @@ pub(crate) fn install_text_window_cursor_effects(
     output_builder: &mut DisplayOutputBuilder,
     request: TextWindowCursorEffects,
 ) {
-    output_builder.set_output_cursor_effects(request.window_id, request.effects);
+    install_text_output_cursor_effects(output_builder, request.window_id, request.effects);
 }
 
 pub(crate) fn publish_text_window_decorative_cursor(
@@ -873,20 +875,32 @@ fn install_text_window_cursor_artifact(
     output_builder: &mut DisplayOutputBuilder,
     cursor: TextWindowCursorArtifact,
 ) {
-    output_builder.add_output_cursor(
-        cursor.window_id,
-        cursor.slot_id,
-        cursor.x,
-        cursor.y,
-        cursor.width,
-        cursor.height,
-        cursor.style,
-        cursor.color,
+    install_text_output_cursor_artifact(
+        output_builder,
+        DisplayOutputCursorArtifactInstallRequest::new(
+            cursor.window_id,
+            cursor.slot_id,
+            cursor.x,
+            cursor.y,
+            cursor.width,
+            cursor.height,
+            cursor.style,
+            cursor.color,
+        ),
     );
 }
 
 fn store_text_window_phys_cursor(output_builder: &mut DisplayOutputBuilder, cursor: PhysCursor) {
-    output_builder.store_output_phys_cursor(cursor);
+    store_text_output_phys_cursor(output_builder, cursor);
+}
+
+fn install_text_window_row_cursor(
+    output_builder: &mut DisplayOutputBuilder,
+    row: usize,
+    row_col: u16,
+    style: CursorStyle,
+) {
+    install_text_output_row_cursor(output_builder, row, row_col, style);
 }
 
 pub(crate) fn install_text_window_terminal_right_border(
@@ -991,7 +1005,7 @@ impl TextWindowCursorPublication {
         if let Some(cursor) = self.cursor_artifact {
             install_text_window_cursor_artifact(output_builder, cursor);
         }
-        output_builder.set_output_row_cursor(self.row, self.row_col, self.style);
+        install_text_window_row_cursor(output_builder, self.row, self.row_col, self.style);
         output_emitter.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
             store_text_window_phys_cursor(output_builder, cursor);

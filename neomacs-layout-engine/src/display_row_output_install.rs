@@ -16,10 +16,13 @@ use crate::display_row_builder::{DisplayRowGlyphSlot, merge_display_row_source_s
 use crate::display_row_builder::{DisplayRowPosition, display_row_text_is_empty};
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
+use neomacs_display_protocol::frame_glyphs::{
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
+};
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{Color, Rect};
 #[cfg(test)]
 use neovm_core::emacs_core::Context;
 
@@ -55,6 +58,18 @@ pub(crate) struct DisplayOutputTextWindowBeginInstallRequest {
     bounds: Rect,
     text_bounds: Rect,
     selected: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayOutputCursorArtifactInstallRequest {
+    window_id: i64,
+    slot_id: DisplaySlotId,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    style: CursorStyle,
+    color: Color,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,6 +146,44 @@ impl DisplayOutputTextWindowBeginInstallRequest {
             self.bounds,
             self.text_bounds,
             self.selected,
+        );
+    }
+}
+
+impl DisplayOutputCursorArtifactInstallRequest {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        window_id: i64,
+        slot_id: DisplaySlotId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        style: CursorStyle,
+        color: Color,
+    ) -> Self {
+        Self {
+            window_id,
+            slot_id,
+            x,
+            y,
+            width,
+            height,
+            style,
+            color,
+        }
+    }
+
+    fn install(self, builder: &mut DisplayOutputBuilder) {
+        builder.add_output_cursor(
+            self.window_id,
+            self.slot_id,
+            self.x,
+            self.y,
+            self.width,
+            self.height,
+            self.style,
+            self.color,
         );
     }
 }
@@ -235,6 +288,37 @@ pub(crate) fn install_text_output_row_decoration(
             builder.mark_current_output_row_truncated_left();
         }
     }
+}
+
+pub(crate) fn install_text_output_cursor_effects(
+    builder: &mut DisplayOutputBuilder,
+    window_id: i64,
+    effects: EffectsConfig,
+) {
+    builder.set_output_cursor_effects(window_id, effects);
+}
+
+pub(crate) fn install_text_output_cursor_artifact(
+    builder: &mut DisplayOutputBuilder,
+    request: DisplayOutputCursorArtifactInstallRequest,
+) {
+    request.install(builder);
+}
+
+pub(crate) fn install_text_output_row_cursor(
+    builder: &mut DisplayOutputBuilder,
+    display_row_index: usize,
+    col: u16,
+    style: CursorStyle,
+) {
+    builder.set_output_row_cursor(display_row_index, col, style);
+}
+
+pub(crate) fn store_text_output_phys_cursor(
+    builder: &mut DisplayOutputBuilder,
+    cursor: PhysCursor,
+) {
+    builder.store_output_phys_cursor(cursor);
 }
 
 pub(crate) fn install_current_text_output_row_decoration<D>(
