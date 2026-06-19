@@ -8,8 +8,7 @@
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
-    FrameTabBarDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope, WindowChromeRowsPlan,
-    build_tab_bar_display, max_mini_window_lines, max_mini_window_lines_for_buffer,
+    FrameTabBarDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope, build_tab_bar_display,
     max_mini_window_lines_from_value,
 };
 use super::font_metrics::FontMetricsService;
@@ -19,14 +18,8 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_render::{
-    BufferTextWindowCursorEffectsOutput, BufferTextWindowDefaultFacePlan,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderAttemptOutcome,
-    BufferTextWindowRenderAttemptState, BufferTextWindowWalkSetupRequest,
-};
-use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
-use crate::display_buffer_text_walk::{
-    BufferTextWindowChromeHeights, BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
-    BufferTextWindowLocalDisplayPolicy,
+    BufferTextWindowRenderAttemptOutcome, BufferTextWindowRenderAttemptState,
+    BufferTextWindowRenderRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -917,160 +910,17 @@ impl LayoutEngine {
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name().to_owned();
-        let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
-        BufferTextWindowCursorEffectsOutput::install_cursor_effects(
-            &mut self.matrix_builder,
+        let render_outcome = BufferTextWindowRenderRequest::new(
+            frame_id,
+            window_id,
             params,
-        );
-
-        let char_w = params.char_width;
-        let char_h = params.char_height;
-        let font_ascent = params.font_ascent;
-        let local_display_policy = BufferTextWindowLocalDisplayPolicy::from_buffer(buffer);
-
-        // Use face_resolver's default face for this window.
-        // Chrome row reservation must use the same realized face metrics as
-        // the final status-line renderer, otherwise rows drift from GNU
-        // redisplay when faces override font size, ascent, or box widths.
-        let default_face = BufferTextWindowDefaultFacePlan::new(
-            face_resolver,
-            &mut self.font_metrics,
-            frame_params.window_system,
-            char_w,
-            char_h,
-            font_ascent,
-        );
-        let default_resolved = default_face.face();
-
-        tracing::debug!(
-            "layout font metrics: family={:?} weight={} italic={} size={} char_w={:.2} char_h={:.2} ascent={:.2} (window char_w={:.2} char_h={:.2})",
-            default_resolved.font_family,
-            default_resolved.font_weight,
-            default_resolved.italic,
-            default_resolved.font_size,
-            default_face.char_width(),
-            default_face.row_height(),
-            default_face.ascent(),
-            char_w,
-            char_h,
-        );
-
-        let chrome_plan = WindowChromeRowsPlan::new(
-            params,
-            face_resolver,
-            &mut self.font_metrics,
-            char_w,
-            default_face.ascent(),
-            default_face.row_height(),
-        );
-        let mode_line_height = chrome_plan.mode_line_height();
-        let header_line_height = chrome_plan.header_line_height();
-        let tab_line_height = chrome_plan.tab_line_height();
-        let chrome_heights = BufferTextWindowChromeHeights::new(
-            mode_line_height,
-            header_line_height,
-            tab_line_height,
-        );
-        // GNU `resize_mini_window` clips the measured mini-window height to the
-        // `max-mini-window-height` ceiling.  Compute that ceiling in display
-        // rows and thread it into the geometry so the minibuffer walk measures
-        // its content unclamped up to (and no further than) the ceiling.
-        let max_mini_window_rows = {
-            let frame_rows = frame_params.height / char_h.max(1.0);
-            if params.is_minibuffer() {
-                max_mini_window_lines_for_buffer(evaluator, buffer, frame_rows)
-            } else {
-                max_mini_window_lines(evaluator, frame_rows)
-            }
-            .ceil()
-            .max(1.0) as usize
-        };
-        let geometry_request = BufferTextWindowGeometryRequest::new(
-            params,
-            char_w,
-            char_h,
-            mode_line_height,
-            header_line_height,
-            tab_line_height,
-        )
-        .with_max_mini_window_rows(max_mini_window_rows);
-        let BufferTextWindowGeometryPlan {
-            geometry,
-            line_number_columns: lnum_cols,
-        } = geometry_request.into_window_plan(&local_display_policy, &buf_access);
-
-        // GNU Emacs redisplay advances iterators until the visible window is
-        // fully resolved; it does not stop at an arbitrary "rows * cols"
-        // character budget.  Capping the text slice here truncates long
-        // wrapped or truncated lines before they are actually offscreen, which
-        // breaks both redisplay and geometry queries.
-        let text_source = BufferTextWindowSourceReadRequest::new(params, geometry.max_rows)
-            .read_into(&buf_access, &mut self.text_buf);
-        let bytes_read = text_source.bytes_read();
-
-        let text = if bytes_read > 0 {
-            &self.text_buf[..bytes_read]
-        } else {
-            &[]
-        };
-        tracing::debug!(
-            "  layout_window_rust id={}: text_y={:.1} text_h={:.1} max_rows={} bytes_read={}",
-            params.window_id,
-            geometry.text_y,
-            geometry.text_height,
-            geometry.max_rows,
-            bytes_read
-        );
-
-        if geometry.text_height <= 0.0 || geometry.text_width <= 0.0 {
-            return;
-        }
-
-        // GNU `display_echo_area_1` (xdisp.c:13194) renders the echo area by just
-        // calling `resize_mini_window` + `try_window` over the echo-area buffer —
-        // i.e. the ordinary window walk. The inactive mini-window's `buf_id` was
-        // swapped to ` *Echo Area 0*` above, so it flows through that same walk
-        // here; there is no separate echo render path.
-
-        let reserve_right_special_col =
-            !frame_params.window_system && params.right_fringe_width == 0.0;
-        let mut walk_setup = BufferTextWindowWalkSetupRequest::from_window_geometry(
-            text_source,
-            params,
-            &geometry,
-            &local_display_policy,
-            &default_face,
-            reserve_right_border_col,
-            reserve_right_special_col,
-        )
-        .into_setup();
-        let text_append_surface = walk_setup.text_append_surface.clone();
-        let output_setup = BufferTextWindowOutputSetupRequest::from_window_geometry(
-            frame_id, window_id, params, &geometry,
-        )
-        .into_setup(geometry.max_rows, &walk_setup);
-
-        let body_plan = output_setup.into_body_plan(
-            &walk_setup,
-            local_display_policy,
-            lnum_cols,
-            &geometry,
-            chrome_heights,
-            buffer,
+            frame_params,
             buf_id,
-            text_source,
-            params,
-            face_resolver,
-            &default_face,
-            font_ascent,
-            frame_params.window_system,
-            params.window_id as u64,
-            &text_append_surface,
-            reserve_right_special_col,
+            buffer,
+            &buffer_name,
             reserve_right_border_col,
-        );
-        let render_outcome = body_plan.render_attempt(
-            &mut walk_setup,
+        )
+        .render_into(
             BufferTextWindowRenderAttemptState::new(
                 &mut self.matrix_builder,
                 evaluator,
@@ -1080,22 +930,12 @@ impl LayoutEngine {
                 &mut self.hit_data,
                 &mut self.display_snapshots,
             ),
-            chrome_plan.render_request(
-                params,
-                geometry.mode_line_matrix_row,
-                reserve_right_border_col,
-                char_w,
-                font_ascent,
-                &buffer_name,
-            ),
+            &mut self.text_buf,
             remaining_visibility_retries,
-            text,
-            params,
-            buffer,
-            &buf_access,
         );
 
         let redisplay_positions = match render_outcome {
+            BufferTextWindowRenderAttemptOutcome::Skipped => return,
             BufferTextWindowRenderAttemptOutcome::Retry { window_start } => {
                 let mut retry_params = params.clone();
                 retry_params.window_start = window_start;
