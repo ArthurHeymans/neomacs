@@ -7441,15 +7441,17 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 transition,
             } => {
                 let word_wrap_action = BufferTextWordWrapSourceAction::new(wrap_break);
+                let mut source_position = BufferTextSourcePosition::new(*byte_idx, *charpos);
                 word_wrap_action.apply_before_row_transition(
                     source_render.output_emitter(),
-                    byte_idx,
-                    charpos,
+                    &mut source_position,
                     col,
                     row_extend,
                     x,
                     context.content_x,
                 );
+                *byte_idx = source_position.byte_idx();
+                *charpos = source_position.charpos();
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -7469,25 +7471,26 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                         col: *col,
                     },
                 );
-                BufferTextOverflowRenderOutcome::Transition(
-                    word_wrap_action.apply_after_row_transition_and_prefix(
-                        row_transition,
-                        transition,
-                        charpos,
-                        hit_row_range,
-                        face_scan,
-                        row_geometry,
-                        context.row_visibility_limit,
-                        DisplayRowTransitionRenderState::new(
-                            prefix_request,
-                            context.has_prefix,
-                            line_numbers,
-                            hscroll_skip,
-                            word_wrap,
-                            trailing_whitespace,
-                        ),
+                let continuation = word_wrap_action.apply_after_row_transition_and_prefix(
+                    row_transition,
+                    transition,
+                    &mut source_position,
+                    hit_row_range,
+                    face_scan,
+                    row_geometry,
+                    context.row_visibility_limit,
+                    DisplayRowTransitionRenderState::new(
+                        prefix_request,
+                        context.has_prefix,
+                        line_numbers,
+                        hscroll_skip,
+                        word_wrap,
+                        trailing_whitespace,
                     ),
-                )
+                );
+                *byte_idx = source_position.byte_idx();
+                *charpos = source_position.charpos();
+                BufferTextOverflowRenderOutcome::Transition(continuation)
             }
             BufferTextSourceCharOverflowAction::CharacterWrap { transition } => {
                 let character_wrap_action =
@@ -7495,6 +7498,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                         self.source_step_char,
                     );
                 character_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
+                let mut source_position = BufferTextSourcePosition::new(*byte_idx, *charpos);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
@@ -7523,17 +7527,17 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                     ),
                     col,
                 );
-                BufferTextOverflowRenderOutcome::Transition(
-                    character_wrap_action.apply_after_visible_row_transition(
-                        row_transition,
-                        byte_idx,
-                        charpos,
-                        hit_row_range,
-                        face_scan,
-                        row_geometry,
-                        context.row_visibility_limit,
-                    ),
-                )
+                let continuation = character_wrap_action.apply_after_visible_row_transition(
+                    row_transition,
+                    &mut source_position,
+                    hit_row_range,
+                    face_scan,
+                    row_geometry,
+                    context.row_visibility_limit,
+                );
+                *byte_idx = source_position.byte_idx();
+                *charpos = source_position.charpos();
+                BufferTextOverflowRenderOutcome::Transition(continuation)
             }
         }
     }
@@ -7650,41 +7654,45 @@ impl BufferTextWordWrapSourceAction {
             .restore_current_row_display_positions(row_first_display_pos, row_last_display_pos);
     }
 
+    pub(crate) fn source_position(self) -> BufferTextSourcePosition {
+        BufferTextSourcePosition::new(
+            self.break_candidate.byte_idx(),
+            self.break_candidate.charpos(),
+        )
+    }
+
     pub(crate) fn rewind_source_state(
         self,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         col: &mut usize,
     ) {
-        *byte_idx = self.break_candidate.byte_idx();
-        *charpos = self.break_candidate.charpos();
+        *position = self.source_position();
         *col = 0;
     }
 
     pub(crate) fn apply_before_row_transition(
         self,
         output_emitter: &mut WindowOutputEmitter,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         col: &mut usize,
         row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
         x: &mut f32,
         content_x: f32,
     ) {
         self.restore_row_output_progress(output_emitter);
-        self.rewind_source_state(byte_idx, charpos, col);
+        self.rewind_source_state(position, col);
         *x = content_x;
         row_extend.clear();
     }
 
     pub(crate) fn apply_after_row_transition(
         self,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
     ) {
-        *charpos = self.charpos();
-        hit_row_range.advance_to(*charpos);
+        *position = self.source_position();
+        hit_row_range.advance_to(position.charpos());
         face_scan.invalidate();
     }
 
@@ -7692,7 +7700,7 @@ impl BufferTextWordWrapSourceAction {
         self,
         row_transition: DisplayTextRowTransition,
         transition: DisplayRowOverflowTransitionPlan,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
         row_geometry: &DisplayRowGeometryState,
@@ -7702,7 +7710,7 @@ impl BufferTextWordWrapSourceAction {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        self.apply_after_row_transition(charpos, hit_row_range, face_scan);
+        self.apply_after_row_transition(position, hit_row_range, face_scan);
         render_state.apply_overflow_prefix(transition);
         DisplayRowTransitionContinuation::after_visible_row_transition(
             row_transition,
@@ -7711,13 +7719,14 @@ impl BufferTextWordWrapSourceAction {
         )
     }
 
-    pub(crate) fn charpos(self) -> i64 {
-        self.break_candidate.charpos()
-    }
-
     #[cfg(test)]
     pub(crate) fn byte_idx(self) -> usize {
         self.break_candidate.byte_idx()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn charpos(self) -> i64 {
+        self.break_candidate.charpos()
     }
 }
 
@@ -7787,9 +7796,12 @@ impl BufferTextCharacterWrapSourceAction {
         Self::new(source_char.start_byte_idx(), source_char.start_charpos())
     }
 
-    pub(crate) fn rewind_source_state(self, byte_idx: &mut usize, charpos: &mut i64) {
-        *byte_idx = self.ch_start_byte_idx;
-        *charpos = self.ch_start_charpos;
+    pub(crate) fn source_position(self) -> BufferTextSourcePosition {
+        BufferTextSourcePosition::new(self.ch_start_byte_idx, self.ch_start_charpos)
+    }
+
+    pub(crate) fn rewind_source_state(self, position: &mut BufferTextSourcePosition) {
+        *position = self.source_position();
     }
 
     pub(crate) fn apply_before_row_transition(
@@ -7804,21 +7816,19 @@ impl BufferTextCharacterWrapSourceAction {
 
     pub(crate) fn apply_after_row_transition(
         self,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
     ) {
-        self.rewind_source_state(byte_idx, charpos);
-        hit_row_range.advance_to(*charpos);
+        self.rewind_source_state(position);
+        hit_row_range.advance_to(position.charpos());
         face_scan.invalidate();
     }
 
     pub(crate) fn apply_after_visible_row_transition(
         self,
         row_transition: DisplayTextRowTransition,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
         face_scan: &mut FaceScanCheckpoint,
         row_geometry: &DisplayRowGeometryState,
@@ -7827,7 +7837,7 @@ impl BufferTextCharacterWrapSourceAction {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        self.apply_after_row_transition(byte_idx, charpos, hit_row_range, face_scan);
+        self.apply_after_row_transition(position, hit_row_range, face_scan);
         DisplayRowTransitionContinuation::after_visible_row_transition(
             row_transition,
             row_geometry,
