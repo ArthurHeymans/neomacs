@@ -15,8 +15,8 @@
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
 use super::window_output::{ChromeRowOutput, TextWindowRowOutputSurface};
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_frame_output::FrameChromeOutputSurface;
 use crate::display_origin::DisplayOrigin;
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowOwner,
     DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
@@ -25,12 +25,13 @@ use crate::display_row::{
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
+use crate::display_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
-use neomacs_display_protocol::glyph_matrix::GlyphRow;
+use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::ui_types::TabBarItem;
 use neovm_core::buffer::BufferId;
@@ -171,27 +172,36 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             rendered,
             DisplayRowBoundsPolicy::MeasureContent,
         );
-        state.output.install_measured_frame_chrome_row(&measured);
+        install_measured_frame_chrome_display_row(
+            state.output_builder,
+            state.pending_frame_chrome_rows,
+            &measured,
+        );
         Some(FrameTabBarDisplayRowRender::Measured(measured))
     }
 }
 
 pub(crate) struct FrameTabBarDisplayRowRenderState<'emit, 'output, 'face> {
-    output: &'emit mut FrameChromeOutputSurface<'emit, 'output>,
+    output_builder: &'emit mut DisplayOutputBuilder,
+    pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
     display_host: Option<&'emit dyn DisplayHost>,
+    _output: std::marker::PhantomData<&'output mut ()>,
 }
 
 impl<'emit, 'output, 'face> FrameTabBarDisplayRowRenderState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        output: &'emit mut FrameChromeOutputSurface<'emit, 'output>,
+        output_builder: &'emit mut DisplayOutputBuilder,
+        pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
         render_services: ChromeRowRenderServices<'emit, 'face>,
         display_host: Option<&'emit dyn DisplayHost>,
     ) -> Self {
         Self {
-            output,
+            output_builder,
+            pending_frame_chrome_rows,
             render_services,
             display_host,
+            _output: std::marker::PhantomData,
         }
     }
 }

@@ -1034,7 +1034,8 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let mut frame_chrome_output = self.frame_output.chrome_surface();
+        let (frame_chrome_output, pending_frame_chrome_rows) =
+            self.frame_output.frame_chrome_output_parts();
         let Some(rendered_tab_bar) = (FrameTabBarDisplayRowRequest {
             row_index,
             y: tab_bar_y,
@@ -1047,7 +1048,8 @@ impl LayoutEngine {
             text: tab_bar.text,
         })
         .render(&mut FrameTabBarDisplayRowRenderState::new(
-            &mut frame_chrome_output,
+            frame_chrome_output,
+            pending_frame_chrome_rows,
             ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
             evaluator.display_host.as_deref(),
         )) else {

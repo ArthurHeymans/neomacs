@@ -1,7 +1,5 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_row::MeasuredDisplayRow;
-use crate::display_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
@@ -56,11 +54,6 @@ pub(crate) struct FrameOutputSurface<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
 
-pub(crate) struct FrameChromeOutputSurface<'builder, 'rows> {
-    builder: &'builder mut DisplayOutputBuilder,
-    pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
-}
-
 pub(crate) struct FrameOutputOwner {
     builder: DisplayOutputBuilder,
     pending_frame_chrome_rows: Vec<FrameChromeRow>,
@@ -102,11 +95,10 @@ impl FrameOutputOwner {
         &mut self.builder
     }
 
-    pub(crate) fn chrome_surface(&mut self) -> FrameChromeOutputSurface<'_, '_> {
-        FrameChromeOutputSurface::from_output_builder(
-            &mut self.builder,
-            &mut self.pending_frame_chrome_rows,
-        )
+    pub(crate) fn frame_chrome_output_parts(
+        &mut self,
+    ) -> (&mut DisplayOutputBuilder, &mut Vec<FrameChromeRow>) {
+        (&mut self.builder, &mut self.pending_frame_chrome_rows)
     }
 
     pub(crate) fn view(&self) -> FrameOutputView<'_> {
@@ -227,26 +219,6 @@ impl<'a> FrameOutputSurface<'a> {
 
     fn cursors(&self) -> &[CursorItem] {
         self.builder.cursors()
-    }
-}
-
-impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
-    pub(crate) fn from_output_builder(
-        builder: &'builder mut DisplayOutputBuilder,
-        pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
-    ) -> Self {
-        Self {
-            builder,
-            pending_frame_chrome_rows,
-        }
-    }
-
-    pub(crate) fn install_measured_frame_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        install_measured_frame_chrome_display_row(
-            self.builder,
-            self.pending_frame_chrome_rows,
-            measured,
-        );
     }
 }
 
