@@ -314,13 +314,14 @@ pub(crate) struct BufferTextSourceItem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextSourceCursorItem {
+enum BufferTextSourceCursorItem {
     Item(DisplayItem),
     Replacement(BufferTextReplacementItem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BufferTextConsumedCursorItem {
+pub(crate) enum BufferTextConsumedSourceItem {
+    PendingStep(BufferTextSourceItemStep),
     SourceItem(BufferTextSourceItem),
     Replacement(BufferTextReplacementItem),
 }
@@ -679,7 +680,7 @@ impl BufferTextSourceItemStepper {
         self.item_step_from_source_item(item, byte_idx, charpos)
     }
 
-    pub(crate) fn next_pending_item_step(
+    fn next_pending_item_step(
         &mut self,
         byte_idx: &mut usize,
         charpos: i64,
@@ -712,13 +713,13 @@ impl BufferTextSourceItemStepper {
         self.validate_source_item(item, byte_idx, charpos, source_char)
     }
 
-    pub(crate) fn next_buffer_walk_item_from_source<B: LayoutBufferView + ?Sized>(
+    fn next_buffer_walk_item_from_source<B: LayoutBufferView + ?Sized>(
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
         byte_idx: usize,
         charpos: i64,
-    ) -> Option<BufferTextConsumedCursorItem> {
+    ) -> Option<BufferTextConsumedSourceItem> {
         if self.pending_text_run.is_some() {
             tracing::debug!(
                 "BufferTextSourceItemStepper: requested typed item while a text run is pending"
@@ -735,7 +736,7 @@ impl BufferTextSourceItemStepper {
         match source.next_buffer_walk_item(context)? {
             BufferTextSourceCursorItem::Item(item) => self
                 .validate_source_item(item, byte_idx, charpos, source_char)
-                .map(BufferTextConsumedCursorItem::SourceItem),
+                .map(BufferTextConsumedSourceItem::SourceItem),
             BufferTextSourceCursorItem::Replacement(item) => {
                 if item.start_byte_idx(self.text_start_byte)? != byte_idx
                     || item.start_charpos() != charpos
@@ -750,9 +751,23 @@ impl BufferTextSourceItemStepper {
                     );
                     return None;
                 }
-                Some(BufferTextConsumedCursorItem::Replacement(item))
+                Some(BufferTextConsumedSourceItem::Replacement(item))
             }
         }
+    }
+
+    pub(crate) fn next_consumed_source_item<B: LayoutBufferView + ?Sized>(
+        &mut self,
+        source: &mut BufferTextSourceCursor<'_, B>,
+        context: &mut DisplaySourceContext<'_>,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextConsumedSourceItem> {
+        if let Some(step) = self.next_pending_item_step(byte_idx, charpos) {
+            return Some(BufferTextConsumedSourceItem::PendingStep(step));
+        }
+
+        self.next_buffer_walk_item_from_source(source, context, *byte_idx, charpos)
     }
 
     #[cfg(test)]
@@ -1065,7 +1080,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
     }
 
-    pub(crate) fn next_buffer_walk_item(
+    fn next_buffer_walk_item(
         &mut self,
         context: &mut DisplaySourceContext<'_>,
     ) -> Option<BufferTextSourceCursorItem> {

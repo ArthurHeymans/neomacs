@@ -1,5 +1,7 @@
 use super::*;
-use crate::display_buffer_text_source::{BufferTextSourceCursor, BufferTextSourceCursorItem};
+use crate::display_buffer_text_source::{
+    BufferTextConsumedSourceItem, BufferTextSourceCursor, BufferTextSourceItemStepper,
+};
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
     DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplayRowBreakReason,
@@ -852,14 +854,23 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
         RenderFaceRef::FaceId(3),
     );
     let mut context = DisplaySourceContext::empty();
+    let mut stepper = BufferTextSourceItemStepper::new(0);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
 
-    let Some(BufferTextSourceCursorItem::Item(first)) = source.next_buffer_walk_item(&mut context)
+    let Some(BufferTextConsumedSourceItem::SourceItem(first)) =
+        stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)
     else {
         panic!("expected leading text item");
     };
-    assert_eq!(item_texts(&[first]), ["a"]);
-    let Some(BufferTextSourceCursorItem::Replacement(replacement)) =
-        source.next_buffer_walk_item(&mut context)
+    assert_eq!(item_texts(std::slice::from_ref(first.item())), ["a"]);
+    let step = stepper
+        .item_step_from_source_item(first, &mut byte_idx, charpos)
+        .expect("leading text step");
+    charpos = step.end_charpos();
+
+    let Some(BufferTextConsumedSourceItem::Replacement(replacement)) =
+        stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)
     else {
         panic!("expected atomic replacement string item");
     };
@@ -908,14 +919,23 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
         RenderFaceRef::FaceId(3),
     );
     let mut context = DisplaySourceContext::empty();
+    let mut stepper = BufferTextSourceItemStepper::new(0);
+    let mut byte_idx = 0;
+    let mut charpos = 0;
 
-    let Some(BufferTextSourceCursorItem::Item(first)) = source.next_buffer_walk_item(&mut context)
+    let Some(BufferTextConsumedSourceItem::SourceItem(first)) =
+        stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)
     else {
         panic!("expected leading text item");
     };
-    assert_eq!(item_texts(&[first]), ["a"]);
-    let Some(BufferTextSourceCursorItem::Replacement(replacement)) =
-        source.next_buffer_walk_item(&mut context)
+    assert_eq!(item_texts(std::slice::from_ref(first.item())), ["a"]);
+    let step = stepper
+        .item_step_from_source_item(first, &mut byte_idx, charpos)
+        .expect("leading text step");
+    charpos = step.end_charpos();
+
+    let Some(BufferTextConsumedSourceItem::Replacement(replacement)) =
+        stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)
     else {
         panic!("expected atomic display space item");
     };

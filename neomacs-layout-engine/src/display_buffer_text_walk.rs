@@ -28,7 +28,7 @@ use crate::display_buffer_text_render::{
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
-    BufferTextConsumedCursorItem, BufferTextReplacementItem, BufferTextSourceCursor,
+    BufferTextConsumedSourceItem, BufferTextReplacementItem, BufferTextSourceCursor,
     BufferTextSourceItem, BufferTextSourceItemStep, BufferTextSourceItemStepper,
     BufferTextSourceStepChar,
 };
@@ -676,12 +676,6 @@ pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
     text: &'a [u8],
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
-}
-
-pub(crate) enum BufferTextConsumedSourceItem {
-    PendingStep(BufferTextSourceItemStep),
-    SourceItem(BufferTextSourceItem),
-    Replacement(BufferTextReplacementItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3073,12 +3067,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         _active_face_state: &DisplayRowActiveFaceState,
     ) -> Option<BufferTextConsumedSourceItem> {
-        if let Some(step) = item_stepper.next_pending_item_step(self.byte_idx, *self.charpos) {
-            return Some(BufferTextConsumedSourceItem::PendingStep(step));
-        }
-        // One persistent typed source cursor feeds the row walk. Fetching the
-        // typed item is deliberately separate from pending-run splitting so
-        // direct single-character items can stay typed through render.
+        // One persistent typed source cursor feeds the row walk. The source
+        // side owns pending text-run splitting so direct single-character
+        // items can still stay typed through render.
         let mut pending_faces = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
@@ -3089,10 +3080,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 &mut pending_faces,
             );
             let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
-            item_stepper.next_buffer_walk_item_from_source(
+            item_stepper.next_consumed_source_item(
                 source_cursor,
                 &mut source_context,
-                *self.byte_idx,
+                self.byte_idx,
                 *self.charpos,
             )
         };
@@ -3104,14 +3095,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 pending_faces,
             );
         }
-        source_item.map(|item| match item {
-            BufferTextConsumedCursorItem::SourceItem(item) => {
-                BufferTextConsumedSourceItem::SourceItem(item)
-            }
-            BufferTextConsumedCursorItem::Replacement(item) => {
-                BufferTextConsumedSourceItem::Replacement(item)
-            }
-        })
+        source_item
     }
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
