@@ -984,14 +984,6 @@ pub struct TaggedHeap {
     /// Accumulated marking time (slices + final drain) for the in-flight
     /// incremental cycle, reported as `mark_us` at termination. Reset at start.
     incremental_mark_us: u64,
-    /// Concurrent-GC SATB (snapshot-at-the-beginning) barrier (Phase 3). When
-    /// set, every barriered write DURING marking snapshots the owner's
-    /// pre-overwrite children to gray (the barrier runs before the store), so
-    /// the start-of-cycle snapshot stays live without the GC re-reading a
-    /// possibly-reallocated owner. Env `NEOVM_GC_SATB`, default off — the
-    /// default incremental collector uses the dirty-owner re-trace and is
-    /// unaffected. (The concurrent path in Phase 5 will rely on SATB instead.)
-    satb_active: bool,
     /// Run the mark phase on the background GC thread (the concurrent collector).
     /// DEFAULT ON; set env `NEOVM_GC_CONCURRENT=0` to fall back to the
     /// (sliced, mutator-side) incremental collector. Phase 5 overlaps cons-spine
@@ -1084,7 +1076,6 @@ impl TaggedHeap {
             mapped_remembered: FxHashSet::default(),
             mark_in_progress: false,
             incremental_mark_us: 0,
-            satb_active: std::env::var("NEOVM_GC_SATB").as_deref() == Ok("1"),
             // Default ON; only `NEOVM_GC_CONCURRENT=0` disables it (-> incremental).
             concurrent: std::env::var("NEOVM_GC_CONCURRENT").as_deref() != Ok("0"),
             concurrent_mark_running: false,
@@ -1367,12 +1358,11 @@ impl TaggedHeap {
         // keeps the start-of-cycle snapshot live. Nothing is re-read later, so
         // the concurrent GC thread never touches a reallocated owner.
         if self.concurrent_mark_running {
-            // Phase 5: the background GC thread is marking — log overwritten
-            // children to the shared buffer it drains (not the local gray queue,
-            // which belongs to the GC thread for the duration).
+            // The background GC thread is marking — log overwritten children to
+            // the shared buffer it drains (not the local gray queue, which
+            // belongs to the GC thread for the duration). This SATB barrier keeps
+            // the start-of-cycle snapshot live without re-reading a mutated owner.
             self.push_value_children_to_satb_shared(record.owner);
-        } else if self.satb_active && self.mark_in_progress {
-            self.push_value_children_to_gray(record.owner, "satb-snapshot");
         }
         if self.write_tracking_mode == WriteTrackingMode::Disabled {
             return;
@@ -3327,31 +3317,9 @@ impl TaggedHeap {
     // Incremental marking (step 7)
     // ---------------------------------------------------------------------
 
-    /// True if incremental marking should drive THIS collection. Only on
-    /// partitioned cycles (after the first-cycle promotion), so promotion and
-    /// blackening stay on the simple stop-the-world path.
-    pub fn should_run_incremental(&self) -> bool {
-        // Concurrent mode owns partitioned cycles when enabled; the incremental
-        // slicer drives them only when the concurrent collector is off.
-        self.partition_dump && self.dump_blackened && !self.concurrent
-    }
-
-    /// True while an incremental mark is underway (between start and sweep).
+    /// True while a mark is underway (between the start handshake and sweep).
     pub fn mark_in_progress(&self) -> bool {
         self.mark_in_progress
-    }
-
-    /// Begin an incremental mark: clear young marks + seed the internal and
-    /// remembered roots (`begin_collection`), then turn on the incremental
-    /// write barrier so every subsequent heap mutation records its owner as
-    /// dirty. The caller seeds the context/thread-local roots afterwards.
-    pub(crate) fn incremental_begin(&mut self) {
-        self.begin_collection();
-        // Owner tracking feeds `dirty_owners`, which each slice re-traces so no
-        // black->white edge created by the mutator survives (Steele barrier).
-        self.set_write_tracking_mode(WriteTrackingMode::OwnersOnly);
-        self.mark_in_progress = true;
-        self.incremental_mark_us = 0;
     }
 
     /// Re-seed the collector-internal roots at mark termination: the runtime
@@ -3367,66 +3335,13 @@ impl TaggedHeap {
         }
     }
 
-    /// Re-trace every owner the barrier has recorded dirty since the last drain,
-    /// pushing their current children onto the gray queue. Clears the dirty set.
-    fn drain_dirty_owners_to_gray(&mut self) {
-        if self.dirty_owners.is_empty() {
-            return;
-        }
-        let owners = std::mem::take(&mut self.dirty_owners);
-        self.dirty_owner_bits.clear();
-        for owner in owners {
-            self.push_value_children_to_gray(owner, "incremental-dirty-owner");
-        }
-    }
-
-    /// Advance marking by one bounded slice. Drains the barrier's dirty owners,
-    /// then marks up to `budget` gray objects. Returns true when marking has
-    /// reached a fixpoint (gray queue empty AND no dirty owners pending) — the
-    /// signal to run mark termination. Each call is a short, bounded pause.
-    pub(crate) fn incremental_mark_slice(&mut self, budget: usize) -> bool {
-        let t0 = std::time::Instant::now();
-        self.drain_dirty_owners_to_gray();
-        let mut marked = 0usize;
-        while marked < budget {
-            match self.gray_queue.pop() {
-                Some(val) => {
-                    self.mark_value(val);
-                    marked += 1;
-                }
-                None => break,
-            }
-        }
-        let slice_us = t0.elapsed().as_micros() as u64;
-        self.incremental_mark_us += slice_us;
-        // Marking (mark_value) is GC-internal and never trips the barrier, so
-        // no new dirty owners appear during this loop; the queue state is the
-        // complete picture.
-        let drained = self.gray_queue.is_empty() && self.dirty_owners.is_empty();
-        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
-            eprintln!(
-                "NEOVM_GC slice {slice_us}us marked={marked} gray_left={} drained={drained}",
-                self.gray_queue.len(),
-            );
-        }
-        drained
-    }
-
     /// Drain ALL remaining marking work to a fixpoint (no budget). Used at mark
     /// termination, after the roots have been re-snapshotted, while the world is
-    /// stopped. Loops because draining dirty owners can enqueue more gray work.
+    /// stopped. A single `mark_all` reaches the fixpoint: `mark_value` re-pushes
+    /// each marked object's children, so the gray queue drains completely.
     pub(crate) fn incremental_drain_all(&mut self) {
         let t0 = std::time::Instant::now();
-        loop {
-            self.drain_dirty_owners_to_gray();
-            if self.gray_queue.is_empty() {
-                break;
-            }
-            self.mark_all();
-            if self.dirty_owners.is_empty() {
-                break;
-            }
-        }
+        self.mark_all();
         self.incremental_mark_us += t0.elapsed().as_micros() as u64;
     }
 
