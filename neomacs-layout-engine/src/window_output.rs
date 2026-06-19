@@ -304,7 +304,7 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
         begin.matrix_row
     }
 
-    fn finish_text_matrix_row(
+    fn finish_display_text_row(
         &mut self,
         matrix_row: usize,
         metrics: DisplayTextRowMetrics,
@@ -322,7 +322,7 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
         }
     }
 
-    fn finalize_text_matrix_row(&mut self, matrix_row: usize) {
+    fn finalize_display_text_row(&mut self, matrix_row: usize) {
         DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(matrix_row);
     }
 
@@ -986,9 +986,9 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         &mut self,
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
-        let matrix_row = self.output_emitter.current_text_matrix_row();
+        let matrix_row = self.output_emitter.current_display_text_row();
         let finish = TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .finish_text_matrix_row(matrix_row, metrics);
+            .finish_display_text_row(matrix_row, metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
         finish
@@ -998,10 +998,10 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         &mut self,
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
-        let matrix_row = self.output_emitter.current_text_matrix_row();
+        let matrix_row = self.output_emitter.current_display_text_row();
         let finish = self.finish_text_row(metrics);
         TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .finalize_text_matrix_row(matrix_row);
+            .finalize_display_text_row(matrix_row);
         finish
     }
 
@@ -1705,7 +1705,7 @@ impl WindowOutputEmitter {
         });
     }
 
-    pub(crate) fn current_text_matrix_row(&self) -> usize {
+    pub(crate) fn current_display_text_row(&self) -> usize {
         self.current_row_progress
             .and_then(|progress| progress.matrix_row)
             .expect("text row must have matrix row progress before finishing")
