@@ -8955,26 +8955,26 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
             accessible_end: 3,
         },
     )
-    .render_and_apply(BufferDisplayPropertyCheckpointRenderState {
-        source_render: TextRowSourceRenderState::new(
+    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
+        TextRowSourceRenderState::new(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
             &mut font_metrics,
             &face_resolver,
         ),
-        face_ids: &mut face_ids,
-        append_surface: &surface,
-        row_geometry: &mut context.geometry,
-        checkpoints: &mut checkpoints,
-        active_face_state: &mut active_face,
-        byte_idx: &mut byte_idx,
-        charpos: &mut charpos,
-        x: &mut x,
-        col: &mut col,
-        cursor_info: &mut cursor_info,
-        point_charpos: 99,
-    });
+        &mut face_ids,
+        &surface,
+        &mut context.geometry,
+        &mut checkpoints,
+        &mut active_face,
+        &mut byte_idx,
+        &mut charpos,
+        &mut x,
+        &mut col,
+        &mut cursor_info,
+        99,
+    ));
 
     assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
     assert!(!outcome.should_continue_buffer_walk());

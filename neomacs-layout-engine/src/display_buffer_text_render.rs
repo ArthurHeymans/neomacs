@@ -2594,18 +2594,51 @@ pub(crate) struct BufferDisplayPropertyCheckpointRenderContext<'a, B: LayoutBuff
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-    pub(crate) append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) checkpoints: &'emit mut TextPropertyScanCheckpoints,
-    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
-    pub(crate) byte_idx: &'emit mut usize,
-    pub(crate) charpos: &'emit mut i64,
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) point_charpos: i64,
+    source_render: TextRowSourceRenderState<'emit>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    append_surface: &'a DisplayRowAppendSurface,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    active_face_state: &'emit mut DisplayRowActiveFaceState,
+    byte_idx: &'emit mut usize,
+    charpos: &'emit mut i64,
+    x: &'emit mut f32,
+    col: &'emit mut usize,
+    cursor_info: &'emit mut CursorCaptureState,
+    point_charpos: i64,
+}
+
+impl<'a, 'emit> BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        source_render: TextRowSourceRenderState<'emit>,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+        append_surface: &'a DisplayRowAppendSurface,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        checkpoints: &'emit mut TextPropertyScanCheckpoints,
+        active_face_state: &'emit mut DisplayRowActiveFaceState,
+        byte_idx: &'emit mut usize,
+        charpos: &'emit mut i64,
+        x: &'emit mut f32,
+        col: &'emit mut usize,
+        cursor_info: &'emit mut CursorCaptureState,
+        point_charpos: i64,
+    ) -> Self {
+        Self {
+            source_render,
+            face_ids,
+            append_surface,
+            row_geometry,
+            checkpoints,
+            active_face_state,
+            byte_idx,
+            charpos,
+            x,
+            col,
+            cursor_info,
+            point_charpos,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

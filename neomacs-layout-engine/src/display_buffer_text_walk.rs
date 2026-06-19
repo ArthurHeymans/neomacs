@@ -3086,20 +3086,20 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         active_face_state: &mut DisplayRowActiveFaceState,
         point_charpos: i64,
     ) -> BufferDisplayPropertyTextWalkOutcome {
-        request.render_and_apply(BufferDisplayPropertyCheckpointRenderState {
-            source_render: self.source_render.reborrow(),
-            face_ids: self.face_ids,
+        request.render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
+            self.source_render.reborrow(),
+            self.face_ids,
             append_surface,
-            row_geometry: self.row_geometry,
-            checkpoints: self.text_property_checkpoints,
+            self.row_geometry,
+            self.text_property_checkpoints,
             active_face_state,
-            byte_idx: self.byte_idx,
-            charpos: self.charpos,
-            x: self.x,
-            col: self.col,
-            cursor_info: self.cursor_info,
+            self.byte_idx,
+            self.charpos,
+            self.x,
+            self.col,
+            self.cursor_info,
             point_charpos,
-        })
+        ))
     }
 
     fn render_selective_display_tail<B: LayoutBufferView>(
