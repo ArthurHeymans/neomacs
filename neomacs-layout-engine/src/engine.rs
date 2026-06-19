@@ -56,7 +56,7 @@ use crate::display_item::{
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderExecutor,
-    DisplayRowSourceFragmentFrame, DisplayRowSourceState, install_mock_display_row_in_matrix_row,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::DisplayRowMaxX;
@@ -1662,7 +1662,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                install_mock_display_row_in_matrix_row(&mut builder, row_idx, &row);
+                FrameOutputRenderState::new(&mut builder).install_mock_display_row(row_idx, &row);
             }
 
             // Mode-line pinned to window bottom.
@@ -1683,7 +1683,7 @@ impl LayoutEngine {
                 &mut self.font_metrics,
                 &mut mock_face_ids,
             );
-            install_mock_display_row_in_matrix_row(&mut builder, mode_line_row, &row);
+            FrameOutputRenderState::new(&mut builder).install_mock_display_row(mode_line_row, &row);
 
             close_text_window_output(&mut builder);
         }
@@ -1724,7 +1724,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                install_mock_display_row_in_matrix_row(&mut builder, row_idx, &row);
+                FrameOutputRenderState::new(&mut builder).install_mock_display_row(row_idx, &row);
             }
 
             if has_mode_line {
@@ -1745,7 +1745,8 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                install_mock_display_row_in_matrix_row(&mut builder, mode_line_row, &row);
+                FrameOutputRenderState::new(&mut builder)
+                    .install_mock_display_row(mode_line_row, &row);
             }
 
             close_text_window_output(&mut builder);
@@ -1818,7 +1819,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                install_mock_display_row_in_matrix_row(&mut cb, ri, &row);
+                FrameOutputRenderState::new(&mut cb).install_mock_display_row(ri, &row);
             }
             close_text_window_output(&mut cb);
             let cs = cb.finish(

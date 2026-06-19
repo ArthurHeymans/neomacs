@@ -1,6 +1,7 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_row::{
     DisplayRowInstaller, MeasuredDisplayRow, insert_resolved_display_row_face,
+    install_mock_display_row_in_matrix_row,
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
@@ -15,7 +16,7 @@ use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
     WindowTransitionKind,
 };
-use neomacs_display_protocol::glyph_matrix::{CursorItem, FrameChromeRow, ScrollBarItem};
+use neomacs_display_protocol::glyph_matrix::{CursorItem, FrameChromeRow, GlyphRow, ScrollBarItem};
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::{HashMap, HashSet};
 
@@ -115,6 +116,10 @@ impl<'a> FrameOutputRenderState<'a> {
 
     fn cursors(&self) -> &[CursorItem] {
         self.builder.cursors()
+    }
+
+    pub(crate) fn install_mock_display_row(&mut self, matrix_row: usize, row: &GlyphRow) {
+        install_mock_display_row_in_matrix_row(self.builder, matrix_row, row);
     }
 }
 
