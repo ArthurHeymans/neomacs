@@ -13,8 +13,8 @@ use crate::display_row_walk_state::{
 use crate::hit_test::HitRow;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::window_output::{
-    TextMatrixRowGeometryTransition, TextMatrixRowTransition, WindowOutputEmitter,
-    emit_text_matrix_row_transition_with_limit,
+    TextMatrixRowGeometryTransition, TextMatrixRowTransition, TextWindowRowLifecycleInstaller,
+    WindowOutputEmitter,
 };
 use neovm_core::emacs_core::Context;
 
@@ -116,13 +116,8 @@ impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
     ) -> TextMatrixRowTransition {
         let geometry_transition =
             row_geometry.finish_boundary_and_record_hit(self.target, hit_rows);
-        emit_text_matrix_row_transition_with_limit(
-            builder,
-            output_emitter,
-            evaluator,
-            geometry_transition,
-            self.max_rows,
-        )
+        TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
+            .transition_with_limit(geometry_transition, self.max_rows)
     }
 }
 

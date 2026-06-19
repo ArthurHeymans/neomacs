@@ -28,9 +28,8 @@ use crate::types::WindowParams;
 use crate::window_output::{
     TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
     TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightBorder,
-    TextWindowRightEdgeMarkers, WindowOutputEmitter, begin_text_window_output,
-    close_text_window_output, finish_pending_text_window_row, install_text_window_body_output,
-    install_text_window_cursor_effects,
+    TextWindowRightEdgeMarkers, TextWindowRowLifecycleInstaller, WindowOutputEmitter,
+    close_text_window_output, install_text_window_body_output, install_text_window_cursor_effects,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -405,11 +404,8 @@ impl BufferTextWindowBeginRequest {
             self.window_top,
         );
         output_emitter.begin_update(state.evaluator);
-        begin_text_window_output(
-            state.builder,
-            &mut output_emitter,
-            state.evaluator,
-            TextWindowBegin {
+        TextWindowRowLifecycleInstaller::new(state.builder, &mut output_emitter, state.evaluator)
+            .begin_text_window_output(TextWindowBegin {
                 window_id: self.matrix_window_id,
                 rows: self.matrix_rows,
                 cols: self.matrix_cols,
@@ -417,8 +413,7 @@ impl BufferTextWindowBeginRequest {
                 text_bounds: self.text_bounds,
                 selected: self.selected,
                 first_row: self.first_row,
-            },
-        );
+            });
         output_emitter
     }
 
@@ -493,21 +488,18 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             }
         }
 
-        let pending_row_finished = finish_pending_text_window_row(
-            builder,
-            output_emitter,
-            evaluator,
-            TextWindowPendingRowFinish {
-                row_geometry,
-                row_limit: context.row_limit,
-                row_y_positions,
-                text_y: context.text_y,
-                char_height: context.char_h,
-                charpos: context.charpos,
-                hit_row_range,
-                hit_rows,
-            },
-        );
+        let pending_row_finished =
+            TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
+                .finish_pending_row(TextWindowPendingRowFinish {
+                    row_geometry,
+                    row_limit: context.row_limit,
+                    row_y_positions,
+                    text_y: context.text_y,
+                    char_height: context.char_h,
+                    charpos: context.charpos,
+                    hit_row_range,
+                    hit_rows,
+                });
 
         let visual_cursor_summary = VisualTextWindowCursorPublishContext::new(
             context.params,
