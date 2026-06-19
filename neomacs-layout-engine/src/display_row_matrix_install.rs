@@ -3,16 +3,13 @@ use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
     DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
     RenderedDisplayRowMedia, RenderedDisplayRowMediaKind, WindowChromeKind,
-    resolved_display_row_face,
 };
 use crate::display_row_builder::apply_display_row_source_slot_bounds;
 #[cfg(test)]
 use crate::display_row_builder::{
     DisplayRowPosition, display_row_text_is_empty, merge_display_row_source_slot_bounds,
 };
-use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::{FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder};
-use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::face::Face;
@@ -28,19 +25,6 @@ pub(crate) fn install_mock_display_row_in_matrix_row(
     row: &GlyphRow,
 ) {
     DisplayRowMatrixInstall::from_row(matrix_row, row).install(builder);
-}
-
-pub(crate) fn install_resolved_display_row_face(
-    builder: &mut GlyphMatrixBuilder,
-    face_id: u32,
-    face: &ResolvedFace,
-    metrics: Option<FontMetrics>,
-) {
-    let render_face = resolved_display_row_face(face_id, face, metrics);
-    let rendered = render_face.render_face();
-    builder
-        .artifact_installer()
-        .set_face(render_face.face_id, rendered);
 }
 
 struct DisplayRowMatrixInstall<'a> {

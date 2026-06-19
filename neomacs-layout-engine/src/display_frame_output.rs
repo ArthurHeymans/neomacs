@@ -1,7 +1,7 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_row::MeasuredDisplayRow;
 use crate::display_row_matrix_install::{
-    DisplayRowInstaller, install_mock_display_row_in_matrix_row, install_resolved_display_row_face,
+    DisplayRowInstaller, install_mock_display_row_in_matrix_row,
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
@@ -204,12 +204,10 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
         state.set_background_color(self.background_color);
         state.set_font_pixel_size(self.font_pixel_size);
-        install_resolved_display_row_face(
-            state.builder_mut(),
-            0,
-            self.default_face,
-            self.default_metrics,
-        );
+        state
+            .builder_mut()
+            .artifact_installer()
+            .set_resolved_display_row_face(0, self.default_face, self.default_metrics);
     }
 }
 

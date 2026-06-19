@@ -12,8 +12,6 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
-#[cfg(test)]
-use crate::display_row_matrix_install::install_resolved_display_row_face;
 use crate::display_row_source_append::DisplayRowSourceAppendOperation;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
@@ -573,7 +571,11 @@ pub(crate) fn apply_pending_display_source_faces(
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
     for pending in pending_faces.drain(..) {
-        install_resolved_display_row_face(builder, pending.face_id, &pending.resolved, None);
+        builder.artifact_installer().set_resolved_display_row_face(
+            pending.face_id,
+            &pending.resolved,
+            None,
+        );
     }
 }
 

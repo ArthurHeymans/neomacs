@@ -18,9 +18,7 @@ use crate::display_row::{
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
 use crate::display_row_builder::merge_display_row_source_slot_bounds;
-use crate::display_row_matrix_install::{
-    RenderedDisplayRowAssetsInstall, install_resolved_display_row_face,
-};
+use crate::display_row_matrix_install::RenderedDisplayRowAssetsInstall;
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
@@ -433,16 +431,19 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        install_resolved_display_row_face(self.builder, face_id, face, None);
+        self.builder
+            .artifact_installer()
+            .set_resolved_display_row_face(face_id, face, None);
     }
 
     fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
-        install_resolved_display_row_face(
-            self.builder,
-            face.face_id(),
-            face.resolved_face(),
-            face.font_metrics(),
-        );
+        self.builder
+            .artifact_installer()
+            .set_resolved_display_row_face(
+                face.face_id(),
+                face.resolved_face(),
+                face.font_metrics(),
+            );
     }
 
     fn display_host(&self) -> Option<&dyn DisplayHost> {

@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_row_matrix_install::{
-    DisplayRowInstaller, install_mock_display_row_in_matrix_row, install_resolved_display_row_face,
+    DisplayRowInstaller, install_mock_display_row_in_matrix_row,
 };
 use crate::display_row_source_render::current_display_row_cluster_tail;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
@@ -200,8 +200,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let face = base_face();
 
-    install_resolved_display_row_face(
-        &mut builder,
+    builder.artifact_installer().set_resolved_display_row_face(
         9,
         &face,
         Some(FontMetrics {
@@ -490,8 +489,7 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
         &mut font_metrics,
     );
 
-    install_resolved_display_row_face(
-        &mut builder,
+    builder.artifact_installer().set_resolved_display_row_face(
         realized.face_id(),
         realized.resolved_face(),
         realized.font_metrics(),

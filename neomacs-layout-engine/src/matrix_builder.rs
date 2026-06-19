@@ -9,7 +9,10 @@
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_row::resolved_display_row_face;
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
+use crate::font_metrics::FontMetrics;
+use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -549,6 +552,16 @@ impl MatrixArtifactInstaller<'_> {
 
     pub(crate) fn set_face(&mut self, id: u32, face: Face) {
         self.install_frame_state(MatrixFrameStateInstallRequest::Face { id, face });
+    }
+
+    pub(crate) fn set_resolved_display_row_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+    ) {
+        let render_face = resolved_display_row_face(face_id, face, metrics);
+        self.set_face(render_face.face_id, render_face.render_face());
     }
 
     pub(crate) fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
