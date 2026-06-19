@@ -1201,7 +1201,7 @@ fn finish_text_area(builder: GlyphMatrixBuilder) -> Vec<Glyph> {
 
 fn current_cluster_tail(builder: &GlyphMatrixBuilder) -> Option<(char, bool)> {
     builder
-        .current_row()
+        .current_row_for_test()
         .and_then(crate::composition::last_text_cluster_tail_in_row)
 }
 

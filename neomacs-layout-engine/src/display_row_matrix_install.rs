@@ -49,7 +49,7 @@ pub(crate) fn install_resolved_display_row_face(
 }
 
 pub(crate) fn current_display_row_artifact(builder: &GlyphMatrixBuilder) -> Option<GlyphRow> {
-    builder.current_row().cloned()
+    builder.current_row_artifact()
 }
 
 pub(crate) fn install_current_display_row_artifact(

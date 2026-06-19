@@ -642,9 +642,18 @@ impl GlyphMatrixBuilder {
         });
     }
 
-    pub(crate) fn current_row(&self) -> Option<&GlyphRow> {
+    pub(crate) fn current_row_artifact(&self) -> Option<GlyphRow> {
+        self.current_row().cloned()
+    }
+
+    fn current_row(&self) -> Option<&GlyphRow> {
         let matrix = self.current_matrix.as_ref()?;
         matrix.rows.get(self.current_row)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn current_row_for_test(&self) -> Option<&GlyphRow> {
+        self.current_row()
     }
 
     fn write_row_metrics_at(&mut self, row: usize, metrics: MatrixRowMetricsRequest) {
