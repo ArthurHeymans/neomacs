@@ -2,6 +2,7 @@ use super::*;
 use crate::display_row_matrix_install::{
     DisplayRowInstaller, install_mock_display_row_in_matrix_row, install_resolved_display_row_face,
 };
+use crate::display_row_source_render::current_display_row_cluster_tail;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
