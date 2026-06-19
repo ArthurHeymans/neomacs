@@ -180,6 +180,9 @@ fn row_lifecycle_request_installs_prebuilt_row_metrics_and_cursor() {
         col: 1,
         style: CursorStyle::Bar(2.0),
     });
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::CurrentDecoration(
+        MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
+    ));
     builder.install_row_lifecycle(MatrixRowLifecycleRequest::Finalize { row: 0 });
     builder.end_window();
 
@@ -191,6 +194,7 @@ fn row_lifecycle_request_installs_prebuilt_row_metrics_and_cursor() {
     assert_eq!(row.ascent_px, 13.0);
     assert_eq!(row.cursor_col, Some(1));
     assert_eq!(row.cursor_type, Some(CursorStyle::Bar(2.0)));
+    assert!(row.truncated_left);
     assert_ne!(row.hash, 0);
 }
 

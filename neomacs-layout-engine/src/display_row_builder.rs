@@ -401,10 +401,6 @@ pub(crate) fn pop_display_row_trailing_text_char(row: &mut GlyphRow, ch: char) -
     }
 }
 
-pub(crate) fn mark_display_row_truncated_left(row: &mut GlyphRow) {
-    row.truncated_left = true;
-}
-
 pub(crate) fn apply_display_row_source_slot_bounds(
     row: &mut GlyphRow,
     slots: &[DisplayRowGlyphSlot],

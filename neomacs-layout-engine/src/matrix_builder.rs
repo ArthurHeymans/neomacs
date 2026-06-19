@@ -324,6 +324,11 @@ pub(crate) struct MatrixRowMetricsRequest {
     pub(crate) ascent_px: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MatrixCurrentRowDecorationRequest {
+    MarkTruncatedLeft,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum MatrixRowLifecycleRequest {
     Begin(MatrixRowBeginRequest),
@@ -343,6 +348,7 @@ pub(crate) enum MatrixRowLifecycleRequest {
         col: u16,
         style: CursorStyle,
     },
+    CurrentDecoration(MatrixCurrentRowDecorationRequest),
 }
 
 impl MatrixRowLifecycleRequest {
@@ -357,6 +363,7 @@ impl MatrixRowLifecycleRequest {
             Self::Metrics { row, metrics } => builder.write_row_metrics_at(row, metrics),
             Self::Finalize { row } => builder.finalize_matrix_row(row),
             Self::Cursor { row, col, style } => builder.write_row_cursor(row, col, style),
+            Self::CurrentDecoration(decoration) => builder.decorate_current_row(decoration),
         }
     }
 }
@@ -616,6 +623,14 @@ impl GlyphMatrixBuilder {
         let matrix = self.current_matrix.as_mut()?;
         let row = matrix.rows.get_mut(self.current_row)?;
         Some(f(row))
+    }
+
+    fn decorate_current_row(&mut self, decoration: MatrixCurrentRowDecorationRequest) {
+        let _ = self.with_current_row_mut(|row| match decoration {
+            MatrixCurrentRowDecorationRequest::MarkTruncatedLeft => {
+                row.truncated_left = true;
+            }
+        });
     }
 
     pub(crate) fn current_row(&self) -> Option<&GlyphRow> {

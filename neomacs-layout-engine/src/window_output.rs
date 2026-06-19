@@ -15,9 +15,7 @@ use crate::display_item::{
 };
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
-use crate::display_row_builder::{
-    DisplayRowGlyphSlot, DisplayRowPosition, mark_display_row_truncated_left,
-};
+use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
@@ -25,9 +23,9 @@ use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
-    MatrixRowBeginRequest, MatrixRowLifecycleRequest, MatrixRowMetricsRequest,
-    MatrixWindowBeginRequest, MatrixWindowLifecycleRequest,
+    GlyphMatrixBuilder, MatrixCurrentRowDecorationRequest, MatrixCursorInstallRequest,
+    MatrixFrameStateInstallRequest, MatrixRowBeginRequest, MatrixRowLifecycleRequest,
+    MatrixRowMetricsRequest, MatrixWindowBeginRequest, MatrixWindowLifecycleRequest,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
@@ -282,7 +280,9 @@ impl TextWindowRowDecorationRequest {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         match self {
             Self::MarkCurrentTruncatedLeft => {
-                builder.with_current_row_mut(mark_display_row_truncated_left);
+                builder.install_row_lifecycle(MatrixRowLifecycleRequest::CurrentDecoration(
+                    MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
+                ));
             }
         }
     }
