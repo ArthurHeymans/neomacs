@@ -156,12 +156,10 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
         ));
         let matrix_row = measured.row_index as usize;
-        RenderedDisplayRowAssetsInstall::from_rendered(
+        RenderedDisplayRowAssetsInstall::window_row(
             &measured.rendered,
-            RenderedDisplayRowAssetInstallTarget::WindowRow {
-                row_index: measured.row_index,
-                bounds: measured.bounds,
-            },
+            measured.row_index,
+            measured.bounds,
         )
         .install(builder);
         DisplayRowMatrixInstall::from_rendered(
@@ -187,12 +185,10 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
             panic!("window-owned rows must install through window chrome");
         };
         debug_assert!(matches!(kind, FrameChromeKind::TabBar));
-        RenderedDisplayRowAssetsInstall::from_rendered(
+        RenderedDisplayRowAssetsInstall::frame_chrome(
             &measured.rendered,
-            RenderedDisplayRowAssetInstallTarget::FrameChrome {
-                row_index: measured.row_index,
-                bounds: measured.bounds,
-            },
+            measured.row_index,
+            measured.bounds,
         )
         .install(builder);
         let mut row = measured.rendered.row.clone();
@@ -210,7 +206,7 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum RenderedDisplayRowAssetInstallTarget {
+enum RenderedDisplayRowAssetInstallTarget {
     MatrixRow(usize),
     WindowRow { row_index: u32, bounds: Rect },
     FrameChrome { row_index: u32, bounds: Rect },
@@ -248,6 +244,20 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
             media: &rendered.media,
             target,
         }
+    }
+
+    fn window_row(rendered: &'a RenderedDisplayRow, row_index: u32, bounds: Rect) -> Self {
+        Self::from_rendered(
+            rendered,
+            RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds },
+        )
+    }
+
+    fn frame_chrome(rendered: &'a RenderedDisplayRow, row_index: u32, bounds: Rect) -> Self {
+        Self::from_rendered(
+            rendered,
+            RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds },
+        )
     }
 
     pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
