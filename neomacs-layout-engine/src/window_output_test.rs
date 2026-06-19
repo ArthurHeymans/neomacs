@@ -11,7 +11,6 @@ use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
-use super::TextWindowOutputInstaller;
 use super::TextWindowPendingRowFinish;
 use super::TextWindowRedisplayPositions;
 use super::TextWindowRowDecorationRequest;
@@ -19,6 +18,7 @@ use super::TextWindowRowOutputSurface;
 use super::WindowOutputEmitter;
 use super::close_text_window_output;
 use super::install_text_window_cursor_effects;
+use super::install_text_window_finished_rows;
 use super::install_text_window_row_decoration;
 use super::publish_text_window_decorative_cursor;
 use super::record_text_window_display_range;
@@ -1030,7 +1030,7 @@ fn install_text_window_output_installs_row_metrics() {
         },
     );
 
-    TextWindowOutputInstaller::new(&mut builder, &emitter).install_finished_rows();
+    install_text_window_finished_rows(&mut builder, &emitter);
 
     builder.end_window();
     let state = builder.finish(5, 1, 8.0, 16.0);
@@ -1083,16 +1083,17 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
         },
     );
 
-    let positions = TextWindowOutputInstaller::new(&mut builder, &emitter).install_body_output(
-        TextWindowBodyOutputInstall {
-            window_id: 41,
-            window_start: 3,
-            text_start_byte: 100,
-            byte_idx: 4,
-            right_edge_markers: None,
-        },
-        None,
-    );
+    let positions = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
+        .install_body_output(
+            TextWindowBodyOutputInstall {
+                window_id: 41,
+                window_start: 3,
+                text_start_byte: 100,
+                byte_idx: 4,
+                right_edge_markers: None,
+            },
+            None,
+        );
 
     assert_eq!(positions.window_start, LispCharPos1::new(4));
     assert_eq!(positions.window_end, LispCharPos1::new(8));

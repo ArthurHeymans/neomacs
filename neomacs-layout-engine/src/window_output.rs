@@ -323,6 +323,13 @@ pub(crate) fn close_text_window_output(output_builder: &mut DisplayOutputBuilder
     output_builder.end_output_window();
 }
 
+pub(crate) fn install_text_window_finished_rows(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &WindowOutputEmitter,
+) {
+    finish_output_rows(output_builder, output_emitter);
+}
+
 pub(crate) fn capture_text_window_retry_checkpoint(
     output_builder: &DisplayOutputBuilder,
 ) -> TextWindowOutputRetryCheckpoint {
@@ -826,8 +833,12 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
         request: TextWindowBodyOutputInstall<'_>,
         render_services: Option<ChromeRowRenderServices<'_, '_>>,
     ) -> TextWindowRedisplayPositions {
-        TextWindowOutputInstaller::new(self.output_builder, self.output_emitter)
-            .install_body_output(request, render_services)
+        install_text_window_body_output(
+            self.output_builder,
+            self.output_emitter,
+            request,
+            render_services,
+        )
     }
 
     pub(crate) fn begin_chrome_progress(
@@ -1079,50 +1090,26 @@ impl TextWindowCursorPublication {
     }
 }
 
-struct TextWindowOutputInstaller<'output_builder, 'output> {
-    output_builder: &'output_builder mut DisplayOutputBuilder,
-    output_emitter: &'output WindowOutputEmitter,
-}
-
-impl<'output_builder, 'output> TextWindowOutputInstaller<'output_builder, 'output> {
-    fn new(
-        output_builder: &'output_builder mut DisplayOutputBuilder,
-        output_emitter: &'output WindowOutputEmitter,
-    ) -> Self {
-        Self {
-            output_builder,
-            output_emitter,
-        }
+fn install_text_window_body_output(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &WindowOutputEmitter,
+    request: TextWindowBodyOutputInstall<'_>,
+    render_services: Option<ChromeRowRenderServices<'_, '_>>,
+) -> TextWindowRedisplayPositions {
+    let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
+        output_emitter,
+        request.window_start,
+        request.text_start_byte,
+        request.byte_idx,
+    );
+    record_text_window_redisplay_positions(output_builder, request.window_id, redisplay_positions);
+    install_text_window_finished_rows(output_builder, output_emitter);
+    if let Some(markers) = request.right_edge_markers {
+        let render_services =
+            render_services.expect("right-edge markers require chrome render services");
+        install_right_edge_markers(output_builder, render_services, markers);
     }
-
-    fn install_finished_rows(&mut self) {
-        finish_output_rows(self.output_builder, self.output_emitter);
-    }
-
-    fn install_body_output(
-        &mut self,
-        request: TextWindowBodyOutputInstall<'_>,
-        render_services: Option<ChromeRowRenderServices<'_, '_>>,
-    ) -> TextWindowRedisplayPositions {
-        let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
-            self.output_emitter,
-            request.window_start,
-            request.text_start_byte,
-            request.byte_idx,
-        );
-        record_text_window_redisplay_positions(
-            self.output_builder,
-            request.window_id,
-            redisplay_positions,
-        );
-        self.install_finished_rows();
-        if let Some(markers) = request.right_edge_markers {
-            let render_services =
-                render_services.expect("right-edge markers require chrome render services");
-            install_right_edge_markers(self.output_builder, render_services, markers);
-        }
-        redisplay_positions
-    }
+    redisplay_positions
 }
 
 pub(crate) trait DisplayProgressSink {
