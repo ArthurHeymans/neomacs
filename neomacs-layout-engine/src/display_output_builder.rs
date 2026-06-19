@@ -515,10 +515,13 @@ pub(crate) struct DisplayOutputBuilder {
     no_accept_focus: bool,
 }
 
+#[cfg(test)]
 pub(crate) struct OutputArtifactInstaller<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 impl OutputArtifactInstaller<'_> {
     fn install_frame_state(&mut self, request: OutputFrameStateInstallRequest) {
         self.builder.install_frame_state(request);
@@ -1026,6 +1029,7 @@ impl DisplayOutputBuilder {
         request.install(self);
     }
 
+    #[cfg(test)]
     pub(crate) fn artifact_installer(&mut self) -> OutputArtifactInstaller<'_> {
         OutputArtifactInstaller { builder: self }
     }
@@ -1174,6 +1178,241 @@ impl DisplayOutputBuilder {
 
     fn install_media(&mut self, request: OutputMediaInstallRequest) {
         request.install(self);
+    }
+
+    pub(crate) fn set_output_frame_identity(
+        &mut self,
+        frame_id: u64,
+        parent_id: u64,
+        parent_x: f32,
+        parent_y: f32,
+        z_order: i32,
+        undecorated: bool,
+        border_width: f32,
+        border_color: Color,
+        background_alpha: f32,
+        no_accept_focus: bool,
+    ) {
+        self.install_frame_state(OutputFrameStateInstallRequest::Identity(
+            OutputFrameIdentityInstallRequest {
+                frame_id,
+                parent_id,
+                parent_x,
+                parent_y,
+                z_order,
+                undecorated,
+                border_width,
+                border_color,
+                background_alpha,
+                no_accept_focus,
+            },
+        ));
+    }
+
+    pub(crate) fn set_output_background_color(&mut self, color: Color) {
+        self.install_frame_state(OutputFrameStateInstallRequest::BackgroundColor(color));
+    }
+
+    pub(crate) fn set_output_font_pixel_size(&mut self, size: f32) {
+        self.install_frame_state(OutputFrameStateInstallRequest::FontPixelSize(size));
+    }
+
+    pub(crate) fn install_output_face(&mut self, id: u32, face: Face) {
+        self.install_frame_state(OutputFrameStateInstallRequest::Face { id, face });
+    }
+
+    pub(crate) fn install_output_resolved_display_row_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+    ) {
+        let render_face = resolved_display_row_face(face_id, face, metrics);
+        self.install_output_face(render_face.face_id, render_face.render_face());
+    }
+
+    pub(crate) fn set_output_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
+        self.install_frame_state(OutputFrameStateInstallRequest::CursorEffects {
+            window_id,
+            effects,
+        });
+    }
+
+    pub(crate) fn add_output_background(&mut self, bounds: Rect, color: Color) {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::Background {
+            bounds,
+            color,
+        });
+    }
+
+    pub(crate) fn add_output_border(
+        &mut self,
+        window_id: i64,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: Color,
+    ) {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::Border {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+            color,
+        });
+    }
+
+    pub(crate) fn add_output_scroll_bar(&mut self, item: ScrollBarItem) {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::ScrollBar(item));
+    }
+
+    pub(crate) fn add_output_window_info(&mut self, info: WindowInfo) {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::WindowInfo(info));
+    }
+
+    pub(crate) fn add_output_transition_hint(&mut self, hint: WindowTransitionHint) {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::TransitionHint(hint));
+    }
+
+    pub(crate) fn add_output_effect_hint(&mut self, hint: WindowEffectHint) {
+        self.install_frame_artifact(OutputFrameArtifactInstallRequest::EffectHint(hint));
+    }
+
+    pub(crate) fn add_output_cursor(
+        &mut self,
+        window_id: i64,
+        slot_id: DisplaySlotId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        style: CursorStyle,
+        color: Color,
+    ) {
+        self.install_cursor(OutputCursorInstallRequest {
+            window_id,
+            slot_id,
+            x,
+            y,
+            width,
+            height,
+            style,
+            color,
+        });
+    }
+
+    fn add_output_media(
+        &mut self,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
+        kind: OutputMediaInstallKind,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.install_media(OutputMediaInstallRequest::new(
+            ResolvedOutputMediaInstallTarget {
+                window_id,
+                role,
+                clip,
+                slot_id,
+            },
+            kind,
+            x,
+            y,
+            width,
+            height,
+        ));
+    }
+
+    pub(crate) fn add_output_image_media(
+        &mut self,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
+        image_id: u32,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.add_output_media(
+            window_id,
+            role,
+            clip,
+            slot_id,
+            OutputMediaInstallKind::Image { image_id },
+            x,
+            y,
+            width,
+            height,
+        );
+    }
+
+    pub(crate) fn add_output_video_media(
+        &mut self,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
+        video_id: u32,
+        loop_count: i32,
+        autoplay: bool,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.add_output_media(
+            window_id,
+            role,
+            clip,
+            slot_id,
+            OutputMediaInstallKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            },
+            x,
+            y,
+            width,
+            height,
+        );
+    }
+
+    pub(crate) fn add_output_xwidget_media(
+        &mut self,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
+        xwidget_id: u32,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
+        self.add_output_media(
+            window_id,
+            role,
+            clip,
+            slot_id,
+            OutputMediaInstallKind::Xwidget { xwidget_id },
+            x,
+            y,
+            width,
+            height,
+        );
+    }
+
+    pub(crate) fn store_output_phys_cursor(&mut self, cursor: PhysCursor) {
+        self.store_phys_cursor(cursor);
     }
 
     pub(crate) fn current_window_id_i64(&self) -> i64 {

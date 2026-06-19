@@ -32,7 +32,7 @@ impl<'output> OutputArtifactInstallSurface<'output> {
         background_alpha: f32,
         no_accept_focus: bool,
     ) {
-        self.output_builder.artifact_installer().set_frame_identity(
+        self.output_builder.set_output_frame_identity(
             frame_id,
             parent_id,
             parent_x,
@@ -47,21 +47,16 @@ impl<'output> OutputArtifactInstallSurface<'output> {
     }
 
     pub(crate) fn set_background_color(&mut self, color: Color) {
-        self.output_builder
-            .artifact_installer()
-            .set_background_color(color);
+        self.output_builder.set_output_background_color(color);
     }
 
     pub(crate) fn set_font_pixel_size(&mut self, size: f32) {
-        self.output_builder
-            .artifact_installer()
-            .set_font_pixel_size(size);
+        self.output_builder.set_output_font_pixel_size(size);
     }
 
     pub(crate) fn install_face(&mut self, face: &Face) {
         self.output_builder
-            .artifact_installer()
-            .set_face(face.id, face.clone());
+            .install_output_face(face.id, face.clone());
     }
 
     pub(crate) fn install_resolved_face(
@@ -71,20 +66,16 @@ impl<'output> OutputArtifactInstallSurface<'output> {
         metrics: Option<FontMetrics>,
     ) {
         self.output_builder
-            .artifact_installer()
-            .set_resolved_display_row_face(face_id, face, metrics);
+            .install_output_resolved_display_row_face(face_id, face, metrics);
     }
 
     pub(crate) fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
         self.output_builder
-            .artifact_installer()
-            .set_cursor_effects(window_id, effects);
+            .set_output_cursor_effects(window_id, effects);
     }
 
     pub(crate) fn add_background(&mut self, bounds: Rect, color: Color) {
-        self.output_builder
-            .artifact_installer()
-            .add_background(bounds, color);
+        self.output_builder.add_output_background(bounds, color);
     }
 
     pub(crate) fn add_border(
@@ -97,32 +88,23 @@ impl<'output> OutputArtifactInstallSurface<'output> {
         color: Color,
     ) {
         self.output_builder
-            .artifact_installer()
-            .add_border(window_id, x, y, width, height, color);
+            .add_output_border(window_id, x, y, width, height, color);
     }
 
     pub(crate) fn add_scroll_bar(&mut self, item: ScrollBarItem) {
-        self.output_builder
-            .artifact_installer()
-            .add_scroll_bar(item);
+        self.output_builder.add_output_scroll_bar(item);
     }
 
     pub(crate) fn add_window_info(&mut self, info: WindowInfo) {
-        self.output_builder
-            .artifact_installer()
-            .add_window_info(info);
+        self.output_builder.add_output_window_info(info);
     }
 
     pub(crate) fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
-        self.output_builder
-            .artifact_installer()
-            .add_transition_hint(hint);
+        self.output_builder.add_output_transition_hint(hint);
     }
 
     pub(crate) fn add_effect_hint(&mut self, hint: WindowEffectHint) {
-        self.output_builder
-            .artifact_installer()
-            .add_effect_hint(hint);
+        self.output_builder.add_output_effect_hint(hint);
     }
 
     pub(crate) fn add_cursor(
@@ -137,8 +119,7 @@ impl<'output> OutputArtifactInstallSurface<'output> {
         color: Color,
     ) {
         self.output_builder
-            .artifact_installer()
-            .add_cursor(window_id, slot_id, x, y, width, height, style, color);
+            .add_output_cursor(window_id, slot_id, x, y, width, height, style, color);
     }
 
     pub(crate) fn add_image_media(
@@ -153,7 +134,7 @@ impl<'output> OutputArtifactInstallSurface<'output> {
         width: f32,
         height: f32,
     ) {
-        self.output_builder.artifact_installer().add_image_media(
+        self.output_builder.add_output_image_media(
             window_id, role, clip, slot_id, image_id, x, y, width, height,
         );
     }
@@ -172,7 +153,7 @@ impl<'output> OutputArtifactInstallSurface<'output> {
         width: f32,
         height: f32,
     ) {
-        self.output_builder.artifact_installer().add_video_media(
+        self.output_builder.add_output_video_media(
             window_id, role, clip, slot_id, video_id, loop_count, autoplay, x, y, width, height,
         );
     }
@@ -189,14 +170,12 @@ impl<'output> OutputArtifactInstallSurface<'output> {
         width: f32,
         height: f32,
     ) {
-        self.output_builder.artifact_installer().add_xwidget_media(
+        self.output_builder.add_output_xwidget_media(
             window_id, role, clip, slot_id, xwidget_id, x, y, width, height,
         );
     }
 
     pub(crate) fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        self.output_builder
-            .artifact_installer()
-            .store_phys_cursor(cursor);
+        self.output_builder.store_output_phys_cursor(cursor);
     }
 }
