@@ -7,7 +7,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
 };
-use crate::display_row::{DisplayRowActiveFaceState, insert_resolved_display_row_face};
+use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_replacement::DisplayPropertyReplacementAppendRequest;
 use crate::display_source::{
@@ -18,7 +18,6 @@ use crate::display_source::{
 };
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::font_metrics::FontMetricsService;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
@@ -270,82 +269,6 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
         face_id,
         pending_face,
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn resolve_and_install_display_string_base_face<B: LayoutBufferView>(
-    buffer: &B,
-    face_resolver: &FaceResolver,
-    origin: DisplayOrigin,
-    policy: BaseFacePolicy,
-    active_base_face: Option<ActiveDisplayStringBaseFace<'_>>,
-    default_install_policy: DisplayDefaultFaceInstallPolicy,
-    face_ids: &mut FrameFaceIdAllocator,
-    builder: &mut GlyphMatrixBuilder,
-) -> DisplayStringBaseFace {
-    let base_face = resolve_display_string_base_face(
-        buffer,
-        face_resolver,
-        origin,
-        policy,
-        active_base_face,
-        default_install_policy,
-        face_ids,
-    );
-    if let Some(pending_face) = base_face.pending_face() {
-        insert_resolved_display_row_face(
-            builder,
-            pending_face.face_id,
-            &pending_face.resolved,
-            None,
-        );
-    }
-    base_face
-}
-
-pub(crate) fn display_string_base_face<B: LayoutBufferView>(
-    buffer: &B,
-    face_resolver: &FaceResolver,
-    origin: DisplayOrigin,
-    policy: BaseFacePolicy,
-    face_ids: &mut FrameFaceIdAllocator,
-    builder: &mut GlyphMatrixBuilder,
-) -> DisplayStringBaseFace {
-    resolve_and_install_display_string_base_face(
-        buffer,
-        face_resolver,
-        origin,
-        policy,
-        None,
-        DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
-        face_ids,
-        builder,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn display_string_base_face_for_active_row<B: LayoutBufferView>(
-    buffer: &B,
-    face_resolver: &FaceResolver,
-    origin: DisplayOrigin,
-    policy: BaseFacePolicy,
-    active_face_state: &DisplayRowActiveFaceState,
-    face_ids: &mut FrameFaceIdAllocator,
-    builder: &mut GlyphMatrixBuilder,
-) -> DisplayStringBaseFace {
-    resolve_and_install_display_string_base_face(
-        buffer,
-        face_resolver,
-        origin,
-        policy,
-        Some(ActiveDisplayStringBaseFace::new(
-            active_face_state.face_id(),
-            active_face_state.resolved_face(),
-        )),
-        DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
-        face_ids,
-        builder,
-    )
 }
 
 #[derive(Clone, Debug)]

@@ -18,7 +18,8 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_source_resolver::{
-    DisplayStringBaseFace, display_string_base_face, display_string_base_face_for_active_row,
+    ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
+    resolve_display_string_base_face,
 };
 use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -142,6 +143,12 @@ impl<'a> TextRowSourceRenderState<'a> {
         insert_resolved_display_row_face(self.output_render.builder, face_id, face, None);
     }
 
+    fn install_pending_display_string_base_face(&mut self, base_face: &DisplayStringBaseFace) {
+        if let Some(pending_face) = base_face.pending_face() {
+            self.insert_resolved_face(pending_face.face_id, &pending_face.resolved);
+        }
+    }
+
     fn resolved_measured_face(
         &mut self,
         measurement_policy: DisplayRowMeasurementPolicy,
@@ -209,14 +216,17 @@ impl<'a> TextRowSourceRenderState<'a> {
         policy: BaseFacePolicy,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayStringBaseFace {
-        display_string_base_face(
+        let base_face = resolve_display_string_base_face(
             buffer,
             self.face_resolver,
             origin,
             policy,
+            None,
+            DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
             face_ids,
-            self.output_render.builder,
-        )
+        );
+        self.install_pending_display_string_base_face(&base_face);
+        base_face
     }
 
     pub(crate) fn default_display_string_base_face<B: LayoutBufferView>(
@@ -236,15 +246,20 @@ impl<'a> TextRowSourceRenderState<'a> {
         active_face_state: &DisplayRowActiveFaceState,
         face_ids: &mut FrameFaceIdAllocator,
     ) -> DisplayStringBaseFace {
-        display_string_base_face_for_active_row(
+        let base_face = resolve_display_string_base_face(
             buffer,
             self.face_resolver,
             origin,
             policy,
-            active_face_state,
+            Some(ActiveDisplayStringBaseFace::new(
+                active_face_state.face_id(),
+                active_face_state.resolved_face(),
+            )),
+            DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
             face_ids,
-            self.output_render.builder,
-        )
+        );
+        self.install_pending_display_string_base_face(&base_face);
+        base_face
     }
 
     pub(crate) fn default_display_string_base_face_for_active_row<B: LayoutBufferView>(
