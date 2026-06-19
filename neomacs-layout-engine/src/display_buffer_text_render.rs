@@ -330,29 +330,29 @@ pub(crate) struct BufferTextWindowDefaultFacePlan {
 }
 
 struct BufferTextWindowWalkRenderState<'emit> {
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
-    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    source_render: TextRowSourceRenderState<'emit>,
+    line_numbers: &'emit mut LineNumberRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
+    active_face_state: &'emit mut DisplayRowActiveFaceState,
+    face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 struct BufferTextWindowPostLoopRenderState<'emit> {
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    source_render: TextRowSourceRenderState<'emit>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 struct BufferTextWindowBodyRenderState<'emit> {
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
-    pub(crate) active_face_state: &'emit mut DisplayRowActiveFaceState,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    source_render: TextRowSourceRenderState<'emit>,
+    line_numbers: &'emit mut LineNumberRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
+    active_face_state: &'emit mut DisplayRowActiveFaceState,
+    face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 struct BufferTextWindowBodyPassState<'emit> {
-    pub(crate) output: BufferTextWindowBodyOutputRenderState<'emit>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    output: BufferTextWindowBodyOutputRenderState<'emit>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
@@ -404,16 +404,16 @@ where
 }
 
 struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
-    pub(crate) output_builder: &'output mut DisplayOutputBuilder,
-    pub(crate) output_emitter: &'output mut WindowOutputEmitter,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    output_builder: &'output mut DisplayOutputBuilder,
+    output_emitter: &'output mut WindowOutputEmitter,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 struct BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
-    pub(crate) output_builder: &'output mut DisplayOutputBuilder,
-    pub(crate) output_emitter: &'output mut WindowOutputEmitter,
-    pub(crate) evaluator: &'output mut Context,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    output_builder: &'output mut DisplayOutputBuilder,
+    output_emitter: &'output mut WindowOutputEmitter,
+    evaluator: &'output mut Context,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -459,6 +459,123 @@ struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
     render_services: ChromeRowRenderServices<'emit, 'face>,
     hit_data: &'emit mut Vec<WindowHitData>,
     display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
+}
+
+impl<'emit> BufferTextWindowWalkRenderState<'emit> {
+    fn new(
+        source_render: TextRowSourceRenderState<'emit>,
+        line_numbers: &'emit mut LineNumberRenderState,
+        face_scan: &'emit mut FaceScanCheckpoint,
+        active_face_state: &'emit mut DisplayRowActiveFaceState,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            source_render,
+            line_numbers,
+            face_scan,
+            active_face_state,
+            face_ids,
+        }
+    }
+}
+
+impl<'emit> BufferTextWindowPostLoopRenderState<'emit> {
+    fn new(
+        source_render: TextRowSourceRenderState<'emit>,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            source_render,
+            face_ids,
+        }
+    }
+}
+
+impl<'emit> BufferTextWindowBodyRenderState<'emit> {
+    fn new(
+        source_render: TextRowSourceRenderState<'emit>,
+        line_numbers: &'emit mut LineNumberRenderState,
+        face_scan: &'emit mut FaceScanCheckpoint,
+        active_face_state: &'emit mut DisplayRowActiveFaceState,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            source_render,
+            line_numbers,
+            face_scan,
+            active_face_state,
+            face_ids,
+        }
+    }
+}
+
+impl<'emit> BufferTextWindowBodyOutputRenderState<'emit> {
+    fn new(
+        output: BufferTextWindowOutputState<'emit>,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'emit FaceResolver,
+    ) -> Self {
+        Self {
+            output,
+            font_metrics,
+            face_resolver,
+        }
+    }
+}
+
+impl<'emit> BufferTextWindowBodyPassState<'emit> {
+    fn new(
+        output: BufferTextWindowBodyOutputRenderState<'emit>,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self { output, face_ids }
+    }
+}
+
+impl<'emit, 'output, 'face> BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
+    fn new(
+        output_builder: &'output mut DisplayOutputBuilder,
+        output_emitter: &'output mut WindowOutputEmitter,
+        render_services: ChromeRowRenderServices<'emit, 'face>,
+    ) -> Self {
+        Self {
+            output_builder,
+            output_emitter,
+            render_services,
+        }
+    }
+}
+
+impl<'emit, 'output, 'face> BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
+    fn new(
+        output_builder: &'output mut DisplayOutputBuilder,
+        output_emitter: &'output mut WindowOutputEmitter,
+        evaluator: &'output mut Context,
+        render_services: ChromeRowRenderServices<'emit, 'face>,
+    ) -> Self {
+        Self {
+            output_builder,
+            output_emitter,
+            evaluator,
+            render_services,
+        }
+    }
+}
+
+impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
+    fn new(
+        output: BufferTextWindowOutputState<'emit>,
+        render_services: ChromeRowRenderServices<'emit, 'face>,
+        hit_data: &'emit mut Vec<WindowHitData>,
+        display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
+    ) -> Self {
+        Self {
+            output,
+            render_services,
+            hit_data,
+            display_snapshots,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1211,10 +1328,7 @@ impl<'emit> BufferTextWindowOutputState<'emit> {
     }
 
     fn reborrow(&mut self) -> BufferTextWindowOutputState<'_> {
-        BufferTextWindowOutputState {
-            output_builder: self.output_builder,
-            evaluator: self.evaluator,
-        }
+        BufferTextWindowOutputState::from_parts(self.output_builder, self.evaluator)
     }
 
     fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
@@ -1518,14 +1632,14 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
     }
 
     pub(crate) fn body_pass_state(&mut self) -> BufferTextWindowBodyPassState<'_> {
-        BufferTextWindowBodyPassState {
-            output: BufferTextWindowBodyOutputRenderState {
-                output: self.output.reborrow(),
-                font_metrics: self.font_metrics,
-                face_resolver: self.face_resolver,
-            },
-            face_ids: &mut self.face_ids,
-        }
+        BufferTextWindowBodyPassState::new(
+            BufferTextWindowBodyOutputRenderState::new(
+                self.output.reborrow(),
+                self.font_metrics,
+                self.face_resolver,
+            ),
+            &mut self.face_ids,
+        )
     }
 
     pub(crate) fn rendered_body_complete_state<'hit>(
@@ -1533,16 +1647,12 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         hit_data: &'hit mut Vec<WindowHitData>,
         display_snapshots: &'hit mut Vec<WindowDisplaySnapshot>,
     ) -> BufferTextWindowRenderedBodyCompleteState<'hit, 'hit> {
-        BufferTextWindowRenderedBodyCompleteState {
-            output: self.output.reborrow(),
-            render_services: ChromeRowRenderServices::new(
-                self.font_metrics,
-                self.face_resolver,
-                &mut self.face_ids,
-            ),
+        BufferTextWindowRenderedBodyCompleteState::new(
+            self.output.reborrow(),
+            ChromeRowRenderServices::new(self.font_metrics, self.face_resolver, &mut self.face_ids),
             hit_data,
             display_snapshots,
-        }
+        )
     }
 
     pub(crate) fn initial_active_face_state(
@@ -1614,12 +1724,12 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
             evaluator,
         } = &mut self.output;
         walk_setup.install_body_and_publish_redisplay(
-            BufferTextWindowBodyInstallPublishState {
+            BufferTextWindowBodyInstallPublishState::new(
                 output_builder,
                 output_emitter,
                 evaluator,
-                render_services: self.render_services.reborrow(),
-            },
+                self.render_services.reborrow(),
+            ),
             tail_context,
             publish_request,
         )
@@ -1847,11 +1957,11 @@ impl BufferTextWindowWalkSetup {
             render_services,
         } = state;
         let redisplay_positions = self.install_body(
-            BufferTextWindowBodyInstallRenderState {
+            BufferTextWindowBodyInstallRenderState::new(
                 output_builder,
                 output_emitter,
                 render_services,
-            },
+            ),
             tail_context,
         );
         // GNU status-line percent specs read the live window state from the
@@ -1876,13 +1986,13 @@ impl BufferTextWindowWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowPostLoopRenderOutcome {
         self.render_visible_steps(
-            &mut BufferTextWindowWalkRenderState {
-                source_render: state.source_render.reborrow(),
-                line_numbers: state.line_numbers,
-                face_scan: state.face_scan,
-                active_face_state: state.active_face_state,
-                face_ids: state.face_ids,
-            },
+            &mut BufferTextWindowWalkRenderState::new(
+                state.source_render.reborrow(),
+                state.line_numbers,
+                state.face_scan,
+                state.active_face_state,
+                state.face_ids,
+            ),
             row_prelude_context,
             loop_context,
             face_resolution_context,
@@ -1893,10 +2003,10 @@ impl BufferTextWindowWalkSetup {
         );
 
         self.render_tail_and_decide_retry(
-            &mut BufferTextWindowPostLoopRenderState {
-                source_render: state.source_render.reborrow(),
-                face_ids: state.face_ids,
-            },
+            &mut BufferTextWindowPostLoopRenderState::new(
+                state.source_render.reborrow(),
+                state.face_ids,
+            ),
             loop_context,
             tail_context,
             text,
@@ -1929,13 +2039,13 @@ impl BufferTextWindowWalkSetup {
     ) -> BufferTextWindowBodyPassOutcome {
         let mut output_emitter = state.output.begin_text_window_output(begin_request);
         let post_loop = self.render_body_and_tail(
-            &mut BufferTextWindowBodyRenderState {
-                source_render: state.output.source_render_state(&mut output_emitter),
+            &mut BufferTextWindowBodyRenderState::new(
+                state.output.source_render_state(&mut output_emitter),
                 line_numbers,
                 face_scan,
                 active_face_state,
-                face_ids: state.face_ids,
-            },
+                state.face_ids,
+            ),
             row_prelude_context,
             loop_context,
             face_resolution_context,
@@ -2910,16 +3020,16 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             BufferDisplayPropertyTextReplacementResolveOutcome::Resolved(request) => {
                 request.render_and_apply(
                     buffer,
-                    BufferDisplayPropertyTextReplacementRenderState {
+                    BufferDisplayPropertyTextReplacementRenderState::new(
                         text,
-                        source_render: self.source_render.reborrow(),
-                        face_ids: self.face_ids,
-                        append_surface: self.append_surface,
-                        row_geometry: self.row_geometry,
-                        cursor_info: self.cursor_info,
+                        self.source_render.reborrow(),
+                        self.face_ids,
+                        self.append_surface,
+                        self.row_geometry,
+                        self.cursor_info,
                         active_face_state,
-                        progress: self.progress.reborrow(),
-                    },
+                        self.progress.reborrow(),
+                    ),
                 );
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }

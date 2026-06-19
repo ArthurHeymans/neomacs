@@ -75,19 +75,44 @@ pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest {
 }
 
 pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
-    pub(crate) text: &'emit [u8],
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
-    pub(crate) append_surface: &'emit DisplayRowAppendSurface,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) active_face_state: &'emit DisplayRowActiveFaceState,
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
+    text: &'emit [u8],
+    source_render: TextRowSourceRenderState<'emit>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    append_surface: &'emit DisplayRowAppendSurface,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    cursor_info: &'emit mut CursorCaptureState,
+    active_face_state: &'emit DisplayRowActiveFaceState,
+    progress: BufferTextWindowProgressState<'emit>,
 }
 
 impl BufferDisplayPropertyTextWalkOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         false
+    }
+}
+
+impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'emit [u8],
+        source_render: TextRowSourceRenderState<'emit>,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+        append_surface: &'emit DisplayRowAppendSurface,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        cursor_info: &'emit mut CursorCaptureState,
+        active_face_state: &'emit DisplayRowActiveFaceState,
+        progress: BufferTextWindowProgressState<'emit>,
+    ) -> Self {
+        Self {
+            text,
+            source_render,
+            face_ids,
+            append_surface,
+            row_geometry,
+            cursor_info,
+            active_face_state,
+            progress,
+        }
     }
 }
 
