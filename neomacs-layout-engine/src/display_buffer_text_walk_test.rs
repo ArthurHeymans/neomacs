@@ -1,8 +1,12 @@
 use super::*;
-use crate::display_buffer_text_render::BufferTextWindowTailDecorationState;
-use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowMarker};
+use crate::display_buffer_text_render::{
+    BufferTextWindowLoopRequestContext, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowTailDecorationState, BufferTextWindowTailRequestContext,
+    BufferTextWindowWalkSetupRequest,
+};
+use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowGeometryState, DisplayRowMarker};
 use crate::types::WindowKind;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::window::{FrameId, WindowId};
 
 fn window_params() -> WindowParams {
