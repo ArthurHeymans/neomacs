@@ -832,12 +832,76 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
+pub(crate) struct TextWindowCursorInstaller<'builder, 'output> {
+    builder: &'builder mut GlyphMatrixBuilder,
+    output_emitter: Option<&'output mut WindowOutputEmitter>,
+}
+
+impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
+    pub(crate) fn new(
+        builder: &'builder mut GlyphMatrixBuilder,
+        output_emitter: &'output mut WindowOutputEmitter,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter: Some(output_emitter),
+        }
+    }
+
+    pub(crate) fn without_output(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self {
+            builder,
+            output_emitter: None,
+        }
+    }
+
+    pub(crate) fn publish_cursor(
+        &mut self,
+        cursor: TextWindowCursor,
+    ) -> TextWindowCursorPublicationOutcome {
+        let output_emitter = self
+            .output_emitter
+            .as_deref_mut()
+            .expect("text-window cursor publication requires an output emitter");
+        TextWindowCursorPublication::resolve(self.builder, cursor)
+            .publish(self.builder, output_emitter)
+    }
+
+    pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
+        if let Some(effects) = cursor.effects {
+            self.install_cursor_effects(TextWindowCursorEffects {
+                window_id: cursor.window_id,
+                effects,
+            });
+        }
+        self.builder.install_cursor(MatrixCursorInstallRequest {
+            window_id: cursor.window_id,
+            slot_id: cursor.slot_id,
+            x: cursor.x,
+            y: cursor.y,
+            width: cursor.width,
+            height: cursor.height,
+            style: cursor.style,
+            color: cursor.color,
+        });
+    }
+
+    pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
+        self.builder
+            .install_frame_state(MatrixFrameStateInstallRequest::CursorEffects {
+                window_id: request.window_id,
+                effects: request.effects,
+            });
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn publish_text_window_cursor(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
     cursor: TextWindowCursor,
 ) -> TextWindowCursorPublicationOutcome {
-    TextWindowCursorPublication::resolve(builder, cursor).publish(builder, output_emitter)
+    TextWindowCursorInstaller::new(builder, output_emitter).publish_cursor(cursor)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -920,39 +984,20 @@ impl TextWindowCursorPublication {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn publish_text_window_decorative_cursor(
     builder: &mut GlyphMatrixBuilder,
     cursor: TextWindowDecorativeCursor,
 ) {
-    if let Some(effects) = cursor.effects {
-        install_text_window_cursor_effects(
-            builder,
-            TextWindowCursorEffects {
-                window_id: cursor.window_id,
-                effects,
-            },
-        );
-    }
-    builder.install_cursor(MatrixCursorInstallRequest {
-        window_id: cursor.window_id,
-        slot_id: cursor.slot_id,
-        x: cursor.x,
-        y: cursor.y,
-        width: cursor.width,
-        height: cursor.height,
-        style: cursor.style,
-        color: cursor.color,
-    });
+    TextWindowCursorInstaller::without_output(builder).publish_decorative_cursor(cursor);
 }
 
+#[cfg(test)]
 pub(crate) fn install_text_window_cursor_effects(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowCursorEffects,
 ) {
-    builder.install_frame_state(MatrixFrameStateInstallRequest::CursorEffects {
-        window_id: request.window_id,
-        effects: request.effects,
-    });
+    TextWindowCursorInstaller::without_output(builder).install_cursor_effects(request);
 }
 
 pub(crate) fn finish_text_window_output_rows(

@@ -6,8 +6,8 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::{
-    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, WindowOutputEmitter,
-    publish_text_window_cursor, publish_text_window_decorative_cursor,
+    RowMetricsSnapshot, TextWindowCursor, TextWindowCursorInstaller, TextWindowDecorativeCursor,
+    WindowOutputEmitter,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphMatrix, GlyphType};
@@ -805,27 +805,23 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
             return CapturedTextWindowCursorPublishOutcome::Clipped;
         }
 
-        publish_text_window_cursor(
-            builder,
-            output_emitter,
-            TextWindowCursor {
-                selected: self.params.selected,
-                window_id: resolved_cursor.window_id(),
-                charpos: self.point_charpos.max(0) as usize,
-                slot_id: resolved_cursor.slot_id,
-                x: resolved_cursor.x,
-                y: resolved_cursor.y,
-                width: resolved_cursor.width,
-                height: resolved_cursor.height,
-                ascent: resolved_cursor.ascent,
-                style: resolved_cursor.style,
-                color: resolved_cursor.color,
-                cursor_fg: resolved_cursor.cursor_fg,
-                text_area_left: self.text_area_left,
-                window_top: self.window_top,
-                glyph_row_resolved: cursor.glyph_row_resolved,
-            },
-        );
+        TextWindowCursorInstaller::new(builder, output_emitter).publish_cursor(TextWindowCursor {
+            selected: self.params.selected,
+            window_id: resolved_cursor.window_id(),
+            charpos: self.point_charpos.max(0) as usize,
+            slot_id: resolved_cursor.slot_id,
+            x: resolved_cursor.x,
+            y: resolved_cursor.y,
+            width: resolved_cursor.width,
+            height: resolved_cursor.height,
+            ascent: resolved_cursor.ascent,
+            style: resolved_cursor.style,
+            color: resolved_cursor.color,
+            cursor_fg: resolved_cursor.cursor_fg,
+            text_area_left: self.text_area_left,
+            window_top: self.window_top,
+            glyph_row_resolved: cursor.glyph_row_resolved,
+        });
 
         if self.ends_at_visible_eob {
             tracing::debug!(
@@ -917,8 +913,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 summary.clipped += 1;
                 continue;
             }
-            publish_text_window_decorative_cursor(
-                builder,
+            TextWindowCursorInstaller::without_output(builder).publish_decorative_cursor(
                 TextWindowDecorativeCursor {
                     window_id: resolved_cursor.window_id(),
                     slot_id: resolved_cursor.slot_id,

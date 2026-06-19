@@ -24,9 +24,9 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
     TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowOutputInstaller, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightBorder, TextWindowRightEdgeMarkers, TextWindowRowLifecycleInstaller,
-    WindowOutputEmitter, close_text_window_output, install_text_window_cursor_effects,
+    TextWindowCursorInstaller, TextWindowOutputInstaller, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightBorder, TextWindowRightEdgeMarkers,
+    TextWindowRowLifecycleInstaller, WindowOutputEmitter, close_text_window_output,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -124,8 +124,7 @@ impl BufferTextWindowCursorEffectsRequest {
         let Some(effects) = self.effects else {
             return false;
         };
-        install_text_window_cursor_effects(
-            builder,
+        TextWindowCursorInstaller::without_output(builder).install_cursor_effects(
             TextWindowCursorEffects {
                 window_id: self.window_id,
                 effects,
