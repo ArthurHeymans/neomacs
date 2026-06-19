@@ -2519,54 +2519,116 @@ fn finish_current_text_row_render(
     }
 }
 
-pub(crate) fn install_display_row_in_matrix_row(
+pub(crate) fn install_mock_display_row_in_matrix_row(
     builder: &mut GlyphMatrixBuilder,
     matrix_row: usize,
     row: &GlyphRow,
 ) {
-    let context = builder.current_window_row_install_context();
-    let mut row = row.clone();
-    row.pixel_y -= context.pixel_bounds.y;
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
-        begin: MatrixRowBeginRequest {
-            row: matrix_row,
-            role: row.role,
-            mode_line: row.mode_line,
-        },
-        row,
-    });
+    MatrixDisplayRowInstallRequest::from_row(matrix_row, row).install(builder);
+}
+
+struct MatrixDisplayRowInstallRequest<'a> {
+    matrix_row: usize,
+    row: &'a GlyphRow,
+    source_slots: Option<&'a [DisplayRowGlyphSlot]>,
+    pixel_y: f32,
+    height_px: f32,
+    ascent_px: f32,
+}
+
+impl<'a> MatrixDisplayRowInstallRequest<'a> {
+    fn from_row(matrix_row: usize, row: &'a GlyphRow) -> Self {
+        Self {
+            matrix_row,
+            row,
+            source_slots: None,
+            pixel_y: row.pixel_y,
+            height_px: row.height_px,
+            ascent_px: row.ascent_px,
+        }
+    }
+
+    fn from_rendered(
+        matrix_row: usize,
+        rendered: &'a RenderedDisplayRow,
+        bounds: Rect,
+        height_px: f32,
+        ascent_px: f32,
+    ) -> Self {
+        Self {
+            matrix_row,
+            row: &rendered.row,
+            source_slots: Some(&rendered.source_slots),
+            pixel_y: bounds.y,
+            height_px,
+            ascent_px,
+        }
+    }
+
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        let context = builder.current_window_row_install_context();
+        let mut row = self.row.clone();
+        if let Some(source_slots) = self.source_slots {
+            apply_display_row_source_slot_bounds(&mut row, source_slots);
+        }
+        row.pixel_y = self.pixel_y - context.pixel_bounds.y;
+        row.height_px = self.height_px;
+        row.ascent_px = self.ascent_px;
+        builder.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
+            begin: MatrixRowBeginRequest {
+                row: self.matrix_row,
+                role: row.role,
+                mode_line: row.mode_line,
+            },
+            row,
+        });
+    }
 }
 
 pub(crate) fn install_measured_window_display_row(
     builder: &mut GlyphMatrixBuilder,
     measured: &MeasuredDisplayRow,
 ) {
-    let DisplayRowOwner::WindowChrome { window_id, kind } = measured.owner else {
-        panic!("frame chrome rows must use install_measured_frame_chrome_row");
-    };
-    debug_assert!(window_id > 0);
-    debug_assert_eq!(
-        builder.current_window_media_install_context().window_id,
-        window_id as i64
-    );
-    debug_assert!(matches!(
-        kind,
-        WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
-    ));
-    let matrix_row = measured.row_index as usize;
-    RenderedDisplayRowAssetsInstall::from_rendered(
-        &measured.rendered,
-        RenderedDisplayRowAssetInstallTarget::WindowRow {
-            row_index: measured.row_index,
-            bounds: measured.bounds,
-        },
-    )
-    .install(builder);
-    let mut row = rendered_row_with_source_bounds(&measured.rendered);
-    row.pixel_y = measured.bounds.y;
-    row.height_px = measured.row_height();
-    row.ascent_px = measured.row_ascent();
-    install_display_row_in_matrix_row(builder, matrix_row, &row);
+    MeasuredWindowDisplayRowInstallRequest { measured }.install(builder);
+}
+
+struct MeasuredWindowDisplayRowInstallRequest<'a> {
+    measured: &'a MeasuredDisplayRow,
+}
+
+impl MeasuredWindowDisplayRowInstallRequest<'_> {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        let measured = self.measured;
+        let DisplayRowOwner::WindowChrome { window_id, kind } = measured.owner else {
+            panic!("frame chrome rows must use install_measured_frame_chrome_row");
+        };
+        debug_assert!(window_id > 0);
+        debug_assert_eq!(
+            builder.current_window_media_install_context().window_id,
+            window_id as i64
+        );
+        debug_assert!(matches!(
+            kind,
+            WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
+        ));
+        let matrix_row = measured.row_index as usize;
+        RenderedDisplayRowAssetsInstall::from_rendered(
+            &measured.rendered,
+            RenderedDisplayRowAssetInstallTarget::WindowRow {
+                row_index: measured.row_index,
+                bounds: measured.bounds,
+            },
+        )
+        .install(builder);
+        MatrixDisplayRowInstallRequest::from_rendered(
+            matrix_row,
+            &measured.rendered,
+            measured.bounds,
+            measured.row_height(),
+            measured.row_ascent(),
+        )
+        .install(builder);
+    }
 }
 
 pub(crate) fn install_measured_frame_chrome_row(
@@ -2574,33 +2636,49 @@ pub(crate) fn install_measured_frame_chrome_row(
     frame_chrome_rows: &mut Vec<FrameChromeRow>,
     measured: &MeasuredDisplayRow,
 ) {
-    let DisplayRowOwner::FrameChrome { kind } = measured.owner else {
-        panic!("window-owned rows must use install_measured_window_display_row");
-    };
-    debug_assert!(matches!(kind, FrameChromeKind::TabBar));
-    RenderedDisplayRowAssetsInstall::from_rendered(
-        &measured.rendered,
-        RenderedDisplayRowAssetInstallTarget::FrameChrome {
-            row_index: measured.row_index,
-            bounds: measured.bounds,
-        },
-    )
+    MeasuredFrameChromeRowInstallRequest {
+        frame_chrome_rows,
+        measured,
+    }
     .install(builder);
-    let mut row = measured.rendered.row.clone();
-    apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
-    // Frame chrome (tab-bar) rows are stored in a side vector and never pass
-    // through the matrix-row lifecycle, so they reorder here. Render no longer
-    // reorders (the single matrix-row finalizer is `end_current_row`), so the
-    // cloned row is un-reordered and must be finalized once on the clone.
-    let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
-    row.pixel_y = measured.bounds.y;
-    row.height_px = measured.row_height();
-    row.ascent_px = measured.row_ascent();
-    frame_chrome_rows.push(FrameChromeRow {
-        row_index: measured.row_index,
-        pixel_bounds: measured.bounds,
-        row,
-    });
+}
+
+struct MeasuredFrameChromeRowInstallRequest<'a, 'rows> {
+    frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
+    measured: &'a MeasuredDisplayRow,
+}
+
+impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
+        let measured = self.measured;
+        let DisplayRowOwner::FrameChrome { kind } = measured.owner else {
+            panic!("window-owned rows must use install_measured_window_display_row");
+        };
+        debug_assert!(matches!(kind, FrameChromeKind::TabBar));
+        RenderedDisplayRowAssetsInstall::from_rendered(
+            &measured.rendered,
+            RenderedDisplayRowAssetInstallTarget::FrameChrome {
+                row_index: measured.row_index,
+                bounds: measured.bounds,
+            },
+        )
+        .install(builder);
+        let mut row = measured.rendered.row.clone();
+        apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
+        // Frame chrome (tab-bar) rows are stored in a side vector and never pass
+        // through the matrix-row lifecycle, so they reorder here. Render no longer
+        // reorders (the single matrix-row finalizer is `end_current_row`), so the
+        // cloned row is un-reordered and must be finalized once on the clone.
+        let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
+        row.pixel_y = measured.bounds.y;
+        row.height_px = measured.row_height();
+        row.ascent_px = measured.row_ascent();
+        self.frame_chrome_rows.push(FrameChromeRow {
+            row_index: measured.row_index,
+            pixel_bounds: measured.bounds,
+            row,
+        });
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -2781,12 +2859,6 @@ impl RenderedDisplayRowMedia {
             }
         }
     }
-}
-
-fn rendered_row_with_source_bounds(rendered: &RenderedDisplayRow) -> GlyphRow {
-    let mut row = rendered.row.clone();
-    apply_display_row_source_slot_bounds(&mut row, &rendered.source_slots);
-    row
 }
 
 fn display_row_output_end_position(progress: DisplayRowOutputProgress) -> DisplayRowPosition {
