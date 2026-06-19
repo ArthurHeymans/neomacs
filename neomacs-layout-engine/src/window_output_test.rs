@@ -741,7 +741,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     let phys = state.phys_cursor.expect("selected phys cursor");
     assert_eq!(phys.slot_id.col, 2);
     assert_eq!(state.window_matrices[0].matrix.rows[0].cursor_col, Some(2));
-    assert_eq!(outcome.installed_matrix_cursor, false);
+    assert_eq!(outcome.installed_cursor_artifact, false);
     assert_eq!(outcome.stored_phys_cursor, true);
     assert_eq!(outcome.row, 0);
     assert_eq!(outcome.row_col, 2);

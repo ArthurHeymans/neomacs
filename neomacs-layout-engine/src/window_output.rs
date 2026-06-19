@@ -1047,11 +1047,11 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
             .publish_decorative_cursor(cursor);
     }
 
-    fn install_matrix_cursor(&mut self, cursor: TextWindowMatrixCursor) {
-        TextWindowArtifactOutputSurface::from_builder(self.builder).install_matrix_cursor(cursor);
+    fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
+        TextWindowArtifactOutputSurface::from_builder(self.builder).install_cursor_artifact(cursor);
     }
 
-    fn set_matrix_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
+    fn set_display_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
         DisplayRowLifecycleSurface::from_builder(self.builder).set_cursor(row, col, style);
     }
 
@@ -1168,7 +1168,7 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
                 effects,
             });
         }
-        self.install_matrix_cursor(TextWindowMatrixCursor {
+        self.install_cursor_artifact(TextWindowCursorArtifact {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,
             x: cursor.x,
@@ -1180,7 +1180,7 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
         });
     }
 
-    fn install_matrix_cursor(&mut self, cursor: TextWindowMatrixCursor) {
+    fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
         DisplayRowArtifactInstallSurface::from_builder(self.builder).add_cursor(
             cursor.window_id,
             cursor.slot_id,
@@ -1232,7 +1232,7 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublication {
-    matrix_cursor: Option<TextWindowMatrixCursor>,
+    cursor_artifact: Option<TextWindowCursorArtifact>,
     row: usize,
     row_col: u16,
     style: CursorStyle,
@@ -1241,7 +1241,7 @@ pub(crate) struct TextWindowCursorPublication {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct TextWindowMatrixCursor {
+struct TextWindowCursorArtifact {
     window_id: i64,
     slot_id: DisplaySlotId,
     x: f32,
@@ -1254,7 +1254,7 @@ struct TextWindowMatrixCursor {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublicationOutcome {
-    pub(crate) installed_matrix_cursor: bool,
+    pub(crate) installed_cursor_artifact: bool,
     pub(crate) stored_phys_cursor: bool,
     pub(crate) row: usize,
     pub(crate) row_col: u16,
@@ -1266,7 +1266,7 @@ impl TextWindowCursorPublication {
         window_context: &DisplayRowWindowContextSurface<'_>,
         cursor: TextWindowCursor,
     ) -> Self {
-        let matrix_cursor = (!cursor.selected).then_some(TextWindowMatrixCursor {
+        let cursor_artifact = (!cursor.selected).then_some(TextWindowCursorArtifact {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,
             x: cursor.x,
@@ -1289,7 +1289,7 @@ impl TextWindowCursorPublication {
         };
 
         Self {
-            matrix_cursor,
+            cursor_artifact,
             row: cursor.row(),
             row_col,
             style: cursor.style,
@@ -1302,17 +1302,17 @@ impl TextWindowCursorPublication {
         self,
         output: &mut TextWindowRowOutputSurface<'_, '_>,
     ) -> TextWindowCursorPublicationOutcome {
-        let installed_matrix_cursor = self.matrix_cursor.is_some();
-        if let Some(cursor) = self.matrix_cursor {
-            output.install_matrix_cursor(cursor);
+        let installed_cursor_artifact = self.cursor_artifact.is_some();
+        if let Some(cursor) = self.cursor_artifact {
+            output.install_cursor_artifact(cursor);
         }
-        output.set_matrix_cursor(self.row, self.row_col, self.style);
+        output.set_display_row_cursor(self.row, self.row_col, self.style);
         output.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
             output.store_phys_cursor(cursor);
         }
         TextWindowCursorPublicationOutcome {
-            installed_matrix_cursor,
+            installed_cursor_artifact,
             stored_phys_cursor: self.selected_phys_cursor.is_some(),
             row: self.row,
             row_col: self.row_col,
