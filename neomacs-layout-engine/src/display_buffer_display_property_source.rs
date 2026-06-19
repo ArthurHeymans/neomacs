@@ -18,6 +18,12 @@ pub(crate) struct BufferTextReplacementItem {
     end_charpos: CharPos0,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BufferTextReplacementSourceAnchor {
+    byte_idx: usize,
+    charpos: i64,
+}
+
 impl BufferTextReplacementItem {
     pub(crate) fn new(
         value: Value,
@@ -53,6 +59,16 @@ impl BufferTextReplacementItem {
 
     pub(crate) fn start_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
         self.start_byte_pos.get().checked_sub(text_start_byte)
+    }
+
+    pub(crate) fn source_anchor(
+        &self,
+        text_start_byte: usize,
+    ) -> Option<BufferTextReplacementSourceAnchor> {
+        Some(BufferTextReplacementSourceAnchor {
+            byte_idx: self.start_byte_idx(text_start_byte)?,
+            charpos: self.start_charpos(),
+        })
     }
 
     pub(crate) fn start_charpos(&self) -> i64 {
@@ -110,5 +126,19 @@ impl BufferTextReplacementItem {
             self.start_charpos(),
             source_char,
         ))
+    }
+}
+
+impl BufferTextReplacementSourceAnchor {
+    pub(crate) fn byte_idx(self) -> usize {
+        self.byte_idx
+    }
+
+    pub(crate) fn charpos(self) -> i64 {
+        self.charpos
+    }
+
+    pub(crate) fn matches(self, byte_idx: usize, charpos: i64) -> bool {
+        self.byte_idx == byte_idx && self.charpos == charpos
     }
 }

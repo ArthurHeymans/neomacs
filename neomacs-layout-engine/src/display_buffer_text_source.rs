@@ -319,6 +319,22 @@ enum BufferTextSourceCursorItem {
     Replacement(BufferTextReplacementItem),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferTextDisplayReplacementMode {
+    InlineSourceItems,
+    ConsumedSourceItem,
+}
+
+impl BufferTextDisplayReplacementMode {
+    fn consumes_typed_replacements(self) -> bool {
+        matches!(self, Self::ConsumedSourceItem)
+    }
+
+    fn inlines_replacement_strings(self) -> bool {
+        matches!(self, Self::InlineSourceItems)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextConsumedSourceItem {
     PendingStep(BufferTextSourceItemStep),
@@ -640,14 +656,13 @@ impl BufferTextSourceItemStepper {
                 .validate_source_item(item, byte_idx, charpos, source_char)
                 .map(BufferTextConsumedSourceItem::SourceItem),
             BufferTextSourceCursorItem::Replacement(item) => {
-                if item.start_byte_idx(self.text_start_byte)? != byte_idx
-                    || item.start_charpos() != charpos
-                {
+                let anchor = item.source_anchor(self.text_start_byte)?;
+                if !anchor.matches(byte_idx, charpos) {
                     tracing::error!(
-                        "BufferTextSourceItemStepper: replacement string at byte {:?} charpos {} \
+                        "BufferTextSourceItemStepper: display replacement at byte {:?} charpos {} \
                          did not match buffer walk byte {} charpos {}",
-                        item.start_byte_idx(self.text_start_byte),
-                        item.start_charpos(),
+                        anchor.byte_idx(),
+                        anchor.charpos(),
                         byte_idx,
                         charpos
                     );
@@ -1074,9 +1089,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos(self.char_pos))
     }
 
-    fn next_buffer_walk_item(
+    fn next_cursor_item(
         &mut self,
         context: &mut DisplaySourceContext<'_>,
+        replacement_mode: BufferTextDisplayReplacementMode,
     ) -> Option<BufferTextSourceCursorItem> {
         loop {
             if let Some(item) = self.replacement_strings.next_item(context) {
@@ -1098,7 +1114,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
                 let display_property = DisplayPropertySourcePlan::new(display_prop);
-                if display_property.replacement().is_some() {
+                if replacement_mode.consumes_typed_replacements()
+                    && display_property.replacement().is_some()
+                {
                     return Some(BufferTextSourceCursorItem::Replacement(
                         self.display_replacement_item(
                             display_prop,
@@ -1114,7 +1132,16 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     face,
                     span,
                 ) {
-                    DisplayPropertySourceCursorAction::PushReplacement { value, .. } => {
+                    DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
+                        if replacement_mode.inlines_replacement_strings() {
+                            self.push_display_replacement_string(
+                                value,
+                                base_face,
+                                start,
+                                property_end,
+                            );
+                            continue;
+                        }
                         return Some(BufferTextSourceCursorItem::Replacement(
                             self.display_replacement_item(
                                 value,
@@ -1141,49 +1168,26 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             )?));
         }
     }
+
+    fn next_buffer_walk_item(
+        &mut self,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> Option<BufferTextSourceCursorItem> {
+        self.next_cursor_item(
+            context,
+            BufferTextDisplayReplacementMode::ConsumedSourceItem,
+        )
+    }
 }
 
 impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<'_, B> {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        loop {
-            if let Some(item) = self.replacement_strings.next_item(context) {
-                return Some(item);
+        match self.next_cursor_item(context, BufferTextDisplayReplacementMode::InlineSourceItems)? {
+            BufferTextSourceCursorItem::Item(item) => Some(item),
+            BufferTextSourceCursorItem::Replacement(_) => {
+                debug_assert!(false, "inline source cursor surfaced a buffer replacement");
+                None
             }
-
-            if self.char_pos >= self.end {
-                return None;
-            }
-
-            let start = self.char_pos;
-            let property_end = self
-                .next_property_change(start)
-                .max(start.add_len(CharLen::new(1)))
-                .min(self.end);
-            let face = self.face_at(start, context);
-            let span = self.span(start, property_end);
-
-            if let Some(display_prop) = self.display_prop_at(start) {
-                self.char_pos = property_end;
-                let display_property = DisplayPropertySourcePlan::new(display_prop);
-                let item_layout = match self.display_property_cursor_action(
-                    context,
-                    &display_property,
-                    face,
-                    span,
-                ) {
-                    DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
-                        self.push_display_replacement_string(value, base_face, start, property_end);
-                        continue;
-                    }
-                    DisplayPropertySourceCursorAction::Emit(item) => {
-                        return Some(item);
-                    }
-                    DisplayPropertySourceCursorAction::FallThrough { layout } => layout,
-                };
-                return self.next_text_item_with_layout(start, property_end, face, item_layout);
-            }
-
-            return self.next_text_item(start, property_end, face);
         }
     }
 }
