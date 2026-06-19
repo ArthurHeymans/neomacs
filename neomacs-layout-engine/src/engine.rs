@@ -191,6 +191,114 @@ pub struct LayoutEngine {
 }
 
 impl LayoutEngine {
+    fn reset_frame_output_state(&mut self) {
+        self.matrix_builder.reset();
+        self.frame_face_id_counter = BasicFaceId::SENTINEL;
+        self.pending_frame_chrome_rows.clear();
+        self.pending_tab_bar = None;
+    }
+
+    fn frame_output_surface(&mut self) -> FrameOutputSurface<'_> {
+        FrameOutputSurface::from_builder(&mut self.matrix_builder)
+    }
+
+    fn latest_output_window_info(&self, window_id: i64) -> Option<WindowInfo> {
+        self.matrix_builder
+            .window_infos()
+            .iter()
+            .rev()
+            .find(|info| info.window_id == window_id)
+            .cloned()
+    }
+
+    fn latest_output_window_enabled_rows(&self) -> Option<usize> {
+        self.matrix_builder
+            .windows()
+            .last()
+            .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
+    }
+
+    fn finish_frame_output(
+        &mut self,
+        frame_params: &FrameParams,
+    ) -> neomacs_display_protocol::glyph_matrix::FrameDisplayState {
+        let frame_cols = (frame_params.width / frame_params.char_width.max(1.0)) as usize;
+        let frame_rows = (frame_params.height / frame_params.char_height.max(1.0)) as usize;
+        let matrix_builder = std::mem::replace(
+            &mut self.matrix_builder,
+            crate::matrix_builder::GlyphMatrixBuilder::new(),
+        );
+        let mut frame_display_state = matrix_builder.finish_with_pixel_size(
+            frame_cols,
+            frame_rows,
+            frame_params.char_width,
+            frame_params.char_height,
+            frame_params.width,
+            frame_params.height,
+        );
+        frame_display_state
+            .frame_chrome_rows
+            .extend(std::mem::take(&mut self.pending_frame_chrome_rows));
+        frame_display_state.tab_bar = self.pending_tab_bar.take();
+        frame_display_state
+    }
+
+    fn render_window_output_decorations(
+        &mut self,
+        params: &WindowParams,
+        frame_params: &FrameParams,
+        window_geometry: crate::display_frame_output::WindowFrameGeometry,
+        info: &WindowInfo,
+        face_resolver: &super::neovm_bridge::FaceResolver,
+    ) {
+        let mut decoration_face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
+        WindowFrameDecorationsRenderRequest::new(params, frame_params, window_geometry, info)
+            .render_and_apply(
+                &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
+                ChromeRowRenderServices::new(
+                    &mut self.font_metrics,
+                    face_resolver,
+                    &mut decoration_face_ids,
+                ),
+            );
+        decoration_face_ids.finish_into(&mut self.frame_face_id_counter);
+    }
+
+    fn render_latest_window_output_info_effects(
+        &mut self,
+        curr_window_infos: &mut std::collections::HashMap<i64, WindowInfo>,
+    ) {
+        WindowFrameInfoEffectsRenderRequest::new(&self.prev_window_infos).render_latest_and_apply(
+            &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
+            curr_window_infos,
+        );
+    }
+
+    fn render_frame_output_hints(
+        &mut self,
+        curr_window_infos: &std::collections::HashMap<i64, WindowInfo>,
+        frame_params: &FrameParams,
+    ) {
+        let mut frame_output = FrameOutputSurface::from_builder(&mut self.matrix_builder);
+        FrameLineAnimationHintsRenderRequest::new(&self.prev_window_infos, curr_window_infos)
+            .render_and_apply(&mut frame_output);
+        FrameWindowSwitchHintRenderRequest::new(&mut self.prev_selected_window_id)
+            .render_and_apply(&mut frame_output);
+        FrameThemeTransitionHintRenderRequest::new(
+            &mut self.prev_background,
+            frame_params.width,
+            frame_params.height,
+        )
+        .render_and_apply(&mut frame_output);
+        FrameTopologyTransitionHintRenderRequest::new(
+            &self.prev_window_infos,
+            curr_window_infos,
+            frame_params.width,
+            frame_params.height,
+        )
+        .render_and_apply(&mut frame_output);
+    }
+
     /// Create a new layout engine with cosmic-text font metrics.
     ///
     /// Initializes the `FontMetricsService` eagerly (~500ms font
@@ -394,11 +502,7 @@ impl LayoutEngine {
                 Self::ensure_fontified_rust(evaluator, buf_id, window_start, fontify_end);
             }
 
-            // Reset builder for new frame
-            self.matrix_builder.reset();
-            self.frame_face_id_counter = BasicFaceId::SENTINEL;
-            self.pending_frame_chrome_rows.clear();
-            self.pending_tab_bar = None;
+            self.reset_frame_output_state();
             let mut curr_window_infos: std::collections::HashMap<i64, WindowInfo> =
                 std::collections::HashMap::new();
             let default_resolved = face_resolver.default_face();
@@ -431,9 +535,7 @@ impl LayoutEngine {
                 default_resolved,
                 default_metrics,
             )
-            .render_and_apply(&mut FrameOutputSurface::from_builder(
-                &mut self.matrix_builder,
-            ));
+            .render_and_apply(&mut self.frame_output_surface());
 
             // Clear hit-test data for new frame
             self.hit_data.clear();
@@ -503,14 +605,9 @@ impl LayoutEngine {
                         modified: buffer.map(|b| b.is_modified()).unwrap_or(false),
                     }
                 };
-                WindowFrameInfoRenderRequest::new(params, metadata).render_and_apply(
-                    &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
-                );
-                WindowFrameInfoEffectsRenderRequest::new(&self.prev_window_infos)
-                    .render_latest_and_apply(
-                        &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
-                        &mut curr_window_infos,
-                    );
+                WindowFrameInfoRenderRequest::new(params, metadata)
+                    .render_and_apply(&mut self.frame_output_surface());
+                self.render_latest_window_output_info_effects(&mut curr_window_infos);
 
                 // Simplified layout for this window (no face resolution, no overlays)
                 self.layout_window_rust(
@@ -523,31 +620,14 @@ impl LayoutEngine {
                     MAX_WINDOW_VISIBILITY_RETRIES,
                 );
 
-                if let Some(info) = self
-                    .matrix_builder
-                    .window_infos()
-                    .iter()
-                    .rev()
-                    .find(|info| info.window_id == params.window_id)
-                    .cloned()
-                {
-                    let mut decoration_face_ids =
-                        FrameFaceIdAllocator::new(self.frame_face_id_counter);
-                    WindowFrameDecorationsRenderRequest::new(
+                if let Some(info) = self.latest_output_window_info(params.window_id) {
+                    self.render_window_output_decorations(
                         params,
                         &frame_params,
                         window_geometry,
                         &info,
-                    )
-                    .render_and_apply(
-                        &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
-                        ChromeRowRenderServices::new(
-                            &mut self.font_metrics,
-                            &face_resolver,
-                            &mut decoration_face_ids,
-                        ),
+                        &face_resolver,
                     );
-                    decoration_face_ids.finish_into(&mut self.frame_face_id_counter);
                 }
             }
 
@@ -559,11 +639,9 @@ impl LayoutEngine {
             // Also shrink back when the minibuffer content fits in fewer
             // rows than currently allocated.
             if !mini_resize_attempted {
-                if let Some(mini_entry) = self.matrix_builder.windows().last() {
+                if let Some(mini_rows_used) = self.latest_output_window_enabled_rows() {
                     if let Some(mini_params) = window_params_list.last() {
                         if mini_params.is_minibuffer() {
-                            let mini_rows_used =
-                                mini_entry.matrix.rows.iter().filter(|r| r.enabled).count();
                             let char_h = frame_params.char_height.max(1.0);
                             let allocated_rows =
                                 (mini_params.bounds.height / char_h).floor().max(1.0) as usize;
@@ -673,54 +751,12 @@ impl LayoutEngine {
                 }
             }
 
-            FrameLineAnimationHintsRenderRequest::new(&self.prev_window_infos, &curr_window_infos)
-                .render_and_apply(&mut FrameOutputSurface::from_builder(
-                    &mut self.matrix_builder,
-                ));
-            FrameWindowSwitchHintRenderRequest::new(&mut self.prev_selected_window_id)
-                .render_and_apply(&mut FrameOutputSurface::from_builder(
-                    &mut self.matrix_builder,
-                ));
-            FrameThemeTransitionHintRenderRequest::new(
-                &mut self.prev_background,
-                frame_params.width,
-                frame_params.height,
-            )
-            .render_and_apply(&mut FrameOutputSurface::from_builder(
-                &mut self.matrix_builder,
-            ));
-            FrameTopologyTransitionHintRenderRequest::new(
-                &self.prev_window_infos,
-                &curr_window_infos,
-                frame_params.width,
-                frame_params.height,
-            )
-            .render_and_apply(&mut FrameOutputSurface::from_builder(
-                &mut self.matrix_builder,
-            ));
+            self.render_frame_output_hints(&curr_window_infos, &frame_params);
 
             break (frame_params, curr_window_infos);
         };
 
-        // Build parallel GlyphMatrix output for validation
-        let frame_cols = (frame_params.width / frame_params.char_width.max(1.0)) as usize;
-        let frame_rows = (frame_params.height / frame_params.char_height.max(1.0)) as usize;
-        let matrix_builder = std::mem::replace(
-            &mut self.matrix_builder,
-            crate::matrix_builder::GlyphMatrixBuilder::new(),
-        );
-        let mut frame_display_state = matrix_builder.finish_with_pixel_size(
-            frame_cols,
-            frame_rows,
-            frame_params.char_width,
-            frame_params.char_height,
-            frame_params.width,
-            frame_params.height,
-        );
-        frame_display_state
-            .frame_chrome_rows
-            .extend(std::mem::take(&mut self.pending_frame_chrome_rows));
-        frame_display_state.tab_bar = self.pending_tab_bar.take();
+        let mut frame_display_state = self.finish_frame_output(&frame_params);
 
         // NOTE: GlyphMatrix vs FrameGlyphBuffer character count validation removed.
         // FrameGlyphBuffer no longer receives glyph output; the GlyphMatrixBuilder
