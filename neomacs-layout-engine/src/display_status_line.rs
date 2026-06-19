@@ -13,7 +13,7 @@
 //! trait and renamed the file to reflect its new role.
 
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
-use super::window_output::{ChromeRowOutput, TextWindowRowOutputSurface};
+use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
@@ -25,7 +25,9 @@ use crate::display_row::{
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
-use crate::display_row_output_install::install_measured_frame_chrome_display_row;
+use crate::display_row_output_install::{
+    install_measured_frame_chrome_display_row, install_measured_window_display_row,
+};
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;
@@ -484,7 +486,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         self.target_columns().columns()
     }
 
-    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_, '_, '_, '_>) {
+    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_, '_>) {
         let params = self.params;
         let mut status_line_symbol_values = std::collections::HashMap::new();
         if let Some(buffer) = state
@@ -667,22 +669,23 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
     }
 }
 
-pub(crate) struct WindowChromeRowsRenderState<'state, 'builder, 'output, 'services, 'face> {
-    output: &'state mut TextWindowRowOutputSurface<'builder, 'output>,
+pub(crate) struct WindowChromeRowsRenderState<'state, 'services, 'face> {
+    output_builder: &'state mut DisplayOutputBuilder,
+    output_emitter: &'state mut WindowOutputEmitter,
     evaluator: &'state mut Context,
     render_services: ChromeRowRenderServices<'services, 'face>,
 }
 
-impl<'state, 'builder, 'output, 'services, 'face>
-    WindowChromeRowsRenderState<'state, 'builder, 'output, 'services, 'face>
-{
+impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'face> {
     pub(crate) fn new(
-        output: &'state mut TextWindowRowOutputSurface<'builder, 'output>,
+        output_builder: &'state mut DisplayOutputBuilder,
+        output_emitter: &'state mut WindowOutputEmitter,
         evaluator: &'state mut Context,
         render_services: ChromeRowRenderServices<'services, 'face>,
     ) -> Self {
         Self {
-            output,
+            output_builder,
+            output_emitter,
             evaluator,
             render_services,
         }
@@ -693,7 +696,7 @@ impl<'state, 'builder, 'output, 'services, 'face>
         request: WindowChromeDisplayRowRequest<'_>,
     ) -> Option<MeasuredDisplayRow> {
         let parts = request.into_render_parts(self.render_services.face_ids());
-        self.output
+        self.output_emitter
             .begin_chrome_progress(self.evaluator, parts.output);
         let rendered_row = self.render_services.render_lisp_string_request(
             parts.render_request,
@@ -709,13 +712,13 @@ impl<'state, 'builder, 'output, 'services, 'face>
             )
         });
         if let Some(ref measured_row) = measured_row {
-            self.output.install_measured_window_chrome_row(measured_row);
-            self.output.emit_chrome_progress(
+            install_measured_window_display_row(self.output_builder, measured_row);
+            self.output_emitter.emit_chrome_progress(
                 self.evaluator,
                 parts.output,
                 measured_row.output_progress(),
             );
-            self.output
+            self.output_emitter
                 .finish_chrome_progress(measured_row.output_progress());
         }
         measured_row

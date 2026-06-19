@@ -19,14 +19,12 @@ use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_builder::{
     OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
 };
-use crate::display_row::MeasuredDisplayRow;
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_output_install::install_measured_window_display_row;
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
     text_window_right_edge_marker_decorations,
@@ -841,33 +839,6 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
         )
     }
 
-    pub(crate) fn begin_chrome_progress(
-        &mut self,
-        evaluator: &mut Context,
-        output: ChromeRowOutput,
-    ) {
-        self.output_emitter_mut()
-            .begin_chrome_progress(evaluator, output);
-    }
-
-    pub(crate) fn emit_chrome_progress(
-        &mut self,
-        evaluator: &mut Context,
-        output: ChromeRowOutput,
-        progress: DisplayRowOutputProgress,
-    ) {
-        self.output_emitter_mut()
-            .emit_chrome_progress(evaluator, output, progress);
-    }
-
-    pub(crate) fn finish_chrome_progress(&mut self, progress: DisplayRowOutputProgress) {
-        self.output_emitter_mut().finish_chrome_progress(progress);
-    }
-
-    pub(crate) fn install_measured_window_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        install_measured_window_display_row(self.output_builder, measured);
-    }
-
     pub(crate) fn render_chrome_rows(
         &mut self,
         evaluator: &mut Context,
@@ -875,7 +846,8 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
         request.render(&mut WindowChromeRowsRenderState::new(
-            self,
+            self.output_builder,
+            self.output_emitter,
             evaluator,
             render_services,
         ));
