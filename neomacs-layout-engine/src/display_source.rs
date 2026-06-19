@@ -8,6 +8,7 @@ use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
 };
+use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -672,12 +673,7 @@ impl BufferTextSourceAdvancePath {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextSourceNaturalFallbackAdvance {
-    Tab,
-    ClusterContinuation,
-    FaceColumns { columns: usize },
-}
+pub(crate) type BufferTextSourceNaturalFallbackAdvance = DisplayRowTextNaturalAdvanceKind;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextSourceNaturalAdvanceRequest {
@@ -685,18 +681,9 @@ pub(crate) struct BufferTextSourceNaturalAdvanceRequest {
     fallback: BufferTextSourceNaturalFallbackAdvance,
 }
 
-impl BufferTextSourceNaturalFallbackAdvance {
+impl DisplayRowTextNaturalAdvanceKind {
     pub(crate) fn for_cluster_state(cluster: BufferTextSourceClusterState) -> Self {
-        let ch = cluster.ch();
-        if ch == '\t' {
-            Self::Tab
-        } else if cluster.is_cluster_continuation() {
-            Self::ClusterContinuation
-        } else {
-            Self::FaceColumns {
-                columns: crate::composition::base_width_cols(ch) as usize,
-            }
-        }
+        Self::for_source_char(cluster.ch(), cluster.is_cluster_continuation())
     }
 }
 

@@ -1,3 +1,6 @@
+use crate::composition::{
+    base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
+};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
     DisplayRowRenderBounds, DisplayRowSourceRenderRequest, DisplayRowSourceRequestPolicy,
@@ -8,6 +11,7 @@ use crate::display_row_source_append::DisplayRowSourceAppendRequest;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::TextRowOutput;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::Glyph;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendPlacement {
@@ -145,6 +149,137 @@ impl DisplayRowAppendSurface {
             glyph_y_offset,
             DisplayRowAppendMetrics::from_active_face_state(active_face, default_row_height),
         )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayRowTextNaturalAdvanceKind {
+    Tab,
+    ClusterContinuation,
+    ComplexRunMember,
+    FaceColumns { columns: usize },
+}
+
+impl DisplayRowTextNaturalAdvanceKind {
+    pub(crate) fn for_tail(ch: char, tail: Option<(char, bool)>) -> Self {
+        if ch == '\t' {
+            Self::Tab
+        } else if continues_cluster(ch, tail) {
+            Self::ClusterContinuation
+        } else if continues_complex_run(ch, tail) {
+            Self::ComplexRunMember
+        } else {
+            Self::FaceColumns {
+                columns: usize::from(base_width_cols(ch)),
+            }
+        }
+    }
+
+    pub(crate) fn for_source_char(ch: char, is_cluster_continuation: bool) -> Self {
+        if ch == '\t' {
+            Self::Tab
+        } else if is_cluster_continuation {
+            Self::ClusterContinuation
+        } else {
+            Self::FaceColumns {
+                columns: usize::from(base_width_cols(ch)),
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowTextNaturalAdvanceRequest {
+    kind: DisplayRowTextNaturalAdvanceKind,
+    position: DisplayRowPosition,
+    ch: char,
+    face_id: u32,
+}
+
+impl DisplayRowTextNaturalAdvanceRequest {
+    pub(crate) fn new(
+        kind: DisplayRowTextNaturalAdvanceKind,
+        position: DisplayRowPosition,
+        ch: char,
+        face_id: u32,
+    ) -> Self {
+        Self {
+            kind,
+            position,
+            ch,
+            face_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayRowTextNaturalAdvancePolicy {
+    tab_policy: DisplayTabPolicy,
+    char_width_px: f32,
+}
+
+impl DisplayRowTextNaturalAdvancePolicy {
+    pub(crate) fn new(tab_policy: DisplayTabPolicy, char_width_px: f32) -> Self {
+        Self {
+            tab_policy,
+            char_width_px,
+        }
+    }
+
+    pub(crate) fn resolve_with(
+        &self,
+        request: DisplayRowTextNaturalAdvanceRequest,
+        mut glyph_advance_px: impl FnMut(char, u32, usize) -> f32,
+    ) -> f32 {
+        match request.kind {
+            DisplayRowTextNaturalAdvanceKind::Tab => {
+                self.tab_policy
+                    .advance_from(request.position, self.char_width_px)
+                    .pixel_width
+            }
+            DisplayRowTextNaturalAdvanceKind::ClusterContinuation => 0.0,
+            DisplayRowTextNaturalAdvanceKind::ComplexRunMember => {
+                glyph_advance_px(request.ch, request.face_id, 1)
+            }
+            DisplayRowTextNaturalAdvanceKind::FaceColumns { columns } => {
+                glyph_advance_px(request.ch, request.face_id, columns)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DisplayRowTextCharState {
+    ch: char,
+    kind: DisplayRowTextNaturalAdvanceKind,
+}
+
+impl DisplayRowTextCharState {
+    pub(crate) fn for_tail(ch: char, tail: Option<(char, bool)>) -> Self {
+        Self {
+            ch,
+            kind: DisplayRowTextNaturalAdvanceKind::for_tail(ch, tail),
+        }
+    }
+
+    pub(crate) fn for_glyphs(ch: char, glyphs: &[Glyph]) -> Self {
+        Self::for_tail(ch, last_text_cluster_tail_in_glyphs(glyphs))
+    }
+
+    pub(crate) fn ch(self) -> char {
+        self.ch
+    }
+
+    pub(crate) fn kind(self) -> DisplayRowTextNaturalAdvanceKind {
+        self.kind
+    }
+
+    pub(crate) fn natural_advance_request(
+        self,
+        position: DisplayRowPosition,
+        face_id: u32,
+    ) -> DisplayRowTextNaturalAdvanceRequest {
+        DisplayRowTextNaturalAdvanceRequest::new(self.kind, position, self.ch, face_id)
     }
 }
 
@@ -338,6 +473,13 @@ pub(crate) struct DisplayRowAppendFrame {
 impl DisplayRowAppendFrame {
     pub(crate) fn width_for_columns(&self, columns: usize) -> f32 {
         columns as f32 * self.geometry.char_width.max(1.0)
+    }
+
+    pub(crate) fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
+        DisplayRowTextNaturalAdvancePolicy::new(
+            self.geometry.tab_policy.clone(),
+            self.face_space_width,
+        )
     }
 
     fn right_edge(&self) -> f32 {

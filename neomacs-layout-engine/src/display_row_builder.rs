@@ -1,10 +1,12 @@
-use crate::composition::{
-    base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
-};
+use crate::composition::base_width_cols;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
     DisplayLengthExpr, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod,
     RenderFaceRef, SourceSpan, control_char_caret_char,
+};
+use crate::display_row_append_context::{
+    DisplayRowTextCharState, DisplayRowTextNaturalAdvanceKind, DisplayRowTextNaturalAdvancePolicy,
+    DisplayRowTextNaturalAdvanceRequest,
 };
 #[cfg(test)]
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
@@ -43,20 +45,6 @@ pub(crate) struct DisplayTabAdvance {
     pub(crate) width_cols: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DisplayRowTextCharKind {
-    Tab,
-    ClusterContinuation,
-    ComplexRunMember,
-    BaseGlyph { columns: u8 },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct DisplayRowTextCharState {
-    ch: char,
-    kind: DisplayRowTextCharKind,
-}
-
 #[derive(Clone, Copy, Debug)]
 struct DisplayRowTextCharAdvanceRequest<'a> {
     char_state: DisplayRowTextCharState,
@@ -65,31 +53,6 @@ struct DisplayRowTextCharAdvanceRequest<'a> {
     char_offset: usize,
     byte_offset: usize,
     measurement: &'a DisplayTextRunMeasurement,
-}
-
-impl DisplayRowTextCharState {
-    fn for_tail(ch: char, tail: Option<(char, bool)>) -> Self {
-        let kind = if ch == '\t' {
-            DisplayRowTextCharKind::Tab
-        } else if continues_cluster(ch, tail) {
-            DisplayRowTextCharKind::ClusterContinuation
-        } else if continues_complex_run(ch, tail) {
-            DisplayRowTextCharKind::ComplexRunMember
-        } else {
-            DisplayRowTextCharKind::BaseGlyph {
-                columns: base_width_cols(ch),
-            }
-        };
-        Self { ch, kind }
-    }
-
-    fn ch(self) -> char {
-        self.ch
-    }
-
-    fn kind(self) -> DisplayRowTextCharKind {
-        self.kind
-    }
 }
 
 impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
@@ -124,8 +87,13 @@ impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
         self.char_state.ch()
     }
 
-    fn kind(self) -> DisplayRowTextCharKind {
+    fn kind(self) -> DisplayRowTextNaturalAdvanceKind {
         self.char_state.kind()
+    }
+
+    fn natural_advance_request(self) -> DisplayRowTextNaturalAdvanceRequest {
+        self.char_state
+            .natural_advance_request(self.position, self.face_id)
     }
 
     fn measured_advance(self) -> Option<f32> {
@@ -1164,10 +1132,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     ) {
         let ch = advance_request.ch();
         match advance_request.kind() {
-            DisplayRowTextCharKind::Tab => {
+            DisplayRowTextNaturalAdvanceKind::Tab => {
                 self.push_tab_at_position(advance_request.face_id, advance_request.position);
             }
-            DisplayRowTextCharKind::ClusterContinuation => {
+            DisplayRowTextNaturalAdvanceKind::ClusterContinuation => {
                 glyph_row_writer::push_cluster_continuation_to_area(
                     &mut self.row,
                     self.area_index,
@@ -1176,7 +1144,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     charpos,
                 );
             }
-            DisplayRowTextCharKind::ComplexRunMember => {
+            DisplayRowTextNaturalAdvanceKind::ComplexRunMember => {
                 let advance = self.text_char_advance_px(advance_request);
                 glyph_row_writer::push_run_member_to_area(
                     &mut self.row,
@@ -1187,7 +1155,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     advance,
                 );
             }
-            DisplayRowTextCharKind::BaseGlyph { columns } if columns > 1 => {
+            DisplayRowTextNaturalAdvanceKind::FaceColumns { columns } if columns > 1 => {
                 let advance = self.text_char_advance_px(advance_request);
                 glyph_row_writer::push_wide_char_to_area(
                     &mut self.row,
@@ -1198,7 +1166,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     advance,
                 );
             }
-            DisplayRowTextCharKind::BaseGlyph { .. } => {
+            DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => {
                 let advance = self.text_char_advance_px(advance_request);
                 glyph_row_writer::push_char_to_area(
                     &mut self.row,
@@ -1223,28 +1191,27 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn text_char_advance_px(&mut self, request: DisplayRowTextCharAdvanceRequest<'_>) -> f32 {
+        let resolve_natural = |writer: &mut Self| {
+            let policy = DisplayRowTextNaturalAdvancePolicy::new(
+                writer.layout.tab_policy.clone(),
+                writer.layout.char_width_px,
+            );
+            policy.resolve_with(request.natural_advance_request(), |ch, face_id, columns| {
+                writer.glyph_advance_px(ch, face_id, columns)
+            })
+        };
         match request.kind() {
-            DisplayRowTextCharKind::Tab => {
-                self.layout
-                    .tab_policy
-                    .advance_from(request.position, self.layout.char_width_px)
-                    .pixel_width
-            }
-            DisplayRowTextCharKind::ClusterContinuation => 0.0,
-            DisplayRowTextCharKind::ComplexRunMember => request
+            DisplayRowTextNaturalAdvanceKind::Tab
+            | DisplayRowTextNaturalAdvanceKind::ClusterContinuation => resolve_natural(self),
+            DisplayRowTextNaturalAdvanceKind::ComplexRunMember
+            | DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => request
                 .measured_advance()
-                .unwrap_or_else(|| self.glyph_advance_px(request.ch(), request.face_id, 1)),
-            DisplayRowTextCharKind::BaseGlyph { columns } => request
-                .measured_advance()
-                .unwrap_or_else(|| self.glyph_advance_px(request.ch(), request.face_id, columns)),
+                .unwrap_or_else(|| resolve_natural(self)),
         }
     }
 
     fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {
-        DisplayRowTextCharState::for_tail(
-            ch,
-            last_text_cluster_tail_in_glyphs(&self.row.glyphs[self.area_index]),
-        )
+        DisplayRowTextCharState::for_glyphs(ch, &self.row.glyphs[self.area_index])
     }
 
     fn text_run_measurement(&mut self, text: &str, face_id: u32) -> DisplayTextRunMeasurement {
@@ -1299,11 +1266,12 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .sum()
     }
 
-    fn glyph_advance_px(&mut self, ch: char, face_id: u32, columns: u8) -> f32 {
-        let fallback = self.layout.char_width_px.max(1.0) * f32::from(columns.max(1));
+    fn glyph_advance_px(&mut self, ch: char, face_id: u32, columns: usize) -> f32 {
+        let fallback = self.layout.char_width_px.max(1.0) * columns.max(1) as f32;
+        let measured_columns = columns.min(usize::from(u8::MAX)) as u8;
         self.glyph_measurer
             .as_mut()
-            .and_then(|measurer| measurer.glyph_advance_px(ch, face_id, columns, fallback))
+            .and_then(|measurer| measurer.glyph_advance_px(ch, face_id, measured_columns, fallback))
             .filter(|advance| advance.is_finite() && *advance >= 0.0)
             .unwrap_or(fallback)
     }

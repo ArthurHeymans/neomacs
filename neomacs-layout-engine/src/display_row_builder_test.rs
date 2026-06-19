@@ -107,19 +107,19 @@ fn row_text(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> String {
 fn display_row_text_char_state_names_row_tail_policy() {
     assert_eq!(
         DisplayRowTextCharState::for_tail('\t', Some(('x', false))).kind(),
-        DisplayRowTextCharKind::Tab
+        DisplayRowTextNaturalAdvanceKind::Tab
     );
     assert_eq!(
         DisplayRowTextCharState::for_tail('\u{301}', Some(('e', false))).kind(),
-        DisplayRowTextCharKind::ClusterContinuation
+        DisplayRowTextNaturalAdvanceKind::ClusterContinuation
     );
     assert_eq!(
         DisplayRowTextCharState::for_tail('\u{0633}', Some(('\u{0627}', false))).kind(),
-        DisplayRowTextCharKind::ComplexRunMember
+        DisplayRowTextNaturalAdvanceKind::ComplexRunMember
     );
     assert_eq!(
         DisplayRowTextCharState::for_tail('中', None).kind(),
-        DisplayRowTextCharKind::BaseGlyph { columns: 2 }
+        DisplayRowTextNaturalAdvanceKind::FaceColumns { columns: 2 }
     );
 }
 

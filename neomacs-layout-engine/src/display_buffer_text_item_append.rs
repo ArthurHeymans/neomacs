@@ -16,7 +16,7 @@ use crate::display_row::{
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
-    DisplayRowAppendSurface,
+    DisplayRowAppendSurface, DisplayRowTextNaturalAdvanceKind, DisplayRowTextNaturalAdvanceRequest,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
@@ -29,8 +29,8 @@ use crate::display_row_walk_state::{
 use crate::display_source::{
     BufferTextSourceAdvancePath, BufferTextSourceAdvanceRequest, BufferTextSourceAppendItem,
     BufferTextSourceChar, BufferTextSourceClusterState, BufferTextSourceItemRequest,
-    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceNaturalFallbackAdvance,
-    BufferTextSourceRange, BufferTextSourceSpecialDisplayKind, BufferTextSourceTextItemRequest,
+    BufferTextSourceNaturalAdvanceRequest, BufferTextSourceRange,
+    BufferTextSourceSpecialDisplayKind, BufferTextSourceTextItemRequest,
     BufferTextSourceTextRequest, BufferTextSpecialSourceCharRequest,
     ResolvedBufferTextSourceAdvance,
 };
@@ -84,7 +84,7 @@ impl BufferTextRowAppendState {
     }
 }
 
-impl BufferTextSourceNaturalFallbackAdvance {
+impl DisplayRowTextNaturalAdvanceKind {
     pub(crate) fn resolve_to_text_row(
         self,
         font_metrics: &mut Option<FontMetricsService>,
@@ -93,19 +93,17 @@ impl BufferTextSourceNaturalFallbackAdvance {
         position: DisplayRowPosition,
         ch: char,
     ) -> f32 {
-        match self {
-            Self::Tab => {
-                frame
-                    .geometry
-                    .tab_policy
-                    .advance_from(position, frame.face_space_width)
-                    .pixel_width
-            }
-            Self::ClusterContinuation => 0.0,
-            Self::FaceColumns { columns } => {
+        let request = DisplayRowTextNaturalAdvanceRequest::new(
+            self,
+            position,
+            ch,
+            active_face_state.face_id(),
+        );
+        frame
+            .natural_text_advance_policy()
+            .resolve_with(request, |ch, _face_id, columns| {
                 active_face_state.advance_for_columns(font_metrics, ch, columns)
-            }
-        }
+            })
     }
 }
 
