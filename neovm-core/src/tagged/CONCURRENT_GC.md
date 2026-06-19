@@ -269,3 +269,10 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
   swept a weak table's still-referenced entries → UAF (only reproduces under
   `gc_stress` + `NEOVM_GC_VERIFY_PARTITION` together — run that combo, not each
   alone). Fixed 2026-06-19; was latent on the concurrent + incremental paths.
+- `collect_veclike_children` MUST stay a SUPERSET of what `trace_veclike` traces
+  for every `VecLikeType` — the remembered/SATB strong-trace AND
+  `verify_dump_partition` both rely on it. A field traced by `trace_veclike` but
+  omitted from `collect_veclike_children` is invisible to the verifier (it uses
+  `collect`) yet unmarked via the remembered path → a silent UAF the gate cannot
+  catch. (Found 2026-06-19: hash-table `user_cmp_function`/`user_hash_function`
+  were missing from `collect`; added.) When adding a veclike field, update BOTH.

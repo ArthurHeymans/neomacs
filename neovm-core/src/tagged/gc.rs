@@ -2839,6 +2839,18 @@ impl TaggedHeap {
                     let ht = &(*(ptr as *const HashTableObj)).table;
                     out.extend(ht.data.values().copied());
                     out.extend(ht.key_snapshots.values().copied());
+                    // Custom test/hash closures (`define-hash-table-test`) live
+                    // ONLY in these fields and are traced by `trace_veclike`; keep
+                    // the two enumerations in sync so the remembered/SATB strong-
+                    // trace (which uses this) and the dump-partition verifier both
+                    // cover them — otherwise a dumped/tenured custom-test table's
+                    // closures are swept while the table still calls them (UAF).
+                    if let Some(f) = ht.user_cmp_function {
+                        out.push(f);
+                    }
+                    if let Some(f) = ht.user_hash_function {
+                        out.push(f);
+                    }
                 }
                 VecLikeType::ByteCode => {
                     let data = &(*(ptr as *const ByteCodeObj)).data;
