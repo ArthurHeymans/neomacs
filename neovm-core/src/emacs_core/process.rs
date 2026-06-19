@@ -1456,6 +1456,11 @@ impl ProcessOutputRead {
 enum ProcessOutputSource {
     Pty,
     ChildStdout,
+    /// A stderr pipe-process (created for `make-process :stderr`) whose readable
+    /// source is the child's separate stderr pipe.  GNU connects the stderr
+    /// pipe-process's `READ_FROM_SUBPROCESS` fd to the child's stderr; here that
+    /// read end lives in `child_stderr` on the stderr pipe-process record.
+    ChildStderr,
     Network,
 }
 
@@ -1464,6 +1469,8 @@ fn process_output_source(proc: &Process) -> Option<ProcessOutputSource> {
         Some(ProcessOutputSource::Pty)
     } else if proc.child_stdout.is_some() {
         Some(ProcessOutputSource::ChildStdout)
+    } else if proc.child_stderr.is_some() {
+        Some(ProcessOutputSource::ChildStderr)
     } else if proc.tls_stream.is_some() || proc.network_socket.is_some() {
         Some(ProcessOutputSource::Network)
     } else {
@@ -1588,6 +1595,49 @@ impl ProcessManager {
         // See `register_child_stdout_with_poller`.
     }
 
+    #[cfg(unix)]
+    fn register_child_stderr_with_poller(
+        poller: &polling::Poller,
+        stderr: &std::process::ChildStderr,
+        id: ProcessId,
+    ) {
+        use std::os::unix::io::AsRawFd;
+        let fd = stderr.as_raw_fd();
+        unsafe {
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        }
+        let _ = Self::register_readable_raw_fd(poller, fd, id);
+    }
+
+    #[cfg(not(unix))]
+    fn register_child_stderr_with_poller(
+        _poller: &polling::Poller,
+        _stderr: &std::process::ChildStderr,
+        _id: ProcessId,
+    ) {
+        // See `register_child_stdout_with_poller`.
+    }
+
+    #[cfg(unix)]
+    fn unregister_child_stderr_from_poller(
+        poller: &polling::Poller,
+        stderr: &std::process::ChildStderr,
+    ) {
+        use std::os::unix::io::AsRawFd;
+        let fd = stderr.as_raw_fd();
+        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
+        let _ = poller.delete(&borrowed);
+    }
+
+    #[cfg(not(unix))]
+    fn unregister_child_stderr_from_poller(
+        _poller: &polling::Poller,
+        _stderr: &std::process::ChildStderr,
+    ) {
+        // See `register_child_stdout_with_poller`.
+    }
+
     fn unregister_process_poll_sources(poller: Option<&polling::Poller>, proc: &Process) {
         let Some(poller) = poller else {
             return;
@@ -1595,6 +1645,9 @@ impl ProcessManager {
 
         if let Some(stdout) = proc.child_stdout.as_ref() {
             Self::unregister_child_stdout_from_poller(poller, stdout);
+        }
+        if let Some(stderr) = proc.child_stderr.as_ref() {
+            Self::unregister_child_stderr_from_poller(poller, stderr);
         }
         if let Some(tls) = proc.tls_stream.as_ref() {
             let _ = poller.delete(tls.tcp_stream());
@@ -1857,6 +1910,14 @@ impl ProcessManager {
             return Ok(());
         }
 
+        // GNU's `create_process` :stderr path: a separate stderr pipe-process
+        // captures the child's stderr stream.  Its read end is parked in the
+        // stderr pipe-process's `child_stderr` slot after spawn; the main
+        // process keeps stdout on its own buffer.  When there is no stderr
+        // pipe-process the child's stderr is captured on the main process
+        // record (current behaviour — merged conceptually with stdout).
+        let stderr_pipe_id = process_value_to_id(&proc.stderrproc);
+
         let argv_os = argv
             .iter()
             .map(lisp_string_to_os_string)
@@ -1895,32 +1956,74 @@ impl ProcessManager {
             }
         }
 
-        match cmd.spawn() {
-            Ok(mut child) => {
-                let stdout = child.stdout.take();
+        let spawned = cmd.spawn();
+        // End the `proc` borrow before touching other process records (the
+        // stderr pipe-process) and the poller.
+        let _ = proc;
 
-                // Register stdout with the poller where the platform exposes
-                // child pipe descriptors as pollable sources.
-                if let (Some(poller), Some(stdout)) = (self.wait_backend.poller(), &stdout) {
-                    Self::register_child_stdout_with_poller(poller, stdout, id);
-                }
-
-                proc.child_stdout = stdout;
-                proc.child_stderr = child.stderr.take();
-                proc.child = Some(child);
-                proc.status = process_status_run_value();
-                // Pipe-mode processes don't have a real TTY.
-                proc.tty_name = Value::NIL;
-                proc.tty_stdin = false;
-                proc.tty_stdout = false;
-                proc.tty_stderr = false;
-                Ok(())
-            }
+        let mut child = match spawned {
+            Ok(child) => child,
             Err(e) => {
-                proc.status = process_status_exit_value(1);
-                Err(format!("Failed to start process: {}", e))
+                if let Some(proc) = self.processes.get_mut(&id) {
+                    proc.status = process_status_exit_value(1);
+                }
+                return Err(format!("Failed to start process: {}", e));
+            }
+        };
+
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
+        // Register stdout with the poller where the platform exposes child
+        // pipe descriptors as pollable sources.
+        if let (Some(poller), Some(stdout)) = (self.wait_backend.poller(), &stdout) {
+            Self::register_child_stdout_with_poller(poller, stdout, id);
+        }
+
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.child_stdout = stdout;
+            proc.child = Some(child);
+            proc.status = process_status_run_value();
+            // Pipe-mode processes don't have a real TTY.
+            proc.tty_name = Value::NIL;
+            proc.tty_stdin = false;
+            proc.tty_stdout = false;
+            proc.tty_stderr = false;
+        }
+
+        // Route the child's stderr.  With a separate stderr pipe-process
+        // (make-process :stderr), the read end goes to that process's record
+        // and is polled under its id, mirroring GNU's create_process which
+        // connects the child's stderr fd to the stderr pipe-process's
+        // READ_FROM_SUBPROCESS.  Otherwise it stays on the main process record.
+        let stderr_target = stderr_pipe_id.filter(|sid| {
+            *sid != id
+                && matches!(
+                    self.processes.get(sid).map(|p| p.kind),
+                    Some(ProcessKind::Pipe)
+                )
+        });
+        match stderr_target {
+            Some(stderr_id) => {
+                if let (Some(poller), Some(stderr)) = (self.wait_backend.poller(), &stderr) {
+                    Self::register_child_stderr_with_poller(poller, stderr, stderr_id);
+                }
+                if let Some(stderr_proc) = self.processes.get_mut(&stderr_id) {
+                    stderr_proc.child_stderr = stderr;
+                    stderr_proc.status = process_status_run_value();
+                }
+            }
+            None => {
+                // No separate stderr pipe-process: drop the child's stderr
+                // handle.  Parking it on the main (Real) process record would
+                // make it look like a stderr pipe-process and would also be
+                // surfaced as a readable source; neither is wanted here.  (GNU
+                // merges stderr into the same stdout pipe in this case; that
+                // pre-existing merge limitation is out of scope.)
+                drop(stderr);
             }
         }
+        Ok(())
     }
 
     /// PTY-based child spawn via `portable-pty`.
@@ -2119,6 +2222,38 @@ impl ProcessManager {
         read
     }
 
+    /// Read available output from a stderr pipe-process's child stderr fd.
+    ///
+    /// Mirrors GNU's `create_process` :stderr wiring: the stderr pipe-process
+    /// reads from the child's separate stderr pipe.  The read end lives in this
+    /// (the stderr pipe-process's) `child_stderr` slot.
+    fn read_child_stderr_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return ProcessOutputRead::NoSource;
+        };
+        let Some(stderr) = proc.child_stderr.as_mut() else {
+            return ProcessOutputRead::NoSource;
+        };
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = stderr.as_raw_fd();
+            unsafe {
+                let flags = libc::fcntl(fd, libc::F_GETFL);
+                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            }
+        }
+
+        let mut buf = vec![0u8; 4096];
+        let read =
+            ProcessOutputRead::from_io_result(stderr.read(&mut buf), &buf, proc.coding_decode);
+        if let ProcessOutputRead::Data(ref data) = read {
+            proc.stderr.push_str(&process_output_runtime_string(data));
+        }
+        read
+    }
+
     /// Read available output from a PTY master reader.
     /// Returns the data read (may be empty if nothing available).
     /// PTY combines stdout and stderr into a single stream.
@@ -2227,6 +2362,16 @@ impl ProcessManager {
             proc.tls_stream = None;
             proc.network_socket = None;
             proc.gnutls_initstage = GnutlsInitStage::Empty;
+        }
+    }
+
+    /// Tear down a stderr pipe-process's readable I/O once its source EOFs.
+    /// Removes the stderr fd from the poller and drops it so the descriptor is
+    /// closed and the process stops being polled.
+    fn deactivate_stderr_pipe_process_io(&mut self, id: ProcessId) {
+        if let Some(proc) = self.processes.get_mut(&id) {
+            Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
+            proc.child_stderr = None;
         }
     }
 
@@ -2376,6 +2521,13 @@ impl ProcessManager {
                     return true;
                 }
                 if p.network_socket.is_some() || p.tls_stream.is_some() {
+                    return true;
+                }
+                // A stderr pipe-process (make-process :stderr) has no child of
+                // its own; its readable source is the child's stderr fd parked
+                // in `child_stderr`.  It must be serviced so its output is
+                // drained and it reaches a terminal state on EOF.
+                if p.child_stderr.is_some() {
                     return true;
                 }
                 false
@@ -2680,6 +2832,7 @@ impl ProcessManager {
         match source {
             Some(ProcessOutputSource::Pty) => self.read_pty_output_result(id),
             Some(ProcessOutputSource::ChildStdout) => self.read_child_stdout_result(id),
+            Some(ProcessOutputSource::ChildStderr) => self.read_child_stderr_result(id),
             Some(ProcessOutputSource::Network) => self.read_network_output_result(id),
             None => ProcessOutputRead::NoSource,
         }
@@ -2954,6 +3107,19 @@ impl super::eval::Context {
                 .get(pid)
                 .map(|p| p.kind == ProcessKind::Network)
                 .unwrap_or(false);
+            // A stderr pipe-process drains the child's separate stderr fd; its
+            // readable source lives in `child_stderr` and it has no child of
+            // its own (it is a `ProcessKind::Pipe` created for `:stderr`).  On
+            // EOF it must reach a terminal state and run its sentinel, or
+            // `accept-process-output` would block forever waiting on it.  This
+            // must NOT match the main (Real) process, which owns the child.
+            let is_stderr_pipe = self
+                .processes
+                .get(pid)
+                .map(|p| {
+                    p.kind == ProcessKind::Pipe && p.child_stderr.is_some() && p.child.is_none()
+                })
+                .unwrap_or(false);
 
             match read_result {
                 ProcessOutputRead::Data(ref data) if !data.is_empty() => {
@@ -2965,6 +3131,29 @@ impl super::eval::Context {
                         .map(|p| p.filter)
                         .unwrap_or(Value::NIL);
                     self.run_process_filter_callback(pid, filter, data);
+                }
+                ProcessOutputRead::Eof if is_stderr_pipe => {
+                    outcome.record_activity(is_target);
+
+                    // Mirror GNU: when the child's stderr EOFs, the stderr
+                    // pipe-process finishes (exit status 0) and runs its
+                    // sentinel, which inserts "Process NAME stderr finished".
+                    self.processes.deactivate_stderr_pipe_process_io(pid);
+                    if let Some(proc) = self.processes.get_mut(pid) {
+                        proc.status = process_status_exit_value(0);
+                    }
+                    let sentinel = self
+                        .processes
+                        .get(pid)
+                        .map(|p| p.sentinel)
+                        .unwrap_or(Value::NIL);
+                    let exit_msg = self
+                        .processes
+                        .get(pid)
+                        .map(|p| gnu_process_status_message(p.status))
+                        .unwrap_or_else(|| "finished\n".to_string());
+                    self.run_process_sentinel_callback(pid, sentinel, &exit_msg);
+                    continue;
                 }
                 ProcessOutputRead::Eof if is_network => {
                     outcome.record_activity(is_target);
@@ -7721,8 +7910,14 @@ fn builtin_make_process_impl_with_environment(
     // Determine PTY vs pipe as GNU's `is_pty_from_symbol` does:
     // nil inherits `process-connection-type`; only `pipe` and `pty` are
     // accepted explicit symbols.
-    let use_pty =
+    let mut use_pty =
         resolve_process_connection_type_use_pty(connection_type.as_ref(), default_use_pty)?;
+    // GNU's create_process can only separate stderr when the child uses pipes
+    // (a PTY merges stdout and stderr).  When :stderr is given, force pipe mode
+    // for the main process so stderr can be routed to the stderr pipe-process.
+    if !stderr_target.is_nil() {
+        use_pty = false;
+    }
 
     let command = command.unwrap_or_default();
     let (program, argv) = if command.is_empty() {
