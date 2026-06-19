@@ -1,12 +1,13 @@
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
+    DisplayRowRenderBounds, DisplayRowSourceRenderRequest, DisplayRowSourceRequestPolicy,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
-use crate::display_row_source_append::{
-    DisplayRowSourceAppendRequest, DisplayRowSourceAppendRequestPolicy,
-};
+use crate::display_row_source_append::DisplayRowSourceAppendRequest;
 use crate::neovm_bridge::ResolvedFace;
+use crate::window_output::TextRowOutput;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendPlacement {
@@ -375,23 +376,45 @@ impl DisplayRowAppendFrame {
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowSourceAppendRequest<'face> {
-        let geometry = DisplayRowGeometry {
+        DisplayRowSourceAppendRequest::from_render_request(
+            self.source_render_request(position, face_id, base_face, kind),
+            self.text_row_output(kind),
+            position,
+        )
+    }
+
+    pub(crate) fn source_render_request<'face>(
+        &self,
+        position: DisplayRowPosition,
+        face_id: u32,
+        base_face: &'face ResolvedFace,
+        kind: DisplayRowAppendKind,
+    ) -> DisplayRowSourceRenderRequest<'face> {
+        DisplayRowSourceRequestPolicy::from_display_row_geometry(
+            self.source_render_geometry(kind),
+            GlyphRowRole::Text,
+        )
+        .source_request_for_base_face_id(face_id, base_face)
+        .with_render_bounds(DisplayRowRenderBounds {
+            start: position,
+            max_x: kind.max_x(self),
+        })
+    }
+
+    fn source_render_geometry(&self, kind: DisplayRowAppendKind) -> DisplayRowGeometry {
+        DisplayRowGeometry {
             char_width: kind.char_width(self),
             ..self.geometry.clone()
-        };
-        DisplayRowSourceAppendRequest::from_text_row_policy(
-            position,
-            face_id,
-            base_face,
-            DisplayRowSourceAppendRequestPolicy::new(
-                self.row,
-                self.geometry.y,
-                self.glyph_y,
-                kind.output_height(self),
-                geometry,
-                kind.max_x(self),
-            ),
-        )
+        }
+    }
+
+    fn text_row_output(&self, kind: DisplayRowAppendKind) -> TextRowOutput {
+        TextRowOutput {
+            row: self.row,
+            row_y: self.geometry.y,
+            glyph_y: self.glyph_y,
+            height: kind.output_height(self),
+        }
     }
 }
 

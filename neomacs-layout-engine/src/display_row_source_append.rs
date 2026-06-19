@@ -2,20 +2,20 @@ use crate::display_buffer_text_render::SyntheticTextSource;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 #[cfg(test)]
+use crate::display_row::DisplayRowGeometry;
+#[cfg(test)]
 use crate::display_row::DisplayRowRenderStop;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowCurrentTextMeasureState,
-    DisplayRowCurrentTextRenderState, DisplayRowGeometry, DisplayRowRenderBounds,
-    DisplayRowRenderPolicy, DisplayRowSourceRenderRequest, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState, DisplaySourceAppendRenderPolicy, NaturalDisplayRowAppendRenderPolicy,
-    measure_display_item_source_against_current_text_row,
+    DisplayRowCurrentTextRenderState, DisplayRowRenderBounds, DisplayRowRenderPolicy,
+    DisplayRowSourceRenderRequest, DisplayRowSourceState, DisplaySourceAppendRenderPolicy,
+    NaturalDisplayRowAppendRenderPolicy, measure_display_item_source_against_current_text_row,
     render_display_item_source_into_current_text_row_and_emit,
 };
 use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
-use crate::display_row_geometry::DisplayRowMaxX;
 use crate::display_row_source_render::{
     TextRowSourceMeasureState, TextRowSourceRenderState, current_text_measure_state,
     current_text_render_state,
@@ -23,37 +23,8 @@ use crate::display_row_source_render::{
 use crate::display_source::{DisplayItemOnceSource, DisplayItemSource};
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::TextRowOutput;
+#[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DisplayRowSourceAppendRequestPolicy {
-    matrix_row: usize,
-    row_y: f32,
-    glyph_y: f32,
-    output_height: f32,
-    geometry: DisplayRowGeometry,
-    max_x: DisplayRowMaxX,
-}
-
-impl DisplayRowSourceAppendRequestPolicy {
-    pub(crate) fn new(
-        matrix_row: usize,
-        row_y: f32,
-        glyph_y: f32,
-        output_height: f32,
-        geometry: DisplayRowGeometry,
-        max_x: DisplayRowMaxX,
-    ) -> Self {
-        Self {
-            matrix_row,
-            row_y,
-            glyph_y,
-            output_height,
-            geometry,
-            max_x,
-        }
-    }
-}
 
 pub(crate) struct DisplayRowSourceAppendRequest<'face> {
     request: DisplayRowSourceRenderRequest<'face>,
@@ -62,7 +33,7 @@ pub(crate) struct DisplayRowSourceAppendRequest<'face> {
 }
 
 impl<'face> DisplayRowSourceAppendRequest<'face> {
-    fn new(
+    pub(crate) fn from_render_request(
         request: DisplayRowSourceRenderRequest<'face>,
         output: TextRowOutput,
         start: DisplayRowPosition,
@@ -72,30 +43,6 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
             output,
             start,
         }
-    }
-
-    pub(crate) fn from_text_row_policy(
-        position: DisplayRowPosition,
-        base_face_id: u32,
-        base_face: &'face ResolvedFace,
-        policy: DisplayRowSourceAppendRequestPolicy,
-    ) -> Self {
-        let request = DisplayRowSourceRequestPolicy::from_display_row_geometry(
-            policy.geometry,
-            GlyphRowRole::Text,
-        )
-        .source_request_for_base_face_id(base_face_id, base_face)
-        .with_render_bounds(DisplayRowRenderBounds {
-            start: position,
-            max_x: policy.max_x,
-        });
-        let output = TextRowOutput {
-            row: policy.matrix_row,
-            row_y: policy.row_y,
-            glyph_y: policy.glyph_y,
-            height: policy.output_height,
-        };
-        Self::new(request, output, position)
     }
 
     pub(crate) fn start_position(&self) -> DisplayRowPosition {

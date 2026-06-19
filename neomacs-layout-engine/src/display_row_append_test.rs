@@ -4957,7 +4957,9 @@ fn display_row_append_frame_builds_positioned_source_request() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
-    assert_eq!(request.output().row, 3);
+    assert_eq!(request.role(), GlyphRowRole::Text);
+    assert_eq!(request.geometry().y, 20.0);
+    assert_eq!(request.geometry().char_width, 9.0);
 }
 
 #[test]
@@ -4986,7 +4988,7 @@ fn display_row_append_frame_builds_source_request_directly() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = resolver.default_face();
 
-    let request = frame.source_append_request(
+    let request = frame.source_render_request(
         DisplayRowPosition { x_px: 18.0, col: 2 },
         42,
         base_face,
@@ -4994,15 +4996,13 @@ fn display_row_append_frame_builds_source_request_directly() {
     );
 
     assert_eq!(
-        request.start_position(),
-        DisplayRowPosition { x_px: 18.0, col: 2 }
-    );
-    assert_eq!(
         request.render_bounds().max_x,
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
-    assert_eq!(request.output().row, 3);
+    assert_eq!(request.role(), GlyphRowRole::Text);
+    assert_eq!(request.geometry().y, 20.0);
+    assert_eq!(request.geometry().char_width, 9.0);
 }
 
 #[test]
