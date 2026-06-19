@@ -36,10 +36,11 @@ use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext}
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
     FrameChromeOutputSurface, FrameLineAnimationHintsRenderRequest, FrameOutputIdentity,
-    FrameOutputStateRenderRequest, FrameOutputSurface, FrameThemeTransitionHintRenderRequest,
-    FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
-    WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
-    WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
+    FrameOutputSession, FrameOutputStateRenderRequest, FrameOutputSurface, FrameOutputView,
+    FrameThemeTransitionHintRenderRequest, FrameTopologyTransitionHintRenderRequest,
+    FrameWindowSwitchHintRenderRequest, WindowFrameDecorationsRenderRequest,
+    WindowFrameGeometryRequest, WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest,
+    WindowFrameMetadata,
 };
 use crate::display_mock_frame::layout_mock_frame_content;
 use crate::display_origin::DisplayOrigin;
@@ -191,56 +192,36 @@ pub struct LayoutEngine {
 }
 
 impl LayoutEngine {
+    fn frame_output_session(&mut self) -> FrameOutputSession<'_, '_, '_> {
+        FrameOutputSession::new(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+            &mut self.pending_tab_bar,
+        )
+    }
+
     fn reset_frame_output_state(&mut self) {
-        self.matrix_builder.reset();
+        self.frame_output_session().reset();
         self.frame_face_id_counter = BasicFaceId::SENTINEL;
-        self.pending_frame_chrome_rows.clear();
-        self.pending_tab_bar = None;
     }
 
     fn frame_output_surface(&mut self) -> FrameOutputSurface<'_> {
-        FrameOutputSurface::from_builder(&mut self.matrix_builder)
+        self.frame_output_session().into_output_surface()
     }
 
     fn latest_output_window_info(&self, window_id: i64) -> Option<WindowInfo> {
-        self.matrix_builder
-            .window_infos()
-            .iter()
-            .rev()
-            .find(|info| info.window_id == window_id)
-            .cloned()
+        FrameOutputView::from_builder(&self.matrix_builder).latest_window_info(window_id)
     }
 
     fn latest_output_window_enabled_rows(&self) -> Option<usize> {
-        self.matrix_builder
-            .windows()
-            .last()
-            .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
+        FrameOutputView::from_builder(&self.matrix_builder).latest_window_enabled_rows()
     }
 
     fn finish_frame_output(
         &mut self,
         frame_params: &FrameParams,
     ) -> neomacs_display_protocol::glyph_matrix::FrameDisplayState {
-        let frame_cols = (frame_params.width / frame_params.char_width.max(1.0)) as usize;
-        let frame_rows = (frame_params.height / frame_params.char_height.max(1.0)) as usize;
-        let matrix_builder = std::mem::replace(
-            &mut self.matrix_builder,
-            crate::matrix_builder::GlyphMatrixBuilder::new(),
-        );
-        let mut frame_display_state = matrix_builder.finish_with_pixel_size(
-            frame_cols,
-            frame_rows,
-            frame_params.char_width,
-            frame_params.char_height,
-            frame_params.width,
-            frame_params.height,
-        );
-        frame_display_state
-            .frame_chrome_rows
-            .extend(std::mem::take(&mut self.pending_frame_chrome_rows));
-        frame_display_state.tab_bar = self.pending_tab_bar.take();
-        frame_display_state
+        self.frame_output_session().finish(frame_params)
     }
 
     fn render_window_output_decorations(
@@ -252,9 +233,15 @@ impl LayoutEngine {
         face_resolver: &super::neovm_bridge::FaceResolver,
     ) {
         let mut decoration_face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
+        let mut frame_output = FrameOutputSession::new(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+            &mut self.pending_tab_bar,
+        )
+        .into_output_surface();
         WindowFrameDecorationsRenderRequest::new(params, frame_params, window_geometry, info)
             .render_and_apply(
-                &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
+                &mut frame_output,
                 ChromeRowRenderServices::new(
                     &mut self.font_metrics,
                     face_resolver,
@@ -268,10 +255,14 @@ impl LayoutEngine {
         &mut self,
         curr_window_infos: &mut std::collections::HashMap<i64, WindowInfo>,
     ) {
-        WindowFrameInfoEffectsRenderRequest::new(&self.prev_window_infos).render_latest_and_apply(
-            &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
-            curr_window_infos,
-        );
+        let mut frame_output = FrameOutputSession::new(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+            &mut self.pending_tab_bar,
+        )
+        .into_output_surface();
+        WindowFrameInfoEffectsRenderRequest::new(&self.prev_window_infos)
+            .render_latest_and_apply(&mut frame_output, curr_window_infos);
     }
 
     fn render_frame_output_hints(
@@ -279,7 +270,12 @@ impl LayoutEngine {
         curr_window_infos: &std::collections::HashMap<i64, WindowInfo>,
         frame_params: &FrameParams,
     ) {
-        let mut frame_output = FrameOutputSurface::from_builder(&mut self.matrix_builder);
+        let mut frame_output = FrameOutputSession::new(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+            &mut self.pending_tab_bar,
+        )
+        .into_output_surface();
         FrameLineAnimationHintsRenderRequest::new(&self.prev_window_infos, curr_window_infos)
             .render_and_apply(&mut frame_output);
         FrameWindowSwitchHintRenderRequest::new(&mut self.prev_selected_window_id)

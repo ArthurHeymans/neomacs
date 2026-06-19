@@ -9,10 +9,12 @@ use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowArtifactOutputSurface;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
-    FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
-    WindowTransitionKind,
+    FrameGlyphBuffer, FrameTabBarState, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo,
+    WindowTransitionHint, WindowTransitionKind,
 };
-use neomacs_display_protocol::glyph_matrix::{CursorItem, FrameChromeRow, GlyphRow, ScrollBarItem};
+use neomacs_display_protocol::glyph_matrix::{
+    CursorItem, FrameChromeRow, FrameDisplayState, GlyphRow, ScrollBarItem,
+};
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::{HashMap, HashSet};
 
@@ -58,6 +60,16 @@ pub(crate) struct FrameOutputSurface<'a> {
 pub(crate) struct FrameChromeOutputSurface<'builder, 'rows> {
     builder: &'builder mut GlyphMatrixBuilder,
     pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
+}
+
+pub(crate) struct FrameOutputSession<'builder, 'chrome, 'tab> {
+    builder: &'builder mut GlyphMatrixBuilder,
+    pending_frame_chrome_rows: &'chrome mut Vec<FrameChromeRow>,
+    pending_tab_bar: &'tab mut Option<FrameTabBarState>,
+}
+
+pub(crate) struct FrameOutputView<'builder> {
+    builder: &'builder GlyphMatrixBuilder,
 }
 
 impl<'a> FrameOutputSurface<'a> {
@@ -193,6 +205,71 @@ impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
             self.pending_frame_chrome_rows,
         )
         .install_measured(measured);
+    }
+}
+
+impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
+    pub(crate) fn new(
+        builder: &'builder mut GlyphMatrixBuilder,
+        pending_frame_chrome_rows: &'chrome mut Vec<FrameChromeRow>,
+        pending_tab_bar: &'tab mut Option<FrameTabBarState>,
+    ) -> Self {
+        Self {
+            builder,
+            pending_frame_chrome_rows,
+            pending_tab_bar,
+        }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.builder.reset();
+        self.pending_frame_chrome_rows.clear();
+        *self.pending_tab_bar = None;
+    }
+
+    pub(crate) fn into_output_surface(self) -> FrameOutputSurface<'builder> {
+        FrameOutputSurface::from_builder(self.builder)
+    }
+
+    pub(crate) fn finish(self, frame_params: &FrameParams) -> FrameDisplayState {
+        let frame_cols = (frame_params.width / frame_params.char_width.max(1.0)) as usize;
+        let frame_rows = (frame_params.height / frame_params.char_height.max(1.0)) as usize;
+        let matrix_builder = std::mem::replace(self.builder, GlyphMatrixBuilder::new());
+        let mut frame_display_state = matrix_builder.finish_with_pixel_size(
+            frame_cols,
+            frame_rows,
+            frame_params.char_width,
+            frame_params.char_height,
+            frame_params.width,
+            frame_params.height,
+        );
+        frame_display_state
+            .frame_chrome_rows
+            .extend(std::mem::take(self.pending_frame_chrome_rows));
+        frame_display_state.tab_bar = self.pending_tab_bar.take();
+        frame_display_state
+    }
+}
+
+impl<'builder> FrameOutputView<'builder> {
+    pub(crate) fn from_builder(builder: &'builder GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn latest_window_info(&self, window_id: i64) -> Option<WindowInfo> {
+        self.builder
+            .window_infos()
+            .iter()
+            .rev()
+            .find(|info| info.window_id == window_id)
+            .cloned()
+    }
+
+    pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
+        self.builder
+            .windows()
+            .last()
+            .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
     }
 }
 
