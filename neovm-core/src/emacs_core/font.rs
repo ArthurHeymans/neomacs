@@ -4089,6 +4089,13 @@ fn normalize_face_attr_for_set_with_eval(
             }
         }
         ":box" => {
+            // GNU xfaces.c `internal-set-lisp-face-attribute` (QCbox arm):
+            // `t` means a simple box of width 1 in the face's foreground
+            // color and is canonicalized to the fixnum 1 *before* validation
+            // and storage, so `face-attribute` later reports 1, not t.
+            if normalized == Value::T {
+                normalized = Value::fixnum(1);
+            }
             if !is_reset_like && !valid_face_box_value(normalized) {
                 return Err(signal(
                     "error",
