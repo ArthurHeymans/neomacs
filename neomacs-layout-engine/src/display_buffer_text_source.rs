@@ -257,6 +257,13 @@ impl BufferTextSourcePosition {
         self.charpos
     }
 
+    pub(crate) const fn with_charpos(self, charpos: i64) -> Self {
+        Self {
+            byte_idx: self.byte_idx,
+            charpos,
+        }
+    }
+
     fn advance_byte_idx_to(&mut self, byte_idx: usize) {
         self.byte_idx = byte_idx;
     }

@@ -5606,15 +5606,17 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
                 context.text_start_byte + progress.source_position().byte_idx(),
             ))
             .get() as i64;
+        let mut synced_source_position = progress.source_position();
         let continuation = line_break_action.apply_after_line_break_row_transition(
             row_transition,
             synced_charpos,
-            progress.charpos,
+            &mut synced_source_position,
             hit_row_range,
             row_geometry,
             box_face,
             context.content_x,
         );
+        progress.apply_source_position(synced_source_position);
         if continuation.should_break() {
             return continuation;
         }
@@ -5714,7 +5716,7 @@ impl BufferTextLineBreakSourceAction {
         self,
         row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
         row_geometry: &DisplayRowGeometryState,
         box_face: &mut BoxFaceRowState,
@@ -5723,18 +5725,18 @@ impl BufferTextLineBreakSourceAction {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        Self::sync_after_row_transition(synced_charpos, charpos, hit_row_range);
+        Self::sync_after_row_transition(synced_charpos, position, hit_row_range);
         self.apply_after_row_transition(row_geometry, box_face, content_x);
         DisplayRowTransitionContinuation::Continue
     }
 
     pub(crate) fn sync_after_row_transition(
         synced_charpos: i64,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) {
-        *charpos = synced_charpos;
-        hit_row_range.advance_to(*charpos);
+        *position = position.with_charpos(synced_charpos);
+        hit_row_range.advance_to(position.charpos());
     }
 
     pub(crate) fn cursor_info(
@@ -7603,11 +7605,11 @@ impl BufferTextTruncationSkipAction {
 
     pub(crate) fn sync_after_row_transition(
         synced_charpos: i64,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) {
-        *charpos = synced_charpos;
-        hit_row_range.advance_to(*charpos);
+        *position = position.with_charpos(synced_charpos);
+        hit_row_range.advance_to(position.charpos());
     }
 
     pub(crate) fn transition_continuation(
@@ -7625,13 +7627,13 @@ impl BufferTextTruncationSkipAction {
         self,
         row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) -> DisplayRowTransitionContinuation {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        Self::sync_after_row_transition(synced_charpos, charpos, hit_row_range);
+        Self::sync_after_row_transition(synced_charpos, position, hit_row_range);
         DisplayRowTransitionContinuation::Continue
     }
 }
@@ -8011,8 +8013,9 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                         context.text,
                         &mut BufferTextSourcePosition::new(*byte_idx, *charpos),
                     );
-                *byte_idx = truncation_skip.source_position().byte_idx();
-                *charpos = truncation_skip.source_position().charpos();
+                let mut source_position = truncation_skip.source_position();
+                *byte_idx = source_position.byte_idx();
+                *charpos = source_position.charpos();
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,
@@ -8049,17 +8052,18 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 );
                 let synced_charpos = buffer
                     .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-                        context.text_start_byte + *byte_idx,
+                        context.text_start_byte + source_position.byte_idx(),
                     ))
                     .get() as i64;
-                BufferTextSpecialOverflowRenderOutcome::ContinueBufferWalk(
-                    truncation_skip.sync_after_row_transition_if_visible(
-                        row_transition,
-                        synced_charpos,
-                        charpos,
-                        hit_row_range,
-                    ),
-                )
+                let continuation = truncation_skip.sync_after_row_transition_if_visible(
+                    row_transition,
+                    synced_charpos,
+                    &mut source_position,
+                    hit_row_range,
+                );
+                *byte_idx = source_position.byte_idx();
+                *charpos = source_position.charpos();
+                BufferTextSpecialOverflowRenderOutcome::ContinueBufferWalk(continuation)
             }
             Some(BufferTextSpecialSourceCharOverflowAction::Wrap { transition }) => {
                 let special_wrap_action = BufferTextSpecialWrapSourceAction::new(*charpos);

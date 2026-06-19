@@ -2483,16 +2483,16 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
 
 #[test]
 fn buffer_text_line_break_source_action_syncs_after_transition() {
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     BufferTextLineBreakSourceAction::sync_after_row_transition(
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
     );
 
-    assert_eq!(charpos, 14);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
@@ -2509,13 +2509,13 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(geometry.current_row_marker(), 8.0);
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_line_break_row_transition(
         DisplayTextRowTransition::BeganNextRow,
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
         &geometry,
         &mut box_face,
@@ -2523,7 +2523,7 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(charpos, 14);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
     assert_eq!(box_face.row(), geometry.current_row_marker());
     assert_eq!(box_face.start_x(), Some(2.0));
@@ -2541,13 +2541,13 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
     let action = BufferTextLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
     let mut box_face = BoxFaceRowState::inactive();
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_line_break_row_transition(
         DisplayTextRowTransition::ExhaustedRows,
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
         &geometry,
         &mut box_face,
@@ -2555,7 +2555,7 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
-    assert_eq!(charpos, 9);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 9));
     assert_eq!(hit_row_range.start(), 3);
     assert_eq!(box_face.start_x(), None);
 }
@@ -2920,12 +2920,16 @@ fn buffer_text_truncation_skip_action_applies_transition_state() {
 
 #[test]
 fn buffer_text_truncation_skip_action_syncs_after_transition() {
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
-    BufferTextTruncationSkipAction::sync_after_row_transition(14, &mut charpos, &mut hit_row_range);
+    BufferTextTruncationSkipAction::sync_after_row_transition(
+        14,
+        &mut position,
+        &mut hit_row_range,
+    );
 
-    assert_eq!(charpos, 14);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
@@ -2954,18 +2958,18 @@ fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
         reached_line_break: true,
         source_position: BufferTextSourcePosition::new(0, 12),
     };
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     let continuation = action.sync_after_row_transition_if_visible(
         DisplayTextRowTransition::BeganNextRow,
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(charpos, 14);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
@@ -2976,18 +2980,18 @@ fn buffer_text_truncation_skip_action_skips_sync_when_transition_exhausted() {
         reached_line_break: true,
         source_position: BufferTextSourcePosition::new(0, 12),
     };
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     let continuation = action.sync_after_row_transition_if_visible(
         DisplayTextRowTransition::ExhaustedRows,
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
-    assert_eq!(charpos, 9);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 9));
     assert_eq!(hit_row_range.start(), 2);
 }
 
