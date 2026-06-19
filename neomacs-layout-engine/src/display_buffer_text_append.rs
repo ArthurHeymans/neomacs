@@ -344,6 +344,19 @@ impl<'a> BufferTextWindowBeginState<'a> {
     pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder, evaluator: &'a mut Context) -> Self {
         Self { builder, evaluator }
     }
+
+    fn begin_update(&mut self, output_emitter: &mut WindowOutputEmitter) {
+        output_emitter.begin_update(self.evaluator);
+    }
+
+    fn begin_text_window_output(
+        &mut self,
+        output_emitter: &mut WindowOutputEmitter,
+        begin: TextWindowBegin,
+    ) {
+        TextWindowOutputRenderState::new(self.builder, output_emitter)
+            .begin_text_window_output(self.evaluator, begin);
+    }
 }
 
 impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
@@ -393,6 +406,28 @@ impl<'a> BufferTextWindowFinishState<'a> {
             hit_rows,
         }
     }
+
+    fn close_text_window_output(&mut self) {
+        TextWindowOutputRenderState::new(self.builder, &mut self.output_emitter)
+            .close_text_window_output();
+    }
+
+    fn finish_snapshot(
+        self,
+        text_area_left_offset: i64,
+        mode_line_height: i64,
+        header_line_height: i64,
+        tab_line_height: i64,
+    ) -> (Vec<HitRow>, WindowDisplaySnapshot) {
+        let snapshot = self.output_emitter.finish_snapshot(
+            self.evaluator,
+            text_area_left_offset,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        );
+        (self.hit_rows, snapshot)
+    }
 }
 
 impl BufferTextWindowBeginRequest {
@@ -431,6 +466,7 @@ impl BufferTextWindowBeginRequest {
         self,
         state: BufferTextWindowBeginState<'_>,
     ) -> WindowOutputEmitter {
+        let mut state = state;
         let mut output_emitter = WindowOutputEmitter::new(
             self.frame_id,
             self.window_id,
@@ -438,20 +474,19 @@ impl BufferTextWindowBeginRequest {
             self.text_area_left,
             self.window_top,
         );
-        output_emitter.begin_update(state.evaluator);
-        TextWindowOutputRenderState::new(state.builder, &mut output_emitter)
-            .begin_text_window_output(
-                state.evaluator,
-                TextWindowBegin {
-                    window_id: self.matrix_window_id,
-                    rows: self.matrix_rows,
-                    cols: self.matrix_cols,
-                    bounds: self.bounds,
-                    text_bounds: self.text_bounds,
-                    selected: self.selected,
-                    first_row: self.first_row,
-                },
-            );
+        state.begin_update(&mut output_emitter);
+        state.begin_text_window_output(
+            &mut output_emitter,
+            TextWindowBegin {
+                window_id: self.matrix_window_id,
+                rows: self.matrix_rows,
+                cols: self.matrix_cols,
+                bounds: self.bounds,
+                text_bounds: self.text_bounds,
+                selected: self.selected,
+                first_row: self.first_row,
+            },
+        );
         output_emitter
     }
 
@@ -707,26 +742,20 @@ impl BufferTextWindowFinishRequest {
         self,
         state: BufferTextWindowFinishState<'_>,
     ) -> BufferTextWindowFinishOutput {
-        let BufferTextWindowFinishState {
-            builder,
-            mut output_emitter,
-            evaluator,
-            hit_rows,
-        } = state;
-        TextWindowOutputRenderState::new(builder, &mut output_emitter).close_text_window_output();
+        let mut state = state;
+        state.close_text_window_output();
+        let (hit_rows, snapshot) = state.finish_snapshot(
+            self.text_area_left_offset,
+            self.mode_line_height,
+            self.header_line_height,
+            self.tab_line_height,
+        );
         let hit_data = WindowHitData {
             window_id: self.window_id,
             content_x: self.content_x,
             char_w: self.char_w,
             rows: hit_rows,
         };
-        let snapshot = output_emitter.finish_snapshot(
-            evaluator,
-            self.text_area_left_offset,
-            self.mode_line_height,
-            self.header_line_height,
-            self.tab_line_height,
-        );
 
         BufferTextWindowFinishOutput { hit_data, snapshot }
     }
