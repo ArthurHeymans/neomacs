@@ -11,7 +11,6 @@ use crate::display_property::{
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
-use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, text_props::TextPropertyTable,
 };
@@ -817,19 +816,6 @@ impl BufferDisplayReplacementSource {
         }
     }
 
-    pub(crate) fn for_source_event(
-        buffer_id: BufferId,
-        source_event: BufferDisplayPropertyTextSourceEvent<'_>,
-    ) -> Self {
-        Self::spanning(
-            buffer_id,
-            source_event.anchor_charpos(),
-            source_event.anchor_bytepos(),
-            source_event.covered_end_charpos(),
-            source_event.covered_end_bytepos(),
-        )
-    }
-
     pub(crate) fn buffer_id(self) -> BufferId {
         self.buffer_id
     }
@@ -1500,9 +1486,11 @@ impl DisplayPropertyReplacementSourceInputs {
 }
 
 impl DisplayPropertyReplacementSourceItem {
-    pub(crate) fn from_display_property(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_display_property_parts(
         display_property: &DisplayPropertyClassification,
-        source_event: BufferDisplayPropertyTextSourceEvent<'_>,
+        value: Value,
+        anchor_charpos: CharPos0,
         current_x: f32,
         content_x: f32,
         params: &WindowParams,
@@ -1512,8 +1500,8 @@ impl DisplayPropertyReplacementSourceItem {
         match display_property.replacement()? {
             DisplayReplacementProperty::String => {
                 DisplayReplacementStringSourceItem::display_property_string(
-                    source_event.value(),
-                    source_event.anchor_charpos(),
+                    value,
+                    anchor_charpos,
                     DisplayPropertySource::TextProperty,
                     1,
                     inputs.string_cursor_slot_width_px?,
@@ -1522,7 +1510,7 @@ impl DisplayPropertyReplacementSourceItem {
             }
             DisplayReplacementProperty::Stretch(_) => Some(Self::Stretch(
                 DisplayReplacementStretchSourceItem::from_display_space_spec(
-                    &source_event.value(),
+                    &value,
                     current_x,
                     content_x,
                     metrics.char_width,
@@ -1586,90 +1574,6 @@ impl BufferDisplayReplacementStringRequest {
     #[cfg(test)]
     pub(crate) fn value(self) -> Value {
         self.value
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct BufferDisplayPropertyTextSourceEvent<'a> {
-    value: Value,
-    anchor_charpos: CharPos0,
-    anchor_bytepos: EmacsBytePos,
-    source_text: &'a [u8],
-    skip_to: i64,
-}
-
-impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        value: Value,
-        text_start_byte: usize,
-        text: &'a [u8],
-        charpos: i64,
-        byte_idx: usize,
-        skip_to: i64,
-    ) -> Self {
-        Self {
-            value,
-            anchor_charpos: CharPos0::new(charpos.max(0) as usize),
-            anchor_bytepos: EmacsBytePos::new(text_start_byte + byte_idx),
-            source_text: text.get(byte_idx..).unwrap_or(&[]),
-            skip_to,
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_anchor(
-        value: Value,
-        anchor_charpos: CharPos0,
-        anchor_bytepos: EmacsBytePos,
-        source_text: &'a [u8],
-        skip_to: i64,
-    ) -> Self {
-        Self {
-            value,
-            anchor_charpos,
-            anchor_bytepos,
-            source_text,
-            skip_to,
-        }
-    }
-
-    pub(crate) fn value(self) -> Value {
-        self.value
-    }
-
-    pub(crate) fn anchor_charpos(self) -> CharPos0 {
-        self.anchor_charpos
-    }
-
-    pub(crate) fn anchor_bytepos(self) -> EmacsBytePos {
-        self.anchor_bytepos
-    }
-
-    pub(crate) fn source_text(self) -> &'a [u8] {
-        self.source_text
-    }
-
-    pub(crate) fn covered_end_charpos(self) -> CharPos0 {
-        CharPos0::new(self.skip_to.max(self.anchor_charpos.get() as i64) as usize)
-    }
-
-    pub(crate) fn covered_end_bytepos(self) -> EmacsBytePos {
-        let covered_chars = self
-            .skip_to
-            .saturating_sub(self.anchor_charpos.get() as i64) as usize;
-        let mut byte_len = 0usize;
-        for _ in 0..covered_chars {
-            if byte_len >= self.source_text.len() {
-                break;
-            }
-            let (_, len) = decode_utf8(&self.source_text[byte_len..]);
-            if len == 0 {
-                break;
-            }
-            byte_len += len;
-        }
-        EmacsBytePos::new(self.anchor_bytepos.get().saturating_add(byte_len))
     }
 }
 

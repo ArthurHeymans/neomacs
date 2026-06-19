@@ -2520,7 +2520,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             replacement,
             self.loop_context.text_start_byte(),
             text,
-            self.loop_context.buffer_id(),
             self.loop_context.content_x(),
             params,
             0.0,
@@ -5825,7 +5824,6 @@ pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest<'a> {
     replacement: BufferTextReplacementItem,
     text_start_byte: usize,
     text: &'a [u8],
-    buffer_id: BufferId,
     content_x: f32,
     params: &'a WindowParams,
     glyph_y_offset: f32,
@@ -5878,7 +5876,6 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
         replacement: BufferTextReplacementItem,
         text_start_byte: usize,
         text: &'a [u8],
-        buffer_id: BufferId,
         content_x: f32,
         params: &'a WindowParams,
         glyph_y_offset: f32,
@@ -5890,7 +5887,6 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
             replacement,
             text_start_byte,
             text,
-            buffer_id,
             content_x,
             params,
             glyph_y_offset,
@@ -5905,9 +5901,9 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
         buffer: &B,
         mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
     ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
-        let Some(source_event) = self
+        let Some(source_text) = self
             .replacement
-            .source_event(self.text_start_byte, self.text)
+            .source_text(self.text_start_byte, self.text)
         else {
             return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
         };
@@ -5916,10 +5912,12 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
             state
                 .source_render
                 .with_font_metrics_and_display_host(|font_metrics, host| {
-                    DisplayPropertyReplacementAppendRequestResolver::for_source_event(
+                    DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
                         &display_property,
-                        self.buffer_id,
-                        source_event,
+                        self.replacement.replacement_source(),
+                        self.replacement.value(),
+                        self.replacement.start_charpos0(),
+                        source_text,
                         self.active_face_state,
                         *state.x,
                         self.content_x,

@@ -4,11 +4,10 @@ use crate::display_item::{
 };
 use crate::display_property::classify_display_property;
 use crate::display_source::{
-    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource, BufferTextSourceChar,
-    BufferTextSourceRange, DisplayItemSource, DisplayPropertySourceCursorAction,
-    DisplaySourceContext, LispStringSourceStack, TextSourceCharClassification,
-    classify_text_source_char, display_item_kind_for_text_source_char,
-    display_property_source_action,
+    BufferDisplayReplacementSource, BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
+    DisplayPropertySourceCursorAction, DisplaySourceContext, LispStringSourceStack,
+    TextSourceCharClassification, classify_text_source_char,
+    display_item_kind_for_text_source_char, display_property_source_action,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::{WindowKind, WindowParams};
@@ -355,39 +354,40 @@ impl BufferTextReplacementItem {
         }
     }
 
-    pub(crate) fn value(self) -> Value {
+    pub(crate) fn value(&self) -> Value {
         self.value
     }
 
-    pub(crate) fn start_byte_idx(self, text_start_byte: usize) -> Option<usize> {
+    pub(crate) fn replacement_source(&self) -> BufferDisplayReplacementSource {
+        self.replacement_source
+    }
+
+    pub(crate) fn start_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
         self.start_byte_pos.get().checked_sub(text_start_byte)
     }
 
-    pub(crate) fn start_charpos(self) -> i64 {
+    pub(crate) fn start_charpos(&self) -> i64 {
         self.start_charpos.get() as i64
     }
 
-    pub(crate) fn end_charpos(self) -> i64 {
+    pub(crate) fn start_charpos0(&self) -> CharPos0 {
+        self.start_charpos
+    }
+
+    pub(crate) fn end_charpos(&self) -> i64 {
         self.end_charpos.get() as i64
     }
 
-    pub(crate) fn source_event<'a>(
-        self,
+    pub(crate) fn source_text<'a>(
+        &self,
         text_start_byte: usize,
         text: &'a [u8],
-    ) -> Option<BufferDisplayPropertyTextSourceEvent<'a>> {
-        Some(BufferDisplayPropertyTextSourceEvent::new(
-            self.value,
-            text_start_byte,
-            text,
-            self.start_charpos(),
-            self.start_byte_idx(text_start_byte)?,
-            self.end_charpos(),
-        ))
+    ) -> Option<&'a [u8]> {
+        Some(text.get(self.start_byte_idx(text_start_byte)?..)?)
     }
 
     pub(crate) fn fallback_source_item(
-        self,
+        &self,
         text_start_byte: usize,
         text: &[u8],
         face: RenderFaceRef,

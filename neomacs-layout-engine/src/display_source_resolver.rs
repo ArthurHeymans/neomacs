@@ -11,10 +11,10 @@ use crate::display_row::DisplayRowActiveFaceState;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_replacement::DisplayPropertyReplacementAppendRequest;
 use crate::display_source::{
-    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource,
-    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
-    DisplayPropertyReplacementSourceMetrics, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    BufferDisplayReplacementSource, DisplayPropertyReplacementSourceInputs,
+    DisplayPropertyReplacementSourceItem, DisplayPropertyReplacementSourceMetrics,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem,
 };
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::font_metrics::FontMetricsService;
@@ -22,7 +22,7 @@ use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::BasicFaceId;
-use neovm_core::buffer::BufferId;
+use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::HashMap;
@@ -353,7 +353,9 @@ impl DisplayReplacementMediaSourceItem {
 
 pub(crate) struct DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     display_property: &'a DisplayPropertyClassification,
-    source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+    replacement_value: Value,
+    anchor_charpos: CharPos0,
+    source_text: &'source [u8],
     active_face_state: &'a DisplayRowActiveFaceState,
     font_metrics: &'a mut Option<FontMetricsService>,
     current_x: f32,
@@ -364,9 +366,11 @@ pub(crate) struct DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
 
 impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub(crate) fn from_typed_replacement(
         display_property: &'a DisplayPropertyClassification,
-        source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+        replacement_value: Value,
+        anchor_charpos: CharPos0,
+        source_text: &'source [u8],
         active_face_state: &'a DisplayRowActiveFaceState,
         font_metrics: &'a mut Option<FontMetricsService>,
         current_x: f32,
@@ -376,7 +380,9 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     ) -> Self {
         Self {
             display_property,
-            source_event,
+            replacement_value,
+            anchor_charpos,
+            source_text,
             active_face_state,
             font_metrics,
             current_x,
@@ -392,7 +398,9 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
 
     pub(crate) fn resolve(self) -> Option<DisplayPropertyReplacementSourceItem> {
         let display_property = self.display_property;
-        let source_event = self.source_event;
+        let replacement_value = self.replacement_value;
+        let anchor_charpos = self.anchor_charpos;
+        let source_text = self.source_text;
         let face_metrics = self.face_metrics();
         let source_metrics = DisplayPropertyReplacementSourceMetrics::new(
             face_metrics.char_width,
@@ -401,7 +409,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         );
         let source_inputs = match display_property.replacement()? {
             DisplayReplacementProperty::String => {
-                let replacement = source_event.value().as_utf8_str()?;
+                let replacement = replacement_value.as_utf8_str()?;
                 let cursor_slot_width_px = replacement
                     .chars()
                     .next()
@@ -417,7 +425,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                     .with_string_cursor_slot_width_px(cursor_slot_width_px)
             }
             DisplayReplacementProperty::Stretch(_) => {
-                let (display_ch, _) = decode_utf8(source_event.source_text());
+                let (display_ch, _) = decode_utf8(source_text);
                 let display_char_width = self.active_face_state.advance_for_char(
                     self.font_metrics,
                     display_ch,
@@ -428,7 +436,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
             }
             DisplayReplacementProperty::Media(media_replacement) => {
                 let media = DisplayReplacementMediaSourceItem::resolve_display_property(
-                    source_event.value(),
+                    replacement_value,
                     media_replacement,
                     self.display_host,
                     self.active_face_state,
@@ -438,9 +446,10 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                 DisplayPropertyReplacementSourceInputs::empty().with_media(media)
             }
         };
-        DisplayPropertyReplacementSourceItem::from_display_property(
+        DisplayPropertyReplacementSourceItem::from_display_property_parts(
             display_property,
-            source_event,
+            replacement_value,
+            anchor_charpos,
             self.current_x,
             self.content_x,
             self.params,
@@ -452,8 +461,10 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
 
 pub(crate) struct DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
     display_property: &'a DisplayPropertyClassification,
-    buffer_id: BufferId,
-    source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+    replacement_source: BufferDisplayReplacementSource,
+    replacement_value: Value,
+    anchor_charpos: CharPos0,
+    source_text: &'source [u8],
     active_face_state: &'a DisplayRowActiveFaceState,
     current_x: f32,
     content_x: f32,
@@ -465,10 +476,12 @@ pub(crate) struct DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
 
 impl<'a, 'source> DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn for_source_event(
+    pub(crate) fn for_typed_replacement(
         display_property: &'a DisplayPropertyClassification,
-        buffer_id: BufferId,
-        source_event: BufferDisplayPropertyTextSourceEvent<'source>,
+        replacement_source: BufferDisplayReplacementSource,
+        replacement_value: Value,
+        anchor_charpos: CharPos0,
+        source_text: &'source [u8],
         active_face_state: &'a DisplayRowActiveFaceState,
         current_x: f32,
         content_x: f32,
@@ -479,8 +492,10 @@ impl<'a, 'source> DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
     ) -> Self {
         Self {
             display_property,
-            buffer_id,
-            source_event,
+            replacement_source,
+            replacement_value,
+            anchor_charpos,
+            source_text,
             active_face_state,
             current_x,
             content_x,
@@ -496,11 +511,11 @@ impl<'a, 'source> DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
         font_metrics: &mut Option<FontMetricsService>,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<DisplayPropertyReplacementAppendRequest> {
-        let replacement_source =
-            BufferDisplayReplacementSource::for_source_event(self.buffer_id, self.source_event);
-        let item = DisplayPropertyReplacementSourceResolveRequest::new(
+        let item = DisplayPropertyReplacementSourceResolveRequest::from_typed_replacement(
             self.display_property,
-            self.source_event,
+            self.replacement_value,
+            self.anchor_charpos,
+            self.source_text,
             self.active_face_state,
             font_metrics,
             self.current_x,
@@ -510,7 +525,7 @@ impl<'a, 'source> DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
         )
         .resolve()?;
         Some(DisplayPropertyReplacementAppendRequest::new(
-            replacement_source,
+            self.replacement_source,
             item,
             self.glyph_y_offset,
             self.default_row_height,

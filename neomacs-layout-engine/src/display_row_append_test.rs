@@ -63,14 +63,13 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::*;
 use crate::display_source::{
-    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementStringRequest,
-    BufferTextSourceAdvanceRequest, BufferTextSourceSpecialDisplay,
-    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementAppendItem, DisplayReplacementBox, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
-    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem,
+    BufferDisplayReplacementStringRequest, BufferTextSourceAdvanceRequest,
+    BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementAppendItem, DisplayReplacementBox,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
+    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_source_resolver::{
     DisplayPropertyReplacementAppendRequestResolver, DisplayPropertyReplacementSourceResolveRequest,
@@ -8502,15 +8501,11 @@ fn test_display_property_replacement_resolve_context<'a>(
     font_metrics: &'a mut Option<FontMetricsService>,
     params: &'a WindowParams,
 ) -> DisplayPropertyReplacementSourceResolveRequest<'a, 'static> {
-    DisplayPropertyReplacementSourceResolveRequest::new(
+    DisplayPropertyReplacementSourceResolveRequest::from_typed_replacement(
         classification,
-        BufferDisplayPropertyTextSourceEvent::with_anchor(
-            value,
-            CharPos0::new(4),
-            EmacsBytePos::new(4),
-            b"x",
-            0,
-        ),
+        value,
+        CharPos0::new(4),
+        b"x",
         active_face,
         font_metrics,
         0.0,
@@ -8734,16 +8729,18 @@ fn display_property_replacement_append_resolve_request_builds_append_request() {
     let value = Value::string("ab");
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
-    let request = DisplayPropertyReplacementAppendRequestResolver::for_source_event(
+    let request = DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
         &classification,
-        buf_id,
-        BufferDisplayPropertyTextSourceEvent::with_anchor(
-            value,
+        BufferDisplayReplacementSource::spanning(
+            buf_id,
             CharPos0::new(3),
             EmacsBytePos::new(12),
-            b"x",
-            0,
+            CharPos0::new(4),
+            EmacsBytePos::new(13),
         ),
+        value,
+        CharPos0::new(3),
+        b"x",
         &active_face,
         24.0,
         8.0,
@@ -8905,16 +8902,18 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let classification = classify_display_property(value);
     let params = test_display_space_window_params();
 
-    let request = DisplayPropertyReplacementAppendRequestResolver::for_source_event(
+    let request = DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
         &classification,
-        buf_id,
-        BufferDisplayPropertyTextSourceEvent::with_anchor(
-            value,
+        BufferDisplayReplacementSource::spanning(
+            buf_id,
             CharPos0::new(3),
             EmacsBytePos::new(12),
-            b"x",
-            0,
+            CharPos0::new(4),
+            EmacsBytePos::new(13),
         ),
+        value,
+        CharPos0::new(3),
+        b"x",
         &active_face,
         24.0,
         8.0,
