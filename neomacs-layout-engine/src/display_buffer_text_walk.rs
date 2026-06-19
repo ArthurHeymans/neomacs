@@ -53,6 +53,7 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::DisplaySourceContext;
+use crate::display_source_resolver::{DisplaySourcePropertyResolver, DisplaySourceResolveState};
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
@@ -1078,7 +1079,7 @@ impl BufferTextWindowWalkSetup {
             CharPos0::new(usize::MAX),
             RenderFaceRef::Inherit,
         );
-        let mut source_context = DisplaySourceContext::empty();
+        let mut source_resolve_state = DisplaySourceResolveState::default();
         let mut item_stepper = BufferTextSourceItemStepper::new(loop_context.text_start_byte());
 
         BufferTextWindowLoopRenderState::new(
@@ -1107,7 +1108,7 @@ impl BufferTextWindowWalkSetup {
         )
         .render_visible_steps(
             &mut source_cursor,
-            &mut source_context,
+            &mut source_resolve_state,
             &mut item_stepper,
             row_prelude_context,
             loop_context,
@@ -2716,7 +2717,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'request, B>,
-        source_context: &mut DisplaySourceContext<'_>,
+        source_resolve_state: &mut DisplaySourceResolveState,
         item_stepper: &mut BufferTextSourceItemStepper,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
@@ -2736,7 +2737,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             if matches!(
                 self.render_next_step(
                     source_cursor,
-                    source_context,
+                    source_resolve_state,
                     item_stepper,
                     row_prelude_context,
                     loop_context,
@@ -2758,7 +2759,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_next_step<'request, B: LayoutBufferView>(
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'request, B>,
-        source_context: &mut DisplaySourceContext<'_>,
+        source_resolve_state: &mut DisplaySourceResolveState,
         item_stepper: &mut BufferTextSourceItemStepper,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         loop_context: BufferTextWindowLoopRequestContext,
@@ -2790,9 +2791,13 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             }
         }
 
-        let Some(consumed_source) =
-            self.consume_source_item(source_cursor, source_context, item_stepper)
-        else {
+        let Some(consumed_source) = self.consume_source_item(
+            source_cursor,
+            source_resolve_state,
+            item_stepper,
+            face_resolution_context,
+            active_face_state,
+        ) else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
@@ -3051,8 +3056,10 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn consume_source_item<B: LayoutBufferView>(
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'_, B>,
-        source_context: &mut DisplaySourceContext<'_>,
+        source_resolve_state: &mut DisplaySourceResolveState,
         item_stepper: &mut BufferTextSourceItemStepper,
+        face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
+        _active_face_state: &DisplayRowActiveFaceState,
     ) -> Option<BufferTextConsumedSourceItem> {
         if let Some(step) = item_stepper.next_pending_item_step(self.byte_idx, *self.charpos) {
             return Some(BufferTextConsumedSourceItem::PendingStep(step));
@@ -3060,9 +3067,32 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         // One persistent typed source cursor feeds the row walk. Fetching the
         // typed item is deliberately separate from pending-run splitting so
         // direct single-character items can stay typed through render.
-        item_stepper
-            .next_item_from_source(source_cursor, source_context, *self.byte_idx, *self.charpos)
-            .map(BufferTextConsumedSourceItem::SourceItem)
+        let mut pending_faces = Vec::new();
+        let source_item = {
+            let params = face_resolution_context.source_resolve_params(None);
+            let mut resolver = DisplaySourcePropertyResolver::new(
+                params,
+                source_resolve_state,
+                self.face_ids,
+                &mut pending_faces,
+            );
+            let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
+            item_stepper.next_item_from_source(
+                source_cursor,
+                &mut source_context,
+                *self.byte_idx,
+                *self.charpos,
+            )
+        };
+        {
+            let mut source_render = self.source_render.reborrow();
+            face_resolution_context.install_pending_source_faces(
+                &mut source_render,
+                self.row_geometry,
+                pending_faces,
+            );
+        }
+        source_item.map(BufferTextConsumedSourceItem::SourceItem)
     }
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(

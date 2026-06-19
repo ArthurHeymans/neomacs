@@ -48,7 +48,10 @@ use crate::display_row_walk_state::{
     WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{BufferDisplayPropertyTextSourceEvent, SyntheticTextItemSource};
-use crate::display_source_resolver::DisplayPropertyReplacementAppendRequestResolver;
+use crate::display_source_resolver::{
+    DisplayPropertyReplacementAppendRequestResolver, DisplaySourceFaceBasis,
+    DisplaySourceFallbackMetrics, DisplaySourceResolveParams, PendingDisplaySourceFace,
+};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustTextPropAccess};
 use crate::types::{LineWrapMode, WindowParams};
@@ -58,6 +61,7 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::value::string_has_text_properties_for_value;
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
@@ -2397,6 +2401,50 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
             char_h: self.char_h,
             font_ascent: self.font_ascent,
             window_system: self.window_system,
+        }
+    }
+
+    pub(crate) fn source_resolve_params(
+        self,
+        display_host: Option<&'a dyn DisplayHost>,
+    ) -> DisplaySourceResolveParams<'a> {
+        DisplaySourceResolveParams::new(
+            DisplaySourceFaceBasis::new(
+                self.face_resolver,
+                u32::from(BasicFaceId::Default),
+                self.default_resolved,
+                DisplaySourceFallbackMetrics::new(
+                    self.default_face_char_w,
+                    self.default_face_ascent,
+                    self.default_face_h,
+                ),
+            ),
+            display_host,
+        )
+    }
+
+    pub(crate) fn install_pending_source_faces(
+        self,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        row_geometry: &mut DisplayRowGeometryState,
+        pending_faces: Vec<PendingDisplaySourceFace>,
+    ) {
+        let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
+            self.char_w,
+            self.char_h,
+            self.font_ascent,
+        );
+        for pending in pending_faces {
+            let active_face = source_render.resolve_and_install_measured_face(
+                self.measurement_policy,
+                pending.face_id,
+                pending.resolved,
+                self.window_system,
+                self.char_w,
+                fallback_metrics,
+            );
+            let metrics = active_face.metrics();
+            row_geometry.include_row_extents(metrics.row_height, metrics.ascent);
         }
     }
 
