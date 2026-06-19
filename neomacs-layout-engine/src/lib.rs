@@ -22,7 +22,6 @@ pub(crate) mod display_face_id;
 pub(crate) mod display_face_layout;
 pub(crate) mod display_face_policy;
 pub(crate) mod display_frame_output;
-pub(crate) mod display_frame_output_install;
 pub(crate) mod display_item;
 pub mod display_iterator;
 pub(crate) mod display_media;

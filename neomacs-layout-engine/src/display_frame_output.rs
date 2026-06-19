@@ -1,5 +1,4 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
-use crate::display_frame_output_install::{FrameOutputInstallSurface, FrameOutputReadSurface};
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::MeasuredDisplayRow;
 use crate::display_row_output_install::install_measured_frame_chrome_display_row;
@@ -143,19 +142,30 @@ impl<'a> FrameOutputSurface<'a> {
     }
 
     pub(crate) fn set_frame_identity(&mut self, identity: FrameOutputIdentity) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).set_frame_identity(identity);
+        self.builder.set_output_frame_identity(
+            identity.frame_id,
+            identity.parent_id,
+            identity.parent_x,
+            identity.parent_y,
+            identity.z_order,
+            identity.undecorated,
+            identity.border_width,
+            identity.border_color,
+            identity.background_alpha,
+            identity.no_accept_focus,
+        );
     }
 
     pub(crate) fn set_background_color(&mut self, color: Color) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).set_background_color(color);
+        self.builder.set_output_background_color(color);
     }
 
     fn set_font_pixel_size(&mut self, size: f32) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).set_font_pixel_size(size);
+        self.builder.set_output_font_pixel_size(size);
     }
 
     pub(crate) fn install_face(&mut self, face: &Face) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).install_face(face);
+        self.builder.install_output_face(face.id, face.clone());
     }
 
     fn install_resolved_face(
@@ -164,8 +174,8 @@ impl<'a> FrameOutputSurface<'a> {
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
     ) {
-        FrameOutputInstallSurface::from_output_builder(self.builder)
-            .install_resolved_face(face_id, face, metrics);
+        self.builder
+            .install_output_resolved_display_row_face(face_id, face, metrics);
     }
 
     fn install_terminal_right_border(
@@ -173,24 +183,26 @@ impl<'a> FrameOutputSurface<'a> {
         request: BufferTextWindowTerminalRightBorderRequest,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
-        FrameOutputInstallSurface::from_output_builder(self.builder)
-            .install_terminal_right_border(request, render_services)
+        request.install_and_apply(
+            &mut TextWindowArtifactOutputSurface::from_output_builder(self.builder),
+            render_services,
+        )
     }
 
     fn add_background(&mut self, bounds: Rect, color: Color) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).add_background(bounds, color);
+        self.builder.add_output_background(bounds, color);
     }
 
     fn add_window_info(&mut self, info: WindowInfo) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).add_window_info(info);
+        self.builder.add_output_window_info(info);
     }
 
     fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).add_transition_hint(hint);
+        self.builder.add_output_transition_hint(hint);
     }
 
     fn add_effect_hint(&mut self, hint: WindowEffectHint) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).add_effect_hint(hint);
+        self.builder.add_output_effect_hint(hint);
     }
 
     fn add_border(
@@ -202,32 +214,32 @@ impl<'a> FrameOutputSurface<'a> {
         height: f32,
         color: Color,
     ) {
-        FrameOutputInstallSurface::from_output_builder(self.builder)
-            .add_border(window_id, x, y, width, height, color);
+        self.builder
+            .add_output_border(window_id, x, y, width, height, color);
     }
 
     fn add_scroll_bar(&mut self, item: ScrollBarItem) {
-        FrameOutputInstallSurface::from_output_builder(self.builder).add_scroll_bar(item);
+        self.builder.add_output_scroll_bar(item);
     }
 
     fn window_infos(&self) -> &[WindowInfo] {
-        FrameOutputReadSurface::from_output_builder(self.builder).window_infos()
+        self.builder.window_infos()
     }
 
     fn transition_hints(&self) -> &[WindowTransitionHint] {
-        FrameOutputReadSurface::from_output_builder(self.builder).transition_hints()
+        self.builder.transition_hints()
     }
 
     fn background_color(&self) -> Color {
-        FrameOutputReadSurface::from_output_builder(self.builder).background_color()
+        *self.builder.background_color()
     }
 
     fn phys_cursor(&self) -> Option<&PhysCursor> {
-        FrameOutputReadSurface::from_output_builder(self.builder).phys_cursor()
+        self.builder.phys_cursor()
     }
 
     fn cursors(&self) -> &[CursorItem] {
-        FrameOutputReadSurface::from_output_builder(self.builder).cursors()
+        self.builder.cursors()
     }
 }
 
@@ -344,11 +356,19 @@ impl<'builder> FrameOutputView<'builder> {
     }
 
     pub(crate) fn latest_window_info(&self, window_id: i64) -> Option<WindowInfo> {
-        FrameOutputReadSurface::from_output_builder(self.builder).latest_window_info(window_id)
+        self.builder
+            .window_infos()
+            .iter()
+            .rev()
+            .find(|info| info.window_id == window_id)
+            .cloned()
     }
 
     pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
-        FrameOutputReadSurface::from_output_builder(self.builder).latest_window_enabled_rows()
+        self.builder
+            .windows()
+            .last()
+            .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
     }
 }
 
