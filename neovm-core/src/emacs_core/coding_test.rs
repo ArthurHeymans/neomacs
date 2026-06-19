@@ -2361,3 +2361,67 @@ fn priority_list_keeps_chinese_iso_8bit_and_big5_after_charset_front() {
     assert_eq!(m.priority.len(), 20, "list must still have 20 entries");
     assert_eq!(names[0], "iso-latin-1", "fronted charset system first");
 }
+
+// ===========================================================================
+// `coding-category-list`: all 21 detection categories in priority order, like
+// GNU's `Vcoding_category_list`.  Verifies the value the dispatcher writes.
+// ===========================================================================
+
+#[test]
+fn coding_category_priority_list_has_all_21_categories_in_order() {
+    crate::test_utils::init_test_tracing();
+    // NOTE: this exercises `coding_category_priority_list` on a *fresh*
+    // `CodingSystemManager`, where the iso-2022/utf-16 systems are not yet
+    // fully specified (their full :coding-type specs come from
+    // `define-coding-system-internal` during loadup), so some entries resolve
+    // to other categories than the booted runtime.  We therefore assert only
+    // the structural invariants that hold regardless: the result always covers
+    // all 21 categories exactly once, including the unbound `coding-category-ccl`
+    // and the now-distinct `iso-8-2`/`big5` categories.  The exact GNU order is
+    // verified end-to-end against the booted binary's `coding-category-list`.
+    let m = mgr();
+    let cats: Vec<&str> = coding_category_priority_list(&m)
+        .iter()
+        .map(|&s| resolve_sym(s))
+        .collect();
+    assert_eq!(cats.len(), 21, "expected 21 categories, got {cats:?}");
+    assert!(cats.contains(&"coding-category-ccl"), "ccl must be present");
+    assert!(
+        cats.contains(&"coding-category-iso-8-2"),
+        "iso-8-2 (chinese-iso-8bit) present"
+    );
+    assert!(
+        cats.contains(&"coding-category-big5"),
+        "big5 (chinese-big5) present"
+    );
+    // No duplicates: every category appears exactly once.
+    let mut sorted = cats.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted.len(), 21, "categories must be unique: {cats:?}");
+}
+
+// Verifies the unbound-category insertion against the exact booted post-
+// `reset-language-environment` category order (the 20 bound categories in
+// priority order, by `enum coding_category` index), and that it reproduces
+// GNU's `coding-category-list` byte-for-byte (ccl lands before undecided).
+#[test]
+fn insert_unbound_categories_matches_gnu_booted_order() {
+    // Indices for the booted priority order: utf-8(7) iso-7(0) charset(14)
+    // iso-7-else(4) iso-8-else(5) emacs-mule(18) raw-text(19) iso-7-tight(1)
+    // iso-8-1(2) iso-8-2(3) utf-8-auto(6) utf-8-sig(8) utf-16-auto(9)
+    // utf-16-be(10) utf-16-le(11) utf-16-be-nosig(12) utf-16-le-nosig(13)
+    // sjis(15) big5(16) undecided(20).  Only ccl(17) is unbound/missing.
+    let mut order = vec![
+        7, 0, 14, 4, 5, 18, 19, 1, 2, 3, 6, 8, 9, 10, 11, 12, 13, 15, 16, 20,
+    ];
+    insert_unbound_categories(&mut order);
+    // GNU inserts ccl(17) between big5(16) and undecided(20).
+    assert_eq!(
+        order,
+        vec![
+            7, 0, 14, 4, 5, 18, 19, 1, 2, 3, 6, 8, 9, 10, 11, 12, 13, 15, 16, 17, 20
+        ],
+        "ccl must be inserted just before undecided, matching GNU"
+    );
+}

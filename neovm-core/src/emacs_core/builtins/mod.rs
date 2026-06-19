@@ -848,7 +848,13 @@ fn defsubr_set_coding_system_priority(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    super::coding::builtin_set_coding_system_priority(&mut eval.coding_systems, args)
+    let result = super::coding::builtin_set_coding_system_priority(&mut eval.coding_systems, args)?;
+    // GNU `Fset_coding_system_priority` also rebuilds the `coding-category-list`
+    // variable (coding.c) from the reordered category priorities.
+    let categories = super::coding::coding_category_priority_list(&eval.coding_systems);
+    let list = Value::list(categories.into_iter().map(Value::symbol).collect());
+    eval.set_variable("coding-category-list", list);
+    Ok(result)
 }
 fn defsubr_set_keyboard_coding_system_internal(
     eval: &mut super::eval::Context,

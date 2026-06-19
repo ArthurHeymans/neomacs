@@ -2589,6 +2589,78 @@ fn coding_cat_index(category: &str) -> Option<usize> {
     })
 }
 
+/// Map a category enum index back to its category symbol name (inverse of
+/// `coding_cat_index`).  Used to build `coding-category-list`.
+fn coding_cat_name(cat: usize) -> Option<&'static str> {
+    Some(match cat {
+        x if x == CodingCat::Iso7 as usize => "coding-category-iso-7",
+        x if x == CodingCat::Iso7Tight as usize => "coding-category-iso-7-tight",
+        x if x == CodingCat::Iso81 as usize => "coding-category-iso-8-1",
+        x if x == CodingCat::Iso82 as usize => "coding-category-iso-8-2",
+        x if x == CodingCat::Iso7Else as usize => "coding-category-iso-7-else",
+        x if x == CodingCat::Iso8Else as usize => "coding-category-iso-8-else",
+        x if x == CodingCat::Utf8Auto as usize => "coding-category-utf-8-auto",
+        x if x == CodingCat::Utf8Nosig as usize => "coding-category-utf-8",
+        x if x == CodingCat::Utf8Sig as usize => "coding-category-utf-8-sig",
+        x if x == CodingCat::Utf16Auto as usize => "coding-category-utf-16-auto",
+        x if x == CodingCat::Utf16Be as usize => "coding-category-utf-16-be",
+        x if x == CodingCat::Utf16Le as usize => "coding-category-utf-16-le",
+        x if x == CodingCat::Utf16BeNosig as usize => "coding-category-utf-16-be-nosig",
+        x if x == CodingCat::Utf16LeNosig as usize => "coding-category-utf-16-le-nosig",
+        x if x == CodingCat::Charset as usize => "coding-category-charset",
+        x if x == CodingCat::Sjis as usize => "coding-category-sjis",
+        x if x == CodingCat::Big5 as usize => "coding-category-big5",
+        x if x == CodingCat::Ccl as usize => "coding-category-ccl",
+        x if x == CodingCat::EmacsMule as usize => "coding-category-emacs-mule",
+        x if x == CodingCat::RawText as usize => "coding-category-raw-text",
+        x if x == CodingCat::Undecided as usize => "coding-category-undecided",
+        _ => return None,
+    })
+}
+
+/// Build the value of the `coding-category-list` variable: all detection
+/// categories (one per `enum coding_category`) ordered by the current
+/// detection priority, mirroring GNU's `Vcoding_category_list`
+/// (coding.c `Fset_coding_system_priority`).  The priority list stores coding
+/// systems; we map each to its category (first occurrence wins) and append any
+/// categories not represented, in enum order, so the result always covers all
+/// `CODING_CAT_MAX` categories like GNU's fixed-size `coding_priorities` array.
+pub(crate) fn coding_category_priority_list(mgr: &CodingSystemManager) -> Vec<SymId> {
+    let mut order: Vec<usize> = Vec::with_capacity(CODING_CAT_MAX);
+    for &sym in &mgr.priority {
+        if let Some(cat) = coding_category_of(mgr, resolve_sym(sym)).and_then(coding_cat_index) {
+            if !order.contains(&cat) {
+                order.push(cat);
+            }
+        }
+    }
+    insert_unbound_categories(&mut order);
+    order
+        .into_iter()
+        .filter_map(|cat| coding_cat_name(cat).map(intern))
+        .collect()
+}
+
+/// Insert every detection category missing from `order` (those with no bound
+/// coding system, e.g. `coding-category-ccl`) so that `order` covers all
+/// `CODING_CAT_MAX` categories.  GNU's fixed-size `coding_priorities` array
+/// always carries every category (Fset_coding_system_priority); categories not
+/// fronted by `set-coding-system-priority` keep their prior — i.e. `enum
+/// coding_category` — order, forming an ascending run at the tail.  Insert each
+/// missing category into that ascending tail just after the last entry with a
+/// smaller enum index (scanning from the right so the fronted, non-ascending
+/// prefix never captures it).  For the lone unbound `ccl` (index 17) this
+/// yields GNU's tail `... big5 ccl undecided`.
+fn insert_unbound_categories(order: &mut Vec<usize>) {
+    for cat in 0..CODING_CAT_MAX {
+        if order.contains(&cat) {
+            continue;
+        }
+        let pos = order.iter().rposition(|&c| c < cat).map_or(0, |i| i + 1);
+        order.insert(pos, cat);
+    }
+}
+
 // Category bit-mask helpers (coding.c:504).
 const fn cat_mask(c: CodingCat) -> u32 {
     1 << (c as u32)
