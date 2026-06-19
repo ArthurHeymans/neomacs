@@ -1268,7 +1268,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
-        begin_request.begin_and_apply(TextWindowBeginOutputSurface::new(
+        begin_request.begin_and_apply(TextWindowBeginOutputSurface::from_builder(
             self.builder,
             self.evaluator,
         ))
@@ -1279,7 +1279,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
-            TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::new(
+            TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::from_builder(
                 self.builder,
                 output_emitter,
                 self.evaluator,
@@ -1643,7 +1643,7 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
     ) -> TextWindowRedisplayPositions {
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
-                output: TextWindowLiveOutputSurface::new(
+                output: TextWindowLiveOutputSurface::from_builder(
                     self.builder,
                     output_emitter,
                     self.evaluator,
@@ -1660,7 +1660,7 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         output_emitter: &mut WindowOutputEmitter,
         request: WindowChromeRowsRenderRequest<'_, '_>,
     ) {
-        TextWindowLiveOutputSurface::new(self.builder, output_emitter, self.evaluator)
+        TextWindowLiveOutputSurface::from_builder(self.builder, output_emitter, self.evaluator)
             .render_chrome_rows(request, self.render_services.reborrow());
     }
 }

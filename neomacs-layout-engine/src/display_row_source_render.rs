@@ -384,7 +384,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         output_emitter: &'a mut WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
-        Self::from_live_output(TextWindowLiveOutputSurface::new(
+        Self::from_live_output(TextWindowLiveOutputSurface::from_builder(
             builder,
             output_emitter,
             evaluator,

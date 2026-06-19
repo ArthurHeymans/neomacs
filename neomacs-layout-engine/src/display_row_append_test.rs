@@ -6680,8 +6680,8 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
-    crate::window_output::TextMatrixRowOutput::new(&mut builder, &mut output_emitter, &mut eval)
-        .begin(crate::window_output::TextMatrixRowBegin {
+    TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
+        .begin_text_row(crate::window_output::TextMatrixRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -6690,16 +6690,12 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         });
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
-    crate::window_output::TextWindowRowLifecycleInstaller::new(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-    )
-    .finish_row(crate::window_output::TextMatrixRowMetrics {
-        y: 2.0,
-        height: 20.0,
-        ascent: 15.0,
-    });
+    TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
+        .finish_text_row(crate::window_output::TextMatrixRowMetrics {
+            y: 2.0,
+            height: 20.0,
+            ascent: 15.0,
+        });
 
     let mut row_flags = DisplayRowFlags::new(1);
     row_flags.mark(0, DisplayRowFlagKind::Truncated);
@@ -6722,7 +6718,11 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             char_w: 8.0,
         })
         .install_and_apply(BufferTextWindowBodyInstallState::new(
-            &mut TextWindowLiveOutputSurface::new(&mut builder, &mut output_emitter, &mut eval),
+            &mut TextWindowLiveOutputSurface::from_builder(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+            ),
             crate::display_status_line::ChromeRowRenderServices::new(
                 &mut font_metrics,
                 &face_resolver,
@@ -6783,19 +6783,18 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             x: 18.0,
         },
     )
-    .begin_and_apply(TextWindowBeginOutputSurface::new(&mut builder, &mut eval));
+    .begin_and_apply(TextWindowBeginOutputSurface::from_builder(
+        &mut builder,
+        &mut eval,
+    ));
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
-    crate::window_output::TextWindowRowLifecycleInstaller::new(
-        &mut builder,
-        &mut output_emitter,
-        &mut eval,
-    )
-    .finish_row(crate::window_output::TextMatrixRowMetrics {
-        y: 9.0,
-        height: 17.0,
-        ascent: 12.0,
-    });
+    TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
+        .finish_text_row(crate::window_output::TextMatrixRowMetrics {
+            y: 9.0,
+            height: 17.0,
+            ascent: 12.0,
+        });
     crate::window_output::TextWindowMatrixOutputSurface::from_builder(&mut builder)
         .close_text_window_output();
 

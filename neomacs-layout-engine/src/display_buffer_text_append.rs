@@ -376,7 +376,7 @@ impl<'a> BufferTextWindowFinishState<'a> {
         hit_rows: Vec<HitRow>,
     ) -> Self {
         Self {
-            output: TextWindowFinishOutputSurface::new(builder, output_emitter, evaluator),
+            output: TextWindowFinishOutputSurface::from_builder(builder, output_emitter, evaluator),
             hit_rows,
         }
     }
