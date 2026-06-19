@@ -79,15 +79,13 @@ use crate::display_status_line::{
 };
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{
     FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess, RustTextPropAccess,
 };
 use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
-    TextWindowFinishOutputSurface, TextWindowLiveOutputSurface, TextWindowMatrixOutputSurface,
+    TextMatrixRowTransition, TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
     TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
@@ -348,7 +346,7 @@ struct BufferTextWindowBodyPassState<'emit> {
 }
 
 struct BufferTextWindowOutputSurface<'emit> {
-    builder: &'emit mut GlyphMatrixBuilder,
+    output: FrameTextWindowOutputSurface<'emit>,
     evaluator: &'emit mut Context,
 }
 
@@ -1263,23 +1261,27 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
 }
 
 impl<'emit> BufferTextWindowOutputSurface<'emit> {
-    fn from_parts(builder: &'emit mut GlyphMatrixBuilder, evaluator: &'emit mut Context) -> Self {
-        Self { builder, evaluator }
+    fn from_parts(
+        output: FrameTextWindowOutputSurface<'emit>,
+        evaluator: &'emit mut Context,
+    ) -> Self {
+        Self { output, evaluator }
     }
 
     fn reborrow(&mut self) -> BufferTextWindowOutputSurface<'_> {
         BufferTextWindowOutputSurface {
-            builder: self.builder,
+            output: self.output.reborrow(),
             evaluator: self.evaluator,
         }
     }
 
     fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
-        TextWindowMatrixOutputSurface::from_builder(self.builder).capture_retry_checkpoint()
+        self.output.matrix_surface().capture_retry_checkpoint()
     }
 
     fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        TextWindowMatrixOutputSurface::from_builder(self.builder)
+        self.output
+            .matrix_surface()
             .restore_retry_checkpoint(checkpoint);
     }
 
@@ -1289,19 +1291,14 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
 
     fn install_cursor_effects(&mut self, params: &WindowParams) -> bool {
         BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
-            .install_and_apply(&mut TextWindowArtifactOutputSurface::from_builder(
-                self.builder,
-            ))
+            .install_and_apply(&mut self.output.artifact_surface())
     }
 
     fn begin_text_window_output(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
-        begin_request.begin_and_apply(TextWindowBeginOutputSurface::from_builder(
-            self.builder,
-            self.evaluator,
-        ))
+        begin_request.begin_and_apply(self.output.begin_surface(self.evaluator))
     }
 
     fn source_render_state<'output>(
@@ -1311,11 +1308,9 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
         face_resolver: &'output FaceResolver,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
-            TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::from_builder(
-                self.builder,
-                output_emitter,
-                self.evaluator,
-            )),
+            TextRowOutputRenderState::from_live_output(
+                self.output.live_surface(output_emitter, self.evaluator),
+            ),
             font_metrics,
             face_resolver,
         )
@@ -1325,14 +1320,14 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
         &'output mut self,
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> TextWindowLiveOutputSurface<'output> {
-        TextWindowLiveOutputSurface::from_builder(self.builder, output_emitter, self.evaluator)
+        self.output.live_surface(output_emitter, self.evaluator)
     }
 
     fn into_finish_output_surface(
         self,
         output_emitter: WindowOutputEmitter,
     ) -> TextWindowFinishOutputSurface<'emit> {
-        TextWindowFinishOutputSurface::from_builder(self.builder, output_emitter, self.evaluator)
+        self.output.finish_surface(output_emitter, self.evaluator)
     }
 }
 
@@ -1387,7 +1382,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptSurface<'a, 'face> {
     ) -> Self {
         Self {
             state: BufferTextWindowRenderAttemptState::new(
-                BufferTextWindowOutputSurface::from_parts(output.into_builder(), evaluator),
+                BufferTextWindowOutputSurface::from_parts(output, evaluator),
                 font_metrics,
                 face_resolver,
                 frame_face_id_counter,

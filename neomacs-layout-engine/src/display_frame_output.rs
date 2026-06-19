@@ -6,7 +6,10 @@ use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
-use crate::window_output::TextWindowArtifactOutputSurface;
+use crate::window_output::{
+    TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface, TextWindowFinishOutputSurface,
+    TextWindowLiveOutputSurface, TextWindowMatrixOutputSurface, WindowOutputEmitter,
+};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, FrameTabBarState, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo,
@@ -16,6 +19,7 @@ use neomacs_display_protocol::glyph_matrix::{
     CursorItem, FrameChromeRow, FrameDisplayState, GlyphRow, ScrollBarItem,
 };
 use neomacs_display_protocol::types::{Color, Rect};
+use neovm_core::emacs_core::Context;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -252,8 +256,41 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
         Self { builder }
     }
 
-    pub(crate) fn into_builder(self) -> &'builder mut GlyphMatrixBuilder {
-        self.builder
+    pub(crate) fn reborrow(&mut self) -> FrameTextWindowOutputSurface<'_> {
+        FrameTextWindowOutputSurface {
+            builder: self.builder,
+        }
+    }
+
+    pub(crate) fn matrix_surface(&mut self) -> TextWindowMatrixOutputSurface<'_> {
+        TextWindowMatrixOutputSurface::from_builder(self.builder)
+    }
+
+    pub(crate) fn artifact_surface(&mut self) -> TextWindowArtifactOutputSurface<'_> {
+        TextWindowArtifactOutputSurface::from_builder(self.builder)
+    }
+
+    pub(crate) fn begin_surface<'a>(
+        &'a mut self,
+        evaluator: &'a mut Context,
+    ) -> TextWindowBeginOutputSurface<'a> {
+        TextWindowBeginOutputSurface::from_builder(self.builder, evaluator)
+    }
+
+    pub(crate) fn live_surface<'a>(
+        &'a mut self,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+    ) -> TextWindowLiveOutputSurface<'a> {
+        TextWindowLiveOutputSurface::from_builder(self.builder, output_emitter, evaluator)
+    }
+
+    pub(crate) fn finish_surface(
+        self,
+        output_emitter: WindowOutputEmitter,
+        evaluator: &'builder mut Context,
+    ) -> TextWindowFinishOutputSurface<'builder> {
+        TextWindowFinishOutputSurface::from_builder(self.builder, output_emitter, evaluator)
     }
 }
 
