@@ -1981,20 +1981,59 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
 }
 
 pub(crate) struct DisplayRowCurrentTextRenderState<'face, 'emit> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    builder: &'emit mut GlyphMatrixBuilder,
+    output_emitter: &'emit mut WindowOutputEmitter,
+    evaluator: &'emit mut Context,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 pub(crate) struct DisplayRowCurrentTextMeasureState<'face, 'emit> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        output_emitter: &'emit mut WindowOutputEmitter,
+        evaluator: &'emit mut Context,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+        }
+    }
+}
+
+impl<'face, 'emit> DisplayRowCurrentTextMeasureState<'face, 'emit> {
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        evaluator: &'emit mut Context,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+        }
+    }
 }
 
 impl<'a> DisplayRowSourceRenderRequest<'a> {
@@ -3223,11 +3262,29 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
 }
 
 pub(crate) struct DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'face FaceResolver,
-    pub(crate) display_host: Option<&'emit dyn DisplayHost>,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    builder: &'emit mut GlyphMatrixBuilder,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'face FaceResolver,
+    display_host: Option<&'emit dyn DisplayHost>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        display_host: Option<&'emit dyn DisplayHost>,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            builder,
+            font_metrics,
+            face_resolver,
+            display_host,
+            face_ids,
+        }
+    }
 }
 
 impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {

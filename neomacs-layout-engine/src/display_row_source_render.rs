@@ -301,13 +301,13 @@ impl<'a> TextRowSourceRenderState<'a> {
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         request.render_natural_fragment_into_current_row(
-            &mut DisplayRowCurrentSourceFragmentRenderState {
-                builder: self.output_render.builder,
-                font_metrics: self.font_metrics,
-                face_resolver: self.face_resolver,
-                display_host: self.output_render.evaluator.display_host.as_deref(),
+            &mut DisplayRowCurrentSourceFragmentRenderState::new(
+                self.output_render.builder,
+                self.font_metrics,
+                self.face_resolver,
+                self.output_render.evaluator.display_host.as_deref(),
                 face_ids,
-            },
+            ),
             source,
             source_state,
         )
@@ -388,14 +388,14 @@ fn current_text_render_state<'emit>(
 ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
     let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
         state.reborrow().into_parts();
-    DisplayRowCurrentTextRenderState {
+    DisplayRowCurrentTextRenderState::new(
         builder,
         output_emitter,
         evaluator,
         font_metrics,
         face_resolver,
         face_ids,
-    }
+    )
 }
 
 pub(crate) struct TextRowSourceMeasureState<'a> {
@@ -480,11 +480,11 @@ fn current_text_measure_state<'emit>(
     face_ids: &'emit mut FrameFaceIdAllocator,
 ) -> DisplayRowCurrentTextMeasureState<'emit, 'emit> {
     let (builder, evaluator, font_metrics, face_resolver) = state.reborrow().into_parts();
-    DisplayRowCurrentTextMeasureState {
+    DisplayRowCurrentTextMeasureState::new(
         builder,
         evaluator,
         font_metrics,
         face_resolver,
         face_ids,
-    }
+    )
 }
