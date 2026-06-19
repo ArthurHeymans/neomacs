@@ -932,7 +932,7 @@ impl LayoutEngine {
         )
         .render_into(
             BufferTextWindowRenderAttemptSurface::new(
-                self.frame_output.text_window_surface(),
+                self.frame_output.text_window_output_builder(),
                 evaluator,
                 &mut self.font_metrics,
                 face_resolver,

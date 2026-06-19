@@ -1,6 +1,4 @@
-use crate::display_buffer_text_append::{
-    BufferTextWindowCursorEffectsRequest, BufferTextWindowTerminalRightBorderRequest,
-};
+use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::MeasuredDisplayRow;
 use crate::display_row_output_install::install_measured_frame_chrome_display_row;
@@ -8,10 +6,6 @@ use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
-use crate::window_output::{
-    TextWindowOutputRetryCheckpoint, capture_text_window_retry_checkpoint,
-    restore_text_window_retry_checkpoint,
-};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, FrameTabBarState, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo,
@@ -62,10 +56,6 @@ pub(crate) struct FrameOutputSurface<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
 
-pub(crate) struct FrameTextWindowOutputSurface<'builder> {
-    builder: &'builder mut DisplayOutputBuilder,
-}
-
 pub(crate) struct FrameChromeOutputSurface<'builder, 'rows> {
     builder: &'builder mut DisplayOutputBuilder,
     pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
@@ -108,8 +98,8 @@ impl FrameOutputOwner {
         FrameOutputSurface::from_output_builder(&mut self.builder)
     }
 
-    pub(crate) fn text_window_surface(&mut self) -> FrameTextWindowOutputSurface<'_> {
-        FrameTextWindowOutputSurface::from_output_builder(&mut self.builder)
+    pub(crate) fn text_window_output_builder(&mut self) -> &mut DisplayOutputBuilder {
+        &mut self.builder
     }
 
     pub(crate) fn chrome_surface(&mut self) -> FrameChromeOutputSurface<'_, '_> {
@@ -237,41 +227,6 @@ impl<'a> FrameOutputSurface<'a> {
 
     fn cursors(&self) -> &[CursorItem] {
         self.builder.cursors()
-    }
-}
-
-impl<'builder> FrameTextWindowOutputSurface<'builder> {
-    fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    pub(crate) fn reborrow(&mut self) -> FrameTextWindowOutputSurface<'_> {
-        FrameTextWindowOutputSurface {
-            builder: self.builder,
-        }
-    }
-
-    pub(crate) fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
-        capture_text_window_retry_checkpoint(self.builder)
-    }
-
-    pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        restore_text_window_retry_checkpoint(self.builder, checkpoint);
-    }
-
-    pub(crate) fn install_cursor_effects(
-        &mut self,
-        request: BufferTextWindowCursorEffectsRequest,
-    ) -> bool {
-        request.install_and_apply(self.builder)
-    }
-
-    pub(crate) fn output_builder(&mut self) -> &mut DisplayOutputBuilder {
-        self.builder
-    }
-
-    pub(crate) fn into_output_builder(self) -> &'builder mut DisplayOutputBuilder {
-        self.builder
     }
 }
 
