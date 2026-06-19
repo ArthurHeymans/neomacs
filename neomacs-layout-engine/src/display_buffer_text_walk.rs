@@ -391,11 +391,54 @@ pub(crate) struct BufferTextWindowRenderedBodyChromeState<'emit, 'face> {
 }
 
 pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
-    pub(crate) hit_data: &'emit mut Vec<WindowHitData>,
-    pub(crate) display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
+    hit_data: &'emit mut Vec<WindowHitData>,
+    display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
+}
+
+impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        evaluator: &'emit mut Context,
+        render_services: ChromeRowRenderServices<'emit, 'face>,
+        hit_data: &'emit mut Vec<WindowHitData>,
+        display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
+    ) -> Self {
+        Self {
+            builder,
+            evaluator,
+            render_services,
+            hit_data,
+            display_snapshots,
+        }
+    }
+
+    fn install_publish_state(&mut self) -> BufferTextWindowRenderedBodyInstallPublishState<'_, '_> {
+        BufferTextWindowRenderedBodyInstallPublishState {
+            builder: &mut *self.builder,
+            evaluator: &mut *self.evaluator,
+            render_services: self.render_services.reborrow(),
+        }
+    }
+
+    fn chrome_state(&mut self) -> BufferTextWindowRenderedBodyChromeState<'_, '_> {
+        BufferTextWindowRenderedBodyChromeState {
+            builder: &mut *self.builder,
+            evaluator: &mut *self.evaluator,
+            render_services: self.render_services.reborrow(),
+        }
+    }
+
+    fn finish_state(self) -> BufferTextWindowRenderedBodyFinishState<'emit> {
+        BufferTextWindowRenderedBodyFinishState {
+            builder: self.builder,
+            evaluator: self.evaluator,
+            hit_data: self.hit_data,
+            display_snapshots: self.display_snapshots,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1291,31 +1334,10 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
         mut state: BufferTextWindowRenderedBodyCompleteState<'_, '_>,
     ) -> TextWindowRedisplayPositions {
-        let redisplay_positions = self.install_body_and_publish_redisplay(
-            walk_setup,
-            BufferTextWindowRenderedBodyInstallPublishState {
-                builder: &mut *state.builder,
-                evaluator: &mut *state.evaluator,
-                render_services: state.render_services.reborrow(),
-            },
-        );
-        self.render_chrome_rows(
-            chrome_request,
-            BufferTextWindowRenderedBodyChromeState {
-                builder: &mut *state.builder,
-                evaluator: &mut *state.evaluator,
-                render_services: state.render_services,
-            },
-        );
-        self.finish_window_and_install(
-            walk_setup,
-            BufferTextWindowRenderedBodyFinishState {
-                builder: state.builder,
-                evaluator: state.evaluator,
-                hit_data: state.hit_data,
-                display_snapshots: state.display_snapshots,
-            },
-        );
+        let redisplay_positions =
+            self.install_body_and_publish_redisplay(walk_setup, state.install_publish_state());
+        self.render_chrome_rows(chrome_request, state.chrome_state());
+        self.finish_window_and_install(walk_setup, state.finish_state());
         redisplay_positions
     }
 }

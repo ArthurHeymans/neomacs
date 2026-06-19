@@ -1139,17 +1139,13 @@ impl LayoutEngine {
                 font_ascent,
                 &buffer_name,
             ),
-            BufferTextWindowRenderedBodyCompleteState {
-                builder: &mut self.matrix_builder,
+            BufferTextWindowRenderedBodyCompleteState::new(
+                &mut self.matrix_builder,
                 evaluator,
-                render_services: ChromeRowRenderServices::new(
-                    &mut self.font_metrics,
-                    face_resolver,
-                    &mut face_ids,
-                ),
-                hit_data: &mut self.hit_data,
-                display_snapshots: &mut self.display_snapshots,
-            },
+                ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
+                &mut self.hit_data,
+                &mut self.display_snapshots,
+            ),
         );
 
         tracing::debug!(
