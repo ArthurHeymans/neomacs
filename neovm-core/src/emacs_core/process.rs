@@ -7676,6 +7676,7 @@ fn builtin_make_process_impl_with_environment(
     let mut sentinel = Value::NIL;
     let mut connection_type: Option<Value> = None;
     let mut stderr_target = Value::NIL;
+    let mut coding_val: Option<Value> = None;
 
     let mut i = 0usize;
     while i < args.len() {
@@ -7691,7 +7692,8 @@ fn builtin_make_process_impl_with_environment(
             Some(ProcessKeyword::Sentinel) => sentinel = value,
             Some(ProcessKeyword::ConnectionType) => connection_type = Some(value),
             Some(ProcessKeyword::Stderr) => stderr_target = value,
-            _ => {} // :coding, :noquery, :stop — ignored for now
+            Some(ProcessKeyword::Coding) => coding_val = Some(value),
+            _ => {} // :noquery, :stop — ignored for now
         }
         i += 2;
     }
@@ -7777,6 +7779,27 @@ fn builtin_make_process_impl_with_environment(
     }
     if let Some(proc) = processes.get_mut(id) {
         proc.default_directory = subprocess_cwd;
+    }
+
+    // GNU `make-process` (src/process.c): when :coding is a non-nil value, it
+    // supplies the DECODE coding (its car if it is a cons, else the whole
+    // value) and the ENCODE coding (its cdr if a cons, else the whole value);
+    // a single symbol is used for both directions. make-process does NOT run
+    // these through `coding_inherit_eol_type` (unlike set-process-coding-system).
+    // When :coding is absent/nil we keep the process default
+    // (utf-8-unix . utf-8-unix), matching GNU's `default-process-coding-system`.
+    if let Some(coding) = coding_val {
+        if !coding.is_nil() {
+            let (decode, encode) = if coding.is_cons() {
+                (coding.cons_car(), coding.cons_cdr())
+            } else {
+                (coding, coding)
+            };
+            if let Some(proc) = processes.get_mut(id) {
+                proc.coding_decode = decode;
+                proc.coding_encode = encode;
+            }
+        }
     }
 
     // Spawn the actual OS child process.
@@ -8211,11 +8234,12 @@ pub(crate) fn builtin_set_process_coding_system(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_set_process_coding_system_impl(&mut eval.processes, args)
+    builtin_set_process_coding_system_impl(&mut eval.processes, &eval.coding_systems, args)
 }
 
 pub(crate) fn builtin_set_process_coding_system_impl(
     processes: &mut ProcessManager,
+    coding_systems: &super::coding::CodingSystemManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("set-process-coding-system", &args, 1)?;
@@ -8228,17 +8252,26 @@ pub(crate) fn builtin_set_process_coding_system_impl(
             ],
         ));
     }
+    // GNU `Fset_process_coding_system` (src/process.c): CHECK_PROCESS first,
+    // then DECODING and ENCODING (both defaulting to nil) are validated, then
+    // ENCODING (only) is passed through `coding_inherit_eol_type` so a
+    // nil/undecided-EOL encode coding normalizes (e.g. nil -> raw-text-unix,
+    // utf-8 -> utf-8-unix). DECODING is stored as-is (nil stays nil).
     let id = resolve_process_or_wrong_type_any_in_manager(processes, &args[0])?;
+    let decoding = args.get(1).cloned().unwrap_or(Value::NIL);
+    let encoding = args.get(2).cloned().unwrap_or(Value::NIL);
+    super::coding::builtin_check_coding_system(coding_systems, vec![decoding])?;
+    super::coding::builtin_check_coding_system(coding_systems, vec![encoding])?;
+    let encoding = super::coding::coding_inherit_eol_type_unix(coding_systems, encoding);
+
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
-    if let Some(coding) = args.get(1) {
-        proc.coding_decode = *coding;
-        proc.coding_encode = args.get(2).cloned().unwrap_or(*coding);
-    }
+    proc.coding_decode = decoding;
+    proc.coding_encode = encoding;
     Ok(Value::NIL)
 }
 

@@ -1876,6 +1876,48 @@ pub(crate) fn builtin_coding_system_eol_type(
     Ok(Value::vector(vec))
 }
 
+/// Port of GNU `coding_inherit_eol_type` (src/coding.c) with PARENT == nil.
+///
+/// If CODING-SYSTEM is nil it becomes `raw-text`.  Then, if its end-of-line
+/// type is still undecided (GNU's `VECTORP (AREF (spec, 2))`), it inherits the
+/// system EOL (Qunix on Unix/Mac) and is replaced by the unix-suffixed variant
+/// (`AREF (eol_type, 0)`, e.g. `latin-1` -> `iso-latin-1-unix`,
+/// `raw-text` -> `raw-text-unix`).  A coding system that already carries a
+/// concrete EOL is returned unchanged.  Used for the ENCODE side of process
+/// coding systems (`set-process-coding-system`), not the DECODE side.
+pub(crate) fn coding_inherit_eol_type_unix(
+    mgr: &CodingSystemManager,
+    coding_system: Value,
+) -> Value {
+    // GNU: NILP (coding_system) -> coding_system = Qraw_text.
+    let coding_system = if coding_system.is_nil() {
+        Value::symbol("raw-text")
+    } else {
+        coding_system
+    };
+    let Some(name) = coding_system.as_symbol_name() else {
+        return coding_system;
+    };
+    let Some(resolved_name) = resolve_runtime_name(mgr, name) else {
+        return coding_system;
+    };
+    // Concrete EOL already encoded in the name suffix -> unchanged.
+    if EolType::from_suffix(&resolved_name).is_some() {
+        return coding_system;
+    }
+    if let Some(bucket) = runtime_bucket_name(mgr, &resolved_name) {
+        if let Some(info) = mgr.get(&bucket) {
+            // EOL fixed by the coding-system definition -> unchanged.
+            if info.eol_type.specified_index().is_some() {
+                return coding_system;
+            }
+        }
+    }
+    // Undecided EOL -> inherit system (unix) EOL == AREF (eol_type, 0).
+    let base = eol_vector_base(strip_eol_suffix(&resolved_name));
+    Value::symbol(format!("{base}-unix"))
+}
+
 /// `(coding-system-type CODING-SYSTEM)` -- return the type symbol of the
 /// coding system (e.g. utf-8, charset, raw-text, undecided).
 pub(crate) fn builtin_coding_system_type(
