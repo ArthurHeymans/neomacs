@@ -355,6 +355,12 @@ struct BufferTextWindowBodyPassState<'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
+struct BufferTextWindowSourceWalk<'request, B: LayoutBufferView> {
+    source_cursor: BufferTextSourceCursor<'request, B>,
+    source_resolve_state: DisplaySourceResolveState,
+    item_stepper: BufferTextSourceItemStepper,
+}
+
 struct BufferTextWindowOutputState<'emit> {
     output_builder: &'emit mut DisplayOutputBuilder,
     evaluator: &'emit mut Context,
@@ -1556,6 +1562,27 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
     }
 }
 
+impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
+    fn new(
+        buffer_id: BufferId,
+        buffer: &'request B,
+        start_charpos: i64,
+        text_start_byte: usize,
+    ) -> Self {
+        Self {
+            source_cursor: BufferTextSourceCursor::new(
+                buffer_id,
+                buffer,
+                CharPos0::new(start_charpos.max(0) as usize),
+                CharPos0::new(usize::MAX),
+                RenderFaceRef::Inherit,
+            ),
+            source_resolve_state: DisplaySourceResolveState::default(),
+            item_stepper: BufferTextSourceItemStepper::new(text_start_byte),
+        }
+    }
+}
+
 impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
     pub(crate) fn finish_state(self) -> BufferTextWindowRenderedBodyFinishState<'emit> {
         BufferTextWindowRenderedBodyFinishState {
@@ -1695,15 +1722,12 @@ impl BufferTextWindowWalkSetup {
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
         buffer: &B,
     ) {
-        let mut source_cursor = BufferTextSourceCursor::new(
+        let mut source_walk = BufferTextWindowSourceWalk::new(
             loop_context.buffer_id(),
             buffer,
-            CharPos0::new(self.charpos.max(0) as usize),
-            CharPos0::new(usize::MAX),
-            RenderFaceRef::Inherit,
+            self.charpos,
+            loop_context.text_start_byte(),
         );
-        let mut source_resolve_state = DisplaySourceResolveState::default();
-        let mut item_stepper = BufferTextSourceItemStepper::new(loop_context.text_start_byte());
 
         BufferTextWindowLoopRenderState::new(
             loop_context,
@@ -1735,9 +1759,7 @@ impl BufferTextWindowWalkSetup {
             overlay_text_row_context,
         )
         .render_visible_steps(
-            &mut source_cursor,
-            &mut source_resolve_state,
-            &mut item_stepper,
+            &mut source_walk,
             row_prelude_context,
             face_resolution_context,
             text,
@@ -2643,11 +2665,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         self.hscroll_skip.should_skip()
     }
 
-    pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
+    fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
-        source_cursor: &mut BufferTextSourceCursor<'request, B>,
-        source_resolve_state: &mut DisplaySourceResolveState,
-        item_stepper: &mut BufferTextSourceItemStepper,
+        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
@@ -2664,9 +2684,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         {
             if matches!(
                 self.render_next_step(
-                    source_cursor,
-                    source_resolve_state,
-                    item_stepper,
+                    source_walk,
                     row_prelude_context,
                     face_resolution_context.clone(),
                     text,
@@ -2681,11 +2699,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         }
     }
 
-    pub(crate) fn render_next_step<'request, B: LayoutBufferView>(
+    fn render_next_step<'request, B: LayoutBufferView>(
         &mut self,
-        source_cursor: &mut BufferTextSourceCursor<'request, B>,
-        source_resolve_state: &mut DisplaySourceResolveState,
-        item_stepper: &mut BufferTextSourceItemStepper,
+        source_walk: &mut BufferTextWindowSourceWalk<'request, B>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
@@ -2713,13 +2729,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             }
         }
 
-        let Some(consumed_source) = self.consume_source_item(
-            source_cursor,
-            source_resolve_state,
-            item_stepper,
-            face_resolution_context,
-            active_face_state,
-        ) else {
+        let Some(consumed_source) =
+            self.consume_source_item(source_walk, face_resolution_context, active_face_state)
+        else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
@@ -2740,7 +2752,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             BufferTextConsumedSourceItem::Replacement(replacement) => {
                 return self.render_replacement_source_item_for_context(
                     replacement,
-                    item_stepper,
+                    &mut source_walk.item_stepper,
                     face_resolution_context.source_item_layout_resolution_context(),
                     text,
                     active_face_state,
@@ -2962,11 +2974,9 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             );
     }
 
-    pub(crate) fn consume_source_item<B: LayoutBufferView>(
+    fn consume_source_item<B: LayoutBufferView>(
         &mut self,
-        source_cursor: &mut BufferTextSourceCursor<'_, B>,
-        source_resolve_state: &mut DisplaySourceResolveState,
-        item_stepper: &mut BufferTextSourceItemStepper,
+        source_walk: &mut BufferTextWindowSourceWalk<'_, B>,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         _active_face_state: &DisplayRowActiveFaceState,
     ) -> Option<BufferTextConsumedSourceItem> {
@@ -2978,13 +2988,13 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             let params = face_resolution_context.source_resolve_params(None);
             let mut resolver = DisplaySourcePropertyResolver::new(
                 params,
-                source_resolve_state,
+                &mut source_walk.source_resolve_state,
                 self.face_ids,
                 &mut pending_faces,
             );
             let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
-            item_stepper.next_consumed_source_item(
-                source_cursor,
+            source_walk.item_stepper.next_consumed_source_item(
+                &mut source_walk.source_cursor,
                 &mut source_context,
                 self.progress.byte_idx,
                 self.progress.charpos(),
