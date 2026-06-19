@@ -21,10 +21,11 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    TextMatrixRowBegin, TextWindowBegin, TextWindowBeginOutputState, TextWindowBodyOutputInstall,
-    TextWindowCursorEffects, TextWindowFinishOutputState, TextWindowLiveOutputState,
-    TextWindowOutputRenderState, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder, WindowOutputEmitter,
+    TextMatrixRowBegin, TextWindowArtifactOutputSurface, TextWindowBegin,
+    TextWindowBeginOutputState, TextWindowBodyOutputInstall, TextWindowCursorEffects,
+    TextWindowFinishOutputState, TextWindowLiveOutputState, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
+    WindowOutputEmitter,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -120,7 +121,7 @@ impl BufferTextWindowCursorEffectsRequest {
 
     pub(crate) fn install_and_apply(
         self,
-        output: &mut TextWindowOutputRenderState<'_, '_>,
+        output: &mut TextWindowArtifactOutputSurface<'_>,
     ) -> bool {
         let Some(effects) = self.effects else {
             return false;
@@ -150,7 +151,7 @@ impl BufferTextWindowTerminalRightBorderRequest {
 
     pub(crate) fn install_and_apply(
         self,
-        output: &mut TextWindowOutputRenderState<'_, '_>,
+        output: &mut TextWindowArtifactOutputSurface<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
         output.install_terminal_right_border(

@@ -6,7 +6,7 @@ use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
-use crate::window_output::TextWindowOutputRenderState;
+use crate::window_output::TextWindowArtifactOutputSurface;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
@@ -662,7 +662,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
         } else {
             BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
                 .install_and_apply(
-                    &mut TextWindowOutputRenderState::without_output(state.builder_mut()),
+                    &mut TextWindowArtifactOutputSurface::from_builder(state.builder_mut()),
                     render_services,
                 );
         }

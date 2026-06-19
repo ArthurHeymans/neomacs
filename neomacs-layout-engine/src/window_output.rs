@@ -1071,7 +1071,11 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
 
 pub(crate) struct TextWindowOutputRenderState<'builder, 'output> {
     builder: &'builder mut GlyphMatrixBuilder,
-    output_emitter: Option<&'output mut WindowOutputEmitter>,
+    output_emitter: &'output mut WindowOutputEmitter,
+}
+
+pub(crate) struct TextWindowArtifactOutputSurface<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1101,27 +1105,16 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
     ) -> Self {
         Self {
             builder,
-            output_emitter: Some(output_emitter),
-        }
-    }
-
-    pub(crate) fn without_output(builder: &'builder mut GlyphMatrixBuilder) -> Self {
-        Self {
-            builder,
-            output_emitter: None,
+            output_emitter,
         }
     }
 
     fn output_emitter(&self) -> &WindowOutputEmitter {
         self.output_emitter
-            .as_deref()
-            .expect("text-window output state requires an output emitter")
     }
 
     fn output_emitter_mut(&mut self) -> &mut WindowOutputEmitter {
         self.output_emitter
-            .as_deref_mut()
-            .expect("text-window output state requires an output emitter")
     }
 
     pub(crate) fn set_logical_cursor(&mut self, cursor: WindowCursorPos) {
@@ -1143,28 +1136,11 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
         &mut self,
         cursor: TextWindowCursor,
     ) -> TextWindowCursorPublicationOutcome {
-        let output_emitter = self
-            .output_emitter
-            .as_deref_mut()
-            .expect("text-window cursor publication requires an output emitter");
-        TextWindowCursorInstaller::new(self.builder, output_emitter).publish_cursor(cursor)
+        TextWindowCursorInstaller::new(self.builder, self.output_emitter).publish_cursor(cursor)
     }
 
     pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
         TextWindowCursorInstaller::without_output(self.builder).publish_decorative_cursor(cursor);
-    }
-
-    pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        TextWindowCursorInstaller::without_output(self.builder).install_cursor_effects(request);
-    }
-
-    pub(crate) fn install_terminal_right_border(
-        &mut self,
-        request: TextWindowTerminalRightBorder,
-        render_services: ChromeRowRenderServices<'_, '_>,
-    ) -> u32 {
-        TextWindowBorderInstaller::new(self.builder)
-            .install_terminal_right_border(request, render_services)
     }
 
     pub(crate) fn install_body_output(
@@ -1172,11 +1148,7 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
         request: TextWindowBodyOutputInstall<'_>,
         render_services: Option<ChromeRowRenderServices<'_, '_>>,
     ) -> TextWindowRedisplayPositions {
-        let output_emitter = self
-            .output_emitter
-            .as_deref()
-            .expect("text-window output state requires an output emitter");
-        TextWindowOutputInstaller::new(self.builder, output_emitter)
+        TextWindowOutputInstaller::new(self.builder, self.output_emitter)
             .install_body_output(request, render_services)
     }
 
@@ -1225,11 +1197,7 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
         evaluator: &mut Context,
         request: TextWindowBegin,
     ) {
-        let output_emitter = self
-            .output_emitter
-            .as_deref_mut()
-            .expect("text-window output state requires an output emitter");
-        TextWindowRowLifecycleInstaller::new(self.builder, output_emitter, evaluator)
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, evaluator)
             .begin_text_window_output(request);
     }
 
@@ -1238,12 +1206,27 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
         evaluator: &mut Context,
         request: TextWindowPendingRowFinish<'_>,
     ) -> bool {
-        let output_emitter = self
-            .output_emitter
-            .as_deref_mut()
-            .expect("text-window output state requires an output emitter");
-        TextWindowRowLifecycleInstaller::new(self.builder, output_emitter, evaluator)
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, evaluator)
             .finish_pending_row(request)
+    }
+}
+
+impl<'builder> TextWindowArtifactOutputSurface<'builder> {
+    pub(crate) fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
+        TextWindowCursorInstaller::without_output(self.builder).install_cursor_effects(request);
+    }
+
+    pub(crate) fn install_terminal_right_border(
+        &mut self,
+        request: TextWindowTerminalRightBorder,
+        render_services: ChromeRowRenderServices<'_, '_>,
+    ) -> u32 {
+        TextWindowBorderInstaller::new(self.builder)
+            .install_terminal_right_border(request, render_services)
     }
 }
 

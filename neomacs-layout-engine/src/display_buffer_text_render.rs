@@ -85,8 +85,8 @@ use crate::neovm_bridge::{
 use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowBeginOutputState, TextWindowLiveOutputState,
-    TextWindowMatrixOutputState, TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint,
+    TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputState,
+    TextWindowLiveOutputState, TextWindowMatrixOutputState, TextWindowOutputRetryCheckpoint,
     TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
@@ -1293,7 +1293,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
 impl BufferTextWindowCursorEffectsOutput {
     fn install_cursor_effects(builder: &mut GlyphMatrixBuilder, params: &WindowParams) -> bool {
         BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
-            .install_and_apply(&mut TextWindowOutputRenderState::without_output(builder))
+            .install_and_apply(&mut TextWindowArtifactOutputSurface::from_builder(builder))
     }
 }
 
