@@ -5,8 +5,6 @@ use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::DisplayRowGeometry;
 #[cfg(test)]
 use crate::display_row::DisplayRowRenderStop;
-#[cfg(test)]
-use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowRenderBounds, DisplayRowRenderPolicy,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, DisplaySourceAppendRenderPolicy,

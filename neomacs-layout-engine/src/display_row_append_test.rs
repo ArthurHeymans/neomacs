@@ -46,6 +46,7 @@ use crate::display_row_lisp_string::{
     LispStringSourceAppendRequest, LispStringSourceId, LispStringSourceRowAppendSession,
     append_lisp_string_to_text_row, apply_pending_display_source_faces, render_face_ref_id,
 };
+use crate::display_row_matrix_install::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row_overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
     OverlayStringRenderState, OverlayStringRowBreakRenderContext,

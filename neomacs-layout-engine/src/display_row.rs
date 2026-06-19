@@ -7,16 +7,14 @@ use crate::display_item::{
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::parse_display_length_expr;
-#[cfg(test)]
-use crate::display_row_builder::display_row_text_is_empty;
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot,
     DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter,
-    DisplayTabPolicy, apply_display_row_source_slot_bounds, merge_display_row_source_slot_bounds,
-    new_display_row_for_role,
+    DisplayTabPolicy, merge_display_row_source_slot_bounds, new_display_row_for_role,
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 pub(crate) use crate::display_row_geometry::DisplayRowMaxX;
+use crate::display_row_matrix_install::RenderedDisplayRowAssetsInstall;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -31,17 +29,13 @@ use crate::display_text_run_measurement::{
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::glyph_row_writer;
-use crate::matrix_builder::{
-    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixFrameStateInstallRequest,
-    MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixRowBeginRequest,
-    MatrixRowLifecycleRequest, ResolvedMatrixMediaInstallTarget,
-};
+use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameStateInstallRequest};
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
-use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
-use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -2351,40 +2345,6 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
             })
             .flatten()
     }
-
-    #[cfg(test)]
-    fn append_rendered_fragment(
-        &mut self,
-        rendered: &RenderedDisplayRow,
-        matrix_row: usize,
-    ) -> DisplayRowPosition {
-        for face in &rendered.faces {
-            self.builder
-                .install_frame_state(MatrixFrameStateInstallRequest::Face {
-                    id: face.id,
-                    face: face.clone(),
-                });
-        }
-        self.builder.with_current_row_mut(|row| {
-            row.enabled = true;
-            row.role = rendered.row.role;
-            row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
-            row.displays_text |=
-                rendered.row.displays_text || !display_row_text_is_empty(&rendered.row);
-            row.glyphs[GlyphArea::Text.index()]
-                .extend(rendered.row.glyphs[GlyphArea::Text.index()].iter().cloned());
-            row.height_px = row.height_px.max(rendered.row.height_px);
-            row.ascent_px = row
-                .ascent_px
-                .max(rendered.row.ascent_px)
-                .min(row.height_px.max(1.0));
-            merge_display_row_source_slot_bounds(row, &rendered.source_slots);
-        });
-        for media in &rendered.media {
-            media.install(self.builder, rendered.row.role, matrix_row);
-        }
-        display_row_output_end_position(rendered.progress)
-    }
 }
 
 impl<'row, 'source, 'state, 'policy, S, P>
@@ -2629,373 +2589,9 @@ fn finish_current_text_row_render(
     }
 }
 
-pub(crate) fn install_mock_display_row_in_matrix_row(
-    builder: &mut GlyphMatrixBuilder,
-    matrix_row: usize,
-    row: &GlyphRow,
-) {
-    MatrixDisplayRowInstallRequest::from_row(matrix_row, row).install(builder);
-}
-
-struct MatrixDisplayRowInstallRequest<'a> {
-    matrix_row: usize,
-    row: &'a GlyphRow,
-    source_slots: Option<&'a [DisplayRowGlyphSlot]>,
-    pixel_y: f32,
-    height_px: f32,
-    ascent_px: f32,
-}
-
-impl<'a> MatrixDisplayRowInstallRequest<'a> {
-    fn from_row(matrix_row: usize, row: &'a GlyphRow) -> Self {
-        Self {
-            matrix_row,
-            row,
-            source_slots: None,
-            pixel_y: row.pixel_y,
-            height_px: row.height_px,
-            ascent_px: row.ascent_px,
-        }
-    }
-
-    fn from_rendered(
-        matrix_row: usize,
-        rendered: &'a RenderedDisplayRow,
-        bounds: Rect,
-        height_px: f32,
-        ascent_px: f32,
-    ) -> Self {
-        Self {
-            matrix_row,
-            row: &rendered.row,
-            source_slots: Some(&rendered.source_slots),
-            pixel_y: bounds.y,
-            height_px,
-            ascent_px,
-        }
-    }
-
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
-        let context = builder.current_window_row_install_context();
-        let mut row = self.row.clone();
-        if let Some(source_slots) = self.source_slots {
-            apply_display_row_source_slot_bounds(&mut row, source_slots);
-        }
-        row.pixel_y = self.pixel_y - context.pixel_bounds.y;
-        row.height_px = self.height_px;
-        row.ascent_px = self.ascent_px;
-        builder.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
-            begin: MatrixRowBeginRequest {
-                row: self.matrix_row,
-                role: row.role,
-                mode_line: row.mode_line,
-            },
-            row,
-        });
-    }
-}
-
-pub(crate) struct DisplayRowInstaller<'builder, 'rows> {
-    builder: &'builder mut GlyphMatrixBuilder,
-    frame_chrome_rows: Option<&'rows mut Vec<FrameChromeRow>>,
-}
-
-impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
-    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
-        Self {
-            builder,
-            frame_chrome_rows: None,
-        }
-    }
-
-    pub(crate) fn with_frame_chrome_rows(
-        builder: &'builder mut GlyphMatrixBuilder,
-        frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
-    ) -> Self {
-        Self {
-            builder,
-            frame_chrome_rows: Some(frame_chrome_rows),
-        }
-    }
-
-    pub(crate) fn install_measured(&mut self, measured: &MeasuredDisplayRow) {
-        match measured.owner {
-            DisplayRowOwner::WindowChrome { .. } => {
-                MeasuredWindowDisplayRowInstallRequest { measured }.install(self.builder);
-            }
-            DisplayRowOwner::FrameChrome { .. } => {
-                let frame_chrome_rows = self
-                    .frame_chrome_rows
-                    .as_deref_mut()
-                    .expect("frame chrome rows are required to install frame chrome");
-                MeasuredFrameChromeRowInstallRequest {
-                    frame_chrome_rows,
-                    measured,
-                }
-                .install(self.builder);
-            }
-        }
-    }
-}
-
-struct MeasuredWindowDisplayRowInstallRequest<'a> {
-    measured: &'a MeasuredDisplayRow,
-}
-
-impl MeasuredWindowDisplayRowInstallRequest<'_> {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
-        let measured = self.measured;
-        let DisplayRowOwner::WindowChrome { window_id, kind } = measured.owner else {
-            panic!("frame chrome rows must install through frame chrome rows");
-        };
-        debug_assert!(window_id > 0);
-        debug_assert_eq!(
-            builder.current_window_media_install_context().window_id,
-            window_id as i64
-        );
-        debug_assert!(matches!(
-            kind,
-            WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
-        ));
-        let matrix_row = measured.row_index as usize;
-        RenderedDisplayRowAssetsInstall::from_rendered(
-            &measured.rendered,
-            RenderedDisplayRowAssetInstallTarget::WindowRow {
-                row_index: measured.row_index,
-                bounds: measured.bounds,
-            },
-        )
-        .install(builder);
-        MatrixDisplayRowInstallRequest::from_rendered(
-            matrix_row,
-            &measured.rendered,
-            measured.bounds,
-            measured.row_height(),
-            measured.row_ascent(),
-        )
-        .install(builder);
-    }
-}
-
-struct MeasuredFrameChromeRowInstallRequest<'a, 'rows> {
-    frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
-    measured: &'a MeasuredDisplayRow,
-}
-
-impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
-        let measured = self.measured;
-        let DisplayRowOwner::FrameChrome { kind } = measured.owner else {
-            panic!("window-owned rows must install through window chrome");
-        };
-        debug_assert!(matches!(kind, FrameChromeKind::TabBar));
-        RenderedDisplayRowAssetsInstall::from_rendered(
-            &measured.rendered,
-            RenderedDisplayRowAssetInstallTarget::FrameChrome {
-                row_index: measured.row_index,
-                bounds: measured.bounds,
-            },
-        )
-        .install(builder);
-        let mut row = measured.rendered.row.clone();
-        apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
-        // Frame chrome (tab-bar) rows are stored in a side vector and never pass
-        // through the matrix-row lifecycle, so they reorder here. Render no longer
-        // reorders (the single matrix-row finalizer is `end_current_row`), so the
-        // cloned row is un-reordered and must be finalized once on the clone.
-        let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
-        row.pixel_y = measured.bounds.y;
-        row.height_px = measured.row_height();
-        row.ascent_px = measured.row_ascent();
-        self.frame_chrome_rows.push(FrameChromeRow {
-            row_index: measured.row_index,
-            pixel_bounds: measured.bounds,
-            row,
-        });
-    }
-}
-
-#[derive(Clone, Copy)]
-enum RenderedDisplayRowAssetInstallTarget {
-    MatrixRow(usize),
-    WindowRow { row_index: u32, bounds: Rect },
-    FrameChrome { row_index: u32, bounds: Rect },
-}
-
-struct RenderedDisplayRowAssetsInstall<'a> {
-    role: GlyphRowRole,
-    faces: &'a [Face],
-    media: &'a [RenderedDisplayRowMedia],
-    target: RenderedDisplayRowAssetInstallTarget,
-}
-
-impl<'a> RenderedDisplayRowAssetsInstall<'a> {
-    fn fragment(
-        role: GlyphRowRole,
-        matrix_row: usize,
-        faces: &'a [Face],
-        media: &'a [RenderedDisplayRowMedia],
-    ) -> Self {
-        Self {
-            role,
-            faces,
-            media,
-            target: RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row),
-        }
-    }
-
-    fn from_rendered(
-        rendered: &'a RenderedDisplayRow,
-        target: RenderedDisplayRowAssetInstallTarget,
-    ) -> Self {
-        Self {
-            role: rendered.row.role,
-            faces: &rendered.faces,
-            media: &rendered.media,
-            target,
-        }
-    }
-
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
-        for face in self.faces {
-            builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-                id: face.id,
-                face: face.clone(),
-            });
-        }
-        for media in self.media {
-            match self.target {
-                RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row) => {
-                    media.install(builder, self.role, matrix_row);
-                }
-                RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds } => {
-                    media.install_window_row(builder, self.role, row_index, bounds);
-                }
-                RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds } => {
-                    media.install_frame_chrome(builder, self.role, row_index, bounds);
-                }
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-pub(crate) fn append_rendered_display_row_fragment_to_current_row(
-    builder: &mut GlyphMatrixBuilder,
-    rendered: &RenderedDisplayRow,
-    matrix_row: usize,
+pub(crate) fn display_row_output_end_position(
+    progress: DisplayRowOutputProgress,
 ) -> DisplayRowPosition {
-    DisplayRowCurrentRowSurface::new(builder).append_rendered_fragment(rendered, matrix_row)
-}
-
-#[cfg(test)]
-pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    rendered: &RenderedDisplayRow,
-    output: TextRowOutput,
-) -> DisplayRowPosition {
-    let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
-    output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
-    end
-}
-
-impl RenderedDisplayRowMedia {
-    fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
-        let context = builder.current_window_media_install_context();
-        let row = matrix_row.min(u32::MAX as usize) as u32;
-        let target = ResolvedMatrixMediaInstallTarget {
-            window_id: context.window_id,
-            role,
-            clip: Some(context.text_pixel_bounds),
-            slot_id: DisplaySlotId {
-                window_id: context.window_id,
-                row,
-                col: self.col,
-            },
-        };
-        self.install_with_target(builder, target);
-    }
-
-    fn install_window_row(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        role: GlyphRowRole,
-        row: u32,
-        clip: Rect,
-    ) {
-        let context = builder.current_window_media_install_context();
-        let target = ResolvedMatrixMediaInstallTarget {
-            window_id: context.window_id,
-            role,
-            clip: Some(clip),
-            slot_id: DisplaySlotId {
-                window_id: context.window_id,
-                row,
-                col: self.col,
-            },
-        };
-        self.install_with_target(builder, target);
-    }
-
-    fn install_frame_chrome(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        role: GlyphRowRole,
-        row: u32,
-        clip: Rect,
-    ) {
-        let target = ResolvedMatrixMediaInstallTarget {
-            window_id: FRAME_CHROME_WINDOW_ID,
-            role,
-            clip: Some(clip),
-            slot_id: DisplaySlotId {
-                window_id: FRAME_CHROME_WINDOW_ID,
-                row,
-                col: self.col,
-            },
-        };
-        self.install_with_target(builder, target);
-    }
-
-    fn install_with_target(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        target: ResolvedMatrixMediaInstallTarget,
-    ) {
-        builder.install_media(MatrixMediaInstallRequest::new(
-            target,
-            self.matrix_media_kind(),
-            self.x,
-            self.y,
-            self.width,
-            self.height,
-        ));
-    }
-
-    fn matrix_media_kind(&self) -> MatrixMediaInstallKind {
-        match self.kind {
-            RenderedDisplayRowMediaKind::Image { image_id } => {
-                MatrixMediaInstallKind::Image { image_id }
-            }
-            RenderedDisplayRowMediaKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => MatrixMediaInstallKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            },
-            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
-                MatrixMediaInstallKind::Xwidget { xwidget_id }
-            }
-        }
-    }
-}
-
-fn display_row_output_end_position(progress: DisplayRowOutputProgress) -> DisplayRowPosition {
     DisplayRowPosition {
         x_px: progress.end_x,
         col: usize::try_from(progress.end_col.max(0)).unwrap_or(usize::MAX),
