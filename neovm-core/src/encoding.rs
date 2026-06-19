@@ -2164,6 +2164,254 @@ fn is_emacs_mule(ctx: &crate::emacs_core::eval::Context, coding: &str) -> bool {
         .is_some_and(|info| resolve_sym(info.coding_type) == "emacs-mule")
 }
 
+/// Return the `:pre-write-conversion` (when `encode`) or `:post-read-conversion`
+/// (otherwise) hook function of `coding`, together with the coding system's
+/// base `:coding-type` name, when the hook should be run by the generic
+/// codec path.
+///
+/// GNU's coding pipeline runs `CODING_ATTR_PRE_WRITE` before encoding and
+/// `CODING_ATTR_POST_READ` after decoding (src/coding.c
+/// `encode_coding_object` / `decode_coding_object`).  The mnemonic VIQR coding
+/// (`vietnamese-viqr`, base `:coding-type` utf-8) and a few others rely on
+/// these elisp hooks for the actual character translation; without them the
+/// generic codec is a pass-through (and, for VIQR specifically, would drop
+/// every non-ASCII character because the family is unknown).
+///
+/// Codings that neomacs already routes through a dedicated codec (utf-7, hz,
+/// emacs-mule, …) reimplement their conversion entirely in Rust and must NOT
+/// re-run the hook, so this returns `None` for them; the caller only consults
+/// it on the otherwise-generic branch.
+fn coding_conversion_hook(
+    ctx: &crate::emacs_core::eval::Context,
+    coding: &str,
+    encode: bool,
+) -> Option<(SymId, String)> {
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    let hook = if encode {
+        info.pre_write_conversion
+    } else {
+        info.post_read_conversion
+    }?;
+    Some((hook, resolve_sym(info.coding_type).to_string()))
+}
+
+/// True when GNU's `code_convert_string` identity fast path applies: the coding
+/// is `:ascii-compatible-p`, the input `args[0]` is pure ASCII, and no
+/// end-of-line conversion is required (unix EOL, or no `\n`/`\r` to convert).
+/// In that case GNU returns the string unchanged and never enters
+/// encode/decode_coding_object, so the pre/post-conversion hooks do not run.
+fn coding_ascii_identity_fast_path(
+    ctx: &crate::emacs_core::eval::Context,
+    coding: &str,
+    args: &[Value],
+    encode: bool,
+) -> bool {
+    if !ctx.coding_systems.is_ascii_compatible(coding) {
+        return false;
+    }
+    let Some(info) = ctx.coding_systems.get(coding_system_base(coding)) else {
+        return false;
+    };
+    let Some(string) = args[0].as_lisp_string() else {
+        return false;
+    };
+    let bytes = string.as_bytes();
+    // For both unibyte and all-ASCII multibyte strings every storage byte is
+    // < 0x80 (eight-bit and multibyte chars use >= 0x80 lead bytes).
+    if !bytes.iter().all(u8::is_ascii) {
+        return false;
+    }
+    // EOL conversion forces the slow path unless the coding is unix EOL or the
+    // relevant newline byte is absent.
+    match info.eol_type {
+        crate::emacs_core::coding::EolType::Unix => true,
+        _ => {
+            let needle = if encode { b'\n' } else { b'\r' };
+            !bytes.contains(&needle)
+        }
+    }
+}
+
+/// Build (and evaluate) the elisp form that mirrors GNU's
+/// `encode_coding_object` pre-write protocol: insert `src` into a fresh
+/// conversion work buffer, call `(FN (point-min) (point-max))`, and return the
+/// text of whatever buffer is current afterwards (the hook is allowed to switch
+/// to its own buffer, as `viqr-pre-write-conversion` does).  Both work buffers
+/// are killed.  Returns the transformed multibyte string `Value`.
+fn run_pre_write_conversion(
+    ctx: &mut crate::emacs_core::eval::Context,
+    hook: SymId,
+    src: Value,
+) -> EvalResult {
+    // `src` is a heap Value that must survive the allocations performed while
+    // building the form below (exact GC does not scan Rust locals).  Root it on
+    // the specpdl for the duration of construction; `eval_sub` then roots the
+    // finished form itself.
+    let root_scope = ctx.save_specpdl_roots();
+    ctx.push_specpdl_root(src);
+    let form = build_pre_write_form(hook, src);
+    ctx.restore_specpdl_roots(root_scope);
+    ctx.eval_sub(form)
+}
+
+fn build_pre_write_form(hook: SymId, src: Value) -> Value {
+    // (save-current-buffer
+    //   (let ((src-buf (generate-new-buffer " *code-conversion-work*")))
+    //     (unwind-protect
+    //         (progn
+    //           (with-current-buffer src-buf (insert SRC))
+    //           (set-buffer src-buf)
+    //           (funcall 'FN (point-min) (point-max))
+    //           (prog1 (buffer-string)
+    //             (unless (eq (current-buffer) src-buf)
+    //               (kill-buffer (current-buffer)))))
+    //       (when (buffer-live-p src-buf) (kill-buffer src-buf)))))
+    // `save-current-buffer` restores the caller's buffer after the hook (which
+    // may `set-buffer` to its own work buffer and which we then kill).
+    let src_buf = Value::symbol("--neovm-cc-src-buf");
+    let gen_buf = Value::list(vec![
+        Value::symbol("generate-new-buffer"),
+        Value::string(" *code-conversion-work*"),
+    ]);
+    let binding = Value::list(vec![Value::list(vec![src_buf, gen_buf])]);
+    let insert_form = Value::list(vec![
+        Value::symbol("with-current-buffer"),
+        src_buf,
+        Value::list(vec![Value::symbol("insert"), src]),
+    ]);
+    let set_buf = Value::list(vec![Value::symbol("set-buffer"), src_buf]);
+    let call = Value::list(vec![
+        Value::symbol("funcall"),
+        quote_value(Value::symbol(resolve_sym(hook))),
+        Value::list(vec![Value::symbol("point-min")]),
+        Value::list(vec![Value::symbol("point-max")]),
+    ]);
+    let kill_current = Value::list(vec![
+        Value::symbol("unless"),
+        Value::list(vec![
+            Value::symbol("eq"),
+            Value::list(vec![Value::symbol("current-buffer")]),
+            src_buf,
+        ]),
+        Value::list(vec![
+            Value::symbol("kill-buffer"),
+            Value::list(vec![Value::symbol("current-buffer")]),
+        ]),
+    ]);
+    let result = Value::list(vec![
+        Value::symbol("prog1"),
+        Value::list(vec![Value::symbol("buffer-string")]),
+        kill_current,
+    ]);
+    let body = Value::list(vec![
+        Value::symbol("progn"),
+        insert_form,
+        set_buf,
+        call,
+        result,
+    ]);
+    let cleanup = Value::list(vec![
+        Value::symbol("when"),
+        Value::list(vec![Value::symbol("buffer-live-p"), src_buf]),
+        Value::list(vec![Value::symbol("kill-buffer"), src_buf]),
+    ]);
+    let unwind = Value::list(vec![Value::symbol("unwind-protect"), body, cleanup]);
+    let let_form = Value::list(vec![Value::symbol("let"), binding, unwind]);
+    Value::list(vec![Value::symbol("save-current-buffer"), let_form])
+}
+
+/// Mirror GNU's `decode_coding_object` post-read protocol: insert the decoded
+/// `text` into a temp buffer, move point to the start, call `(FN LEN)`, and
+/// return the resulting buffer text.
+fn run_post_read_conversion(
+    ctx: &mut crate::emacs_core::eval::Context,
+    hook: SymId,
+    text: Value,
+) -> EvalResult {
+    // `text` is a heap Value that must survive form-construction allocations.
+    let root_scope = ctx.save_specpdl_roots();
+    ctx.push_specpdl_root(text);
+    let form = build_post_read_form(hook, text);
+    ctx.restore_specpdl_roots(root_scope);
+    ctx.eval_sub(form)
+}
+
+fn build_post_read_form(hook: SymId, text: Value) -> Value {
+    // (with-temp-buffer
+    //   (insert TEXT)
+    //   (goto-char (point-min))
+    //   (funcall 'FN (- (point-max) (point-min)))
+    //   (buffer-string))
+    let len = Value::list(vec![
+        Value::symbol("-"),
+        Value::list(vec![Value::symbol("point-max")]),
+        Value::list(vec![Value::symbol("point-min")]),
+    ]);
+    let call = Value::list(vec![
+        Value::symbol("funcall"),
+        quote_value(Value::symbol(resolve_sym(hook))),
+        len,
+    ]);
+    Value::list(vec![
+        Value::symbol("with-temp-buffer"),
+        Value::list(vec![Value::symbol("insert"), text]),
+        Value::list(vec![
+            Value::symbol("goto-char"),
+            Value::list(vec![Value::symbol("point-min")]),
+        ]),
+        call,
+        Value::list(vec![Value::symbol("buffer-string")]),
+    ])
+}
+
+/// `'value` -> `(quote value)`.
+fn quote_value(value: Value) -> Value {
+    Value::list(vec![Value::symbol("quote"), value])
+}
+
+/// Encode or decode `args[0]` through a coding system whose conversion is
+/// implemented by an elisp `:pre-write-conversion` / `:post-read-conversion`
+/// hook (e.g. `vietnamese-viqr`).  Mirrors GNU: encoding runs the pre-write
+/// hook first and then encodes the transformed text with the base
+/// `:coding-type`; decoding decodes with the base `:coding-type` first and then
+/// runs the post-read hook on the decoded text.
+fn run_coding_with_conversion_hook(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: &[Value],
+    base_type: &str,
+    hook: SymId,
+    encode: bool,
+) -> EvalResult {
+    // The base `:coding-type` symbol names the codec to apply to the text the
+    // hook produces / consumes.  GNU's mnemonic codings are utf-8 based; map
+    // any other base type by name and fall back to utf-8 (the universal
+    // multibyte codec) when the type is not itself a usable coding-system name.
+    let base_coding = if known_coding_system(base_type) {
+        base_type
+    } else {
+        "utf-8"
+    };
+    if encode {
+        let transformed = run_pre_write_conversion(ctx, hook, args[0])?;
+        let transformed_str = transformed.as_lisp_string().ok_or_else(|| {
+            signal(
+                "wrong-type-argument",
+                vec![Value::symbol("stringp"), transformed],
+            )
+        })?;
+        let bytes = encode_lisp_string(transformed_str, base_coding);
+        Ok(Value::heap_string(
+            crate::heap_types::LispString::from_unibyte(bytes),
+        ))
+    } else {
+        let decoded = builtin_decode_coding_string_with_known(
+            vec![args[0], Value::symbol(base_coding)],
+            |_| true,
+        )?;
+        run_post_read_conversion(ctx, hook, decoded)
+    }
+}
+
 /// Standard UTF-8 encoding of a Lisp string (GNU `CHAR_STRING` per character):
 /// eight-bit characters become their single raw byte, everything else its
 /// plain UTF-8 bytes. This is what raw-text/no-conversion and the UTF-8 codec
@@ -2770,6 +3018,77 @@ fn builtin_coding_string_in_context(
     let euc_coding = euc_iso2022_spec(ctx, &coding);
     let sjis_coding = sjis_charsets(ctx, &coding);
     let charset_coding = general_charset_coding_list(ctx, &coding, encode);
+    // GNU runs a coding system's :pre-write-conversion before encoding and its
+    // :post-read-conversion after decoding (src/coding.c encode_coding_object /
+    // decode_coding_object).  These elisp hooks do the real character
+    // translation for mnemonic codings such as `vietnamese-viqr` (base
+    // :coding-type utf-8).  The dedicated codec branches above (utf-7, hz,
+    // emacs-mule, …) reimplement their conversion entirely in Rust and already
+    // subsume any hook, so only run a hook when none of them claim this coding.
+    let dedicated_codec = utf7_coding.is_some()
+        || hz_coding.is_some()
+        || emacs_mule
+        || no_conv_multibyte
+        || utf8_signature
+        || full_iso.is_some()
+        || euc_coding.is_some()
+        || sjis_coding.is_some()
+        || charset_coding.is_some();
+    // A coding system whose conversion is implemented by an elisp
+    // :pre-write-conversion / :post-read-conversion hook (e.g. vietnamese-viqr)
+    // is handled entirely here; the generic family encoders below do not know
+    // how to encode it (its family is "unknown") and would drop every
+    // character.
+    if !dedicated_codec
+        && let Some((hook, base_type)) = coding_conversion_hook(ctx, &coding, encode)
+    {
+        // GNU's `code_convert_string` (src/coding.c) takes an identity fast path
+        // for an ASCII-compatible coding when the input is pure ASCII and needs
+        // no EOL conversion, returning the string unchanged WITHOUT running
+        // encode/decode_coding_object — and therefore WITHOUT the pre/post
+        // conversion hook.  So a pure-ASCII `(encode-coding-string "cafe'"
+        // 'vietnamese-viqr)` is `"cafe'"`, not the VIQR-translated `café`.
+        let result = if coding_ascii_identity_fast_path(ctx, &coding, &args, encode) {
+            // Identity: encode yields a unibyte string, decode a multibyte one
+            // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
+            // are pure ASCII, so the two storage forms coincide.
+            let bytes = lisp_string_coding_source_bytes(
+                args[0].as_lisp_string().expect("string validated above"),
+            );
+            if encode {
+                Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+            } else {
+                Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+            }
+        } else {
+            run_coding_with_conversion_hook(ctx, &args, &base_type, hook, encode)?
+        };
+        let result_text = result
+            .as_lisp_string()
+            .ok_or_else(|| {
+                signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("stringp"), result],
+                )
+            })?
+            .clone();
+        ctx.set_variable(
+            "last-coding-system-used",
+            Value::symbol(&canonical_context_coding_name(ctx, &coding)),
+        );
+        let Some(buffer_id) = destination else {
+            return Ok(result);
+        };
+        let restore_point = ctx.buffers.get(buffer_id).map(|buf| buf.point_anchor());
+        if restore_point.is_none() {
+            return Err(signal(
+                "error",
+                vec![Value::string("Selecting deleted buffer")],
+            ));
+        }
+        insert_coding_result(ctx, buffer_id, &result_text, restore_point)?;
+        return Ok(Value::fixnum(result_text.schars() as i64));
+    }
     let source_string = || {
         args[0]
             .as_lisp_string()

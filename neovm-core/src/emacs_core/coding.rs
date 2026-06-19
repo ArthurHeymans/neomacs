@@ -1494,12 +1494,19 @@ fn coding_bom_kind(info: &CodingSystemInfo) -> BomKind {
     }
 }
 
-/// Whether a pre-write or post-read conversion function is attached. Such a
-/// coding system (e.g. utf-7, chinese-hz) is not ASCII-compatible — GNU's
-/// `define-coding-system` passes `:ascii-compatible-p nil` for these even though
-/// the underlying `:coding-type` is utf-8.
-fn coding_has_conversion(info: &CodingSystemInfo) -> bool {
-    info.post_read_conversion.is_some() || info.pre_write_conversion.is_some()
+/// An explicit `:ascii-compatible-p` value carried in the coding system's
+/// property list — either passed to `define-coding-system` or set afterward via
+/// `coding-system-put`.  GNU's `Fdefine_coding_system_internal` auto-sets the
+/// attribute to `t` for a BOM-less utf-8 coding (src/coding.c:11420), and codings
+/// that must NOT be treated as ASCII-compatible (utf-7, utf-7-imap, chinese-hz)
+/// override it back to nil with a `coding-system-put` in their Lisp definitions
+/// (mule-conf.el / chinese.el).  `vietnamese-viqr` does no such override, so it
+/// keeps the auto-set `t` — which is why a pure-ASCII VIQR encode/decode is an
+/// identity pass-through.
+fn coding_explicit_ascii_compat(info: &CodingSystemInfo) -> Option<bool> {
+    info.properties
+        .get(&intern(":ascii-compatible-p"))
+        .map(|v| v.is_truthy())
 }
 
 /// Whether `:charset-list` is the FULL_SUPPORT marker symbol `iso-2022`.
@@ -1611,9 +1618,12 @@ fn compute_coding_ascii_compat(info: &CodingSystemInfo) -> bool {
     };
     match resolve_sym(info.coding_type) {
         "charset" => any_ascii() || info.ascii_compatible_p,
-        // utf-8 is ASCII-compatible unless it carries a BOM (utf-8-with-signature
-        // / utf-8-auto) or a pre/post conversion (utf-7, utf-7-imap, chinese-hz).
-        "utf-8" => !coding_has_bom(info) && !coding_has_conversion(info),
+        // GNU auto-sets `:ascii-compatible-p t` for a BOM-less utf-8 coding
+        // (utf-8-with-signature / utf-8-auto carry a BOM and are not), unless the
+        // coding's Lisp definition explicitly overrode it (utf-7, utf-7-imap and
+        // chinese-hz `coding-system-put` it back to nil; vietnamese-viqr does
+        // not).
+        "utf-8" => coding_explicit_ascii_compat(info).unwrap_or_else(|| !coding_has_bom(info)),
         "utf-16" => false,
         "iso-2022" => matches!(
             compute_coding_category(info),
