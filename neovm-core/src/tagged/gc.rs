@@ -2505,7 +2505,21 @@ impl TaggedHeap {
             }
         } else if owner.is_veclike() {
             if let Some(ptr) = owner.as_veclike_ptr() {
-                unsafe { self.trace_veclike(ptr as *mut VecLikeHeader) };
+                // STRONG enumeration (collect_veclike_children), NOT trace_veclike:
+                // the remembered-set / SATB paths must conservatively retain weak
+                // hash-table entries. A dumped/tenured weak table is permanent-black
+                // and its entries are reached only here; trace_veclike would DEFER
+                // weak entries to mark_and_sweep_weak_tables, which historically did
+                // not run on the concurrent/incremental termination -> the entries
+                // were swept while still in the table -> UAF (caught by
+                // verify_dump_partition). collect_veclike_children traces them
+                // strongly, matching what the verifier checks. Precise weak
+                // semantics for runtime tables still apply via the weak-table sweep.
+                for child in self.collect_veclike_children(ptr as *mut VecLikeHeader) {
+                    if child.is_heap_object() {
+                        self.push_gray(child, origin);
+                    }
+                }
             }
         } else if owner.is_string() {
             if let Some(ptr) = owner.as_string_ptr() {
@@ -3346,6 +3360,14 @@ impl TaggedHeap {
         bytes_before: usize,
         _pause_t0: std::time::Instant,
     ) {
+        // Resolve weak hash tables (GNU mark_and_sweep_weak_table_contents): mark
+        // entries that survive per their table's weakness, then drop the rest. This
+        // mirrors `complete_collection` and MUST run on the concurrent/incremental
+        // termination too — otherwise a weak table's only-weakly-reachable entries
+        // are neither marked nor removed, so they are swept while still referenced
+        // by the table (UAF). The main mark has already drained at this point.
+        self.mark_and_sweep_weak_tables();
+
         // Dump-partition safety gate (marks still intact). Same as
         // `finalize_collection`'s, run before any object is freed.
         if self.partition_dump

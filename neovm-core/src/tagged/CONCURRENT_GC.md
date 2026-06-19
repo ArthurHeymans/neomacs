@@ -260,5 +260,12 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
 - Any new root source must be seeded at BOTH the snapshot and the termination
   handshake (the lesson from the incremental-termination UAF).
 - Keep allocation + free list mutator-only; never let the GC thread touch them.
-- The default (incremental) collector must stay byte-for-byte unchanged when
-  `NEOVM_GC_CONCURRENT` is off.
+- Weak hash tables must be resolved (`mark_and_sweep_weak_tables`) on EVERY
+  termination path — `complete_collection` AND `incremental_finish` (the
+  concurrent/incremental termination). The remembered/SATB path
+  (`push_value_children_to_gray`) must STRONG-trace veclike children
+  (`collect_veclike_children`, not `trace_veclike`, which defers weak entries) so
+  a dumped/tenured weak table conservatively retains its entries. Missing either
+  swept a weak table's still-referenced entries → UAF (only reproduces under
+  `gc_stress` + `NEOVM_GC_VERIFY_PARTITION` together — run that combo, not each
+  alone). Fixed 2026-06-19; was latent on the concurrent + incremental paths.
