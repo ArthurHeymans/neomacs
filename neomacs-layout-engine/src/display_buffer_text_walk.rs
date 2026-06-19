@@ -307,14 +307,6 @@ pub(crate) struct BufferTextWindowFinishInstallState<'a> {
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
-pub(crate) struct BufferTextWindowFinishOutputState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    output_emitter: WindowOutputEmitter,
-    evaluator: &'a mut Context,
-    hit_data: &'a mut Vec<WindowHitData>,
-    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
-}
-
 pub(crate) struct BufferTextWindowWalkRenderState<'emit> {
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
@@ -453,12 +445,6 @@ pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face>
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-pub(crate) struct BufferTextWindowRenderedBodyOutputState<'emit, 'face> {
-    builder: &'emit mut GlyphMatrixBuilder,
-    evaluator: &'emit mut Context,
-    render_services: ChromeRowRenderServices<'emit, 'face>,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowRedisplayPublishRequest {
     frame_id: FrameId,
@@ -496,14 +482,6 @@ pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
 }
 
 impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
-    fn output_state(&mut self) -> BufferTextWindowRenderedBodyOutputState<'_, '_> {
-        BufferTextWindowRenderedBodyOutputState {
-            builder: &mut *self.builder,
-            evaluator: &mut *self.evaluator,
-            render_services: self.render_services.reborrow(),
-        }
-    }
-
     fn finish_state(self) -> BufferTextWindowRenderedBodyFinishState<'emit> {
         BufferTextWindowRenderedBodyFinishState {
             builder: self.builder,
@@ -512,11 +490,9 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
             display_snapshots: self.display_snapshots,
         }
     }
-}
 
-impl<'emit, 'face> BufferTextWindowRenderedBodyOutputState<'emit, 'face> {
     fn install_body_and_publish_redisplay(
-        self,
+        &mut self,
         output_emitter: &mut WindowOutputEmitter,
         walk_setup: &mut BufferTextWindowWalkSetup,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
@@ -526,7 +502,7 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyOutputState<'emit, 'face> {
             BufferTextWindowBodyInstallPublishState {
                 output: TextWindowOutputRenderState::new(self.builder, output_emitter),
                 evaluator: self.evaluator,
-                render_services: self.render_services,
+                render_services: self.render_services.reborrow(),
             },
             tail_context,
             publish_request,
@@ -534,39 +510,28 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyOutputState<'emit, 'face> {
     }
 
     fn render_chrome_rows(
-        self,
+        &mut self,
         output_emitter: &mut WindowOutputEmitter,
         request: WindowChromeRowsRenderRequest<'_, '_>,
     ) {
         TextWindowOutputRenderState::new(self.builder, output_emitter).render_chrome_rows(
             self.evaluator,
             request,
-            self.render_services,
+            self.render_services.reborrow(),
         );
     }
 }
 
 impl<'a> BufferTextWindowRenderedBodyFinishState<'a> {
-    fn finish_output_state(
+    fn finish_install_state(
         self,
         output_emitter: WindowOutputEmitter,
-    ) -> BufferTextWindowFinishOutputState<'a> {
-        BufferTextWindowFinishOutputState {
-            builder: self.builder,
-            output_emitter,
-            evaluator: self.evaluator,
-            hit_data: self.hit_data,
-            display_snapshots: self.display_snapshots,
-        }
-    }
-}
-
-impl<'a> BufferTextWindowFinishOutputState<'a> {
-    fn into_install_state(self, hit_rows: Vec<HitRow>) -> BufferTextWindowFinishInstallState<'a> {
+        hit_rows: Vec<HitRow>,
+    ) -> BufferTextWindowFinishInstallState<'a> {
         BufferTextWindowFinishInstallState {
             finish_state: BufferTextWindowFinishState::new(
                 self.builder,
-                self.output_emitter,
+                output_emitter,
                 self.evaluator,
                 hit_rows,
             ),
@@ -1304,10 +1269,12 @@ impl BufferTextWindowWalkSetup {
     pub(crate) fn finish_window_and_install(
         &mut self,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
-        state: BufferTextWindowFinishOutputState<'_>,
+        state: BufferTextWindowRenderedBodyFinishState<'_>,
+        output_emitter: WindowOutputEmitter,
     ) {
-        tail_context
-            .finish_and_install(state.into_install_state(std::mem::take(&mut self.hit_rows)));
+        tail_context.finish_and_install(
+            state.finish_install_state(output_emitter, std::mem::take(&mut self.hit_rows)),
+        );
     }
 }
 
@@ -1416,7 +1383,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
     pub(crate) fn install_body_and_publish_redisplay(
         &mut self,
         walk_setup: &mut BufferTextWindowWalkSetup,
-        state: BufferTextWindowRenderedBodyOutputState<'_, '_>,
+        state: &mut BufferTextWindowRenderedBodyCompleteState<'_, '_>,
     ) -> TextWindowRedisplayPositions {
         state.install_body_and_publish_redisplay(
             &mut self.output_emitter,
@@ -1429,7 +1396,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
     pub(crate) fn render_chrome_rows(
         &mut self,
         request: WindowChromeRowsRenderRequest<'_, '_>,
-        state: BufferTextWindowRenderedBodyOutputState<'_, '_>,
+        state: &mut BufferTextWindowRenderedBodyCompleteState<'_, '_>,
     ) {
         state.render_chrome_rows(&mut self.output_emitter, request);
     }
@@ -1439,10 +1406,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         walk_setup: &mut BufferTextWindowWalkSetup,
         state: BufferTextWindowRenderedBodyFinishState<'_>,
     ) {
-        walk_setup.finish_window_and_install(
-            &self.tail_context,
-            state.finish_output_state(self.output_emitter),
-        );
+        walk_setup.finish_window_and_install(&self.tail_context, state, self.output_emitter);
     }
 
     pub(crate) fn install_body_chrome_and_finish(
@@ -1454,9 +1418,8 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         display_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) -> TextWindowRedisplayPositions {
         let mut state = output_session.rendered_body_complete_state(hit_data, display_snapshots);
-        let redisplay_positions =
-            self.install_body_and_publish_redisplay(walk_setup, state.output_state());
-        self.render_chrome_rows(chrome_request, state.output_state());
+        let redisplay_positions = self.install_body_and_publish_redisplay(walk_setup, &mut state);
+        self.render_chrome_rows(chrome_request, &mut state);
         self.finish_window_and_install(walk_setup, state.finish_state());
         redisplay_positions
     }
