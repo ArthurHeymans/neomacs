@@ -51,22 +51,18 @@ pub(crate) struct FrameOutputIdentity {
     pub(crate) no_accept_focus: bool,
 }
 
-pub(crate) struct FrameOutputRenderState<'a> {
+pub(crate) struct FrameOutputSurface<'a> {
     builder: &'a mut GlyphMatrixBuilder,
 }
 
-pub(crate) struct FrameChromeOutputRenderState<'builder, 'rows> {
+pub(crate) struct FrameChromeOutputSurface<'builder, 'rows> {
     builder: &'builder mut GlyphMatrixBuilder,
     pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
 }
 
-impl<'a> FrameOutputRenderState<'a> {
-    pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder) -> Self {
+impl<'a> FrameOutputSurface<'a> {
+    pub(crate) fn from_builder(builder: &'a mut GlyphMatrixBuilder) -> Self {
         Self { builder }
-    }
-
-    fn builder_mut(&mut self) -> &mut GlyphMatrixBuilder {
-        self.builder
     }
 
     pub(crate) fn set_frame_identity(&mut self, identity: FrameOutputIdentity) {
@@ -96,6 +92,27 @@ impl<'a> FrameOutputRenderState<'a> {
 
     pub(crate) fn install_face(&mut self, face: &Face) {
         DisplayRowFaceInstallSurface::from_builder(self.builder).install_face(face);
+    }
+
+    fn install_resolved_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+    ) {
+        DisplayRowFaceInstallSurface::from_builder(self.builder)
+            .install_resolved_face(face_id, face, metrics);
+    }
+
+    fn install_terminal_right_border(
+        &mut self,
+        request: BufferTextWindowTerminalRightBorderRequest,
+        render_services: ChromeRowRenderServices<'_, '_>,
+    ) -> u32 {
+        request.install_and_apply(
+            &mut TextWindowArtifactOutputSurface::from_builder(self.builder),
+            render_services,
+        )
     }
 
     fn add_background(&mut self, bounds: Rect, color: Color) {
@@ -159,8 +176,8 @@ impl<'a> FrameOutputRenderState<'a> {
     }
 }
 
-impl<'builder, 'rows> FrameChromeOutputRenderState<'builder, 'rows> {
-    pub(crate) fn new(
+impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
+    pub(crate) fn from_builder(
         builder: &'builder mut GlyphMatrixBuilder,
         pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
     ) -> Self {
@@ -204,17 +221,13 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         if let Some(identity) = self.identity {
             state.set_frame_identity(identity);
         }
         state.set_background_color(self.background_color);
         state.set_font_pixel_size(self.font_pixel_size);
-        DisplayRowFaceInstallSurface::from_builder(state.builder_mut()).install_resolved_face(
-            0,
-            self.default_face,
-            self.default_metrics,
-        );
+        state.install_resolved_face(0, self.default_face, self.default_metrics);
     }
 }
 
@@ -262,7 +275,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
         Self { params, metadata }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         state.add_background(
             self.params.bounds,
             Color::from_pixel(self.params.default_bg),
@@ -302,7 +315,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
 
     pub(crate) fn render_latest_and_apply(
         self,
-        state: &mut FrameOutputRenderState<'_>,
+        state: &mut FrameOutputSurface<'_>,
         curr_window_infos: &mut HashMap<i64, WindowInfo>,
     ) {
         let Some(curr) = state.window_infos().last().cloned() else {
@@ -313,7 +326,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         curr_window_infos.insert(curr.window_id, curr);
     }
 
-    fn record_transition_hint(&self, state: &mut FrameOutputRenderState<'_>, curr: &WindowInfo) {
+    fn record_transition_hint(&self, state: &mut FrameOutputSurface<'_>, curr: &WindowInfo) {
         let Some(prev) = self.prev_window_infos.get(&curr.window_id) else {
             return;
         };
@@ -322,7 +335,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         }
     }
 
-    fn record_effect_hints(&self, state: &mut FrameOutputRenderState<'_>, curr: &WindowInfo) {
+    fn record_effect_hints(&self, state: &mut FrameOutputSurface<'_>, curr: &WindowInfo) {
         if curr.is_minibuffer {
             return;
         }
@@ -390,7 +403,7 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         for (window_id, curr) in self.curr_window_infos {
             if curr.is_minibuffer {
                 continue;
@@ -436,7 +449,7 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         let new_selected = state
             .window_infos()
             .iter()
@@ -470,7 +483,7 @@ impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         let bg = state.background_color();
         let new_bg = (bg.r, bg.g, bg.b, bg.a);
         if let Some(old_bg) = *self.prev_background
@@ -507,7 +520,7 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         if self.prev_window_infos.is_empty() {
             return;
         }
@@ -536,10 +549,7 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
     }
 }
 
-fn find_window_cursor_y_in_state(
-    state: &FrameOutputRenderState<'_>,
-    info: &WindowInfo,
-) -> Option<f32> {
+fn find_window_cursor_y_in_state(state: &FrameOutputSurface<'_>, info: &WindowInfo) -> Option<f32> {
     let in_window = |x: f32, y: f32, hollow: bool| -> bool {
         !hollow
             && x >= info.bounds.x
@@ -570,7 +580,7 @@ fn color_changed_for_theme_transition(
 }
 
 fn frame_content_height_before_minibuffer(
-    state: &FrameOutputRenderState<'_>,
+    state: &FrameOutputSurface<'_>,
     frame_height: f32,
 ) -> f32 {
     state
@@ -612,7 +622,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
 
     pub(crate) fn render_and_apply(
         self,
-        state: &mut FrameOutputRenderState<'_>,
+        state: &mut FrameOutputSurface<'_>,
         mut render_services: ChromeRowRenderServices<'_, '_>,
     ) {
         WindowScrollBarsRenderRequest::new(self.params, self.info).render_and_apply(state);
@@ -622,7 +632,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
 
     fn render_right_divider(
         &self,
-        state: &mut FrameOutputRenderState<'_>,
+        state: &mut FrameOutputSurface<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
         if self.params.is_minibuffer() || self.geometry.is_rightmost {
@@ -660,15 +670,14 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
                 Color::from_pixel(self.frame_params.vertical_border_fg),
             );
         } else {
-            BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
-                .install_and_apply(
-                    &mut TextWindowArtifactOutputSurface::from_builder(state.builder_mut()),
-                    render_services,
-                );
+            state.install_terminal_right_border(
+                BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width),
+                render_services,
+            );
         }
     }
 
-    fn render_bottom_divider(&self, state: &mut FrameOutputRenderState<'_>) {
+    fn render_bottom_divider(&self, state: &mut FrameOutputSurface<'_>) {
         if self.params.is_minibuffer()
             || self.geometry.is_bottommost
             || self.frame_params.bottom_divider_width <= 0
@@ -733,7 +742,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
         }
     }
 
-    fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         if self.width <= 0.0 || self.height <= 0.0 {
             return;
         }
@@ -822,7 +831,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
         Self { params, info }
     }
 
-    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputSurface<'_>) {
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
         let chrome_top = self.params.header_line_height + self.params.tab_line_height;

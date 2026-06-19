@@ -35,8 +35,8 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
-    FrameChromeOutputRenderState, FrameLineAnimationHintsRenderRequest, FrameOutputIdentity,
-    FrameOutputRenderState, FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
+    FrameChromeOutputSurface, FrameLineAnimationHintsRenderRequest, FrameOutputIdentity,
+    FrameOutputStateRenderRequest, FrameOutputSurface, FrameThemeTransitionHintRenderRequest,
     FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
     WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
@@ -431,7 +431,9 @@ impl LayoutEngine {
                 default_resolved,
                 default_metrics,
             )
-            .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
+            .render_and_apply(&mut FrameOutputSurface::from_builder(
+                &mut self.matrix_builder,
+            ));
 
             // Clear hit-test data for new frame
             self.hit_data.clear();
@@ -501,11 +503,12 @@ impl LayoutEngine {
                         modified: buffer.map(|b| b.is_modified()).unwrap_or(false),
                     }
                 };
-                WindowFrameInfoRenderRequest::new(params, metadata)
-                    .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
+                WindowFrameInfoRenderRequest::new(params, metadata).render_and_apply(
+                    &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
+                );
                 WindowFrameInfoEffectsRenderRequest::new(&self.prev_window_infos)
                     .render_latest_and_apply(
-                        &mut FrameOutputRenderState::new(&mut self.matrix_builder),
+                        &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
                         &mut curr_window_infos,
                     );
 
@@ -537,7 +540,7 @@ impl LayoutEngine {
                         &info,
                     )
                     .render_and_apply(
-                        &mut FrameOutputRenderState::new(&mut self.matrix_builder),
+                        &mut FrameOutputSurface::from_builder(&mut self.matrix_builder),
                         ChromeRowRenderServices::new(
                             &mut self.font_metrics,
                             &face_resolver,
@@ -671,22 +674,30 @@ impl LayoutEngine {
             }
 
             FrameLineAnimationHintsRenderRequest::new(&self.prev_window_infos, &curr_window_infos)
-                .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
+                .render_and_apply(&mut FrameOutputSurface::from_builder(
+                    &mut self.matrix_builder,
+                ));
             FrameWindowSwitchHintRenderRequest::new(&mut self.prev_selected_window_id)
-                .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
+                .render_and_apply(&mut FrameOutputSurface::from_builder(
+                    &mut self.matrix_builder,
+                ));
             FrameThemeTransitionHintRenderRequest::new(
                 &mut self.prev_background,
                 frame_params.width,
                 frame_params.height,
             )
-            .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
+            .render_and_apply(&mut FrameOutputSurface::from_builder(
+                &mut self.matrix_builder,
+            ));
             FrameTopologyTransitionHintRenderRequest::new(
                 &self.prev_window_infos,
                 &curr_window_infos,
                 frame_params.width,
                 frame_params.height,
             )
-            .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
+            .render_and_apply(&mut FrameOutputSurface::from_builder(
+                &mut self.matrix_builder,
+            ));
 
             break (frame_params, curr_window_infos);
         };
@@ -1024,7 +1035,7 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let mut frame_chrome_output = FrameChromeOutputRenderState::new(
+        let mut frame_chrome_output = FrameChromeOutputSurface::from_builder(
             &mut self.matrix_builder,
             &mut self.pending_frame_chrome_rows,
         );

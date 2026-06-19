@@ -15,7 +15,7 @@
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
 use super::window_output::{ChromeRowOutput, TextWindowOutputRenderState};
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_frame_output::FrameChromeOutputRenderState;
+use crate::display_frame_output::FrameChromeOutputSurface;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowOwner,
@@ -177,14 +177,14 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
 }
 
 pub(crate) struct FrameTabBarDisplayRowRenderState<'emit, 'output, 'face> {
-    output: &'emit mut FrameChromeOutputRenderState<'emit, 'output>,
+    output: &'emit mut FrameChromeOutputSurface<'emit, 'output>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
     display_host: Option<&'emit dyn DisplayHost>,
 }
 
 impl<'emit, 'output, 'face> FrameTabBarDisplayRowRenderState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        output: &'emit mut FrameChromeOutputRenderState<'emit, 'output>,
+        output: &'emit mut FrameChromeOutputSurface<'emit, 'output>,
         render_services: ChromeRowRenderServices<'emit, 'face>,
         display_host: Option<&'emit dyn DisplayHost>,
     ) -> Self {
