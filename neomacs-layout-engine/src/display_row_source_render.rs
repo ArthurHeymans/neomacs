@@ -176,6 +176,19 @@ pub(crate) struct TextRowSourceRenderState<'a> {
 }
 
 impl<'a> TextRowSourceRenderState<'a> {
+    pub(crate) fn from_output_render(
+        output_render: TextRowOutputRenderState<'a>,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'a FaceResolver,
+    ) -> Self {
+        Self {
+            output_render,
+            font_metrics,
+            face_resolver,
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn new(
         builder: &'a mut GlyphMatrixBuilder,
         output_emitter: &'a mut WindowOutputEmitter,
@@ -183,11 +196,11 @@ impl<'a> TextRowSourceRenderState<'a> {
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'a FaceResolver,
     ) -> Self {
-        Self {
-            output_render: TextRowOutputRenderState::new(builder, output_emitter, evaluator),
+        Self::from_output_render(
+            TextRowOutputRenderState::new(builder, output_emitter, evaluator),
             font_metrics,
             face_resolver,
-        }
+        )
     }
 
     pub(crate) fn reborrow(&mut self) -> TextRowSourceRenderState<'_> {

@@ -46,7 +46,7 @@ use crate::display_row_geometry::{
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{DisplayRowPrefixRequest, DisplayRowPrefixValues};
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
-use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_row_walk_state::{
@@ -328,11 +328,28 @@ pub(crate) struct BufferTextWindowBodyRenderState<'emit> {
 }
 
 pub(crate) struct BufferTextWindowBodyPassState<'emit> {
+    output: BufferTextWindowBodyOutputState<'emit>,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+struct BufferTextWindowBodyOutputState<'emit> {
     builder: &'emit mut GlyphMatrixBuilder,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'emit FaceResolver,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'emit> BufferTextWindowBodyOutputState<'emit> {
+    fn source_render_state<'output>(
+        &'output mut self,
+        output_emitter: &'output mut WindowOutputEmitter,
+    ) -> TextRowSourceRenderState<'output> {
+        TextRowSourceRenderState::from_output_render(
+            TextRowOutputRenderState::new(self.builder, output_emitter, self.evaluator),
+            self.font_metrics,
+            self.face_resolver,
+        )
+    }
 }
 
 pub(crate) struct BufferTextWindowOutputSession<'emit> {
@@ -362,10 +379,12 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
 
     fn body_pass_state(&mut self) -> BufferTextWindowBodyPassState<'_> {
         BufferTextWindowBodyPassState {
-            builder: self.builder,
-            evaluator: self.evaluator,
-            font_metrics: self.font_metrics,
-            face_resolver: self.face_resolver,
+            output: BufferTextWindowBodyOutputState {
+                builder: self.builder,
+                evaluator: self.evaluator,
+                font_metrics: self.font_metrics,
+                face_resolver: self.face_resolver,
+            },
             face_ids: self.face_ids,
         }
     }
@@ -1154,18 +1173,12 @@ impl BufferTextWindowWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowBodyPassOutcome {
         let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState::new(
-            state.builder,
-            state.evaluator,
+            state.output.builder,
+            state.output.evaluator,
         ));
         let post_loop = self.render_body_and_tail(
             &mut BufferTextWindowBodyRenderState {
-                source_render: TextRowSourceRenderState::new(
-                    state.builder,
-                    &mut output_emitter,
-                    state.evaluator,
-                    state.font_metrics,
-                    state.face_resolver,
-                ),
+                source_render: state.output.source_render_state(&mut output_emitter),
                 line_numbers,
                 face_scan,
                 active_face_state,
