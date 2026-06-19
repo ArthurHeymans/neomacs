@@ -31,10 +31,9 @@ use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCurrentRowDecorationRequest, MatrixCurrentWindowRowDecorationRequest,
-    MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
-    MatrixLastWindowRowsDecorationRequest, MatrixRowBeginRequest, MatrixRowLifecycleRequest,
-    MatrixRowMetricsRequest, MatrixWindowBeginRequest, MatrixWindowLifecycleRequest,
+    GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest, MatrixCursorInstallRequest,
+    MatrixFrameStateInstallRequest, MatrixLastWindowRowsDecorationRequest, MatrixRowBeginRequest,
+    MatrixRowMetricsRequest, MatrixWindowBeginRequest,
 };
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -314,11 +313,7 @@ impl TextWindowRowDecorationRequest {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         match self {
             Self::MarkCurrentTruncatedLeft => {
-                builder
-                    .row_installer()
-                    .install(MatrixRowLifecycleRequest::CurrentDecoration(
-                        MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
-                    ));
+                builder.row_installer().mark_current_truncated_left();
             }
         }
     }
@@ -431,31 +426,9 @@ fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum TextMatrixRowLifecycleRequest {
-    Begin(TextMatrixRowBegin),
-    Finish(TextMatrixRowMetrics),
-    FinishAndEnd(TextMatrixRowMetrics),
-    Transition(TextMatrixRowGeometryTransition),
-    TransitionWithLimit {
-        transition: TextMatrixRowGeometryTransition,
-        max_rows: usize,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum TextMatrixRowLifecycleOutcome {
-    Began {
-        matrix_row: usize,
-    },
-    Finished {
-        matrix_row: usize,
-        metrics: MatrixRowMetricsRequest,
-    },
-    FinishedAndFinalized {
-        matrix_row: usize,
-        metrics: MatrixRowMetricsRequest,
-    },
-    Transitioned(TextMatrixRowTransition),
+pub(crate) struct TextMatrixRowFinish {
+    pub(crate) matrix_row: usize,
+    pub(crate) metrics: MatrixRowMetricsRequest,
 }
 
 pub(crate) struct TextMatrixRowOutput<'a> {
@@ -477,30 +450,12 @@ impl<'a> TextMatrixRowOutput<'a> {
         }
     }
 
-    pub(crate) fn apply(
-        &mut self,
-        request: TextMatrixRowLifecycleRequest,
-    ) -> TextMatrixRowLifecycleOutcome {
-        match request {
-            TextMatrixRowLifecycleRequest::Begin(begin) => self.begin(begin),
-            TextMatrixRowLifecycleRequest::Finish(metrics) => self.finish(metrics),
-            TextMatrixRowLifecycleRequest::FinishAndEnd(metrics) => self.finish_and_end(metrics),
-            TextMatrixRowLifecycleRequest::Transition(transition) => self.emit(transition),
-            TextMatrixRowLifecycleRequest::TransitionWithLimit {
-                transition,
-                max_rows,
-            } => self.emit_with_row_limit(transition, max_rows),
-        }
-    }
-
-    pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) -> TextMatrixRowLifecycleOutcome {
-        self.builder
-            .row_installer()
-            .install(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
-                row: begin.matrix_row,
-                role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
-                mode_line: false,
-            }));
+    pub(crate) fn begin(&mut self, begin: TextMatrixRowBegin) -> usize {
+        self.builder.row_installer().begin(MatrixRowBeginRequest {
+            row: begin.matrix_row,
+            role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+            mode_line: false,
+        });
         self.output_emitter.begin_text_matrix_row(
             self.evaluator,
             begin.matrix_row,
@@ -509,67 +464,47 @@ impl<'a> TextMatrixRowOutput<'a> {
             begin.y,
             begin.x,
         );
-        TextMatrixRowLifecycleOutcome::Began {
-            matrix_row: begin.matrix_row,
-        }
+        begin.matrix_row
     }
 
-    pub(crate) fn finish(
-        &mut self,
-        metrics: TextMatrixRowMetrics,
-    ) -> TextMatrixRowLifecycleOutcome {
+    pub(crate) fn finish(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
         let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
         let matrix_row = self.output_emitter.current_text_matrix_row();
         self.builder
             .row_installer()
-            .install(MatrixRowLifecycleRequest::Metrics {
-                row: matrix_row,
-                metrics: matrix_metrics,
-            });
+            .set_metrics(matrix_row, matrix_metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
-        TextMatrixRowLifecycleOutcome::Finished {
+        TextMatrixRowFinish {
             matrix_row,
             metrics: matrix_metrics,
         }
     }
 
-    pub(crate) fn finish_and_end(
-        &mut self,
-        metrics: TextMatrixRowMetrics,
-    ) -> TextMatrixRowLifecycleOutcome {
+    pub(crate) fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
         let matrix_row = self.output_emitter.current_text_matrix_row();
-        let TextMatrixRowLifecycleOutcome::Finished { metrics, .. } = self.finish(metrics) else {
-            unreachable!("finish returns a finished row outcome");
-        };
-        self.builder
-            .row_installer()
-            .install(MatrixRowLifecycleRequest::Finalize { row: matrix_row });
-        TextMatrixRowLifecycleOutcome::FinishedAndFinalized {
-            matrix_row,
-            metrics,
-        }
+        let finish = self.finish(metrics);
+        self.builder.row_installer().finalize(matrix_row);
+        finish
     }
 
     pub(crate) fn emit(
         &mut self,
         transition: TextMatrixRowGeometryTransition,
-    ) -> TextMatrixRowLifecycleOutcome {
+    ) -> TextMatrixRowTransition {
         self.finish_and_end(transition.finished_row);
         self.begin(transition.begin_row);
-        TextMatrixRowLifecycleOutcome::Transitioned(TextMatrixRowTransition::BeganNextRow)
+        TextMatrixRowTransition::BeganNextRow
     }
 
     pub(crate) fn emit_with_row_limit(
         &mut self,
         transition: TextMatrixRowGeometryTransition,
         max_rows: usize,
-    ) -> TextMatrixRowLifecycleOutcome {
+    ) -> TextMatrixRowTransition {
         if transition.begin_row.row >= max_rows {
             self.finish_and_end(transition.finished_row);
-            return TextMatrixRowLifecycleOutcome::Transitioned(
-                TextMatrixRowTransition::ExhaustedRows,
-            );
+            return TextMatrixRowTransition::ExhaustedRows;
         }
         self.emit(transition)
     }
@@ -593,13 +528,11 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
     pub(crate) fn begin_text_window_output(&mut self, request: TextWindowBegin) {
         let first_row = request.first_row;
         begin_text_window_matrix(self.output.builder, request.into());
-        self.output
-            .apply(TextMatrixRowLifecycleRequest::Begin(first_row));
+        self.output.begin(first_row);
     }
 
     pub(crate) fn finish_row(&mut self, metrics: TextMatrixRowMetrics) {
-        self.output
-            .apply(TextMatrixRowLifecycleRequest::Finish(metrics));
+        self.output.finish(metrics);
     }
 
     pub(crate) fn finish_pending_row(&mut self, request: TextWindowPendingRowFinish<'_>) -> bool {
@@ -626,21 +559,14 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
     }
 
     pub(crate) fn finish_and_end_row(&mut self, metrics: TextMatrixRowMetrics) {
-        self.output
-            .apply(TextMatrixRowLifecycleRequest::FinishAndEnd(metrics));
+        self.output.finish_and_end(metrics);
     }
 
     pub(crate) fn transition(
         &mut self,
         transition: TextMatrixRowGeometryTransition,
     ) -> TextMatrixRowTransition {
-        match self
-            .output
-            .apply(TextMatrixRowLifecycleRequest::Transition(transition))
-        {
-            TextMatrixRowLifecycleOutcome::Transitioned(transition) => transition,
-            _ => unreachable!("transition returns a transition outcome"),
-        }
+        self.output.emit(transition)
     }
 
     pub(crate) fn transition_with_limit(
@@ -648,15 +574,7 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
         transition: TextMatrixRowGeometryTransition,
         max_rows: usize,
     ) -> TextMatrixRowTransition {
-        match self
-            .output
-            .apply(TextMatrixRowLifecycleRequest::TransitionWithLimit {
-                transition,
-                max_rows,
-            }) {
-            TextMatrixRowLifecycleOutcome::Transitioned(transition) => transition,
-            _ => unreachable!("transition with limit returns a transition outcome"),
-        }
+        self.output.emit_with_row_limit(transition, max_rows)
     }
 
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
@@ -665,18 +583,14 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
 }
 
 fn begin_text_window_matrix(builder: &mut GlyphMatrixBuilder, request: TextWindowMatrixBegin) {
-    builder
-        .window_installer()
-        .install(MatrixWindowLifecycleRequest::Begin(
-            MatrixWindowBeginRequest {
-                window_id: request.window_id,
-                nrows: request.rows,
-                ncols: request.cols,
-                pixel_bounds: request.bounds,
-                text_pixel_bounds: request.text_bounds,
-                selected: request.selected,
-            },
-        ));
+    builder.window_installer().begin(MatrixWindowBeginRequest {
+        window_id: request.window_id,
+        nrows: request.rows,
+        ncols: request.cols,
+        pixel_bounds: request.bounds,
+        text_pixel_bounds: request.text_bounds,
+        selected: request.selected,
+    });
 }
 
 fn record_text_window_display_range_in_matrix(
@@ -746,9 +660,7 @@ fn record_text_window_redisplay_positions(
 }
 
 fn close_text_window_matrix_output(builder: &mut GlyphMatrixBuilder) {
-    builder
-        .window_installer()
-        .install(MatrixWindowLifecycleRequest::End);
+    builder.window_installer().end();
 }
 
 #[cfg(test)]
@@ -1244,11 +1156,7 @@ impl TextWindowCursorPublication {
         }
         builder
             .row_installer()
-            .install(MatrixRowLifecycleRequest::Cursor {
-                row: self.row,
-                col: self.row_col,
-                style: self.style,
-            });
+            .set_cursor(self.row, self.row_col, self.style);
         output_emitter.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
             builder.artifact_installer().store_phys_cursor(cursor);
@@ -1285,23 +1193,17 @@ fn finish_text_window_output_rows(
 ) {
     let window_y = builder.current_window_row_install_context().pixel_bounds.y;
     for metric in output_emitter.row_metrics() {
-        builder
-            .row_installer()
-            .install(MatrixRowLifecycleRequest::Metrics {
-                row: metric.matrix_row,
-                metrics: MatrixRowMetricsRequest {
-                    pixel_y: metric.pixel_y - window_y,
-                    height_px: metric.height,
-                    ascent_px: metric.ascent,
-                },
-            });
+        builder.row_installer().set_metrics(
+            metric.matrix_row,
+            MatrixRowMetricsRequest {
+                pixel_y: metric.pixel_y - window_y,
+                height_px: metric.height,
+                ascent_px: metric.ascent,
+            },
+        );
     }
     if let Some(metric) = output_emitter.row_metrics().last() {
-        builder
-            .row_installer()
-            .install(MatrixRowLifecycleRequest::Finalize {
-                row: metric.matrix_row,
-            });
+        builder.row_installer().finalize(metric.matrix_row);
     }
 }
 

@@ -278,7 +278,7 @@ pub(crate) struct MatrixWindowBeginRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum MatrixWindowLifecycleRequest {
+enum MatrixWindowLifecycleRequest {
     Begin(MatrixWindowBeginRequest),
     End,
 }
@@ -325,12 +325,12 @@ pub(crate) struct MatrixRowMetricsRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum MatrixCurrentRowDecorationRequest {
+enum MatrixCurrentRowDecorationRequest {
     MarkTruncatedLeft,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum MatrixRowLifecycleRequest {
+enum MatrixRowLifecycleRequest {
     Begin(MatrixRowBeginRequest),
     ReplaceCurrent {
         row: GlyphRow,
@@ -436,16 +436,18 @@ pub(crate) struct MatrixRowInstaller<'a> {
 }
 
 impl MatrixRowInstaller<'_> {
-    pub(crate) fn install(&mut self, request: MatrixRowLifecycleRequest) {
+    fn install(&mut self, request: MatrixRowLifecycleRequest) {
         self.builder.install_row_lifecycle(request);
     }
 
-    pub(crate) fn install_complete_row(&mut self, begin: MatrixRowBeginRequest, row: GlyphRow) {
+    pub(crate) fn begin(&mut self, begin: MatrixRowBeginRequest) {
         self.install(MatrixRowLifecycleRequest::Begin(begin));
+    }
+
+    pub(crate) fn install_complete_row(&mut self, begin: MatrixRowBeginRequest, row: GlyphRow) {
+        self.begin(begin);
         self.replace_current_row(row);
-        self.install(MatrixRowLifecycleRequest::Finalize {
-            row: self.builder.current_row,
-        });
+        self.finalize(self.builder.current_row);
     }
 
     pub(crate) fn replace_current_row(&mut self, row: GlyphRow) {
@@ -455,6 +457,24 @@ impl MatrixRowInstaller<'_> {
     pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
         self.builder.with_current_row_mut(f)
     }
+
+    pub(crate) fn set_metrics(&mut self, row: usize, metrics: MatrixRowMetricsRequest) {
+        self.install(MatrixRowLifecycleRequest::Metrics { row, metrics });
+    }
+
+    pub(crate) fn finalize(&mut self, row: usize) {
+        self.install(MatrixRowLifecycleRequest::Finalize { row });
+    }
+
+    pub(crate) fn set_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
+        self.install(MatrixRowLifecycleRequest::Cursor { row, col, style });
+    }
+
+    pub(crate) fn mark_current_truncated_left(&mut self) {
+        self.install(MatrixRowLifecycleRequest::CurrentDecoration(
+            MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
+        ));
+    }
 }
 
 pub(crate) struct MatrixWindowInstaller<'a> {
@@ -462,8 +482,16 @@ pub(crate) struct MatrixWindowInstaller<'a> {
 }
 
 impl MatrixWindowInstaller<'_> {
-    pub(crate) fn install(&mut self, request: MatrixWindowLifecycleRequest) {
+    fn install(&mut self, request: MatrixWindowLifecycleRequest) {
         self.builder.install_window_lifecycle(request);
+    }
+
+    pub(crate) fn begin(&mut self, begin: MatrixWindowBeginRequest) {
+        self.install(MatrixWindowLifecycleRequest::Begin(begin));
+    }
+
+    pub(crate) fn end(&mut self) {
+        self.install(MatrixWindowLifecycleRequest::End);
     }
 }
 
@@ -621,23 +649,19 @@ impl GlyphMatrixBuilder {
         text_pixel_bounds: Rect,
         selected: bool,
     ) {
-        self.window_installer()
-            .install(MatrixWindowLifecycleRequest::Begin(
-                MatrixWindowBeginRequest {
-                    window_id,
-                    nrows,
-                    ncols,
-                    pixel_bounds,
-                    text_pixel_bounds,
-                    selected,
-                },
-            ));
+        self.window_installer().begin(MatrixWindowBeginRequest {
+            window_id,
+            nrows,
+            ncols,
+            pixel_bounds,
+            text_pixel_bounds,
+            selected,
+        });
     }
 
     #[cfg(test)]
     pub(crate) fn end_window(&mut self) {
-        self.window_installer()
-            .install(MatrixWindowLifecycleRequest::End);
+        self.window_installer().end();
     }
 
     fn install_window_lifecycle(&mut self, request: MatrixWindowLifecycleRequest) {
@@ -662,31 +686,31 @@ impl GlyphMatrixBuilder {
 
     #[cfg(test)]
     pub(crate) fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::Begin(MatrixRowBeginRequest {
+        self.row_installer().begin(MatrixRowBeginRequest {
             row,
             role,
             mode_line: matches!(role, GlyphRowRole::ModeLine),
-        }));
+        });
     }
 
     #[cfg(test)]
     pub(crate) fn end_row(&mut self) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::Finalize {
-            row: self.current_row,
-        });
+        let current_row = self.current_row;
+        self.row_installer().finalize(current_row);
     }
 
     /// Record stored geometry for the currently open row.
     #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::Metrics {
-            row: self.current_row,
-            metrics: MatrixRowMetricsRequest {
+        let current_row = self.current_row;
+        self.row_installer().set_metrics(
+            current_row,
+            MatrixRowMetricsRequest {
                 pixel_y,
                 height_px,
                 ascent_px,
             },
-        });
+        );
     }
 
     fn with_current_row_mut<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
@@ -805,7 +829,7 @@ impl GlyphMatrixBuilder {
         col: u16,
         style: neomacs_display_protocol::frame_glyphs::CursorStyle,
     ) {
-        self.install_row_lifecycle(MatrixRowLifecycleRequest::Cursor { row, col, style });
+        self.row_installer().set_cursor(row, col, style);
     }
 
     // -----------------------------------------------------------------------

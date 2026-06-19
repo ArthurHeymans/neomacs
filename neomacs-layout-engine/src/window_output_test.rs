@@ -2,8 +2,6 @@ use super::ChromeRowOutput;
 use super::DisplayProgressSink;
 use super::TextMatrixRowBegin;
 use super::TextMatrixRowGeometryTransition;
-use super::TextMatrixRowLifecycleOutcome;
-use super::TextMatrixRowLifecycleRequest;
 use super::TextMatrixRowMetrics;
 use super::TextMatrixRowOutput;
 use super::TextMatrixRowTransition;
@@ -494,10 +492,7 @@ fn text_matrix_row_output_surface_begins_row() {
             x: 0.0,
         });
 
-    assert_eq!(
-        outcome,
-        TextMatrixRowLifecycleOutcome::Began { matrix_row: 0 }
-    );
+    assert_eq!(outcome, 0);
 
     let display = eval
         .frame_manager()
@@ -542,32 +537,28 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);
     let mut output = TextMatrixRowOutput::new(&mut builder, &mut emitter, &mut eval);
-    output.apply(TextMatrixRowLifecycleRequest::Begin(TextMatrixRowBegin {
+    output.begin(TextMatrixRowBegin {
         matrix_row: 0,
         row: 0,
         col: 0,
         y: 4.0,
         x: 0.0,
-    }));
-    let outcome = output.apply(TextMatrixRowLifecycleRequest::Finish(
-        TextMatrixRowMetrics {
-            y: 20.0,
-            height: 16.0,
-            ascent: 11.0,
-        },
-    ));
+    });
+    let outcome = output.finish(TextMatrixRowMetrics {
+        y: 20.0,
+        height: 16.0,
+        ascent: 11.0,
+    });
 
     assert_eq!(
-        outcome,
-        TextMatrixRowLifecycleOutcome::Finished {
-            matrix_row: 0,
-            metrics: crate::matrix_builder::MatrixRowMetricsRequest {
-                pixel_y: 16.0,
-                height_px: 16.0,
-                ascent_px: 11.0,
-            },
+        outcome.metrics,
+        crate::matrix_builder::MatrixRowMetricsRequest {
+            pixel_y: 16.0,
+            height_px: 16.0,
+            ascent_px: 11.0,
         }
     );
+    assert_eq!(outcome.matrix_row, 0);
 
     builder.end_row();
     builder.end_window();

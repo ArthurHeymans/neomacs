@@ -167,31 +167,19 @@ fn row_installer_installs_complete_row_metrics_and_cursor() {
         },
         row,
     );
+    builder.row_installer().set_metrics(
+        0,
+        MatrixRowMetricsRequest {
+            pixel_y: 12.0,
+            height_px: 18.0,
+            ascent_px: 13.0,
+        },
+    );
     builder
         .row_installer()
-        .install(MatrixRowLifecycleRequest::Metrics {
-            row: 0,
-            metrics: MatrixRowMetricsRequest {
-                pixel_y: 12.0,
-                height_px: 18.0,
-                ascent_px: 13.0,
-            },
-        });
-    builder
-        .row_installer()
-        .install(MatrixRowLifecycleRequest::Cursor {
-            row: 0,
-            col: 1,
-            style: CursorStyle::Bar(2.0),
-        });
-    builder
-        .row_installer()
-        .install(MatrixRowLifecycleRequest::CurrentDecoration(
-            MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
-        ));
-    builder
-        .row_installer()
-        .install(MatrixRowLifecycleRequest::Finalize { row: 0 });
+        .set_cursor(0, 1, CursorStyle::Bar(2.0));
+    builder.row_installer().mark_current_truncated_left();
+    builder.row_installer().finalize(0);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);
