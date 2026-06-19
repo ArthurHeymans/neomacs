@@ -8,7 +8,9 @@ use crate::display_buffer_text_append::{
     BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
     TextWindowAppendSurfaceRequest,
 };
-use crate::display_buffer_text_item_append::BufferTextRowAppendState;
+use crate::display_buffer_text_item_append::{
+    BufferTextRowAppendContext, BufferTextRowAppendState,
+};
 use crate::display_buffer_text_render::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
     BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
@@ -32,13 +34,12 @@ use crate::display_buffer_text_source::{
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_item::DisplayItem;
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
-use crate::display_row_append_context::DisplayRowAppendSurface;
-use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row_append_context::{DisplayRowAppendKind, DisplayRowAppendSurface};
+use crate::display_row_builder::{DisplayRowAppendStatus, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowVisibilityLimit, DisplayRowYPositions,
@@ -614,6 +615,23 @@ pub(crate) struct BufferTextSourceItemStepRenderRequest<'a> {
     overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
+}
+
+pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
+    loop_context: BufferTextWindowLoopRequestContext,
+    layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+    source_item: BufferTextSourceItem,
+    item_stepper: &'a mut BufferTextSourceItemStepper,
+    text: &'a [u8],
+    append_surface: &'a DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    params: &'a WindowParams,
+}
+
+pub(crate) enum BufferTextConsumedSourceItem {
+    PendingStep(BufferTextSourceItemStep),
+    SourceItem(BufferTextSourceItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2717,18 +2735,39 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             }
         }
 
-        let Some(source_step) =
-            self.consume_source_item_step(source_cursor, source_context, item_stepper)
+        let Some(consumed_source) =
+            self.consume_source_item(source_cursor, source_context, item_stepper)
         else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
-        self.render_source_item_step_for_context(
-            BufferTextSourceItemStepRenderRequest {
+        let source_item = match consumed_source {
+            BufferTextConsumedSourceItem::PendingStep(source_step) => {
+                return self.render_source_item_step_for_context(
+                    BufferTextSourceItemStepRenderRequest {
+                        loop_context,
+                        layout_resolution_context: face_resolution_context
+                            .source_item_layout_resolution_context(),
+                        source_step,
+                        text,
+                        append_surface,
+                        overlay_context,
+                        active_face_state,
+                        params,
+                    },
+                    buffer,
+                );
+            }
+            BufferTextConsumedSourceItem::SourceItem(source_item) => source_item,
+        };
+
+        self.render_source_item_for_context(
+            BufferTextSourceItemRenderRequest {
                 loop_context,
                 layout_resolution_context: face_resolution_context
                     .source_item_layout_resolution_context(),
-                source_step,
+                source_item,
+                item_stepper,
                 text,
                 append_surface,
                 overlay_context,
@@ -2874,6 +2913,142 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         BufferTextWindowLoopStepOutcome::ContinueBufferWalk
     }
 
+    pub(crate) fn render_source_item_for_context<'request, B: LayoutBufferView>(
+        &mut self,
+        request: BufferTextSourceItemRenderRequest<'request>,
+        buffer: &B,
+    ) -> BufferTextWindowLoopStepOutcome {
+        let BufferTextSourceItemRenderRequest {
+            loop_context,
+            layout_resolution_context,
+            source_item,
+            item_stepper,
+            text,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+        } = request;
+
+        if let Some(outcome) = self.render_plain_text_run_item_directly(
+            loop_context,
+            &source_item,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+            buffer,
+        ) {
+            return outcome;
+        }
+
+        let Some(source_step) =
+            item_stepper.item_step_from_item(source_item.into_item(), self.byte_idx, *self.charpos)
+        else {
+            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+        };
+
+        self.render_source_item_step_for_context(
+            BufferTextSourceItemStepRenderRequest {
+                loop_context,
+                layout_resolution_context,
+                source_step,
+                text,
+                append_surface,
+                overlay_context,
+                active_face_state,
+                params,
+            },
+            buffer,
+        )
+    }
+
+    fn render_plain_text_run_item_directly<B: LayoutBufferView>(
+        &mut self,
+        loop_context: BufferTextWindowLoopRequestContext,
+        source_item: &BufferTextSourceItem,
+        append_surface: &DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'_>,
+        active_face_state: &DisplayRowActiveFaceState,
+        params: &WindowParams,
+        buffer: &B,
+    ) -> Option<BufferTextWindowLoopStepOutcome> {
+        let item = source_item.item();
+        if item.face != RenderFaceRef::Inherit
+            || item.layout.height.is_some()
+            || item.layout.raise.is_some()
+            || overlay_context.is_enabled()
+            || params.word_wrap
+            || params.wrap_mode != LineWrapMode::Truncate
+        {
+            return None;
+        }
+
+        let DisplayItemKind::TextRun(run) = &item.kind else {
+            return None;
+        };
+        let text = run.text.as_ref();
+        if text.is_empty() || text.chars().any(char::is_whitespace) {
+            return None;
+        }
+
+        let char_count = i64::try_from(text.chars().count()).ok()?;
+        if char_count <= 1 {
+            return None;
+        }
+        let start_charpos = source_item.start_charpos();
+        let end_charpos = start_charpos.checked_add(char_count)?;
+        if loop_context.point_charpos >= start_charpos && loop_context.point_charpos < end_charpos {
+            return None;
+        }
+
+        let mut direct_item = item.clone();
+        direct_item.face = RenderFaceRef::FaceId(active_face_state.face_id());
+        let append_position = DisplayRowPosition {
+            x_px: *self.x,
+            col: *self.col,
+        };
+        let row_append_context = BufferTextRowAppendContext::new(
+            buffer,
+            loop_context.buffer_id(),
+            append_surface,
+            active_face_state,
+            0.0,
+            loop_context.char_height,
+        );
+        let measured_width = row_append_context.measure_source_display_item_width_to_text_row(
+            self.row_geometry,
+            &mut self.source_render.measure_state(),
+            &direct_item,
+            append_position,
+            DisplayRowAppendKind::SourceText,
+        )?;
+        if append_position.x_px + measured_width > append_surface.right_edge() {
+            return None;
+        }
+
+        let progress = row_append_context.append_source_display_item_naturally_to_text_row(
+            self.row_geometry,
+            &mut self.source_render,
+            direct_item,
+            append_position,
+            DisplayRowAppendKind::SourceText,
+        )?;
+        if progress.status != DisplayRowAppendStatus::Complete {
+            return Some(BufferTextWindowLoopStepOutcome::StopBufferWalk);
+        }
+
+        self.trailing_whitespace.reset_after_row_transition();
+        if let Some(last_char) = text.chars().last() {
+            self.word_wrap.allow_after_current_char(last_char);
+        }
+        *self.byte_idx = source_item.start_byte_idx() + text.len();
+        *self.charpos = end_charpos;
+        *self.x = progress.end.x_px;
+        *self.col = progress.end.col;
+        Some(BufferTextWindowLoopStepOutcome::ContinueBufferWalk)
+    }
+
     pub(crate) fn render_row_prelude<B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowRowPreludeRequestContext,
@@ -2914,38 +3089,21 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             );
     }
 
-    pub(crate) fn consume_source_item_step<B: LayoutBufferView>(
-        &mut self,
-        source_cursor: &mut BufferTextSourceCursor<'_, B>,
-        source_context: &mut DisplaySourceContext<'_>,
-        item_stepper: &mut BufferTextSourceItemStepper,
-    ) -> Option<BufferTextSourceItemStep> {
-        if let Some(step) = item_stepper.next_pending_item_step(self.byte_idx, *self.charpos) {
-            return Some(step);
-        }
-        let source_item = self.consume_source_item(source_cursor, source_context, item_stepper)?;
-        // Keep the remaining character-at-a-time row walk isolated here. The
-        // validated typed source item is now available before lowering, so the
-        // next slice can route eligible text runs directly into the shared row
-        // renderer without reworking cursor alignment again.
-        item_stepper.item_step_from_item(source_item.into_item(), self.byte_idx, *self.charpos)
-    }
-
     pub(crate) fn consume_source_item<B: LayoutBufferView>(
         &mut self,
         source_cursor: &mut BufferTextSourceCursor<'_, B>,
         source_context: &mut DisplaySourceContext<'_>,
         item_stepper: &mut BufferTextSourceItemStepper,
-    ) -> Option<BufferTextSourceItem> {
+    ) -> Option<BufferTextConsumedSourceItem> {
+        if let Some(step) = item_stepper.next_pending_item_step(self.byte_idx, *self.charpos) {
+            return Some(BufferTextConsumedSourceItem::PendingStep(step));
+        }
         // One persistent typed source cursor feeds the row walk. Fetching the
         // typed item is deliberately separate from legacy single-character
         // lowering so the buffer source can be consumed as DisplayItems.
-        item_stepper.next_item_from_source(
-            source_cursor,
-            source_context,
-            *self.byte_idx,
-            *self.charpos,
-        )
+        item_stepper
+            .next_item_from_source(source_cursor, source_context, *self.byte_idx, *self.charpos)
+            .map(BufferTextConsumedSourceItem::SourceItem)
     }
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(

@@ -321,17 +321,14 @@ impl BufferTextSourceItem {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn start_byte_idx(&self) -> usize {
         self.start_byte_idx
     }
 
-    #[cfg(test)]
     pub(crate) fn start_charpos(&self) -> i64 {
         self.start_charpos
     }
 
-    #[cfg(test)]
     pub(crate) fn item(&self) -> &DisplayItem {
         &self.item
     }

@@ -452,7 +452,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             .render_item_with_policy(state, item, position, kind, &mut render_policy)
     }
 
-    fn append_source_display_item_to_text_row(
+    pub(crate) fn append_source_display_item_to_text_row(
         &self,
         geometry: &DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
@@ -465,6 +465,37 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let face_id = self.active_face.face_id();
         DisplayRowSingleItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
             .render_item_with_policy(state, item, position, fallback_kind, render_policy)
+    }
+
+    pub(crate) fn append_source_display_item_naturally_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        state: &mut TextRowSourceRenderState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+    ) -> Option<DisplayRowAppendProgress> {
+        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+        self.append_source_display_item_to_text_row(
+            geometry,
+            state,
+            item,
+            position,
+            fallback_kind,
+            &mut render_policy,
+        )
+    }
+
+    pub(crate) fn measure_source_display_item_width_to_text_row(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: &DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+    ) -> Option<f32> {
+        self.item_active_face(geometry)
+            .measure_display_item_width_to_text_row(state, item, position, fallback_kind)
     }
 
     fn append_source_char_plan_to_text_row(

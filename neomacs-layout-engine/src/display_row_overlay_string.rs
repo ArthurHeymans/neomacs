@@ -224,6 +224,10 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         }
     }
 
+    pub(crate) fn is_enabled(self) -> bool {
+        self.enabled
+    }
+
     fn overlay_context(
         self,
         active_face_state: &DisplayRowActiveFaceState,
