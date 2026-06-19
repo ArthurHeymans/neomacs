@@ -14,7 +14,6 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -47,10 +46,10 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
     WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
-use crate::display_source::{BufferDisplayPropertyTextSourceEvent, SyntheticTextItemSource};
+use crate::display_source::SyntheticTextItemSource;
 use crate::display_source_resolver::{
-    DisplayPropertyReplacementAppendRequestResolver, DisplaySourceFaceBasis,
-    DisplaySourceFallbackMetrics, DisplaySourceResolveParams, PendingDisplaySourceFace,
+    DisplaySourceFaceBasis, DisplaySourceFallbackMetrics, DisplaySourceResolveParams,
+    PendingDisplaySourceFace,
 };
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustTextPropAccess};
@@ -2568,45 +2567,9 @@ impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
     }
 }
 
-pub(crate) enum BufferDisplayPropertyTextAppendAction {
-    Replacement(BufferDisplayPropertyTextReplacementOutcome),
-    None,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferDisplayPropertyTextWalkOutcome {
     Continue,
-    ReplacementConsumed,
-}
-
-pub(crate) struct BufferDisplayPropertyTextAppendRequest<'a> {
-    source_event: BufferDisplayPropertyTextSourceEvent<'a>,
-    context: BufferDisplayPropertyTextAppendContext<'a>,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct BufferDisplayPropertyTextAppendContext<'a> {
-    buffer_id: BufferId,
-    active_face_state: &'a DisplayRowActiveFaceState,
-    current_x: f32,
-    content_x: f32,
-    params: &'a WindowParams,
-    glyph_y_offset: f32,
-    default_row_height: f32,
-    start_position: DisplayRowPosition,
-}
-
-pub(crate) struct BufferDisplayPropertyTextRenderContext<'a> {
-    buffer_id: BufferId,
-    text_start_byte: usize,
-    text: &'a [u8],
-    active_face_state: &'a DisplayRowActiveFaceState,
-    current_x: f32,
-    content_x: f32,
-    params: &'a WindowParams,
-    glyph_y_offset: f32,
-    default_row_height: f32,
-    start_position: DisplayRowPosition,
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBufferView> {
@@ -2615,65 +2578,16 @@ pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBuff
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderContext<'a, B: LayoutBufferView> {
     pub(crate) buffer: &'a B,
-    pub(crate) buffer_id: BufferId,
-    pub(crate) text_start_byte: usize,
-    pub(crate) text: &'a [u8],
-    pub(crate) current_x: f32,
-    pub(crate) content_x: f32,
-    pub(crate) params: &'a WindowParams,
-    pub(crate) glyph_y_offset: f32,
-    pub(crate) default_row_height: f32,
-    pub(crate) start_position: DisplayRowPosition,
     pub(crate) charpos: i64,
-    pub(crate) byte_idx: usize,
-    pub(crate) accessible_end: i64,
 }
 
-pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
-    source_render: TextRowSourceRenderState<'emit>,
-    face_ids: &'emit mut FrameFaceIdAllocator,
-    append_surface: &'a DisplayRowAppendSurface,
-    row_geometry: &'emit mut DisplayRowGeometryState,
+pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'emit> {
     checkpoints: &'emit mut TextPropertyScanCheckpoints,
-    active_face_state: &'emit mut DisplayRowActiveFaceState,
-    byte_idx: &'emit mut usize,
-    charpos: &'emit mut i64,
-    x: &'emit mut f32,
-    col: &'emit mut usize,
-    cursor_info: &'emit mut CursorCaptureState,
-    point_charpos: i64,
 }
 
-impl<'a, 'emit> BufferDisplayPropertyCheckpointRenderState<'a, 'emit> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        source_render: TextRowSourceRenderState<'emit>,
-        face_ids: &'emit mut FrameFaceIdAllocator,
-        append_surface: &'a DisplayRowAppendSurface,
-        row_geometry: &'emit mut DisplayRowGeometryState,
-        checkpoints: &'emit mut TextPropertyScanCheckpoints,
-        active_face_state: &'emit mut DisplayRowActiveFaceState,
-        byte_idx: &'emit mut usize,
-        charpos: &'emit mut i64,
-        x: &'emit mut f32,
-        col: &'emit mut usize,
-        cursor_info: &'emit mut CursorCaptureState,
-        point_charpos: i64,
-    ) -> Self {
-        Self {
-            source_render,
-            face_ids,
-            append_surface,
-            row_geometry,
-            checkpoints,
-            active_face_state,
-            byte_idx,
-            charpos,
-            x,
-            col,
-            cursor_info,
-            point_charpos,
-        }
+impl<'emit> BufferDisplayPropertyCheckpointRenderState<'emit> {
+    pub(crate) fn new(checkpoints: &'emit mut TextPropertyScanCheckpoints) -> Self {
+        Self { checkpoints }
     }
 }
 
@@ -2685,125 +2599,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
 
 impl BufferDisplayPropertyTextWalkOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
-        matches!(self, Self::ReplacementConsumed)
-    }
-}
-
-impl BufferDisplayPropertyTextAppendAction {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn apply_to_buffer_walk_state(
-        self,
-        text: &[u8],
-        byte_idx: &mut usize,
-        charpos: &mut i64,
-        x: &mut f32,
-        col: &mut usize,
-        cursor_info: &mut CursorCaptureState,
-        active_face_state: &DisplayRowActiveFaceState,
-        row_geometry: &DisplayRowGeometryState,
-        point_charpos: i64,
-    ) -> BufferDisplayPropertyTextWalkOutcome {
-        match self {
-            Self::Replacement(replacement_outcome) => {
-                replacement_outcome.capture_cursor_info_if_point(
-                    cursor_info,
-                    active_face_state,
-                    row_geometry,
-                    point_charpos,
-                    *charpos,
-                    *byte_idx,
-                );
-                replacement_outcome.apply_to_walk_state(text, byte_idx, charpos, x, col);
-                BufferDisplayPropertyTextWalkOutcome::ReplacementConsumed
-            }
-            Self::None => BufferDisplayPropertyTextWalkOutcome::Continue,
-        }
-    }
-}
-
-impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        buffer_id: BufferId,
-        text_start_byte: usize,
-        text: &'a [u8],
-        active_face_state: &'a DisplayRowActiveFaceState,
-        current_x: f32,
-        content_x: f32,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        default_row_height: f32,
-        start_position: DisplayRowPosition,
-    ) -> Self {
-        Self {
-            buffer_id,
-            text_start_byte,
-            text,
-            active_face_state,
-            current_x,
-            content_x,
-            params,
-            glyph_y_offset,
-            default_row_height,
-            start_position,
-        }
-    }
-
-    pub(crate) fn resolve_and_append_at_checkpoint<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        append_surface: &DisplayRowAppendSurface,
-        row_geometry: &mut DisplayRowGeometryState,
-        checkpoints: &mut TextPropertyScanCheckpoints,
-        charpos: i64,
-        byte_idx: usize,
-        accessible_end: i64,
-    ) -> BufferDisplayPropertyTextAppendAction {
-        if !checkpoints.should_check_display(charpos) {
-            return BufferDisplayPropertyTextAppendAction::None;
-        }
-
-        let text_props = RustTextPropAccess::new(buffer);
-        let (display_property, next_change) = text_props.check_display_prop(charpos);
-        checkpoints.record_display_next(next_change);
-        let Some(value) = display_property else {
-            return BufferDisplayPropertyTextAppendAction::None;
-        };
-        let display_property = classify_display_property(value);
-        if display_property.replacement().is_some() {
-            return BufferDisplayPropertyTextAppendAction::None;
-        }
-
-        let source_event = BufferDisplayPropertyTextSourceEvent::new(
-            value,
-            self.text_start_byte,
-            self.text,
-            charpos,
-            byte_idx,
-            checkpoints.display_skip_to(accessible_end),
-        );
-        BufferDisplayPropertyTextAppendRequest::for_source_event(
-            source_event,
-            BufferDisplayPropertyTextAppendContext {
-                buffer_id: self.buffer_id,
-                active_face_state: self.active_face_state,
-                current_x: self.current_x,
-                content_x: self.content_x,
-                params: self.params,
-                glyph_y_offset: self.glyph_y_offset,
-                default_row_height: self.default_row_height,
-                start_position: self.start_position,
-            },
-        )
-        .resolve_and_append_to_text_row(
-            buffer,
-            state,
-            face_ids,
-            append_surface,
-            row_geometry,
-        )
+        false
     }
 }
 
@@ -2814,116 +2610,16 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
 
     pub(crate) fn render_and_apply(
         self,
-        state: BufferDisplayPropertyCheckpointRenderState<'_, '_>,
+        state: BufferDisplayPropertyCheckpointRenderState<'_>,
     ) -> BufferDisplayPropertyTextWalkOutcome {
-        let BufferDisplayPropertyCheckpointRenderState {
-            mut source_render,
-            face_ids,
-            append_surface,
-            row_geometry,
-            checkpoints,
-            active_face_state,
-            byte_idx,
-            charpos,
-            x,
-            col,
-            cursor_info,
-            point_charpos,
-        } = state;
+        let BufferDisplayPropertyCheckpointRenderState { checkpoints } = state;
         let context = self.context;
-
-        let action = BufferDisplayPropertyTextRenderContext::new(
-            context.buffer_id,
-            context.text_start_byte,
-            context.text,
-            active_face_state,
-            context.current_x,
-            context.content_x,
-            context.params,
-            context.glyph_y_offset,
-            context.default_row_height,
-            context.start_position,
-        )
-        .resolve_and_append_at_checkpoint(
-            context.buffer,
-            &mut source_render,
-            face_ids,
-            append_surface,
-            row_geometry,
-            checkpoints,
-            context.charpos,
-            context.byte_idx,
-            context.accessible_end,
-        );
-        let outcome = action.apply_to_buffer_walk_state(
-            context.text,
-            byte_idx,
-            charpos,
-            x,
-            col,
-            cursor_info,
-            active_face_state,
-            row_geometry,
-            point_charpos,
-        );
-        outcome
-    }
-}
-
-impl<'a> BufferDisplayPropertyTextAppendRequest<'a> {
-    pub(crate) fn for_source_event(
-        source_event: BufferDisplayPropertyTextSourceEvent<'a>,
-        context: BufferDisplayPropertyTextAppendContext<'a>,
-    ) -> Self {
-        Self {
-            source_event,
-            context,
+        if checkpoints.should_check_display(context.charpos) {
+            let text_props = RustTextPropAccess::new(context.buffer);
+            let (_, next_change) = text_props.check_display_prop(context.charpos);
+            checkpoints.record_display_next(next_change);
         }
-    }
-
-    pub(crate) fn resolve_and_append_to_text_row<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
-        append_surface: &DisplayRowAppendSurface,
-        row_geometry: &mut DisplayRowGeometryState,
-    ) -> BufferDisplayPropertyTextAppendAction {
-        let context = self.context;
-        let display_property = classify_display_property(self.source_event.value());
-        let replacement_request = state.with_font_metrics_and_display_host(|font_metrics, host| {
-            DisplayPropertyReplacementAppendRequestResolver::for_source_event(
-                &display_property,
-                context.buffer_id,
-                self.source_event,
-                context.active_face_state,
-                context.current_x,
-                context.content_x,
-                context.params,
-                context.glyph_y_offset,
-                context.default_row_height,
-                context.start_position,
-            )
-            .resolve(font_metrics, host)
-        });
-        if let Some(request) = replacement_request {
-            let replacement = request.append_to_text_row(
-                buffer,
-                state,
-                face_ids,
-                append_surface,
-                row_geometry,
-                context.active_face_state,
-            );
-            return BufferDisplayPropertyTextAppendAction::Replacement(
-                BufferDisplayPropertyTextReplacementOutcome {
-                    replacement,
-                    skip_to: self.source_event.skip_to(),
-                },
-            );
-        }
-
-        BufferDisplayPropertyTextAppendAction::None
+        BufferDisplayPropertyTextWalkOutcome::Continue
     }
 }
 

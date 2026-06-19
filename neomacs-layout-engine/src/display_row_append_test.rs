@@ -8839,49 +8839,6 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
 }
 
 #[test]
-fn buffer_display_property_append_action_applies_replacement_walk_state() {
-    let outcome = BufferDisplayPropertyTextReplacementOutcome {
-        replacement: DisplayPropertyReplacementAppendOutcome {
-            start_position: DisplayRowPosition { x_px: 4.0, col: 1 },
-            end_position: DisplayRowPosition { x_px: 12.0, col: 2 },
-            cursor_policy: DisplayPropertyReplacementCursorPolicy::FaceChar,
-        },
-        skip_to: 4,
-    };
-    let action = BufferDisplayPropertyTextAppendAction::Replacement(outcome);
-    let active_face = test_active_face_state(7, 8.0);
-    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let mut cursor_info = CursorCaptureState::new();
-    let mut byte_idx = "a".len();
-    let mut charpos = 1;
-    let mut x = 4.0;
-    let mut col = 1;
-
-    let walk_outcome = action.apply_to_buffer_walk_state(
-        "a界b\n".as_bytes(),
-        &mut byte_idx,
-        &mut charpos,
-        &mut x,
-        &mut col,
-        &mut cursor_info,
-        &active_face,
-        &geometry,
-        2,
-    );
-
-    assert_eq!(
-        walk_outcome,
-        BufferDisplayPropertyTextWalkOutcome::ReplacementConsumed
-    );
-    assert!(walk_outcome.should_continue_buffer_walk());
-    assert_eq!(byte_idx, "a界b\n".len());
-    assert_eq!(charpos, 4);
-    assert_eq!(x, 12.0);
-    assert_eq!(col, 2);
-    assert!(cursor_info.captured().is_some());
-}
-
-#[test]
 fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -9012,78 +8969,20 @@ fn buffer_display_property_render_context_ignores_modifier_only_checkpoint() {
                 Value::list(vec![Value::keyword("raise"), Value::make_float(0.5)]),
             );
     }
-    let frame_id = eval.frame_manager_mut().create_frame(
-        "display-property-render-context-modifier",
-        320,
-        120,
-        buf_id,
-    );
-    let window_id = eval
-        .frame_manager()
-        .get(frame_id)
-        .expect("frame")
-        .selected_window;
-    let mut output_emitter =
-        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
-    output_emitter.begin_update(&mut eval);
-    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
-
     let buffer = current_buffer_snapshot(&eval, buf_id);
-    let table = FaceTable::new();
-    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
-    let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
-    builder.begin_row(0, GlyphRowRole::Text);
-    let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
-    let params = test_display_space_window_params();
     let mut checkpoints = TextPropertyScanCheckpoints::new(0);
 
-    let action = BufferDisplayPropertyTextRenderContext::new(
-        buf_id,
-        0,
-        b"abc",
-        &active_face,
-        0.0,
-        0.0,
-        &params,
-        0.0,
-        16.0,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
+        BufferDisplayPropertyCheckpointRenderContext {
+            buffer: &buffer,
+            charpos: 0,
+        },
     )
-    .resolve_and_append_at_checkpoint(
-        &buffer,
-        &mut TextRowSourceRenderState::new(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        &mut face_ids,
-        &surface,
-        &mut row_geometry,
+    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
         &mut checkpoints,
-        0,
-        0,
-        3,
-    );
-
-    assert!(matches!(
-        action,
-        BufferDisplayPropertyTextAppendAction::None
     ));
+
+    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
     assert_eq!(checkpoints.display_next(), 1);
 }
 
@@ -9107,78 +9006,20 @@ fn buffer_display_property_render_context_defers_string_checkpoint_to_source_cur
                 Value::string("YZ"),
             );
     }
-    let frame_id = eval.frame_manager_mut().create_frame(
-        "display-property-render-context-string",
-        320,
-        120,
-        buf_id,
-    );
-    let window_id = eval
-        .frame_manager()
-        .get(frame_id)
-        .expect("frame")
-        .selected_window;
-    let mut output_emitter =
-        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
-    output_emitter.begin_update(&mut eval);
-    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
-
     let buffer = current_buffer_snapshot(&eval, buf_id);
-    let table = FaceTable::new();
-    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
-    let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
-    builder.begin_row(0, GlyphRowRole::Text);
-    let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
-    let params = test_display_space_window_params();
     let mut checkpoints = TextPropertyScanCheckpoints::new(1);
 
-    let action = BufferDisplayPropertyTextRenderContext::new(
-        buf_id,
-        0,
-        b"abc",
-        &active_face,
-        0.0,
-        0.0,
-        &params,
-        0.0,
-        16.0,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
+        BufferDisplayPropertyCheckpointRenderContext {
+            buffer: &buffer,
+            charpos: 1,
+        },
     )
-    .resolve_and_append_at_checkpoint(
-        &buffer,
-        &mut TextRowSourceRenderState::new(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        &mut face_ids,
-        &surface,
-        &mut row_geometry,
+    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
         &mut checkpoints,
-        1,
-        1,
-        3,
-    );
-
-    assert!(matches!(
-        action,
-        BufferDisplayPropertyTextAppendAction::None
     ));
+
+    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
     assert_eq!(checkpoints.display_next(), 3);
 }
 
@@ -9210,78 +9051,20 @@ fn buffer_display_property_render_context_defers_propertized_string_checkpoint_t
                 replacement,
             );
     }
-    let frame_id = eval.frame_manager_mut().create_frame(
-        "display-property-render-context-propertized-string",
-        320,
-        120,
-        buf_id,
-    );
-    let window_id = eval
-        .frame_manager()
-        .get(frame_id)
-        .expect("frame")
-        .selected_window;
-    let mut output_emitter =
-        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
-    output_emitter.begin_update(&mut eval);
-    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
-
     let buffer = current_buffer_snapshot(&eval, buf_id);
-    let table = FaceTable::new();
-    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
-    let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
-    builder.begin_row(0, GlyphRowRole::Text);
-    let mut row_geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
-    let params = test_display_space_window_params();
     let mut checkpoints = TextPropertyScanCheckpoints::new(1);
 
-    let action = BufferDisplayPropertyTextRenderContext::new(
-        buf_id,
-        0,
-        b"abc",
-        &active_face,
-        0.0,
-        0.0,
-        &params,
-        0.0,
-        16.0,
-        DisplayRowPosition { x_px: 0.0, col: 0 },
+    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
+        BufferDisplayPropertyCheckpointRenderContext {
+            buffer: &buffer,
+            charpos: 1,
+        },
     )
-    .resolve_and_append_at_checkpoint(
-        &buffer,
-        &mut TextRowSourceRenderState::new(
-            &mut builder,
-            &mut output_emitter,
-            &mut eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        &mut face_ids,
-        &surface,
-        &mut row_geometry,
+    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
         &mut checkpoints,
-        1,
-        1,
-        3,
-    );
-
-    assert!(matches!(
-        action,
-        BufferDisplayPropertyTextAppendAction::None
     ));
+
+    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
     assert_eq!(checkpoints.display_next(), 3);
 }
 
@@ -9331,21 +9114,9 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
     let mut checkpoints = TextPropertyScanCheckpoints::new(0);
-    let mut byte_idx = 0;
-    let mut charpos = 0;
-    let mut x = 0.0;
-    let mut col = 0;
-    let mut cursor_info = CursorCaptureState::new();
-    let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea {
-            content_x: 0.0,
-            width: 80.0,
-            text_width: 80.0,
-            line_number_width: 0.0,
-        },
-        DisplayTabPolicy::every(8),
-    );
-    let params = test_display_space_window_params();
+    let byte_idx = 0;
+    let charpos = 0;
+    let x = 0.0;
     let face_resolution_context = BufferCurrentFaceResolutionContext::new(
         &buffer,
         &face_resolver,
@@ -9381,39 +9152,11 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
     let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
         BufferDisplayPropertyCheckpointRenderContext {
             buffer: &buffer,
-            buffer_id: buf_id,
-            text_start_byte: 0,
-            text: b"abc",
-            current_x: x,
-            content_x: 0.0,
-            params: &params,
-            glyph_y_offset: 0.0,
-            default_row_height: 16.0,
-            start_position: DisplayRowPosition { x_px: x, col },
             charpos,
-            byte_idx,
-            accessible_end: 3,
         },
     )
     .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
-        TextRowSourceRenderState::new(
-            &mut context.builder,
-            &mut context.output_emitter,
-            &mut context.eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        &mut face_ids,
-        &surface,
-        &mut context.geometry,
         &mut checkpoints,
-        &mut active_face,
-        &mut byte_idx,
-        &mut charpos,
-        &mut x,
-        &mut col,
-        &mut cursor_info,
-        99,
     ));
 
     assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
@@ -9423,41 +9166,6 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
     assert_eq!(byte_idx, 0);
     assert_eq!(charpos, 0);
     assert_eq!(checkpoints.display_next(), 1);
-}
-
-#[test]
-fn buffer_display_property_append_action_none_keeps_walk_state() {
-    let action = BufferDisplayPropertyTextAppendAction::None;
-    let active_face = test_active_face_state(7, 8.0);
-    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let mut cursor_info = CursorCaptureState::new();
-    let mut face_scan = FaceScanCheckpoint::initial();
-    *face_scan.next_check_mut() = 99;
-    let mut byte_idx = 1;
-    let mut charpos = 1;
-    let mut x = 4.0;
-    let mut col = 1;
-
-    let walk_outcome = action.apply_to_buffer_walk_state(
-        b"abc",
-        &mut byte_idx,
-        &mut charpos,
-        &mut x,
-        &mut col,
-        &mut cursor_info,
-        &active_face,
-        &geometry,
-        2,
-    );
-
-    assert_eq!(walk_outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
-    assert!(!walk_outcome.should_continue_buffer_walk());
-    assert_eq!(byte_idx, 1);
-    assert_eq!(charpos, 1);
-    assert_eq!(x, 4.0);
-    assert_eq!(col, 1);
-    assert!(cursor_info.captured().is_none());
-    assert!(!face_scan.should_resolve_at(0));
 }
 
 #[test]

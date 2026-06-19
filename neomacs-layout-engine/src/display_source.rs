@@ -1650,10 +1650,6 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
         self.source_text
     }
 
-    pub(crate) fn skip_to(self) -> i64 {
-        self.skip_to
-    }
-
     pub(crate) fn covered_end_charpos(self) -> CharPos0 {
         CharPos0::new(self.skip_to.max(self.anchor_charpos.get() as i64) as usize)
     }

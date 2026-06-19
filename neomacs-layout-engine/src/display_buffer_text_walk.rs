@@ -2490,33 +2490,13 @@ impl BufferTextWindowLoopRequestContext {
     pub(crate) fn display_property_checkpoint_request<'a, B>(
         self,
         buffer: &'a B,
-        text: &'a [u8],
-        params: &'a WindowParams,
-        x: f32,
-        col: usize,
         charpos: i64,
-        byte_idx: usize,
-        glyph_y_offset: f32,
     ) -> BufferDisplayPropertyCheckpointRenderRequest<'a, B>
     where
         B: LayoutBufferView,
     {
         BufferDisplayPropertyCheckpointRenderRequest::new(
-            BufferDisplayPropertyCheckpointRenderContext {
-                buffer,
-                buffer_id: self.buffer_id,
-                text_start_byte: self.text_start_byte,
-                text,
-                current_x: x,
-                content_x: self.content_x,
-                params,
-                glyph_y_offset,
-                default_row_height: self.char_height,
-                start_position: DisplayRowPosition { x_px: x, col },
-                charpos,
-                byte_idx,
-                accessible_end: self.accessible_end,
-            },
+            BufferDisplayPropertyCheckpointRenderContext { buffer, charpos },
         )
     }
 
@@ -2874,7 +2854,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
-        params: &'request WindowParams,
+        _params: &'request WindowParams,
         append_surface: &'request DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &mut DisplayRowActiveFaceState,
@@ -2918,14 +2898,8 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
         self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
 
-        let display_property_walk = self.render_display_property_checkpoint_for_context(
-            loop_context,
-            text,
-            params,
-            append_surface,
-            active_face_state,
-            buffer,
-        );
+        let display_property_walk =
+            self.render_display_property_checkpoint_for_context(loop_context, buffer);
         if display_property_walk.should_continue_buffer_walk() {
             return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
         }
@@ -3271,28 +3245,10 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowLoopRequestContext,
-        text: &'request [u8],
-        params: &'request WindowParams,
-        append_surface: &'request DisplayRowAppendSurface,
-        active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &'request B,
     ) -> BufferDisplayPropertyTextWalkOutcome {
-        let request = context.display_property_checkpoint_request(
-            buffer,
-            text,
-            params,
-            *self.x,
-            *self.col,
-            *self.charpos,
-            *self.byte_idx,
-            0.0,
-        );
-        self.render_display_property_checkpoint(
-            request,
-            append_surface,
-            active_face_state,
-            context.point_charpos,
-        )
+        let request = context.display_property_checkpoint_request(buffer, *self.charpos);
+        self.render_display_property_checkpoint(request)
     }
 
     pub(crate) fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
@@ -3405,23 +3361,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     fn render_display_property_checkpoint<B: LayoutBufferView>(
         &mut self,
         request: BufferDisplayPropertyCheckpointRenderRequest<'_, B>,
-        append_surface: &DisplayRowAppendSurface,
-        active_face_state: &mut DisplayRowActiveFaceState,
-        point_charpos: i64,
     ) -> BufferDisplayPropertyTextWalkOutcome {
         request.render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
-            self.source_render.reborrow(),
-            self.face_ids,
-            append_surface,
-            self.row_geometry,
             self.text_property_checkpoints,
-            active_face_state,
-            self.byte_idx,
-            self.charpos,
-            self.x,
-            self.col,
-            self.cursor_info,
-            point_charpos,
         ))
     }
 
