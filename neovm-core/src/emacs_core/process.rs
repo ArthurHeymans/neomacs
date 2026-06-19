@@ -2418,6 +2418,26 @@ impl ProcessManager {
         }
     }
 
+    /// GNU `remove_process` for an already-terminated process (called from
+    /// `status_notify` when `delete-exited-processes' is non-nil): drop the
+    /// process from the live process table (so `get-process'/`process-list' no
+    /// longer return it) while keeping the object reachable for bindings that
+    /// still hold its value.  Unlike `delete_process`, this does NOT kill or
+    /// re-stamp the child — it has already exited and its recorded terminal
+    /// status (exit/signal) must be preserved for `process-status' on the value.
+    pub fn reap_exited_process(&mut self, id: ProcessId) {
+        if let Some(mut proc) = self.processes.remove(&id) {
+            Self::unregister_process_poll_sources(self.wait_backend.poller(), &proc);
+            // Release OS resources the (already dead) process held; keep the
+            // recorded status and identity intact.
+            proc.child = None;
+            proc.pty_child = None;
+            proc.child_stdout = None;
+            proc.child_stderr = None;
+            self.deleted_processes.insert(id, proc);
+        }
+    }
+
     /// Get process status.
     pub fn process_status(&self, id: ProcessId) -> Option<&Value> {
         self.processes.get(&id).map(|p| &p.status)
@@ -2881,6 +2901,14 @@ fn dedupe_process_ids(process_ids: impl IntoIterator<Item = ProcessId>) -> Vec<P
 }
 
 impl super::eval::Context {
+    /// Whether `delete-exited-processes` is non-nil (GNU
+    /// `delete_exited_processes`, default `t`).  Controls whether a terminated
+    /// process is removed from the process list once its status is reported.
+    fn delete_exited_processes_enabled(&self) -> bool {
+        self.visible_variable_value_or_nil("delete-exited-processes")
+            .is_truthy()
+    }
+
     pub(crate) fn service_pending_timers_with_wait_policy(&mut self, redisplay: bool) -> bool {
         self.flush_pending_safe_funcalls();
         let mut fired_any = false;
@@ -3188,6 +3216,29 @@ impl super::eval::Context {
             if exited {
                 outcome.record_activity(is_target);
 
+                // GNU `status_notify` (process.c) drains ALL remaining output
+                // from a terminated process before reporting its status and
+                // (when `delete-exited-processes' is non-nil) removing it from
+                // `Vprocess_alist'.  Mirror the drain here so trailing bytes
+                // buffered in the pipe after the child exited are not lost when
+                // the process is reaped below.
+                loop {
+                    match self.processes.read_process_output_result(pid) {
+                        ProcessOutputRead::Data(ref data) if !data.is_empty() => {
+                            let filter = self
+                                .processes
+                                .get(pid)
+                                .map(|p| p.filter)
+                                .unwrap_or(Value::NIL);
+                            self.run_process_filter_callback(pid, filter, data);
+                        }
+                        ProcessOutputRead::Data(_)
+                        | ProcessOutputRead::WouldBlock
+                        | ProcessOutputRead::Eof
+                        | ProcessOutputRead::NoSource => break,
+                    }
+                }
+
                 let sentinel = self
                     .processes
                     .get(pid)
@@ -3199,6 +3250,17 @@ impl super::eval::Context {
                     .map(|p| gnu_process_status_message(p.status))
                     .unwrap_or_else(|| "finished\n".to_string());
                 self.run_process_sentinel_callback(pid, sentinel, &exit_msg);
+
+                // GNU `status_notify`: a terminated process (status exit/signal/
+                // closed) is removed from `Vprocess_alist' when
+                // `delete-exited-processes' is non-nil (its default), so that
+                // `get-process'/`process-list' no longer return it.  The process
+                // object itself stays alive for any binding that still holds it
+                // (e.g. `process-status' on the value), which neomacs models by
+                // moving it into the deleted-process table that `get_any' reads.
+                if self.delete_exited_processes_enabled() {
+                    self.processes.reap_exited_process(pid);
+                }
             }
         }
 
