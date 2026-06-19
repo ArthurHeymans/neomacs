@@ -344,7 +344,6 @@ impl BufferTextSourceStepChar {
 pub(crate) struct BufferTextSourceItemStep {
     source_char: BufferTextSourceStepChar,
     item: DisplayItem,
-    end_charpos: i64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -385,13 +384,7 @@ pub(crate) enum BufferTextConsumedSourceItem {
 
 impl BufferTextSourceItemStep {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
-        let end_charpos = display_item_buffer_end_charpos(&item)
-            .unwrap_or_else(|| source_char.start_charpos().saturating_add(1));
-        Self {
-            source_char,
-            item,
-            end_charpos,
-        }
+        Self { source_char, item }
     }
 
     pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
@@ -407,7 +400,8 @@ impl BufferTextSourceItemStep {
     }
 
     pub(crate) fn end_charpos(&self) -> i64 {
-        self.end_charpos
+        display_item_buffer_end_charpos(&self.item)
+            .unwrap_or_else(|| self.source_char.start_charpos().saturating_add(1))
     }
 
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
