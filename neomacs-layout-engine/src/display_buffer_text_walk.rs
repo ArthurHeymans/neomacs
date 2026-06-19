@@ -27,8 +27,8 @@ use crate::display_buffer_text_render::{
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
-    BufferTextSourceCursor, BufferTextSourceItemStep, BufferTextSourceItemStepper,
-    BufferTextSourceStepChar,
+    BufferTextSourceCursor, BufferTextSourceItem, BufferTextSourceItemStep,
+    BufferTextSourceItemStepper, BufferTextSourceStepChar,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -2920,14 +2920,30 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         source_context: &mut DisplaySourceContext<'_>,
         item_stepper: &mut BufferTextSourceItemStepper,
     ) -> Option<BufferTextSourceItemStep> {
-        // One persistent typed source cursor feeds the remaining
-        // character-at-a-time row walk. The item_stepper splits text-run items into
-        // typed item steps while preserving source spans, so the row walk no
-        // longer rebuilds a source cursor for every character.
-        item_stepper.next_item_step_from_source(
+        if let Some(step) = item_stepper.next_pending_item_step(self.byte_idx, *self.charpos) {
+            return Some(step);
+        }
+        let source_item = self.consume_source_item(source_cursor, source_context, item_stepper)?;
+        // Keep the remaining character-at-a-time row walk isolated here. The
+        // validated typed source item is now available before lowering, so the
+        // next slice can route eligible text runs directly into the shared row
+        // renderer without reworking cursor alignment again.
+        item_stepper.item_step_from_item(source_item.into_item(), self.byte_idx, *self.charpos)
+    }
+
+    pub(crate) fn consume_source_item<B: LayoutBufferView>(
+        &mut self,
+        source_cursor: &mut BufferTextSourceCursor<'_, B>,
+        source_context: &mut DisplaySourceContext<'_>,
+        item_stepper: &mut BufferTextSourceItemStepper,
+    ) -> Option<BufferTextSourceItem> {
+        // One persistent typed source cursor feeds the row walk. Fetching the
+        // typed item is deliberately separate from legacy single-character
+        // lowering so the buffer source can be consumed as DisplayItems.
+        item_stepper.next_item_from_source(
             source_cursor,
             source_context,
-            self.byte_idx,
+            *self.byte_idx,
             *self.charpos,
         )
     }

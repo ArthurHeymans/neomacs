@@ -283,6 +283,13 @@ pub(crate) struct BufferTextSourceItemStep {
     item: DisplayItem,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferTextSourceItem {
+    item: DisplayItem,
+    start_byte_idx: usize,
+    start_charpos: i64,
+}
+
 impl BufferTextSourceItemStep {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
         Self { source_char, item }
@@ -302,6 +309,35 @@ impl BufferTextSourceItemStep {
 
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
         (self.source_char, self.item)
+    }
+}
+
+impl BufferTextSourceItem {
+    fn new(item: DisplayItem, start_byte_idx: usize, start_charpos: i64) -> Self {
+        Self {
+            item,
+            start_byte_idx,
+            start_charpos,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn start_byte_idx(&self) -> usize {
+        self.start_byte_idx
+    }
+
+    #[cfg(test)]
+    pub(crate) fn start_charpos(&self) -> i64 {
+        self.start_charpos
+    }
+
+    #[cfg(test)]
+    pub(crate) fn item(&self) -> &DisplayItem {
+        &self.item
+    }
+
+    pub(crate) fn into_item(self) -> DisplayItem {
+        self.item
     }
 }
 
@@ -412,6 +448,7 @@ impl BufferTextSourceItemStepper {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn next_item_step_from_source<B: LayoutBufferView + ?Sized>(
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
@@ -419,8 +456,34 @@ impl BufferTextSourceItemStepper {
         byte_idx: &mut usize,
         charpos: i64,
     ) -> Option<BufferTextSourceItemStep> {
-        if let Some(step) = self.next_pending_step(byte_idx, charpos) {
+        if let Some(step) = self.next_pending_item_step(byte_idx, charpos) {
             return Some(step);
+        }
+
+        let item = self.next_item_from_source(source, context, *byte_idx, charpos)?;
+        self.item_step_from_item(item.into_item(), byte_idx, charpos)
+    }
+
+    pub(crate) fn next_pending_item_step(
+        &mut self,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextSourceItemStep> {
+        self.next_pending_step(byte_idx, charpos)
+    }
+
+    pub(crate) fn next_item_from_source<B: LayoutBufferView + ?Sized>(
+        &mut self,
+        source: &mut BufferTextSourceCursor<'_, B>,
+        context: &mut DisplaySourceContext<'_>,
+        byte_idx: usize,
+        charpos: i64,
+    ) -> Option<BufferTextSourceItem> {
+        if self.pending_text_run.is_some() {
+            tracing::debug!(
+                "BufferTextSourceItemStepper: requested typed item while a text run is pending"
+            );
+            return None;
         }
 
         let expected_source_pos = CharPos0::new(charpos.max(0) as usize);
@@ -429,7 +492,7 @@ impl BufferTextSourceItemStepper {
         }
 
         let item = source.next_item(context)?;
-        self.item_step_from_item(item, byte_idx, charpos)
+        self.validate_source_item(item, byte_idx, charpos)
     }
 
     pub(crate) fn item_step_from_item(
@@ -438,6 +501,18 @@ impl BufferTextSourceItemStepper {
         byte_idx: &mut usize,
         charpos: i64,
     ) -> Option<BufferTextSourceItemStep> {
+        let item = self
+            .validate_source_item(item, *byte_idx, charpos)?
+            .into_item();
+        self.item_step_from_validated_item(item, byte_idx, charpos)
+    }
+
+    fn validate_source_item(
+        &self,
+        item: DisplayItem,
+        byte_idx: usize,
+        charpos: i64,
+    ) -> Option<BufferTextSourceItem> {
         let buffer_byte_pos = match item.span.start {
             DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
             _ => {
@@ -449,16 +524,47 @@ impl BufferTextSourceItemStepper {
             }
         };
         let start_byte_idx = buffer_byte_pos.get().checked_sub(self.text_start_byte)?;
-        if start_byte_idx != *byte_idx {
+        if start_byte_idx != byte_idx {
             tracing::error!(
                 "BufferTextSourceItemStepper: typed cursor byte position {} did not match \
                  buffer walk byte index {}",
                 start_byte_idx,
-                *byte_idx
+                byte_idx
             );
             return None;
         }
+        let DisplaySourcePosition::Buffer { char_pos, .. } = item.span.start else {
+            unreachable!("buffer byte position match implies buffer source position");
+        };
+        let start_charpos = char_pos.get() as i64;
+        if start_charpos != charpos {
+            tracing::error!(
+                "BufferTextSourceItemStepper: typed cursor char position {} did not match \
+                 buffer walk char position {}",
+                start_charpos,
+                charpos
+            );
+            return None;
+        }
+        Some(BufferTextSourceItem::new(
+            item,
+            start_byte_idx,
+            start_charpos,
+        ))
+    }
 
+    fn item_step_from_validated_item(
+        &mut self,
+        item: DisplayItem,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextSourceItemStep> {
+        let start_byte_idx = match item.span.start {
+            DisplaySourcePosition::Buffer { byte_pos, .. } => {
+                byte_pos.get().checked_sub(self.text_start_byte)?
+            }
+            _ => return None,
+        };
         let DisplayItem {
             span,
             face,

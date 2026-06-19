@@ -1879,6 +1879,43 @@ fn buffer_text_source_item_stepper_preserves_single_char_source_item() {
 }
 
 #[test]
+fn buffer_text_source_item_stepper_can_return_full_text_run_item() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("abc");
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut cursor = BufferTextSourceCursor::new(
+        buf_id,
+        &snapshot,
+        CharPos0::new(0),
+        CharPos0::new(3),
+        RenderFaceRef::Inherit,
+    );
+    let mut source_context = DisplaySourceContext::empty();
+    let mut item_stepper = BufferTextSourceItemStepper::new(0);
+    let byte_idx = 0;
+
+    let typed_item = item_stepper
+        .next_item_from_source(&mut cursor, &mut source_context, byte_idx, 0)
+        .expect("typed source item");
+
+    assert_eq!(typed_item.start_byte_idx(), 0);
+    assert_eq!(typed_item.start_charpos(), 0);
+    assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
+    match &typed_item.item().kind {
+        DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "abc"),
+        other => panic!("expected full text run, got {other:?}"),
+    }
+}
+
+#[test]
 fn buffer_text_source_item_stepper_keeps_display_item_layout() {
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
