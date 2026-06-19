@@ -43,8 +43,13 @@ fn registry_priority_list() {
     let reg = CharsetRegistry::new();
     let prio = reg.priority_list();
     assert!(!prio.is_empty());
-    // unicode should be the highest priority.
-    assert_eq!(resolve_sym(prio[0]), "unicode");
+    // GNU `init_charset_once` (charset.c:2444) defines the C-level charsets in
+    // the order ascii, iso-8859-1, unicode, emacs, eight-bit and appends each to
+    // `Vcharset_ordered_list`, so `ascii` is the highest priority charset (GNU
+    // `(car (charset-priority-list))` => ascii at `-Q`).
+    assert_eq!(resolve_sym(prio[0]), "ascii");
+    assert_eq!(resolve_sym(prio[1]), "iso-8859-1");
+    assert_eq!(resolve_sym(prio[2]), "unicode");
 }
 
 #[test]
@@ -125,7 +130,8 @@ fn charset_list_returns_priority_order() {
     crate::test_utils::init_test_tracing();
     let r = builtin_charset_list(vec![]).unwrap();
     let items = list_to_vec(&r).unwrap();
-    assert!(items[0].is_symbol_named("unicode"));
+    // GNU definition order: ascii is highest priority (charset.c:2444).
+    assert!(items[0].is_symbol_named("ascii"));
     assert!(items.len() >= 2);
 }
 
@@ -146,8 +152,8 @@ fn charset_priority_list_full() {
     let r = builtin_charset_priority_list(vec![]).unwrap();
     let items = list_to_vec(&r).unwrap();
     assert!(!items.is_empty());
-    // First should be unicode.
-    assert!(items[0].is_symbol_named("unicode"));
+    // First should be ascii (GNU definition order; charset.c:2444).
+    assert!(items[0].is_symbol_named("ascii"));
 }
 
 #[test]
@@ -156,7 +162,7 @@ fn charset_priority_list_highestp() {
     let r = builtin_charset_priority_list(vec![Value::T]).unwrap();
     let items = list_to_vec(&r).unwrap();
     assert_eq!(items.len(), 1);
-    assert!(items[0].is_symbol_named("unicode"));
+    assert!(items[0].is_symbol_named("ascii"));
 }
 
 #[test]

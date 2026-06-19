@@ -247,47 +247,19 @@ impl CharsetRegistry {
     }
 
     fn init_standard_charsets(&mut self) {
+        // The five C-level charsets are defined by GNU's `init_charset_once`
+        // (charset.c:2444-2468) in this exact order — ascii, iso-8859-1,
+        // unicode, emacs, eight-bit — and each is appended to
+        // `Vcharset_ordered_list`.  `emacs` and `eight-bit` are supplementary
+        // (the 2nd-to-last argument to `define_charset_internal` is 1), so they
+        // accrue at the tail of the ordered list.  Registering them here in the
+        // same order seeds the priority list to match GNU before mule-conf.el
+        // defines the remaining ~174 Lisp charsets.
         let mut ascii = Self::make_default(0, "ascii");
         ascii.ascii_compatible_p = true;
         ascii.iso_final_char = Some(66); // ISO final char 'B'
         ascii.emacs_mule_id = Some(0);
         self.register_builtin(ascii);
-
-        let mut unicode = Self::make_default(2, "unicode");
-        unicode.dimension = 3;
-        unicode.code_space = [0, 255, 0, 255, 0, 16, 0, 0];
-        unicode.max_code = 0x10FFFF;
-        unicode.ascii_compatible_p = true; // GNU charset-plist :ascii-compatible-p t
-        self.register_builtin(unicode);
-
-        let mut bmp = Self::make_default(144, "unicode-bmp");
-        bmp.dimension = 2;
-        bmp.code_space = [0, 255, 0, 255, 0, 0, 0, 0];
-        bmp.max_code = 0xFFFF;
-        self.register_builtin(bmp);
-
-        let mut latin1 = Self::make_default(5, "latin-iso8859-1");
-        latin1.code_space = [32, 127, 0, 0, 0, 0, 0, 0];
-        latin1.min_code = 32;
-        latin1.method = CharsetMethod::Offset(160);
-        latin1.iso_final_char = Some(65); // ISO final char 'A'
-        latin1.emacs_mule_id = Some(129);
-        self.register_builtin(latin1);
-
-        let mut emacs = Self::make_default(3, "emacs");
-        emacs.dimension = 3;
-        emacs.code_space = [0, 255, 0, 255, 0, 63, 0, 0];
-        emacs.max_code = 0x3FFF7F;
-        emacs.ascii_compatible_p = true; // GNU charset-plist :ascii-compatible-p t
-        self.register_builtin(emacs);
-
-        let mut eight_bit = Self::make_default(4, "eight-bit");
-        eight_bit.code_space = [128, 255, 0, 0, 0, 0, 0, 0];
-        eight_bit.min_code = 128;
-        eight_bit.max_code = 255;
-        eight_bit.supplementary_p = true;
-        eight_bit.method = CharsetMethod::Offset(0x3FFF80);
-        self.register_builtin(eight_bit);
 
         // iso-8859-1 is a full 0-255 charset with identity mapping
         // (code_offset=0, min_code=0, max_code=255, ascii_compatible=true),
@@ -302,17 +274,49 @@ impl CharsetRegistry {
         iso_8859_1.method = CharsetMethod::Offset(0);
         self.register_builtin(iso_8859_1);
 
-        self.define_alias(intern("ucs"), intern("unicode"));
+        let mut unicode = Self::make_default(2, "unicode");
+        unicode.dimension = 3;
+        unicode.code_space = [0, 255, 0, 255, 0, 16, 0, 0];
+        unicode.max_code = 0x10FFFF;
+        unicode.ascii_compatible_p = true; // GNU charset-plist :ascii-compatible-p t
+        self.register_builtin(unicode);
 
-        // Default priority order.
-        self.priority = vec![
-            intern("unicode"),
-            intern("emacs"),
-            intern("ascii"),
-            intern("unicode-bmp"),
-            intern("latin-iso8859-1"),
-            intern("eight-bit"),
-        ];
+        let mut emacs = Self::make_default(3, "emacs");
+        emacs.dimension = 3;
+        emacs.code_space = [0, 255, 0, 255, 0, 63, 0, 0];
+        emacs.max_code = 0x3FFF7F;
+        emacs.ascii_compatible_p = true; // GNU charset-plist :ascii-compatible-p t
+        emacs.supplementary_p = true; // GNU define_charset_internal: supplementary=1
+        self.register_builtin(emacs);
+
+        let mut eight_bit = Self::make_default(4, "eight-bit");
+        eight_bit.code_space = [128, 255, 0, 0, 0, 0, 0, 0];
+        eight_bit.min_code = 128;
+        eight_bit.max_code = 255;
+        eight_bit.supplementary_p = true;
+        eight_bit.method = CharsetMethod::Offset(0x3FFF80);
+        self.register_builtin(eight_bit);
+
+        // unicode-bmp and latin-iso8859-1 are *Lisp* charsets in GNU
+        // (mule-conf.el).  neomacs pre-seeds them so the runtime can use them
+        // before loadup, but they must enter the ordered list only when
+        // mule-conf.el's `define-charset` runs (at GNU's position), so register
+        // them WITHOUT adding to the ordered list here.
+        let mut bmp = Self::make_default(144, "unicode-bmp");
+        bmp.dimension = 2;
+        bmp.code_space = [0, 255, 0, 255, 0, 0, 0, 0];
+        bmp.max_code = 0xFFFF;
+        self.register_builtin_preseed(bmp);
+
+        let mut latin1 = Self::make_default(5, "latin-iso8859-1");
+        latin1.code_space = [32, 127, 0, 0, 0, 0, 0, 0];
+        latin1.min_code = 32;
+        latin1.method = CharsetMethod::Offset(160);
+        latin1.iso_final_char = Some(65); // ISO final char 'A'
+        latin1.emacs_mule_id = Some(129);
+        self.register_builtin_preseed(latin1);
+
+        self.define_alias(intern("ucs"), intern("unicode"));
     }
 
     /// Register a built-in (C-level) charset, giving it GNU's canonical
@@ -323,7 +327,17 @@ impl CharsetRegistry {
     /// appends `:docstring`/`:short-name`/`:long-name` via put-charset-property.
     /// Charsets created from Lisp `define-charset` keep the plist they were
     /// defined with, so they go through the plain `register`.
-    fn register_builtin(&mut self, mut info: CharsetInfo) {
+    fn register_builtin(&mut self, info: CharsetInfo) {
+        self.register_builtin_impl(info, true);
+    }
+
+    /// Like `register_builtin`, but pre-seeds the charset without adding it to
+    /// the ordered/priority list (it is added when mule-conf.el redefines it).
+    fn register_builtin_preseed(&mut self, info: CharsetInfo) {
+        self.register_builtin_impl(info, false);
+    }
+
+    fn register_builtin_impl(&mut self, mut info: CharsetInfo, add_ordered: bool) {
         // The canonical plist holds Lisp `Value`s (the `:code-space` vector
         // allocates on the tagged heap). `CharsetRegistry` is a thread-local
         // lazily built on whatever thread first needs it — including the GUI
@@ -368,10 +382,27 @@ impl CharsetRegistry {
                 (intern(":code-offset"), Value::fixnum(code_offset)),
             ];
         }
-        self.register(info);
+        if add_ordered {
+            self.register(info);
+        } else {
+            self.register_preseed(info);
+        }
     }
 
-    fn register(&mut self, mut info: CharsetInfo) {
+    fn register(&mut self, info: CharsetInfo) {
+        self.register_inner(info, true);
+    }
+
+    /// Insert a charset into the `charsets` map WITHOUT touching the ordered
+    /// (priority) list.  Used to pre-seed charsets that the runtime needs
+    /// before loadup but that mule-conf.el *redefines* (latin-iso8859-1,
+    /// unicode-bmp): their ordered-list slot must come from that later Lisp
+    /// `define-charset`, at GNU's position, not from the pre-seed.
+    fn register_preseed(&mut self, info: CharsetInfo) {
+        self.register_inner(info, false);
+    }
+
+    fn register_inner(&mut self, mut info: CharsetInfo, add_ordered: bool) {
         // Ensure the plist includes :dimension so that Elisp
         // charset-dimension (which reads the plist) returns a value.
         // GNU define-charset includes :dimension in the plist
@@ -382,7 +413,47 @@ impl CharsetRegistry {
         if !info.plist.iter().any(|(k, _)| *k == dim_sym) {
             info.plist.push((dim_sym, Value::fixnum(info.dimension)));
         }
-        self.charsets.insert(info.name, info);
+        let name = info.name;
+        let supplementary_p = info.supplementary_p;
+        self.charsets.insert(name, info);
+        // GNU's `Fdefine_charset_internal` appends every NEWLY-defined charset
+        // to `Vcharset_ordered_list` (charset.c:1191-1219).  This is what makes
+        // `charset-priority-list` return the full registered set in definition
+        // order.  Only add a charset the first time it enters the ordered list:
+        // some charsets (latin-iso8859-1, unicode-bmp) are pre-seeded in the
+        // `charsets` map but are *redefined* from mule-conf.el — their first
+        // appearance in the ordered list is at that (re)definition, matching
+        // GNU where they are pure Lisp charsets.
+        if add_ordered {
+            let resolved = self.resolve_name(name);
+            if !self.priority.contains(&resolved) {
+                self.add_to_ordered(resolved, supplementary_p);
+            }
+        }
+    }
+
+    /// Insert NAME into the priority/ordered list following GNU's
+    /// `Fdefine_charset_internal` rule (charset.c:1191-1219):
+    /// - supplementary charsets are appended to the end;
+    /// - non-supplementary charsets are inserted just before the first
+    ///   supplementary charset (or at the end if there is no supplementary
+    ///   charset yet).
+    fn add_to_ordered(&mut self, name: SymId, supplementary_p: bool) {
+        if supplementary_p {
+            self.priority.push(name);
+            return;
+        }
+        // Find the position of the first supplementary charset.
+        let first_supp = self.priority.iter().position(|&id| {
+            self.charsets
+                .get(&id)
+                .map(|cs| cs.supplementary_p)
+                .unwrap_or(false)
+        });
+        match first_supp {
+            Some(idx) => self.priority.insert(idx, name),
+            None => self.priority.push(name),
+        }
     }
 
     /// Allocate the next auto-incrementing charset ID.

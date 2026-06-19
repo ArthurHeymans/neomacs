@@ -108,7 +108,6 @@ fn divergence_split_char_returns_nil() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: charset-priority-list returns only a handful of charsets (ascii/emacs/latin-iso8859-1/eight-bit/...); GNU returns the full registered set (~180, incl. big5, windows-1252, CJK). neomacs has a limited charset registry."]
 fn divergence_charset_priority_list_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

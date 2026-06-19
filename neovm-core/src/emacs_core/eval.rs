@@ -3708,7 +3708,15 @@ impl Context {
         obarray.set_symbol_value("current-input-method-title", Value::NIL);
         obarray.set_symbol_value("current-iso639-language", Value::NIL);
         obarray.set_symbol_value("current-key-remap-sequence", Value::NIL);
-        obarray.set_symbol_value("current-language-environment", Value::string("UTF-8"));
+        // GNU's `current-language-environment` defcustom defaults to "English"
+        // (mule-cmds.el:1812), and the dumped image / `-Q` keeps it there.  This
+        // value matters during loadup: `set-language-info` (mule-cmds.el:1181)
+        // re-applies `set-charset-priority` whenever a language-info KEY is set
+        // for the *current* language environment.  Seeding "UTF-8" here made
+        // utf-8-lang.el's `(set-language-info-alist "UTF-8" ...)` reorder the
+        // charset priority list at dump time (unicode-bmp/unicode to the front),
+        // diverging from GNU's raw definition order.  Match GNU's default.
+        obarray.set_symbol_value("current-language-environment", Value::string("English"));
         obarray.set_symbol_value(
             "current-load-list",
             Value::list(vec![
