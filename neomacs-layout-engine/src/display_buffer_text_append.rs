@@ -22,8 +22,8 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
     TextMatrixRowBegin, TextWindowArtifactOutputSurface, TextWindowBegin,
-    TextWindowBeginOutputState, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowFinishOutputState, TextWindowLiveOutputState, TextWindowPendingRowFinish,
+    TextWindowBeginOutputSurface, TextWindowBodyOutputInstall, TextWindowCursorEffects,
+    TextWindowFinishOutputSurface, TextWindowLiveOutputSurface, TextWindowPendingRowFinish,
     TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
     WindowOutputEmitter,
 };
@@ -231,7 +231,7 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
 }
 
 pub(crate) struct BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
-    output: &'output mut TextWindowLiveOutputState<'emit>,
+    output: &'output mut TextWindowLiveOutputSurface<'emit>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
@@ -259,7 +259,7 @@ pub(crate) struct BufferTextWindowFinishRequest {
 }
 
 pub(crate) struct BufferTextWindowFinishState<'a> {
-    output: TextWindowFinishOutputState<'a>,
+    output: TextWindowFinishOutputSurface<'a>,
     hit_rows: Vec<HitRow>,
 }
 
@@ -358,7 +358,7 @@ impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
 
 impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        output: &'output mut TextWindowLiveOutputState<'emit>,
+        output: &'output mut TextWindowLiveOutputSurface<'emit>,
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
@@ -376,7 +376,7 @@ impl<'a> BufferTextWindowFinishState<'a> {
         hit_rows: Vec<HitRow>,
     ) -> Self {
         Self {
-            output: TextWindowFinishOutputState::new(builder, output_emitter, evaluator),
+            output: TextWindowFinishOutputSurface::new(builder, output_emitter, evaluator),
             hit_rows,
         }
     }
@@ -432,7 +432,7 @@ impl BufferTextWindowBeginRequest {
 
     pub(crate) fn begin_and_apply(
         self,
-        state: TextWindowBeginOutputState<'_>,
+        state: TextWindowBeginOutputSurface<'_>,
     ) -> WindowOutputEmitter {
         let mut state = state;
         let mut output_emitter = WindowOutputEmitter::new(

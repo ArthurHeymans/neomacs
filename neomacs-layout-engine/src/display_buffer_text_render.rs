@@ -85,8 +85,8 @@ use crate::neovm_bridge::{
 use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputState,
-    TextWindowLiveOutputState, TextWindowMatrixOutputState, TextWindowOutputRetryCheckpoint,
+    TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
+    TextWindowLiveOutputSurface, TextWindowMatrixOutputSurface, TextWindowOutputRetryCheckpoint,
     TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
@@ -393,12 +393,12 @@ where
 }
 
 struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
-    pub(crate) output: &'output mut TextWindowLiveOutputState<'emit>,
+    pub(crate) output: &'output mut TextWindowLiveOutputSurface<'emit>,
     pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
-    pub(crate) output: TextWindowLiveOutputState<'emit>,
+    pub(crate) output: TextWindowLiveOutputSurface<'emit>,
     pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
@@ -1268,7 +1268,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
-        begin_request.begin_and_apply(TextWindowBeginOutputState::new(
+        begin_request.begin_and_apply(TextWindowBeginOutputSurface::new(
             self.builder,
             self.evaluator,
         ))
@@ -1279,7 +1279,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
-            TextRowOutputRenderState::from_live_output(TextWindowLiveOutputState::new(
+            TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::new(
                 self.builder,
                 output_emitter,
                 self.evaluator,
@@ -1564,7 +1564,8 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         face_resolver: &'emit FaceResolver,
         frame_face_id_counter: u32,
     ) -> Self {
-        let retry_checkpoint = TextWindowMatrixOutputState::new(builder).capture_retry_checkpoint();
+        let retry_checkpoint =
+            TextWindowMatrixOutputSurface::from_builder(builder).capture_retry_checkpoint();
         Self {
             builder,
             evaluator,
@@ -1613,7 +1614,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
     }
 
     fn prepare_retry(&mut self, frame_counter: &mut u32) {
-        TextWindowMatrixOutputState::new(self.builder)
+        TextWindowMatrixOutputSurface::from_builder(self.builder)
             .restore_retry_checkpoint(self.retry_checkpoint);
         self.publish_face_ids(frame_counter);
     }
@@ -1642,7 +1643,7 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
     ) -> TextWindowRedisplayPositions {
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
-                output: TextWindowLiveOutputState::new(
+                output: TextWindowLiveOutputSurface::new(
                     self.builder,
                     output_emitter,
                     self.evaluator,
@@ -1659,7 +1660,7 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         output_emitter: &mut WindowOutputEmitter,
         request: WindowChromeRowsRenderRequest<'_, '_>,
     ) {
-        TextWindowLiveOutputState::new(self.builder, output_emitter, self.evaluator)
+        TextWindowLiveOutputSurface::new(self.builder, output_emitter, self.evaluator)
             .render_chrome_rows(request, self.render_services.reborrow());
     }
 }

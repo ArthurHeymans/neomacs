@@ -251,12 +251,12 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
 
 pub(crate) struct TextWindowOutputInstall;
 
-pub(crate) struct TextWindowMatrixOutputState<'builder> {
+pub(crate) struct TextWindowMatrixOutputSurface<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
 
-impl<'builder> TextWindowMatrixOutputState<'builder> {
-    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+impl<'builder> TextWindowMatrixOutputSurface<'builder> {
+    pub(crate) fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 
@@ -473,24 +473,24 @@ pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
     pub(crate) display_host: Option<&'a dyn DisplayHost>,
 }
 
-pub(crate) struct TextWindowBeginOutputState<'a> {
+pub(crate) struct TextWindowBeginOutputSurface<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     evaluator: &'a mut Context,
 }
 
-pub(crate) struct TextWindowFinishOutputState<'a> {
+pub(crate) struct TextWindowFinishOutputSurface<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
 
-pub(crate) struct TextWindowLiveOutputState<'a> {
+pub(crate) struct TextWindowLiveOutputSurface<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
 
-impl<'a> TextWindowBeginOutputState<'a> {
+impl<'a> TextWindowBeginOutputSurface<'a> {
     pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder, evaluator: &'a mut Context) -> Self {
         Self { builder, evaluator }
     }
@@ -509,7 +509,7 @@ impl<'a> TextWindowBeginOutputState<'a> {
     }
 }
 
-impl<'a> TextWindowFinishOutputState<'a> {
+impl<'a> TextWindowFinishOutputSurface<'a> {
     pub(crate) fn new(
         builder: &'a mut GlyphMatrixBuilder,
         output_emitter: WindowOutputEmitter,
@@ -540,7 +540,7 @@ impl<'a> TextWindowFinishOutputState<'a> {
     }
 }
 
-impl<'a> TextWindowLiveOutputState<'a> {
+impl<'a> TextWindowLiveOutputSurface<'a> {
     pub(crate) fn new(
         builder: &'a mut GlyphMatrixBuilder,
         output_emitter: &'a mut WindowOutputEmitter,
@@ -553,8 +553,8 @@ impl<'a> TextWindowLiveOutputState<'a> {
         }
     }
 
-    pub(crate) fn reborrow(&mut self) -> TextWindowLiveOutputState<'_> {
-        TextWindowLiveOutputState {
+    pub(crate) fn reborrow(&mut self) -> TextWindowLiveOutputSurface<'_> {
+        TextWindowLiveOutputSurface {
             builder: self.builder,
             output_emitter: self.output_emitter,
             evaluator: self.evaluator,

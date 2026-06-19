@@ -13,7 +13,7 @@ use super::TextWindowCursorEffects;
 use super::TextWindowCursorInstaller;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
-use super::TextWindowMatrixOutputState;
+use super::TextWindowMatrixOutputSurface;
 use super::TextWindowOutputInstall;
 use super::TextWindowOutputInstaller;
 use super::TextWindowPendingRowFinish;
@@ -564,21 +564,25 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
         .artifact_installer()
         .add_window_info(window_info(41));
 
-    TextWindowMatrixOutputState::new(&mut builder).record_display_range(TextWindowDisplayRange {
-        window_id: 41,
-        window_start: LispCharPos1::new(7),
-        window_end: LispCharPos1::new(19),
-    });
+    TextWindowMatrixOutputSurface::from_builder(&mut builder).record_display_range(
+        TextWindowDisplayRange {
+            window_id: 41,
+            window_start: LispCharPos1::new(7),
+            window_end: LispCharPos1::new(19),
+        },
+    );
 
     let info = builder.window_infos().last().expect("window info");
     assert_eq!(info.window_start, 7);
     assert_eq!(info.window_end, 19);
 
-    TextWindowMatrixOutputState::new(&mut builder).record_display_range(TextWindowDisplayRange {
-        window_id: 42,
-        window_start: LispCharPos1::new(11),
-        window_end: LispCharPos1::new(23),
-    });
+    TextWindowMatrixOutputSurface::from_builder(&mut builder).record_display_range(
+        TextWindowDisplayRange {
+            window_id: 42,
+            window_start: LispCharPos1::new(11),
+            window_end: LispCharPos1::new(23),
+        },
+    );
 
     let info = builder.window_infos().last().expect("window info");
     assert_eq!(info.window_start, 7);
@@ -663,7 +667,7 @@ fn close_text_window_output_closes_active_matrix_window() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
 
-    TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
+    TextWindowMatrixOutputSurface::from_builder(&mut builder).close_text_window_output();
 
     assert_eq!(builder.windows().len(), 1);
     assert_eq!(builder.windows()[0].window_id, 9);
@@ -1078,7 +1082,7 @@ fn mark_current_text_row_truncated_left_sets_current_row_flag() {
     builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
     builder.begin_row(1, GlyphRowRole::Text);
 
-    TextWindowMatrixOutputState::new(&mut builder)
+    TextWindowMatrixOutputSurface::from_builder(&mut builder)
         .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
 
     builder.end_row();

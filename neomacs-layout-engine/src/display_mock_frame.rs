@@ -14,7 +14,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::mock_frame::{MockDisplayProperty, MockFrameContent, MockStyledLine};
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
-use crate::window_output::{TextWindowMatrixBegin, TextWindowMatrixOutputState};
+use crate::window_output::{TextWindowMatrixBegin, TextWindowMatrixOutputSurface};
 use neomacs_display_protocol::face::{BasicFaceId, Face, FaceAttributes};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, GlyphArea, GlyphRow};
@@ -374,7 +374,7 @@ pub(crate) fn layout_mock_frame_content(
     for window in &content.windows {
         let nrows = window.lines.len() + 1;
         let ncols = mock_frame_pixel_width_to_columns(window.pixel_bounds.width, char_w);
-        TextWindowMatrixOutputState::new(&mut builder).begin_text_window_matrix(
+        TextWindowMatrixOutputSurface::from_builder(&mut builder).begin_text_window_matrix(
             TextWindowMatrixBegin {
                 window_id: window.window_id,
                 rows: nrows,
@@ -424,14 +424,14 @@ pub(crate) fn layout_mock_frame_content(
         );
         FrameOutputSurface::from_builder(&mut builder).install_display_row(mode_line_row, &row);
 
-        TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
+        TextWindowMatrixOutputSurface::from_builder(&mut builder).close_text_window_output();
     }
 
     if let Some(ref mini) = content.minibuffer {
         let has_mode_line = !mini.mode_line.glyphs.is_empty();
         let nrows = mini.lines.len() + usize::from(has_mode_line);
         let ncols = mock_frame_pixel_width_to_columns(mini.pixel_bounds.width, char_w);
-        TextWindowMatrixOutputState::new(&mut builder).begin_text_window_matrix(
+        TextWindowMatrixOutputSurface::from_builder(&mut builder).begin_text_window_matrix(
             TextWindowMatrixBegin {
                 window_id: mini.window_id,
                 rows: nrows,
@@ -483,7 +483,7 @@ pub(crate) fn layout_mock_frame_content(
             FrameOutputSurface::from_builder(&mut builder).install_display_row(mode_line_row, &row);
         }
 
-        TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
+        TextWindowMatrixOutputSurface::from_builder(&mut builder).close_text_window_output();
     }
 
     let main_state = builder.finish(
@@ -515,14 +515,16 @@ pub(crate) fn layout_mock_frame_content(
         }
         let nrows = cf.window.lines.len();
         let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
-        TextWindowMatrixOutputState::new(&mut cb).begin_text_window_matrix(TextWindowMatrixBegin {
-            window_id: cf.window.window_id,
-            rows: nrows,
-            cols: ncols,
-            bounds: cf.window.pixel_bounds,
-            text_bounds: cf.window.pixel_bounds,
-            selected: false,
-        });
+        TextWindowMatrixOutputSurface::from_builder(&mut cb).begin_text_window_matrix(
+            TextWindowMatrixBegin {
+                window_id: cf.window.window_id,
+                rows: nrows,
+                cols: ncols,
+                bounds: cf.window.pixel_bounds,
+                text_bounds: cf.window.pixel_bounds,
+                selected: false,
+            },
+        );
         for (ri, line) in cf.window.lines.iter().enumerate() {
             let row = mock_display_row_from_line(
                 GlyphRowRole::Text,
@@ -541,7 +543,7 @@ pub(crate) fn layout_mock_frame_content(
             );
             FrameOutputSurface::from_builder(&mut cb).install_display_row(ri, &row);
         }
-        TextWindowMatrixOutputState::new(&mut cb).close_text_window_output();
+        TextWindowMatrixOutputSurface::from_builder(&mut cb).close_text_window_output();
         let cs = cb.finish(
             mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w),
             cf.window.lines.len().max(1),

@@ -79,8 +79,8 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputState,
-    TextWindowLiveOutputState,
+    TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
+    TextWindowLiveOutputSurface,
 };
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -6722,7 +6722,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             char_w: 8.0,
         })
         .install_and_apply(BufferTextWindowBodyInstallState::new(
-            &mut TextWindowLiveOutputState::new(&mut builder, &mut output_emitter, &mut eval),
+            &mut TextWindowLiveOutputSurface::new(&mut builder, &mut output_emitter, &mut eval),
             crate::display_status_line::ChromeRowRenderServices::new(
                 &mut font_metrics,
                 &face_resolver,
@@ -6783,7 +6783,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             x: 18.0,
         },
     )
-    .begin_and_apply(TextWindowBeginOutputState::new(&mut builder, &mut eval));
+    .begin_and_apply(TextWindowBeginOutputSurface::new(&mut builder, &mut eval));
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
     crate::window_output::TextWindowRowLifecycleInstaller::new(
@@ -6796,7 +6796,8 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
         height: 17.0,
         ascent: 12.0,
     });
-    crate::window_output::TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
+    crate::window_output::TextWindowMatrixOutputSurface::from_builder(&mut builder)
+        .close_text_window_output();
 
     let state = builder.finish(8, 4, 8.0, 16.0);
     assert_eq!(state.window_matrices.len(), 1);

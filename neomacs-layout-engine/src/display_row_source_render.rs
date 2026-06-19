@@ -31,7 +31,7 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput,
-    TextWindowLiveOutputState, TextWindowOutputRenderState, TextWindowRowDecorationRequest,
+    TextWindowLiveOutputSurface, TextWindowOutputRenderState, TextWindowRowDecorationRequest,
     WindowOutputEmitter,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -40,7 +40,7 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::DisplayRowSnapshot;
 
 pub(crate) struct TextRowOutputRenderState<'a> {
-    output: TextWindowLiveOutputState<'a>,
+    output: TextWindowLiveOutputSurface<'a>,
 }
 
 struct DisplayRowCurrentTextRenderState<'face, 'emit> {
@@ -374,7 +374,7 @@ where
 }
 
 impl<'a> TextRowOutputRenderState<'a> {
-    pub(crate) fn from_live_output(output: TextWindowLiveOutputState<'a>) -> Self {
+    pub(crate) fn from_live_output(output: TextWindowLiveOutputSurface<'a>) -> Self {
         Self { output }
     }
 
@@ -384,7 +384,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         output_emitter: &'a mut WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
-        Self::from_live_output(TextWindowLiveOutputState::new(
+        Self::from_live_output(TextWindowLiveOutputSurface::new(
             builder,
             output_emitter,
             evaluator,
