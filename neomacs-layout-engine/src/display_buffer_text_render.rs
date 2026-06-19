@@ -174,8 +174,7 @@ pub(crate) struct BufferTextWindowFinishInstallState<'a> {
 pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     source_render: TextRowSourceRenderState<'emit>,
-    x: &'emit mut f32,
-    col: &'emit mut usize,
+    row_progress: BufferTextWindowRowProgressState<'emit>,
     row_geometry: &'emit mut DisplayRowGeometryState,
     cursor_info: &'emit mut CursorCaptureState,
     hit_rows: &'emit mut Vec<HitRow>,
@@ -469,11 +468,40 @@ pub(crate) struct BufferTextWindowInitialFaceStateRequest<'a> {
     fallback_metrics: DisplayRowFallbackMetrics,
 }
 
+pub(crate) struct BufferTextWindowRowProgressState<'emit> {
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+}
+
+impl<'emit> BufferTextWindowRowProgressState<'emit> {
+    pub(crate) fn new(x: &'emit mut f32, col: &'emit mut usize) -> Self {
+        Self { x, col }
+    }
+
+    pub(crate) fn row_position(&self) -> DisplayRowPosition {
+        DisplayRowPosition {
+            x_px: *self.x,
+            col: *self.col,
+        }
+    }
+
+    pub(crate) fn reborrow(&mut self) -> BufferTextWindowRowProgressState<'_> {
+        BufferTextWindowRowProgressState {
+            x: self.x,
+            col: self.col,
+        }
+    }
+
+    pub(crate) fn apply_position(&mut self, position: DisplayRowPosition) {
+        *self.x = position.x_px;
+        *self.col = position.col;
+    }
+}
+
 pub(crate) struct BufferTextWindowProgressState<'emit> {
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
+    pub(crate) row: BufferTextWindowRowProgressState<'emit>,
 }
 
 impl<'emit> BufferTextWindowProgressState<'emit> {
@@ -486,16 +514,12 @@ impl<'emit> BufferTextWindowProgressState<'emit> {
         Self {
             byte_idx,
             charpos,
-            x,
-            col,
+            row: BufferTextWindowRowProgressState::new(x, col),
         }
     }
 
     pub(crate) fn row_position(&self) -> DisplayRowPosition {
-        DisplayRowPosition {
-            x_px: *self.x,
-            col: *self.col,
-        }
+        self.row.row_position()
     }
 
     pub(crate) fn charpos(&self) -> i64 {
@@ -506,8 +530,7 @@ impl<'emit> BufferTextWindowProgressState<'emit> {
         BufferTextWindowProgressState {
             byte_idx: self.byte_idx,
             charpos: self.charpos,
-            x: self.x,
-            col: self.col,
+            row: self.row.reborrow(),
         }
     }
 }
@@ -1482,8 +1505,7 @@ impl BufferTextWindowWalkSetup {
         BufferTextWindowPostLoopState::new(
             loop_context,
             state.source_render.reborrow(),
-            &mut self.x,
-            &mut self.col,
+            BufferTextWindowRowProgressState::new(&mut self.x, &mut self.col),
             &mut self.row_geometry,
             &mut self.cursor_info,
             &mut self.hit_rows,
@@ -2628,8 +2650,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 buffer,
                 self.progress.charpos(),
                 self.face_ids,
-                self.progress.x,
-                self.progress.col,
+                self.progress.row.x,
+                self.progress.row.col,
             );
     }
 
@@ -2718,7 +2740,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             self.row_geometry,
             self.row_extend,
             self.box_face,
-            *self.progress.x,
+            *self.progress.row.x,
             self.progress.charpos(),
         );
     }
@@ -3109,8 +3131,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
     pub(crate) fn new(
         loop_context: BufferTextWindowLoopRequestContext,
         source_render: TextRowSourceRenderState<'emit>,
-        x: &'emit mut f32,
-        col: &'emit mut usize,
+        row_progress: BufferTextWindowRowProgressState<'emit>,
         row_geometry: &'emit mut DisplayRowGeometryState,
         cursor_info: &'emit mut CursorCaptureState,
         hit_rows: &'emit mut Vec<HitRow>,
@@ -3126,8 +3147,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
         Self {
             loop_context,
             source_render,
-            x,
-            col,
+            row_progress,
             row_geometry,
             cursor_info,
             hit_rows,
@@ -3165,8 +3185,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
                 buffer,
                 BufferEndOfBufferTailRenderState {
                     source_render: self.source_render.reborrow(),
-                    x: self.x,
-                    col: self.col,
+                    row_progress: self.row_progress.reborrow(),
                     row_geometry: self.row_geometry,
                     cursor_info: self.cursor_info,
                     hit_rows: self.hit_rows,
@@ -3185,7 +3204,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
         tail_context
             .tail_decoration_request()
             .apply(BufferTextWindowTailDecorationState {
-                x: *self.x,
+                x: *self.row_progress.x,
                 text_append_surface: self.text_append_surface,
                 row_geometry: self.row_geometry,
                 row_y_positions: self.row_y_positions,
@@ -3309,8 +3328,7 @@ pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
 
 pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) x: &'emit mut f32,
-    pub(crate) col: &'emit mut usize,
+    pub(crate) row_progress: BufferTextWindowRowProgressState<'emit>,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
     pub(crate) hit_rows: &'emit mut Vec<HitRow>,
@@ -3627,8 +3645,7 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
     ) -> BufferEndOfBufferTailRenderOutcome {
         let BufferEndOfBufferTailRenderState {
             source_render,
-            x,
-            col,
+            row_progress,
             row_geometry,
             cursor_info,
             hit_rows,
@@ -3636,6 +3653,7 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
             row_y_positions,
             face_ids,
         } = state;
+        let BufferTextWindowRowProgressState { x, col } = row_progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -3789,8 +3807,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         let BufferTextWindowProgressState {
             byte_idx,
             charpos,
-            x,
-            col,
+            row: BufferTextWindowRowProgressState { x, col },
         } = progress;
         let mut source_render = source_render;
         let context = self.context;
@@ -3857,8 +3874,10 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             );
         }
 
-        let mut synthetic_text_state =
-            BufferSyntheticTextRenderState::new(source_render.reborrow(), x, col);
+        let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
+            source_render.reborrow(),
+            BufferTextWindowRowProgressState::new(x, col),
+        );
         hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -4050,13 +4069,14 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         let BufferTextWindowProgressState {
             byte_idx,
             charpos,
-            x,
-            col,
+            row: BufferTextWindowRowProgressState { x, col },
         } = progress;
         let mut source_render = source_render;
 
-        let mut synthetic_text_state =
-            BufferSyntheticTextRenderState::new(source_render.reborrow(), x, col);
+        let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
+            source_render.reborrow(),
+            BufferTextWindowRowProgressState::new(x, col),
+        );
         marker.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -4269,11 +4289,10 @@ impl<'a> BufferInvisibleTextRenderState<'a> {
     pub(crate) fn new(
         source_render: TextRowSourceRenderState<'a>,
         cursor_info: &'a mut CursorCaptureState,
-        x: &'a mut f32,
-        col: &'a mut usize,
+        row_progress: BufferTextWindowRowProgressState<'a>,
     ) -> Self {
         Self {
-            synthetic_text: BufferSyntheticTextRenderState::new(source_render, x, col),
+            synthetic_text: BufferSyntheticTextRenderState::new(source_render, row_progress),
             cursor_info,
         }
     }
@@ -4303,8 +4322,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         let BufferTextWindowProgressState {
             byte_idx,
             charpos,
-            x,
-            col,
+            row: BufferTextWindowRowProgressState { x, col },
         } = progress;
         let mut source_render = source_render;
         let context = self.context;
@@ -4320,8 +4338,11 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             return BufferInvisibleTextRenderOutcome::Visible;
         };
 
-        let mut hidden_text_state =
-            BufferInvisibleTextRenderState::new(source_render.reborrow(), cursor_info, x, col);
+        let mut hidden_text_state = BufferInvisibleTextRenderState::new(
+            source_render.reborrow(),
+            cursor_info,
+            BufferTextWindowRowProgressState::new(x, col),
+        );
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -4715,8 +4736,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         let BufferTextWindowProgressState {
             byte_idx,
             charpos,
-            x,
-            col,
+            row: BufferTextWindowRowProgressState { x, col },
         } = progress;
         let mut source_render = source_render;
         let context = self.context;
@@ -5336,28 +5356,22 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
 
 pub(crate) struct BufferSyntheticTextRenderState<'a> {
     source_render: TextRowSourceRenderState<'a>,
-    x: &'a mut f32,
-    col: &'a mut usize,
+    row_progress: BufferTextWindowRowProgressState<'a>,
 }
 
 impl<'a> BufferSyntheticTextRenderState<'a> {
     pub(crate) fn new(
         source_render: TextRowSourceRenderState<'a>,
-        x: &'a mut f32,
-        col: &'a mut usize,
+        row_progress: BufferTextWindowRowProgressState<'a>,
     ) -> Self {
         Self {
             source_render,
-            x,
-            col,
+            row_progress,
         }
     }
 
     pub(crate) fn position(&self) -> DisplayRowPosition {
-        DisplayRowPosition {
-            x_px: *self.x,
-            col: *self.col,
-        }
+        self.row_progress.row_position()
     }
 
     pub(crate) fn append_request_to_text_row<'ctx>(
@@ -5373,8 +5387,7 @@ impl<'a> BufferSyntheticTextRenderState<'a> {
         ) else {
             return;
         };
-        *self.x = progress.end.x_px;
-        *self.col = progress.end.col;
+        self.row_progress.apply_position(progress.end);
     }
 
     pub(crate) fn append_hscroll_truncation_marker_to_text_row<'ctx>(
@@ -5939,7 +5952,7 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
                     self.replacement.start_charpos0(),
                     source_text,
                     self.active_face_state,
-                    *progress.x,
+                    *progress.row.x,
                     self.content_x,
                     self.params,
                     self.glyph_y_offset,
@@ -5982,8 +5995,8 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
             self.text,
             progress.byte_idx,
             progress.charpos,
-            progress.x,
-            progress.col,
+            progress.row.x,
+            progress.row.col,
         );
         BufferDisplayPropertyTextReplacementRenderOutcome::Continue
     }
@@ -6225,9 +6238,7 @@ pub(crate) struct BufferTextSourceCharRenderState<'a> {
     pub(crate) source_render: TextRowSourceRenderState<'a>,
     pub(crate) trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
     pub(crate) word_wrap: &'a mut WordWrapRenderState,
-    pub(crate) x: &'a mut f32,
-    pub(crate) col: &'a mut usize,
-    pub(crate) charpos: &'a mut i64,
+    pub(crate) progress: BufferTextWindowProgressState<'a>,
 }
 
 impl<'a> BufferTextSourceCharRenderState<'a> {
@@ -6235,17 +6246,13 @@ impl<'a> BufferTextSourceCharRenderState<'a> {
         source_render: TextRowSourceRenderState<'a>,
         trailing_whitespace: &'a mut TrailingWhitespaceRenderState,
         word_wrap: &'a mut WordWrapRenderState,
-        x: &'a mut f32,
-        col: &'a mut usize,
-        charpos: &'a mut i64,
+        progress: BufferTextWindowProgressState<'a>,
     ) -> Self {
         Self {
             source_render,
             trailing_whitespace,
             word_wrap,
-            x,
-            col,
-            charpos,
+            progress,
         }
     }
 }
@@ -6255,9 +6262,7 @@ pub(crate) struct BufferTextSpecialSourceCharRenderState<'a> {
     pub(crate) source_render: TextRowSourceRenderState<'a>,
     pub(crate) face_scan: &'a mut FaceScanCheckpoint,
     pub(crate) word_wrap: &'a mut WordWrapRenderState,
-    pub(crate) x: &'a mut f32,
-    pub(crate) col: &'a mut usize,
-    pub(crate) charpos: &'a mut i64,
+    pub(crate) progress: BufferTextWindowProgressState<'a>,
 }
 
 impl<'a> BufferTextSpecialSourceCharRenderState<'a> {
@@ -6266,18 +6271,14 @@ impl<'a> BufferTextSpecialSourceCharRenderState<'a> {
         source_render: TextRowSourceRenderState<'a>,
         face_scan: &'a mut FaceScanCheckpoint,
         word_wrap: &'a mut WordWrapRenderState,
-        x: &'a mut f32,
-        col: &'a mut usize,
-        charpos: &'a mut i64,
+        progress: BufferTextWindowProgressState<'a>,
     ) -> Self {
         Self {
             face_ids,
             source_render,
             face_scan,
             word_wrap,
-            x,
-            col,
-            charpos,
+            progress,
         }
     }
 }
@@ -6386,8 +6387,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             context.char_h,
         );
         let append_position = DisplayRowPosition {
-            x_px: *progress.x,
-            col: *progress.col,
+            x_px: *progress.row.x,
+            col: *progress.row.col,
         };
         let append_geometry = *row_geometry;
 
@@ -6416,7 +6417,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     BufferTextSpecialOverflowRenderContext {
                         text: context.text,
                         text_start_byte: context.text_start_byte,
-                        x_px: *progress.x,
+                        x_px: *progress.row.x,
                         right_edge_px: context.append_surface.full_text_right_edge(),
                         wrap_mode: context.params.wrap_mode,
                         row_visibility_limit: context.row_visibility_limit,
@@ -6463,9 +6464,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                             source_render.reborrow(),
                             face_scan,
                             word_wrap,
-                            progress.x,
-                            progress.col,
-                            progress.charpos,
+                            progress.reborrow(),
                         ),
                     )
                     .should_break()
@@ -6525,8 +6524,8 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         {
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
-                progress.x,
-                progress.col,
+                progress.row.x,
+                progress.row.col,
                 row_geometry,
                 cursor_info,
                 hit_rows,
@@ -6546,9 +6545,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             cursor_info,
             &active_face_state,
             row_geometry,
-            *progress.x,
+            *progress.row.x,
             source_step_char.start_byte_idx(),
-            *progress.col,
+            *progress.row.col,
             ch == '\t',
             *progress.charpos,
             context.point_charpos,
@@ -6563,9 +6562,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 prepared_append.cursor_info_for_main_char(
                     &active_face_state,
                     row_geometry.text_position(
-                        *progress.x,
+                        *progress.row.x,
                         source_step_char.start_byte_idx(),
-                        *progress.col,
+                        *progress.row.col,
                     ),
                     ch == '\t',
                 ),
@@ -6581,9 +6580,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                     source_render.reborrow(),
                     trailing_whitespace,
                     word_wrap,
-                    progress.x,
-                    progress.col,
-                    progress.charpos,
+                    progress.reborrow(),
                 ),
             )
             .should_break()
@@ -6635,8 +6632,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
         let BufferTextWindowProgressState {
             byte_idx,
             charpos,
-            x,
-            col,
+            row: BufferTextWindowRowProgressState { x, col },
         } = progress;
         let mut source_render = source_render;
         let context = self.context;
@@ -7189,8 +7185,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
         let BufferTextWindowProgressState {
             byte_idx,
             charpos,
-            x,
-            col,
+            row: BufferTextWindowRowProgressState { x, col },
         } = progress;
         let mut source_render = source_render;
         let context = self.context;

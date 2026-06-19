@@ -1345,8 +1345,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
             &mut font_metrics,
             &face_resolver,
         ),
-        &mut x,
-        &mut col,
+        BufferTextWindowRowProgressState::new(&mut x, &mut col),
     );
     let action = BufferHscrollSkipAction::Text {
         ch_start_byte_idx: 5,
@@ -6071,6 +6070,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     let mut word_wrap = WordWrapRenderState::new(true);
     let mut charpos = 4;
+    let mut byte_idx = 0;
     let mut end_x = 0.0;
     let mut end_col = 0;
     let continuation = prepared_append.append_to_text_row_and_apply(
@@ -6087,9 +6087,12 @@ fn buffer_text_source_append_context_appends_source_char() {
             ),
             &mut trailing_whitespace,
             &mut word_wrap,
-            &mut end_x,
-            &mut end_col,
-            &mut charpos,
+            BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut end_x,
+                &mut end_col,
+            ),
         ),
     );
     assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);
@@ -6491,8 +6494,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
                 &mut font_metrics,
                 &face_resolver,
             ),
-            x: &mut x,
-            col: &mut col,
+            row_progress: BufferTextWindowRowProgressState::new(&mut x, &mut col),
             row_geometry: &mut context.geometry,
             cursor_info: &mut cursor_info,
             hit_rows: &mut context.hit_rows,
@@ -7848,6 +7850,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     *face_scan.next_check_mut() = 99;
     let mut word_wrap = WordWrapRenderState::new(true);
     let mut charpos = 8;
+    let mut byte_idx = 0;
     let mut end_x = 0.0;
     let mut end_col = 0;
     let continuation = prepared_append.append_to_text_row_and_apply(
@@ -7865,9 +7868,12 @@ fn buffer_text_item_append_context_builds_mapped_item() {
             ),
             &mut face_scan,
             &mut word_wrap,
-            &mut end_x,
-            &mut end_col,
-            &mut charpos,
+            BufferTextWindowProgressState::new(
+                &mut byte_idx,
+                &mut charpos,
+                &mut end_x,
+                &mut end_col,
+            ),
         ),
     );
     assert_eq!(continuation, BufferTextSourceAppendContinuation::Rendered);

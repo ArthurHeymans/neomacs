@@ -686,9 +686,9 @@ impl BufferTextSourceCharPreparedAppend {
             state.word_wrap,
             ch,
             geometry,
-            state.x,
-            state.col,
-            state.charpos,
+            state.progress.row.x,
+            state.progress.row.col,
+            state.progress.charpos,
         );
         BufferTextSourceAppendContinuation::Rendered
     }
@@ -952,9 +952,9 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         outcome.apply_rendered_special_char_to_walk_state(
             state.face_scan,
             state.word_wrap,
-            state.x,
-            state.col,
-            state.charpos,
+            state.progress.row.x,
+            state.progress.row.col,
+            state.progress.charpos,
         );
         BufferTextSourceAppendContinuation::Rendered
     }
