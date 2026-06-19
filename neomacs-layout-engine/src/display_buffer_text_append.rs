@@ -492,8 +492,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
         };
 
         let (cursor_publish_status, pending_row_finished, visual_cursor_summary) =
-            output_render.apply(|builder, output_emitter, evaluator| {
-                let mut output = TextWindowOutputRenderState::new(builder, output_emitter);
+            output_render.with_text_window_output(|output, evaluator| {
                 let mut cursor_publish_status = initial_cursor_publish_status;
                 if cursor_requested {
                     if let Some(cursor) = cursor_info.captured() {
@@ -515,7 +514,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                             cursor,
                             &cursor_row_metrics,
                             row_geometry.row_metrics_snapshot(context.text_matrix_row_base),
-                            &mut output,
+                            output,
                         )
                         .into();
                     } else {
@@ -548,7 +547,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                     context.text_height,
                     context.char_w,
                 )
-                .publish_visual_cursors(&mut output);
+                .publish_visual_cursors(output);
                 (
                     cursor_publish_status,
                     pending_row_finished,

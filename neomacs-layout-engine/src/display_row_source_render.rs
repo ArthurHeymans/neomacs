@@ -31,7 +31,8 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput,
-    TextWindowRowDecorationRequest, TextWindowRowLifecycleInstaller, WindowOutputEmitter,
+    TextWindowOutputRenderState, TextWindowRowDecorationRequest, TextWindowRowLifecycleInstaller,
+    WindowOutputEmitter,
 };
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -64,21 +65,12 @@ impl<'a> TextRowOutputRenderState<'a> {
         }
     }
 
-    fn into_parts(
+    pub(crate) fn with_text_window_output<R>(
         self,
-    ) -> (
-        &'a mut GlyphMatrixBuilder,
-        &'a mut WindowOutputEmitter,
-        &'a mut Context,
-    ) {
-        (self.builder, self.output_emitter, self.evaluator)
-    }
-
-    pub(crate) fn apply<R>(
-        self,
-        f: impl FnOnce(&mut GlyphMatrixBuilder, &mut WindowOutputEmitter, &mut Context) -> R,
+        f: impl FnOnce(&mut TextWindowOutputRenderState<'_, '_>, &mut Context) -> R,
     ) -> R {
-        f(self.builder, self.output_emitter, self.evaluator)
+        let mut output = TextWindowOutputRenderState::new(self.builder, self.output_emitter);
+        f(&mut output, self.evaluator)
     }
 
     pub(crate) fn finish_and_end_text_matrix_row_output(self, metrics: TextMatrixRowMetrics) {
@@ -357,25 +349,6 @@ impl<'a> TextRowSourceRenderState<'a> {
         )
     }
 
-    fn into_parts(
-        self,
-    ) -> (
-        &'a mut GlyphMatrixBuilder,
-        &'a mut WindowOutputEmitter,
-        &'a mut Context,
-        &'a mut Option<FontMetricsService>,
-        &'a FaceResolver,
-    ) {
-        let (builder, output_emitter, evaluator) = self.output_render.into_parts();
-        (
-            builder,
-            output_emitter,
-            evaluator,
-            self.font_metrics,
-            self.face_resolver,
-        )
-    }
-
     pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
         self.output_render.output_emitter
     }
@@ -393,14 +366,12 @@ fn current_text_render_state<'emit>(
     state: &'emit mut TextRowSourceRenderState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
 ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
-    let (builder, output_emitter, evaluator, font_metrics, face_resolver) =
-        state.reborrow().into_parts();
     DisplayRowCurrentTextRenderState::new(
-        builder,
-        output_emitter,
-        evaluator,
-        font_metrics,
-        face_resolver,
+        state.output_render.builder,
+        state.output_render.output_emitter,
+        state.output_render.evaluator,
+        state.font_metrics,
+        state.face_resolver,
         face_ids,
     )
 }
@@ -426,31 +397,6 @@ impl<'a> TextRowSourceMeasureState<'a> {
             font_metrics,
             face_resolver,
         }
-    }
-
-    pub(crate) fn reborrow(&mut self) -> TextRowSourceMeasureState<'_> {
-        TextRowSourceMeasureState {
-            builder: self.builder,
-            evaluator: self.evaluator,
-            font_metrics: self.font_metrics,
-            face_resolver: self.face_resolver,
-        }
-    }
-
-    fn into_parts(
-        self,
-    ) -> (
-        &'a mut GlyphMatrixBuilder,
-        &'a mut Context,
-        &'a mut Option<FontMetricsService>,
-        &'a FaceResolver,
-    ) {
-        (
-            self.builder,
-            self.evaluator,
-            self.font_metrics,
-            self.face_resolver,
-        )
     }
 
     pub(crate) fn font_metrics(&mut self) -> &mut Option<FontMetricsService> {
@@ -486,12 +432,11 @@ fn current_text_measure_state<'emit>(
     state: &'emit mut TextRowSourceMeasureState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
 ) -> DisplayRowCurrentTextMeasureState<'emit, 'emit> {
-    let (builder, evaluator, font_metrics, face_resolver) = state.reborrow().into_parts();
     DisplayRowCurrentTextMeasureState::new(
-        builder,
-        evaluator,
-        font_metrics,
-        face_resolver,
+        state.builder,
+        state.evaluator,
+        state.font_metrics,
+        state.face_resolver,
         face_ids,
     )
 }
