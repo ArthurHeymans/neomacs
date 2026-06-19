@@ -300,6 +300,7 @@ impl BufferTextSourceStepChar {
 pub(crate) struct BufferTextSourceItemStep {
     source_char: BufferTextSourceStepChar,
     item: DisplayItem,
+    end_charpos: i64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -312,7 +313,13 @@ pub(crate) struct BufferTextSourceItem {
 
 impl BufferTextSourceItemStep {
     pub(crate) fn new(source_char: BufferTextSourceStepChar, item: DisplayItem) -> Self {
-        Self { source_char, item }
+        let end_charpos = display_item_buffer_end_charpos(&item)
+            .unwrap_or_else(|| source_char.start_charpos().saturating_add(1));
+        Self {
+            source_char,
+            item,
+            end_charpos,
+        }
     }
 
     pub(crate) fn source_char(&self) -> BufferTextSourceStepChar {
@@ -327,9 +334,23 @@ impl BufferTextSourceItemStep {
         )
     }
 
+    pub(crate) fn end_charpos(&self) -> i64 {
+        self.end_charpos
+    }
+
     pub(crate) fn into_parts(self) -> (BufferTextSourceStepChar, DisplayItem) {
         (self.source_char, self.item)
     }
+}
+
+fn display_item_buffer_end_charpos(item: &DisplayItem) -> Option<i64> {
+    item.span
+        .buffer_end_charpos()
+        .map(|char_pos| char_pos.get() as i64)
+}
+
+fn display_item_buffer_byte_len(item: &DisplayItem) -> Option<usize> {
+    item.span.buffer_byte_len()
 }
 
 impl BufferTextSourceItem {
@@ -397,7 +418,8 @@ impl BufferTextSourceItem {
         };
         let start_byte_idx = self.start_byte_idx;
         let start_charpos = self.start_charpos;
-        *byte_idx = start_byte_idx.saturating_add(ch.len_utf8());
+        let byte_len = display_item_buffer_byte_len(&self.item).unwrap_or_else(|| ch.len_utf8());
+        *byte_idx = start_byte_idx.saturating_add(byte_len);
         Ok(BufferTextSourceItemStep::new(
             BufferTextSourceStepChar::new(ch, start_byte_idx, start_charpos),
             self.item,

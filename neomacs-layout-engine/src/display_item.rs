@@ -77,6 +77,26 @@ impl SourceSpan {
         Self { start, end }
     }
 
+    pub(crate) fn buffer_end_charpos(&self) -> Option<CharPos0> {
+        let DisplaySourcePosition::Buffer { char_pos, .. } = self.end else {
+            return None;
+        };
+        Some(char_pos)
+    }
+
+    pub(crate) fn buffer_byte_len(&self) -> Option<usize> {
+        let DisplaySourcePosition::Buffer {
+            byte_pos: start, ..
+        } = self.start
+        else {
+            return None;
+        };
+        let DisplaySourcePosition::Buffer { byte_pos: end, .. } = self.end else {
+            return None;
+        };
+        end.get().checked_sub(start.get())
+    }
+
     #[cfg(test)]
     pub(crate) const fn lisp_string(
         source_id: u64,

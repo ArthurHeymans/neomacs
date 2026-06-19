@@ -14,7 +14,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::classify_display_property;
+use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -58,6 +58,7 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::value::string_has_text_properties_for_value;
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
@@ -2723,6 +2724,14 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
         let Some(value) = display_property else {
             return BufferDisplayPropertyTextAppendAction::None;
         };
+        let display_property = classify_display_property(value);
+        if matches!(
+            display_property.replacement(),
+            Some(DisplayReplacementProperty::String)
+        ) && !string_has_text_properties_for_value(value)
+        {
+            return BufferDisplayPropertyTextAppendAction::None;
+        }
 
         let source_event = BufferDisplayPropertyTextSourceEvent::new(
             value,
@@ -3265,6 +3274,10 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 context.active_face_state,
                 &mut source_item,
             );
+        let source_end_charpos = source_item
+            .span
+            .buffer_end_charpos()
+            .map(|char_pos| char_pos.get() as i64);
 
         let source_step_char = self.source_char;
         let ch = source_step_char.ch();
@@ -3453,6 +3466,19 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             *charpos,
             context.point_charpos,
         );
+        if cursor_info.is_missing()
+            && source_end_charpos
+                .is_some_and(|end| context.point_charpos > *charpos && context.point_charpos < end)
+        {
+            capture_cursor_info(
+                cursor_info,
+                prepared_append.cursor_info_for_main_char(
+                    &active_face_state,
+                    row_geometry.text_position(*x, source_step_char.start_byte_idx(), *col),
+                    ch == '\t',
+                ),
+            );
+        }
 
         if prepared_append
             .append_to_text_row_and_apply(
@@ -3471,6 +3497,9 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             .should_break()
         {
             return BufferTextSourceCharRenderOutcome::Stop;
+        }
+        if let Some(end_charpos) = source_end_charpos {
+            *charpos = (*charpos).max(end_charpos);
         }
 
         {

@@ -2930,6 +2930,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         }
 
         let is_explicit_line_break = source_step.is_explicit_line_break();
+        let end_charpos = source_step.end_charpos();
         let (source_char, source_item) = source_step.into_parts();
         if is_explicit_line_break {
             if self
@@ -2963,6 +2964,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             if char_render_outcome.should_continue_buffer_walk() {
                 return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
             }
+            *self.charpos = (*self.charpos).max(end_charpos);
         }
 
         BufferTextWindowLoopStepOutcome::ContinueBufferWalk
