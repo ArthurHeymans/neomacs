@@ -4428,6 +4428,48 @@ mod ownership_tests {
         assert_eq!(heap.non_cons_object_addrs.len(), 1);
         assert!((live.xfloat() - 1.0).abs() < f64::EPSILON);
     }
+
+    /// Characterization safety net for the path-collapse refactor: a forced full
+    /// collection must retain a rooted cons graph and reclaim an unrooted one,
+    /// regardless of which internal mark path runs. Pins the observable contract
+    /// (`collect_exact` keeps the live set, frees garbage, leaves the spine
+    /// readable) so collapsing the three GC paths into one cannot silently change
+    /// it.
+    #[test]
+    fn collect_exact_retains_rooted_graph_and_frees_garbage() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // Rooted spine: a -> b -> c (cdr-terminated by a fixnum).
+        let c = heap.alloc_cons(TaggedValue::fixnum(3), TaggedValue::fixnum(0));
+        let b = heap.alloc_cons(TaggedValue::fixnum(2), c);
+        let a = heap.alloc_cons(TaggedValue::fixnum(1), b);
+        // Unrooted garbage: reachable from neither the root nor the spine.
+        let _g1 = heap.alloc_cons(TaggedValue::fixnum(-1), TaggedValue::fixnum(0));
+        let _g2 = heap.alloc_cons(TaggedValue::fixnum(-2), TaggedValue::fixnum(0));
+        let live_before = heap.cons_live_count;
+        assert!(live_before >= 5);
+
+        // Force a full collection rooted only at `a`.
+        heap.collect_exact(std::iter::once(a));
+
+        // The 3-cons rooted spine survives; the 2 garbage conses are reclaimed.
+        assert_eq!(
+            heap.cons_live_count,
+            live_before - 2,
+            "rooted graph retained, unrooted garbage reclaimed",
+        );
+        // The spine is intact and readable (reading a swept cons would corrupt).
+        let a_cdr = unsafe { (*a.xcons_ptr()).load_cdr() };
+        assert!(a_cdr.is_cons());
+        let b_cdr = unsafe { (*a_cdr.xcons_ptr()).load_cdr() };
+        assert!(b_cdr.is_cons());
+        assert_eq!(
+            unsafe { (*b_cdr.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(3).0,
+        );
+    }
 }
 
 pub fn read_stack_end_from_proc() -> Option<usize> {
