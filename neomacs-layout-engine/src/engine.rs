@@ -19,8 +19,8 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    TextWindowMatrixBegin, TextWindowOutputRenderState, begin_text_window_matrix,
-    close_text_window_output,
+    TextWindowMatrixBegin, TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint,
+    begin_text_window_matrix, close_text_window_output,
 };
 use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
@@ -28,8 +28,7 @@ use crate::display_buffer_text_walk::{
     BufferTextWindowBodyPassState, BufferTextWindowChromeHeights, BufferTextWindowDefaultFacePlan,
     BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
     BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderedBodyCompleteState, BufferTextWindowRetryRenderCheckpoint,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowRenderedBodyCompleteState, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -1029,7 +1028,7 @@ impl LayoutEngine {
             &[]
         };
         let retry_render_checkpoint =
-            BufferTextWindowRetryRenderCheckpoint::capture(&self.matrix_builder);
+            TextWindowOutputRetryCheckpoint::capture(&self.matrix_builder);
 
         tracing::debug!(
             "  layout_window_rust id={}: text_y={:.1} text_h={:.1} max_rows={} bytes_read={}",

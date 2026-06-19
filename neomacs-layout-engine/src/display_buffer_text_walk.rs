@@ -54,9 +54,7 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::DisplaySourceContext;
-use crate::display_status_line::{
-    ChromeRowRenderServices, WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
-};
+use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -365,7 +363,7 @@ pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face>
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-pub(crate) struct BufferTextWindowRenderedBodyInstallPublishState<'emit, 'face> {
+pub(crate) struct BufferTextWindowRenderedBodyOutputState<'emit, 'face> {
     builder: &'emit mut GlyphMatrixBuilder,
     evaluator: &'emit mut Context,
     render_services: ChromeRowRenderServices<'emit, 'face>,
@@ -399,12 +397,6 @@ pub(crate) struct BufferTextWindowRenderedBodyFinishState<'a> {
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
-pub(crate) struct BufferTextWindowRenderedBodyChromeState<'emit, 'face> {
-    builder: &'emit mut GlyphMatrixBuilder,
-    evaluator: &'emit mut Context,
-    render_services: ChromeRowRenderServices<'emit, 'face>,
-}
-
 pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
     builder: &'emit mut GlyphMatrixBuilder,
     evaluator: &'emit mut Context,
@@ -430,16 +422,8 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         }
     }
 
-    fn install_publish_state(&mut self) -> BufferTextWindowRenderedBodyInstallPublishState<'_, '_> {
-        BufferTextWindowRenderedBodyInstallPublishState {
-            builder: &mut *self.builder,
-            evaluator: &mut *self.evaluator,
-            render_services: self.render_services.reborrow(),
-        }
-    }
-
-    fn chrome_state(&mut self) -> BufferTextWindowRenderedBodyChromeState<'_, '_> {
-        BufferTextWindowRenderedBodyChromeState {
+    fn output_state(&mut self) -> BufferTextWindowRenderedBodyOutputState<'_, '_> {
+        BufferTextWindowRenderedBodyOutputState {
             builder: &mut *self.builder,
             evaluator: &mut *self.evaluator,
             render_services: self.render_services.reborrow(),
@@ -471,12 +455,6 @@ pub(crate) struct BufferTextWindowRetryPlan {
     rendered_rows_len: usize,
     retry_bounds: BufferTextWindowRetryBounds,
     retry: BufferTextWindowVisibilityRetryOutcome,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowRetryRenderCheckpoint {
-    transition_hints_len: usize,
-    effect_hints_len: usize,
 }
 
 pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
@@ -1304,7 +1282,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
     pub(crate) fn install_body_and_publish_redisplay(
         &mut self,
         walk_setup: &mut BufferTextWindowWalkSetup,
-        state: BufferTextWindowRenderedBodyInstallPublishState<'_, '_>,
+        state: BufferTextWindowRenderedBodyOutputState<'_, '_>,
     ) -> TextWindowRedisplayPositions {
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
@@ -1320,14 +1298,10 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
     pub(crate) fn render_chrome_rows(
         &mut self,
         request: WindowChromeRowsRenderRequest<'_, '_>,
-        state: BufferTextWindowRenderedBodyChromeState<'_, '_>,
+        state: BufferTextWindowRenderedBodyOutputState<'_, '_>,
     ) {
-        request.render(&mut WindowChromeRowsRenderState::new(
-            state.builder,
-            state.evaluator,
-            &mut self.output_emitter,
-            state.render_services,
-        ));
+        TextWindowOutputRenderState::new(state.builder, &mut self.output_emitter)
+            .render_chrome_rows(state.evaluator, request, state.render_services);
     }
 
     pub(crate) fn finish_window_and_install(
@@ -1354,8 +1328,8 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         mut state: BufferTextWindowRenderedBodyCompleteState<'_, '_>,
     ) -> TextWindowRedisplayPositions {
         let redisplay_positions =
-            self.install_body_and_publish_redisplay(walk_setup, state.install_publish_state());
-        self.render_chrome_rows(chrome_request, state.chrome_state());
+            self.install_body_and_publish_redisplay(walk_setup, state.output_state());
+        self.render_chrome_rows(chrome_request, state.output_state());
         self.finish_window_and_install(walk_setup, state.finish_state());
         redisplay_positions
     }
@@ -3275,20 +3249,6 @@ impl BufferTextWindowRetryPlan {
             new_window_start,
             remaining_visibility_retries
         );
-    }
-}
-
-impl BufferTextWindowRetryRenderCheckpoint {
-    pub(crate) fn capture(builder: &GlyphMatrixBuilder) -> Self {
-        Self {
-            transition_hints_len: builder.transition_hints().len(),
-            effect_hints_len: builder.effect_hints().len(),
-        }
-    }
-
-    pub(crate) fn restore(self, builder: &mut GlyphMatrixBuilder) {
-        builder.truncate_transition_hints(self.transition_hints_len);
-        builder.truncate_effect_hints(self.effect_hints_len);
     }
 }
 

@@ -5,7 +5,10 @@
 //! while simultaneously recording immutable row snapshots for renderer
 //! handoff.
 
-use super::display_status_line::{ChromeRowRenderServices, DisplayRowOutputProgress};
+use super::display_status_line::{
+    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeRowsRenderRequest,
+    WindowChromeRowsRenderState,
+};
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_item::{
@@ -951,6 +954,26 @@ pub(crate) struct TextWindowOutputRenderState<'builder, 'output> {
     output_emitter: Option<&'output mut WindowOutputEmitter>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextWindowOutputRetryCheckpoint {
+    transition_hints_len: usize,
+    effect_hints_len: usize,
+}
+
+impl TextWindowOutputRetryCheckpoint {
+    pub(crate) fn capture(builder: &GlyphMatrixBuilder) -> Self {
+        Self {
+            transition_hints_len: builder.transition_hints().len(),
+            effect_hints_len: builder.effect_hints().len(),
+        }
+    }
+
+    pub(crate) fn restore(self, builder: &mut GlyphMatrixBuilder) {
+        builder.truncate_transition_hints(self.transition_hints_len);
+        builder.truncate_effect_hints(self.effect_hints_len);
+    }
+}
+
 impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
     pub(crate) fn new(
         builder: &'builder mut GlyphMatrixBuilder,
@@ -1035,6 +1058,24 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
             .expect("text-window output state requires an output emitter");
         TextWindowOutputInstaller::new(self.builder, output_emitter)
             .install_body_output(request, render_services)
+    }
+
+    pub(crate) fn render_chrome_rows(
+        &mut self,
+        evaluator: &mut Context,
+        request: WindowChromeRowsRenderRequest<'_, '_>,
+        render_services: ChromeRowRenderServices<'_, '_>,
+    ) {
+        let output_emitter = self
+            .output_emitter
+            .as_deref_mut()
+            .expect("text-window chrome rendering requires an output emitter");
+        request.render(&mut WindowChromeRowsRenderState::new(
+            self.builder,
+            evaluator,
+            output_emitter,
+            render_services,
+        ));
     }
 
     pub(crate) fn begin_text_window_output(
