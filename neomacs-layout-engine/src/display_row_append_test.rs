@@ -79,7 +79,7 @@ use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunM
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
-use crate::window_output::{DisplayTextRowTransition, TextWindowLiveOutputSurface};
+use crate::window_output::DisplayTextRowTransition;
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -100,11 +100,7 @@ fn text_row_output_render_state<'a>(
     output_emitter: &'a mut crate::window_output::WindowOutputEmitter,
     evaluator: &'a mut Context,
 ) -> TextRowOutputRenderState<'a> {
-    TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::from_output_builder(
-        builder,
-        output_emitter,
-        evaluator,
-    ))
+    TextRowOutputRenderState::from_parts(builder, output_emitter, evaluator)
 }
 
 fn text_row_source_render_state<'a>(
@@ -6759,11 +6755,8 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             char_w: 8.0,
         })
         .install_and_apply(BufferTextWindowBodyInstallState::new(
-            &mut TextWindowLiveOutputSurface::from_output_builder(
-                &mut builder,
-                &mut output_emitter,
-                &mut eval,
-            ),
+            &mut builder,
+            &mut output_emitter,
             crate::display_status_line::ChromeRowRenderServices::new(
                 &mut font_metrics,
                 &face_resolver,

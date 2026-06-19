@@ -19,17 +19,14 @@ use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_builder::{
     OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
 };
-use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
+use crate::display_row::MeasuredDisplayRow;
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_output_install::{
-    DisplayRowCurrentRowSurface, install_measured_window_display_row,
-    install_rendered_display_row_fragment_assets,
-};
+use crate::display_row_output_install::install_measured_window_display_row;
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
     text_window_right_edge_marker_decorations,
@@ -45,7 +42,6 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
-use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot,
@@ -579,143 +575,6 @@ pub(crate) struct DisplayTextRowStoredMetrics {
     pub(crate) pixel_y: f32,
     pub(crate) height_px: f32,
     pub(crate) ascent_px: f32,
-}
-
-pub(crate) struct TextWindowLiveCurrentRowEvaluatorState<'a> {
-    pub(crate) row_surface: DisplayRowCurrentRowSurface<'a>,
-    pub(crate) evaluator: &'a mut Context,
-}
-
-pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
-    pub(crate) row_surface: DisplayRowCurrentRowSurface<'a>,
-    pub(crate) display_host: Option<&'a dyn DisplayHost>,
-}
-
-pub(crate) struct TextWindowLiveOutputSurface<'a> {
-    output_builder: &'a mut DisplayOutputBuilder,
-    output_emitter: &'a mut WindowOutputEmitter,
-    evaluator: &'a mut Context,
-}
-
-impl<'a> TextWindowLiveOutputSurface<'a> {
-    pub(crate) fn from_output_builder(
-        output_builder: &'a mut DisplayOutputBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-    ) -> Self {
-        Self {
-            output_builder,
-            output_emitter,
-            evaluator,
-        }
-    }
-
-    pub(crate) fn reborrow(&mut self) -> TextWindowLiveOutputSurface<'_> {
-        TextWindowLiveOutputSurface {
-            output_builder: self.output_builder,
-            output_emitter: self.output_emitter,
-            evaluator: self.evaluator,
-        }
-    }
-
-    pub(crate) fn with_text_window_output<R>(
-        self,
-        f: impl FnOnce(&mut TextWindowRowOutputSurface<'_, '_>, &mut Context) -> R,
-    ) -> R {
-        let mut output =
-            TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter);
-        f(&mut output, self.evaluator)
-    }
-
-    pub(crate) fn install_resolved_face(
-        &mut self,
-        face_id: u32,
-        face: &ResolvedFace,
-        metrics: Option<crate::font_metrics::FontMetrics>,
-    ) {
-        self.output_builder
-            .install_output_resolved_display_row_face(face_id, face, metrics);
-    }
-
-    pub(crate) fn install_rendered_fragment_assets(
-        &mut self,
-        role: GlyphRowRole,
-        display_row_index: usize,
-        faces: &[neomacs_display_protocol::face::Face],
-        media: &[RenderedDisplayRowMedia],
-    ) {
-        install_rendered_display_row_fragment_assets(
-            self.output_builder,
-            role,
-            display_row_index,
-            faces,
-            media,
-        );
-    }
-
-    pub(crate) fn emit_text_source_slots(
-        &mut self,
-        output: TextRowOutput,
-        source_slots: &[DisplayRowGlyphSlot],
-        end: DisplayRowPosition,
-    ) {
-        self.output_emitter
-            .emit_text_source_slots(self.evaluator, output, source_slots, end);
-    }
-
-    pub(crate) fn install_body_output(
-        &mut self,
-        request: TextWindowBodyOutputInstall<'_>,
-        render_services: Option<ChromeRowRenderServices<'_, '_>>,
-    ) -> TextWindowRedisplayPositions {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .install_body_output(request, render_services)
-    }
-
-    pub(crate) fn render_chrome_rows(
-        &mut self,
-        request: WindowChromeRowsRenderRequest<'_, '_>,
-        render_services: ChromeRowRenderServices<'_, '_>,
-    ) {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .render_chrome_rows(self.evaluator, request, render_services);
-    }
-
-    pub(crate) fn current_row_evaluator_state(
-        &mut self,
-    ) -> TextWindowLiveCurrentRowEvaluatorState<'_> {
-        TextWindowLiveCurrentRowEvaluatorState {
-            row_surface: DisplayRowCurrentRowSurface::from_output_builder(self.output_builder),
-            evaluator: self.evaluator,
-        }
-    }
-
-    pub(crate) fn current_row_host_state(&mut self) -> TextWindowLiveCurrentRowHostState<'_> {
-        TextWindowLiveCurrentRowHostState {
-            row_surface: DisplayRowCurrentRowSurface::from_output_builder(self.output_builder),
-            display_host: self.evaluator.display_host.as_deref(),
-        }
-    }
-
-    pub(crate) fn display_host(&self) -> Option<&dyn DisplayHost> {
-        self.evaluator.display_host.as_deref()
-    }
-
-    pub(crate) fn with_evaluator<R>(&mut self, f: impl FnOnce(&mut Context) -> R) -> R {
-        f(self.evaluator)
-    }
-
-    pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
-        self.output_emitter
-    }
-
-    pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {
-        self.output_emitter.rows()
-    }
-
-    pub(crate) fn output_rows_len(&self) -> usize {
-        self.output_emitter.rows().len()
-    }
 }
 
 impl TextWindowRedisplayPositions {

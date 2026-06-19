@@ -45,6 +45,7 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_frame_output::FrameTextWindowOutputSurface;
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -94,8 +95,8 @@ use crate::neovm_bridge::{
 use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    DisplayTextRowTransition, TextWindowLiveOutputSurface, TextWindowOutputRetryCheckpoint,
-    TextWindowRedisplayPositions, WindowOutputEmitter,
+    DisplayTextRowTransition, TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions,
+    TextWindowRowOutputSurface, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -401,12 +402,15 @@ where
 }
 
 struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
-    pub(crate) output: &'output mut TextWindowLiveOutputSurface<'emit>,
+    pub(crate) output_builder: &'output mut DisplayOutputBuilder,
+    pub(crate) output_emitter: &'output mut WindowOutputEmitter,
     pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
-    pub(crate) output: TextWindowLiveOutputSurface<'emit>,
+struct BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
+    pub(crate) output_builder: &'output mut DisplayOutputBuilder,
+    pub(crate) output_emitter: &'output mut WindowOutputEmitter,
+    pub(crate) evaluator: &'output mut Context,
     pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
@@ -1251,19 +1255,14 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
         face_resolver: &'output FaceResolver,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
-            TextRowOutputRenderState::from_live_output(
-                self.output.live_surface(output_emitter, self.evaluator),
+            TextRowOutputRenderState::from_parts(
+                self.output.output_builder(),
+                output_emitter,
+                self.evaluator,
             ),
             font_metrics,
             face_resolver,
         )
-    }
-
-    fn live_output_surface<'output>(
-        &'output mut self,
-        output_emitter: &'output mut WindowOutputEmitter,
-    ) -> TextWindowLiveOutputSurface<'output> {
-        self.output.live_surface(output_emitter, self.evaluator)
     }
 
     fn into_finish_state(
@@ -1613,10 +1612,12 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
-        let output = self.output.live_output_surface(output_emitter);
+        let BufferTextWindowOutputSurface { output, evaluator } = &mut self.output;
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
-                output,
+                output_builder: output.output_builder(),
+                output_emitter,
+                evaluator,
                 render_services: self.render_services.reborrow(),
             },
             tail_context,
@@ -1629,9 +1630,9 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         output_emitter: &mut WindowOutputEmitter,
         request: WindowChromeRowsRenderRequest<'_, '_>,
     ) {
-        self.output
-            .live_output_surface(output_emitter)
-            .render_chrome_rows(request, self.render_services.reborrow());
+        let BufferTextWindowOutputSurface { output, evaluator } = &mut self.output;
+        TextWindowRowOutputSurface::from_parts(output.output_builder(), output_emitter)
+            .render_chrome_rows(evaluator, request, self.render_services.reborrow());
     }
 }
 
@@ -1824,32 +1825,35 @@ impl BufferTextWindowWalkSetup {
         tail_context
             .body_install_request(self.byte_idx, &self.row_flags)
             .install_and_apply(BufferTextWindowBodyInstallState::new(
-                state.output,
+                state.output_builder,
+                state.output_emitter,
                 state.render_services,
             ))
     }
 
     fn install_body_and_publish_redisplay(
         &mut self,
-        state: BufferTextWindowBodyInstallPublishState<'_, '_>,
+        state: BufferTextWindowBodyInstallPublishState<'_, '_, '_>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
         let BufferTextWindowBodyInstallPublishState {
-            output,
+            output_builder,
+            output_emitter,
+            evaluator,
             render_services,
         } = state;
-        let mut output = output;
         let redisplay_positions = self.install_body(
             BufferTextWindowBodyInstallRenderState {
-                output: &mut output,
+                output_builder,
+                output_emitter,
                 render_services,
             },
             tail_context,
         );
         // GNU status-line percent specs read the live window state from the
         // just-produced redisplay. Publish before chrome rows are evaluated.
-        output.with_evaluator(|evaluator| publish_request.publish(evaluator, redisplay_positions));
+        publish_request.publish(evaluator, redisplay_positions);
         redisplay_positions
     }
 

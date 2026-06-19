@@ -9,6 +9,7 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
     DisplayRowMeasurementPolicy, DisplayRowRenderContext, DisplayRowRenderExecutor,
@@ -16,7 +17,9 @@ use crate::display_row::{
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
-use crate::display_row_output_install::DisplayRowCurrentRowSurface;
+use crate::display_row_output_install::{
+    DisplayRowCurrentRowSurface, install_rendered_display_row_fragment_assets,
+};
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
@@ -29,8 +32,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
-    TextRowOutput, TextWindowLiveOutputSurface, TextWindowRowDecorationRequest,
-    TextWindowRowOutputSurface, WindowOutputEmitter,
+    TextRowOutput, TextWindowRowDecorationRequest, TextWindowRowOutputSurface, WindowOutputEmitter,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::emacs_core::Context;
@@ -38,7 +40,9 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::DisplayRowSnapshot;
 
 pub(crate) struct TextRowOutputRenderState<'a> {
-    output: TextWindowLiveOutputSurface<'a>,
+    output_builder: &'a mut DisplayOutputBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
 }
 
 struct DisplayRowCurrentTextRenderState<'face, 'emit> {
@@ -372,13 +376,23 @@ where
 }
 
 impl<'a> TextRowOutputRenderState<'a> {
-    pub(crate) fn from_live_output(output: TextWindowLiveOutputSurface<'a>) -> Self {
-        Self { output }
+    pub(crate) fn from_parts(
+        output_builder: &'a mut DisplayOutputBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+    ) -> Self {
+        Self {
+            output_builder,
+            output_emitter,
+            evaluator,
+        }
     }
 
     pub(crate) fn reborrow(&mut self) -> TextRowOutputRenderState<'_> {
         TextRowOutputRenderState {
-            output: self.output.reborrow(),
+            output_builder: self.output_builder,
+            output_emitter: self.output_emitter,
+            evaluator: self.evaluator,
         }
     }
 
@@ -386,7 +400,9 @@ impl<'a> TextRowOutputRenderState<'a> {
         self,
         f: impl FnOnce(&mut TextWindowRowOutputSurface<'_, '_>, &mut Context) -> R,
     ) -> R {
-        self.output.with_text_window_output(f)
+        let mut output =
+            TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter);
+        f(&mut output, self.evaluator)
     }
 
     pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
@@ -418,31 +434,33 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        self.output.install_resolved_face(face_id, face, None);
+        self.output_builder
+            .install_output_resolved_display_row_face(face_id, face, None);
     }
 
     fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
-        self.output.install_resolved_face(
-            face.face_id(),
-            face.resolved_face(),
-            face.font_metrics(),
-        );
+        self.output_builder
+            .install_output_resolved_display_row_face(
+                face.face_id(),
+                face.resolved_face(),
+                face.font_metrics(),
+            );
     }
 
     fn display_host(&self) -> Option<&dyn DisplayHost> {
-        self.output.display_host()
+        self.evaluator.display_host.as_deref()
     }
 
     fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
-        self.output.output_emitter()
+        self.output_emitter
     }
 
     fn output_rows(&self) -> &[DisplayRowSnapshot] {
-        self.output.output_rows()
+        self.output_emitter.rows()
     }
 
     fn output_rows_len(&self) -> usize {
-        self.output.output_rows_len()
+        self.output_emitter.rows().len()
     }
 
     fn measure_state<'emit>(
@@ -450,10 +468,9 @@ impl<'a> TextRowOutputRenderState<'a> {
         font_metrics: &'emit mut Option<FontMetricsService>,
         face_resolver: &'emit FaceResolver,
     ) -> TextRowSourceMeasureState<'emit> {
-        let current_row = self.output.current_row_evaluator_state();
         TextRowSourceMeasureState {
-            row_surface: current_row.row_surface,
-            evaluator: current_row.evaluator,
+            row_surface: DisplayRowCurrentRowSurface::from_output_builder(self.output_builder),
+            evaluator: self.evaluator,
             font_metrics,
             face_resolver,
         }
@@ -465,10 +482,9 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_resolver: &'emit FaceResolver,
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
-        let current_row = self.output.current_row_evaluator_state();
         DisplayRowCurrentTextRenderState::new(
-            current_row.row_surface,
-            current_row.evaluator,
+            DisplayRowCurrentRowSurface::from_output_builder(self.output_builder),
+            self.evaluator,
             font_metrics,
             face_resolver,
             face_ids,
@@ -481,12 +497,11 @@ impl<'a> TextRowOutputRenderState<'a> {
         face_resolver: &'emit FaceResolver,
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentSourceFragmentRenderState<'emit, 'emit> {
-        let current_row = self.output.current_row_host_state();
         DisplayRowCurrentSourceFragmentRenderState::new(
-            current_row.row_surface,
+            DisplayRowCurrentRowSurface::from_output_builder(self.output_builder),
             font_metrics,
             face_resolver,
-            current_row.display_host,
+            self.evaluator.display_host.as_deref(),
             face_ids,
         )
     }
@@ -503,15 +518,16 @@ impl<'a> TextRowOutputRenderState<'a> {
             row_ascent_px,
         } = result;
         let end = display_row_output_end_position(result.progress);
-        self.output.install_rendered_fragment_assets(
+        install_rendered_display_row_fragment_assets(
+            self.output_builder,
             role,
             output.row,
             &result.faces,
             &result.media,
         );
         let source_slots = result.source_slots;
-        self.output
-            .emit_text_source_slots(output, &source_slots, end);
+        self.output_emitter
+            .emit_text_source_slots(self.evaluator, output, &source_slots, end);
         CurrentTextRowRenderOutcome {
             stop: result.stop,
             source_slots,

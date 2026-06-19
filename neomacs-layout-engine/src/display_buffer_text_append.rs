@@ -22,9 +22,9 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
     DisplayTextRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowLiveOutputSurface, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightEdgeMarkers, TextWindowRowOutputSurface, TextWindowTerminalRightBorder,
-    WindowOutputEmitter, close_text_window_output, install_text_window_cursor_effects,
+    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
+    TextWindowRowOutputSurface, TextWindowTerminalRightBorder, WindowOutputEmitter,
+    close_text_window_output, install_text_window_cursor_effects,
     install_text_window_terminal_right_border,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -232,7 +232,8 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
 }
 
 pub(crate) struct BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
-    output: &'output mut TextWindowLiveOutputSurface<'emit>,
+    output_builder: &'output mut DisplayOutputBuilder,
+    output_emitter: &'output mut WindowOutputEmitter,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
@@ -361,11 +362,13 @@ impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
 
 impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        output: &'output mut TextWindowLiveOutputSurface<'emit>,
+        output_builder: &'output mut DisplayOutputBuilder,
+        output_emitter: &'output mut WindowOutputEmitter,
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
-            output,
+            output_builder,
+            output_emitter,
             render_services,
         }
     }
@@ -595,16 +598,18 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
             context.char_w,
         );
 
-        let redisplay_positions = state.output.install_body_output(
-            TextWindowBodyOutputInstall {
-                window_id: context.window_id,
-                window_start: context.window_start,
-                text_start_byte: context.text_start_byte,
-                byte_idx: context.byte_idx,
-                right_edge_markers,
-            },
-            Some(state.render_services),
-        );
+        let redisplay_positions =
+            TextWindowRowOutputSurface::from_parts(state.output_builder, state.output_emitter)
+                .install_body_output(
+                    TextWindowBodyOutputInstall {
+                        window_id: context.window_id,
+                        window_start: context.window_start,
+                        text_start_byte: context.text_start_byte,
+                        byte_idx: context.byte_idx,
+                        right_edge_markers,
+                    },
+                    Some(state.render_services),
+                );
         redisplay_positions
     }
 }
