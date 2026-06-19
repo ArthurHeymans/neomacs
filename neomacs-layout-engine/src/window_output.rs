@@ -24,9 +24,11 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_output_install::{
     DisplayOutputRowStoredMetrics, DisplayOutputTextRowMetricsInstallRequest,
-    DisplayOutputTextWindowBeginInstallRequest, begin_text_output_row, begin_text_output_window,
-    end_text_output_window, finalize_text_output_row, finish_text_output_row,
-    install_text_output_display_range, install_text_output_row_metrics,
+    DisplayOutputTextWindowBeginInstallRequest, TextWindowRowDecorationRequest,
+    begin_text_output_row, begin_text_output_window, end_text_output_window,
+    finalize_text_output_row, finish_text_output_row, install_current_text_output_row_decoration,
+    install_last_text_output_rows_decoration, install_text_output_display_range,
+    install_text_output_row_decoration, install_text_output_row_metrics,
     restore_text_output_retry_checkpoint,
 };
 use crate::display_row_special_glyphs::{
@@ -293,7 +295,7 @@ fn install_text_window_row_decoration(
     output_builder: &mut DisplayOutputBuilder,
     request: TextWindowRowDecorationRequest,
 ) {
-    request.install(output_builder);
+    install_text_output_row_decoration(output_builder, request);
 }
 
 pub(crate) fn install_text_window_row_decoration_request(
@@ -543,16 +545,15 @@ fn install_right_edge_markers(
 ) {
     let base_face = render_services.face_resolver().default_face().clone();
     for decoration in text_window_right_edge_marker_decorations(&request) {
-        output_builder.install_row_decoration(
-            crate::display_output_builder::OutputRowDecorationInstallRequest::current_window_row(
-                decoration.display_row_index,
-                RightEdgeMarkerRowDecorator::new(
-                    decoration,
-                    request.face_id,
-                    &base_face,
-                    request.char_width,
-                    &mut render_services,
-                ),
+        install_current_text_output_row_decoration(
+            output_builder,
+            decoration.display_row_index,
+            RightEdgeMarkerRowDecorator::new(
+                decoration,
+                request.face_id,
+                &base_face,
+                request.char_width,
+                &mut render_services,
             ),
         );
     }
@@ -564,10 +565,9 @@ fn install_last_window_right_border(
     request: TextWindowRightBorder,
     base_face: &ResolvedFace,
 ) {
-    output_builder.install_row_decoration(
-        crate::display_output_builder::OutputRowDecorationInstallRequest::last_window_rows(
-            RightBorderRowsDecorator::new(request, base_face, &mut render_services),
-        ),
+    install_last_text_output_rows_decoration(
+        output_builder,
+        RightBorderRowsDecorator::new(request, base_face, &mut render_services),
     );
 }
 
@@ -606,20 +606,6 @@ pub(crate) struct TextWindowLineNumberMargin<'a> {
     pub(crate) text: &'a str,
     pub(crate) cols: i32,
     pub(crate) face_id: u32,
-}
-
-pub(crate) enum TextWindowRowDecorationRequest {
-    MarkCurrentTruncatedLeft,
-}
-
-impl TextWindowRowDecorationRequest {
-    fn install(self, output: &mut DisplayOutputBuilder) {
-        match self {
-            Self::MarkCurrentTruncatedLeft => {
-                output.mark_current_output_row_truncated_left();
-            }
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

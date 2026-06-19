@@ -1,6 +1,7 @@
 use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_output_builder::{
     DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRetryCheckpointRestoreRequest,
+    OutputRowDecorationInstallRequest, OutputRowDecorator,
     OutputTextWindowDisplayRangeInstallRequest,
 };
 #[cfg(test)]
@@ -54,6 +55,11 @@ pub(crate) struct DisplayOutputTextWindowBeginInstallRequest {
     bounds: Rect,
     text_bounds: Rect,
     selected: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextWindowRowDecorationRequest {
+    MarkCurrentTruncatedLeft,
 }
 
 impl<'a> DisplayRowOutputInstall<'a> {
@@ -217,6 +223,41 @@ pub(crate) fn restore_text_output_retry_checkpoint(
     builder.install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
         transition_hints_len,
         effect_hints_len,
+    ));
+}
+
+pub(crate) fn install_text_output_row_decoration(
+    builder: &mut DisplayOutputBuilder,
+    request: TextWindowRowDecorationRequest,
+) {
+    match request {
+        TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft => {
+            builder.mark_current_output_row_truncated_left();
+        }
+    }
+}
+
+pub(crate) fn install_current_text_output_row_decoration<D>(
+    builder: &mut DisplayOutputBuilder,
+    display_row_index: usize,
+    decorator: D,
+) where
+    D: OutputRowDecorator,
+{
+    builder.install_row_decoration(OutputRowDecorationInstallRequest::current_window_row(
+        display_row_index,
+        decorator,
+    ));
+}
+
+pub(crate) fn install_last_text_output_rows_decoration<D>(
+    builder: &mut DisplayOutputBuilder,
+    decorator: D,
+) where
+    D: OutputRowDecorator,
+{
+    builder.install_row_decoration(OutputRowDecorationInstallRequest::last_window_rows(
+        decorator,
     ));
 }
 

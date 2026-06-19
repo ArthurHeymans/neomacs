@@ -18,7 +18,8 @@ use crate::display_row::{
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
 use crate::display_row_output_install::{
-    DisplayRowCurrentRowOutput, install_rendered_display_row_fragment_assets,
+    DisplayRowCurrentRowOutput, TextWindowRowDecorationRequest,
+    install_rendered_display_row_fragment_assets,
 };
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
@@ -32,9 +33,9 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
     DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
-    TextRowOutput, TextWindowRowDecorationRequest, WindowOutputEmitter,
-    finish_and_end_text_window_row, install_text_window_row_decoration_request,
-    transition_text_window_row, transition_text_window_row_with_limit,
+    TextRowOutput, WindowOutputEmitter, finish_and_end_text_window_row,
+    install_text_window_row_decoration_request, transition_text_window_row,
+    transition_text_window_row_with_limit,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::emacs_core::Context;
