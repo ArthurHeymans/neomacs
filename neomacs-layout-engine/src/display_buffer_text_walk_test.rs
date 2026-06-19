@@ -1,5 +1,6 @@
 use super::*;
-use crate::display_row_geometry::DisplayRowMarker;
+use crate::display_buffer_text_render::BufferTextWindowTailDecorationState;
+use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowMarker};
 use crate::types::WindowKind;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::window::{FrameId, WindowId};

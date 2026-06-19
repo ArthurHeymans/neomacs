@@ -1,5 +1,12 @@
 //! Buffer-text source rendering requests and actions.
 
+use crate::display_buffer_text_append::{
+    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
+    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
+    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
+};
 use crate::display_buffer_text_item_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
     BufferTextSourceCharPreparationState, BufferTextSourceCharPreparedAppend,
@@ -25,9 +32,9 @@ use crate::display_row_append_context::{
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{
-    DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
-    DisplayRowLimit, DisplayRowScopedValue, DisplayRowTextPosition, DisplayRowVisibilityLimit,
-    DisplayRowYPositions,
+    DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
+    DisplayRowHitRange, DisplayRowLimit, DisplayRowScopedValue, DisplayRowTextPosition,
+    DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{
@@ -55,8 +62,10 @@ use crate::display_source_resolver::{
     DisplayPropertyReplacementAppendRequestResolver, DisplaySourceFaceBasis,
     DisplaySourceFallbackMetrics, DisplaySourceResolveParams, PendingDisplaySourceFace,
 };
-use crate::hit_test::HitRow;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustTextPropAccess};
+use crate::hit_test::{HitRow, WindowHitData};
+use crate::neovm_bridge::{
+    FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess, RustTextPropAccess,
+};
 use crate::types::{LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{TextMatrixRowTransition, WindowOutputEmitter};
@@ -65,6 +74,7 @@ use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextWindowLoopRequestContext {
@@ -97,6 +107,115 @@ pub(crate) struct BufferTextWindowRowPreludeRequestContext {
     prefix_values: DisplayRowPrefixValues,
     char_width: f32,
     char_height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowBodyInstallContext {
+    pub(crate) matrix_window_id: u64,
+    pub(crate) text_matrix_row_base: usize,
+    pub(crate) matrix_cols: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowRetryBounds {
+    pub(crate) text_area_top: i64,
+    pub(crate) text_area_bottom: i64,
+}
+
+pub(crate) struct BufferTextWindowTailRequestContext<'a> {
+    pub(crate) params: &'a WindowParams,
+    pub(crate) window_start: i64,
+    accessible_start: i64,
+    accessible_end: i64,
+    text_start_byte: usize,
+    text_matrix_row_base: usize,
+    text_area_left: f32,
+    window_top: f32,
+    text_y: f32,
+    text_height: f32,
+    content_x: f32,
+    cols: usize,
+    char_width: f32,
+    char_height: f32,
+    default_fg: Color,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    retry_bounds: BufferTextWindowRetryBounds,
+    body_install_context: BufferTextWindowBodyInstallContext,
+    reserve_right_special_col: bool,
+    reserve_right_border_col: bool,
+    mode_line_height: f32,
+    header_line_height: f32,
+    tab_line_height: f32,
+}
+
+pub(crate) struct BufferTextWindowFinishInstallState<'a> {
+    pub(crate) finish_state: BufferTextWindowFinishState<'a>,
+    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
+    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+}
+
+pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
+    loop_context: BufferTextWindowLoopRequestContext,
+    source_render: TextRowSourceRenderState<'emit>,
+    x: &'emit mut f32,
+    col: &'emit mut usize,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    cursor_info: &'emit mut CursorCaptureState,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    row_y_positions: &'rows mut DisplayRowYPositions,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+    row_flags: &'emit DisplayRowFlags,
+    row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'emit BoxFaceRowState,
+    text_append_surface: &'surface DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowPostLoopRenderOutcome {
+    pub(crate) retry: BufferTextWindowVisibilityRetryOutcome,
+    pub(crate) rendered_rows_len: usize,
+}
+
+pub(crate) struct BufferTextWindowTailDecorationRequest<'a> {
+    params: &'a WindowParams,
+    content_x: f32,
+    cols: usize,
+    text_y: f32,
+    text_height: f32,
+    char_width: f32,
+    char_height: f32,
+    default_fg: Color,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+}
+
+pub(crate) struct BufferTextWindowTailDecorationState<'a> {
+    pub(crate) x: f32,
+    pub(crate) text_append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) row_geometry: &'a DisplayRowGeometryState,
+    pub(crate) row_y_positions: &'a DisplayRowYPositions,
+    pub(crate) row_flags: &'a DisplayRowFlags,
+    pub(crate) row_extend: &'a DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) box_face: &'a BoxFaceRowState,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct BufferTextWindowTailDecorationOutcome {
+    pub(crate) box_face_active: bool,
+    pub(crate) row_extend_active: bool,
+    pub(crate) current_row_extended: bool,
+    pub(crate) empty_extend_rows: usize,
+    pub(crate) fringe_rows: usize,
+    pub(crate) right_continuation_rows: usize,
+    pub(crate) right_truncation_rows: usize,
+    pub(crate) left_continuation_rows: usize,
+    pub(crate) empty_line_fringe_rows: usize,
+    pub(crate) fill_column_rows: usize,
 }
 
 impl BufferTextWindowLoopRequestContext {
@@ -361,6 +480,161 @@ impl BufferTextWindowLoopRequestContext {
     }
 }
 
+impl<'a> BufferTextWindowTailDecorationRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        content_x: f32,
+        cols: usize,
+        text_y: f32,
+        text_height: f32,
+        char_width: f32,
+        char_height: f32,
+        default_fg: Color,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+    ) -> Self {
+        Self {
+            params,
+            content_x,
+            cols,
+            text_y,
+            text_height,
+            char_width,
+            char_height,
+            default_fg,
+            max_rows,
+            row_limit,
+            row_geometry_defaults,
+        }
+    }
+
+    pub(crate) fn apply(
+        self,
+        state: BufferTextWindowTailDecorationState<'_>,
+    ) -> BufferTextWindowTailDecorationOutcome {
+        let mut outcome = BufferTextWindowTailDecorationOutcome::default();
+
+        if state.box_face.is_active() {
+            outcome.box_face_active = true;
+            let _ = (state.box_face.start_x(), state.box_face.row());
+        }
+
+        if let Some((_ext_bg, _ext_face_id)) = state.row_extend.value() {
+            outcome.row_extend_active = true;
+            let right_edge = state.text_append_surface.right_edge();
+            if state.x < right_edge && state.row_geometry.is_within_row_limit(self.row_limit) {
+                outcome.current_row_extended = true;
+                let _ = state.row_geometry.current_row_y(
+                    state.row_y_positions,
+                    self.text_y,
+                    self.char_height,
+                );
+            }
+
+            let start_row = state.row_geometry.first_row_below_current(self.row_limit);
+            for r in start_row..self.max_rows {
+                let ry = state.row_geometry.row_y(
+                    r,
+                    state.row_y_positions,
+                    self.text_y,
+                    self.char_height,
+                );
+                if ry + self.char_height > self.text_y + self.text_height {
+                    break;
+                }
+                outcome.empty_extend_rows += 1;
+            }
+        }
+
+        if self.params.left_fringe_width > 0.0 || self.params.right_fringe_width > 0.0 {
+            let _fringe_char_w = self
+                .params
+                .left_fringe_width
+                .min(self.char_width)
+                .max(self.char_width * 0.5);
+
+            for r in 0..state.row_geometry.rendered_row_count(self.row_limit) {
+                outcome.fringe_rows += 1;
+                let _gy = state
+                    .row_y_positions
+                    .y_for_row(r, self.row_geometry_defaults.row_y_fallback(0.0));
+
+                if self.params.right_fringe_width > 0.0
+                    && state.row_flags.is_set(r, DisplayRowFlagKind::Continued)
+                {
+                    outcome.right_continuation_rows += 1;
+                }
+
+                if self.params.right_fringe_width > 0.0
+                    && state.row_flags.is_set(r, DisplayRowFlagKind::Truncated)
+                {
+                    outcome.right_truncation_rows += 1;
+                }
+
+                if self.params.left_fringe_width > 0.0
+                    && state.row_flags.is_set(r, DisplayRowFlagKind::Continuation)
+                {
+                    outcome.left_continuation_rows += 1;
+                }
+            }
+
+            if self.params.indicate_empty_lines > 0 {
+                let eob_start = state.row_geometry.rendered_row_count(self.row_limit);
+                for r in eob_start..self.max_rows {
+                    let _gy = state.row_geometry.row_y(
+                        r,
+                        state.row_y_positions,
+                        self.text_y,
+                        self.char_height,
+                    );
+                    let left_fringe_x = self.params.text_bounds.x - self.params.left_fringe_width;
+                    let right_fringe_x = self.params.text_bounds.x + self.params.text_bounds.width;
+                    let _fringe_x = if self.params.indicate_empty_lines == 2 {
+                        right_fringe_x
+                    } else {
+                        left_fringe_x
+                    };
+                    let fringe_w = if self.params.indicate_empty_lines == 2 {
+                        self.params.right_fringe_width
+                    } else {
+                        self.params.left_fringe_width
+                    };
+                    if fringe_w > 0.0 {
+                        outcome.empty_line_fringe_rows += 1;
+                    }
+                }
+            }
+        }
+
+        if self.params.fill_column_indicator >= 0 {
+            let fci_col = self.params.fill_column_indicator;
+            let _fci_char = self.params.fill_column_indicator_char;
+            let _fci_fg = if self.params.fill_column_indicator_fg != 0 {
+                Color::from_pixel(self.params.fill_column_indicator_fg)
+            } else {
+                self.default_fg
+            };
+
+            if (fci_col as usize) < self.cols {
+                let indicator_x = self.content_x + fci_col as f32 * self.char_width;
+                let total_rows = state.row_geometry.rendered_row_count(self.row_limit);
+                for r in 0..total_rows {
+                    let _gy = state
+                        .row_y_positions
+                        .y_for_row(r, self.row_geometry_defaults.row_y_fallback(0.0));
+                    if indicator_x < state.text_append_surface.right_edge() {
+                        outcome.fill_column_rows += 1;
+                    }
+                }
+            }
+        }
+
+        outcome
+    }
+}
+
 impl BufferTextWindowRowPreludeRequestContext {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -428,6 +702,377 @@ impl BufferTextWindowRowPreludeRequestContext {
     #[cfg(test)]
     pub(crate) fn prefix_values(self) -> DisplayRowPrefixValues {
         self.prefix_values
+    }
+}
+
+impl BufferTextWindowBodyInstallContext {
+    pub(crate) fn request(
+        self,
+        window_start: i64,
+        text_start_byte: usize,
+        byte_idx: usize,
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        row_flags: &DisplayRowFlags,
+        char_width: f32,
+    ) -> BufferTextWindowBodyInstallRequest<'_> {
+        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext {
+            window_id: self.matrix_window_id,
+            window_start,
+            text_start_byte,
+            byte_idx,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            text_matrix_row_base: self.text_matrix_row_base,
+            matrix_cols: self.matrix_cols,
+            row_flags,
+            right_edge_face_id: 0,
+            char_w: char_width,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn matrix_cols(self) -> usize {
+        self.matrix_cols
+    }
+}
+
+impl<'a> BufferTextWindowTailRequestContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        window_start: i64,
+        accessible_start: i64,
+        accessible_end: i64,
+        text_start_byte: usize,
+        text_matrix_row_base: usize,
+        text_area_left: f32,
+        window_top: f32,
+        text_y: f32,
+        text_height: f32,
+        content_x: f32,
+        cols: usize,
+        char_width: f32,
+        char_height: f32,
+        default_fg: Color,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        retry_bounds: BufferTextWindowRetryBounds,
+        body_install_context: BufferTextWindowBodyInstallContext,
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        mode_line_height: f32,
+        header_line_height: f32,
+        tab_line_height: f32,
+    ) -> Self {
+        Self {
+            params,
+            window_start,
+            accessible_start,
+            accessible_end,
+            text_start_byte,
+            text_matrix_row_base,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            content_x,
+            cols,
+            char_width,
+            char_height,
+            default_fg,
+            max_rows,
+            row_limit,
+            row_geometry_defaults,
+            retry_bounds,
+            body_install_context,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        }
+    }
+
+    pub(crate) fn tail_decoration_request(&self) -> BufferTextWindowTailDecorationRequest<'a> {
+        BufferTextWindowTailDecorationRequest::new(
+            self.params,
+            self.content_x,
+            self.cols,
+            self.text_y,
+            self.text_height,
+            self.char_width,
+            self.char_height,
+            self.default_fg,
+            self.max_rows,
+            self.row_limit,
+            self.row_geometry_defaults,
+        )
+    }
+
+    pub(crate) fn tail_finalize_request<'request>(
+        &'request self,
+        text: &'request [u8],
+        charpos: i64,
+        point_is_visible_eob: bool,
+    ) -> BufferTextWindowTailFinalizeRequest<'request> {
+        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
+            params: self.params,
+            text,
+            text_matrix_row_base: self.text_matrix_row_base,
+            text_area_left: self.text_area_left,
+            window_top: self.window_top,
+            text_y: self.text_y,
+            text_height: self.text_height,
+            char_w: self.char_width,
+            char_h: self.char_height,
+            window_start: self.window_start,
+            point_charpos: self.params.point_charpos().get(),
+            charpos,
+            point_is_visible_eob,
+            row_limit: self.row_limit,
+        })
+    }
+
+    pub(crate) fn visibility_retry_request<'rows, 'buf, B>(
+        &self,
+        rows: &'rows [DisplayRowSnapshot],
+        charpos: i64,
+        point_is_visible_eob: bool,
+        buf_access: &'rows RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowVisibilityRetryRequest<'rows, 'buf, B>
+    where
+        B: LayoutBufferView,
+    {
+        BufferTextWindowVisibilityRetryRequest::new(
+            rows,
+            self.window_start,
+            self.accessible_start,
+            self.accessible_end,
+            self.params.point_charpos().get(),
+            charpos,
+            point_is_visible_eob,
+            self.retry_bounds.text_area_top,
+            self.retry_bounds.text_area_bottom,
+            buf_access,
+        )
+    }
+
+    pub(crate) fn body_install_request<'flags>(
+        &self,
+        byte_idx: usize,
+        row_flags: &'flags DisplayRowFlags,
+    ) -> BufferTextWindowBodyInstallRequest<'flags> {
+        self.body_install_context.request(
+            self.window_start,
+            self.text_start_byte,
+            byte_idx,
+            self.reserve_right_special_col,
+            self.reserve_right_border_col,
+            row_flags,
+            self.char_width,
+        )
+    }
+
+    pub(crate) fn finish_request(&self) -> BufferTextWindowFinishRequest {
+        BufferTextWindowFinishRequest::new(
+            self.params.window_id,
+            self.content_x,
+            self.char_width,
+            (self.text_area_left - self.params.bounds.x).round() as i64,
+            self.mode_line_height.round() as i64,
+            self.header_line_height.round() as i64,
+            self.tab_line_height.round() as i64,
+        )
+    }
+
+    pub(crate) fn finish_and_install(&self, state: BufferTextWindowFinishInstallState<'_>) {
+        let finished_window = self
+            .finish_request()
+            .finish_and_snapshot(state.finish_state);
+        state.hit_data.push(finished_window.hit_data);
+        state.display_snapshots.push(finished_window.snapshot);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn window_start(&self) -> i64 {
+        self.window_start
+    }
+
+    #[cfg(test)]
+    pub(crate) fn accessible_range(&self) -> (i64, i64) {
+        (self.accessible_start, self.accessible_end)
+    }
+}
+
+impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        loop_context: BufferTextWindowLoopRequestContext,
+        source_render: TextRowSourceRenderState<'emit>,
+        x: &'emit mut f32,
+        col: &'emit mut usize,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        cursor_info: &'emit mut CursorCaptureState,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        row_y_positions: &'rows mut DisplayRowYPositions,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+        row_flags: &'emit DisplayRowFlags,
+        row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'emit BoxFaceRowState,
+        text_append_surface: &'surface DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
+    ) -> Self {
+        Self {
+            loop_context,
+            source_render,
+            x,
+            col,
+            row_geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+            row_flags,
+            row_extend,
+            box_face,
+            text_append_surface,
+            overlay_context,
+        }
+    }
+
+    pub(crate) fn render_end_of_buffer_tail<'request, B: LayoutBufferView>(
+        &mut self,
+        byte_idx: usize,
+        charpos: i64,
+        has_overlays: bool,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> bool
+    where
+        'surface: 'request,
+    {
+        self.loop_context
+            .end_of_buffer_tail_request(
+                byte_idx,
+                charpos,
+                has_overlays,
+                self.overlay_context,
+                active_face_state,
+            )
+            .render_and_apply(
+                buffer,
+                BufferEndOfBufferTailRenderState {
+                    source_render: self.source_render.reborrow(),
+                    x: self.x,
+                    col: self.col,
+                    row_geometry: self.row_geometry,
+                    cursor_info: self.cursor_info,
+                    hit_rows: self.hit_rows,
+                    hit_row_range: self.hit_row_range,
+                    row_y_positions: self.row_y_positions,
+                    face_ids: self.face_ids,
+                },
+            )
+            .point_is_visible_eob()
+    }
+
+    pub(crate) fn apply_tail_decorations(
+        &self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+    ) -> BufferTextWindowTailDecorationOutcome {
+        tail_context
+            .tail_decoration_request()
+            .apply(BufferTextWindowTailDecorationState {
+                x: *self.x,
+                text_append_surface: self.text_append_surface,
+                row_geometry: self.row_geometry,
+                row_y_positions: self.row_y_positions,
+                row_flags: self.row_flags,
+                row_extend: self.row_extend,
+                box_face: self.box_face,
+            })
+    }
+
+    pub(crate) fn finalize_tail(
+        &mut self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text: &[u8],
+        charpos: i64,
+        point_is_visible_eob: bool,
+    ) -> BufferTextWindowTailFinalizeOutcome {
+        tail_context
+            .tail_finalize_request(text, charpos, point_is_visible_eob)
+            .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+                self.cursor_info,
+                self.row_geometry,
+                self.row_y_positions,
+                self.hit_row_range,
+                self.hit_rows,
+                self.source_render.output_render(),
+            ))
+    }
+
+    pub(crate) fn decide_visibility_retry<'buf, B: LayoutBufferView>(
+        &self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        charpos: i64,
+        point_is_visible_eob: bool,
+        buf_access: &'rows RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowVisibilityRetryOutcome {
+        tail_context
+            .visibility_retry_request(
+                self.source_render.output_rows(),
+                charpos,
+                point_is_visible_eob,
+                buf_access,
+            )
+            .decide()
+    }
+
+    pub(crate) fn rendered_rows_len(&self) -> usize {
+        self.source_render.output_rows_len()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
+        &mut self,
+        tail_context: &BufferTextWindowTailRequestContext<'_>,
+        text: &'request [u8],
+        byte_idx: usize,
+        charpos: i64,
+        has_overlays: bool,
+        active_face_state: &'request DisplayRowActiveFaceState,
+        buffer: &B,
+        buf_access: &'rows RustBufferAccess<'buf, B>,
+    ) -> BufferTextWindowPostLoopRenderOutcome
+    where
+        'surface: 'request,
+    {
+        let point_is_visible_eob = self.render_end_of_buffer_tail(
+            byte_idx,
+            charpos,
+            has_overlays,
+            active_face_state,
+            buffer,
+        );
+
+        self.apply_tail_decorations(tail_context);
+        self.finalize_tail(tail_context, text, charpos, point_is_visible_eob);
+
+        // GNU redisplay keeps iterating until point visibility converges or no
+        // further progress can be made. Advance by actual rendered row spans
+        // from this pass, since wrapped and variable-height lines are exactly
+        // where newline-based retry selection goes wrong.
+        let retry =
+            self.decide_visibility_retry(tail_context, charpos, point_is_visible_eob, buf_access);
+        BufferTextWindowPostLoopRenderOutcome {
+            retry,
+            rendered_rows_len: self.rendered_rows_len(),
+        }
     }
 }
 
