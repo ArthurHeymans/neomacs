@@ -627,42 +627,6 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         f(&mut output, self.evaluator)
     }
 
-    #[cfg(test)]
-    pub(crate) fn begin_text_row(self, begin: DisplayTextRowBegin) -> usize {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .begin_text_row(self.evaluator, begin)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn finish_text_row(self, metrics: DisplayTextRowMetrics) {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .finish_text_row(metrics);
-    }
-
-    pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .finish_and_end_text_row(metrics);
-    }
-
-    pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .transition_text_row(self.evaluator, transition);
-    }
-
-    pub(crate) fn transition_text_row_with_limit(
-        self,
-        transition: DisplayTextRowGeometryTransition,
-        max_rows: usize,
-    ) -> DisplayTextRowTransition {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .transition_text_row_with_limit(self.evaluator, transition, max_rows)
-    }
-
-    pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, self.output_emitter)
-            .install_row_decoration(request);
-    }
-
     pub(crate) fn install_resolved_face(
         &mut self,
         face_id: u32,

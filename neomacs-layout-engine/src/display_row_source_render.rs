@@ -390,11 +390,15 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        self.output.finish_and_end_text_row(metrics);
+        self.with_text_window_output(|output, _evaluator| {
+            output.finish_and_end_text_row(metrics);
+        });
     }
 
     pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
-        self.output.transition_text_row(transition);
+        self.with_text_window_output(|output, evaluator| {
+            output.transition_text_row(evaluator, transition);
+        });
     }
 
     pub(crate) fn transition_text_row_with_limit(
@@ -402,12 +406,15 @@ impl<'a> TextRowOutputRenderState<'a> {
         transition: DisplayTextRowGeometryTransition,
         max_rows: usize,
     ) -> DisplayTextRowTransition {
-        self.output
-            .transition_text_row_with_limit(transition, max_rows)
+        self.with_text_window_output(|output, evaluator| {
+            output.transition_text_row_with_limit(evaluator, transition, max_rows)
+        })
     }
 
     pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
-        self.output.install_row_decoration(request);
+        self.with_text_window_output(|output, _evaluator| {
+            output.install_row_decoration(request);
+        });
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {

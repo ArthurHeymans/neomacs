@@ -6718,17 +6718,20 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let mut output_emitter =
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
-    TextWindowLiveOutputSurface::from_output_builder(&mut builder, &mut output_emitter, &mut eval)
-        .begin_text_row(crate::window_output::DisplayTextRowBegin {
-            display_row_index: 0,
-            row: 0,
-            col: 0,
-            y: 2.0,
-            x: 0.0,
-        });
+    crate::window_output::TextWindowRowOutputSurface::from_parts(&mut builder, &mut output_emitter)
+        .begin_text_row(
+            &mut eval,
+            crate::window_output::DisplayTextRowBegin {
+                display_row_index: 0,
+                row: 0,
+                col: 0,
+                y: 2.0,
+                x: 0.0,
+            },
+        );
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
-    TextWindowLiveOutputSurface::from_output_builder(&mut builder, &mut output_emitter, &mut eval)
+    crate::window_output::TextWindowRowOutputSurface::from_parts(&mut builder, &mut output_emitter)
         .finish_text_row(crate::window_output::DisplayTextRowMetrics {
             y: 2.0,
             height: 20.0,
@@ -6824,7 +6827,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
     .begin_and_apply(&mut builder, &mut eval);
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
-    TextWindowLiveOutputSurface::from_output_builder(&mut builder, &mut output_emitter, &mut eval)
+    crate::window_output::TextWindowRowOutputSurface::from_parts(&mut builder, &mut output_emitter)
         .finish_text_row(crate::window_output::DisplayTextRowMetrics {
             y: 9.0,
             height: 17.0,
