@@ -5641,10 +5641,16 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
         .get(frame_id)
         .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))?;
     if frame.window_system.is_none() {
+        // GNU `Fface_font` (xfaces.c) calls `lookup_named_face (..., true)`,
+        // which signals "Invalid face" only when the name does not resolve to
+        // any face. A face created at runtime via `make-face`/`defface` is a
+        // valid (but on a TTY frame, unrealized) face, so it must return nil
+        // rather than error. Use the full existence check, not just the
+        // bootstrap built-in table.
         return match args[0].kind() {
             ValueKind::String => {
                 let name = font_string_text(&args[0]).expect("checked string");
-                if is_known_lisp_face_name(&name) {
+                if face_exists_for_domain(&name, false) {
                     Ok(Value::NIL)
                 } else {
                     let payload = if name.is_empty() {
@@ -5661,7 +5667,7 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
             ValueKind::Nil => Err(signal("error", vec![Value::string("Invalid face")])),
             ValueKind::T | ValueKind::Symbol(_) => {
                 if let Some(name) = symbol_name_for_face_value(&args[0]) {
-                    if is_known_lisp_face_name(&name) {
+                    if face_exists_for_domain(&name, false) {
                         return Ok(Value::NIL);
                     }
                 }
