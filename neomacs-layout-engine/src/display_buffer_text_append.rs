@@ -5,14 +5,12 @@
 //! Keeping it separate from `display_row_append.rs` lets the append layer stay
 //! source-agnostic while the buffer text walker owns its own setup logic.
 
-use crate::display_row::insert_resolved_display_row_face;
 use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_source_render::TextRowOutputRenderState;
-use crate::display_row_special_glyphs::install_last_window_right_border_from_source_requests;
 use crate::display_row_walk_state::{
     HitRowRangeTracker, next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
@@ -23,10 +21,11 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowCursorInstaller, TextWindowOutputInstaller, TextWindowPendingRowFinish,
-    TextWindowRedisplayPositions, TextWindowRightBorder, TextWindowRightEdgeMarkers,
-    TextWindowRowLifecycleInstaller, WindowOutputEmitter, close_text_window_output,
+    TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowBorderInstaller,
+    TextWindowCursorEffects, TextWindowCursorInstaller, TextWindowOutputInstaller,
+    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
+    TextWindowRowLifecycleInstaller, TextWindowTerminalRightBorder, WindowOutputEmitter,
+    close_text_window_output,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -152,29 +151,16 @@ impl BufferTextWindowTerminalRightBorderRequest {
     pub(crate) fn install_and_apply(
         self,
         builder: &mut GlyphMatrixBuilder,
-        mut render_services: ChromeRowRenderServices<'_, '_>,
+        render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
-        let border_face = render_services
-            .face_resolver()
-            .resolve_named_face(self.face_name);
-        // GNU draws every realized face id from the single per-frame face cache
-        // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
-        // border's id from the frame-scoped allocator (reconciled into
-        // `frame_face_id_counter` by the decoration render, engine.rs) rather than
-        // a separate `FaceResolver` counter that could collide with it.
-        let border_face_id = render_services.face_ids().allocate();
-        insert_resolved_display_row_face(builder, border_face_id, &border_face, None);
-        install_last_window_right_border_from_source_requests(
-            builder,
-            render_services.reborrow(),
-            TextWindowRightBorder {
+        TextWindowBorderInstaller::new(builder).install_terminal_right_border(
+            TextWindowTerminalRightBorder {
                 ch: self.ch,
-                face_id: border_face_id,
+                face_name: self.face_name,
                 char_width: self.char_width,
             },
-            &border_face,
-        );
-        border_face_id
+            render_services,
+        )
     }
 }
 

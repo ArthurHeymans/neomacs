@@ -12,13 +12,17 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_row::insert_resolved_display_row_face;
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_special_glyphs::install_right_edge_markers_from_source_requests;
+use crate::display_row_special_glyphs::{
+    install_last_window_right_border_from_source_requests,
+    install_right_edge_markers_from_source_requests,
+};
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
@@ -261,6 +265,13 @@ pub(crate) struct TextWindowRedisplayPositions {
 pub(crate) struct TextWindowRightBorder {
     pub(crate) ch: char,
     pub(crate) face_id: u32,
+    pub(crate) char_width: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextWindowTerminalRightBorder {
+    pub(crate) ch: char,
+    pub(crate) face_name: &'static str,
     pub(crate) char_width: f32,
 }
 
@@ -829,6 +840,44 @@ impl LineNumberMarginItemSource {
 impl DisplayItemSource for LineNumberMarginItemSource {
     fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.items.next()
+    }
+}
+
+pub(crate) struct TextWindowBorderInstaller<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
+}
+
+impl<'builder> TextWindowBorderInstaller<'builder> {
+    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn install_terminal_right_border(
+        &mut self,
+        request: TextWindowTerminalRightBorder,
+        mut render_services: ChromeRowRenderServices<'_, '_>,
+    ) -> u32 {
+        let border_face = render_services
+            .face_resolver()
+            .resolve_named_face(request.face_name);
+        // GNU draws every realized face id from the single per-frame face cache
+        // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
+        // border's id from the frame-scoped allocator (reconciled into
+        // `frame_face_id_counter` by the decoration render, engine.rs) rather than
+        // a separate `FaceResolver` counter that could collide with it.
+        let border_face_id = render_services.face_ids().allocate();
+        insert_resolved_display_row_face(self.builder, border_face_id, &border_face, None);
+        install_last_window_right_border_from_source_requests(
+            self.builder,
+            render_services.reborrow(),
+            TextWindowRightBorder {
+                ch: request.ch,
+                face_id: border_face_id,
+                char_width: request.char_width,
+            },
+            &border_face,
+        );
+        border_face_id
     }
 }
 
