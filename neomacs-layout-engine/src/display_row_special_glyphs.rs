@@ -192,7 +192,7 @@ pub(crate) fn text_window_right_edge_marker_decorations(
     let target_col = request.column.target_col(request.matrix_cols);
     let mut decorations = Vec::new();
     for row_idx in 0..request.row_flags.len() {
-        let matrix_row = request.text_matrix_row_base + row_idx;
+        let matrix_row = request.display_text_row_base + row_idx;
         let marker = if request
             .row_flags
             .is_set(row_idx, DisplayRowFlagKind::Truncated)

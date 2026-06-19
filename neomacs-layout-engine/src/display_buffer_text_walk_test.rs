@@ -112,8 +112,8 @@ fn geometry_request_derives_text_area_and_matrix_rows() {
     assert_eq!(geometry.char_width, 8.0);
     assert_eq!(geometry.char_height, 16.0);
     assert_eq!(geometry.max_rows, 5);
-    assert_eq!(geometry.text_matrix_row_base, 2);
-    assert_eq!(geometry.text_matrix_rows, 5);
+    assert_eq!(geometry.display_text_row_base, 2);
+    assert_eq!(geometry.display_text_rows, 5);
     assert_eq!(geometry.bottom_chrome_rows, 1);
     assert_eq!(geometry.mode_line_matrix_row, 7);
     assert_eq!(geometry.line_number_pixel_width, 24.0);
@@ -153,7 +153,7 @@ fn geometry_request_measures_minibuffer_up_to_max_mini_window_rows() {
     let geometry = request.into_geometry(0);
 
     assert_eq!(geometry.max_rows, 3);
-    assert_eq!(geometry.text_matrix_rows, 3);
+    assert_eq!(geometry.display_text_rows, 3);
     assert_eq!(geometry.mode_line_matrix_row, 3);
     // The visibility bottom is lifted so the walk can emit all three rows even
     // though the window is physically one row tall.

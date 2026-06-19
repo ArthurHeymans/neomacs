@@ -166,7 +166,7 @@ impl BufferTextWindowTerminalRightBorderRequest {
 pub(crate) struct BufferTextWindowBeginRequest {
     frame_id: FrameId,
     window_id: WindowId,
-    text_matrix_row_base: usize,
+    display_text_row_base: usize,
     text_area_left: f32,
     window_top: f32,
     matrix_window_id: u64,
@@ -186,7 +186,7 @@ pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
 pub(crate) struct BufferTextWindowTailFinalizeContext<'a> {
     pub(crate) params: &'a WindowParams,
     pub(crate) text: &'a [u8],
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
     pub(crate) text_y: f32,
@@ -221,7 +221,7 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
     pub(crate) byte_idx: usize,
     pub(crate) reserve_right_special_col: bool,
     pub(crate) reserve_right_border_col: bool,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) matrix_cols: usize,
     pub(crate) row_flags: &'a DisplayRowFlags,
     pub(crate) right_edge_face_id: u32,
@@ -396,7 +396,7 @@ impl BufferTextWindowBeginRequest {
     pub(crate) fn new(
         frame_id: FrameId,
         window_id: WindowId,
-        text_matrix_row_base: usize,
+        display_text_row_base: usize,
         text_area_left: f32,
         window_top: f32,
         matrix_window_id: u64,
@@ -410,7 +410,7 @@ impl BufferTextWindowBeginRequest {
         Self {
             frame_id,
             window_id,
-            text_matrix_row_base,
+            display_text_row_base,
             text_area_left,
             window_top,
             matrix_window_id,
@@ -431,7 +431,7 @@ impl BufferTextWindowBeginRequest {
         let mut output_emitter = WindowOutputEmitter::new(
             self.frame_id,
             self.window_id,
-            self.text_matrix_row_base,
+            self.display_text_row_base,
             self.text_area_left,
             self.window_top,
         );
@@ -496,7 +496,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                         cursor_publish_status = CapturedTextWindowCursorPublishContext::new(
                             context.params,
                             context.text,
-                            context.text_matrix_row_base,
+                            context.display_text_row_base,
                             context.text_area_left,
                             context.window_top,
                             context.text_y,
@@ -509,7 +509,7 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
                         .publish_captured_cursor(
                             cursor,
                             &cursor_row_metrics,
-                            row_geometry.row_metrics_snapshot(context.text_matrix_row_base),
+                            row_geometry.row_metrics_snapshot(context.display_text_row_base),
                             output,
                         )
                         .into();
@@ -573,7 +573,7 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
         let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
             context.reserve_right_special_col,
             context.reserve_right_border_col,
-            context.text_matrix_row_base,
+            context.display_text_row_base,
             context.matrix_cols,
             context.row_flags,
             context.right_edge_face_id,

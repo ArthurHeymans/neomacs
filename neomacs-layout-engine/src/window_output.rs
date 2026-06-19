@@ -207,7 +207,7 @@ impl TextWindowRightEdgeMarkerColumn {
 }
 
 pub(crate) struct TextWindowRightEdgeMarkers<'a> {
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) matrix_cols: usize,
     pub(crate) column: TextWindowRightEdgeMarkerColumn,
     pub(crate) row_flags: &'a DisplayRowFlags,
@@ -219,14 +219,14 @@ impl<'a> TextWindowRightEdgeMarkers<'a> {
     pub(crate) fn for_reserved_special_column(
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
-        text_matrix_row_base: usize,
+        display_text_row_base: usize,
         matrix_cols: usize,
         row_flags: &'a DisplayRowFlags,
         face_id: u32,
         char_width: f32,
     ) -> Option<Self> {
         reserve_right_special_col.then_some(Self {
-            text_matrix_row_base,
+            display_text_row_base,
             matrix_cols,
             column: if reserve_right_border_col {
                 TextWindowRightEdgeMarkerColumn::BeforeRightBorder

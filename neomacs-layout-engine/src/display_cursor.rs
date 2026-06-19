@@ -291,14 +291,14 @@ impl CapturedCursorInfo {
     pub(crate) fn logical_cursor_position(
         &self,
         row_metric: RowMetricsSnapshot,
-        text_matrix_row_base: usize,
+        display_text_row_base: usize,
         text_area_left: f32,
         window_top: f32,
     ) -> WindowCursorPos {
         WindowCursorPos {
             x: (self.x - text_area_left).round() as i64,
             y: (row_metric.pixel_y - window_top).round() as i64,
-            row: text_matrix_row_base as i64 + self.matrix_row as i64,
+            row: display_text_row_base as i64 + self.matrix_row as i64,
             col: self.col as i64,
         }
     }
@@ -716,7 +716,7 @@ pub(crate) enum CapturedTextWindowCursorPublishOutcome {
 pub(crate) struct CapturedTextWindowCursorPublishContext<'a> {
     params: &'a WindowParams,
     text: &'a [u8],
-    text_matrix_row_base: usize,
+    display_text_row_base: usize,
     text_area_left: f32,
     window_top: f32,
     text_y: f32,
@@ -732,7 +732,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
     pub(crate) fn new(
         params: &'a WindowParams,
         text: &'a [u8],
-        text_matrix_row_base: usize,
+        display_text_row_base: usize,
         text_area_left: f32,
         window_top: f32,
         text_y: f32,
@@ -745,7 +745,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         Self {
             params,
             text,
-            text_matrix_row_base,
+            display_text_row_base,
             text_area_left,
             window_top,
             text_y,
@@ -766,12 +766,12 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
     ) -> CapturedTextWindowCursorPublishOutcome {
         let row_metric = row_metrics_for_cursor(
             row_metrics,
-            self.text_matrix_row_base + cursor.matrix_row,
+            self.display_text_row_base + cursor.matrix_row,
             fallback_row_metric,
         );
         output.set_logical_cursor(cursor.logical_cursor_position(
             row_metric,
-            self.text_matrix_row_base,
+            self.display_text_row_base,
             self.text_area_left,
             self.window_top,
         ));

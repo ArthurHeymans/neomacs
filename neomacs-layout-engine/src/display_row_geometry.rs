@@ -601,13 +601,13 @@ impl DisplayRowGeometryState {
         }
     }
 
-    pub(crate) fn text_matrix_row_begin(
+    pub(crate) fn display_text_row_begin(
         &self,
         row_base: usize,
         col: usize,
         x: f32,
     ) -> DisplayTextRowBegin {
-        DisplayRowGeometryCursor::from_state(*self).text_matrix_row_begin(row_base, col, x)
+        DisplayRowGeometryCursor::from_state(*self).display_text_row_begin(row_base, col, x)
     }
 
     pub(crate) fn glyph_y(&self, glyph_y_offset: f32) -> f32 {
@@ -621,7 +621,7 @@ impl DisplayRowGeometryState {
         let mut row_cursor = DisplayRowGeometryCursor::from_state(*self);
         let hit_row =
             row_cursor.hit_row(target.hit_range.charpos_start, target.hit_range.charpos_end);
-        let transition = row_cursor.finish_and_begin_next_text_matrix_row(
+        let transition = row_cursor.finish_and_begin_next_display_text_row(
             target.transition.defaults,
             target.transition.kind,
             target.transition.row_base,
@@ -820,7 +820,7 @@ impl DisplayRowGeometryCursor {
         row_advance.finished
     }
 
-    pub(crate) fn finish_and_begin_next_text_matrix_row(
+    pub(crate) fn finish_and_begin_next_display_text_row(
         &mut self,
         defaults: DisplayRowGeometryDefaults,
         kind: DisplayRowAdvanceKind,
@@ -829,14 +829,14 @@ impl DisplayRowGeometryCursor {
         x: f32,
     ) -> DisplayTextRowGeometryTransition {
         let finished_row = self.finish_and_advance_to_next_row(defaults, kind);
-        let begin_row = self.text_matrix_row_begin(row_base, col, x);
+        let begin_row = self.display_text_row_begin(row_base, col, x);
         DisplayTextRowGeometryTransition {
             finished_row,
             begin_row,
         }
     }
 
-    pub(crate) fn text_matrix_row_begin(
+    pub(crate) fn display_text_row_begin(
         &self,
         row_base: usize,
         col: usize,

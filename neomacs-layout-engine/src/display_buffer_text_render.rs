@@ -111,7 +111,7 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     char_width: f32,
     row_visibility_limit: DisplayRowVisibilityLimit,
     row_geometry_defaults: DisplayRowGeometryDefaults,
-    text_matrix_row_base: usize,
+    display_text_row_base: usize,
     max_rows: usize,
     row_limit: DisplayRowLimit,
 }
@@ -131,7 +131,7 @@ pub(crate) struct BufferTextWindowRowPreludeRequestContext {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowBodyInstallContext {
     pub(crate) matrix_window_id: u64,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) matrix_cols: usize,
 }
 
@@ -147,7 +147,7 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     accessible_start: i64,
     accessible_end: i64,
     text_start_byte: usize,
-    text_matrix_row_base: usize,
+    display_text_row_base: usize,
     text_area_left: f32,
     window_top: f32,
     text_y: f32,
@@ -290,8 +290,8 @@ pub(crate) struct BufferTextWindowOutputSetupRequest {
     frame_id: FrameId,
     window_id: WindowId,
     matrix_window_id: u64,
-    text_matrix_row_base: usize,
-    text_matrix_rows: usize,
+    display_text_row_base: usize,
+    display_text_rows: usize,
     bottom_chrome_rows: usize,
     cols: usize,
     bounds: Rect,
@@ -475,7 +475,7 @@ where
     matrix_window_id: u64,
     append_surface: &'surface DisplayRowAppendSurface,
     text_y: f32,
-    text_matrix_row_base: usize,
+    display_text_row_base: usize,
     max_rows: usize,
 }
 
@@ -648,7 +648,7 @@ impl BufferTextWindowLoopRequestContext {
         char_width: f32,
         row_visibility_limit: DisplayRowVisibilityLimit,
         row_geometry_defaults: DisplayRowGeometryDefaults,
-        text_matrix_row_base: usize,
+        display_text_row_base: usize,
         max_rows: usize,
         row_limit: DisplayRowLimit,
     ) -> Self {
@@ -667,7 +667,7 @@ impl BufferTextWindowLoopRequestContext {
             char_width,
             row_visibility_limit,
             row_geometry_defaults,
-            text_matrix_row_base,
+            display_text_row_base,
             max_rows,
             row_limit,
         }
@@ -713,7 +713,7 @@ impl BufferTextWindowLoopRequestContext {
             point_charpos: self.point_charpos,
             has_prefix: self.has_prefix,
             row_geometry_defaults: self.row_geometry_defaults,
-            text_matrix_row_base: self.text_matrix_row_base,
+            display_text_row_base: self.display_text_row_base,
             max_rows: self.max_rows,
             row_limit: self.row_limit,
         })
@@ -756,7 +756,7 @@ impl BufferTextWindowLoopRequestContext {
                 content_x: self.content_x,
                 has_prefix: self.has_prefix,
                 row_geometry_defaults: self.row_geometry_defaults,
-                text_matrix_row_base: self.text_matrix_row_base,
+                display_text_row_base: self.display_text_row_base,
                 max_rows: self.max_rows,
                 row_limit: self.row_limit,
             },
@@ -784,7 +784,7 @@ impl BufferTextWindowLoopRequestContext {
                 content_x: self.content_x,
                 has_prefix: self.has_prefix,
                 row_geometry_defaults: self.row_geometry_defaults,
-                text_matrix_row_base: self.text_matrix_row_base,
+                display_text_row_base: self.display_text_row_base,
                 max_rows: self.max_rows,
                 row_limit: self.row_limit,
                 overlay_context,
@@ -823,7 +823,7 @@ impl BufferTextWindowLoopRequestContext {
                 content_x: self.content_x,
                 has_prefix: self.has_prefix,
                 row_geometry_defaults: self.row_geometry_defaults,
-                text_matrix_row_base: self.text_matrix_row_base,
+                display_text_row_base: self.display_text_row_base,
                 max_rows: self.max_rows,
                 row_limit: self.row_limit,
             },
@@ -1750,7 +1750,7 @@ impl BufferTextWindowBodyInstallContext {
             byte_idx,
             reserve_right_special_col,
             reserve_right_border_col,
-            text_matrix_row_base: self.text_matrix_row_base,
+            display_text_row_base: self.display_text_row_base,
             matrix_cols: self.matrix_cols,
             row_flags,
             right_edge_face_id: 0,
@@ -2018,8 +2018,8 @@ impl BufferTextWindowOutputSetupRequest {
         frame_id: FrameId,
         window_id: WindowId,
         matrix_window_id: u64,
-        text_matrix_row_base: usize,
-        text_matrix_rows: usize,
+        display_text_row_base: usize,
+        display_text_rows: usize,
         bottom_chrome_rows: usize,
         cols: usize,
         bounds: Rect,
@@ -2033,8 +2033,8 @@ impl BufferTextWindowOutputSetupRequest {
             frame_id,
             window_id,
             matrix_window_id,
-            text_matrix_row_base,
-            text_matrix_rows,
+            display_text_row_base,
+            display_text_rows,
             bottom_chrome_rows,
             cols,
             bounds,
@@ -2056,8 +2056,8 @@ impl BufferTextWindowOutputSetupRequest {
             frame_id,
             window_id,
             params.window_id as u64,
-            geometry.text_matrix_row_base,
-            geometry.text_matrix_rows,
+            geometry.display_text_row_base,
+            geometry.display_text_rows,
             geometry.bottom_chrome_rows,
             geometry.cols,
             params.bounds,
@@ -2079,17 +2079,17 @@ impl BufferTextWindowOutputSetupRequest {
             begin_request: BufferTextWindowBeginRequest::new(
                 self.frame_id,
                 self.window_id,
-                self.text_matrix_row_base,
+                self.display_text_row_base,
                 walk_setup.text_area_left,
                 walk_setup.window_top,
                 self.matrix_window_id,
-                self.text_matrix_row_base + self.text_matrix_rows + self.bottom_chrome_rows,
+                self.display_text_row_base + self.display_text_rows + self.bottom_chrome_rows,
                 matrix_cols,
                 self.bounds,
                 self.text_bounds,
                 self.selected,
-                walk_setup.row_geometry.text_matrix_row_begin(
-                    self.text_matrix_row_base,
+                walk_setup.row_geometry.display_text_row_begin(
+                    self.display_text_row_base,
                     walk_setup.col,
                     walk_setup.x,
                 ),
@@ -2105,7 +2105,7 @@ impl BufferTextWindowOutputSetupRequest {
             row_limit: DisplayRowLimit { max_rows },
             body_install_context: BufferTextWindowBodyInstallContext {
                 matrix_window_id: self.matrix_window_id,
-                text_matrix_row_base: self.text_matrix_row_base,
+                display_text_row_base: self.display_text_row_base,
                 matrix_cols,
             },
             retry_bounds: BufferTextWindowRetryBounds {
@@ -2215,7 +2215,7 @@ impl BufferTextWindowOutputSetup {
             matrix_window_id,
             append_surface,
             geometry.text_y,
-            self.body_install_context.text_matrix_row_base,
+            self.body_install_context.display_text_row_base,
             geometry.max_rows,
         )
         .into_contexts();
@@ -2232,7 +2232,7 @@ impl BufferTextWindowOutputSetup {
             geometry.char_width,
             self.row_visibility_limit,
             walk_setup.row_geometry_defaults,
-            self.body_install_context.text_matrix_row_base,
+            self.body_install_context.display_text_row_base,
             geometry.max_rows,
             self.row_limit,
         );
@@ -2257,7 +2257,7 @@ impl BufferTextWindowOutputSetup {
             source.accessible_start(),
             source.accessible_end(),
             source.text_start_byte(),
-            self.body_install_context.text_matrix_row_base,
+            self.body_install_context.display_text_row_base,
             walk_setup.text_area_left,
             walk_setup.window_top,
             geometry.text_y,
@@ -2511,7 +2511,7 @@ where
         matrix_window_id: u64,
         append_surface: &'surface DisplayRowAppendSurface,
         text_y: f32,
-        text_matrix_row_base: usize,
+        display_text_row_base: usize,
         max_rows: usize,
     ) -> Self {
         Self {
@@ -2529,7 +2529,7 @@ where
             matrix_window_id,
             append_surface,
             text_y,
-            text_matrix_row_base,
+            display_text_row_base,
             max_rows,
         }
     }
@@ -2558,7 +2558,7 @@ where
                 self.char_height,
                 self.default_face_ascent,
                 self.text_y,
-                self.text_matrix_row_base,
+                self.display_text_row_base,
                 self.max_rows,
             ),
         }
@@ -3379,7 +3379,7 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
         accessible_start: i64,
         accessible_end: i64,
         text_start_byte: usize,
-        text_matrix_row_base: usize,
+        display_text_row_base: usize,
         text_area_left: f32,
         window_top: f32,
         text_y: f32,
@@ -3406,7 +3406,7 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
             accessible_start,
             accessible_end,
             text_start_byte,
-            text_matrix_row_base,
+            display_text_row_base,
             text_area_left,
             window_top,
             text_y,
@@ -3454,7 +3454,7 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
         BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
             params: self.params,
             text,
-            text_matrix_row_base: self.text_matrix_row_base,
+            display_text_row_base: self.display_text_row_base,
             text_area_left: self.text_area_left,
             window_top: self.window_top,
             text_y: self.text_y,
@@ -4135,7 +4135,7 @@ pub(crate) struct BufferHscrollSkipRenderContext<'a> {
     pub(crate) point_charpos: i64,
     pub(crate) has_prefix: bool,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) max_rows: usize,
     pub(crate) row_limit: DisplayRowLimit,
 }
@@ -4249,7 +4249,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
                 .expect("hscroll line break hit range");
             let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                 context.row_geometry_defaults,
-                context.text_matrix_row_base,
+                context.display_text_row_base,
                 row_y_positions,
                 context.max_rows,
                 row_geometry,
@@ -4356,7 +4356,7 @@ pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
     pub(crate) content_x: f32,
     pub(crate) has_prefix: bool,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) max_rows: usize,
     pub(crate) row_limit: DisplayRowLimit,
 }
@@ -4520,7 +4520,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         let line_break_transition = DisplayRowLineBreakTransitionPlan::hidden_line_break();
         let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
             context.row_geometry_defaults,
-            context.text_matrix_row_base,
+            context.display_text_row_base,
             row_y_positions,
             context.max_rows,
             row_geometry,
@@ -5106,7 +5106,7 @@ pub(crate) struct BufferTextLineBreakRenderContext<'a> {
     pub(crate) content_x: f32,
     pub(crate) has_prefix: bool,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) max_rows: usize,
     pub(crate) row_limit: DisplayRowLimit,
     pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
@@ -5202,7 +5202,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
         let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
             context.row_geometry_defaults,
-            context.text_matrix_row_base,
+            context.display_text_row_base,
             row_y_positions,
             context.max_rows,
             row_geometry,
@@ -6543,7 +6543,7 @@ pub(crate) struct BufferTextSourceCharRenderContext<'a> {
     pub(crate) content_x: f32,
     pub(crate) has_prefix: bool,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) max_rows: usize,
     pub(crate) row_limit: DisplayRowLimit,
 }
@@ -6624,7 +6624,7 @@ pub(crate) struct BufferTextOverflowRenderContext {
     pub(crate) content_x: f32,
     pub(crate) has_prefix: bool,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) max_rows: usize,
     pub(crate) row_limit: DisplayRowLimit,
 }
@@ -6838,7 +6838,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                         content_x: context.content_x,
                         has_prefix: context.has_prefix,
                         row_geometry_defaults: context.row_geometry_defaults,
-                        text_matrix_row_base: context.text_matrix_row_base,
+                        display_text_row_base: context.display_text_row_base,
                         max_rows: context.max_rows,
                         row_limit: context.row_limit,
                     },
@@ -6904,7 +6904,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 content_x: context.content_x,
                 has_prefix: context.has_prefix,
                 row_geometry_defaults: context.row_geometry_defaults,
-                text_matrix_row_base: context.text_matrix_row_base,
+                display_text_row_base: context.display_text_row_base,
                 max_rows: context.max_rows,
                 row_limit: context.row_limit,
             },
@@ -7071,7 +7071,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
-                    context.text_matrix_row_base,
+                    context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
                     row_geometry,
@@ -7117,7 +7117,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
-                    context.text_matrix_row_base,
+                    context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
                     row_geometry,
@@ -7162,7 +7162,7 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
                 character_wrap_action.apply_before_row_transition(row_extend, x, context.content_x);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
-                    context.text_matrix_row_base,
+                    context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
                     row_geometry,
@@ -7502,7 +7502,7 @@ pub(crate) struct BufferTextSpecialOverflowRenderContext<'a> {
     pub(crate) content_x: f32,
     pub(crate) has_prefix: bool,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) text_matrix_row_base: usize,
+    pub(crate) display_text_row_base: usize,
     pub(crate) max_rows: usize,
     pub(crate) row_limit: DisplayRowLimit,
 }
@@ -7627,7 +7627,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 );
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
-                    context.text_matrix_row_base,
+                    context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
                     row_geometry,
@@ -7673,7 +7673,7 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 let hit_range = special_wrap_action.hit_range_and_advance(hit_row_range);
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
-                    context.text_matrix_row_base,
+                    context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
                     row_geometry,
