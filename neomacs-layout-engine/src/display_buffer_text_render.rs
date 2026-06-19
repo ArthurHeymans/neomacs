@@ -4887,16 +4887,15 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
                 context.text_start_byte + progress.source_position().byte_idx(),
             ))
             .get() as i64;
-        let charpos = progress.charpos;
-        if tail_action
-            .apply_after_hidden_line_break_transition(
-                row_transition,
-                synced_charpos,
-                charpos,
-                hit_row_range,
-            )
-            .should_break()
-        {
+        let mut synced_source_position = progress.source_position();
+        let continuation = tail_action.apply_after_hidden_line_break_transition(
+            row_transition,
+            synced_charpos,
+            &mut synced_source_position,
+            hit_row_range,
+        );
+        progress.apply_source_position(synced_source_position);
+        if continuation.should_break() {
             return BufferSelectiveDisplayTailRenderOutcome::Stop;
         }
 
@@ -5238,24 +5237,24 @@ impl BufferSelectiveDisplayLineTailAction {
 
     pub(crate) fn sync_after_hidden_line_break_transition(
         synced_charpos: i64,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) {
-        *charpos = synced_charpos;
-        hit_row_range.advance_to(*charpos);
+        *position = position.with_charpos(synced_charpos);
+        hit_row_range.advance_to(position.charpos());
     }
 
     pub(crate) fn apply_after_hidden_line_break_transition(
         self,
         row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hit_row_range: &mut HitRowRangeTracker,
     ) -> DisplayRowTransitionContinuation {
         if row_transition.is_exhausted() {
             return DisplayRowTransitionContinuation::Exhausted;
         }
-        Self::sync_after_hidden_line_break_transition(synced_charpos, charpos, hit_row_range);
+        Self::sync_after_hidden_line_break_transition(synced_charpos, position, hit_row_range);
         DisplayRowTransitionContinuation::Continue
     }
 

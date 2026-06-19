@@ -2680,52 +2680,52 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
 
 #[test]
 fn buffer_selective_display_line_tail_action_syncs_after_hidden_line_break_transition() {
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     BufferSelectiveDisplayLineTailAction::sync_after_hidden_line_break_transition(
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
     );
 
-    assert_eq!(charpos, 14);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]
 fn buffer_selective_display_line_tail_action_applies_after_hidden_line_break_transition() {
     let action = BufferSelectiveDisplayLineTailAction::LineBreak { charpos: 12 };
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_hidden_line_break_transition(
         DisplayTextRowTransition::BeganNextRow,
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
-    assert_eq!(charpos, 14);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
 }
 
 #[test]
 fn buffer_selective_display_line_tail_action_skips_after_state_when_transition_exhausted() {
     let action = BufferSelectiveDisplayLineTailAction::LineBreak { charpos: 12 };
-    let mut charpos = 9;
+    let mut position = BufferTextSourcePosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_hidden_line_break_transition(
         DisplayTextRowTransition::ExhaustedRows,
         14,
-        &mut charpos,
+        &mut position,
         &mut hit_row_range,
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
-    assert_eq!(charpos, 9);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 9));
     assert_eq!(hit_row_range.start(), 3);
 }
 
