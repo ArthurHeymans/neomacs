@@ -6,7 +6,6 @@ use super::DisplayTextRowMetrics;
 use super::DisplayTextRowStoredMetrics;
 use super::DisplayTextRowTransition;
 use super::TextRowOutput;
-use super::TextWindowArtifactOutputSurface;
 use super::TextWindowBodyOutputInstall;
 use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
@@ -19,7 +18,9 @@ use super::TextWindowRowDecorationRequest;
 use super::TextWindowRowOutputSurface;
 use super::WindowOutputEmitter;
 use super::close_text_window_output;
+use super::install_text_window_cursor_effects;
 use super::install_text_window_row_decoration;
+use super::publish_text_window_decorative_cursor;
 use super::record_text_window_display_range;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_output_builder::DisplayOutputBuilder;
@@ -763,7 +764,8 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     let mut builder = DisplayOutputBuilder::new();
     let effects = EffectsConfig::default();
 
-    TextWindowArtifactOutputSurface::from_output_builder(&mut builder).publish_decorative_cursor(
+    publish_text_window_decorative_cursor(
+        &mut builder,
         TextWindowDecorativeCursor {
             window_id: 77,
             slot_id: DisplaySlotId {
@@ -795,7 +797,8 @@ fn install_text_window_cursor_effects_records_window_effect_profile() {
     let mut builder = DisplayOutputBuilder::new();
     let effects = EffectsConfig::default();
 
-    TextWindowArtifactOutputSurface::from_output_builder(&mut builder).install_cursor_effects(
+    install_text_window_cursor_effects(
+        &mut builder,
         TextWindowCursorEffects {
             window_id: 42,
             effects: effects.clone(),

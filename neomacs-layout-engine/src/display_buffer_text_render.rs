@@ -1230,8 +1230,11 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
     }
 
     fn install_cursor_effects(&mut self, params: &WindowParams) -> bool {
-        BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
-            .install_and_apply(&mut self.output.artifact_surface())
+        self.output
+            .install_cursor_effects(BufferTextWindowCursorEffectsRequest::new(
+                params.window_id,
+                params.cursor_effects.clone(),
+            ))
     }
 
     fn begin_text_window_output(

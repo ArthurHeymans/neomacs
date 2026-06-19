@@ -5,6 +5,7 @@
 //! Keeping it separate from `display_row_append.rs` lets the append layer stay
 //! source-agnostic while the buffer text walker owns its own setup logic.
 
+use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::{
@@ -20,11 +21,11 @@ use crate::hit_test::{HitRow, WindowHitData};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    DisplayTextRowBegin, TextWindowArtifactOutputSurface, TextWindowBegin,
-    TextWindowBeginOutputSurface, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowFinishOutputSurface, TextWindowLiveOutputSurface, TextWindowPendingRowFinish,
-    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
-    WindowOutputEmitter,
+    DisplayTextRowBegin, TextWindowBegin, TextWindowBeginOutputSurface,
+    TextWindowBodyOutputInstall, TextWindowCursorEffects, TextWindowFinishOutputSurface,
+    TextWindowLiveOutputSurface, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder, WindowOutputEmitter,
+    install_text_window_cursor_effects, install_text_window_terminal_right_border,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -117,17 +118,17 @@ impl BufferTextWindowCursorEffectsRequest {
         Self { window_id, effects }
     }
 
-    pub(crate) fn install_and_apply(
-        self,
-        output: &mut TextWindowArtifactOutputSurface<'_>,
-    ) -> bool {
+    pub(crate) fn install_and_apply(self, output: &mut DisplayOutputBuilder) -> bool {
         let Some(effects) = self.effects else {
             return false;
         };
-        output.install_cursor_effects(TextWindowCursorEffects {
-            window_id: self.window_id,
-            effects,
-        });
+        install_text_window_cursor_effects(
+            output,
+            TextWindowCursorEffects {
+                window_id: self.window_id,
+                effects,
+            },
+        );
         true
     }
 }
@@ -149,10 +150,11 @@ impl BufferTextWindowTerminalRightBorderRequest {
 
     pub(crate) fn install_and_apply(
         self,
-        output: &mut TextWindowArtifactOutputSurface<'_>,
+        output: &mut DisplayOutputBuilder,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
-        output.install_terminal_right_border(
+        install_text_window_terminal_right_border(
+            output,
             TextWindowTerminalRightBorder {
                 ch: self.ch,
                 face_name: self.face_name,

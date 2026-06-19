@@ -932,10 +932,6 @@ pub(crate) struct TextWindowRowOutputSurface<'output_builder, 'output> {
     output_emitter: &'output mut WindowOutputEmitter,
 }
 
-pub(crate) struct TextWindowArtifactOutputSurface<'output_builder> {
-    output_builder: &'output_builder mut DisplayOutputBuilder,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextWindowOutputRetryCheckpoint {
     pub(crate) transition_hints_len: usize,
@@ -1050,13 +1046,11 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     }
 
     pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
-        TextWindowArtifactOutputSurface::from_output_builder(self.output_builder)
-            .publish_decorative_cursor(cursor);
+        publish_text_window_decorative_cursor(self.output_builder, cursor);
     }
 
     fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
-        TextWindowArtifactOutputSurface::from_output_builder(self.output_builder)
-            .install_cursor_artifact(cursor);
+        install_text_window_cursor_artifact(self.output_builder, cursor);
     }
 
     fn set_display_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
@@ -1064,8 +1058,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     }
 
     fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        TextWindowArtifactOutputSurface::from_output_builder(self.output_builder)
-            .store_phys_cursor(cursor);
+        store_text_window_phys_cursor(self.output_builder, cursor);
     }
 
     fn set_phys_cursor(&mut self, cursor: WindowCursorSnapshot) {
@@ -1159,26 +1152,29 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     }
 }
 
-impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
-    pub(crate) fn from_output_builder(
-        output_builder: &'output_builder mut DisplayOutputBuilder,
-    ) -> Self {
-        Self { output_builder }
-    }
+pub(crate) fn install_text_window_cursor_effects(
+    output_builder: &mut DisplayOutputBuilder,
+    request: TextWindowCursorEffects,
+) {
+    output_builder.set_output_cursor_effects(request.window_id, request.effects);
+}
 
-    pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        self.output_builder
-            .set_output_cursor_effects(request.window_id, request.effects);
-    }
-
-    pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
-        if let Some(effects) = cursor.effects {
-            self.install_cursor_effects(TextWindowCursorEffects {
+pub(crate) fn publish_text_window_decorative_cursor(
+    output_builder: &mut DisplayOutputBuilder,
+    cursor: TextWindowDecorativeCursor,
+) {
+    if let Some(effects) = cursor.effects {
+        install_text_window_cursor_effects(
+            output_builder,
+            TextWindowCursorEffects {
                 window_id: cursor.window_id,
                 effects,
-            });
-        }
-        self.install_cursor_artifact(TextWindowCursorArtifact {
+            },
+        );
+    }
+    install_text_window_cursor_artifact(
+        output_builder,
+        TextWindowCursorArtifact {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,
             x: cursor.x,
@@ -1187,54 +1183,56 @@ impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
             height: cursor.height,
             style: cursor.style,
             color: cursor.color,
-        });
-    }
+        },
+    );
+}
 
-    fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
-        self.output_builder.add_output_cursor(
-            cursor.window_id,
-            cursor.slot_id,
-            cursor.x,
-            cursor.y,
-            cursor.width,
-            cursor.height,
-            cursor.style,
-            cursor.color,
-        );
-    }
+fn install_text_window_cursor_artifact(
+    output_builder: &mut DisplayOutputBuilder,
+    cursor: TextWindowCursorArtifact,
+) {
+    output_builder.add_output_cursor(
+        cursor.window_id,
+        cursor.slot_id,
+        cursor.x,
+        cursor.y,
+        cursor.width,
+        cursor.height,
+        cursor.style,
+        cursor.color,
+    );
+}
 
-    fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        self.output_builder.store_output_phys_cursor(cursor);
-    }
+fn store_text_window_phys_cursor(output_builder: &mut DisplayOutputBuilder, cursor: PhysCursor) {
+    output_builder.store_output_phys_cursor(cursor);
+}
 
-    pub(crate) fn install_terminal_right_border(
-        &mut self,
-        request: TextWindowTerminalRightBorder,
-        mut render_services: ChromeRowRenderServices<'_, '_>,
-    ) -> u32 {
-        let border_face = render_services
-            .face_resolver()
-            .resolve_named_face(request.face_name);
-        // GNU draws every realized face id from the single per-frame face cache
-        // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
-        // border's id from the frame-scoped allocator (reconciled into
-        // `frame_face_id_counter` by the decoration render, engine.rs) rather than
-        // a separate `FaceResolver` counter that could collide with it.
-        let border_face_id = render_services.face_ids().allocate();
-        self.output_builder
-            .install_output_resolved_display_row_face(border_face_id, &border_face, None);
-        install_last_window_right_border(
-            self.output_builder,
-            render_services.reborrow(),
-            TextWindowRightBorder {
-                ch: request.ch,
-                face_id: border_face_id,
-                char_width: request.char_width,
-            },
-            &border_face,
-        );
-        border_face_id
-    }
+pub(crate) fn install_text_window_terminal_right_border(
+    output_builder: &mut DisplayOutputBuilder,
+    request: TextWindowTerminalRightBorder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+) -> u32 {
+    let border_face = render_services
+        .face_resolver()
+        .resolve_named_face(request.face_name);
+    // GNU draws every realized face id from the single per-frame face cache
+    // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
+    // border's id from the frame-scoped allocator (reconciled into
+    // `frame_face_id_counter` by the decoration render, engine.rs) rather than
+    // a separate `FaceResolver` counter that could collide with it.
+    let border_face_id = render_services.face_ids().allocate();
+    output_builder.install_output_resolved_display_row_face(border_face_id, &border_face, None);
+    install_last_window_right_border(
+        output_builder,
+        render_services.reborrow(),
+        TextWindowRightBorder {
+            ch: request.ch,
+            face_id: border_face_id,
+            char_width: request.char_width,
+        },
+        &border_face,
+    );
+    border_face_id
 }
 
 #[derive(Clone, Debug, PartialEq)]

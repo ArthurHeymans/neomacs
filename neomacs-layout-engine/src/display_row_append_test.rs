@@ -80,8 +80,8 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::{
-    DisplayTextRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
-    TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
+    DisplayTextRowTransition, TextWindowBeginOutputSurface, TextWindowFinishOutputSurface,
+    TextWindowLiveOutputSurface,
 };
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -6857,9 +6857,7 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
     let effects = EffectsConfig::default();
 
     let installed = BufferTextWindowCursorEffectsRequest::new(42, Some(effects.clone()))
-        .install_and_apply(&mut TextWindowArtifactOutputSurface::from_output_builder(
-            &mut builder,
-        ));
+        .install_and_apply(&mut builder);
 
     assert!(installed);
     let state = builder.finish(1, 1, 8.0, 16.0);
@@ -6870,9 +6868,8 @@ fn buffer_text_window_cursor_effects_request_installs_effect_profile() {
 fn buffer_text_window_cursor_effects_request_ignores_missing_effect_profile() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
-    let installed = BufferTextWindowCursorEffectsRequest::new(42, None).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
-    );
+    let installed =
+        BufferTextWindowCursorEffectsRequest::new(42, None).install_and_apply(&mut builder);
 
     assert!(!installed);
     let state = builder.finish(1, 1, 8.0, 16.0);
@@ -6895,7 +6892,7 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
+        &mut builder,
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -6940,7 +6937,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     let content_face_id = face_ids.allocate();
     let mut font_metrics = None;
     let border_face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
+        &mut builder,
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,
@@ -6978,7 +6975,7 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let face_id = BufferTextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
-        &mut TextWindowArtifactOutputSurface::from_output_builder(&mut builder),
+        &mut builder,
         crate::display_status_line::ChromeRowRenderServices::new(
             &mut font_metrics,
             &face_resolver,

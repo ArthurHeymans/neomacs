@@ -1,4 +1,6 @@
-use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
+use crate::display_buffer_text_append::{
+    BufferTextWindowCursorEffectsRequest, BufferTextWindowTerminalRightBorderRequest,
+};
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::MeasuredDisplayRow;
 use crate::display_row_output_install::install_measured_frame_chrome_display_row;
@@ -7,9 +9,9 @@ use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::{
-    TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface, TextWindowFinishOutputSurface,
-    TextWindowLiveOutputSurface, TextWindowOutputRetryCheckpoint, WindowOutputEmitter,
-    capture_text_window_retry_checkpoint, restore_text_window_retry_checkpoint,
+    TextWindowBeginOutputSurface, TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
+    TextWindowOutputRetryCheckpoint, WindowOutputEmitter, capture_text_window_retry_checkpoint,
+    restore_text_window_retry_checkpoint,
 };
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -183,10 +185,7 @@ impl<'a> FrameOutputSurface<'a> {
         request: BufferTextWindowTerminalRightBorderRequest,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
-        request.install_and_apply(
-            &mut TextWindowArtifactOutputSurface::from_output_builder(self.builder),
-            render_services,
-        )
+        request.install_and_apply(self.builder, render_services)
     }
 
     fn add_background(&mut self, bounds: Rect, color: Color) {
@@ -262,8 +261,11 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
         restore_text_window_retry_checkpoint(self.builder, checkpoint);
     }
 
-    pub(crate) fn artifact_surface(&mut self) -> TextWindowArtifactOutputSurface<'_> {
-        TextWindowArtifactOutputSurface::from_output_builder(self.builder)
+    pub(crate) fn install_cursor_effects(
+        &mut self,
+        request: BufferTextWindowCursorEffectsRequest,
+    ) -> bool {
+        request.install_and_apply(self.builder)
     }
 
     pub(crate) fn begin_surface<'a>(
