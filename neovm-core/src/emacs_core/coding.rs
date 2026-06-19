@@ -1334,11 +1334,22 @@ fn plist_contains_key(plist: &[Value], key: &str) -> bool {
 fn coding_category_for_base(base: &str) -> &'static str {
     match base {
         "utf-8" | "utf-8-emacs" | "utf-8-auto" | "emacs-internal" => "coding-category-utf-8",
+        // `chinese-iso-8bit` is `:coding-type iso-2022` with G1 = chinese-gb2312
+        // (a dimension-2 charset), so GNU classifies it as `coding-category-iso-8-2`
+        // (coding.c `setup_coding_system`), NOT charset.  Keeping it under charset
+        // collides with `iso-latin-1` and gets it dropped from the priority list
+        // when `set-coding-system-priority` fronts the charset category.
+        "cn-gb-2312" | "euc-china" | "euc-cn" | "cn-gb" | "gb2312" | "chinese-iso-8bit" => {
+            "coding-category-iso-8-2"
+        }
+        // `chinese-big5` is `:coding-type big5`, which GNU maps to
+        // `coding-category-big5` (a distinct category from charset).  Note the
+        // HKSCS variant (`chinese-big5-hkscs`) is `:coding-type charset` in GNU,
+        // so it stays under the charset arm below.
+        "big5" | "cn-big5" | "cp950" | "chinese-big5" => "coding-category-big5",
         "latin-1" | "iso-8859-1" | "iso-latin-1" | "latin-5" | "iso-8859-9" | "iso-latin-5"
         | "latin-0" | "latin-9" | "iso-8859-15" | "iso-latin-9" | "ascii" | "us-ascii"
-        | "cn-gb-2312" | "euc-china" | "euc-cn" | "cn-gb" | "gb2312" | "chinese-iso-8bit"
-        | "big5" | "cn-big5" | "cp950" | "chinese-big5" | "big5-hkscs" | "cn-big5-hkscs"
-        | "chinese-big5-hkscs" => "coding-category-charset",
+        | "big5-hkscs" | "cn-big5-hkscs" | "chinese-big5-hkscs" => "coding-category-charset",
         "raw-text" | "binary" | "no-conversion" => "coding-category-raw-text",
         "undecided" | "prefer-utf-8" => "coding-category-undecided",
         _ => "coding-category-undecided",

@@ -2313,3 +2313,51 @@ fn encode_lisp_string_prepends_bom_for_signature() {
     let plain = crate::encoding::encode_lisp_string(&s, "utf-8");
     assert_eq!(plain, vec![b'x']);
 }
+
+// ===========================================================================
+// Regression: chinese-iso-8bit / chinese-big5 must NOT be dropped from the
+// detection priority list during the loadup `reset-language-environment`
+// reorder.  GNU classifies them under distinct detection *categories*
+// (`coding-category-iso-8-2` and `coding-category-big5`), so fronting the
+// charset category (`iso-latin-1`) must leave them in place.  Mapping them to
+// `coding-category-charset` (the old bug) made them collide with iso-latin-1
+// and get deduped out, shrinking the list from GNU's 20 down to 18.
+// ===========================================================================
+
+#[test]
+fn priority_list_keeps_chinese_iso_8bit_and_big5_after_charset_front() {
+    crate::test_utils::init_test_tracing();
+    let mut m = mgr();
+    assert_eq!(m.priority.len(), 20, "fresh new() should have 20 entries");
+
+    // The three charset-family entries must each have GNU's category: only
+    // iso-latin-1 is `coding-category-charset`; the two Chinese systems are
+    // distinct (`iso-8-2` and `big5`).
+    assert_eq!(
+        coding_category_of(&m, "iso-latin-1"),
+        Some("coding-category-charset")
+    );
+    assert_eq!(
+        coding_category_of(&m, "chinese-iso-8bit"),
+        Some("coding-category-iso-8-2")
+    );
+    assert_eq!(
+        coding_category_of(&m, "chinese-big5"),
+        Some("coding-category-big5")
+    );
+
+    // Fronting the charset category (as `reset-language-environment` does via
+    // `iso-latin-1`) must not evict the distinct-category Chinese systems.
+    builtin_set_coding_system_priority(&mut m, vec![Value::symbol("iso-latin-1")]).unwrap();
+    let names: Vec<&str> = m.priority.iter().map(|&s| resolve_sym(s)).collect();
+    assert!(
+        names.contains(&"chinese-iso-8bit"),
+        "chinese-iso-8bit dropped! names={names:?}"
+    );
+    assert!(
+        names.contains(&"chinese-big5"),
+        "chinese-big5 dropped! names={names:?}"
+    );
+    assert_eq!(m.priority.len(), 20, "list must still have 20 entries");
+    assert_eq!(names[0], "iso-latin-1", "fronted charset system first");
+}
