@@ -162,7 +162,7 @@ pub(crate) struct TextWindowBegin {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextWindowMatrixBegin {
+pub(crate) struct TextWindowOutputBegin {
     pub(crate) window_id: u64,
     pub(crate) rows: usize,
     pub(crate) cols: usize,
@@ -171,7 +171,7 @@ pub(crate) struct TextWindowMatrixBegin {
     pub(crate) selected: bool,
 }
 
-impl From<TextWindowBegin> for TextWindowMatrixBegin {
+impl From<TextWindowBegin> for TextWindowOutputBegin {
     fn from(request: TextWindowBegin) -> Self {
         Self {
             window_id: request.window_id,
@@ -253,16 +253,16 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
 
 pub(crate) struct TextWindowOutputInstall;
 
-pub(crate) struct TextWindowMatrixOutputSurface<'builder> {
+pub(crate) struct TextWindowOutputInstallSurface<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
 
-impl<'builder> TextWindowMatrixOutputSurface<'builder> {
+impl<'builder> TextWindowOutputInstallSurface<'builder> {
     pub(crate) fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 
-    pub(crate) fn begin_text_window_matrix(&mut self, request: TextWindowMatrixBegin) {
+    pub(crate) fn begin_text_window_output(&mut self, request: TextWindowOutputBegin) {
         self.builder.window_installer().begin(
             request.window_id,
             request.rows,
@@ -648,7 +648,7 @@ impl<'a> TextWindowFinishOutputSurface<'a> {
         header_line_height: i64,
         tab_line_height: i64,
     ) -> WindowDisplaySnapshot {
-        TextWindowMatrixOutputSurface::from_builder(self.builder).close_text_window_output();
+        TextWindowOutputInstallSurface::from_builder(self.builder).close_text_window_output();
         self.output_emitter.finish_snapshot(
             self.evaluator,
             text_area_left_offset,
@@ -970,8 +970,8 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         evaluator: &mut Context,
         begin: DisplayTextRowBegin,
     ) -> usize {
-        let display_row_index =
-            TextWindowMatrixOutputSurface::from_builder(self.builder).begin_display_text_row(begin);
+        let display_row_index = TextWindowOutputInstallSurface::from_builder(self.builder)
+            .begin_display_text_row(begin);
         self.output_emitter.begin_display_text_row(
             evaluator,
             begin.display_row_index,
@@ -988,7 +988,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
         let display_row_index = self.output_emitter.current_display_text_row_index();
-        let finish = TextWindowMatrixOutputSurface::from_builder(self.builder)
+        let finish = TextWindowOutputInstallSurface::from_builder(self.builder)
             .finish_display_text_row(display_row_index, metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
@@ -1001,7 +1001,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     ) -> DisplayTextRowFinish {
         let display_row_index = self.output_emitter.current_display_text_row_index();
         let finish = self.finish_text_row(metrics);
-        TextWindowMatrixOutputSurface::from_builder(self.builder)
+        TextWindowOutputInstallSurface::from_builder(self.builder)
             .finalize_display_text_row(display_row_index);
         finish
     }
@@ -1030,7 +1030,7 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     }
 
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        TextWindowMatrixOutputSurface::from_builder(self.builder).install_row_decoration(request);
+        TextWindowOutputInstallSurface::from_builder(self.builder).install_row_decoration(request);
     }
 
     pub(crate) fn publish_cursor(
@@ -1118,8 +1118,8 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         request: TextWindowBegin,
     ) {
         let first_row = request.first_row;
-        TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .begin_text_window_matrix(request.into());
+        TextWindowOutputInstallSurface::from_builder(self.builder)
+            .begin_text_window_output(request.into());
         self.begin_text_row(evaluator, first_row);
     }
 
@@ -1216,15 +1216,16 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
             &border_face,
             None,
         );
-        TextWindowMatrixOutputSurface::from_builder(self.builder).install_last_window_right_border(
-            render_services.reborrow(),
-            TextWindowRightBorder {
-                ch: request.ch,
-                face_id: border_face_id,
-                char_width: request.char_width,
-            },
-            &border_face,
-        );
+        TextWindowOutputInstallSurface::from_builder(self.builder)
+            .install_last_window_right_border(
+                render_services.reborrow(),
+                TextWindowRightBorder {
+                    ch: request.ch,
+                    face_id: border_face_id,
+                    char_width: request.char_width,
+                },
+                &border_face,
+            );
         border_face_id
     }
 }
@@ -1321,7 +1322,7 @@ impl TextWindowCursorPublication {
 }
 
 struct TextWindowOutputInstaller<'builder, 'output> {
-    matrix_output: TextWindowMatrixOutputSurface<'builder>,
+    output_install: TextWindowOutputInstallSurface<'builder>,
     output_emitter: &'output WindowOutputEmitter,
 }
 
@@ -1331,13 +1332,13 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
         output_emitter: &'output WindowOutputEmitter,
     ) -> Self {
         Self {
-            matrix_output: TextWindowMatrixOutputSurface::from_builder(builder),
+            output_install: TextWindowOutputInstallSurface::from_builder(builder),
             output_emitter,
         }
     }
 
     fn install_output(&mut self, _request: TextWindowOutputInstall) {
-        self.matrix_output.finish_output_rows(self.output_emitter);
+        self.output_install.finish_output_rows(self.output_emitter);
     }
 
     fn install_body_output(
@@ -1351,13 +1352,13 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
             request.text_start_byte,
             request.byte_idx,
         );
-        self.matrix_output
+        self.output_install
             .record_redisplay_positions(request.window_id, redisplay_positions);
         self.install_output(TextWindowOutputInstall);
         if let Some(markers) = request.right_edge_markers {
             let render_services =
                 render_services.expect("right-edge markers require chrome render services");
-            self.matrix_output
+            self.output_install
                 .install_right_edge_markers(render_services, markers);
         }
         redisplay_positions
