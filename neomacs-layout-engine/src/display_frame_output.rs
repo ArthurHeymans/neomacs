@@ -8,7 +8,8 @@ use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::{
     TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface, TextWindowFinishOutputSurface,
-    TextWindowLiveOutputSurface, TextWindowMatrixOutputSurface, WindowOutputEmitter,
+    TextWindowLiveOutputSurface, TextWindowMatrixOutputSurface, TextWindowOutputRetryCheckpoint,
+    WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -262,8 +263,13 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
         }
     }
 
-    pub(crate) fn matrix_surface(&mut self) -> TextWindowMatrixOutputSurface<'_> {
+    pub(crate) fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
+        TextWindowMatrixOutputSurface::from_builder(self.builder).capture_retry_checkpoint()
+    }
+
+    pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
         TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .restore_retry_checkpoint(checkpoint);
     }
 
     pub(crate) fn artifact_surface(&mut self) -> TextWindowArtifactOutputSurface<'_> {

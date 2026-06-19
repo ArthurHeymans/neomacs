@@ -1276,13 +1276,11 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
     }
 
     fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
-        self.output.matrix_surface().capture_retry_checkpoint()
+        self.output.capture_retry_checkpoint()
     }
 
     fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        self.output
-            .matrix_surface()
-            .restore_retry_checkpoint(checkpoint);
+        self.output.restore_retry_checkpoint(checkpoint);
     }
 
     fn evaluator(&mut self) -> &mut Context {
