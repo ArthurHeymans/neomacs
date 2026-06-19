@@ -963,7 +963,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
         },
     );
     let row_metric = RowMetricsSnapshot {
-        matrix_row: 9,
+        display_row_index: 9,
         row: 9,
         pixel_y: 32.0,
         height: 25.0,
@@ -1119,7 +1119,7 @@ fn captured_cursor_info_builds_logical_cursor_position() {
         },
     );
     let row_metric = RowMetricsSnapshot {
-        matrix_row: 9,
+        display_row_index: 9,
         row: 9,
         pixel_y: 32.6,
         height: 25.0,
@@ -1183,14 +1183,14 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
     .publish_captured_cursor(
         cursor,
         &[RowMetricsSnapshot {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             pixel_y: 20.0,
             height: 16.0,
             ascent: 12.0,
         }],
         RowMetricsSnapshot {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             pixel_y: 20.0,
             height: 16.0,

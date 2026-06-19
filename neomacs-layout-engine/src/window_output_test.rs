@@ -479,7 +479,7 @@ fn text_matrix_row_output_surface_begins_row() {
         .begin_text_row(
             &mut eval,
             DisplayTextRowBegin {
-                matrix_row: 0,
+                display_row_index: 0,
                 row: 0,
                 col: 0,
                 y: 0.0,
@@ -535,7 +535,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
     output.begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 4.0,
@@ -556,7 +556,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
             ascent_px: 11.0,
         }
     );
-    assert_eq!(outcome.matrix_row, 0);
+    assert_eq!(outcome.display_row_index, 0);
 
     builder.end_row();
     builder.end_window();
@@ -622,7 +622,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 0.0,
@@ -642,7 +642,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 1,
+            display_row_index: 1,
             row: 1,
             col: 0,
             y: 16.0,
@@ -828,7 +828,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 0.0,
@@ -894,7 +894,7 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 0.0,
@@ -941,7 +941,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 4.0,
@@ -1006,7 +1006,7 @@ fn install_text_window_output_installs_row_metrics() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 2.0,
@@ -1060,7 +1060,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 2.0,
@@ -1146,7 +1146,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 0.0,
@@ -1164,7 +1164,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
                     ascent: 12.0,
                 },
                 begin_row: DisplayTextRowBegin {
-                    matrix_row: 1,
+                    display_row_index: 1,
                     row: 1,
                     col: 0,
                     y: 16.0,
@@ -1207,7 +1207,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
         DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 0.0,
@@ -1224,7 +1224,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
                 ascent: 12.0,
             },
             begin_row: DisplayTextRowBegin {
-                matrix_row: 1,
+                display_row_index: 1,
                 row: 1,
                 col: 0,
                 y: 16.0,

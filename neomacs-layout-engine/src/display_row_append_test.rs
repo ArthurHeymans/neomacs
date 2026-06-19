@@ -6723,7 +6723,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     output_emitter.begin_update(&mut eval);
     TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
         .begin_text_row(crate::window_output::DisplayTextRowBegin {
-            matrix_row: 0,
+            display_row_index: 0,
             row: 0,
             col: 0,
             y: 2.0,
@@ -6817,7 +6817,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
         Rect::new(10.0, 9.0, 64.0, 48.0),
         true,
         crate::window_output::DisplayTextRowBegin {
-            matrix_row: 2,
+            display_row_index: 2,
             row: 0,
             col: 1,
             y: 9.0,

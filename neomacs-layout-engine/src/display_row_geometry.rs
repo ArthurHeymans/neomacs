@@ -593,7 +593,7 @@ impl DisplayRowGeometryState {
     pub(crate) fn row_metrics_snapshot(&self, row_base: usize) -> RowMetricsSnapshot {
         let height = self.height.max(1.0);
         RowMetricsSnapshot {
-            matrix_row: row_base + self.row,
+            display_row_index: row_base + self.row,
             row: row_base + self.row,
             pixel_y: self.y,
             height,
@@ -843,7 +843,7 @@ impl DisplayRowGeometryCursor {
         x: f32,
     ) -> DisplayTextRowBegin {
         DisplayTextRowBegin {
-            matrix_row: row_base + self.row,
+            display_row_index: row_base + self.row,
             row: self.row,
             col,
             y: self.y,

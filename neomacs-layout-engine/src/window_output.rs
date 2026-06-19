@@ -53,7 +53,7 @@ const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowMetricsSnapshot {
-    pub(crate) matrix_row: usize,
+    pub(crate) display_row_index: usize,
     pub(crate) row: usize,
     pub(crate) pixel_y: f32,
     pub(crate) height: f32,
@@ -62,7 +62,7 @@ pub(crate) struct RowMetricsSnapshot {
 
 #[derive(Clone, Copy, Debug)]
 struct CurrentRowProgress {
-    matrix_row: Option<usize>,
+    display_row_index: Option<usize>,
     row: i64,
     y: i64,
     col: i64,
@@ -143,7 +143,7 @@ pub(crate) struct DisplayTextRowMetrics {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayTextRowBegin {
-    pub(crate) matrix_row: usize,
+    pub(crate) display_row_index: usize,
     pub(crate) row: usize,
     pub(crate) col: usize,
     pub(crate) y: f32,
@@ -297,33 +297,33 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
 
     fn begin_display_text_row(&mut self, begin: DisplayTextRowBegin) -> usize {
         DisplayRowLifecycleSurface::from_builder(self.builder).begin_row(
-            begin.matrix_row,
+            begin.display_row_index,
             GlyphRowRole::Text,
             false,
         );
-        begin.matrix_row
+        begin.display_row_index
     }
 
     fn finish_display_text_row(
         &mut self,
-        matrix_row: usize,
+        display_row_index: usize,
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
         let matrix_metrics = self.display_text_row_metrics(metrics);
         DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
-            matrix_row,
+            display_row_index,
             matrix_metrics.pixel_y,
             matrix_metrics.height_px,
             matrix_metrics.ascent_px,
         );
         DisplayTextRowFinish {
-            matrix_row,
+            display_row_index,
             metrics: matrix_metrics,
         }
     }
 
-    fn finalize_display_text_row(&mut self, matrix_row: usize) {
-        DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(matrix_row);
+    fn finalize_display_text_row(&mut self, display_row_index: usize) {
+        DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(display_row_index);
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
@@ -364,14 +364,15 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
             .y;
         for metric in output_emitter.row_metrics() {
             DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
-                metric.matrix_row,
+                metric.display_row_index,
                 metric.pixel_y - window_y,
                 metric.height,
                 metric.ascent,
             );
         }
         if let Some(metric) = output_emitter.row_metrics().last() {
-            DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(metric.matrix_row);
+            DisplayRowLifecycleSurface::from_builder(self.builder)
+                .finalize_row(metric.display_row_index);
         }
     }
 
@@ -567,7 +568,7 @@ fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayTextRowFinish {
-    pub(crate) matrix_row: usize,
+    pub(crate) display_row_index: usize,
     pub(crate) metrics: DisplayTextRowStoredMetrics,
 }
 
@@ -969,26 +970,26 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         evaluator: &mut Context,
         begin: DisplayTextRowBegin,
     ) -> usize {
-        let matrix_row =
+        let display_row_index =
             TextWindowMatrixOutputSurface::from_builder(self.builder).begin_display_text_row(begin);
         self.output_emitter.begin_display_text_row(
             evaluator,
-            begin.matrix_row,
+            begin.display_row_index,
             begin.row,
             begin.col,
             begin.y,
             begin.x,
         );
-        matrix_row
+        display_row_index
     }
 
     pub(crate) fn finish_text_row(
         &mut self,
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
-        let matrix_row = self.output_emitter.current_display_text_row();
+        let display_row_index = self.output_emitter.current_display_text_row_index();
         let finish = TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .finish_display_text_row(matrix_row, metrics);
+            .finish_display_text_row(display_row_index, metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
         finish
@@ -998,10 +999,10 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         &mut self,
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
-        let matrix_row = self.output_emitter.current_display_text_row();
+        let display_row_index = self.output_emitter.current_display_text_row_index();
         let finish = self.finish_text_row(metrics);
         TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .finalize_display_text_row(matrix_row);
+            .finalize_display_text_row(display_row_index);
         finish
     }
 
@@ -1543,14 +1544,14 @@ impl WindowOutputEmitter {
 
     fn begin_current_row_progress(
         &mut self,
-        matrix_row: Option<usize>,
+        display_row_index: Option<usize>,
         row: i64,
         col: i64,
         y: i64,
         x: i64,
     ) {
         self.current_row_progress = Some(CurrentRowProgress {
-            matrix_row,
+            display_row_index,
             row,
             y,
             col,
@@ -1683,7 +1684,7 @@ impl WindowOutputEmitter {
     pub(crate) fn begin_display_text_row(
         &mut self,
         evaluator: &mut Context,
-        matrix_row: usize,
+        display_row_index: usize,
         row: usize,
         col: usize,
         y: f32,
@@ -1694,7 +1695,7 @@ impl WindowOutputEmitter {
         let output_y = (y - self.window_top).round() as i64;
         let output_x = (x - self.text_x).round() as i64;
         self.begin_current_row_progress(
-            Some(matrix_row),
+            Some(display_row_index),
             output_row,
             output_col,
             output_y,
@@ -1705,10 +1706,10 @@ impl WindowOutputEmitter {
         });
     }
 
-    pub(crate) fn current_display_text_row(&self) -> usize {
+    pub(crate) fn current_display_text_row_index(&self) -> usize {
         self.current_row_progress
-            .and_then(|progress| progress.matrix_row)
-            .expect("text row must have matrix row progress before finishing")
+            .and_then(|progress| progress.display_row_index)
+            .expect("text row must have display row progress before finishing")
     }
 
     #[cfg(test)]
@@ -1794,9 +1795,9 @@ impl WindowOutputEmitter {
             end_buffer_pos: self.current_row_last_display_pos.take(),
         });
         self.row_metrics.push(RowMetricsSnapshot {
-            matrix_row: row_progress
-                .matrix_row
-                .expect("text row must have matrix row progress before recording metrics"),
+            display_row_index: row_progress
+                .display_row_index
+                .expect("text row must have display row progress before recording metrics"),
             row: row_progress.row.max(0) as usize,
             pixel_y: row_y_start,
             height: row_height.max(1.0),

@@ -180,7 +180,7 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
     assert_eq!(
         cursor.display_text_row_begin(5, 7, 13.0),
         DisplayTextRowBegin {
-            matrix_row: 8,
+            display_row_index: 8,
             row: 3,
             col: 7,
             y: 10.0 + 3.0 * 16.0 + 15.0,
@@ -640,7 +640,7 @@ fn display_row_geometry_state_builds_display_text_row_begin() {
     assert_eq!(
         begin,
         DisplayTextRowBegin {
-            matrix_row: 8,
+            display_row_index: 8,
             row: 3,
             col: 7,
             y: 69.0,
@@ -747,7 +747,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
                 ascent: 18.0,
             },
             begin_row: DisplayTextRowBegin {
-                matrix_row: 8,
+                display_row_index: 8,
                 row: 3,
                 col: 7,
                 y: 10.0 + 3.0 * 16.0 + 15.0,
@@ -811,7 +811,7 @@ fn display_row_geometry_state_can_finish_boundary_and_record_hit_row() {
     assert_eq!(
         transition.begin_row,
         DisplayTextRowBegin {
-            matrix_row: 8,
+            display_row_index: 8,
             row: 3,
             col: 7,
             y: 10.0 + 3.0 * 16.0 + 11.0,
@@ -863,7 +863,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
                 ascent: 18.0,
             },
             begin_row: DisplayTextRowBegin {
-                matrix_row: 8,
+                display_row_index: 8,
                 row: 3,
                 col: 7,
                 y: 10.0 + 3.0 * 16.0 + 11.0,
@@ -916,7 +916,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
     assert_eq!(
         transition.begin_row,
         DisplayTextRowBegin {
-            matrix_row: 8,
+            display_row_index: 8,
             row: 3,
             col: 7,
             y: 10.0 + 3.0 * 16.0 + 15.0,
@@ -979,7 +979,7 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
                 ascent: 18.0,
             },
             begin_row: DisplayTextRowBegin {
-                matrix_row: 8,
+                display_row_index: 8,
                 row: 3,
                 col: 7,
                 y: 69.0,
@@ -1005,7 +1005,7 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
                 ascent: 18.0,
             },
             begin_row: DisplayTextRowBegin {
-                matrix_row: 8,
+                display_row_index: 8,
                 row: 3,
                 col: 7,
                 y: 69.0,
