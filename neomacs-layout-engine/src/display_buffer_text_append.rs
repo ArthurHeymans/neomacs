@@ -22,9 +22,9 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
     TextMatrixRowBegin, TextWindowBegin, TextWindowBeginOutputState, TextWindowBodyOutputInstall,
-    TextWindowCursorEffects, TextWindowOutputRenderState, TextWindowPendingRowFinish,
-    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
-    WindowOutputEmitter,
+    TextWindowCursorEffects, TextWindowLiveOutputState, TextWindowOutputRenderState,
+    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightEdgeMarkers,
+    TextWindowTerminalRightBorder, WindowOutputEmitter,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -230,7 +230,7 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
 }
 
 pub(crate) struct BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
-    output: TextWindowOutputRenderState<'emit, 'output>,
+    output: &'output mut TextWindowLiveOutputState<'emit>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
@@ -359,7 +359,7 @@ impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
 
 impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        output: TextWindowOutputRenderState<'emit, 'output>,
+        output: &'output mut TextWindowLiveOutputState<'emit>,
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
@@ -596,8 +596,7 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
             context.char_w,
         );
 
-        let mut output = state.output;
-        let redisplay_positions = output.install_body_output(
+        let redisplay_positions = state.output.install_body_output(
             TextWindowBodyOutputInstall {
                 window_id: context.window_id,
                 window_start: context.window_start,

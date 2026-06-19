@@ -79,7 +79,8 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowBeginOutputState, TextWindowOutputRenderState,
+    TextMatrixRowTransition, TextWindowBeginOutputState, TextWindowLiveOutputState,
+    TextWindowOutputRenderState,
 };
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -6721,7 +6722,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             char_w: 8.0,
         })
         .install_and_apply(BufferTextWindowBodyInstallState::new(
-            TextWindowOutputRenderState::new(&mut builder, &mut output_emitter),
+            &mut TextWindowLiveOutputState::new(&mut builder, &mut output_emitter, &mut eval),
             crate::display_status_line::ChromeRowRenderServices::new(
                 &mut font_metrics,
                 &face_resolver,

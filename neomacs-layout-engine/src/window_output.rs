@@ -579,6 +579,27 @@ impl<'a> TextWindowLiveOutputState<'a> {
             .emit_text_source_slots(self.evaluator, output, source_slots, end);
     }
 
+    pub(crate) fn install_body_output(
+        &mut self,
+        request: TextWindowBodyOutputInstall<'_>,
+        render_services: Option<ChromeRowRenderServices<'_, '_>>,
+    ) -> TextWindowRedisplayPositions {
+        TextWindowOutputRenderState::new(self.builder, self.output_emitter)
+            .install_body_output(request, render_services)
+    }
+
+    pub(crate) fn render_chrome_rows(
+        &mut self,
+        request: WindowChromeRowsRenderRequest<'_, '_>,
+        render_services: ChromeRowRenderServices<'_, '_>,
+    ) {
+        TextWindowOutputRenderState::new(self.builder, self.output_emitter).render_chrome_rows(
+            self.evaluator,
+            request,
+            render_services,
+        );
+    }
+
     pub(crate) fn current_row_evaluator_state(
         &mut self,
     ) -> TextWindowLiveCurrentRowEvaluatorState<'_> {
@@ -597,6 +618,10 @@ impl<'a> TextWindowLiveOutputState<'a> {
 
     pub(crate) fn display_host(&self) -> Option<&dyn DisplayHost> {
         self.evaluator.display_host.as_deref()
+    }
+
+    pub(crate) fn with_evaluator<R>(&mut self, f: impl FnOnce(&mut Context) -> R) -> R {
+        f(self.evaluator)
     }
 
     pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
