@@ -27,9 +27,9 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
     TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowPendingRowFinish, TextWindowRedisplayPositions, TextWindowRightBorder,
-    TextWindowRightEdgeMarkers, TextWindowRowLifecycleInstaller, WindowOutputEmitter,
-    close_text_window_output, install_text_window_body_output, install_text_window_cursor_effects,
+    TextWindowOutputInstaller, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightBorder, TextWindowRightEdgeMarkers, TextWindowRowLifecycleInstaller,
+    WindowOutputEmitter, close_text_window_output, install_text_window_cursor_effects,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -540,16 +540,14 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
             context.char_w,
         );
 
-        install_text_window_body_output(
-            state.builder,
-            state.output_emitter,
-            TextWindowBodyOutputInstall {
-                window_id: context.window_id,
-                window_start: context.window_start,
-                text_start_byte: context.text_start_byte,
-                byte_idx: context.byte_idx,
-            },
-        );
+        let redisplay_positions =
+            TextWindowOutputInstaller::new(state.builder, state.output_emitter)
+                .install_body_output(TextWindowBodyOutputInstall {
+                    window_id: context.window_id,
+                    window_start: context.window_start,
+                    text_start_byte: context.text_start_byte,
+                    byte_idx: context.byte_idx,
+                });
         if let Some(markers) = right_edge_markers {
             install_right_edge_markers_from_source_requests(
                 state.builder,
@@ -557,12 +555,7 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
                 markers,
             );
         }
-        TextWindowRedisplayPositions::from_output_rows(
-            state.output_emitter,
-            context.window_start,
-            context.text_start_byte,
-            context.byte_idx,
-        )
+        redisplay_positions
     }
 }
 

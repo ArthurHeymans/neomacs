@@ -981,28 +981,62 @@ fn text_matrix_row_metrics_request(
     }
 }
 
+pub(crate) struct TextWindowOutputInstaller<'builder, 'output> {
+    builder: &'builder mut GlyphMatrixBuilder,
+    output_emitter: &'output WindowOutputEmitter,
+}
+
+impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
+    pub(crate) fn new(
+        builder: &'builder mut GlyphMatrixBuilder,
+        output_emitter: &'output WindowOutputEmitter,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+        }
+    }
+
+    pub(crate) fn install_output(&mut self, _request: TextWindowOutputInstall) {
+        finish_text_window_output_rows(self.builder, self.output_emitter);
+    }
+
+    pub(crate) fn install_body_output(
+        &mut self,
+        request: TextWindowBodyOutputInstall,
+    ) -> TextWindowRedisplayPositions {
+        let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
+            self.output_emitter,
+            request.window_start,
+            request.text_start_byte,
+            request.byte_idx,
+        );
+        record_text_window_redisplay_positions(
+            self.builder,
+            request.window_id,
+            redisplay_positions,
+        );
+        self.install_output(TextWindowOutputInstall);
+        redisplay_positions
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn install_text_window_output(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,
-    _request: TextWindowOutputInstall,
+    request: TextWindowOutputInstall,
 ) {
-    finish_text_window_output_rows(builder, output_emitter);
+    TextWindowOutputInstaller::new(builder, output_emitter).install_output(request);
 }
 
+#[cfg(test)]
 pub(crate) fn install_text_window_body_output(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,
     request: TextWindowBodyOutputInstall,
 ) -> TextWindowRedisplayPositions {
-    let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
-        output_emitter,
-        request.window_start,
-        request.text_start_byte,
-        request.byte_idx,
-    );
-    record_text_window_redisplay_positions(builder, request.window_id, redisplay_positions);
-    install_text_window_output(builder, output_emitter, TextWindowOutputInstall);
-    redisplay_positions
+    TextWindowOutputInstaller::new(builder, output_emitter).install_body_output(request)
 }
 
 pub(crate) fn install_text_window_row_decoration(
