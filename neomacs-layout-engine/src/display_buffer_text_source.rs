@@ -254,6 +254,25 @@ impl BufferTextSourceStepChar {
         }
     }
 
+    pub(crate) fn consume_from_text(
+        text: &[u8],
+        byte_idx: &mut usize,
+        charpos: &mut i64,
+    ) -> Option<Self> {
+        if *byte_idx >= text.len() {
+            return None;
+        }
+        let start_byte_idx = *byte_idx;
+        let start_charpos = *charpos;
+        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
+        if ch_len == 0 {
+            return None;
+        }
+        *byte_idx += ch_len;
+        *charpos += 1;
+        Some(Self::new(ch, start_byte_idx, start_charpos))
+    }
+
     pub(crate) fn ch(self) -> char {
         self.ch
     }

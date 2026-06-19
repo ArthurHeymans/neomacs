@@ -970,12 +970,12 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_char_preserves_line_break_action() {
+fn buffer_hscroll_skip_source_step_preserves_line_break_action() {
     let mut byte_idx = 0;
     let mut charpos = 10;
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
-    let action = BufferHscrollSkipSourceChar::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_text(
         b"\nnext",
         &mut byte_idx,
         &mut charpos,
@@ -997,12 +997,12 @@ fn buffer_hscroll_skip_source_char_preserves_line_break_action() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_char_consumes_tab_to_next_stop() {
+fn buffer_hscroll_skip_source_step_consumes_tab_to_next_stop() {
     let mut byte_idx = 0;
     let mut charpos = 0;
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
-    let action = BufferHscrollSkipSourceChar::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_text(
         b"\tabc",
         &mut byte_idx,
         &mut charpos,
@@ -1025,12 +1025,12 @@ fn buffer_hscroll_skip_source_char_consumes_tab_to_next_stop() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_char_consumes_wide_char_columns() {
+fn buffer_hscroll_skip_source_step_consumes_wide_char_columns() {
     let mut byte_idx = 0;
     let mut charpos = 3;
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 2);
 
-    let action = BufferHscrollSkipSourceChar::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_text(
         "界x".as_bytes(),
         &mut byte_idx,
         &mut charpos,
@@ -1053,12 +1053,12 @@ fn buffer_hscroll_skip_source_char_consumes_wide_char_columns() {
 }
 
 #[test]
-fn buffer_hscroll_skip_source_char_keeps_marker_pending_while_still_skipping() {
+fn buffer_hscroll_skip_source_step_keeps_marker_pending_while_still_skipping() {
     let mut byte_idx = 0;
     let mut charpos = 0;
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 3);
 
-    let action = BufferHscrollSkipSourceChar::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_text(
         b"abc",
         &mut byte_idx,
         &mut charpos,
@@ -2186,6 +2186,22 @@ fn buffer_text_source_item_stepper_rejects_replacement_items() {
 
     assert!(step.is_none());
     assert_eq!(byte_idx, 0);
+}
+
+#[test]
+fn buffer_text_source_step_char_consumes_multibyte_text_cursor() {
+    let mut byte_idx = "a".len();
+    let mut charpos = 4;
+
+    let source_char =
+        BufferTextSourceStepChar::consume_from_text("a界b".as_bytes(), &mut byte_idx, &mut charpos)
+            .expect("source char");
+
+    assert_eq!(source_char.ch(), '界');
+    assert_eq!(source_char.start_byte_idx(), "a".len());
+    assert_eq!(source_char.start_charpos(), 4);
+    assert_eq!(byte_idx, "a界".len());
+    assert_eq!(charpos, 5);
 }
 
 #[test]

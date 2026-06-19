@@ -55,7 +55,7 @@ use crate::display_source_resolver::DisplayPropertyReplacementAppendRequestResol
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustTextPropAccess};
 use crate::types::{LineWrapMode, WindowParams};
-use crate::unicode::{decode_utf8, is_wide_char};
+use crate::unicode::is_wide_char;
 use crate::window_output::{TextMatrixRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -473,10 +473,8 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferHscrollSkipSourceChar {
-    ch_start_byte_idx: usize,
-    ch: char,
-    charpos: i64,
+pub(crate) struct BufferHscrollSkipSourceStep {
+    source_char: BufferTextSourceStepChar,
 }
 
 pub(crate) struct BufferHscrollSkipRenderRequest<'a> {
@@ -501,13 +499,9 @@ pub(crate) struct BufferHscrollSkipRenderContext<'a> {
     pub(crate) row_limit: DisplayRowLimit,
 }
 
-impl BufferHscrollSkipSourceChar {
-    fn new(ch_start_byte_idx: usize, ch: char, charpos: i64) -> Self {
-        Self {
-            ch_start_byte_idx,
-            ch,
-            charpos,
-        }
+impl BufferHscrollSkipSourceStep {
+    fn new(source_char: BufferTextSourceStepChar) -> Self {
+        Self { source_char }
     }
 
     pub(crate) fn consume_from_text(
@@ -517,18 +511,8 @@ impl BufferHscrollSkipSourceChar {
         hscroll_skip: &mut HorizontalScrollSkipState,
         tab_width: i32,
     ) -> Option<BufferHscrollSkipAction> {
-        if *byte_idx >= text.len() {
-            return None;
-        }
-
-        let ch_start_byte_idx = *byte_idx;
-        let (ch, ch_len) = decode_utf8(&text[*byte_idx..]);
-        *byte_idx += ch_len;
-        *charpos += 1;
-
-        Some(
-            Self::new(ch_start_byte_idx, ch, *charpos).consume_for_hscroll(hscroll_skip, tab_width),
-        )
+        let source_char = BufferTextSourceStepChar::consume_from_text(text, byte_idx, charpos)?;
+        Some(Self::new(source_char).consume_for_hscroll(hscroll_skip, tab_width))
     }
 
     fn consume_for_hscroll(
@@ -536,29 +520,35 @@ impl BufferHscrollSkipSourceChar {
         hscroll_skip: &mut HorizontalScrollSkipState,
         tab_width: i32,
     ) -> BufferHscrollSkipAction {
-        if self.ch == '\n' {
+        let source_char = self.source_char;
+        let end_charpos = source_char.start_charpos() + 1;
+        if source_char.ch() == '\n' {
             return BufferHscrollSkipAction::LineBreak {
-                ch_start_byte_idx: self.ch_start_byte_idx,
-                charpos: self.charpos,
+                ch_start_byte_idx: source_char.start_byte_idx(),
+                charpos: end_charpos,
             };
         }
 
         hscroll_skip.consume_columns(self.column_width(tab_width, hscroll_skip.consumed_columns()));
         BufferHscrollSkipAction::Text {
-            ch_start_byte_idx: self.ch_start_byte_idx,
-            charpos: self.charpos,
+            ch_start_byte_idx: source_char.start_byte_idx(),
+            charpos: end_charpos,
             show_left_truncation: !hscroll_skip.should_skip()
                 && hscroll_skip.should_show_left_truncation(),
         }
     }
 
     fn column_width(self, tab_width: i32, consumed_columns: i32) -> i32 {
-        if self.ch == '\t' {
+        if self.source_char.ch() == '\t' {
             let tab_width = tab_width.max(1);
             return ((consumed_columns / tab_width + 1) * tab_width) - consumed_columns;
         }
 
-        if is_wide_char(self.ch) { 2 } else { 1 }
+        if is_wide_char(self.source_char.ch()) {
+            2
+        } else {
+            1
+        }
     }
 }
 
@@ -593,7 +583,7 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
         let mut source_render = source_render;
         let context = self.context;
 
-        let Some(hscroll_action) = BufferHscrollSkipSourceChar::consume_from_text(
+        let Some(hscroll_action) = BufferHscrollSkipSourceStep::consume_from_text(
             context.text,
             byte_idx,
             charpos,
@@ -1359,13 +1349,12 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
     ) -> BufferSelectiveDisplayLineTailAction {
         *charpos += 1;
         while *byte_idx < self.text.len() {
-            let (skip_ch, skip_len) = decode_utf8(&self.text[*byte_idx..]);
-            if skip_len == 0 {
+            let Some(source_char) =
+                BufferTextSourceStepChar::consume_from_text(self.text, byte_idx, charpos)
+            else {
                 break;
-            }
-            *byte_idx += skip_len;
-            *charpos += 1;
-            if skip_ch == '\n' {
+            };
+            if source_char.ch() == '\n' {
                 return BufferSelectiveDisplayLineTailAction::LineBreak { charpos: *charpos };
             }
         }
@@ -1433,13 +1422,12 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     fn skip_line(self, byte_idx: &mut usize, charpos: &mut i64) -> bool {
         while *byte_idx < self.text.len() {
-            let (skip_ch, skip_len) = decode_utf8(&self.text[*byte_idx..]);
-            if skip_len == 0 {
+            let Some(source_char) =
+                BufferTextSourceStepChar::consume_from_text(self.text, byte_idx, charpos)
+            else {
                 break;
-            }
-            *byte_idx += skip_len;
-            *charpos += 1;
-            if skip_ch == '\n' {
+            };
+            if source_char.ch() == '\n' {
                 return true;
             }
         }
