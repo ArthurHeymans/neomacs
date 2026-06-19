@@ -2016,6 +2016,7 @@ mod divergence_combo_complex512;
 mod divergence_combo_complex513;
 mod divergence_combo_complex514;
 mod divergence_combo_complex515;
+mod divergence_combo_complex516;
 mod divergence_combo_complex52;
 mod divergence_combo_complex53;
 mod divergence_combo_complex54;
