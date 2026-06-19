@@ -30,6 +30,7 @@ use crate::display_cursor::{
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+use crate::display_frame_output::FrameTextWindowOutputSurface;
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::classify_display_property;
@@ -1376,7 +1377,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptState<'a, 'face> {
 impl<'a, 'face> BufferTextWindowRenderAttemptSurface<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
+        output: FrameTextWindowOutputSurface<'a>,
         evaluator: &'a mut Context,
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
@@ -1386,7 +1387,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptSurface<'a, 'face> {
     ) -> Self {
         Self {
             state: BufferTextWindowRenderAttemptState::new(
-                BufferTextWindowOutputSurface::from_parts(builder, evaluator),
+                BufferTextWindowOutputSurface::from_parts(output.into_builder(), evaluator),
                 font_metrics,
                 face_resolver,
                 frame_face_id_counter,

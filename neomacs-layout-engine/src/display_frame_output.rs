@@ -57,12 +57,22 @@ pub(crate) struct FrameOutputSurface<'a> {
     builder: &'a mut GlyphMatrixBuilder,
 }
 
+pub(crate) struct FrameTextWindowOutputSurface<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
+}
+
 pub(crate) struct FrameChromeOutputSurface<'builder, 'rows> {
     builder: &'builder mut GlyphMatrixBuilder,
     pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
 }
 
-pub(crate) struct FrameOutputSession<'builder, 'chrome, 'tab> {
+pub(crate) struct FrameOutputOwner {
+    builder: GlyphMatrixBuilder,
+    pending_frame_chrome_rows: Vec<FrameChromeRow>,
+    pending_tab_bar: Option<FrameTabBarState>,
+}
+
+struct FrameOutputSession<'builder, 'chrome, 'tab> {
     builder: &'builder mut GlyphMatrixBuilder,
     pending_frame_chrome_rows: &'chrome mut Vec<FrameChromeRow>,
     pending_tab_bar: &'tab mut Option<FrameTabBarState>,
@@ -70,6 +80,55 @@ pub(crate) struct FrameOutputSession<'builder, 'chrome, 'tab> {
 
 pub(crate) struct FrameOutputView<'builder> {
     builder: &'builder GlyphMatrixBuilder,
+}
+
+impl FrameOutputOwner {
+    pub(crate) fn new() -> Self {
+        Self {
+            builder: GlyphMatrixBuilder::new(),
+            pending_frame_chrome_rows: Vec::new(),
+            pending_tab_bar: None,
+        }
+    }
+
+    fn session(&mut self) -> FrameOutputSession<'_, '_, '_> {
+        FrameOutputSession::new(
+            &mut self.builder,
+            &mut self.pending_frame_chrome_rows,
+            &mut self.pending_tab_bar,
+        )
+    }
+
+    pub(crate) fn surface(&mut self) -> FrameOutputSurface<'_> {
+        FrameOutputSurface::from_builder(&mut self.builder)
+    }
+
+    pub(crate) fn text_window_surface(&mut self) -> FrameTextWindowOutputSurface<'_> {
+        FrameTextWindowOutputSurface::from_builder(&mut self.builder)
+    }
+
+    pub(crate) fn chrome_surface(&mut self) -> FrameChromeOutputSurface<'_, '_> {
+        FrameChromeOutputSurface::from_builder(
+            &mut self.builder,
+            &mut self.pending_frame_chrome_rows,
+        )
+    }
+
+    pub(crate) fn view(&self) -> FrameOutputView<'_> {
+        FrameOutputView::from_builder(&self.builder)
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.session().reset();
+    }
+
+    pub(crate) fn finish(&mut self, frame_params: &FrameParams) -> FrameDisplayState {
+        self.session().finish(frame_params)
+    }
+
+    pub(crate) fn set_tab_bar(&mut self, tab_bar: FrameTabBarState) {
+        self.pending_tab_bar = Some(tab_bar);
+    }
 }
 
 impl<'a> FrameOutputSurface<'a> {
@@ -188,6 +247,16 @@ impl<'a> FrameOutputSurface<'a> {
     }
 }
 
+impl<'builder> FrameTextWindowOutputSurface<'builder> {
+    fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn into_builder(self) -> &'builder mut GlyphMatrixBuilder {
+        self.builder
+    }
+}
+
 impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
     pub(crate) fn from_builder(
         builder: &'builder mut GlyphMatrixBuilder,
@@ -209,7 +278,7 @@ impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
 }
 
 impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
-    pub(crate) fn new(
+    fn new(
         builder: &'builder mut GlyphMatrixBuilder,
         pending_frame_chrome_rows: &'chrome mut Vec<FrameChromeRow>,
         pending_tab_bar: &'tab mut Option<FrameTabBarState>,
@@ -221,17 +290,13 @@ impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
         }
     }
 
-    pub(crate) fn reset(&mut self) {
+    fn reset(&mut self) {
         self.builder.reset();
         self.pending_frame_chrome_rows.clear();
         *self.pending_tab_bar = None;
     }
 
-    pub(crate) fn into_output_surface(self) -> FrameOutputSurface<'builder> {
-        FrameOutputSurface::from_builder(self.builder)
-    }
-
-    pub(crate) fn finish(self, frame_params: &FrameParams) -> FrameDisplayState {
+    fn finish(self, frame_params: &FrameParams) -> FrameDisplayState {
         let frame_cols = (frame_params.width / frame_params.char_width.max(1.0)) as usize;
         let frame_rows = (frame_params.height / frame_params.char_height.max(1.0)) as usize;
         let matrix_builder = std::mem::replace(self.builder, GlyphMatrixBuilder::new());
