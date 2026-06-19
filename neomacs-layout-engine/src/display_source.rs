@@ -11,6 +11,7 @@ use crate::display_property::{
 use crate::display_space::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
+use crate::unicode::decode_utf8;
 use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, text_props::TextPropertyTable,
 };
@@ -784,26 +785,55 @@ pub(crate) struct BufferDisplayReplacementSource {
     buffer_id: BufferId,
     char_pos: CharPos0,
     byte_pos: EmacsBytePos,
+    end_char_pos: CharPos0,
+    end_byte_pos: EmacsBytePos,
 }
 
 impl BufferDisplayReplacementSource {
-    pub(crate) const fn new(
+    #[cfg(test)]
+    pub(crate) fn new(buffer_id: BufferId, char_pos: CharPos0, byte_pos: EmacsBytePos) -> Self {
+        Self {
+            buffer_id,
+            char_pos,
+            byte_pos,
+            end_char_pos: char_pos.add_len(CharLen::new(1)),
+            end_byte_pos: byte_pos,
+        }
+    }
+
+    pub(crate) fn spanning(
         buffer_id: BufferId,
         char_pos: CharPos0,
         byte_pos: EmacsBytePos,
+        end_char_pos: CharPos0,
+        end_byte_pos: EmacsBytePos,
     ) -> Self {
         Self {
             buffer_id,
             char_pos,
             byte_pos,
+            end_char_pos,
+            end_byte_pos,
         }
     }
 
+    pub(crate) fn for_source_event(
+        buffer_id: BufferId,
+        source_event: BufferDisplayPropertyTextSourceEvent<'_>,
+    ) -> Self {
+        Self::spanning(
+            buffer_id,
+            source_event.anchor_charpos(),
+            source_event.anchor_bytepos(),
+            source_event.covered_end_charpos(),
+            source_event.covered_end_bytepos(),
+        )
+    }
+
     fn span(self) -> SourceSpan {
-        let end = self.char_pos.add_len(CharLen::new(1));
         SourceSpan::new(
             DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos),
-            DisplaySourcePosition::buffer(self.buffer_id, end, self.byte_pos),
+            DisplaySourcePosition::buffer(self.buffer_id, self.end_char_pos, self.end_byte_pos),
         )
     }
 
@@ -813,6 +843,17 @@ impl BufferDisplayReplacementSource {
 
     fn item_with_face(self, face: RenderFaceRef, kind: DisplayItemKind) -> DisplayItem {
         DisplayItem::new(self.span(), face, kind)
+    }
+
+    fn item_from_replacement_string_item(self, item: DisplayItem) -> DisplayItem {
+        let kind = match item.kind {
+            DisplayItemKind::TextRun(run) => {
+                DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(run.text))
+            }
+            kind => kind,
+        };
+        self.item_with_face(item.face, kind)
+            .with_layout(item.layout)
     }
 
     pub(crate) fn stretch_item(self, face_id: u32, geometry: DisplayReplacementBox) -> DisplayItem {
@@ -1608,6 +1649,28 @@ impl<'a> BufferDisplayPropertyTextSourceEvent<'a> {
     pub(crate) fn skip_to(self) -> i64 {
         self.skip_to
     }
+
+    pub(crate) fn covered_end_charpos(self) -> CharPos0 {
+        CharPos0::new(self.skip_to.max(self.anchor_charpos.get() as i64) as usize)
+    }
+
+    pub(crate) fn covered_end_bytepos(self) -> EmacsBytePos {
+        let covered_chars = self
+            .skip_to
+            .saturating_sub(self.anchor_charpos.get() as i64) as usize;
+        let mut byte_len = 0usize;
+        for _ in 0..covered_chars {
+            if byte_len >= self.source_text.len() {
+                break;
+            }
+            let (_, len) = decode_utf8(&self.source_text[byte_len..]);
+            if len == 0 {
+                break;
+            }
+            byte_len += len;
+        }
+        EmacsBytePos::new(self.anchor_bytepos.get().saturating_add(byte_len))
+    }
 }
 
 impl<S> BufferDisplayReplacementStringSource<S> {
@@ -1622,13 +1685,10 @@ impl<S> BufferDisplayReplacementStringSource<S> {
 impl<S: DisplayItemSource> DisplayItemSource for BufferDisplayReplacementStringSource<S> {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         let item = self.source.next_item(context)?;
-        let kind = match item.kind {
-            DisplayItemKind::TextRun(run) => {
-                DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(run.text))
-            }
-            kind => kind,
-        };
-        Some(self.replacement_source.item_with_face(item.face, kind))
+        Some(
+            self.replacement_source
+                .item_from_replacement_string_item(item),
+        )
     }
 }
 
@@ -1690,9 +1750,19 @@ impl LispStringSourceStack {
         })
     }
 
-    pub(crate) fn push(&mut self, value: Value, base_face: RenderFaceRef) {
+    pub(crate) fn push_with_replacement_source(
+        &mut self,
+        value: Value,
+        base_face: RenderFaceRef,
+        replacement_source: Option<BufferDisplayReplacementSource>,
+    ) {
         let source_id = self.allocate_source_id();
-        if let Some(frame) = LispStringSourceFrame::new(source_id, value, base_face) {
+        if let Some(frame) = LispStringSourceFrame::new_with_replacement_source(
+            source_id,
+            value,
+            base_face,
+            replacement_source,
+        ) {
             self.frames.push(frame);
         }
     }
@@ -1702,9 +1772,9 @@ impl LispStringSourceStack {
         context: &mut DisplaySourceContext<'_>,
     ) -> Option<DisplayItem> {
         loop {
-            let action = {
+            let (action, replacement_source) = {
                 let frame = self.frames.last_mut()?;
-                frame.next_action(context)
+                (frame.next_action(context), frame.replacement_source)
             };
 
             match action {
@@ -1712,9 +1782,14 @@ impl LispStringSourceStack {
                     self.frames.pop();
                 }
                 LispStringAction::PushReplacement { value, base_face } => {
-                    self.push(value, base_face);
+                    self.push_with_replacement_source(value, base_face, replacement_source);
                 }
-                LispStringAction::Emit(item) => return Some(item),
+                LispStringAction::Emit(item) => {
+                    return Some(match replacement_source {
+                        Some(source) => source.item_from_replacement_string_item(item),
+                        None => item,
+                    });
+                }
             }
         }
     }
@@ -1746,10 +1821,20 @@ struct LispStringSourceFrame {
     props: Option<TextPropertyTable>,
     char_index: usize,
     base_face: RenderFaceRef,
+    replacement_source: Option<BufferDisplayReplacementSource>,
 }
 
 impl LispStringSourceFrame {
     fn new(source_id: u64, value: Value, base_face: RenderFaceRef) -> Option<Self> {
+        Self::new_with_replacement_source(source_id, value, base_face, None)
+    }
+
+    fn new_with_replacement_source(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        replacement_source: Option<BufferDisplayReplacementSource>,
+    ) -> Option<Self> {
         let text = value.as_runtime_string_owned()?;
         let mut char_byte_offsets = text
             .char_indices()
@@ -1763,6 +1848,7 @@ impl LispStringSourceFrame {
             props: get_string_text_properties_table_for_value(value),
             char_index: 0,
             base_face,
+            replacement_source,
         })
     }
 

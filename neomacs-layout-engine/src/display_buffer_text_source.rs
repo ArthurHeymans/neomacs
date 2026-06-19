@@ -3,7 +3,7 @@ use crate::display_item::{
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_source::{
-    BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
+    BufferDisplayReplacementSource, BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
     DisplayPropertySourceCursorAction, DisplaySourceContext, LispStringSourceStack,
     TextSourceCharClassification, classify_text_source_char,
     display_item_kind_for_text_source_char, display_property_source_action,
@@ -913,7 +913,17 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
                     .into_cursor_action(span, face)
                 {
                     DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
-                        self.replacement_strings.push(value, base_face);
+                        self.replacement_strings.push_with_replacement_source(
+                            value,
+                            base_face,
+                            Some(BufferDisplayReplacementSource::spanning(
+                                self.buffer_id,
+                                start,
+                                self.byte_pos(start),
+                                property_end,
+                                self.byte_pos(property_end),
+                            )),
+                        );
                         continue;
                     }
                     DisplayPropertySourceCursorAction::Emit(item) => {

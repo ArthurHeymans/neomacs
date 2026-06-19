@@ -3,8 +3,8 @@ use crate::display_buffer_text_source::BufferTextSourceCursor;
 use crate::display_item::{
     DisplayGlyphless, DisplayImageItem, DisplayItem, DisplayItemKind, DisplayLength,
     DisplayLengthExpr, DisplayLengthSymbol, DisplayMediaReplacement, DisplayRowBreakReason,
-    DisplaySourceId, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
-    GlyphlessMethod, RenderFaceRef, SourceSpan,
+    DisplaySourceId, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef, SourceSpan,
 };
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
@@ -25,6 +25,7 @@ fn item_texts(items: &[DisplayItem]) -> Vec<String> {
         .iter()
         .filter_map(|item| match &item.kind {
             DisplayItemKind::TextRun(run) => Some(run.text.to_string()),
+            DisplayItemKind::SourceMappedText(text) => Some(text.text.to_string()),
             _ => None,
         })
         .collect()
@@ -112,6 +113,28 @@ fn buffer_display_replacement_source_builds_items_without_appending() {
         text_item.kind,
         DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "fallback"
     ));
+}
+
+#[test]
+fn buffer_display_replacement_source_can_span_covered_buffer_text() {
+    let source = BufferDisplayReplacementSource::spanning(
+        BufferId(7),
+        CharPos0::new(3),
+        EmacsBytePos::new(12),
+        CharPos0::new(5),
+        EmacsBytePos::new(18),
+    );
+
+    let text_item = source.source_mapped_text_item(43, "fallback");
+
+    assert_eq!(
+        text_item.span.start,
+        DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12))
+    );
+    assert_eq!(
+        text_item.span.end,
+        DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(5), EmacsBytePos::new(18))
+    );
 }
 
 #[test]
@@ -773,9 +796,18 @@ fn buffer_text_source_cursor_pushes_display_string_replacement_source() {
     let items = collect_items(&mut source);
 
     assert_eq!(item_texts(&items), ["a", "YZ", "b"]);
-    let DisplaySourcePosition::LispString { .. } = items[1].span.start else {
-        panic!("replacement text should be emitted from a nested Lisp string source");
-    };
+    assert!(matches!(
+        items[1].kind,
+        DisplayItemKind::SourceMappedText(_)
+    ));
+    assert_eq!(
+        items[1].span.start,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(1), EmacsBytePos::new(1))
+    );
+    assert_eq!(
+        items[1].span.end,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(2), EmacsBytePos::new(2))
+    );
 }
 
 #[test]
@@ -827,7 +859,15 @@ fn buffer_text_source_cursor_reports_nested_replacement_source_position() {
 
     assert_eq!(
         item.kind,
-        DisplayItemKind::TextRun(DisplayTextRun::new("Y"))
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("Y"))
+    );
+    assert_eq!(
+        item.span.start,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(0), EmacsBytePos::new(0))
+    );
+    assert_eq!(
+        item.span.end,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(1), EmacsBytePos::new(1))
     );
     assert!(matches!(
         source.source_position(),

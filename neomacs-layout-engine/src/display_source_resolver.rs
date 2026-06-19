@@ -496,11 +496,8 @@ impl<'a, 'source> DisplayPropertyReplacementAppendRequestResolver<'a, 'source> {
         font_metrics: &mut Option<FontMetricsService>,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<DisplayPropertyReplacementAppendRequest> {
-        let replacement_source = BufferDisplayReplacementSource::new(
-            self.buffer_id,
-            self.source_event.anchor_charpos(),
-            self.source_event.anchor_bytepos(),
-        );
+        let replacement_source =
+            BufferDisplayReplacementSource::for_source_event(self.buffer_id, self.source_event);
         let item = DisplayPropertyReplacementSourceResolveRequest::new(
             self.display_property,
             self.source_event,
