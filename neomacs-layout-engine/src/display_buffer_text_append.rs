@@ -21,9 +21,10 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowOutputRenderState, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder, WindowOutputEmitter,
+    TextMatrixRowBegin, TextWindowBegin, TextWindowBeginOutputState, TextWindowBodyOutputInstall,
+    TextWindowCursorEffects, TextWindowOutputRenderState, TextWindowPendingRowFinish,
+    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
+    WindowOutputEmitter,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -176,11 +177,6 @@ pub(crate) struct BufferTextWindowBeginRequest {
     text_bounds: neomacs_display_protocol::types::Rect,
     selected: bool,
     first_row: TextMatrixRowBegin,
-}
-
-pub(crate) struct BufferTextWindowBeginState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    evaluator: &'a mut Context,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
@@ -340,25 +336,6 @@ impl BufferTextWindowTailFinalizeOutcome {
     }
 }
 
-impl<'a> BufferTextWindowBeginState<'a> {
-    pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder, evaluator: &'a mut Context) -> Self {
-        Self { builder, evaluator }
-    }
-
-    fn begin_update(&mut self, output_emitter: &mut WindowOutputEmitter) {
-        output_emitter.begin_update(self.evaluator);
-    }
-
-    fn begin_text_window_output(
-        &mut self,
-        output_emitter: &mut WindowOutputEmitter,
-        begin: TextWindowBegin,
-    ) {
-        TextWindowOutputRenderState::new(self.builder, output_emitter)
-            .begin_text_window_output(self.evaluator, begin);
-    }
-}
-
 impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -464,7 +441,7 @@ impl BufferTextWindowBeginRequest {
 
     pub(crate) fn begin_and_apply(
         self,
-        state: BufferTextWindowBeginState<'_>,
+        state: TextWindowBeginOutputState<'_>,
     ) -> WindowOutputEmitter {
         let mut state = state;
         let mut output_emitter = WindowOutputEmitter::new(

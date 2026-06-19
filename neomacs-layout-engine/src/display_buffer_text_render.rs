@@ -2,9 +2,9 @@
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_append::{
-    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
-    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowBodyInstallState, BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
+    BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
     BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
     BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
     BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
@@ -81,8 +81,8 @@ use crate::neovm_bridge::{
 use crate::types::{LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint,
-    TextWindowRedisplayPositions, WindowOutputEmitter,
+    TextMatrixRowTransition, TextWindowBeginOutputState, TextWindowOutputRenderState,
+    TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -1222,7 +1222,7 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
-        begin_request.begin_and_apply(BufferTextWindowBeginState::new(
+        begin_request.begin_and_apply(TextWindowBeginOutputState::new(
             self.builder,
             self.evaluator,
         ))

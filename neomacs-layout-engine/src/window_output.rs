@@ -466,10 +466,34 @@ pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
     pub(crate) display_host: Option<&'a dyn DisplayHost>,
 }
 
+pub(crate) struct TextWindowBeginOutputState<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
+}
+
 pub(crate) struct TextWindowLiveOutputState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
+}
+
+impl<'a> TextWindowBeginOutputState<'a> {
+    pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder, evaluator: &'a mut Context) -> Self {
+        Self { builder, evaluator }
+    }
+
+    pub(crate) fn begin_update(&mut self, output_emitter: &mut WindowOutputEmitter) {
+        output_emitter.begin_update(self.evaluator);
+    }
+
+    pub(crate) fn begin_text_window_output(
+        &mut self,
+        output_emitter: &mut WindowOutputEmitter,
+        begin: TextWindowBegin,
+    ) {
+        TextWindowOutputRenderState::new(self.builder, output_emitter)
+            .begin_text_window_output(self.evaluator, begin);
+    }
 }
 
 impl<'a> TextWindowLiveOutputState<'a> {

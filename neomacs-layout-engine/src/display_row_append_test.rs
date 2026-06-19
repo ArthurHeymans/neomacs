@@ -1,12 +1,12 @@
 use super::*;
 use crate::display_buffer_text_append::{
-    BufferTextWindowBeginRequest, BufferTextWindowBeginState,
-    BufferTextWindowBodyInstallRenderContext, BufferTextWindowBodyInstallRequest,
-    BufferTextWindowBodyInstallState, BufferTextWindowCursorEffectsRequest,
-    BufferTextWindowCursorPublishStatus, BufferTextWindowFinishRequest,
-    BufferTextWindowFinishState, BufferTextWindowTailFinalizeContext,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowTerminalRightBorderRequest, BufferTextWindowVisibilityRetryRequest,
+    BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
+    BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
+    BufferTextWindowCursorEffectsRequest, BufferTextWindowCursorPublishStatus,
+    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
+    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowTailFinalizeState, BufferTextWindowTerminalRightBorderRequest,
+    BufferTextWindowVisibilityRetryRequest,
 };
 use crate::display_buffer_text_item_append::*;
 use crate::display_buffer_text_render::*;
@@ -78,7 +78,9 @@ use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunM
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
-use crate::window_output::{TextMatrixRowTransition, TextWindowOutputRenderState};
+use crate::window_output::{
+    TextMatrixRowTransition, TextWindowBeginOutputState, TextWindowOutputRenderState,
+};
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -6784,7 +6786,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             x: 18.0,
         },
     )
-    .begin_and_apply(BufferTextWindowBeginState::new(&mut builder, &mut eval));
+    .begin_and_apply(TextWindowBeginOutputState::new(&mut builder, &mut eval));
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
     crate::window_output::TextWindowRowLifecycleInstaller::new(
