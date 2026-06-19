@@ -1101,6 +1101,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
             window_start: 3,
             text_start_byte: 100,
             byte_idx: 4,
+            right_edge_markers: None,
         },
     );
 

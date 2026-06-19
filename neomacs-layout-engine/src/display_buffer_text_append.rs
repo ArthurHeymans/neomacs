@@ -12,10 +12,7 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_source_render::TextRowOutputRenderState;
-use crate::display_row_special_glyphs::{
-    install_last_window_right_border_from_source_requests,
-    install_right_edge_markers_from_source_requests,
-};
+use crate::display_row_special_glyphs::install_last_window_right_border_from_source_requests;
 use crate::display_row_walk_state::{
     HitRowRangeTracker, next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
@@ -542,19 +539,16 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
 
         let redisplay_positions =
             TextWindowOutputInstaller::new(state.builder, state.output_emitter)
-                .install_body_output(TextWindowBodyOutputInstall {
-                    window_id: context.window_id,
-                    window_start: context.window_start,
-                    text_start_byte: context.text_start_byte,
-                    byte_idx: context.byte_idx,
-                });
-        if let Some(markers) = right_edge_markers {
-            install_right_edge_markers_from_source_requests(
-                state.builder,
-                state.render_services,
-                markers,
-            );
-        }
+                .install_body_output(
+                    TextWindowBodyOutputInstall {
+                        window_id: context.window_id,
+                        window_start: context.window_start,
+                        text_start_byte: context.text_start_byte,
+                        byte_idx: context.byte_idx,
+                        right_edge_markers,
+                    },
+                    Some(state.render_services),
+                );
         redisplay_positions
     }
 }

@@ -5,7 +5,7 @@
 //! while simultaneously recording immutable row snapshots for renderer
 //! handoff.
 
-use super::display_status_line::DisplayRowOutputProgress;
+use super::display_status_line::{ChromeRowRenderServices, DisplayRowOutputProgress};
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_item::{
@@ -18,6 +18,7 @@ use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
+use crate::display_row_special_glyphs::install_right_edge_markers_from_source_requests;
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
@@ -240,11 +241,12 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
 
 pub(crate) struct TextWindowOutputInstall;
 
-pub(crate) struct TextWindowBodyOutputInstall {
+pub(crate) struct TextWindowBodyOutputInstall<'a> {
     pub(crate) window_id: u64,
     pub(crate) window_start: i64,
     pub(crate) text_start_byte: usize,
     pub(crate) byte_idx: usize,
+    pub(crate) right_edge_markers: Option<TextWindowRightEdgeMarkers<'a>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1009,7 +1011,8 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
 
     pub(crate) fn install_body_output(
         &mut self,
-        request: TextWindowBodyOutputInstall,
+        request: TextWindowBodyOutputInstall<'_>,
+        render_services: Option<ChromeRowRenderServices<'_, '_>>,
     ) -> TextWindowRedisplayPositions {
         let redisplay_positions = TextWindowRedisplayPositions::from_output_rows(
             self.output_emitter,
@@ -1023,6 +1026,11 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
             redisplay_positions,
         );
         self.install_output(TextWindowOutputInstall);
+        if let Some(markers) = request.right_edge_markers {
+            let render_services =
+                render_services.expect("right-edge markers require chrome render services");
+            install_right_edge_markers_from_source_requests(self.builder, render_services, markers);
+        }
         redisplay_positions
     }
 }
@@ -1040,9 +1048,9 @@ pub(crate) fn install_text_window_output(
 pub(crate) fn install_text_window_body_output(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,
-    request: TextWindowBodyOutputInstall,
+    request: TextWindowBodyOutputInstall<'_>,
 ) -> TextWindowRedisplayPositions {
-    TextWindowOutputInstaller::new(builder, output_emitter).install_body_output(request)
+    TextWindowOutputInstaller::new(builder, output_emitter).install_body_output(request, None)
 }
 
 #[cfg(test)]
