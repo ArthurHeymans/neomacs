@@ -82,7 +82,8 @@ use crate::types::{LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
     TextMatrixRowTransition, TextWindowBeginOutputState, TextWindowLiveOutputState,
-    TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
+    TextWindowMatrixOutputState, TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions,
+    WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -1294,7 +1295,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        checkpoint.restore(self.builder);
+        TextWindowMatrixOutputState::new(self.builder).restore_retry_checkpoint(checkpoint);
     }
 
     pub(crate) fn publish_face_ids(&self, frame_counter: &mut u32) {

@@ -278,6 +278,14 @@ impl<'builder> TextWindowMatrixOutputState<'builder> {
     pub(crate) fn close_text_window_output(&mut self) {
         close_text_window_matrix_output(self.builder);
     }
+
+    pub(crate) fn capture_retry_checkpoint(&self) -> TextWindowOutputRetryCheckpoint {
+        TextWindowOutputRetryCheckpoint::capture(self.builder)
+    }
+
+    pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
+        checkpoint.restore(self.builder);
+    }
 }
 
 pub(crate) struct TextWindowBodyOutputInstall<'a> {
@@ -1076,14 +1084,14 @@ pub(crate) struct TextWindowOutputRetryCheckpoint {
 }
 
 impl TextWindowOutputRetryCheckpoint {
-    pub(crate) fn capture(builder: &GlyphMatrixBuilder) -> Self {
+    fn capture(builder: &GlyphMatrixBuilder) -> Self {
         Self {
             transition_hints_len: builder.transition_hints().len(),
             effect_hints_len: builder.effect_hints().len(),
         }
     }
 
-    pub(crate) fn restore(self, builder: &mut GlyphMatrixBuilder) {
+    fn restore(self, builder: &mut GlyphMatrixBuilder) {
         builder.truncate_transition_hints(self.transition_hints_len);
         builder.truncate_effect_hints(self.effect_hints_len);
     }

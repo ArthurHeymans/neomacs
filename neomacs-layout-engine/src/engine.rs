@@ -18,7 +18,7 @@ use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
-use super::window_output::{TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint};
+use super::window_output::{TextWindowMatrixOutputState, TextWindowOutputRenderState};
 use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_render::{
     BufferTextWindowDefaultFacePlan, BufferTextWindowOutputSession,
@@ -1015,7 +1015,7 @@ impl LayoutEngine {
             &[]
         };
         let retry_render_checkpoint =
-            TextWindowOutputRetryCheckpoint::capture(&self.matrix_builder);
+            TextWindowMatrixOutputState::new(&mut self.matrix_builder).capture_retry_checkpoint();
 
         tracing::debug!(
             "  layout_window_rust id={}: text_y={:.1} text_h={:.1} max_rows={} bytes_read={}",
