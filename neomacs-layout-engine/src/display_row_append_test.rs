@@ -6753,7 +6753,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             reserve_right_special_col: true,
             reserve_right_border_col: false,
             display_text_row_base: 0,
-            matrix_cols: 5,
+            output_cols: 5,
             row_flags: &row_flags,
             right_edge_face_id: 9,
             char_w: 8.0,

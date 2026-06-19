@@ -229,7 +229,7 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
     assert_eq!(output_setup.row_visibility_limit.max_rows, 5);
     assert_eq!(output_setup.row_visibility_limit.bottom_y, 80.0);
     assert_eq!(output_setup.row_limit.max_rows, 5);
-    assert_eq!(output_setup.body_install_context.matrix_cols(), 1);
+    assert_eq!(output_setup.body_install_context.output_cols(), 1);
     assert_eq!(output_setup.retry_bounds.text_area_top, 24);
     assert_eq!(output_setup.retry_bounds.text_area_bottom, 72);
 }

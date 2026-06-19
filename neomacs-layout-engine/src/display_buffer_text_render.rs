@@ -129,9 +129,9 @@ pub(crate) struct BufferTextWindowRowPreludeRequestContext {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowBodyInstallContext {
-    pub(crate) matrix_window_id: u64,
+    pub(crate) output_window_id: u64,
     pub(crate) display_text_row_base: usize,
-    pub(crate) matrix_cols: usize,
+    pub(crate) output_cols: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -288,7 +288,7 @@ pub(crate) struct BufferTextWindowWalkSetup {
 pub(crate) struct BufferTextWindowOutputSetupRequest {
     frame_id: FrameId,
     window_id: WindowId,
-    matrix_window_id: u64,
+    output_window_id: u64,
     display_text_row_base: usize,
     display_text_rows: usize,
     bottom_chrome_rows: usize,
@@ -471,7 +471,7 @@ where
     char_height: f32,
     font_ascent: f32,
     window_system: bool,
-    matrix_window_id: u64,
+    output_window_id: u64,
     append_surface: &'surface DisplayRowAppendSurface,
     text_y: f32,
     display_text_row_base: usize,
@@ -1741,14 +1741,14 @@ impl BufferTextWindowBodyInstallContext {
         char_width: f32,
     ) -> BufferTextWindowBodyInstallRequest<'_> {
         BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext {
-            window_id: self.matrix_window_id,
+            window_id: self.output_window_id,
             window_start,
             text_start_byte,
             byte_idx,
             reserve_right_special_col,
             reserve_right_border_col,
             display_text_row_base: self.display_text_row_base,
-            matrix_cols: self.matrix_cols,
+            output_cols: self.output_cols,
             row_flags,
             right_edge_face_id: 0,
             char_w: char_width,
@@ -1756,8 +1756,8 @@ impl BufferTextWindowBodyInstallContext {
     }
 
     #[cfg(test)]
-    pub(crate) fn matrix_cols(self) -> usize {
-        self.matrix_cols
+    pub(crate) fn output_cols(self) -> usize {
+        self.output_cols
     }
 }
 
@@ -2014,7 +2014,7 @@ impl BufferTextWindowOutputSetupRequest {
     pub(crate) fn new(
         frame_id: FrameId,
         window_id: WindowId,
-        matrix_window_id: u64,
+        output_window_id: u64,
         display_text_row_base: usize,
         display_text_rows: usize,
         bottom_chrome_rows: usize,
@@ -2029,7 +2029,7 @@ impl BufferTextWindowOutputSetupRequest {
         Self {
             frame_id,
             window_id,
-            matrix_window_id,
+            output_window_id,
             display_text_row_base,
             display_text_rows,
             bottom_chrome_rows,
@@ -2071,7 +2071,7 @@ impl BufferTextWindowOutputSetupRequest {
         max_rows: usize,
         walk_setup: &BufferTextWindowWalkSetup,
     ) -> BufferTextWindowOutputSetup {
-        let matrix_cols = self.cols.max(1);
+        let output_cols = self.cols.max(1);
         BufferTextWindowOutputSetup {
             begin_request: BufferTextWindowBeginRequest::new(
                 self.frame_id,
@@ -2079,9 +2079,9 @@ impl BufferTextWindowOutputSetupRequest {
                 self.display_text_row_base,
                 walk_setup.text_area_left,
                 walk_setup.window_top,
-                self.matrix_window_id,
+                self.output_window_id,
                 self.display_text_row_base + self.display_text_rows + self.bottom_chrome_rows,
-                matrix_cols,
+                output_cols,
                 self.bounds,
                 self.text_bounds,
                 self.selected,
@@ -2101,9 +2101,9 @@ impl BufferTextWindowOutputSetupRequest {
             },
             row_limit: DisplayRowLimit { max_rows },
             body_install_context: BufferTextWindowBodyInstallContext {
-                matrix_window_id: self.matrix_window_id,
+                output_window_id: self.output_window_id,
                 display_text_row_base: self.display_text_row_base,
-                matrix_cols,
+                output_cols,
             },
             retry_bounds: BufferTextWindowRetryBounds {
                 text_area_top: (self.text_y - walk_setup.window_top).round() as i64,
@@ -2189,7 +2189,7 @@ impl BufferTextWindowOutputSetup {
         default_face: &'a BufferTextWindowDefaultFacePlan,
         font_ascent: f32,
         window_system: bool,
-        matrix_window_id: u64,
+        output_window_id: u64,
         append_surface: &'surface DisplayRowAppendSurface,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
@@ -2209,7 +2209,7 @@ impl BufferTextWindowOutputSetup {
             geometry.char_height,
             font_ascent,
             window_system,
-            matrix_window_id,
+            output_window_id,
             append_surface,
             geometry.text_y,
             self.body_install_context.display_text_row_base,
@@ -2505,7 +2505,7 @@ where
         char_height: f32,
         font_ascent: f32,
         window_system: bool,
-        matrix_window_id: u64,
+        output_window_id: u64,
         append_surface: &'surface DisplayRowAppendSurface,
         text_y: f32,
         display_text_row_base: usize,
@@ -2523,7 +2523,7 @@ where
             char_height,
             font_ascent,
             window_system,
-            matrix_window_id,
+            output_window_id,
             append_surface,
             text_y,
             display_text_row_base,
@@ -2550,7 +2550,7 @@ where
             ),
             overlay_text_row: BufferOverlayStringTextRowRenderContext::new(
                 has_overlays,
-                self.matrix_window_id,
+                self.output_window_id,
                 self.append_surface,
                 self.char_height,
                 self.default_face_ascent,
