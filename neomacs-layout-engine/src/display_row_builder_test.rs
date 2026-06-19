@@ -305,7 +305,7 @@ fn append_display_item_to_current_text_row_returns_progress_and_updates_row() {
     assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 3 });
     assert_eq!(progress.slots.len(), 2);
     matrix
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             assert_eq!(row_text(row), "ab");
         })
         .expect("current row");
@@ -349,7 +349,7 @@ fn append_measured_display_item_to_current_text_row_uses_glyph_measurer() {
 
     assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
     matrix
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let glyphs = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(glyphs[0].pixel_width, 12.0);
             assert_eq!(glyphs[1].pixel_width, 4.0);
@@ -373,7 +373,7 @@ fn display_row_append_cursor_updates_position_after_append() {
     assert_eq!(progress.end, DisplayRowPosition { x_px: 24.0, col: 3 });
     assert_eq!(cursor.position(), DisplayRowPosition { x_px: 24.0, col: 3 });
     matrix
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             assert_eq!(row_text(row), "ab");
         })
         .expect("current row");
@@ -395,7 +395,7 @@ fn display_row_append_cursor_updates_position_to_clipped_end() {
     assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
     matrix
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             assert_eq!(row_text(row), "a");
         })
         .expect("current row");
@@ -424,7 +424,7 @@ fn display_row_append_cursor_uses_glyph_measurer() {
     assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
     matrix
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let glyphs = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(glyphs[0].pixel_width, 12.0);
             assert_eq!(glyphs[1].pixel_width, 4.0);
@@ -453,7 +453,7 @@ fn display_row_append_cursor_appends_explicit_source_item() {
     assert_eq!(progress.end, DisplayRowPosition { x_px: 32.0, col: 4 });
     assert_eq!(cursor.position(), DisplayRowPosition { x_px: 32.0, col: 4 });
     matrix
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             assert_eq!(row_text(row), "abc");
         })
         .expect("current row");
@@ -482,7 +482,7 @@ fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() 
     assert_eq!(progress.end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(cursor.position(), DisplayRowPosition { x_px: 16.0, col: 2 });
     matrix
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let glyphs = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(glyphs[0].pixel_width, 12.0);
             assert_eq!(glyphs[1].pixel_width, 4.0);

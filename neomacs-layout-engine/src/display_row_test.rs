@@ -175,7 +175,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
     assert_eq!(current_display_row_cluster_tail(&builder), None);
 
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_wide_char_to_row(row, '\u{1F1EF}', 3, 100, 0.0);
         })
         .expect("current row");
@@ -185,7 +185,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
     );
 
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_cluster_continuation_to_row(row, '\u{1F1F5}', 3, 101);
         })
         .expect("current row");

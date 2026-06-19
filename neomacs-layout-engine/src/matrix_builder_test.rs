@@ -21,7 +21,7 @@ fn write_char_to_current_row_with_width(
     pixel_width: f32,
 ) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
         })
         .expect("current row");
@@ -34,7 +34,7 @@ fn write_wide_char_to_current_row(
     charpos: usize,
 ) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_wide_char_to_row(row, ch, face_id, charpos, 0.0);
         })
         .expect("current row");
@@ -47,7 +47,7 @@ fn write_cluster_continuation_to_current_row(
     charpos: usize,
 ) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_cluster_continuation_to_row(row, ch, face_id, charpos);
         })
         .expect("current row");
@@ -61,7 +61,7 @@ fn write_run_member_to_current_row(
     pixel_width: f32,
 ) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_run_member_to_row(row, ch, face_id, charpos, pixel_width);
         })
         .expect("current row");
@@ -69,7 +69,7 @@ fn write_run_member_to_current_row(
 
 fn write_stretch_to_current_row(builder: &mut GlyphMatrixBuilder, width_cols: u16, face_id: u32) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_stretch_to_row(row, width_cols, face_id, 0.0, 0.0, 0.0);
         })
         .expect("current row");
@@ -77,7 +77,7 @@ fn write_stretch_to_current_row(builder: &mut GlyphMatrixBuilder, width_cols: u1
 
 fn write_left_margin_char_to_current_row(builder: &mut GlyphMatrixBuilder, ch: char, face_id: u32) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::char(ch, face_id, 0));
         })
         .expect("current row");
@@ -89,7 +89,7 @@ fn write_left_margin_stretch_to_current_row(
     face_id: u32,
 ) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::stretch(width_cols, face_id));
         })
         .expect("current row");

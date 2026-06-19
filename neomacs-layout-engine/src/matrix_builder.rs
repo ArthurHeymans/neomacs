@@ -620,13 +620,18 @@ impl GlyphMatrixBuilder {
         });
     }
 
-    pub(crate) fn with_current_row_mut<R>(
-        &mut self,
-        f: impl FnOnce(&mut GlyphRow) -> R,
-    ) -> Option<R> {
+    fn with_current_row_mut<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
         let matrix = self.current_matrix.as_mut()?;
         let row = matrix.rows.get_mut(self.current_row)?;
         Some(f(row))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn edit_current_row_for_test<R>(
+        &mut self,
+        f: impl FnOnce(&mut GlyphRow) -> R,
+    ) -> Option<R> {
+        self.with_current_row_mut(f)
     }
 
     fn decorate_current_row(&mut self, decoration: MatrixCurrentRowDecorationRequest) {

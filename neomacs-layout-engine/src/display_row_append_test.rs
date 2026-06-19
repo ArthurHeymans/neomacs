@@ -103,7 +103,7 @@ fn write_char_to_current_row_with_width(
     pixel_width: f32,
 ) {
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_char_to_row(row, ch, face_id, charpos, pixel_width);
         })
         .expect("current row");
@@ -1160,7 +1160,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     assert_eq!(col, 1);
     context
         .builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 1);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
@@ -1368,7 +1368,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     assert_eq!(x, 8.0);
     assert_eq!(col, 1);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 1);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
@@ -1682,7 +1682,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     assert!(cursor_info.captured().is_some());
     context
         .builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 3);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '.' }));
@@ -3906,7 +3906,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
         DisplaySourcePosition::synthetic(99, 0)
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 3);
             assert!(text.iter().all(|glyph| glyph.face_id == 7));
@@ -3984,7 +3984,7 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
 
     assert_eq!(end, DisplayRowPosition { x_px: 24.0, col: 3 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 3);
             assert!(text.iter().all(|glyph| glyph.face_id == 7));
@@ -4047,7 +4047,7 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 1);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
@@ -4138,7 +4138,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 2);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '=' }));
@@ -4232,7 +4232,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     assert_eq!(x, 16.0);
     assert_eq!(col, 2);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 2);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '=' }));
@@ -4293,7 +4293,7 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     assert_eq!(progress.metrics.width_px, 0.0);
     assert_eq!(progress.metrics.width_cols, 0);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert!(matches!(
@@ -4491,7 +4491,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         DisplayRowPosition { x_px: 8.0, col: 1 }
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert!(matches!(
@@ -4716,7 +4716,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
 
     assert_eq!(end, DisplayRowPosition { x_px: 32.0, col: 4 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 4);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: 'X' }));
@@ -5609,7 +5609,7 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
         Some(Color::from_pixel(0x00ff0000))
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text[0].face_id, 0);
             assert_eq!(text[1].face_id, 20);
@@ -5682,7 +5682,7 @@ fn lisp_string_append_context_appends_fragment_items() {
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '=' }));
@@ -5888,7 +5888,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     assert_eq!(end_col, 1);
     assert_eq!(charpos, 5);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert_eq!(text[0].face_id, 7);
@@ -6049,7 +6049,7 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     assert_eq!(col, 1);
     context
         .builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text_glyphs = &row.glyphs[GlyphArea::Text as usize];
             assert_eq!(text_glyphs.len(), 1);
             assert!(matches!(
@@ -6293,7 +6293,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     assert_eq!(col, 4);
     context
         .builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 1);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: 'Z' }));
@@ -6993,7 +6993,7 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
         .advance_px();
 
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: 'x' }));
@@ -7088,7 +7088,7 @@ fn buffer_text_source_append_context_uses_resolved_advance() {
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 1 });
     assert_eq!(progress.metrics.width_px, 13.0);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert_eq!(text[0].pixel_width, 13.0);
@@ -7162,7 +7162,7 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     assert_eq!(progress.metrics.width_px, 0.0);
     assert_eq!(progress.metrics.width_cols, 0);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert!(matches!(
@@ -7231,7 +7231,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         )
         .expect("measured buffer text item fragment");
     builder
-        .with_current_row_mut(|row| assert!(row.glyphs[1].is_empty()))
+        .edit_current_row_for_test(|row| assert!(row.glyphs[1].is_empty()))
         .expect("current row");
     let fallback_width = append_context.measure_source_request_width_or_item_fallback_to_text_row(
         &mut TextRowSourceMeasureState::new(
@@ -7281,7 +7281,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     assert_eq!(edge_width, 16.0);
     assert_eq!(progress.metrics.width_px, measured_width);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
             assert!(matches!(
@@ -7652,7 +7652,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     assert_eq!(end_col, 2);
     assert_eq!(charpos, 9);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
             assert!(matches!(
@@ -7841,7 +7841,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     assert_eq!(end_x, 48.0);
     assert_eq!(end_col, 6);
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert!(matches!(
@@ -7905,7 +7905,7 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert!(matches!(
@@ -8010,7 +8010,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         crate::display_row::DisplayRowRenderStop::SourceExhausted
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
             assert!(matches!(
@@ -9481,7 +9481,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
         Some(Color::from_pixel(0x00ff0000))
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
             assert_eq!(text[0].face_id, 7);
@@ -9548,7 +9548,7 @@ fn display_replacement_append_context_uses_face_fallback() {
     assert_eq!(progress.start, DisplayRowPosition { x_px: 0.0, col: 0 });
     assert_eq!(end, DisplayRowPosition { x_px: 13.0, col: 2 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert_eq!(text[0].face_id, 7);
@@ -9720,7 +9720,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
 
     assert_eq!(end, DisplayRowPosition { x_px: 16.0, col: 2 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
             assert_eq!(text[0].face_id, 3);
@@ -9803,7 +9803,7 @@ fn synthetic_text_append_context_uses_source_append_request() {
 
     assert_eq!(end, DisplayRowPosition { x_px: 8.0, col: 1 });
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert_eq!(text[0].face_id, 7);
@@ -9907,7 +9907,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         }
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
             assert_eq!(glyph.face_id, 3);
             assert_eq!(glyph.pixel_width, 96.0);
@@ -10042,7 +10042,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         }
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
             assert_eq!(glyph.face_id, 3);
             assert_eq!(glyph.pixel_width, 64.0);
@@ -10179,7 +10179,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         }
     );
     builder
-        .with_current_row_mut(|row| {
+        .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
             assert_eq!(glyph.face_id, 3);
             assert_eq!(glyph.pixel_width, 80.0);

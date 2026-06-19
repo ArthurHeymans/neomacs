@@ -641,7 +641,7 @@ fn append_display_item_to_current_text_row(
     position: DisplayRowPosition,
     max_x_px: f32,
 ) -> Option<DisplayRowAppendProgress> {
-    builder.with_current_row_mut(|row| {
+    builder.edit_current_row_for_test(|row| {
         let mut writer = DisplayRowProgressWriter::new(layout, row, position, max_x_px);
         writer.push_item(item)
     })
@@ -656,7 +656,7 @@ fn append_measured_display_item_to_current_text_row(
     position: DisplayRowPosition,
     max_x_px: f32,
 ) -> Option<DisplayRowAppendProgress> {
-    builder.with_current_row_mut(|row| {
+    builder.edit_current_row_for_test(|row| {
         let mut writer = DisplayRowProgressWriter::with_glyph_measurer(
             layout,
             row,
