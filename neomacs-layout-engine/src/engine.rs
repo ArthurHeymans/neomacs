@@ -9,7 +9,8 @@ use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRenderState,
     FrameTabBarDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope, WindowChromeRowsPlan,
-    build_tab_bar_display, max_mini_window_lines,
+    build_tab_bar_display, max_mini_window_lines, max_mini_window_lines_for_buffer,
+    max_mini_window_lines_from_value,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -88,6 +89,7 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
+use neovm_core::emacs_core::Value;
 use neovm_core::face::FaceTable;
 use neovm_core::window::WindowDisplaySnapshot;
 
@@ -113,6 +115,35 @@ fn cursor_width_for_style(
 ) -> f32 {
     CursorSlotWidthRequest::from_window_params(style, text, byte_idx, col, params)
         .width_px(face_char_w)
+}
+
+fn max_mini_window_lines_for_window(
+    evaluator: &mut neovm_core::emacs_core::Context,
+    params: &WindowParams,
+    frame_rows: f32,
+) -> f32 {
+    let window_id = neovm_core::window::WindowId(params.window_id as u64);
+    let buf_id = if params.is_minibuffer() && !evaluator.minibuffer_window_is_active(window_id) {
+        evaluator.ensure_echo_area_buffers();
+        evaluator
+            .buffer_manager()
+            .find_buffer_by_name(" *Echo Area 0*")
+            .unwrap_or_else(|| neovm_core::buffer::BufferId(params.buffer_id))
+    } else {
+        neovm_core::buffer::BufferId(params.buffer_id)
+    };
+    let raw = evaluator
+        .buffer_manager()
+        .get(buf_id)
+        .and_then(|buffer| buffer.buffer_local_value("max-mini-window-height"))
+        .or_else(|| {
+            evaluator
+                .obarray()
+                .symbol_value("max-mini-window-height")
+                .copied()
+        })
+        .unwrap_or_else(|| Value::make_float(0.25));
+    max_mini_window_lines_from_value(raw, frame_rows)
 }
 
 /// The main Rust layout engine.
@@ -564,7 +595,11 @@ impl LayoutEngine {
                             let allocated_rows =
                                 (mini_params.bounds.height / char_h).floor().max(1.0) as usize;
                             let frame_rows = frame_params.height / char_h;
-                            let max_mini_lines = max_mini_window_lines(evaluator, frame_rows);
+                            let max_mini_lines = max_mini_window_lines_for_window(
+                                evaluator,
+                                mini_params,
+                                frame_rows,
+                            );
                             let resize_policy = evaluator
                                 .obarray()
                                 .symbol_value("resize-mini-windows")
@@ -945,7 +980,13 @@ impl LayoutEngine {
         // its content unclamped up to (and no further than) the ceiling.
         let max_mini_window_rows = {
             let frame_rows = frame_params.height / char_h.max(1.0);
-            max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize
+            if params.is_minibuffer() {
+                max_mini_window_lines_for_buffer(evaluator, buffer, frame_rows)
+            } else {
+                max_mini_window_lines(evaluator, frame_rows)
+            }
+            .ceil()
+            .max(1.0) as usize
         };
         let geometry_request = BufferTextWindowGeometryRequest::new(
             params,

@@ -1019,6 +1019,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         window_end_valid,
         point,
         hscroll,
+        vscroll,
         margins,
         left_fringe_width,
         right_fringe_width,
@@ -1032,6 +1033,7 @@ pub fn window_params_from_neovm_with_font_sizing(
             window_end_valid,
             point,
             hscroll,
+            vscroll,
             margins,
             display,
             ..
@@ -1044,6 +1046,7 @@ pub fn window_params_from_neovm_with_font_sizing(
             *window_end_valid,
             *point,
             *hscroll,
+            *vscroll,
             *margins,
             // Mirrors GNU window_body_width (window.c:1109-1111):
             //   - (FRAME_WINDOW_P (f) ? WINDOW_FRINGES_WIDTH (w) : 0)
@@ -1262,7 +1265,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         buffer_size: buffer.point_max_char_pos().get() as i64,
         buffer_begv: buffer.point_min_char_pos().get() as i64,
         hscroll: hscroll as i32,
-        vscroll: 0,
+        vscroll,
         wrap_mode,
         word_wrap,
         tab_width,

@@ -9890,6 +9890,70 @@ fn active_minibuffer_grows_for_multiline_content_gui() {
     assert_active_minibuffer_grows_for_multiline_content(true);
 }
 
+#[test]
+fn active_minibuffer_resize_uses_buffer_local_max_mini_window_height() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
+    eval.obarray_mut()
+        .set_symbol_value("max-mini-window-height", Value::fixnum(10));
+
+    let root_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let minibuf_id = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    {
+        let buf = eval
+            .buffer_manager_mut()
+            .get_mut(minibuf_id)
+            .expect("buffer");
+        buf.set_buffer_local("max-mini-window-height", Value::fixnum(1));
+        buf.insert("Find file: \nalpha.el\nbeta.el\ngamma.el");
+        let eob = buf.point_max_emacs_byte_pos().get();
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(eob));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-active-minibuffer-local-max",
+        120,
+        40,
+        root_buf_id,
+    );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.shrink_mini_window();
+    }
+
+    let minibuffer_window_id = eval
+        .activate_minibuffer_window_for_buffer(minibuf_id, LispString::from_utf8(""), None)
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == minibuffer_window_id.0)
+        .expect("minibuffer matrix entry");
+    let rows = enabled_window_row_texts(entry);
+    let content_rows = rows.iter().filter(|row| !row.trim().is_empty()).count();
+
+    assert_eq!(
+        content_rows, 1,
+        "GNU resize_mini_window reads max-mini-window-height in the minibuffer buffer; rows={rows:?}"
+    );
+}
+
 /// Content taller than `max-mini-window-height` must clamp to the max row
 /// count AND scroll so the END shows (GNU `resize_mini_window` sets `w->start`
 /// to the end when the measured height exceeds `max_height`).  Point is at EOB,

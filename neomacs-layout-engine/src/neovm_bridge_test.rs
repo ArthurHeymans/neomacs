@@ -90,6 +90,32 @@ fn test_collect_layout_params_basic() {
 }
 
 #[test]
+fn collect_layout_params_forwards_window_vscroll() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator.buffer_manager_mut().create_buffer("*vscroll*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("vscroll-frame", 800, 600, buf_id);
+    let selected_window = {
+        let frame = evaluator
+            .frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame");
+        frame.set_window_system(Some(Value::symbol("x")));
+        frame.selected_window
+    };
+
+    evaluator
+        .frame_manager_mut()
+        .set_window_vscroll(selected_window, 28.0, true, true)
+        .expect("set window vscroll");
+
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
+    assert_eq!(wps[0].window_id, selected_window.0 as i64);
+    assert_eq!(wps[0].vscroll, -28);
+}
+
+#[test]
 fn collect_layout_params_reads_nobreak_char_display_global() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*nobreak*");

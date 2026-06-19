@@ -13,7 +13,7 @@
 //! display-engine unification plan merged it into the backend
 //! trait and renamed the file to reflect its new role.
 
-use super::neovm_bridge::{FaceResolver, ResolvedFace};
+use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
 use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
@@ -933,6 +933,26 @@ pub(crate) fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32
         .symbol_value("max-mini-window-height")
         .copied()
         .unwrap_or_else(|| Value::make_float(0.25));
+    max_mini_window_lines_from_value(raw, frame_rows)
+}
+
+pub(crate) fn max_mini_window_lines_for_buffer<B: LayoutBufferView>(
+    evaluator: &Context,
+    buffer: &B,
+    frame_rows: f32,
+) -> f32 {
+    let raw = buffer_local_value(buffer, "max-mini-window-height")
+        .or_else(|| {
+            evaluator
+                .obarray()
+                .symbol_value("max-mini-window-height")
+                .copied()
+        })
+        .unwrap_or_else(|| Value::make_float(0.25));
+    max_mini_window_lines_from_value(raw, frame_rows)
+}
+
+pub(crate) fn max_mini_window_lines_from_value(raw: Value, frame_rows: f32) -> f32 {
     match raw.kind() {
         neovm_core::emacs_core::value::ValueKind::Float => {
             (frame_rows * raw.as_float().unwrap_or(0.25) as f32).max(1.0)
