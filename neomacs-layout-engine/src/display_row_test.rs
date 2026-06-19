@@ -222,7 +222,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let face = base_face();
 
-    builder.artifact_installer().set_resolved_display_row_face(
+    builder.install_output_resolved_display_row_face(
         9,
         &face,
         Some(FontMetrics {
@@ -511,7 +511,7 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
         &mut font_metrics,
     );
 
-    builder.artifact_installer().set_resolved_display_row_face(
+    builder.install_output_resolved_display_row_face(
         realized.face_id(),
         realized.resolved_face(),
         realized.font_metrics(),

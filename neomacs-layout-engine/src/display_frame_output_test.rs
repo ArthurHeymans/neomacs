@@ -156,7 +156,7 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    builder.artifact_installer().add_window_info(curr);
+    builder.add_output_window_info(curr);
 
     WindowFrameInfoEffectsRenderRequest::new(&prev_infos).render_latest_and_apply(
         &mut FrameOutputSurface::from_output_builder(&mut builder),
@@ -180,7 +180,7 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     let mut curr_infos = std::collections::HashMap::new();
     curr_infos.insert(curr.window_id, curr);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    builder.artifact_installer().add_cursor(
+    builder.add_output_cursor(
         params.window_id,
         DisplaySlotId {
             window_id: params.window_id,
@@ -217,7 +217,7 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let info = window_info(&params);
     let mut prev_selected = 7;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    builder.artifact_installer().add_window_info(info);
+    builder.add_output_window_info(info);
 
     FrameWindowSwitchHintRenderRequest::new(&mut prev_selected)
         .render_and_apply(&mut FrameOutputSurface::from_output_builder(&mut builder));
@@ -240,11 +240,9 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    builder
-        .artifact_installer()
-        .set_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
-    builder.artifact_installer().add_window_info(info);
-    builder.artifact_installer().add_window_info(mini);
+    builder.set_output_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
+    builder.add_output_window_info(info);
+    builder.add_output_window_info(mini);
 
     FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
         .render_and_apply(&mut FrameOutputSurface::from_output_builder(&mut builder));

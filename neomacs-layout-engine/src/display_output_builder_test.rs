@@ -857,7 +857,7 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
         row: 0,
         col: 2,
     };
-    builder.artifact_installer().add_cursor(
+    builder.add_output_cursor(
         1,
         captured_slot,
         0.0,
@@ -1107,12 +1107,12 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
     let mut active = Face::new(10);
     active.foreground = Color::rgb(0.0, 0.0, 0.0);
     active.background = Color::rgb(0.75, 0.75, 0.75);
-    builder.artifact_installer().set_face(10, active.clone());
+    builder.install_output_face(10, active.clone());
 
     let mut inactive = Face::new(11);
     inactive.foreground = Color::rgb(0.8, 0.8, 0.8);
     inactive.background = Color::rgb(0.30, 0.30, 0.30);
-    builder.artifact_installer().set_face(11, inactive.clone());
+    builder.install_output_face(11, inactive.clone());
 
     // Window 1 (top, selected): references the active face on
     // its mode-line row.
