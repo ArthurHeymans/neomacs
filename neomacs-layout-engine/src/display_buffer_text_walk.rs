@@ -418,6 +418,13 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         }
     }
 
+    fn initial_active_face_state(
+        &mut self,
+        request: BufferTextWindowInitialFaceStateRequest<'_>,
+    ) -> DisplayRowActiveFaceState {
+        request.into_active_face_state(self.font_metrics)
+    }
+
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
         checkpoint.restore(self.builder);
     }
@@ -540,6 +547,21 @@ impl<'a> BufferTextWindowRenderedBodyFinishState<'a> {
             builder: self.builder,
             output_emitter,
             evaluator: self.evaluator,
+            hit_data: self.hit_data,
+            display_snapshots: self.display_snapshots,
+        }
+    }
+}
+
+impl<'a> BufferTextWindowFinishOutputState<'a> {
+    fn into_install_state(self, hit_rows: Vec<HitRow>) -> BufferTextWindowFinishInstallState<'a> {
+        BufferTextWindowFinishInstallState {
+            finish_state: BufferTextWindowFinishState::new(
+                self.builder,
+                self.output_emitter,
+                self.evaluator,
+                hit_rows,
+            ),
             hit_data: self.hit_data,
             display_snapshots: self.display_snapshots,
         }
@@ -1278,16 +1300,8 @@ impl BufferTextWindowWalkSetup {
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         state: BufferTextWindowFinishOutputState<'_>,
     ) {
-        tail_context.finish_and_install(BufferTextWindowFinishInstallState {
-            finish_state: BufferTextWindowFinishState::new(
-                state.builder,
-                state.output_emitter,
-                state.evaluator,
-                std::mem::take(&mut self.hit_rows),
-            ),
-            hit_data: state.hit_data,
-            display_snapshots: state.display_snapshots,
-        });
+        tail_context
+            .finish_and_install(state.into_install_state(std::mem::take(&mut self.hit_rows)));
     }
 }
 
@@ -1344,9 +1358,8 @@ where
             self.loop_context.point_charpos,
         );
         let mut face_scan = FaceScanCheckpoint::initial();
-        let mut active_face_state = self
-            .initial_face_state
-            .into_active_face_state(output_session.font_metrics);
+        let mut active_face_state =
+            output_session.initial_active_face_state(self.initial_face_state);
         let mut body_pass_state = output_session.body_pass_state();
         let BufferTextWindowBodyPassOutcome {
             output_emitter,
