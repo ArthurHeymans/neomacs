@@ -142,6 +142,16 @@ impl GcHeader {
     pub fn set_marked(&self, value: bool) {
         self.marked.store(value, Ordering::Relaxed);
     }
+
+    /// Atomically CLAIM the mark bit: set it and return `true` iff this call is the
+    /// one that flipped it from unmarked → marked. Used by the concurrent GC thread
+    /// (Workstream D) to mark a heap veclike exactly once with no `&mut TaggedHeap`,
+    /// the non-cons analogue of `atomic_mark_owned_cons_ptr`. `swap` is atomic, so
+    /// two threads racing to claim the same object cannot both observe `true`.
+    #[inline]
+    pub fn mark_claim(&self) -> bool {
+        !self.marked.swap(true, Ordering::Relaxed)
+    }
 }
 
 // ---------------------------------------------------------------------------
