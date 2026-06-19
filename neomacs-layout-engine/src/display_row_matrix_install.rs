@@ -48,6 +48,17 @@ pub(crate) fn install_resolved_display_row_face(
     });
 }
 
+pub(crate) fn current_display_row_artifact(builder: &GlyphMatrixBuilder) -> Option<GlyphRow> {
+    builder.current_row().cloned()
+}
+
+pub(crate) fn install_current_display_row_artifact(
+    builder: &mut GlyphMatrixBuilder,
+    row: GlyphRow,
+) {
+    builder.install_row_lifecycle(MatrixRowLifecycleRequest::ReplaceCurrent { row });
+}
+
 struct MatrixDisplayRowInstallRequest<'a> {
     matrix_row: usize,
     row: &'a GlyphRow,
@@ -298,7 +309,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
             face: face.clone(),
         });
     }
-    builder.with_current_row_mut(|row| {
+    if let Some(mut row) = current_display_row_artifact(builder) {
         row.enabled = true;
         row.role = rendered.row.role;
         row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
@@ -314,8 +325,9 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
             .ascent_px
             .max(rendered.row.ascent_px)
             .min(row.height_px.max(1.0));
-        merge_display_row_source_slot_bounds(row, &rendered.source_slots);
-    });
+        merge_display_row_source_slot_bounds(&mut row, &rendered.source_slots);
+        install_current_display_row_artifact(builder, row);
+    }
     for media in &rendered.media {
         media.install(builder, rendered.row.role, matrix_row);
     }

@@ -19,7 +19,8 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{DisplayRowGlyphSlot, merge_display_row_source_slot_bounds};
 use crate::display_row_matrix_install::{
-    RenderedDisplayRowAssetsInstall, install_resolved_display_row_face,
+    RenderedDisplayRowAssetsInstall, current_display_row_artifact,
+    install_current_display_row_artifact, install_resolved_display_row_face,
 };
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
@@ -50,10 +51,6 @@ pub(crate) struct TextRowOutputRenderState<'a> {
 
 struct DisplayRowCurrentRowSurface<'a> {
     builder: &'a mut GlyphMatrixBuilder,
-}
-
-struct DisplayRowCurrentRowReadSurface<'a> {
-    builder: &'a GlyphMatrixBuilder,
 }
 
 struct DisplayRowCurrentTextRenderState<'face, 'emit> {
@@ -87,22 +84,12 @@ struct DisplayRowCurrentTextSourceStepResult {
     row_ascent_px: f32,
 }
 
-impl<'a> DisplayRowCurrentRowReadSurface<'a> {
-    fn new(builder: &'a GlyphMatrixBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn cluster_tail(&self) -> Option<(char, bool)> {
-        self.builder
-            .current_row()
-            .and_then(last_text_cluster_tail_in_row)
-    }
-}
-
 pub(crate) fn current_display_row_cluster_tail(
     builder: &GlyphMatrixBuilder,
 ) -> Option<(char, bool)> {
-    DisplayRowCurrentRowReadSurface::new(builder).cluster_tail()
+    current_display_row_artifact(builder)
+        .as_ref()
+        .and_then(last_text_cluster_tail_in_row)
 }
 
 impl<'a> DisplayRowCurrentRowSurface<'a> {
@@ -111,9 +98,10 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
     }
 
     fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
-        self.builder.with_current_row_mut(|row| {
-            merge_display_row_source_slot_bounds(row, slots);
-        });
+        if let Some(mut row) = current_display_row_artifact(self.builder) {
+            merge_display_row_source_slot_bounds(&mut row, slots);
+            install_current_display_row_artifact(self.builder, row);
+        }
     }
 
     fn render_source_step_with_policy<S, P>(
@@ -129,19 +117,19 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        self.builder
-            .with_current_row_mut(|row| {
-                let result = row_request.render_fragment_step_into_row_with_policy(
-                    renderer,
-                    row,
-                    source,
-                    source_state,
-                    context,
-                    render_policy,
-                )?;
-                Some((result, row.height_px, row.ascent_px))
-            })
-            .flatten()
+        let mut row = current_display_row_artifact(self.builder)?;
+        let result = row_request.render_fragment_step_into_row_with_policy(
+            renderer,
+            &mut row,
+            source,
+            source_state,
+            context,
+            render_policy,
+        )?;
+        let row_height_px = row.height_px;
+        let row_ascent_px = row.ascent_px;
+        install_current_display_row_artifact(self.builder, row);
+        Some((result, row_height_px, row_ascent_px))
     }
 
     fn measure_source_step_with_policy<S, P>(
@@ -157,7 +145,7 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let mut scratch_row = self.builder.current_row()?.clone();
+        let mut scratch_row = current_display_row_artifact(self.builder)?;
         let result = row_request.render_fragment_step_into_row_with_policy(
             renderer,
             &mut scratch_row,
@@ -179,16 +167,15 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
     where
         S: DisplayItemSource,
     {
-        self.builder
-            .with_current_row_mut(|row| {
-                render_executor.render_item_source_fragment_into_row(
-                    request,
-                    row,
-                    source,
-                    source_state,
-                )
-            })
-            .flatten()
+        let mut row = current_display_row_artifact(self.builder)?;
+        let result = render_executor.render_item_source_fragment_into_row(
+            request,
+            &mut row,
+            source,
+            source_state,
+        )?;
+        install_current_display_row_artifact(self.builder, row);
+        Some(result)
     }
 }
 

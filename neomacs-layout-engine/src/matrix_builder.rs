@@ -336,6 +336,9 @@ pub(crate) enum MatrixRowLifecycleRequest {
         begin: MatrixRowBeginRequest,
         row: GlyphRow,
     },
+    ReplaceCurrent {
+        row: GlyphRow,
+    },
     Metrics {
         row: usize,
         metrics: MatrixRowMetricsRequest,
@@ -360,6 +363,7 @@ impl MatrixRowLifecycleRequest {
                 builder.replace_current_row(row);
                 builder.end_current_row();
             }
+            Self::ReplaceCurrent { row } => builder.replace_current_row(row),
             Self::Metrics { row, metrics } => builder.write_row_metrics_at(row, metrics),
             Self::Finalize { row } => builder.finalize_matrix_row(row),
             Self::Cursor { row, col, style } => builder.write_row_cursor(row, col, style),
