@@ -651,7 +651,7 @@ fn encode_eol_bytes(bytes: &[u8], coding_system: &str) -> Vec<u8> {
     bytes.to_vec()
 }
 
-fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
+pub(crate) fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
     if coding_system.ends_with("-dos") {
         let mut out = Vec::with_capacity(bytes.len());
         let mut i = 0usize;
@@ -3228,7 +3228,7 @@ fn coding_result_for_buffer_multibyte(
     if text.is_multibyte() == target_multibyte {
         return text.clone();
     }
-    if target_multibyte {
+    let mut converted = if target_multibyte {
         // Encoded bytes stored into a multibyte buffer become eight-bit
         // characters (GNU `string-to-multibyte` / BYTE8_STRING), NOT re-parsed
         // as a UTF-8 sequence (`string-as-multibyte`), which would wrongly turn
@@ -3240,7 +3240,20 @@ fn coding_result_for_buffer_multibyte(
         crate::heap_types::LispString::from_unibyte(crate::emacs_core::emacs_char::str_as_unibyte(
             text.as_bytes(),
         ))
+    };
+    // Changing the multibyteness only re-encodes the bytes; the character count
+    // is unchanged, so the (char-indexed) text-property intervals — e.g. the
+    // `charset` property a charset-type coding (latin-1) attaches at decode time
+    // — remain valid and must ride along into the buffer.  This is the
+    // `decode-coding-region`/`decode-coding-string` path; GNU keeps the charset
+    // annotation across `code_convert_region`'s dst multibyteness adjustment.
+    if text.has_intervals() {
+        let intervals = text.intervals().clone();
+        if !intervals.is_empty() {
+            *converted.intervals_mut() = intervals;
+        }
     }
+    converted
 }
 
 fn builtin_coding_region(

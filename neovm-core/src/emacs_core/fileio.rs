@@ -5076,6 +5076,20 @@ fn decode_insert_file_contents(
         ));
     }
 
+    if !multibyte {
+        // Inserting into a UNIBYTE buffer stores the file bytes RAW: GNU
+        // `insert-file-contents` suppresses charset decoding for a unibyte
+        // destination (only EOL conversion applies), keeping the original file
+        // bytes and attaching no `charset` text-property.  E.g. reading latin-1
+        // "café" yields bytes (99 97 102 233); reading utf-8 "café" yields the
+        // undecoded (99 97 102 195 169) — NOT the re-encoded decoded chars.
+        let raw = crate::encoding::decode_eol_text(bytes, &coding);
+        return Ok(DecodedFileContents::from_lisp_string(
+            LispString::from_unibyte(raw),
+            coding,
+        ));
+    }
+
     let decoded = crate::encoding::builtin_decode_coding_string_with_known(
         vec![
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec())),
