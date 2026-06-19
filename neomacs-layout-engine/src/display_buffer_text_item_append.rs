@@ -1213,13 +1213,14 @@ impl<'a> BufferTextItemAppendContext<'a> {
         position: DisplayRowPosition,
     ) -> f32 {
         let fallback_width = source_item.fallback_width_px(self.frame.geometry.char_width);
-        self.measure_display_item_width_to_text_row(
-            state,
-            item,
-            position,
-            source_item.append_kind(),
-        )
-        .unwrap_or(fallback_width)
+        self.single_item_context()
+            .measure_item_width_naturally_or_fallback(
+                state,
+                item,
+                position,
+                source_item.append_kind(),
+                fallback_width,
+            )
     }
 }
 
@@ -1292,7 +1293,18 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
     ) -> f32 {
         let fallback_width =
             source_item.fallback_width_px(self.item_context.frame.geometry.char_width);
-        self.measure_source_request_width_to_text_row(state, source_item, position)
-            .unwrap_or(fallback_width)
+        let Some(append_item) = buffer_text_source_item_append_request(
+            source_item,
+            self.buffer_id,
+            self.buffer,
+            self.item_context.face_id,
+        ) else {
+            return fallback_width;
+        };
+        let kind = append_item.append_kind();
+        let item = append_item.into_item();
+        self.item_context
+            .single_item_context()
+            .measure_item_width_naturally_or_fallback(state, &item, position, kind, fallback_width)
     }
 }

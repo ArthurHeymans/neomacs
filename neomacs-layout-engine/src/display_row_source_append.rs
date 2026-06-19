@@ -313,6 +313,18 @@ impl<'face> DisplayRowSingleItemAppendContext<'face> {
             &mut render_policy,
         )
     }
+
+    pub(crate) fn measure_item_width_naturally_or_fallback(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: &DisplayItem,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+        fallback_width_px: f32,
+    ) -> f32 {
+        self.measure_item_width_naturally(state, item, position, fallback_kind)
+            .unwrap_or(fallback_width_px)
+    }
 }
 
 impl<'face> DisplayRowSourceAppendOperation<'face> {
