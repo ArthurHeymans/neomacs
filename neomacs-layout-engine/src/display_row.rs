@@ -2187,19 +2187,130 @@ struct DisplayRowCurrentTextSourceStepResult {
     row_ascent_px: f32,
 }
 
-struct DisplayRowCurrentSourceSlotBoundsMergeRequest<'a> {
-    slots: &'a [DisplayRowGlyphSlot],
+struct DisplayRowCurrentRowSurface<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
 }
 
-impl<'a> DisplayRowCurrentSourceSlotBoundsMergeRequest<'a> {
-    fn new(slots: &'a [DisplayRowGlyphSlot]) -> Self {
-        Self { slots }
+impl<'a> DisplayRowCurrentRowSurface<'a> {
+    fn new(builder: &'a mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
     }
 
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
-        builder.with_current_row_mut(|row| {
-            merge_display_row_source_slot_bounds(row, self.slots);
+    fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
+        self.builder.with_current_row_mut(|row| {
+            merge_display_row_source_slot_bounds(row, slots);
         });
+    }
+
+    fn render_source_step_with_policy<S, P>(
+        &mut self,
+        row_request: DisplayRowSourceRenderRequest<'_>,
+        renderer: &mut DisplayRowRenderer<'_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
+        self.builder
+            .with_current_row_mut(|row| {
+                let result = DisplayRowItemSourceRenderRequest::new(row_request)
+                    .render_fragment_step_into_row_with_policy(
+                        renderer,
+                        row,
+                        source,
+                        source_state,
+                        context,
+                        render_policy,
+                    )?;
+                Some((result, row.height_px, row.ascent_px))
+            })
+            .flatten()
+    }
+
+    fn measure_source_step_with_policy<S, P>(
+        &mut self,
+        row_request: DisplayRowSourceRenderRequest<'_>,
+        renderer: &mut DisplayRowRenderer<'_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
+        let mut scratch_row = self.builder.current_row()?.clone();
+        let result = DisplayRowItemSourceRenderRequest::new(row_request)
+            .render_fragment_step_into_row_with_policy(
+                renderer,
+                &mut scratch_row,
+                source,
+                source_state,
+                context,
+                render_policy,
+            )?;
+        Some((result, scratch_row.height_px, scratch_row.ascent_px))
+    }
+
+    fn render_natural_source_fragment_step<S>(
+        &mut self,
+        request: DisplayRowSourceFragmentRenderRequest<'_>,
+        render_executor: &mut DisplayRowRenderExecutor<'_, '_, '_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+    ) -> Option<DisplayRowRenderIntoRowResult>
+    where
+        S: DisplayItemSource,
+    {
+        self.builder
+            .with_current_row_mut(|row| {
+                render_executor.render_item_source_fragment_into_row(
+                    request,
+                    row,
+                    source,
+                    source_state,
+                )
+            })
+            .flatten()
+    }
+
+    #[cfg(test)]
+    fn append_rendered_fragment(
+        &mut self,
+        rendered: &RenderedDisplayRow,
+        matrix_row: usize,
+    ) -> DisplayRowPosition {
+        for face in &rendered.faces {
+            self.builder
+                .install_frame_state(MatrixFrameStateInstallRequest::Face {
+                    id: face.id,
+                    face: face.clone(),
+                });
+        }
+        self.builder.with_current_row_mut(|row| {
+            row.enabled = true;
+            row.role = rendered.row.role;
+            row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
+            row.displays_text |=
+                rendered.row.displays_text || !display_row_text_is_empty(&rendered.row);
+            row.glyphs[GlyphArea::Text.index()]
+                .extend(rendered.row.glyphs[GlyphArea::Text.index()].iter().cloned());
+            row.height_px = row.height_px.max(rendered.row.height_px);
+            row.ascent_px = row
+                .ascent_px
+                .max(rendered.row.ascent_px)
+                .min(row.height_px.max(1.0));
+            merge_display_row_source_slot_bounds(row, &rendered.source_slots);
+        });
+        for media in &rendered.media {
+            media.install(self.builder, rendered.row.role, matrix_row);
+        }
+        display_row_output_end_position(rendered.progress)
     }
 }
 
@@ -2248,25 +2359,21 @@ where
             evaluator.display_host.as_deref(),
             face_ids,
         );
-        builder
-            .with_current_row_mut(|row| {
-                let result = DisplayRowItemSourceRenderRequest::new(row_request)
-                    .render_fragment_step_into_row_with_policy(
-                        &mut renderer,
-                        row,
-                        source,
-                        source_state,
-                        &mut context,
-                        render_policy,
-                    )?;
-                Some(DisplayRowCurrentTextSourceStepResult {
-                    role,
-                    result,
-                    row_height_px: row.height_px,
-                    row_ascent_px: row.ascent_px,
-                })
-            })
-            .flatten()
+        let mut surface = DisplayRowCurrentRowSurface::new(builder);
+        let (result, row_height_px, row_ascent_px) = surface.render_source_step_with_policy(
+            row_request,
+            &mut renderer,
+            source,
+            source_state,
+            &mut context,
+            render_policy,
+        )?;
+        Some(DisplayRowCurrentTextSourceStepResult {
+            role,
+            result,
+            row_height_px,
+            row_ascent_px,
+        })
     }
 
     fn measure_against_current_row(
@@ -2281,23 +2388,20 @@ where
         } = self;
         let role = row_request.role();
         let mut renderer = DisplayRowRenderer::new(state.font_metrics);
-        let mut scratch_row = state.builder.current_row()?.clone();
         let mut context = DisplayRowRenderContext::new(
             state.face_resolver,
             state.evaluator.display_host.as_deref(),
             state.face_ids,
         );
-        let result = DisplayRowItemSourceRenderRequest::new(row_request)
-            .render_fragment_step_into_row_with_policy(
-                &mut renderer,
-                &mut scratch_row,
-                source,
-                source_state,
-                &mut context,
-                render_policy,
-            )?;
-        let row_height_px = scratch_row.height_px;
-        let row_ascent_px = scratch_row.ascent_px;
+        let mut surface = DisplayRowCurrentRowSurface::new(state.builder);
+        let (result, row_height_px, row_ascent_px) = surface.measure_source_step_with_policy(
+            row_request,
+            &mut renderer,
+            source,
+            source_state,
+            &mut context,
+            render_policy,
+        )?;
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -2378,7 +2482,7 @@ fn finish_current_text_row_render(
     let end = display_row_output_end_position(result.progress);
     RenderedDisplayRowAssetsInstall::fragment(role, output.row, &result.faces, &result.media)
         .install(state.builder);
-    DisplayRowCurrentSourceSlotBoundsMergeRequest::new(&result.source_slots).install(state.builder);
+    DisplayRowCurrentRowSurface::new(state.builder).merge_source_slot_bounds(&result.source_slots);
     let source_slots = result.source_slots;
     state
         .output_emitter
@@ -2546,31 +2650,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     rendered: &RenderedDisplayRow,
     matrix_row: usize,
 ) -> DisplayRowPosition {
-    for face in &rendered.faces {
-        builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-            id: face.id,
-            face: face.clone(),
-        });
-    }
-    builder.with_current_row_mut(|row| {
-        row.enabled = true;
-        row.role = rendered.row.role;
-        row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
-        row.displays_text |=
-            rendered.row.displays_text || !display_row_text_is_empty(&rendered.row);
-        row.glyphs[GlyphArea::Text.index()]
-            .extend(rendered.row.glyphs[GlyphArea::Text.index()].iter().cloned());
-        row.height_px = row.height_px.max(rendered.row.height_px);
-        row.ascent_px = row
-            .ascent_px
-            .max(rendered.row.ascent_px)
-            .min(row.height_px.max(1.0));
-        merge_display_row_source_slot_bounds(row, &rendered.source_slots);
-    });
-    for media in &rendered.media {
-        media.install(builder, rendered.row.role, matrix_row);
-    }
-    display_row_output_end_position(rendered.progress)
+    DisplayRowCurrentRowSurface::new(builder).append_rendered_fragment(rendered, matrix_row)
 }
 
 #[cfg(test)]
@@ -2989,17 +3069,14 @@ impl<'a> DisplayRowSourceFragmentRenderRequest<'a> {
         } = state;
         let mut render_executor =
             DisplayRowRenderExecutor::new(font_metrics, face_resolver, *display_host, face_ids);
-        let result = builder
-            .with_current_row_mut(|row| {
-                render_executor.render_item_source_fragment_into_row(
-                    self,
-                    row,
-                    source,
-                    source_state,
-                )
-            })
-            .flatten()?;
-        DisplayRowCurrentSourceSlotBoundsMergeRequest::new(&result.source_slots).install(builder);
+        let mut surface = DisplayRowCurrentRowSurface::new(builder);
+        let result = surface.render_natural_source_fragment_step(
+            self,
+            &mut render_executor,
+            source,
+            source_state,
+        )?;
+        surface.merge_source_slot_bounds(&result.source_slots);
         Some(result)
     }
 }
