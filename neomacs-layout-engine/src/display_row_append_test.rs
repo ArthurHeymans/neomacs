@@ -1162,28 +1162,28 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
         4,
         row_limit,
     ))
-    .render_next_and_apply(BufferHscrollSkipRenderState {
-        progress: BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
-        hscroll_skip: &mut hscroll_skip,
-        row_extend: &mut row_extend,
-        source_render: text_row_source_render_state(
+    .render_next_and_apply(BufferHscrollSkipRenderState::new(
+        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+        &mut hscroll_skip,
+        &mut row_extend,
+        text_row_source_render_state(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
             &mut font_metrics,
             &face_resolver,
         ),
-        prefix_request: &mut prefix_request,
-        line_numbers: &mut line_numbers,
-        word_wrap: &mut word_wrap,
-        trailing_whitespace: &mut trailing_whitespace,
-        row_geometry: &mut context.geometry,
-        row_flags: &mut context.row_flags,
-        hit_rows: &mut context.hit_rows,
-        hit_row_range: &mut hit_row_range,
-        cursor_info: &mut cursor_info,
-        row_y_positions: &mut context.row_y_positions,
-    });
+        &mut prefix_request,
+        &mut line_numbers,
+        &mut word_wrap,
+        &mut trailing_whitespace,
+        &mut context.geometry,
+        &mut context.row_flags,
+        &mut context.hit_rows,
+        &mut hit_row_range,
+        &mut cursor_info,
+        &mut context.row_y_positions,
+    ));
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
     assert_eq!(byte_idx, 1);
@@ -1681,28 +1681,23 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     ))
     .render_at_checkpoint_and_apply(
         &snapshot,
-        BufferInvisibleTextRenderRequestState {
-            checkpoints: &mut checkpoints,
-            progress: BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut x,
-                &mut col,
-            ),
-            source_render: text_row_source_render_state(
+        BufferInvisibleTextRenderRequestState::new(
+            &mut checkpoints,
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            row_geometry: &mut context.geometry,
-            cursor_info: &mut cursor_info,
-            hit_rows: &mut context.hit_rows,
-            hit_row_range: &mut hit_row_range,
-            row_y_positions: &mut context.row_y_positions,
-            face_ids: &mut face_ids,
-        },
+            &mut context.geometry,
+            &mut cursor_info,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut context.row_y_positions,
+            &mut face_ids,
+        ),
     );
 
     assert_eq!(
@@ -2624,35 +2619,30 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     )
     .render_and_apply(
         &snapshot,
-        BufferTextLineBreakRenderState {
-            progress: BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut x,
-                &mut col,
-            ),
-            cursor_info: &mut cursor_info,
-            row_geometry: &mut context.geometry,
-            trailing_whitespace: &mut trailing_whitespace,
-            row_extend: &mut row_extend,
-            box_face: &mut box_face,
-            source_render: text_row_source_render_state(
+        BufferTextLineBreakRenderState::new(
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            &mut cursor_info,
+            &mut context.geometry,
+            &mut trailing_whitespace,
+            &mut row_extend,
+            &mut box_face,
+            text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            prefix_request: &mut prefix_request,
-            line_numbers: &mut line_numbers,
-            hscroll_skip: &mut hscroll_skip,
-            word_wrap: &mut word_wrap,
-            row_flags: &mut context.row_flags,
-            hit_rows: &mut context.hit_rows,
-            hit_row_range: &mut hit_row_range,
-            row_y_positions: &mut context.row_y_positions,
-            face_ids: &mut face_ids,
-        },
+            &mut prefix_request,
+            &mut line_numbers,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut context.row_y_positions,
+            &mut face_ids,
+        ),
     );
 
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
@@ -2792,33 +2782,28 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     )
     .render_if_needed_and_apply(
         &snapshot,
-        BufferSelectiveDisplayTailRenderState {
-            progress: BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut x,
-                &mut col,
-            ),
-            source_render: text_row_source_render_state(
+        BufferSelectiveDisplayTailRenderState::new(
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            row_extend: &mut row_extend,
-            box_face: &mut box_face,
-            line_numbers: &mut line_numbers,
-            row_geometry: &mut context.geometry,
-            row_flags: &mut context.row_flags,
-            hit_rows: &mut context.hit_rows,
-            hit_row_range: &mut hit_row_range,
-            prefix_request: &mut prefix_request,
-            hscroll_skip: &mut hscroll_skip,
-            word_wrap: &mut word_wrap,
-            trailing_whitespace: &mut trailing_whitespace,
-            row_y_positions: &mut context.row_y_positions,
-        },
+            &mut row_extend,
+            &mut box_face,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut context.row_y_positions,
+        ),
     );
 
     assert_eq!(
@@ -6519,22 +6504,22 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     ))
     .render_and_apply(
         &snapshot,
-        BufferEndOfBufferTailRenderState {
-            source_render: text_row_source_render_state(
+        BufferEndOfBufferTailRenderState::new(
+            text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            row_progress: BufferTextWindowRowProgressState::new(&mut x, &mut col),
-            row_geometry: &mut context.geometry,
-            cursor_info: &mut cursor_info,
-            hit_rows: &mut context.hit_rows,
-            hit_row_range: &mut hit_row_range,
-            row_y_positions: &mut context.row_y_positions,
-            face_ids: &mut face_ids,
-        },
+            BufferTextWindowRowProgressState::new(&mut x, &mut col),
+            &mut context.geometry,
+            &mut cursor_info,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut context.row_y_positions,
+            &mut face_ids,
+        ),
     );
 
     assert!(outcome.point_is_visible_eob());

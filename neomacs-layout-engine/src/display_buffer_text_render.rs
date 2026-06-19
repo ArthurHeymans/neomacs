@@ -3155,17 +3155,17 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     ) -> BufferInvisibleTextRenderOutcome {
         request.render_at_checkpoint_and_apply(
             buffer,
-            BufferInvisibleTextRenderRequestState {
-                checkpoints: self.text_property_checkpoints,
-                progress: self.progress.reborrow(),
-                source_render: self.source_render.reborrow(),
-                row_geometry: self.row_geometry,
-                cursor_info: self.cursor_info,
-                hit_rows: self.hit_rows,
-                hit_row_range: self.hit_row_range,
-                row_y_positions: self.row_y_positions,
-                face_ids: self.face_ids,
-            },
+            BufferInvisibleTextRenderRequestState::new(
+                self.text_property_checkpoints,
+                self.progress.reborrow(),
+                self.source_render.reborrow(),
+                self.row_geometry,
+                self.cursor_info,
+                self.hit_rows,
+                self.hit_row_range,
+                self.row_y_positions,
+                self.face_ids,
+            ),
         )
     }
 
@@ -3173,22 +3173,22 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         &mut self,
         request: BufferHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
-        request.render_next_and_apply(BufferHscrollSkipRenderState {
-            progress: self.progress.reborrow(),
-            hscroll_skip: self.hscroll_skip,
-            row_extend: self.row_extend,
-            source_render: self.source_render.reborrow(),
-            prefix_request: self.prefix_request,
-            line_numbers: self.line_numbers,
-            word_wrap: self.word_wrap,
-            trailing_whitespace: self.trailing_whitespace,
-            row_geometry: self.row_geometry,
-            row_flags: self.row_flags,
-            hit_rows: self.hit_rows,
-            hit_row_range: self.hit_row_range,
-            cursor_info: self.cursor_info,
-            row_y_positions: self.row_y_positions,
-        })
+        request.render_next_and_apply(BufferHscrollSkipRenderState::new(
+            self.progress.reborrow(),
+            self.hscroll_skip,
+            self.row_extend,
+            self.source_render.reborrow(),
+            self.prefix_request,
+            self.line_numbers,
+            self.word_wrap,
+            self.trailing_whitespace,
+            self.row_geometry,
+            self.row_flags,
+            self.hit_rows,
+            self.hit_row_range,
+            self.cursor_info,
+            self.row_y_positions,
+        ))
     }
 
     fn render_display_property_checkpoint<B: LayoutBufferView>(
@@ -3207,22 +3207,22 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     ) -> BufferSelectiveDisplayTailRenderOutcome {
         request.render_if_needed_and_apply(
             buffer,
-            BufferSelectiveDisplayTailRenderState {
-                progress: self.progress.reborrow(),
-                source_render: self.source_render.reborrow(),
-                row_extend: self.row_extend,
-                box_face: self.box_face,
-                line_numbers: self.line_numbers,
-                row_geometry: self.row_geometry,
-                row_flags: self.row_flags,
-                hit_rows: self.hit_rows,
-                hit_row_range: self.hit_row_range,
-                prefix_request: self.prefix_request,
-                hscroll_skip: self.hscroll_skip,
-                word_wrap: self.word_wrap,
-                trailing_whitespace: self.trailing_whitespace,
-                row_y_positions: self.row_y_positions,
-            },
+            BufferSelectiveDisplayTailRenderState::new(
+                self.progress.reborrow(),
+                self.source_render.reborrow(),
+                self.row_extend,
+                self.box_face,
+                self.line_numbers,
+                self.row_geometry,
+                self.row_flags,
+                self.hit_rows,
+                self.hit_row_range,
+                self.prefix_request,
+                self.hscroll_skip,
+                self.word_wrap,
+                self.trailing_whitespace,
+                self.row_y_positions,
+            ),
         )
     }
 
@@ -3233,24 +3233,24 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     ) -> DisplayRowTransitionContinuation {
         request.render_and_apply(
             buffer,
-            BufferTextLineBreakRenderState {
-                progress: self.progress.reborrow(),
-                cursor_info: self.cursor_info,
-                row_geometry: self.row_geometry,
-                trailing_whitespace: self.trailing_whitespace,
-                row_extend: self.row_extend,
-                box_face: self.box_face,
-                source_render: self.source_render.reborrow(),
-                prefix_request: self.prefix_request,
-                line_numbers: self.line_numbers,
-                hscroll_skip: self.hscroll_skip,
-                word_wrap: self.word_wrap,
-                row_flags: self.row_flags,
-                hit_rows: self.hit_rows,
-                hit_row_range: self.hit_row_range,
-                row_y_positions: self.row_y_positions,
-                face_ids: self.face_ids,
-            },
+            BufferTextLineBreakRenderState::new(
+                self.progress.reborrow(),
+                self.cursor_info,
+                self.row_geometry,
+                self.trailing_whitespace,
+                self.row_extend,
+                self.box_face,
+                self.source_render.reborrow(),
+                self.prefix_request,
+                self.line_numbers,
+                self.hscroll_skip,
+                self.word_wrap,
+                self.row_flags,
+                self.hit_rows,
+                self.hit_row_range,
+                self.row_y_positions,
+                self.face_ids,
+            ),
         )
     }
 
@@ -3510,16 +3510,16 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
             )
             .render_and_apply(
                 buffer,
-                BufferEndOfBufferTailRenderState {
-                    source_render: self.source_render.reborrow(),
-                    row_progress: self.row_progress.reborrow(),
-                    row_geometry: self.row_geometry,
-                    cursor_info: self.cursor_info,
-                    hit_rows: self.hit_rows,
-                    hit_row_range: self.hit_row_range,
-                    row_y_positions: self.row_y_positions,
-                    face_ids: self.face_ids,
-                },
+                BufferEndOfBufferTailRenderState::new(
+                    self.source_render.reborrow(),
+                    self.row_progress.reborrow(),
+                    self.row_geometry,
+                    self.cursor_info,
+                    self.hit_rows,
+                    self.hit_row_range,
+                    self.row_y_positions,
+                    self.face_ids,
+                ),
             )
             .point_is_visible_eob()
     }
@@ -3621,20 +3621,20 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
 }
 
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
-    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
-    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) row_flags: &'emit mut DisplayRowFlags,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    progress: BufferTextWindowProgressState<'emit>,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    source_render: TextRowSourceRenderState<'emit>,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    line_numbers: &'emit mut LineNumberRenderState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    cursor_info: &'emit mut CursorCaptureState,
+    row_y_positions: &'a mut DisplayRowYPositions,
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
@@ -3654,14 +3654,76 @@ pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) row_progress: BufferTextWindowRowProgressState<'emit>,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) row_y_positions: &'emit mut DisplayRowYPositions,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    source_render: TextRowSourceRenderState<'emit>,
+    row_progress: BufferTextWindowRowProgressState<'emit>,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    cursor_info: &'emit mut CursorCaptureState,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    row_y_positions: &'emit mut DisplayRowYPositions,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'a, 'emit> BufferHscrollSkipRenderState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        progress: BufferTextWindowProgressState<'emit>,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        source_render: TextRowSourceRenderState<'emit>,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        line_numbers: &'emit mut LineNumberRenderState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        cursor_info: &'emit mut CursorCaptureState,
+        row_y_positions: &'a mut DisplayRowYPositions,
+    ) -> Self {
+        Self {
+            progress,
+            hscroll_skip,
+            row_extend,
+            source_render,
+            prefix_request,
+            line_numbers,
+            word_wrap,
+            trailing_whitespace,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            cursor_info,
+            row_y_positions,
+        }
+    }
+}
+
+impl<'emit> BufferEndOfBufferTailRenderState<'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        source_render: TextRowSourceRenderState<'emit>,
+        row_progress: BufferTextWindowRowProgressState<'emit>,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        cursor_info: &'emit mut CursorCaptureState,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        row_y_positions: &'emit mut DisplayRowYPositions,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            source_render,
+            row_progress,
+            row_geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+        }
+    }
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderOutcome {
@@ -4293,22 +4355,22 @@ impl<'a> BufferHscrollSkipRenderContext<'a> {
 }
 
 pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) box_face: &'emit mut BoxFaceRowState,
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
-    pub(crate) row_flags: &'emit mut DisplayRowFlags,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    progress: BufferTextWindowProgressState<'emit>,
+    cursor_info: &'emit mut CursorCaptureState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'emit mut BoxFaceRowState,
+    source_render: TextRowSourceRenderState<'emit>,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    line_numbers: &'emit mut LineNumberRenderState,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    row_y_positions: &'a mut DisplayRowYPositions,
+    face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
@@ -4337,20 +4399,20 @@ pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) box_face: &'emit mut BoxFaceRowState,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) row_flags: &'emit mut DisplayRowFlags,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
-    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
-    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    progress: BufferTextWindowProgressState<'emit>,
+    source_render: TextRowSourceRenderState<'emit>,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'emit mut BoxFaceRowState,
+    line_numbers: &'emit mut LineNumberRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    row_y_positions: &'a mut DisplayRowYPositions,
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequest<'a> {
@@ -4372,15 +4434,120 @@ pub(crate) struct BufferInvisibleTextRenderContext<'a> {
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
-    pub(crate) checkpoints: &'emit mut TextPropertyScanCheckpoints,
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    progress: BufferTextWindowProgressState<'emit>,
+    source_render: TextRowSourceRenderState<'emit>,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    cursor_info: &'emit mut CursorCaptureState,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    row_y_positions: &'a mut DisplayRowYPositions,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'a, 'emit> BufferTextLineBreakRenderState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        progress: BufferTextWindowProgressState<'emit>,
+        cursor_info: &'emit mut CursorCaptureState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'emit mut BoxFaceRowState,
+        source_render: TextRowSourceRenderState<'emit>,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        line_numbers: &'emit mut LineNumberRenderState,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            progress,
+            cursor_info,
+            row_geometry,
+            trailing_whitespace,
+            row_extend,
+            box_face,
+            source_render,
+            prefix_request,
+            line_numbers,
+            hscroll_skip,
+            word_wrap,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+        }
+    }
+}
+
+impl<'a, 'emit> BufferSelectiveDisplayTailRenderState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        progress: BufferTextWindowProgressState<'emit>,
+        source_render: TextRowSourceRenderState<'emit>,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'emit mut BoxFaceRowState,
+        line_numbers: &'emit mut LineNumberRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        row_y_positions: &'a mut DisplayRowYPositions,
+    ) -> Self {
+        Self {
+            progress,
+            source_render,
+            row_extend,
+            box_face,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            row_y_positions,
+        }
+    }
+}
+
+impl<'a, 'emit> BufferInvisibleTextRenderRequestState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        checkpoints: &'emit mut TextPropertyScanCheckpoints,
+        progress: BufferTextWindowProgressState<'emit>,
+        source_render: TextRowSourceRenderState<'emit>,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        cursor_info: &'emit mut CursorCaptureState,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            checkpoints,
+            progress,
+            source_render,
+            row_geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
