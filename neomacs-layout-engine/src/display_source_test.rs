@@ -265,7 +265,14 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
     {
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
-        match display_property_source_action(&mut context, Value::string("displayed"), base_face) {
+        let display_string = Value::string("displayed");
+        let display_string_classification = classify_display_property(display_string);
+        match display_property_source_action_from_classification(
+            &mut context,
+            display_string,
+            &display_string_classification,
+            base_face,
+        ) {
             DisplayPropertySourceAction::PushReplacement { value, base_face } => {
                 assert_eq!(
                     value.as_runtime_string_owned().as_deref(),
@@ -281,7 +288,13 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             Value::keyword(":width"),
             Value::fixnum(2),
         ]);
-        match display_property_source_action(&mut context, space_spec, base_face) {
+        let space_classification = classify_display_property(space_spec);
+        match display_property_source_action_from_classification(
+            &mut context,
+            space_spec,
+            &space_classification,
+            base_face,
+        ) {
             DisplayPropertySourceAction::Emit {
                 kind:
                     DisplayItemKind::Stretch(DisplayStretch {
@@ -295,7 +308,13 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
         }
 
         let image_spec = Value::list(vec![Value::symbol("image")]);
-        match display_property_source_action(&mut context, image_spec, base_face) {
+        let image_classification = classify_display_property(image_spec);
+        match display_property_source_action_from_classification(
+            &mut context,
+            image_spec,
+            &image_classification,
+            base_face,
+        ) {
             DisplayPropertySourceAction::Emit {
                 kind:
                     DisplayItemKind::MediaReplacement(DisplayMediaReplacement {
@@ -944,7 +963,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     assert_eq!(replacement.start_charpos(), 1);
     assert_eq!(replacement.end_charpos(), 2);
     assert!(matches!(
-        classify_display_property(replacement.value()).replacement(),
+        replacement.classification().replacement(),
         Some(DisplayReplacementProperty::Stretch(_))
     ));
 }

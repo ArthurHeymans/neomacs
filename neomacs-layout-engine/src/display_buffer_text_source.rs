@@ -2,12 +2,12 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayRowBreakReason, DisplaySourcePosition,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_property::classify_display_property;
+use crate::display_property::{DisplayPropertyClassification, classify_display_property};
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
     DisplayPropertySourceCursorAction, DisplaySourceContext, LispStringSourceStack,
     TextSourceCharClassification, classify_text_source_char,
-    display_item_kind_for_text_source_char, display_property_source_action,
+    display_item_kind_for_text_source_char, display_property_source_action_from_classification,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::{WindowKind, WindowParams};
@@ -325,9 +325,10 @@ pub(crate) enum BufferTextConsumedSourceItem {
     Replacement(BufferTextReplacementItem),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferTextReplacementItem {
     value: Value,
+    classification: DisplayPropertyClassification,
     replacement_source: BufferDisplayReplacementSource,
     start_byte_pos: EmacsBytePos,
     end_byte_pos: EmacsBytePos,
@@ -338,6 +339,7 @@ pub(crate) struct BufferTextReplacementItem {
 impl BufferTextReplacementItem {
     pub(crate) fn new(
         value: Value,
+        classification: DisplayPropertyClassification,
         replacement_source: BufferDisplayReplacementSource,
         start_byte_pos: EmacsBytePos,
         end_byte_pos: EmacsBytePos,
@@ -346,6 +348,7 @@ impl BufferTextReplacementItem {
     ) -> Self {
         Self {
             value,
+            classification,
             replacement_source,
             start_byte_pos,
             end_byte_pos,
@@ -356,6 +359,10 @@ impl BufferTextReplacementItem {
 
     pub(crate) fn value(&self) -> Value {
         self.value
+    }
+
+    pub(crate) fn classification(&self) -> &DisplayPropertyClassification {
+        &self.classification
     }
 
     pub(crate) fn replacement_source(&self) -> BufferDisplayReplacementSource {
@@ -1044,6 +1051,38 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             .layout_text_prop_at_emacs_byte_pos(self.byte_pos(char_pos), Value::symbol("display"))
     }
 
+    fn display_replacement_source(
+        &self,
+        start: CharPos0,
+        end: CharPos0,
+    ) -> BufferDisplayReplacementSource {
+        BufferDisplayReplacementSource::spanning(
+            self.buffer_id,
+            start,
+            self.byte_pos(start),
+            end,
+            self.byte_pos(end),
+        )
+    }
+
+    fn display_replacement_item(
+        &self,
+        value: Value,
+        classification: DisplayPropertyClassification,
+        start: CharPos0,
+        end: CharPos0,
+    ) -> BufferTextReplacementItem {
+        BufferTextReplacementItem::new(
+            value,
+            classification,
+            self.display_replacement_source(start, end),
+            self.byte_pos(start),
+            self.byte_pos(end),
+            start,
+            end,
+        )
+    }
+
     fn face_at(&self, char_pos: CharPos0, context: &mut DisplaySourceContext<'_>) -> RenderFaceRef {
         let face = self
             .buffer
@@ -1105,43 +1144,28 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 self.char_pos = property_end;
                 let display_property = classify_display_property(display_prop);
                 if display_property.replacement().is_some() {
-                    let start_byte_pos = self.byte_pos(start);
-                    let end_byte_pos = self.byte_pos(property_end);
                     return Some(BufferTextSourceCursorItem::Replacement(
-                        BufferTextReplacementItem::new(
+                        self.display_replacement_item(
                             display_prop,
-                            BufferDisplayReplacementSource::spanning(
-                                self.buffer_id,
-                                start,
-                                start_byte_pos,
-                                property_end,
-                                end_byte_pos,
-                            ),
-                            start_byte_pos,
-                            end_byte_pos,
+                            display_property,
                             start,
                             property_end,
                         ),
                     ));
                 }
-                let item_layout = match display_property_source_action(context, display_prop, face)
-                    .into_cursor_action(span, face)
+                let item_layout = match display_property_source_action_from_classification(
+                    context,
+                    display_prop,
+                    &display_property,
+                    face,
+                )
+                .into_cursor_action(span, face)
                 {
                     DisplayPropertySourceCursorAction::PushReplacement { value, .. } => {
-                        let start_byte_pos = self.byte_pos(start);
-                        let end_byte_pos = self.byte_pos(property_end);
                         return Some(BufferTextSourceCursorItem::Replacement(
-                            BufferTextReplacementItem::new(
+                            self.display_replacement_item(
                                 value,
-                                BufferDisplayReplacementSource::spanning(
-                                    self.buffer_id,
-                                    start,
-                                    start_byte_pos,
-                                    property_end,
-                                    end_byte_pos,
-                                ),
-                                start_byte_pos,
-                                end_byte_pos,
+                                display_property,
                                 start,
                                 property_end,
                             ),
@@ -1214,20 +1238,20 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
 
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
-                let item_layout = match display_property_source_action(context, display_prop, face)
-                    .into_cursor_action(span, face)
+                let display_property = classify_display_property(display_prop);
+                let item_layout = match display_property_source_action_from_classification(
+                    context,
+                    display_prop,
+                    &display_property,
+                    face,
+                )
+                .into_cursor_action(span, face)
                 {
                     DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                         self.replacement_strings.push_with_replacement_source(
                             value,
                             base_face,
-                            Some(BufferDisplayReplacementSource::spanning(
-                                self.buffer_id,
-                                start,
-                                self.byte_pos(start),
-                                property_end,
-                                self.byte_pos(property_end),
-                            )),
+                            Some(self.display_replacement_source(start, property_end)),
                         );
                         continue;
                     }

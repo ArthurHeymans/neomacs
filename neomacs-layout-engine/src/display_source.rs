@@ -1756,8 +1756,14 @@ impl LispStringSourceFrame {
         let mut item_layout = DisplayItemLayout::default();
         if let Some(display_prop) = self.display_prop_at(start) {
             self.char_index = property_end;
-            match display_property_source_action(context, display_prop, face)
-                .into_cursor_action(span, face)
+            let display_property = classify_display_property(display_prop);
+            match display_property_source_action_from_classification(
+                context,
+                display_prop,
+                &display_property,
+                face,
+            )
+            .into_cursor_action(span, face)
             {
                 DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                     return LispStringAction::PushReplacement { value, base_face };
@@ -1961,12 +1967,12 @@ impl DisplayPropertySourceReplacement {
     }
 }
 
-pub(crate) fn display_property_source_action(
+pub(crate) fn display_property_source_action_from_classification(
     context: &mut DisplaySourceContext<'_>,
     display_prop: Value,
+    classification: &DisplayPropertyClassification,
     face: RenderFaceRef,
 ) -> DisplayPropertySourceAction {
-    let classification = classify_display_property(display_prop);
     match DisplayPropertySourceReplacement::resolve(
         context,
         display_prop,

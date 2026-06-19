@@ -33,7 +33,6 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_frame_output::FrameTextWindowOutputSurface;
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -6354,11 +6353,10 @@ impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
         else {
             return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
         };
-        let display_property = classify_display_property(self.replacement.value());
         let append_request =
             source_render.with_font_metrics_and_display_host(|font_metrics, host| {
                 DisplayPropertyReplacementAppendRequestResolver::for_typed_replacement(
-                    &display_property,
+                    self.replacement.classification(),
                     self.replacement.replacement_source(),
                     self.replacement.value(),
                     self.replacement.start_charpos0(),
