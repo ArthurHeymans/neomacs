@@ -931,6 +931,7 @@ pub struct TaggedHeap {
     window_registry: FxHashMap<u64, TaggedValue>,
     frame_registry: FxHashMap<u64, TaggedValue>,
     timer_registry: FxHashMap<u64, TaggedValue>,
+    process_registry: FxHashMap<crate::emacs_core::process::ProcessId, TaggedValue>,
 
     /// Cumulative GC statistics.
     gc_collections: usize,
@@ -1068,6 +1069,7 @@ impl TaggedHeap {
             window_registry: FxHashMap::default(),
             frame_registry: FxHashMap::default(),
             timer_registry: FxHashMap::default(),
+            process_registry: FxHashMap::default(),
             write_tracking_mode: WriteTrackingMode::Disabled,
             dirty_owners: Vec::new(),
             dirty_owner_bits: FxHashSet::default(),
@@ -1213,6 +1215,18 @@ impl TaggedHeap {
 
     pub fn register_timer_value(&mut self, id: u64, value: TaggedValue) {
         self.timer_registry.insert(id, value);
+    }
+
+    pub fn process_value(&self, id: crate::emacs_core::process::ProcessId) -> Option<TaggedValue> {
+        self.process_registry.get(&id).copied()
+    }
+
+    pub fn register_process_value(
+        &mut self,
+        id: crate::emacs_core::process::ProcessId,
+        value: TaggedValue,
+    ) {
+        self.process_registry.insert(id, value);
     }
 
     /// Register cons cells whose storage is owned by the loaded pdump image.
@@ -1542,6 +1556,7 @@ impl TaggedHeap {
                         VecLikeType::Window => size_of::<WindowObj>(),
                         VecLikeType::Frame => size_of::<FrameObj>(),
                         VecLikeType::Timer => size_of::<TimerObj>(),
+                        VecLikeType::Process => size_of::<ProcessObj>(),
                         VecLikeType::Xwidget => size_of::<XwidgetObj>(),
                         VecLikeType::XwidgetView => size_of::<XwidgetViewObj>(),
                         VecLikeType::Subr => size_of::<SubrObj>(),
@@ -1851,6 +1866,19 @@ impl TaggedHeap {
         self.link_veclike(ptr as *mut VecLikeHeader);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<TimerObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a process reference.
+    pub fn alloc_process(&mut self, id: crate::emacs_core::process::ProcessId) -> TaggedValue {
+        let obj = Box::new(ProcessObj {
+            header: VecLikeHeader::new(VecLikeType::Process),
+            id,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<ProcessObj>());
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
@@ -2847,12 +2875,13 @@ impl TaggedHeap {
                     let o = &*(ptr as *const XwidgetViewObj);
                     out.extend([o.model, o.window]);
                 }
-                // Buffer/Window/Frame/Timer/Marker/Subr/Bignum/Sqlite/UserPtr
-                // have no Value children to trace (mirrors trace_veclike).
+                // Buffer/Window/Frame/Timer/Process/Marker/Subr/Bignum/Sqlite/
+                // UserPtr have no Value children to trace (mirrors trace_veclike).
                 VecLikeType::Buffer
                 | VecLikeType::Window
                 | VecLikeType::Frame
                 | VecLikeType::Timer
+                | VecLikeType::Process
                 | VecLikeType::Marker
                 | VecLikeType::Subr
                 | VecLikeType::Bignum
@@ -2905,6 +2934,11 @@ impl TaggedHeap {
                 self.timer_registry
                     .values()
                     .map(|value| (*value, "timer-registry")),
+            )
+            .chain(
+                self.process_registry
+                    .values()
+                    .map(|value| (*value, "process-registry")),
             )
             .collect();
 
@@ -3999,6 +4033,7 @@ impl TaggedHeap {
             | VecLikeType::Window
             | VecLikeType::Frame
             | VecLikeType::Timer
+            | VecLikeType::Process
             | VecLikeType::Marker
             | VecLikeType::Subr
             | VecLikeType::Bignum
@@ -4165,6 +4200,7 @@ impl TaggedHeap {
                     VecLikeType::Window => unsafe { drop(Box::from_raw(ptr as *mut WindowObj)) },
                     VecLikeType::Frame => unsafe { drop(Box::from_raw(ptr as *mut FrameObj)) },
                     VecLikeType::Timer => unsafe { drop(Box::from_raw(ptr as *mut TimerObj)) },
+                    VecLikeType::Process => unsafe { drop(Box::from_raw(ptr as *mut ProcessObj)) },
                     VecLikeType::Xwidget => unsafe { drop(Box::from_raw(ptr as *mut XwidgetObj)) },
                     VecLikeType::XwidgetView => unsafe {
                         drop(Box::from_raw(ptr as *mut XwidgetViewObj))

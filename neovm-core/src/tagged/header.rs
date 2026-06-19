@@ -185,6 +185,9 @@ pub enum VecLikeType {
     SymbolWithPos = 6,
     /// User pointer for dynamic module API (GNU `PVEC_USER_PTR`).
     UserPtr = 8,
+    /// Asynchronous subprocess / network / pipe / serial connection
+    /// (GNU `PVEC_PROCESS`).
+    Process = 9,
     Frame = 10,
     Window = 11,
     Buffer = 13,
@@ -222,6 +225,7 @@ impl VecLikeType {
             Self::Overlay => GnuPvecType::Overlay,
             Self::SymbolWithPos => GnuPvecType::SymbolWithPos,
             Self::UserPtr => GnuPvecType::UserPtr,
+            Self::Process => GnuPvecType::Process,
             Self::Frame => GnuPvecType::Frame,
             Self::Window => GnuPvecType::Window,
             Self::Buffer => GnuPvecType::Buffer,
@@ -672,6 +676,16 @@ pub struct BufferObj {
 pub struct WindowObj {
     pub header: VecLikeHeader,
     pub id: u64,
+}
+
+/// Heap-allocated process reference (wraps a ProcessId).
+///
+/// Mirrors `WindowObj`/`FrameObj`/`TimerObj`: the heap object holds only a
+/// numeric manager key, no Lisp Values, so GC tracing is a no-op.
+#[repr(C)]
+pub struct ProcessObj {
+    pub header: VecLikeHeader,
+    pub id: crate::emacs_core::process::ProcessId,
 }
 
 /// Heap-allocated frame reference (wraps a u64 id).

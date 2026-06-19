@@ -166,6 +166,36 @@ use crate::window::FrameManager;
 /// Unique identifier for a process.
 pub type ProcessId = u64;
 
+thread_local! {
+    /// Name registry keyed by process id, used by the printer to render
+    /// `#<process NAME>` without threading a `ProcessManager` into the
+    /// stateless print path (mirrors the terminal handle registry).  A process
+    /// name never changes after creation and survives `delete-process`, so
+    /// entries are inserted once and never removed.
+    static PROCESS_NAME_REGISTRY: std::cell::RefCell<rustc_hash::FxHashMap<ProcessId, String>> =
+        std::cell::RefCell::new(rustc_hash::FxHashMap::default());
+}
+
+/// Record a process id -> name mapping for the printer.
+pub(crate) fn register_process_print_name(id: ProcessId, name: &str) {
+    PROCESS_NAME_REGISTRY.with(|slot| {
+        slot.borrow_mut().insert(id, name.to_string());
+    });
+}
+
+/// Look up a process name for printing `#<process NAME>`.
+///
+/// Returns `None` only for an id that was never registered (it then prints as a
+/// bare `#<process>` fallback).
+pub(crate) fn print_process_handle(value: &Value) -> Option<String> {
+    let id = value.as_process_id()?;
+    let name = PROCESS_NAME_REGISTRY.with(|slot| slot.borrow().get(&id).cloned());
+    Some(match name {
+        Some(name) => format!("#<process {name}>"),
+        None => "#<process>".to_string(),
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProcessOutputWaitTiming {
     Poll,
@@ -1730,6 +1760,7 @@ impl ProcessManager {
             mark: super::marker::make_marker_value(None, None, false),
             default_directory: None,
         };
+        register_process_print_name(id, &process_name_runtime(proc.name));
         self.processes.insert(id, proc);
         id
     }
@@ -2784,7 +2815,7 @@ impl super::eval::Context {
     }
 
     fn run_process_filter_callback(&mut self, pid: ProcessId, filter: Value, data: &LispString) {
-        let proc_val = Value::fixnum(pid as i64);
+        let proc_val = Value::make_process(pid);
         let output_val = Value::heap_string(data.clone());
         if filter.is_nil() || filter.is_symbol_named(DEFAULT_PROCESS_FILTER_SYMBOL) {
             let callback = Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL);
@@ -2815,7 +2846,7 @@ impl super::eval::Context {
 
         self.run_async_process_callback_preserving_state(
             callback,
-            vec![Value::fixnum(pid as i64), Value::string(message)],
+            vec![Value::make_process(pid), Value::string(message)],
             "process sentinel",
         );
     }
@@ -2834,8 +2865,8 @@ impl super::eval::Context {
         self.run_async_process_callback_preserving_state(
             log,
             vec![
-                Value::fixnum(server_id as i64),
-                Value::fixnum(client_id as i64),
+                Value::make_process(server_id),
+                Value::make_process(client_id),
                 Value::string(message),
             ],
             "process log",
@@ -3237,19 +3268,31 @@ fn signal_process_not_running_in_manager(processes: &ProcessManager, id: Process
     )
 }
 
+/// Decode a process designator into a raw `ProcessId` candidate.
+///
+/// This is the single root that maps a Lisp value to a process key.  Like GNU's
+/// `get_process` / `CHECK_PROCESS`, only a genuine process object designates a
+/// process by identity — a bare integer is NOT a process (GNU signals
+/// `wrong-type-argument processp`).  It does NOT validate that the id still
+/// names a live/known process; callers layer their own `get`/`get_any` checks
+/// on top.  Name-string and nil (current-buffer) designators are handled by the
+/// individual resolvers since they need manager/buffer state.
+pub(crate) fn process_value_to_id(value: &Value) -> Option<ProcessId> {
+    value.as_process_id()
+}
+
 fn resolve_process_or_wrong_type(
     eval: &super::eval::Context,
     value: &Value,
 ) -> Result<ProcessId, Flow> {
+    if let Some(id) = process_value_to_id(value) {
+        return if eval.processes.get(id).is_some() {
+            Ok(id)
+        } else {
+            Err(signal_wrong_type_processp(*value))
+        };
+    }
     match value.kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            if eval.processes.get(id).is_some() {
-                Ok(id)
-            } else {
-                Err(signal_wrong_type_processp(*value))
-            }
-        }
         ValueKind::String => {
             let name = process_owned_runtime_string(*value);
             eval.processes
@@ -3264,38 +3307,21 @@ fn resolve_process_or_wrong_type_any(
     eval: &super::eval::Context,
     value: &Value,
 ) -> Result<ProcessId, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            if eval.processes.get_any(id).is_some() {
-                Ok(id)
-            } else {
-                Err(signal_wrong_type_processp(*value))
-            }
-        }
-        ValueKind::String => {
-            let name = process_owned_runtime_string(*value);
-            eval.processes
-                .find_by_name(&name)
-                .ok_or_else(|| signal_wrong_type_processp(*value))
-        }
-        _ => Err(signal_wrong_type_processp(*value)),
-    }
+    resolve_process_or_wrong_type_any_in_manager(&eval.processes, value)
 }
 
 fn resolve_process_or_wrong_type_any_in_manager(
     processes: &ProcessManager,
     value: &Value,
 ) -> Result<ProcessId, Flow> {
+    if let Some(id) = process_value_to_id(value) {
+        return if processes.get_any(id).is_some() {
+            Ok(id)
+        } else {
+            Err(signal_wrong_type_processp(*value))
+        };
+    }
     match value.kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            if processes.get_any(id).is_some() {
-                Ok(id)
-            } else {
-                Err(signal_wrong_type_processp(*value))
-            }
-        }
         ValueKind::String => {
             let name = process_owned_runtime_string(*value);
             processes
@@ -3354,15 +3380,14 @@ fn resolve_process_for_status(
     eval: &super::eval::Context,
     value: &Value,
 ) -> Result<Option<ProcessId>, Flow> {
+    if let Some(id) = process_value_to_id(value) {
+        return if eval.processes.get_any(id).is_some() {
+            Ok(Some(id))
+        } else {
+            Err(signal_wrong_type_processp(*value))
+        };
+    }
     match value.kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            if eval.processes.get_any(id).is_some() {
-                Ok(Some(id))
-            } else {
-                Err(signal_wrong_type_processp(*value))
-            }
-        }
         ValueKind::String => {
             let name = process_owned_runtime_string(*value);
             Ok(eval.processes.find_by_name(&name))
@@ -3408,13 +3433,8 @@ fn resolve_live_process_designator_in_manager(
     processes: &ProcessManager,
     value: &Value,
 ) -> Option<ProcessId> {
-    match value.kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            processes.get(id).map(|_| id)
-        }
-        _ => None,
-    }
+    let id = process_value_to_id(value)?;
+    processes.get(id).map(|_| id)
 }
 
 fn resolve_live_process_or_wrong_type(
@@ -3447,9 +3467,8 @@ fn is_stale_process_id_designator(eval: &super::eval::Context, value: &Value) ->
 }
 
 fn is_stale_process_id_designator_in_manager(processes: &ProcessManager, value: &Value) -> bool {
-    match value.kind() {
-        ValueKind::Fixnum(n) if n > 0 => {
-            let id = n as ProcessId;
+    match process_value_to_id(value) {
+        Some(id) if id > 0 => {
             processes.get(id).is_none()
                 && (processes.get_any(id).is_some() || processes.was_issued_id(id))
         }
@@ -3632,11 +3651,8 @@ fn resolve_optional_process_with_explicit_return_in_state(
 ) -> Result<(ProcessId, Value), Flow> {
     if let Some(v) = value {
         if !v.is_nil() && is_stale_process_id_designator_in_manager(processes, v) {
-            if let Some(n) = v.as_fixnum() {
-                return Err(signal_process_not_active_in_manager(
-                    processes,
-                    n as ProcessId,
-                ));
+            if let Some(id) = process_value_to_id(v) {
+                return Err(signal_process_not_active_in_manager(processes, id));
             }
         }
     }
@@ -3670,6 +3686,15 @@ fn resolve_signal_process_target_in_state(
 ) -> Result<SignalProcessTarget, Flow> {
     if let Some(v) = value {
         if !v.is_nil() {
+            // A first-class process object designates that process while live;
+            // once it has exited, GNU still signals the recorded OS pid.
+            if let Some(id) = v.as_process_id() {
+                return if processes.get(id).is_some() {
+                    Ok(SignalProcessTarget::Process(id))
+                } else {
+                    Ok(SignalProcessTarget::Pid(id as i64))
+                };
+            }
             return match v.kind() {
                 ValueKind::String => {
                     let name_str = process_owned_runtime_string(*v);
@@ -3678,6 +3703,8 @@ fn resolve_signal_process_target_in_state(
                         None => SignalProcessTarget::MissingNamedProcess,
                     })
                 }
+                // GNU `Fsignal_process` treats a bare integer as a literal OS
+                // PID, not a process-object id.
                 ValueKind::Fixnum(pid) if pid >= 0 => {
                     let id = pid as ProcessId;
                     if processes.get(id).is_some() {
@@ -4804,7 +4831,7 @@ pub(crate) fn builtin_clone_process(
         ));
     }
     let id = resolve_process_or_wrong_type_any(eval, &args[0])?;
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (internal-default-interrupt-process &optional PROCESS CURRENT-GROUP) -> process-or-nil
@@ -5999,7 +6026,7 @@ pub(crate) fn builtin_make_network_process(
                         }
                     }
                     eval.processes.register_socket_fd(id).ok();
-                    return Ok(Value::fixnum(id as i64));
+                    return Ok(Value::make_process(id));
                 }
 
                 let stream = TcpStream::connect(addr).map_err(|e| {
@@ -6091,7 +6118,7 @@ pub(crate) fn builtin_make_network_process(
                     .map(|p| p.sentinel)
                     .unwrap_or(Value::NIL);
                 eval.run_process_sentinel_callback(id, sentinel, "open\n");
-                return Ok(Value::fixnum(id as i64));
+                return Ok(Value::make_process(id));
             }
             #[cfg(unix)]
             NetworkAddressSpec::Local(path) => {
@@ -6168,7 +6195,7 @@ pub(crate) fn builtin_make_network_process(
                         }
                     }
                     eval.processes.register_socket_fd(id).ok();
-                    return Ok(Value::fixnum(id as i64));
+                    return Ok(Value::make_process(id));
                 }
 
                 let stream = UnixStream::connect(&path).map_err(|e| {
@@ -6251,7 +6278,7 @@ pub(crate) fn builtin_make_network_process(
                     .unwrap_or(Value::NIL);
                 eval.run_process_sentinel_callback(id, sentinel, "open\n");
 
-                return Ok(Value::fixnum(id as i64));
+                return Ok(Value::make_process(id));
             }
         }
     }
@@ -6368,7 +6395,7 @@ pub(crate) fn builtin_make_network_process(
                     )?;
                 }
                 eval.processes.register_socket_fd(id).ok();
-                return Ok(Value::fixnum(id as i64));
+                return Ok(Value::make_process(id));
             }
 
             let stream = UnixStream::connect(&service_path).map_err(|e| {
@@ -6453,7 +6480,7 @@ pub(crate) fn builtin_make_network_process(
                 .unwrap_or(Value::NIL);
             eval.run_process_sentinel_callback(id, sentinel, "open\n");
 
-            return Ok(Value::fixnum(id as i64));
+            return Ok(Value::make_process(id));
         }
     }
 
@@ -6532,7 +6559,7 @@ pub(crate) fn builtin_make_network_process(
             }
         }
         eval.processes.register_socket_fd(id).ok();
-        return Ok(Value::fixnum(id as i64));
+        return Ok(Value::make_process(id));
     }
 
     // ---- Client mode: establish TCP connection ----
@@ -6633,7 +6660,7 @@ pub(crate) fn builtin_make_network_process(
         .unwrap_or(Value::NIL);
     eval.run_process_sentinel_callback(id, sentinel, "open\n");
 
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (make-pipe-process &rest ARGS) -> process-or-nil
@@ -6715,7 +6742,7 @@ pub(crate) fn builtin_make_pipe_process_impl(
         )?;
         proc.thread = current_thread_handle(threads);
     }
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (make-serial-process &rest ARGS) -> process-or-nil
@@ -6793,7 +6820,7 @@ pub(crate) fn builtin_make_serial_process_impl(
             speed.unwrap(),
         ]);
     }
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (serial-process-configure &rest ARGS) -> nil
@@ -6850,7 +6877,7 @@ pub(crate) fn builtin_serial_process_configure_impl(
     };
     let proc = processes
         .get(id)
-        .ok_or_else(|| signal_wrong_type_processp(Value::fixnum(id as i64)))?;
+        .ok_or_else(|| signal_wrong_type_processp(Value::make_process(id)))?;
     if proc.kind != ProcessKind::Serial {
         return Err(signal("error", vec![Value::string("Not a serial process")]));
     }
@@ -6964,7 +6991,7 @@ pub(crate) fn builtin_start_process(
         ));
     }
 
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (start-process-shell-command NAME BUFFER COMMAND) -> process-id
@@ -6997,7 +7024,7 @@ pub(crate) fn builtin_start_process_shell_command(
         ));
     }
 
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (start-file-process NAME BUFFER PROGRAM &rest PROGRAM-ARGS) -> process-id
@@ -7036,7 +7063,7 @@ pub(crate) fn builtin_start_file_process(
         ));
     }
 
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (start-file-process-shell-command NAME BUFFER COMMAND) -> process-id
@@ -7069,7 +7096,7 @@ pub(crate) fn builtin_start_file_process_shell_command(
         ));
     }
 
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 /// (call-process PROGRAM &optional INFILE DESTINATION DISPLAY &rest ARGS)
@@ -7688,23 +7715,23 @@ fn builtin_make_process_impl_with_environment(
     } else {
         None
     };
-    let stderrproc = match stderr_target.kind() {
-        ValueKind::Nil => Value::NIL,
-        ValueKind::Fixnum(_) => {
-            let stderr_id =
-                resolve_process_or_wrong_type_any_in_manager(processes, &stderr_target)?;
-            let stderr_proc = processes
-                .get_any(stderr_id)
-                .ok_or_else(|| signal_wrong_type_processp(stderr_target))?;
-            if stderr_proc.kind != ProcessKind::Pipe {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Process is not a pipe process")],
-                ));
-            }
-            Value::fixnum(stderr_id as i64)
+    let stderrproc = if stderr_target.is_nil() {
+        Value::NIL
+    } else if let Some(stderr_id) = process_value_to_id(&stderr_target) {
+        // An existing process (object or legacy id) is reused as the stderr
+        // pipe; GNU requires it to be a pipe process.
+        let stderr_proc = processes
+            .get_any(stderr_id)
+            .ok_or_else(|| signal_wrong_type_processp(stderr_target))?;
+        if stderr_proc.kind != ProcessKind::Pipe {
+            return Err(signal(
+                "error",
+                vec![Value::string("Process is not a pipe process")],
+            ));
         }
-        _ => builtin_make_pipe_process_impl(
+        Value::make_process(stderr_id)
+    } else {
+        builtin_make_pipe_process_impl(
             processes,
             buffers,
             threads,
@@ -7714,7 +7741,7 @@ fn builtin_make_process_impl_with_environment(
                 ProcessKeyword::Buffer.value(),
                 stderr_target,
             ],
-        )?,
+        )?
     };
     let id = processes.create_process_lisp_resolved(
         name,
@@ -7753,7 +7780,7 @@ fn builtin_make_process_impl_with_environment(
         ));
     }
 
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_process(id))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -7924,12 +7951,9 @@ pub(crate) fn builtin_process_send_string_impl(
         .as_lisp_string()
         .cloned()
         .ok_or_else(|| signal_wrong_type_string(args[1]))?;
-    if let Some(n) = args[0].as_fixnum() {
-        if n >= 0 && is_stale_process_id_designator_in_manager(processes, &args[0]) {
-            return Err(signal_process_not_running_in_manager(
-                processes,
-                n as ProcessId,
-            ));
+    if let Some(id) = process_value_to_id(&args[0]) {
+        if is_stale_process_id_designator_in_manager(processes, &args[0]) {
+            return Err(signal_process_not_running_in_manager(processes, id));
         }
     }
     let id = resolve_process_or_missing_error_in_manager(processes, &args[0])?;
@@ -7952,22 +7976,23 @@ pub(crate) fn builtin_process_status_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-status", &args, 1)?;
-    let Some(id) = (match args[0].kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            if processes.get_any(id).is_some() {
-                Some(id)
-            } else {
-                return Err(signal_wrong_type_processp(args[0]));
+    let id = if let Some(id) = process_value_to_id(&args[0]) {
+        if processes.get_any(id).is_some() {
+            id
+        } else {
+            return Err(signal_wrong_type_processp(args[0]));
+        }
+    } else {
+        match args[0].kind() {
+            ValueKind::String => {
+                let name = process_owned_runtime_string(args[0]);
+                match processes.find_by_name(&name) {
+                    Some(id) => id,
+                    None => return Ok(Value::NIL),
+                }
             }
+            _ => return Err(signal_wrong_type_processp(args[0])),
         }
-        ValueKind::String => {
-            let name = process_owned_runtime_string(args[0]);
-            processes.find_by_name(&name)
-        }
-        _ => return Err(signal_wrong_type_processp(args[0])),
-    }) else {
-        return Ok(Value::NIL);
     };
     // Match GNU `Fprocess_status` (`src/process.c`): this reports the stored
     // process status and does not synchronously reap the child. Short-lived
@@ -8025,7 +8050,7 @@ pub(crate) fn builtin_process_list_impl(
 ) -> EvalResult {
     expect_args("process-list", &args, 0)?;
     let ids = processes.list_processes();
-    let values: Vec<Value> = ids.iter().map(|id| Value::fixnum(*id as i64)).collect();
+    let values: Vec<Value> = ids.iter().map(|id| Value::make_process(*id)).collect();
     Ok(Value::list(values))
 }
 
@@ -8220,7 +8245,7 @@ pub(crate) fn builtin_set_buffer_process_coding_system(
     let proc = eval.processes.get_mut(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
-            vec![Value::symbol("processp"), Value::fixnum(id as i64)],
+            vec![Value::symbol("processp"), Value::make_process(id)],
         )
     })?;
     proc.coding_decode = args[0];
@@ -8531,13 +8556,10 @@ pub(crate) fn builtin_process_send_region_impl(
 ) -> EvalResult {
     expect_args("process-send-region", &args, 3)?;
 
-    if let Some(n) = args[0].as_fixnum() {
-        if n >= 0 && is_stale_process_id_designator_in_manager(processes, &args[0]) {
+    if let Some(id) = process_value_to_id(&args[0]) {
+        if is_stale_process_id_designator_in_manager(processes, &args[0]) {
             let _ = super::position::LispRegionArgs::from_values(&*buffers, args[1], args[2])?;
-            return Err(signal_process_not_running_in_manager(
-                processes,
-                n as ProcessId,
-            ));
+            return Err(signal_process_not_running_in_manager(processes, id));
         }
     }
 
@@ -8583,12 +8605,9 @@ pub(crate) fn builtin_process_send_eof_impl(
     }
     if let Some(process) = args.first() {
         if !process.is_nil() {
-            if let Some(n) = process.as_fixnum() {
-                if n >= 0 && is_stale_process_id_designator_in_manager(processes, process) {
-                    return Err(signal_process_not_running_in_manager(
-                        processes,
-                        n as ProcessId,
-                    ));
+            if let Some(id) = process_value_to_id(process) {
+                if is_stale_process_id_designator_in_manager(processes, process) {
+                    return Err(signal_process_not_running_in_manager(processes, id));
                 }
             }
             let id = resolve_process_or_missing_error_in_manager(processes, process)?;
@@ -8635,12 +8654,9 @@ pub(crate) fn builtin_process_running_child_p_impl(
         ));
     }
     if let Some(process) = args.first() {
-        if let Some(n) = process.as_fixnum() {
-            if n >= 0 && is_stale_process_id_designator_in_manager(processes, process) {
-                return Err(signal_process_not_active_in_manager(
-                    processes,
-                    n as ProcessId,
-                ));
+        if let Some(id) = process_value_to_id(process) {
+            if is_stale_process_id_designator_in_manager(processes, process) {
+                return Err(signal_process_not_active_in_manager(processes, id));
             }
         }
     }
@@ -8720,9 +8736,14 @@ pub(crate) fn builtin_get_process(eval: &mut super::eval::Context, args: Vec<Val
 
 pub(crate) fn builtin_get_process_impl(processes: &ProcessManager, args: Vec<Value>) -> EvalResult {
     expect_args("get-process", &args, 1)?;
+    // GNU `Fget_process`: a process object is returned unchanged; otherwise the
+    // argument must be a name string.
+    if args[0].is_process() {
+        return Ok(args[0]);
+    }
     let name = expect_string_strict(&args[0])?;
     match processes.find_by_name(&name) {
-        Some(id) => Ok(Value::fixnum(id as i64)),
+        Some(id) => Ok(Value::make_process(id)),
         None => Ok(Value::NIL),
     }
 }
@@ -8747,7 +8768,7 @@ pub(crate) fn builtin_get_buffer_process_impl(
         return Ok(Value::NIL);
     };
     match processes.find_by_buffer_id(buffer_id) {
-        Some(id) => Ok(Value::fixnum(id as i64)),
+        Some(id) => Ok(Value::make_process(id)),
         None => Ok(Value::NIL),
     }
 }
@@ -8757,12 +8778,12 @@ pub(crate) fn builtin_processp(eval: &mut super::eval::Context, args: Vec<Value>
     builtin_processp_impl(&eval.processes, args)
 }
 
-pub(crate) fn builtin_processp_impl(processes: &ProcessManager, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_processp_impl(_processes: &ProcessManager, args: Vec<Value>) -> EvalResult {
     expect_args("processp", &args, 1)?;
-    Ok(Value::bool_val(match args[0].kind() {
-        ValueKind::Fixnum(n) if n >= 0 => processes.get_any(n as ProcessId).is_some(),
-        _ => false,
-    }))
+    // GNU `Fprocessp` is purely structural: any process object is `t`, even
+    // after it has exited (it stays a process object).  A bare integer is not a
+    // process.
+    Ok(Value::bool_val(args[0].is_process()))
 }
 
 /// (process-live-p PROCESS) -> list-or-nil
@@ -8778,13 +8799,8 @@ pub(crate) fn builtin_process_live_p_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-live-p", &args, 1)?;
-    let Some(id) = (match args[0].kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            processes.get(id).map(|_| id)
-        }
-        _ => None,
-    }) else {
+    let Some(id) = process_value_to_id(&args[0]).and_then(|id| processes.get(id).map(|_| id))
+    else {
         return Ok(Value::NIL);
     };
     let proc = processes.get(id).ok_or_else(|| {
@@ -8803,21 +8819,17 @@ pub(crate) fn builtin_process_id(eval: &mut super::eval::Context, args: Vec<Valu
 
 pub(crate) fn builtin_process_id_impl(processes: &ProcessManager, args: Vec<Value>) -> EvalResult {
     expect_args("process-id", &args, 1)?;
-    let id = match args[0].kind() {
-        ValueKind::Fixnum(n) if n >= 0 => {
-            let id = n as ProcessId;
-            if processes.get_any(id).is_some() {
-                id
-            } else {
-                return Err(signal_wrong_type_processp(args[0]));
-            }
-        }
-        _ => return Err(signal_wrong_type_processp(args[0])),
-    };
+    // GNU `Fprocess_id` uses CHECK_PROCESS — it requires a genuine process
+    // object (no name-string designator), so resolve structurally only.
+    let id = process_value_to_id(&args[0])
+        .filter(|id| processes.get_any(*id).is_some())
+        .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
     let proc = processes
         .get_any(id)
         .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
     if proc.kind == ProcessKind::Real {
+        // GNU `Fprocess_id` returns the OS PID as an integer (not the process
+        // object). Neomacs keys processes by id, which equals the PID surface.
         Ok(Value::fixnum(id as i64))
     } else {
         Ok(Value::NIL)

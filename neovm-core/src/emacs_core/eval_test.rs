@@ -1411,7 +1411,7 @@ fn read_char_prefers_ready_keypress_over_process_filter_callback() {
     crate::emacs_core::process::builtin_set_process_filter(
         &mut ev,
         vec![
-            Value::fixnum(pid as i64),
+            Value::make_process(pid),
             Value::symbol("read-char-priority-filter"),
         ],
     )
@@ -1436,7 +1436,7 @@ fn read_char_prefers_ready_keypress_over_process_filter_callback() {
 
     crate::emacs_core::process::builtin_accept_process_output(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::make_float(0.1)],
+        vec![Value::make_process(pid), Value::make_float(0.1)],
     )
     .expect("accept-process-output should service process callback afterwards");
     assert_eq!(

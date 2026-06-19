@@ -35,8 +35,8 @@ use crate::tagged::gc::{
 use crate::tagged::header::{
     BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FloatObj, FrameObj,
     HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj,
-    RecordObj, StringObj, SubCharTableObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
-    XwidgetObj, XwidgetViewObj,
+    ProcessObj, RecordObj, StringObj, SubCharTableObj, TimerObj, VecLikeHeader, VectorObj,
+    WindowObj, XwidgetObj, XwidgetViewObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -1551,6 +1551,24 @@ impl TaggedValue {
         })
     }
 
+    /// Allocate a process reference.
+    ///
+    /// Returns the same value for the same id (eq-ness) via the process value
+    /// cache, exactly like `make_buffer`/`make_timer`.  A process that has
+    /// exited is still a process object in GNU (status `exit`/`signal`), so the
+    /// cached value is never evicted on `delete-process`.
+    pub fn make_process(id: crate::emacs_core::process::ProcessId) -> Self {
+        with_tagged_heap(|h| {
+            if let Some(value) = h.process_value(id) {
+                value
+            } else {
+                let value = h.alloc_process(id);
+                h.register_process_value(id, value);
+                value
+            }
+        })
+    }
+
     /// Allocate a GNU-shaped xwidget model object.
     pub fn make_xwidget(
         type_: Value,
@@ -1615,6 +1633,12 @@ impl TaggedValue {
     #[inline]
     pub fn is_timer(self) -> bool {
         self.veclike_type() == Some(VecLikeType::Timer)
+    }
+
+    /// Check if this is a process.
+    #[inline]
+    pub fn is_process(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::Process)
     }
 
     /// Check if this is a marker.
@@ -1817,6 +1841,16 @@ impl TaggedValue {
     pub fn as_timer_id(self) -> Option<u64> {
         if self.is_timer() {
             let ptr = self.as_veclike_ptr().unwrap() as *const TimerObj;
+            Some(unsafe { (*ptr).id })
+        } else {
+            None
+        }
+    }
+
+    /// Get the process ID from a process value.
+    pub fn as_process_id(self) -> Option<crate::emacs_core::process::ProcessId> {
+        if self.is_process() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const ProcessObj;
             Some(unsafe { (*ptr).id })
         } else {
             None

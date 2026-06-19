@@ -919,6 +919,12 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
             let tid = value.as_timer_id().unwrap();
             write!(out, "#<timer {}>", tid).unwrap();
         }
+        ValueKind::Veclike(VecLikeType::Process) => {
+            out.push_str(
+                &super::process::print_process_handle(value)
+                    .unwrap_or_else(|| "#<process>".to_string()),
+            );
+        }
         ValueKind::Veclike(VecLikeType::Xwidget) => {
             let xw = value.as_xwidget().unwrap();
             write!(out, "#<xwidget {}>", xw.xwidget_id).unwrap();
@@ -1895,6 +1901,13 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         }
         ValueKind::Veclike(VecLikeType::Timer) => {
             out.extend_from_slice(format!("#<timer {}>", value.as_timer_id().unwrap()).as_bytes());
+        }
+        ValueKind::Veclike(VecLikeType::Process) => {
+            out.extend_from_slice(
+                super::process::print_process_handle(value)
+                    .unwrap_or_else(|| "#<process>".to_string())
+                    .as_bytes(),
+            );
         }
         ValueKind::Veclike(VecLikeType::Xwidget) => {
             let xw = value.as_xwidget().unwrap();

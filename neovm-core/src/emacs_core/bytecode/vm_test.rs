@@ -5052,7 +5052,7 @@ fn vm_undo_boundary_uses_shared_buffer_state() {
 fn vm_simple_process_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(let ((p 1))
+        r#"(let ((p (get-process "vm-proc")))
              (list
               (processp p)
               (not (processp 99))
@@ -5090,7 +5090,11 @@ fn vm_simple_process_builtins_use_shared_runtime_state() {
 fn vm_stale_process_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(let ((p 1))
+        // Capture the live process object, then delete it inside the form so we
+        // hold a first-class (now-stale) process value: GNU keeps it `processp`
+        // after `delete-process`.
+        r#"(let ((p (get-process "vm-stale-proc")))
+             (delete-process p)
              (list
               (processp p)
               (let ((b (process-buffer p)))
@@ -5114,7 +5118,6 @@ fn vm_stale_process_builtins_use_shared_runtime_state() {
                 vec![],
             );
             assert_eq!(pid, 1);
-            assert!(eval.processes.delete_process(pid));
         },
     );
     assert_eq!(result, "OK (t t t t t t t t)");
@@ -5125,7 +5128,7 @@ fn vm_process_introspection_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     // process-live-p is a defun in subr.el → bootstrap context required.
     let result = vm_bootstrap_eval_with_init_str(
-        r#"(let ((p 1))
+        r#"(let ((p (get-process "vm-proc-introspect")))
              (list
               (equal (process-live-p p) '(run open listen connect stop))
               (integerp (process-id p))
@@ -5164,7 +5167,8 @@ fn vm_stale_process_introspection_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     // process-live-p is a defun in subr.el → bootstrap context required.
     let result = vm_bootstrap_eval_with_init_str(
-        r#"(let ((p 1))
+        r#"(let ((p (get-process "vm-proc-stale-introspect")))
+             (delete-process p)
              (list
               (null (process-live-p p))
               (integerp (process-id p))
@@ -5184,7 +5188,6 @@ fn vm_stale_process_introspection_builtins_use_shared_runtime_state() {
                 vec![],
             );
             assert_eq!(pid, 1);
-            assert!(eval.processes.delete_process(pid));
         },
     );
     assert_eq!(result, "OK (t t t t t t t t t t)");
@@ -5194,7 +5197,9 @@ fn vm_stale_process_introspection_builtins_use_shared_runtime_state() {
 fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(let ((p 1) (pp 2) (np 3))
+        r#"(let ((p (get-process "vm-proc-coding"))
+                 (pp (get-process "vm-proc-pipe"))
+                 (np (get-process "vm-proc-network")))
              (list
               (equal (process-coding-system p) '(utf-8-unix . utf-8-unix))
               (null (process-datagram-address p))
@@ -5257,7 +5262,8 @@ fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
 fn vm_stale_process_coding_and_tty_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(let ((p 1))
+        r#"(let ((p (get-process "vm-proc-stale-coding")))
+             (delete-process p)
              (list
               (null (set-process-coding-system p 'utf-16le))
               (equal (process-coding-system p) '(utf-16le . utf-16le))
@@ -5275,7 +5281,6 @@ fn vm_stale_process_coding_and_tty_builtins_use_shared_runtime_state() {
                 vec![],
             );
             assert_eq!(pid, 1);
-            assert!(eval.processes.delete_process(pid));
         },
     );
     assert_eq!(result, "OK (t t t t t t t t)");
@@ -5288,12 +5293,12 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
     // bootstrap context required.
     let result = vm_bootstrap_eval_with_init_str(
         r#"(list
-             (eq (process-status 1) 'run)
-             (eq (process-status 2) 'open)
-             (eq (process-status 3) 'listen)
-             (eq (process-status 4) 'stop)
-             (eq (process-status 5) 'signal)
-             (= (process-exit-status 5) 9)
+             (eq (process-status (get-process "vm-status-real")) 'run)
+             (eq (process-status (get-process "vm-status-pipe")) 'open)
+             (eq (process-status (get-process "vm-status-network")) 'listen)
+             (eq (process-status (get-process "vm-status-stop")) 'stop)
+             (eq (process-status (get-process "vm-status-signal")) 'signal)
+             (= (process-exit-status (get-process "vm-status-signal")) 9)
              (eq (process-status "vm-status-real") 'run)
              (null (process-status "vm-status-missing"))
              (process-kill-buffer-query-function))"#,
@@ -5354,7 +5359,8 @@ fn vm_stale_process_status_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     // process-kill-buffer-query-function is in subr.el → bootstrap.
     let result = vm_bootstrap_eval_with_init_str(
-        r#"(let ((p 1))
+        r#"(let ((p (get-process "vm-status-stale")))
+             (delete-process p)
              (list
               (eq (process-status p) 'signal)
               (= (process-exit-status p) 9)
@@ -5370,7 +5376,6 @@ fn vm_stale_process_status_builtins_use_shared_runtime_state() {
             assert_eq!(pid, 1);
             eval.processes.get_any_mut(pid).unwrap().status =
                 Value::list(vec![Value::symbol("signal"), Value::fixnum(9), Value::NIL]);
-            assert!(eval.processes.delete_process(pid));
         },
     );
     assert_eq!(result, "OK (t t t t)");
@@ -5412,24 +5417,31 @@ fn vm_process_control_and_send_builtins_use_shared_runtime_state() {
 
     let result = eval
         .eval_str(
-            r#"(list
-             (null (continue-process))
-             (eq (process-status 1) 'run)
-             (eq (interrupt-process 2) 2)
-             (eq (process-status 2) 'signal)
-             (= (process-exit-status 2) 2)
-             (eq (kill-process 3) 3)
-             (= (process-exit-status 3) 9)
-             (eq (stop-process 4) 4)
-             (eq (process-status 4) 'stop)
-             (eq (quit-process 5) 5)
-             (eq (process-status 5) 'run)
-             (eq (signal-process 6 15) 0)
-             (= (process-exit-status 6) 15)
-             (null (process-send-string 7 "hello"))
-             (null (process-send-region 7 (point-min) (point-max)))
-             (eq (process-send-eof 7) 7)
-             (null (process-running-child-p 7)))"#,
+            r#"(let ((p1 (get-process "vm-proc-current"))
+                     (p2 (get-process "vm-proc-2"))
+                     (p3 (get-process "vm-proc-3"))
+                     (p4 (get-process "vm-proc-4"))
+                     (p5 (get-process "vm-proc-5"))
+                     (p6 (get-process "vm-proc-6"))
+                     (p7 (get-process "vm-proc-7")))
+               (list
+                (null (continue-process))
+                (eq (process-status p1) 'run)
+                (eq (interrupt-process p2) p2)
+                (eq (process-status p2) 'signal)
+                (= (process-exit-status p2) 2)
+                (eq (kill-process p3) p3)
+                (= (process-exit-status p3) 9)
+                (eq (stop-process p4) p4)
+                (eq (process-status p4) 'stop)
+                (eq (quit-process p5) p5)
+                (eq (process-status p5) 'run)
+                (eq (signal-process p6 15) 0)
+                (= (process-exit-status p6) 15)
+                (null (process-send-string p7 "hello"))
+                (null (process-send-region p7 (point-min) (point-max)))
+                (eq (process-send-eof p7) p7)
+                (null (process-running-child-p p7))))"#,
         )
         .expect("process control/send builtins should execute");
 
@@ -5488,7 +5500,8 @@ fn vm_process_control_and_send_builtins_use_shared_runtime_state() {
 fn vm_stale_process_control_and_send_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(let ((p 1))
+        r#"(let ((p (get-process "vm-stale-proc-control")))
+             (delete-process p)
              (list
               (condition-case err (continue-process p) (error (car err)))
               (condition-case err (interrupt-process p) (error (car err)))
@@ -5517,7 +5530,6 @@ fn vm_stale_process_control_and_send_builtins_use_shared_runtime_state() {
                 vec![],
             );
             assert_eq!(pid, 1);
-            assert!(eval.processes.delete_process(pid));
         },
     );
     assert_eq!(
@@ -5530,15 +5542,18 @@ fn vm_stale_process_control_and_send_builtins_use_shared_runtime_state() {
 fn vm_delete_process_builtin_uses_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(list
-             (processp 1)
-             (eq (delete-process nil) nil)
-             (processp 1)
-             (null (memq (process-status 1) '(run open listen connect stop)))
-             (eq (process-status 1) 'signal)
-             (= (process-exit-status 1) 9)
-             (null (get-process "vm-delete-proc"))
-             (null (get-buffer-process "*vm-delete-proc*")))"#,
+        // GNU keeps a deleted process `processp`-true; its status becomes
+        // `signal` with exit code 9.
+        r#"(let ((p (get-buffer-process "*vm-delete-proc*")))
+             (list
+              (processp p)
+              (eq (delete-process nil) nil)
+              (processp p)
+              (null (memq (process-status p) '(run open listen connect stop)))
+              (eq (process-status p) 'signal)
+              (= (process-exit-status p) 9)
+              (null (get-process "vm-delete-proc"))
+              (null (get-buffer-process "*vm-delete-proc*"))))"#,
         |eval| {
             let buffer_id = eval.buffers.create_buffer("*vm-delete-proc*");
             eval.buffers.set_current(buffer_id);
@@ -5613,13 +5628,14 @@ fn vm_process_attributes_builtin_uses_shared_runtime_state() {
 fn vm_set_process_thread_builtin_uses_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(let ((thr (current-thread)))
+        r#"(let ((thr (current-thread))
+                 (p (get-process "vm-process-thread")))
              (list
-              (eq (set-process-thread 1 thr) thr)
-              (eq (process-thread 1) thr)
-              (eq (set-process-thread 1 nil) nil)
-              (null (process-thread 1))
-              (eq (car (condition-case err (set-process-thread 1 'x) (error err)))
+              (eq (set-process-thread p thr) thr)
+              (eq (process-thread p) thr)
+              (eq (set-process-thread p nil) nil)
+              (null (process-thread p))
+              (eq (car (condition-case err (set-process-thread p 'x) (error err)))
                   'wrong-type-argument)))"#,
         |eval| {
             let pid = eval.processes.create_process(
@@ -5673,19 +5689,21 @@ fn vm_non_child_process_creation_builtins_use_shared_runtime_state() {
 fn vm_network_and_serial_process_config_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(list
-             (null (serial-process-configure))
-             (null (serial-process-configure :name "vm-serial"))
-             (eq (car (condition-case err (serial-process-configure :process 2) (error err))) 'error)
-             (eq (car (condition-case err (set-network-process-option) (error err)))
-                 'wrong-number-of-arguments)
-             (eq (car (condition-case err (set-network-process-option 2 :foo 1) (error err)))
-                 'error)
-             (eq (car (condition-case err (set-network-process-option 3 1 1) (error err)))
-                 'wrong-type-argument)
-             (null (set-network-process-option 3 :foo 1 t))
-             (eq (car (condition-case err (set-network-process-option 3 :foo 1) (error err)))
-                 'error))"#,
+        r#"(let ((real (get-process "vm-real"))
+                 (network (get-process "vm-network")))
+             (list
+              (null (serial-process-configure))
+              (null (serial-process-configure :name "vm-serial"))
+              (eq (car (condition-case err (serial-process-configure :process real) (error err))) 'error)
+              (eq (car (condition-case err (set-network-process-option) (error err)))
+                  'wrong-number-of-arguments)
+              (eq (car (condition-case err (set-network-process-option real :foo 1) (error err)))
+                  'error)
+              (eq (car (condition-case err (set-network-process-option network 1 1) (error err)))
+                  'wrong-type-argument)
+              (null (set-network-process-option network :foo 1 t))
+              (eq (car (condition-case err (set-network-process-option network :foo 1) (error err)))
+                  'error)))"#,
         |eval| {
             use crate::emacs_core::process::ProcessKind;
             use crate::emacs_core::value::ValueKind;
@@ -5884,10 +5902,10 @@ fn vm_accept_process_output_uses_shared_runtime_and_callbacks() {
                    (lambda (_proc msg) (setq vm-accept-sentinel-data msg)))
              (setq vm-accept-filter-data nil
                    vm-accept-sentinel-data nil)
-             (set-process-filter 1 'vm-accept-filter)
-             (set-process-sentinel 1 'vm-accept-sentinel)
-             (let ((first (accept-process-output 1 0.1))
-                   (second (accept-process-output 1 0.1)))
+             (set-process-filter (get-process "vm-accept-process") 'vm-accept-filter)
+             (set-process-sentinel (get-process "vm-accept-process") 'vm-accept-sentinel)
+             (let ((first (accept-process-output (get-process "vm-accept-process") 0.1))
+                   (second (accept-process-output (get-process "vm-accept-process") 0.1)))
                (list first
                      (or (eq second t) (null second))
                      vm-accept-filter-data
@@ -6776,7 +6794,7 @@ fn vm_internal_utility_builtins_use_direct_and_shared_state_paths() {
 fn vm_internal_default_process_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     let result = vm_eval_with_init_str(
-        r#"(let ((p 1))
+        r#"(let ((p (get-process "vm-default-callback-proc")))
              (list
               (null (internal-default-process-filter p "chunk"))
               (null (internal-default-process-sentinel p "done"))

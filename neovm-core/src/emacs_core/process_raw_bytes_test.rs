@@ -58,13 +58,10 @@ fn builtin_start_process_preserves_raw_unibyte_command_argument_storage() {
         ],
     )
     .expect("start-process should succeed")
-    .as_fixnum()
-    .expect("pid");
+    .as_process_id()
+    .expect("process object id");
 
-    let proc = eval
-        .processes
-        .get(pid as ProcessId)
-        .expect("process should exist");
+    let proc = eval.processes.get(pid).expect("process should exist");
     let command = list_to_vec(&proc.command).expect("process command list");
     let arg = command
         .get(1)

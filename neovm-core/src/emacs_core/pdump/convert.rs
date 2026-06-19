@@ -259,6 +259,11 @@ impl DumpEncoder {
             ValueKind::Veclike(VecLikeType::Window) => DumpValue::Window(v.as_window_id().unwrap()),
             ValueKind::Veclike(VecLikeType::Frame) => DumpValue::Frame(v.as_frame_id().unwrap()),
             ValueKind::Veclike(VecLikeType::Timer) => DumpValue::Timer(v.as_timer_id().unwrap()),
+            ValueKind::Veclike(VecLikeType::Process) => {
+                // Processes are live runtime objects (OS children, sockets);
+                // they can never appear in a portable dump image.
+                panic!("pdump: process objects are not portable")
+            }
             ValueKind::Veclike(VecLikeType::Xwidget)
             | ValueKind::Veclike(VecLikeType::XwidgetView) => {
                 panic!("pdump: xwidget objects are not portable")

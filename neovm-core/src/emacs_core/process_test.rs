@@ -446,7 +446,7 @@ fn builtin_process_send_string_preserves_raw_unibyte_write_queue_entries() {
     let mut pm = ProcessManager::new();
     let id = pm.create_process("p".into(), Value::NIL, "prog".into(), vec![]);
     let raw = Value::heap_string(LispString::from_unibyte(vec![0xFF, b'A']));
-    builtin_process_send_string_impl(&mut pm, vec![Value::fixnum(id as i64), raw])
+    builtin_process_send_string_impl(&mut pm, vec![Value::make_process(id), raw])
         .expect("process-send-string");
 
     let expected = Value::list(vec![Value::cons(
@@ -475,7 +475,7 @@ fn builtin_process_name_uses_lisp_value_storage() {
     let mut pm = ProcessManager::new();
     let id = pm.create_process("my-proc".into(), Value::NIL, "prog".into(), vec![]);
 
-    let value = builtin_process_name_impl(&pm, vec![Value::fixnum(id as i64)])
+    let value = builtin_process_name_impl(&pm, vec![Value::make_process(id)])
         .expect("process-name should succeed");
     let string = value
         .as_lisp_string()
@@ -511,15 +511,15 @@ fn process_type_and_contact_use_stored_lisp_fields() {
     }
 
     assert_eq!(
-        builtin_process_type_impl(&pm, vec![Value::fixnum(network as i64)]).expect("process-type"),
+        builtin_process_type_impl(&pm, vec![Value::make_process(network)]).expect("process-type"),
         Value::symbol("network")
     );
     assert_eq!(
-        builtin_process_contact_impl(&pm, vec![Value::fixnum(network as i64), Value::NIL])
+        builtin_process_contact_impl(&pm, vec![Value::make_process(network), Value::NIL])
             .expect("process-contact nil"),
         Value::list(vec![Value::string("localhost"), Value::fixnum(7777)])
     );
-    let full = builtin_process_contact_impl(&pm, vec![Value::fixnum(network as i64), Value::T])
+    let full = builtin_process_contact_impl(&pm, vec![Value::make_process(network), Value::T])
         .expect("process-contact t");
     assert_eq!(
         builtins::builtin_plist_get(vec![full, Value::keyword(":name")]).expect("plist-get :name"),
@@ -580,20 +580,20 @@ fn connection_process_mutators_keep_childp_plist_in_sync() {
     builtin_set_process_buffer_impl(
         &mut pm,
         &mut buffers,
-        vec![Value::fixnum(id as i64), Value::NIL],
+        vec![Value::make_process(id), Value::NIL],
     )
     .expect("set-process-buffer");
     let filter =
-        builtin_set_process_filter_impl(&mut pm, vec![Value::fixnum(id as i64), Value::NIL])
+        builtin_set_process_filter_impl(&mut pm, vec![Value::make_process(id), Value::NIL])
             .expect("set-process-filter");
     let sentinel =
-        builtin_set_process_sentinel_impl(&mut pm, vec![Value::fixnum(id as i64), Value::NIL])
+        builtin_set_process_sentinel_impl(&mut pm, vec![Value::make_process(id), Value::NIL])
             .expect("set-process-sentinel");
 
     assert_eq!(filter, Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL));
     assert_eq!(sentinel, Value::symbol(DEFAULT_PROCESS_SENTINEL_SYMBOL));
 
-    let contact = builtin_process_contact_impl(&pm, vec![Value::fixnum(id as i64), Value::T])
+    let contact = builtin_process_contact_impl(&pm, vec![Value::make_process(id), Value::T])
         .expect("process-contact t");
     assert_eq!(
         builtins::builtin_plist_get(vec![contact, Value::keyword(":buffer")])
@@ -630,16 +630,18 @@ fn make_network_process_server_stores_log_as_lisp_value() {
         ],
     )
     .expect("make-network-process");
-    let id = match process.kind() {
-        ValueKind::Fixnum(id) => id as u64,
-        other => panic!("expected process id fixnum, got {other:?}"),
-    };
+    // make-network-process now returns a first-class process object.
+    assert!(
+        process.is_process(),
+        "expected process object, got {process:?}"
+    );
+    let id = process.as_process_id().expect("expected process object id");
 
     let stored = eval.processes.get(id).expect("server process");
     assert_eq!(stored.log, Value::symbol("ignore"));
 
     let contact =
-        builtin_process_contact_impl(&eval.processes, vec![Value::fixnum(id as i64), Value::T])
+        builtin_process_contact_impl(&eval.processes, vec![Value::make_process(id), Value::T])
             .expect("process-contact t");
     assert_eq!(
         builtins::builtin_plist_get(vec![contact, Value::keyword(":log")]).expect("plist-get :log"),
@@ -662,13 +664,13 @@ fn process_buffer_storage_uses_buffer_objects() {
 
     assert_eq!(pm.find_by_buffer_id(buffer_id), Some(id));
     let value =
-        builtin_process_buffer_impl(&pm, vec![Value::fixnum(id as i64)]).expect("process-buffer");
+        builtin_process_buffer_impl(&pm, vec![Value::make_process(id)]).expect("process-buffer");
     assert_eq!(value, Value::make_buffer(buffer_id));
 
     builtin_set_process_buffer_impl(
         &mut pm,
         &mut buffers,
-        vec![Value::fixnum(id as i64), Value::NIL],
+        vec![Value::make_process(id), Value::NIL],
     )
     .expect("set-process-buffer should accept nil");
     assert!(pm.get(id).expect("process").buffer.is_nil());
@@ -685,7 +687,7 @@ fn process_mark_storage_uses_marker_objects() {
 
     let mut pm = ProcessManager::new();
     let id = pm.create_process("my-proc".into(), Value::NIL, "prog".into(), vec![]);
-    let mark = builtin_process_mark_impl(&pm, &buffers, vec![Value::fixnum(id as i64)])
+    let mark = builtin_process_mark_impl(&pm, &buffers, vec![Value::make_process(id)])
         .expect("process-mark should succeed");
     assert!(mark.is_marker());
     assert!(
@@ -697,10 +699,10 @@ fn process_mark_storage_uses_marker_objects() {
     builtin_set_process_buffer_impl(
         &mut pm,
         &mut buffers,
-        vec![Value::fixnum(id as i64), Value::make_buffer(first)],
+        vec![Value::make_process(id), Value::make_buffer(first)],
     )
     .expect("attach first process buffer");
-    let mark = builtin_process_mark_impl(&pm, &buffers, vec![Value::fixnum(id as i64)])
+    let mark = builtin_process_mark_impl(&pm, &buffers, vec![Value::make_process(id)])
         .expect("process-mark should succeed");
     assert_eq!(
         super::super::marker::builtin_marker_buffer_in_buffers(&buffers, vec![mark])
@@ -716,10 +718,10 @@ fn process_mark_storage_uses_marker_objects() {
     builtin_set_process_buffer_impl(
         &mut pm,
         &mut buffers,
-        vec![Value::fixnum(id as i64), Value::make_buffer(second)],
+        vec![Value::make_process(id), Value::make_buffer(second)],
     )
     .expect("attach second process buffer");
-    let mark = builtin_process_mark_impl(&pm, &buffers, vec![Value::fixnum(id as i64)])
+    let mark = builtin_process_mark_impl(&pm, &buffers, vec![Value::make_process(id)])
         .expect("process-mark should succeed");
     assert_eq!(
         super::super::marker::builtin_marker_buffer_in_buffers(&buffers, vec![mark])
@@ -750,11 +752,11 @@ fn internal_default_process_filter_moves_stored_process_mark() {
 
     builtin_internal_default_process_filter(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::string("ab")],
+        vec![Value::make_process(pid), Value::string("ab")],
     )
     .expect("first insert");
     let mark =
-        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::fixnum(pid as i64)])
+        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::make_process(pid)])
             .expect("process-mark");
     assert_eq!(
         super::super::marker::marker_position_as_int_with_buffers(&ev.buffers, &mark)
@@ -772,11 +774,11 @@ fn internal_default_process_filter_moves_stored_process_mark() {
 
     builtin_internal_default_process_filter(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::string("cd")],
+        vec![Value::make_process(pid), Value::string("cd")],
     )
     .expect("second insert");
     let mark =
-        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::fixnum(pid as i64)])
+        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::make_process(pid)])
             .expect("process-mark");
     assert_eq!(
         super::super::marker::marker_position_as_int_with_buffers(&ev.buffers, &mark)
@@ -813,7 +815,7 @@ fn internal_default_process_sentinel_inserts_status_at_process_mark() {
         .sync_process_mark(&mut ev.buffers, pid)
         .expect("sync process mark");
     let mark =
-        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::fixnum(pid as i64)])
+        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::make_process(pid)])
             .expect("process-mark before sentinel");
     super::super::marker::builtin_set_marker_in_buffers(
         &mut ev.buffers,
@@ -824,7 +826,7 @@ fn internal_default_process_sentinel_inserts_status_at_process_mark() {
 
     builtin_internal_default_process_sentinel(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::string("finished\n")],
+        vec![Value::make_process(pid), Value::string("finished\n")],
     )
     .expect("default sentinel");
 
@@ -837,7 +839,7 @@ fn internal_default_process_sentinel_inserts_status_at_process_mark() {
         "before\nProcess sentinel-proc finished\n-after"
     );
     let mark =
-        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::fixnum(pid as i64)])
+        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::make_process(pid)])
             .expect("process-mark");
     assert_eq!(
         super::super::marker::marker_position_as_int_with_buffers(&ev.buffers, &mark)
@@ -860,12 +862,12 @@ fn builtin_process_tty_name_uses_value_slot() {
     );
 
     let tty_value =
-        builtin_process_tty_name_impl(&pm, vec![Value::fixnum(real_id as i64)]).expect("tty");
+        builtin_process_tty_name_impl(&pm, vec![Value::make_process(real_id)]).expect("tty");
     assert!(tty_value.is_string());
     assert!(!tty_value.is_nil());
 
     let pipe_value =
-        builtin_process_tty_name_impl(&pm, vec![Value::fixnum(pipe_id as i64)]).expect("tty");
+        builtin_process_tty_name_impl(&pm, vec![Value::make_process(pipe_id)]).expect("tty");
     assert!(pipe_value.is_nil());
 }
 
@@ -890,27 +892,23 @@ fn make_process_stores_pipe_stderr_process_value() {
         true,
     )
     .expect("make-process");
-    let id = match process.kind() {
-        ValueKind::Fixnum(id) => id as u64,
-        other => panic!("expected process id fixnum, got {other:?}"),
-    };
+    let id = process.as_process_id().expect("expected process object id");
 
     let stderrproc = pm.get(id).expect("main process").stderrproc;
-    let stderr_id = match stderrproc.kind() {
-        ValueKind::Fixnum(id) => id as u64,
-        other => panic!("expected stderr pipe id fixnum, got {other:?}"),
-    };
+    let stderr_id = stderrproc
+        .as_process_id()
+        .expect("expected stderr pipe process object id");
     let stderr_pipe = pm.get(stderr_id).expect("stderr pipe process");
     assert_eq!(stderr_pipe.kind, ProcessKind::Pipe);
     assert!(stderr_pipe.buffer.as_buffer_id().is_some());
 
     let stderr_tty =
-        builtin_process_tty_name_impl(&pm, vec![Value::fixnum(id as i64), Value::symbol("stderr")])
+        builtin_process_tty_name_impl(&pm, vec![Value::make_process(id), Value::symbol("stderr")])
             .expect("process-tty-name stderr");
     assert_eq!(stderr_tty, Value::NIL);
 
     let stdout_tty =
-        builtin_process_tty_name_impl(&pm, vec![Value::fixnum(id as i64), Value::symbol("stdout")])
+        builtin_process_tty_name_impl(&pm, vec![Value::make_process(id), Value::symbol("stdout")])
             .expect("process-tty-name stdout");
     assert!(stdout_tty.as_lisp_string().is_some());
 }
@@ -936,17 +934,14 @@ fn make_process_stderr_pipe_name_preserves_raw_unibyte_owner_bytes() {
         true,
     )
     .expect("make-process");
-    let id = match process.kind() {
-        ValueKind::Fixnum(id) => id as u64,
-        other => panic!("expected process id fixnum, got {other:?}"),
-    };
+    let id = process.as_process_id().expect("expected process object id");
 
     let stderr_id = pm
         .get(id)
         .expect("main process")
         .stderrproc
-        .as_fixnum()
-        .expect("stderr pipe id") as u64;
+        .as_process_id()
+        .expect("stderr pipe process object id");
     let stderr_name = pm
         .get(stderr_id)
         .expect("stderr pipe")
@@ -994,10 +989,7 @@ fn make_process_accepts_existing_pipe_process_for_stderr() {
         true,
     )
     .expect("make-process");
-    let id = match process.kind() {
-        ValueKind::Fixnum(id) => id as u64,
-        other => panic!("expected process id fixnum, got {other:?}"),
-    };
+    let id = process.as_process_id().expect("expected process object id");
 
     assert_eq!(pm.get(id).expect("main process").stderrproc, stderrproc);
 }
@@ -1021,14 +1013,14 @@ fn builtin_process_command_uses_value_slot() {
     );
 
     let command =
-        builtin_process_command_impl(&pm, vec![Value::fixnum(real_id as i64)]).expect("command");
+        builtin_process_command_impl(&pm, vec![Value::make_process(real_id)]).expect("command");
     assert_eq!(
         command,
         Value::list(vec![Value::string("/bin/echo"), Value::string("hello")])
     );
 
     let pipe_command =
-        builtin_process_command_impl(&pm, vec![Value::fixnum(pipe_id as i64)]).expect("command");
+        builtin_process_command_impl(&pm, vec![Value::make_process(pipe_id)]).expect("command");
     assert!(pipe_command.is_nil());
 }
 
@@ -1067,12 +1059,12 @@ fn start_process_and_query() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
     let results = eval_all(&format!(
-        r#"(start-process "my-proc" nil "{echo}" "hello")
-           (process-status 1)
-           (process-name 1)
-           (process-buffer 1)"#,
+        r#"(processp (start-process "my-proc" nil "{echo}" "hello"))
+           (process-status (get-process "my-proc"))
+           (process-name (get-process "my-proc"))
+           (process-buffer (get-process "my-proc"))"#,
     ));
-    assert_eq!(results[0], "OK 1");
+    assert_eq!(results[0], "OK t");
     assert_eq!(results[1], "OK run");
     assert_eq!(results[2], r#"OK "my-proc""#);
     assert_eq!(results[3], "OK nil");
@@ -1084,8 +1076,8 @@ fn start_process_with_buffer() {
     let cat = find_bin("cat");
     let results = eval_all(&format!(
         r#"(start-process "p" "*output*" "{cat}")
-           (bufferp (process-buffer 1))
-           (equal (buffer-name (process-buffer 1)) "*output*")"#,
+           (bufferp (process-buffer (get-process "p")))
+           (equal (buffer-name (process-buffer (get-process "p"))) "*output*")"#,
     ));
     assert_eq!(results[1], "OK t");
     assert_eq!(results[2], "OK t");
@@ -1197,7 +1189,7 @@ fn delete_process_removes() {
     let echo = find_bin("echo");
     let results = eval_all(&format!(
         r#"(start-process "p" nil "{echo}")
-           (delete-process 1)
+           (delete-process (get-process "p"))
            (process-list)"#,
     ));
     assert_eq!(results[2], "OK nil");
@@ -1209,7 +1201,7 @@ fn process_send_string_test() {
     let cat = find_bin("cat");
     let results = eval_all(&format!(
         r#"(start-process "p" nil "{cat}")
-           (process-send-string 1 "hello")"#,
+           (process-send-string (get-process "p") "hello")"#,
     ));
     assert_eq!(results[1], "OK nil");
 }
@@ -1220,7 +1212,7 @@ fn process_exit_status_initial() {
     let echo = find_bin("echo");
     let results = eval_all(&format!(
         r#"(start-process "p" nil "{echo}")
-           (process-exit-status 1)"#,
+           (process-exit-status (get-process "p"))"#,
     ));
     assert_eq!(results[1], "OK 0");
 }
@@ -1265,10 +1257,12 @@ fn process_list_test() {
            (start-process "b" nil "{cat}")
            (process-list)"#,
     ));
-    // Process list contains two entries.  Order may vary.
+    // Process list contains two entries.  Order may vary.  Processes are now
+    // first-class objects that print as `#<process NAME>` (matching GNU), so
+    // the list shows the two process names rather than bare integer ids.
     let list_str = &results[2];
-    assert!(list_str.contains("1"));
-    assert!(list_str.contains("2"));
+    assert!(list_str.contains("#<process a>"));
+    assert!(list_str.contains("#<process b>"));
 }
 
 #[test]
@@ -1989,10 +1983,10 @@ fn start_process_multiple_args() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
     let results = eval_all(&format!(
-        r#"(start-process "echo" nil "{echo}" "a" "b" "c")
-           (process-name 1)"#,
+        r#"(processp (start-process "echo" nil "{echo}" "a" "b" "c"))
+           (process-name (get-process "echo"))"#,
     ));
-    assert_eq!(results[0], "OK 1");
+    assert_eq!(results[0], "OK t");
     assert_eq!(results[1], r#"OK "echo""#);
 }
 
@@ -2292,12 +2286,10 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
     assert_eq!(timeout.target_process_for_follow_up(), None);
 
     let id = processes.create_process("target".into(), Value::NIL, "cat".into(), vec![]);
-    let target = parse_accept_process_output_request(
-        &mut processes,
-        &[Value::fixnum(id as i64), Value::NIL],
-    )
-    .expect("parse target accept-process-output")
-    .expect("live request");
+    let target =
+        parse_accept_process_output_request(&mut processes, &[Value::make_process(id), Value::NIL])
+            .expect("parse target accept-process-output")
+            .expect("live request");
     assert!(target.wait_timing_is_forever());
     assert!(target.completes_on_target_process_activity(id));
     assert!(!target.services_only_target_process_output());
@@ -2603,7 +2595,7 @@ fn accept_process_output_integer_just_this_one_suppresses_timers() {
     let first = builtin_accept_process_output(
         &mut ev,
         vec![
-            Value::fixnum(pid as i64),
+            Value::make_process(pid),
             Value::make_float(0.0),
             Value::NIL,
             Value::fixnum(1),
@@ -2689,16 +2681,13 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
         .expect("spawn ordering process");
     builtin_set_process_filter(
         &mut ev,
-        vec![
-            Value::fixnum(pid as i64),
-            Value::symbol("apio-order-filter"),
-        ],
+        vec![Value::make_process(pid), Value::symbol("apio-order-filter")],
     )
     .expect("install ordering filter");
     builtin_set_process_sentinel(
         &mut ev,
         vec![
-            Value::fixnum(pid as i64),
+            Value::make_process(pid),
             Value::symbol("apio-order-sentinel"),
         ],
     )
@@ -2706,7 +2695,7 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
 
     let first = builtin_accept_process_output(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::make_float(0.1)],
+        vec![Value::make_process(pid), Value::make_float(0.1)],
     )
     .expect("first accept-process-output");
     let events_after_first = ev
@@ -2714,7 +2703,7 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
         .expect("ordering event list after first wait");
     let second = builtin_accept_process_output(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::make_float(0.1)],
+        vec![Value::make_process(pid), Value::make_float(0.1)],
     )
     .expect("second accept-process-output");
     let events_after_second = ev
@@ -2797,7 +2786,7 @@ fn accept_process_output_runs_gnu_timer_then_internal_timer_before_process_callb
     builtin_set_process_filter(
         &mut ev,
         vec![
-            Value::fixnum(pid as i64),
+            Value::make_process(pid),
             Value::symbol("apio-full-order-filter"),
         ],
     )
@@ -2805,7 +2794,7 @@ fn accept_process_output_runs_gnu_timer_then_internal_timer_before_process_callb
     builtin_set_process_sentinel(
         &mut ev,
         vec![
-            Value::fixnum(pid as i64),
+            Value::make_process(pid),
             Value::symbol("apio-full-order-sentinel"),
         ],
     )
@@ -2813,7 +2802,7 @@ fn accept_process_output_runs_gnu_timer_then_internal_timer_before_process_callb
 
     let first = builtin_accept_process_output(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::make_float(0.1)],
+        vec![Value::make_process(pid), Value::make_float(0.1)],
     )
     .expect("accept-process-output with mixed timer sources");
     let events_after_first = ev
@@ -2850,18 +2839,18 @@ fn accept_process_output_runs_default_process_filter() {
         .expect("spawn output process");
 
     assert_eq!(
-        builtin_process_filter(&mut ev, vec![Value::fixnum(pid as i64)]).expect("process-filter"),
+        builtin_process_filter(&mut ev, vec![Value::make_process(pid)]).expect("process-filter"),
         Value::symbol("internal-default-process-filter")
     );
 
     let first = builtin_accept_process_output(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::make_float(0.1)],
+        vec![Value::make_process(pid), Value::make_float(0.1)],
     )
     .expect("first accept-process-output");
     let second = builtin_accept_process_output(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::make_float(0.1)],
+        vec![Value::make_process(pid), Value::make_float(0.1)],
     )
     .expect("second accept-process-output");
     let buf_id = ev
@@ -2909,7 +2898,7 @@ fn accept_process_output_restores_current_buffer_and_match_data() {
     builtin_set_process_filter(
         &mut ev,
         vec![
-            Value::fixnum(pid as i64),
+            Value::make_process(pid),
             Value::symbol("apio-restore-filter"),
         ],
     )
@@ -2917,7 +2906,7 @@ fn accept_process_output_restores_current_buffer_and_match_data() {
 
     let result = builtin_accept_process_output(
         &mut ev,
-        vec![Value::fixnum(pid as i64), Value::make_float(0.1)],
+        vec![Value::make_process(pid), Value::make_float(0.1)],
     )
     .expect("accept-process-output with restoring filter");
     let after_match_data = ev
@@ -3095,7 +3084,7 @@ fn sleep_for_uses_shared_wait_request_for_process_output_and_timers() {
     builtin_set_process_filter(
         &mut ev,
         vec![
-            Value::fixnum(pid as i64),
+            Value::make_process(pid),
             Value::symbol("sleep-shared-filter"),
         ],
     )
