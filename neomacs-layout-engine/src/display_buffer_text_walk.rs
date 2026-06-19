@@ -12,7 +12,9 @@ use crate::display_buffer_text_item_append::BufferTextRowAppendState;
 use crate::display_buffer_text_render::{
     BufferCurrentFaceResolutionContext, BufferDisplayPropertyCheckpointRenderContext,
     BufferDisplayPropertyCheckpointRenderRequest, BufferDisplayPropertyCheckpointRenderState,
-    BufferDisplayPropertyTextReplacementOutcome, BufferDisplayPropertyTextWalkOutcome,
+    BufferDisplayPropertyTextReplacementRenderOutcome,
+    BufferDisplayPropertyTextReplacementRenderRequest,
+    BufferDisplayPropertyTextReplacementRenderState, BufferDisplayPropertyTextWalkOutcome,
     BufferEndOfBufferTailRenderContext, BufferEndOfBufferTailRenderRequest,
     BufferEndOfBufferTailRenderState, BufferHscrollSkipRenderContext,
     BufferHscrollSkipRenderRequest, BufferHscrollSkipRenderState, BufferInvisibleTextRenderContext,
@@ -35,7 +37,6 @@ use crate::display_buffer_text_source::{
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, RenderFaceRef};
-use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -56,10 +57,7 @@ use crate::display_row_walk_state::{
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_source::DisplaySourceContext;
-use crate::display_source_resolver::{
-    DisplayPropertyReplacementAppendRequestResolver, DisplaySourcePropertyResolver,
-    DisplaySourceResolveState,
-};
+use crate::display_source_resolver::{DisplaySourcePropertyResolver, DisplaySourceResolveState};
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
@@ -2944,80 +2942,51 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     where
         'surface: 'request,
     {
-        let Some(source_event) =
-            replacement.source_event(self.loop_context.text_start_byte(), text)
-        else {
-            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-        };
-        let display_property = classify_display_property(replacement.value());
-        let append_request =
-            self.source_render
-                .with_font_metrics_and_display_host(|font_metrics, host| {
-                    DisplayPropertyReplacementAppendRequestResolver::for_source_event(
-                        &display_property,
-                        self.loop_context.buffer_id(),
-                        source_event,
-                        active_face_state,
-                        *self.x,
-                        self.loop_context.content_x(),
-                        params,
-                        0.0,
-                        self.loop_context.char_height(),
-                        DisplayRowPosition {
-                            x_px: *self.x,
-                            col: *self.col,
-                        },
-                    )
-                    .resolve(font_metrics, host)
-                });
-        let Some(request) = append_request else {
-            let Some(source_item) = replacement.fallback_source_item(
-                self.loop_context.text_start_byte(),
-                text,
-                RenderFaceRef::FaceId(active_face_state.face_id()),
-            ) else {
-                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-            };
-            return self.render_source_item_for_context(
-                BufferTextSourceItemRenderRequest {
-                    layout_resolution_context,
-                    source_item,
-                    item_stepper,
-                    text,
-                    active_face_state,
-                    params,
-                },
-                buffer,
-            );
-        };
-        let outcome = request.append_to_text_row(
-            buffer,
-            &mut self.source_render.reborrow(),
-            self.face_ids,
-            self.append_surface,
-            self.row_geometry,
-            active_face_state,
-        );
-        let replacement_outcome = BufferDisplayPropertyTextReplacementOutcome {
-            replacement: outcome,
-            skip_to: replacement.end_charpos(),
-        };
-        replacement_outcome.capture_cursor_info_if_point(
-            self.cursor_info,
-            active_face_state,
-            self.row_geometry,
-            self.loop_context.point_charpos,
-            replacement.start_charpos(),
-            *self.byte_idx,
-        );
-        replacement_outcome.apply_to_walk_state(
+        let request = BufferDisplayPropertyTextReplacementRenderRequest::new(
+            replacement,
+            self.loop_context.text_start_byte(),
             text,
-            self.byte_idx,
-            self.charpos,
-            self.x,
-            self.col,
+            self.loop_context.buffer_id(),
+            self.loop_context.content_x(),
+            params,
+            0.0,
+            self.loop_context.char_height(),
+            active_face_state,
+            self.loop_context.point_charpos,
         );
-        BufferTextWindowLoopStepOutcome::ContinueBufferWalk
+        match request.render_and_apply(
+            buffer,
+            BufferDisplayPropertyTextReplacementRenderState {
+                source_render: self.source_render.reborrow(),
+                face_ids: self.face_ids,
+                append_surface: self.append_surface,
+                row_geometry: self.row_geometry,
+                cursor_info: self.cursor_info,
+                byte_idx: self.byte_idx,
+                charpos: self.charpos,
+                x: self.x,
+                col: self.col,
+            },
+        ) {
+            BufferDisplayPropertyTextReplacementRenderOutcome::Continue => {
+                BufferTextWindowLoopStepOutcome::ContinueBufferWalk
+            }
+            BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => self
+                .render_source_item_for_context(
+                    BufferTextSourceItemRenderRequest {
+                        layout_resolution_context,
+                        source_item,
+                        item_stepper,
+                        text,
+                        active_face_state,
+                        params,
+                    },
+                    buffer,
+                ),
+            BufferDisplayPropertyTextReplacementRenderOutcome::Stop => {
+                BufferTextWindowLoopStepOutcome::StopBufferWalk
+            }
+        }
     }
 
     pub(crate) fn render_row_prelude<B: LayoutBufferView>(

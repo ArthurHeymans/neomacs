@@ -5,7 +5,9 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceCharPreparationState, BufferTextSourceCharPreparedAppend,
     BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
+use crate::display_buffer_text_source::{
+    BufferTextReplacementItem, BufferTextSourceItem, BufferTextSourceStepChar,
+};
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
@@ -14,6 +16,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
+use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -48,8 +51,8 @@ use crate::display_row_walk_state::{
 };
 use crate::display_source::SyntheticTextItemSource;
 use crate::display_source_resolver::{
-    DisplaySourceFaceBasis, DisplaySourceFallbackMetrics, DisplaySourceResolveParams,
-    PendingDisplaySourceFace,
+    DisplayPropertyReplacementAppendRequestResolver, DisplaySourceFaceBasis,
+    DisplaySourceFallbackMetrics, DisplaySourceResolveParams, PendingDisplaySourceFace,
 };
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustTextPropAccess};
@@ -2619,6 +2622,37 @@ pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) skip_to: i64,
 }
 
+pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
+    Continue,
+    Fallback(BufferTextSourceItem),
+    Stop,
+}
+
+pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest<'a> {
+    replacement: BufferTextReplacementItem,
+    text_start_byte: usize,
+    text: &'a [u8],
+    buffer_id: BufferId,
+    content_x: f32,
+    params: &'a WindowParams,
+    glyph_y_offset: f32,
+    default_row_height: f32,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    point_charpos: i64,
+}
+
+pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
+    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) append_surface: &'emit DisplayRowAppendSurface,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) cursor_info: &'emit mut CursorCaptureState,
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+}
+
 impl BufferDisplayPropertyTextWalkOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         false
@@ -2642,6 +2676,108 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             checkpoints.record_display_next(next_change);
         }
         BufferDisplayPropertyTextWalkOutcome::Continue
+    }
+}
+
+impl<'a> BufferDisplayPropertyTextReplacementRenderRequest<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        replacement: BufferTextReplacementItem,
+        text_start_byte: usize,
+        text: &'a [u8],
+        buffer_id: BufferId,
+        content_x: f32,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        default_row_height: f32,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        point_charpos: i64,
+    ) -> Self {
+        Self {
+            replacement,
+            text_start_byte,
+            text,
+            buffer_id,
+            content_x,
+            params,
+            glyph_y_offset,
+            default_row_height,
+            active_face_state,
+            point_charpos,
+        }
+    }
+
+    pub(crate) fn render_and_apply<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        mut state: BufferDisplayPropertyTextReplacementRenderState<'_>,
+    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
+        let Some(source_event) = self
+            .replacement
+            .source_event(self.text_start_byte, self.text)
+        else {
+            return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
+        };
+        let display_property = classify_display_property(self.replacement.value());
+        let append_request =
+            state
+                .source_render
+                .with_font_metrics_and_display_host(|font_metrics, host| {
+                    DisplayPropertyReplacementAppendRequestResolver::for_source_event(
+                        &display_property,
+                        self.buffer_id,
+                        source_event,
+                        self.active_face_state,
+                        *state.x,
+                        self.content_x,
+                        self.params,
+                        self.glyph_y_offset,
+                        self.default_row_height,
+                        DisplayRowPosition {
+                            x_px: *state.x,
+                            col: *state.col,
+                        },
+                    )
+                    .resolve(font_metrics, host)
+                });
+        let Some(request) = append_request else {
+            let Some(source_item) = self.replacement.fallback_source_item(
+                self.text_start_byte,
+                self.text,
+                RenderFaceRef::FaceId(self.active_face_state.face_id()),
+            ) else {
+                return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
+            };
+            return BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item);
+        };
+        let outcome = request.append_to_text_row(
+            buffer,
+            &mut state.source_render.reborrow(),
+            state.face_ids,
+            state.append_surface,
+            state.row_geometry,
+            self.active_face_state,
+        );
+        let replacement_outcome = BufferDisplayPropertyTextReplacementOutcome {
+            replacement: outcome,
+            skip_to: self.replacement.end_charpos(),
+        };
+        replacement_outcome.capture_cursor_info_if_point(
+            state.cursor_info,
+            self.active_face_state,
+            state.row_geometry,
+            self.point_charpos,
+            self.replacement.start_charpos(),
+            *state.byte_idx,
+        );
+        replacement_outcome.apply_to_walk_state(
+            self.text,
+            state.byte_idx,
+            state.charpos,
+            state.x,
+            state.col,
+        );
+        BufferDisplayPropertyTextReplacementRenderOutcome::Continue
     }
 }
 
