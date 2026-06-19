@@ -2690,7 +2690,20 @@ pub(crate) fn builtin_char_syntax_in_buffers(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let class = SyntaxTable::for_buffer(buf).char_syntax_code(code);
+    // GNU `Fchar_syntax` (syntax.c): in a unibyte buffer the character is mapped
+    // through `make_char_multibyte` before the syntax lookup. A byte 0x80-0xFF
+    // becomes its eight-bit character (word syntax); a code >= 0x100 maps past
+    // MAX_CHAR to an invalid character, whose syntax is the default whitespace.
+    let class = if !buf.get_multibyte() {
+        if code < 0x100 {
+            SyntaxTable::for_buffer(buf)
+                .char_syntax_code(crate::emacs_core::emacs_char::unibyte_to_char(code as u8))
+        } else {
+            SyntaxClass::Whitespace
+        }
+    } else {
+        SyntaxTable::for_buffer(buf).char_syntax_code(code)
+    };
     Ok(Value::char(class.to_char()))
 }
 

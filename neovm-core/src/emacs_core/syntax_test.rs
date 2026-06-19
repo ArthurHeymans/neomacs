@@ -388,6 +388,51 @@ fn char_syntax_accepts_full_emacs_character_codes() {
     }
 }
 
+#[test]
+fn char_syntax_unibyte_buffer_maps_through_make_char_multibyte() {
+    // GNU `Fchar_syntax`: in a unibyte buffer the character is mapped through
+    // `make_char_multibyte` before the syntax lookup. Bytes 0x80-0xFF become
+    // their eight-bit (word) character; codes >= 0x100 map past MAX_CHAR to an
+    // invalid character whose syntax is the default whitespace.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // Multibyte (default): a BMP CJK character is a word constituent.
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum(0x4e16)]).unwrap(),
+        Value::char('w')
+    );
+
+    let id = eval.buffers.current_buffer_id().unwrap();
+    eval.buffers.set_buffer_multibyte_flag(id, false).unwrap();
+    // CJK and other >= 0x100 codes collapse to whitespace.
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum(0x4e16)]).unwrap(),
+        Value::char(' ')
+    );
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum(0x100)]).unwrap(),
+        Value::char(' ')
+    );
+    // ASCII keeps its real syntax; high bytes become eight-bit word chars.
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum(b'a' as i64)]).unwrap(),
+        Value::char('w')
+    );
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum(b'.' as i64)]).unwrap(),
+        Value::char('.')
+    );
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum(200)]).unwrap(),
+        Value::char('w')
+    );
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum(255)]).unwrap(),
+        Value::char('w')
+    );
+}
+
 // -----------------------------------------------------------------------
 // forward_word / backward_word
 // -----------------------------------------------------------------------
