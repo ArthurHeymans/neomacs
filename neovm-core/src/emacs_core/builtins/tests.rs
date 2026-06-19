@@ -12718,6 +12718,10 @@ fn message_box_wrappers_render_opaque_handles_in_eval_dispatch() {
 fn message_nil_returns_nil() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // GNU populates the echo area (read back by `current-message`) only on the
+    // interactive display path (xdisp.c `message3_frame_nolog`). The default
+    // test Context is noninteractive, so opt into the interactive path here.
+    eval.set_variable("noninteractive", Value::NIL);
 
     let eval_result =
         builtin_message(&mut eval, vec![Value::NIL]).expect("message eval should accept nil");
@@ -12872,6 +12876,9 @@ fn format_message_preserves_raw_unibyte_payload_without_quoting() {
 fn current_message_preserves_raw_unibyte_payload() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // Interactive echo-area path: GNU only populates `current-message` when not
+    // in batch mode (xdisp.c `message3_frame_nolog`).
+    eval.set_variable("noninteractive", Value::NIL);
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
 
     let displayed =
@@ -12922,6 +12929,9 @@ fn echo_area_print_calls_append_until_next_message_like_gnu() {
 fn message_respects_inhibit_message_and_clears_echo_area() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // Interactive echo-area path (GNU populates `current-message` only when not
+    // in batch mode, xdisp.c `message3_frame_nolog`).
+    eval.set_variable("noninteractive", Value::NIL);
 
     builtin_message(&mut eval, vec![Value::string("visible")]).expect("seed visible message");
     assert_eq!(eval.current_message_text(), Some("visible".to_string()));
@@ -12936,6 +12946,9 @@ fn message_respects_inhibit_message_and_clears_echo_area() {
 fn message_uses_set_message_function_string_and_suppression_results() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // set-message-function only runs on the interactive echo-area path; GNU's
+    // batch path (xdisp.c `message3_frame_nolog`) routes straight to stderr.
+    eval.set_variable("noninteractive", Value::NIL);
 
     eval.eval_str(
         r#"(progn
@@ -12970,6 +12983,10 @@ fn message_uses_set_message_function_string_and_suppression_results() {
 fn message_nil_runs_clear_message_function_after_suppressed_minibuffer_message() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // set-message-function / clear-message-function only run on the interactive
+    // echo-area path; GNU's batch path (xdisp.c `message3_frame_nolog`) routes
+    // straight to stderr and never invokes them.
+    eval.set_variable("noninteractive", Value::NIL);
 
     eval.eval_str(
         r#"
@@ -13023,6 +13040,9 @@ fn message_nil_runs_clear_message_function_after_suppressed_minibuffer_message()
 fn message_ignores_non_function_set_message_function_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // Interactive echo-area path (GNU `message3_frame_nolog` only sets the echo
+    // area when not in batch mode).
+    eval.set_variable("noninteractive", Value::NIL);
 
     eval.assign("set-message-function", Value::T);
     builtin_message(&mut eval, vec![Value::string("plain")])
@@ -13035,6 +13055,8 @@ fn message_ignores_non_function_set_message_function_like_gnu() {
 fn message_demotes_set_message_function_errors_like_gnu_dsafe_call() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // set-message-function only runs on the interactive echo-area path.
+    eval.set_variable("noninteractive", Value::NIL);
 
     eval.eval_str(
         r#"(fset 'neomacs-test-message-error
@@ -13076,6 +13098,9 @@ fn message_eval_stores_echo_text_without_immediate_redisplay() {
     // invoke the redisplay callback.
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
+    // Interactive echo-area path: GNU populates `current-message` only when not
+    // in batch mode (xdisp.c `message3_frame_nolog`).
+    eval.set_variable("noninteractive", Value::NIL);
     let redisplay_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let redisplay_count_capture = std::sync::Arc::clone(&redisplay_count);
 

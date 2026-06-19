@@ -4667,6 +4667,10 @@ fn vm_reader_message_and_completion_builtins_use_shared_runtime_entry() {
                   (read "(1 2)")))"#,
             |eval| {
                 eval.buffers.create_buffer("vm-message-buffer");
+                // GNU populates `current-message` only on the interactive
+                // echo-area path (xdisp.c `message3_frame_nolog`); the default
+                // VM test Context is noninteractive.
+                eval.set_variable("noninteractive", Value::NIL);
             },
         ),
         r##"OK ("vm-message-buffer" "#<buffer vm-message-buffer>" "vm-message-buffer" "vm-message-buffer" "vm-message-buffer" "vm-message-buffer" "appl" t ((a . b) . 7) (1 2))"##

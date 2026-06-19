@@ -196,12 +196,39 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
         None => crate::heap_types::LispString::from_emacs_bytes(Vec::new()),
     };
     let side_effects = (|| {
-        let displayed_message = message_echo_result(ctx, &msg)?;
-        // GNU order (Fmessage): log to *Messages* and materialize the echo-area
-        // buffers FIRST, then echo. set_current_message mirrors the message into
-        // the ` *Echo Area 0*` buffer, so that buffer must already exist here.
+        // GNU xdisp.c `message3` logs to *Messages* (`log_message`) FIRST and
+        // unconditionally (independent of `inhibit-message`).
         message_dolog(ctx, &msg);
-        if matches!(displayed_message, EchoMessageSetResult::EchoArea(_)) && !ctx.noninteractive() {
+        tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes()));
+
+        // GNU xdisp.c `message3_frame_nolog`: when the selected frame is the
+        // initial frame (FRAME_INITIAL_P, i.e. batch / noninteractive), the
+        // message is *only* sent to stderr via `message_to_stderr`.
+        // `set_message` is NOT called (so `set-message-function` never runs), the
+        // echo-area buffer stays empty, and `current-message` (which reads that
+        // buffer) returns nil.  Only the interactive branch
+        // (INTERACTIVE && glyphs_initialized_p) populates the echo area.
+        if ctx.noninteractive() {
+            // GNU `message3`: `if (! inhibit_message) message3_nolog (m);` — an
+            // inhibited message is logged to *Messages* only, never printed.
+            let inhibit_message = ctx
+                .visible_variable_value_or_nil("inhibit-message")
+                .is_truthy();
+            if !inhibit_message {
+                use std::io::Write;
+                let text = crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes());
+                let _ = std::io::stderr().write_all(text.as_bytes());
+                let _ = std::io::stderr().write_all(b"\n");
+                let _ = std::io::stderr().flush();
+            }
+            return Ok(());
+        }
+
+        // Interactive display path (GNU `set_message`): consult
+        // `set-message-function`, then materialize the echo-area buffers and
+        // store the message so `current-message` can read it back.
+        let displayed_message = message_echo_result(ctx, &msg)?;
+        if matches!(displayed_message, EchoMessageSetResult::EchoArea(_)) {
             ctx.ensure_echo_area_buffers();
         }
         match &displayed_message {
@@ -209,15 +236,6 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
                 ctx.set_current_message(Some(displayed.clone()))
             }
             EchoMessageSetResult::LispHandled => ctx.discard_current_message_without_clear_hook(),
-        }
-        tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes()));
-        // GNU Emacs editfns.c: in batch mode, message prints to stderr with newline.
-        if ctx.noninteractive() {
-            use std::io::Write;
-            let text = crate::emacs_core::emacs_char::to_utf8_lossy(msg.as_bytes());
-            let _ = std::io::stderr().write_all(text.as_bytes());
-            let _ = std::io::stderr().write_all(b"\n");
-            let _ = std::io::stderr().flush();
         }
         Ok(())
     })();
