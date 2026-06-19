@@ -97,10 +97,18 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         Self { builder }
     }
 
+    fn current_row(&self) -> Option<neomacs_display_protocol::glyph_matrix::GlyphRow> {
+        current_display_row_artifact(self.builder)
+    }
+
+    fn replace_current_row(&mut self, row: neomacs_display_protocol::glyph_matrix::GlyphRow) {
+        install_current_display_row_artifact(self.builder, row);
+    }
+
     fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
-        if let Some(mut row) = current_display_row_artifact(self.builder) {
+        if let Some(mut row) = self.current_row() {
             merge_display_row_source_slot_bounds(&mut row, slots);
-            install_current_display_row_artifact(self.builder, row);
+            self.replace_current_row(row);
         }
     }
 
@@ -117,7 +125,7 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let mut row = current_display_row_artifact(self.builder)?;
+        let mut row = self.current_row()?;
         let result = row_request.render_fragment_step_into_row_with_policy(
             renderer,
             &mut row,
@@ -128,7 +136,7 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         )?;
         let row_height_px = row.height_px;
         let row_ascent_px = row.ascent_px;
-        install_current_display_row_artifact(self.builder, row);
+        self.replace_current_row(row);
         Some((result, row_height_px, row_ascent_px))
     }
 
@@ -145,7 +153,7 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let mut scratch_row = current_display_row_artifact(self.builder)?;
+        let mut scratch_row = self.current_row()?;
         let result = row_request.render_fragment_step_into_row_with_policy(
             renderer,
             &mut scratch_row,
@@ -167,14 +175,14 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
     where
         S: DisplayItemSource,
     {
-        let mut row = current_display_row_artifact(self.builder)?;
+        let mut row = self.current_row()?;
         let result = render_executor.render_item_source_fragment_into_row(
             request,
             &mut row,
             source,
             source_state,
         )?;
-        install_current_display_row_artifact(self.builder, row);
+        self.replace_current_row(row);
         Some(result)
     }
 }

@@ -672,7 +672,7 @@ fn begin_text_window_matrix(builder: &mut GlyphMatrixBuilder, request: TextWindo
     ));
 }
 
-pub(crate) fn record_text_window_display_range(
+fn record_text_window_display_range_in_matrix(
     builder: &mut GlyphMatrixBuilder,
     range: TextWindowDisplayRange,
 ) {
@@ -682,6 +682,14 @@ pub(crate) fn record_text_window_display_range(
         info.window_start = range.window_start.as_i64();
         info.window_end = range.window_end.as_i64();
     }
+}
+
+#[cfg(test)]
+pub(crate) fn record_text_window_display_range(
+    builder: &mut GlyphMatrixBuilder,
+    range: TextWindowDisplayRange,
+) {
+    record_text_window_display_range_in_matrix(builder, range);
 }
 
 impl TextWindowRedisplayPositions {
@@ -722,12 +730,12 @@ impl TextWindowRedisplayPositions {
     }
 }
 
-pub(crate) fn record_text_window_redisplay_positions(
+fn record_text_window_redisplay_positions(
     builder: &mut GlyphMatrixBuilder,
     window_id: u64,
     positions: TextWindowRedisplayPositions,
 ) {
-    record_text_window_display_range(builder, positions.display_range(window_id));
+    record_text_window_display_range_in_matrix(builder, positions.display_range(window_id));
 }
 
 fn close_text_window_matrix_output(builder: &mut GlyphMatrixBuilder) {
@@ -1257,7 +1265,7 @@ pub(crate) fn install_text_window_cursor_effects(
     TextWindowCursorInstaller::without_output(builder).install_cursor_effects(request);
 }
 
-pub(crate) fn finish_text_window_output_rows(
+fn finish_text_window_output_rows(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,
 ) {
