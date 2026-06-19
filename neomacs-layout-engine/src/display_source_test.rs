@@ -8,7 +8,7 @@ use crate::display_item::{
     DisplaySourceId, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef, SourceSpan,
 };
-use crate::display_property::{DisplayReplacementProperty, classify_display_property};
+use crate::display_property::DisplayReplacementProperty;
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
@@ -265,14 +265,8 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
     {
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
-        let display_string = Value::string("displayed");
-        let display_string_classification = classify_display_property(display_string);
-        match display_property_source_action_from_classification(
-            &mut context,
-            display_string,
-            &display_string_classification,
-            base_face,
-        ) {
+        let display_string = DisplayPropertySourcePlan::new(Value::string("displayed"));
+        match display_string.source_action(&mut context, base_face) {
             DisplayPropertySourceAction::PushReplacement { value, base_face } => {
                 assert_eq!(
                     value.as_runtime_string_owned().as_deref(),
@@ -288,13 +282,8 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             Value::keyword(":width"),
             Value::fixnum(2),
         ]);
-        let space_classification = classify_display_property(space_spec);
-        match display_property_source_action_from_classification(
-            &mut context,
-            space_spec,
-            &space_classification,
-            base_face,
-        ) {
+        let space_plan = DisplayPropertySourcePlan::new(space_spec);
+        match space_plan.source_action(&mut context, base_face) {
             DisplayPropertySourceAction::Emit {
                 kind:
                     DisplayItemKind::Stretch(DisplayStretch {
@@ -307,14 +296,8 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             action => panic!("expected typed space action, got {action:?}"),
         }
 
-        let image_spec = Value::list(vec![Value::symbol("image")]);
-        let image_classification = classify_display_property(image_spec);
-        match display_property_source_action_from_classification(
-            &mut context,
-            image_spec,
-            &image_classification,
-            base_face,
-        ) {
+        let image_plan = DisplayPropertySourcePlan::new(Value::list(vec![Value::symbol("image")]));
+        match image_plan.source_action(&mut context, base_face) {
             DisplayPropertySourceAction::Emit {
                 kind:
                     DisplayItemKind::MediaReplacement(DisplayMediaReplacement {

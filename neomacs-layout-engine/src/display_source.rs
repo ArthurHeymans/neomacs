@@ -1756,15 +1756,8 @@ impl LispStringSourceFrame {
         let mut item_layout = DisplayItemLayout::default();
         if let Some(display_prop) = self.display_prop_at(start) {
             self.char_index = property_end;
-            let display_property = classify_display_property(display_prop);
-            match display_property_source_action_from_classification(
-                context,
-                display_prop,
-                &display_property,
-                face,
-            )
-            .into_cursor_action(span, face)
-            {
+            let display_property = DisplayPropertySourcePlan::new(display_prop);
+            match display_property.cursor_action(context, span, face) {
                 DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                     return LispStringAction::PushReplacement { value, base_face };
                 }
@@ -1911,6 +1904,66 @@ pub(crate) enum DisplayPropertySourceCursorAction {
     },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayPropertySourcePlan {
+    value: Value,
+    classification: DisplayPropertyClassification,
+}
+
+impl DisplayPropertySourcePlan {
+    pub(crate) fn new(value: Value) -> Self {
+        Self {
+            value,
+            classification: classify_display_property(value),
+        }
+    }
+
+    pub(crate) fn replacement(&self) -> Option<&DisplayReplacementProperty> {
+        self.classification.replacement()
+    }
+
+    pub(crate) fn into_classification(self) -> DisplayPropertyClassification {
+        self.classification
+    }
+
+    pub(crate) fn source_action(
+        &self,
+        context: &mut DisplaySourceContext<'_>,
+        face: RenderFaceRef,
+    ) -> DisplayPropertySourceAction {
+        match DisplayPropertySourceReplacement::resolve(
+            context,
+            self.value,
+            self.classification.replacement(),
+            face,
+        ) {
+            DisplayPropertySourceReplacement::String(value) => {
+                DisplayPropertySourceAction::PushReplacement {
+                    value,
+                    base_face: face,
+                }
+            }
+            DisplayPropertySourceReplacement::Item(kind) => DisplayPropertySourceAction::Emit {
+                kind,
+                layout: self.classification.modifiers(),
+            },
+            DisplayPropertySourceReplacement::Unresolved => DisplayPropertySourceAction::Ignore {
+                layout: self.classification.modifiers(),
+            },
+        }
+    }
+
+    pub(crate) fn cursor_action(
+        &self,
+        context: &mut DisplaySourceContext<'_>,
+        span: SourceSpan,
+        face: RenderFaceRef,
+    ) -> DisplayPropertySourceCursorAction {
+        self.source_action(context, face)
+            .into_cursor_action(span, face)
+    }
+}
+
 impl DisplayPropertySourceAction {
     pub(crate) fn into_cursor_action(
         self,
@@ -1964,34 +2017,6 @@ impl DisplayPropertySourceReplacement {
                 .map(Self::Item)
                 .unwrap_or(Self::Unresolved),
         }
-    }
-}
-
-pub(crate) fn display_property_source_action_from_classification(
-    context: &mut DisplaySourceContext<'_>,
-    display_prop: Value,
-    classification: &DisplayPropertyClassification,
-    face: RenderFaceRef,
-) -> DisplayPropertySourceAction {
-    match DisplayPropertySourceReplacement::resolve(
-        context,
-        display_prop,
-        classification.replacement(),
-        face,
-    ) {
-        DisplayPropertySourceReplacement::String(value) => {
-            DisplayPropertySourceAction::PushReplacement {
-                value,
-                base_face: face,
-            }
-        }
-        DisplayPropertySourceReplacement::Item(kind) => DisplayPropertySourceAction::Emit {
-            kind,
-            layout: classification.modifiers(),
-        },
-        DisplayPropertySourceReplacement::Unresolved => DisplayPropertySourceAction::Ignore {
-            layout: classification.modifiers(),
-        },
     }
 }
 

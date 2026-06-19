@@ -2,12 +2,12 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayRowBreakReason, DisplaySourcePosition,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_property::{DisplayPropertyClassification, classify_display_property};
+use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
-    DisplayPropertySourceCursorAction, DisplaySourceContext, LispStringSourceStack,
-    TextSourceCharClassification, classify_text_source_char,
-    display_item_kind_for_text_source_char, display_property_source_action_from_classification,
+    DisplayPropertySourceCursorAction, DisplayPropertySourcePlan, DisplaySourceContext,
+    LispStringSourceStack, TextSourceCharClassification, classify_text_source_char,
+    display_item_kind_for_text_source_char,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::{WindowKind, WindowParams};
@@ -1114,18 +1114,11 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     fn display_property_cursor_action(
         &self,
         context: &mut DisplaySourceContext<'_>,
-        display_prop: Value,
-        display_property: &DisplayPropertyClassification,
+        display_property: &DisplayPropertySourcePlan,
         face: RenderFaceRef,
         span: SourceSpan,
     ) -> DisplayPropertySourceCursorAction {
-        display_property_source_action_from_classification(
-            context,
-            display_prop,
-            display_property,
-            face,
-        )
-        .into_cursor_action(span, face)
+        display_property.cursor_action(context, span, face)
     }
 
     fn push_display_replacement_string(
@@ -1209,12 +1202,12 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
 
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
-                let display_property = classify_display_property(display_prop);
+                let display_property = DisplayPropertySourcePlan::new(display_prop);
                 if display_property.replacement().is_some() {
                     return Some(BufferTextSourceCursorItem::Replacement(
                         self.display_replacement_item(
                             display_prop,
-                            display_property,
+                            display_property.into_classification(),
                             start,
                             property_end,
                         ),
@@ -1222,7 +1215,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 }
                 let item_layout = match self.display_property_cursor_action(
                     context,
-                    display_prop,
                     &display_property,
                     face,
                     span,
@@ -1231,7 +1223,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                         return Some(BufferTextSourceCursorItem::Replacement(
                             self.display_replacement_item(
                                 value,
-                                display_property,
+                                display_property.into_classification(),
                                 start,
                                 property_end,
                             ),
@@ -1277,10 +1269,9 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
 
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
-                let display_property = classify_display_property(display_prop);
+                let display_property = DisplayPropertySourcePlan::new(display_prop);
                 let item_layout = match self.display_property_cursor_action(
                     context,
-                    display_prop,
                     &display_property,
                     face,
                     span,
