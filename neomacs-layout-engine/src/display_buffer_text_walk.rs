@@ -64,7 +64,8 @@ use crate::neovm_bridge::{
 };
 use crate::types::{LineWrapMode, WindowKind, WindowParams};
 use crate::window_output::{
-    TextWindowOutputRenderState, TextWindowRedisplayPositions, WindowOutputEmitter,
+    TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions,
+    WindowOutputEmitter,
 };
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
@@ -334,7 +335,15 @@ pub(crate) struct BufferTextWindowBodyPassState<'emit> {
     face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-impl<'emit> BufferTextWindowBodyPassState<'emit> {
+pub(crate) struct BufferTextWindowOutputSession<'emit> {
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'emit FaceResolver,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'emit> BufferTextWindowOutputSession<'emit> {
     pub(crate) fn new(
         builder: &'emit mut GlyphMatrixBuilder,
         evaluator: &'emit mut Context,
@@ -349,6 +358,42 @@ impl<'emit> BufferTextWindowBodyPassState<'emit> {
             face_resolver,
             face_ids,
         }
+    }
+
+    fn body_pass_state(&mut self) -> BufferTextWindowBodyPassState<'_> {
+        BufferTextWindowBodyPassState {
+            builder: self.builder,
+            evaluator: self.evaluator,
+            font_metrics: self.font_metrics,
+            face_resolver: self.face_resolver,
+            face_ids: self.face_ids,
+        }
+    }
+
+    fn rendered_body_complete_state<'hit>(
+        &'hit mut self,
+        hit_data: &'hit mut Vec<WindowHitData>,
+        display_snapshots: &'hit mut Vec<WindowDisplaySnapshot>,
+    ) -> BufferTextWindowRenderedBodyCompleteState<'hit, 'hit> {
+        BufferTextWindowRenderedBodyCompleteState {
+            builder: self.builder,
+            evaluator: self.evaluator,
+            render_services: ChromeRowRenderServices::new(
+                self.font_metrics,
+                self.face_resolver,
+                self.face_ids,
+            ),
+            hit_data,
+            display_snapshots,
+        }
+    }
+
+    pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
+        checkpoint.restore(self.builder);
+    }
+
+    pub(crate) fn publish_face_ids(&self, frame_counter: &mut u32) {
+        *frame_counter = self.face_ids.finish();
     }
 }
 
@@ -406,22 +451,6 @@ pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
 }
 
 impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
-    pub(crate) fn new(
-        builder: &'emit mut GlyphMatrixBuilder,
-        evaluator: &'emit mut Context,
-        render_services: ChromeRowRenderServices<'emit, 'face>,
-        hit_data: &'emit mut Vec<WindowHitData>,
-        display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
-    ) -> Self {
-        Self {
-            builder,
-            evaluator,
-            render_services,
-            hit_data,
-            display_snapshots,
-        }
-    }
-
     fn output_state(&mut self) -> BufferTextWindowRenderedBodyOutputState<'_, '_> {
         BufferTextWindowRenderedBodyOutputState {
             builder: &mut *self.builder,
@@ -1213,7 +1242,7 @@ where
     pub(crate) fn begin_render_body_and_tail<'buf>(
         self,
         walk_setup: &mut BufferTextWindowWalkSetup,
-        state: &mut BufferTextWindowBodyPassState<'_>,
+        output_session: &mut BufferTextWindowOutputSession<'_>,
         text: &'a [u8],
         params: &'a WindowParams,
         buffer: &B,
@@ -1232,13 +1261,14 @@ where
         let mut face_scan = FaceScanCheckpoint::initial();
         let mut active_face_state = self
             .initial_face_state
-            .into_active_face_state(state.font_metrics);
+            .into_active_face_state(output_session.font_metrics);
+        let mut body_pass_state = output_session.body_pass_state();
         let BufferTextWindowBodyPassOutcome {
             output_emitter,
             post_loop,
         } = walk_setup.begin_render_body_and_tail(
             self.begin_request,
-            state,
+            &mut body_pass_state,
             &mut line_numbers,
             &mut face_scan,
             &mut active_face_state,
@@ -1325,8 +1355,11 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         mut self,
         walk_setup: &mut BufferTextWindowWalkSetup,
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
-        mut state: BufferTextWindowRenderedBodyCompleteState<'_, '_>,
+        output_session: &mut BufferTextWindowOutputSession<'_>,
+        hit_data: &mut Vec<WindowHitData>,
+        display_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) -> TextWindowRedisplayPositions {
+        let mut state = output_session.rendered_body_complete_state(hit_data, display_snapshots);
         let redisplay_positions =
             self.install_body_and_publish_redisplay(walk_setup, state.output_state());
         self.render_chrome_rows(chrome_request, state.output_state());

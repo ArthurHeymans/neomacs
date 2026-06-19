@@ -25,10 +25,10 @@ use super::window_output::{
 use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
-    BufferTextWindowBodyPassState, BufferTextWindowChromeHeights, BufferTextWindowDefaultFacePlan,
-    BufferTextWindowGeometryPlan, BufferTextWindowGeometryRequest,
-    BufferTextWindowLocalDisplayPolicy, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowRenderedBodyCompleteState, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowChromeHeights, BufferTextWindowDefaultFacePlan, BufferTextWindowGeometryPlan,
+    BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
+    BufferTextWindowOutputSession, BufferTextWindowOutputSetupRequest,
+    BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
@@ -1095,15 +1095,16 @@ impl LayoutEngine {
             reserve_right_special_col,
             reserve_right_border_col,
         );
+        let mut output_session = BufferTextWindowOutputSession::new(
+            &mut self.matrix_builder,
+            evaluator,
+            &mut self.font_metrics,
+            face_resolver,
+            &mut face_ids,
+        );
         let rendered_body = body_plan.begin_render_body_and_tail(
             &mut walk_setup,
-            &mut BufferTextWindowBodyPassState::new(
-                &mut self.matrix_builder,
-                evaluator,
-                &mut self.font_metrics,
-                face_resolver,
-                &mut face_ids,
-            ),
+            &mut output_session,
             text,
             params,
             buffer,
@@ -1114,14 +1115,15 @@ impl LayoutEngine {
 
         if let Some(new_window_start) = retry_plan.should_retry(remaining_visibility_retries) {
             retry_plan.log_retry(new_window_start, remaining_visibility_retries);
-            retry_render_checkpoint.restore(&mut self.matrix_builder);
+            output_session.restore_retry_checkpoint(retry_render_checkpoint);
 
             let mut retry_params = params.clone();
             retry_params.window_start = new_window_start;
             retry_params.window_end = 0;
             // Persist the counter before recursing so the retry call loads the
             // parent's bumped value as its base.
-            face_ids.finish_into(&mut self.frame_face_id_counter);
+            output_session.publish_face_ids(&mut self.frame_face_id_counter);
+            drop(output_session);
             self.layout_window_rust(
                 evaluator,
                 frame_id,
@@ -1144,13 +1146,9 @@ impl LayoutEngine {
                 font_ascent,
                 &buffer_name,
             ),
-            BufferTextWindowRenderedBodyCompleteState::new(
-                &mut self.matrix_builder,
-                evaluator,
-                ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
-                &mut self.hit_data,
-                &mut self.display_snapshots,
-            ),
+            &mut output_session,
+            &mut self.hit_data,
+            &mut self.display_snapshots,
         );
 
         tracing::debug!(
@@ -1159,7 +1157,7 @@ impl LayoutEngine {
             redisplay_positions.window_end.as_i64()
         );
 
-        face_ids.finish_into(&mut self.frame_face_id_counter);
+        output_session.publish_face_ids(&mut self.frame_face_id_counter);
     }
 
     /// Trigger fontification for a buffer region via the Rust Context.
