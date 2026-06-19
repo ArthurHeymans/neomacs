@@ -1071,6 +1071,15 @@ pub(crate) fn charset_by_emacs_mule_id(id: i64) -> Option<(SymId, i64)> {
     })
 }
 
+/// `emacs_mule_bytes[c]`: the number of source bytes an emacs-mule sequence
+/// led by byte `c` consumes (charset.c:1183).  Returns `None` when `c` is not
+/// an emacs-mule leading code (the caller defaults to 1).
+pub(crate) fn emacs_mule_leading_code_bytes(c: u8) -> Option<i32> {
+    let (_, dimension) = charset_by_emacs_mule_id(i64::from(c))?;
+    let extra = if c < 0xA0 { 1 } else { 2 };
+    Some(dimension as i32 + extra)
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------

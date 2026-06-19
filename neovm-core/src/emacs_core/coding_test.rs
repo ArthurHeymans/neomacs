@@ -2000,3 +2000,316 @@ fn find_operation_coding_system_validates_operation_target_like_gnu() {
         other => panic!("expected error signal, got {other:?}"),
     }
 }
+
+// ===========================================================================
+// detect-coding-string algorithm verification against GNU Emacs 31 outputs.
+//
+// `detect_categories` is the pure detection core; here we drive it with the
+// exact category->coding-system bindings and priority order GNU reports via
+// `coding-system-priority-list`, then assert byte-exact result lists captured
+// from the GNU binary.
+// ===========================================================================
+
+/// Build (priorities, cat_system) matching GNU's runtime state (UTF-8/English
+/// language environment, the default).
+fn gnu_detect_state() -> (Vec<usize>, [Option<SymId>; CODING_CAT_MAX]) {
+    // (category enum index, bound coding-system base name), in GNU priority order.
+    let order: [(CodingCat, &str); 20] = [
+        (CodingCat::Utf8Nosig, "utf-8"),
+        (CodingCat::Iso7, "iso-2022-7bit"),
+        (CodingCat::Charset, "iso-latin-1"),
+        (CodingCat::Iso7Else, "iso-2022-7bit-lock"),
+        (CodingCat::Iso8Else, "iso-2022-8bit-ss2"),
+        (CodingCat::EmacsMule, "emacs-mule"),
+        (CodingCat::RawText, "raw-text"),
+        (CodingCat::Iso7Tight, "iso-2022-jp"),
+        (CodingCat::Iso81, "in-is13194-devanagari"),
+        (CodingCat::Iso82, "chinese-iso-8bit"),
+        (CodingCat::Utf8Auto, "utf-8-auto"),
+        (CodingCat::Utf8Sig, "utf-8-with-signature"),
+        (CodingCat::Utf16Auto, "utf-16"),
+        (CodingCat::Utf16Be, "utf-16be-with-signature"),
+        (CodingCat::Utf16Le, "utf-16le-with-signature"),
+        (CodingCat::Utf16BeNosig, "utf-16be"),
+        (CodingCat::Utf16LeNosig, "utf-16le"),
+        (CodingCat::Sjis, "japanese-shift-jis"),
+        (CodingCat::Big5, "chinese-big5"),
+        (CodingCat::Undecided, "undecided"),
+    ];
+    let mut cat_system: [Option<SymId>; CODING_CAT_MAX] = [None; CODING_CAT_MAX];
+    let mut priorities = Vec::new();
+    for (cat, name) in order {
+        cat_system[cat as usize] = Some(intern(name));
+        priorities.push(cat as usize);
+    }
+    // ccl has no bound coding system; append it (and any other) in enum order.
+    for cat in 0..CODING_CAT_MAX {
+        if !priorities.contains(&cat) {
+            priorities.push(cat);
+        }
+    }
+    (priorities, cat_system)
+}
+
+fn detect_list(bytes: &[u8]) -> Vec<String> {
+    detect_list_mb(bytes, bytes.len(), false)
+}
+
+fn detect_list_mb(bytes: &[u8], src_chars: usize, multibytep: bool) -> Vec<String> {
+    let (priorities, cat_system) = gnu_detect_state();
+    let v = detect_categories(
+        &priorities,
+        &cat_system,
+        bytes,
+        src_chars,
+        multibytep,
+        false,
+    );
+    list_to_vec(&v)
+        .unwrap()
+        .iter()
+        .map(|s| resolve_sym(s.as_symbol_id().unwrap()).to_string())
+        .collect()
+}
+
+#[test]
+fn detect_matches_gnu_ascii() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 65 66 67)) => (undecided)
+    assert_eq!(detect_list(&[65, 66, 67]), vec!["undecided"]);
+}
+
+#[test]
+fn detect_matches_gnu_utf8_bom() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 239 187 191 97))
+    assert_eq!(
+        detect_list(&[239, 187, 191, 97]),
+        vec![
+            "utf-8",
+            "iso-latin-1",
+            "emacs-mule",
+            "in-is13194-devanagari",
+            "utf-8-auto",
+            "utf-8-with-signature",
+            "japanese-shift-jis",
+            "chinese-big5",
+            "iso-2022-8bit-ss2",
+        ]
+    );
+}
+
+#[test]
+fn detect_matches_gnu_utf16be_bom_null() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 254 255 0 65)) => (no-conversion)
+    assert_eq!(detect_list(&[254, 255, 0, 65]), vec!["no-conversion"]);
+}
+
+#[test]
+fn detect_matches_gnu_lone_high_byte() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 255))
+    assert_eq!(
+        detect_list(&[255]),
+        vec![
+            "iso-latin-1",
+            "emacs-mule",
+            "in-is13194-devanagari",
+            "chinese-iso-8bit",
+            "iso-2022-8bit-ss2",
+        ]
+    );
+}
+
+#[test]
+fn detect_matches_gnu_valid_utf8() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 99 97 102 195 169))  "café"
+    assert_eq!(
+        detect_list(&[99, 97, 102, 195, 169]),
+        vec![
+            "utf-8",
+            "iso-latin-1",
+            "emacs-mule",
+            "in-is13194-devanagari",
+            "chinese-iso-8bit",
+            "utf-8-auto",
+            "japanese-shift-jis",
+            "chinese-big5",
+            "iso-2022-8bit-ss2",
+        ]
+    );
+}
+
+#[test]
+fn detect_matches_gnu_latin1_high() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 99 97 102 233))
+    assert_eq!(
+        detect_list(&[99, 97, 102, 233]),
+        vec![
+            "iso-latin-1",
+            "emacs-mule",
+            "in-is13194-devanagari",
+            "chinese-iso-8bit",
+            "iso-2022-8bit-ss2",
+        ]
+    );
+}
+
+// NOTE: `(detect-coding-string (unibyte-string 228 184 173 230 151 182))`
+// (3-byte UTF-8 for 中时) returns `(utf-8 utf-8-auto japanese-shift-jis raw-text)`
+// in GNU.  The exclusion of emacs-mule depends on `emacs_mule_bytes[0x97] == 3`,
+// which comes from the charset `japanese-jisx0213-1` (emacs-mule-id 151,
+// dimension 2).  That charset is defined by lisp at startup and is *not* present
+// in the bare unit-test charset registry, so this case can only be verified
+// against the booted runtime, not here.
+
+#[test]
+fn detect_matches_gnu_binary_null() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 255 254 0 0)) => (no-conversion)
+    assert_eq!(detect_list(&[255, 254, 0, 0]), vec!["no-conversion"]);
+}
+
+#[test]
+fn detect_matches_gnu_utf8_bom_then_ascii() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (unibyte-string 239 187 191 65 66 67))
+    assert_eq!(
+        detect_list(&[239, 187, 191, 65, 66, 67]),
+        vec![
+            "utf-8",
+            "iso-latin-1",
+            "emacs-mule",
+            "in-is13194-devanagari",
+            "utf-8-auto",
+            "utf-8-with-signature",
+            "japanese-shift-jis",
+            "chinese-big5",
+            "iso-2022-8bit-ss2",
+        ]
+    );
+}
+
+// ----- multibyte string inputs (`(string ...)` / "literal") -----
+// These produce *multibyte* strings; detection runs on their Emacs-internal
+// byte representation with `multibytep = t`, so high chars decode to single
+// (negated) codes rather than raw bytes.
+
+#[test]
+fn detect_matches_gnu_mb_string_with_bom_chars() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (string #xef #xbb #xbf 65))
+    // multibyte bytes = [195 175 194 187 194 191 65], chars = 4.
+    assert_eq!(
+        detect_list_mb(&[195, 175, 194, 187, 194, 191, 65], 4, true),
+        vec!["utf-8", "utf-8-auto", "iso-2022-7bit"]
+    );
+}
+
+#[test]
+fn detect_matches_gnu_mb_cafe() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string "café")  multibyte bytes = [99 97 102 195 169], chars = 4.
+    assert_eq!(
+        detect_list_mb(&[99, 97, 102, 195, 169], 4, true),
+        vec!["utf-8", "utf-8-auto", "iso-2022-7bit"]
+    );
+}
+
+#[test]
+fn detect_matches_gnu_mb_utf16_chars_with_null() {
+    crate::test_utils::init_test_tracing();
+    // (detect-coding-string (string #xff #xfe 65 0))
+    // multibyte bytes = [195 191 195 190 65 0], chars = 4 -> (no-conversion).
+    assert_eq!(
+        detect_list_mb(&[195, 191, 195, 190, 65, 0], 4, true),
+        vec!["no-conversion"]
+    );
+    // (string #xff #xfe #x00) -> [195 191 195 190 0], chars = 3.
+    assert_eq!(
+        detect_list_mb(&[195, 191, 195, 190, 0], 3, true),
+        vec!["no-conversion"]
+    );
+}
+
+// ===========================================================================
+// Coding-system priority list (Group B): category-based reordering.
+// ===========================================================================
+
+#[test]
+fn priority_list_has_twenty_entries_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    let v = builtin_coding_system_priority_list(&m, vec![]).unwrap();
+    assert_eq!(list_to_vec(&v).unwrap().len(), 20);
+}
+
+#[test]
+fn set_priority_is_idempotent_across_repeated_calls() {
+    crate::test_utils::init_test_tracing();
+    // NOTE: in the bare unit-test coding manager, the runtime-defined systems
+    // (utf-8-auto, utf-16, iso-2022-7bit, ...) carry no verbatim plist, so
+    // `coding_category_of` falls back to the per-base mapping and several
+    // collapse onto the same category.  The absolute length therefore differs
+    // from the booted runtime's 20.  What we *can* verify here is the algorithm
+    // itself: preferring a coding system, then preferring it again, leaves the
+    // priority list unchanged (no growth, idempotent) and moves it to the head.
+    let mut m = mgr();
+    builtin_set_coding_system_priority(&mut m, vec![Value::symbol("utf-8")]).unwrap();
+    let once = list_to_vec(&builtin_coding_system_priority_list(&m, vec![]).unwrap()).unwrap();
+    builtin_set_coding_system_priority(&mut m, vec![Value::symbol("utf-8")]).unwrap();
+    let twice = list_to_vec(&builtin_coding_system_priority_list(&m, vec![]).unwrap()).unwrap();
+    assert_eq!(
+        once.len(),
+        twice.len(),
+        "re-preferring must not grow the list"
+    );
+    assert_eq!(
+        resolve_sym(once[0].as_symbol_id().unwrap()),
+        "utf-8",
+        "preferred system moves to the head"
+    );
+    assert_eq!(resolve_sym(twice[0].as_symbol_id().unwrap()), "utf-8");
+}
+
+#[test]
+fn set_priority_moves_charset_category_to_front() {
+    crate::test_utils::init_test_tracing();
+    // iso-latin-1 is registered in the bare manager (charset category); fronting
+    // it then fronting utf-8 must keep utf-8 first and not grow the list.
+    let mut m = mgr();
+    let base = list_to_vec(&builtin_coding_system_priority_list(&m, vec![]).unwrap())
+        .unwrap()
+        .len();
+    builtin_set_coding_system_priority(&mut m, vec![Value::symbol("iso-latin-1")]).unwrap();
+    let after_latin =
+        list_to_vec(&builtin_coding_system_priority_list(&m, vec![Value::T]).unwrap()).unwrap();
+    assert_eq!(
+        resolve_sym(after_latin[0].as_symbol_id().unwrap()),
+        "iso-latin-1"
+    );
+    builtin_set_coding_system_priority(&mut m, vec![Value::symbol("utf-8")]).unwrap();
+    let after_utf8 =
+        list_to_vec(&builtin_coding_system_priority_list(&m, vec![]).unwrap()).unwrap();
+    assert_eq!(resolve_sym(after_utf8[0].as_symbol_id().unwrap()), "utf-8");
+    // Fronting two distinct categories one at a time never grows the list.
+    assert!(after_utf8.len() <= base);
+}
+
+// ===========================================================================
+// utf-8-with-signature BOM on encode (Group C).
+// ===========================================================================
+
+#[test]
+fn encode_lisp_string_prepends_bom_for_signature() {
+    crate::test_utils::init_test_tracing();
+    let s = crate::heap_types::LispString::from_unibyte(b"x".to_vec());
+    let bytes = crate::encoding::encode_lisp_string(&s, "utf-8-with-signature");
+    assert_eq!(bytes, vec![0xEF, 0xBB, 0xBF, b'x']);
+    // Plain utf-8 must NOT prepend a BOM.
+    let plain = crate::encoding::encode_lisp_string(&s, "utf-8");
+    assert_eq!(plain, vec![b'x']);
+}

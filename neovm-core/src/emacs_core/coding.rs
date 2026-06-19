@@ -801,16 +801,36 @@ impl CodingSystemManager {
         mgr.add_alias("utf-16-le", "utf-16le-with-signature");
         mgr.add_alias("utf-16-be", "utf-16be-with-signature");
 
-        // Default priority list
+        // Default detection priority list.  GNU keeps one entry per coding
+        // *category* (coding.c `coding_priorities`/`coding_categories`).  We
+        // seed it with the post-startup order GNU reaches after
+        // `reset-language-environment` runs `set-coding-system-priority`
+        // (utf-8, iso-2022-7bit, iso-latin-1, ... first), so this matches the
+        // booted runtime's `coding-system-priority-list`.  `coding-category-ccl`
+        // has no bound coding system and is omitted (GNU skips id<0 entries),
+        // giving 20 entries like GNU.  `set-coding-system-priority` reorders
+        // these by category and is idempotent on this order.
         mgr.priority = vec![
-            intern("utf-8"),
-            intern("utf-8-unix"),
-            intern("undecided"),
-            intern("iso-latin-1"),
-            intern("us-ascii"),
-            intern("raw-text"),
-            intern("binary"),
-            intern("no-conversion"),
+            intern("utf-8"),                   // coding-category-utf-8
+            intern("iso-2022-7bit"),           // coding-category-iso-7
+            intern("iso-latin-1"),             // coding-category-charset
+            intern("iso-2022-7bit-lock"),      // coding-category-iso-7-else
+            intern("iso-2022-8bit-ss2"),       // coding-category-iso-8-else
+            intern("emacs-mule"),              // coding-category-emacs-mule
+            intern("raw-text"),                // coding-category-raw-text
+            intern("iso-2022-jp"),             // coding-category-iso-7-tight
+            intern("in-is13194-devanagari"),   // coding-category-iso-8-1
+            intern("chinese-iso-8bit"),        // coding-category-iso-8-2
+            intern("utf-8-auto"),              // coding-category-utf-8-auto
+            intern("utf-8-with-signature"),    // coding-category-utf-8-sig
+            intern("utf-16"),                  // coding-category-utf-16-auto
+            intern("utf-16be-with-signature"), // coding-category-utf-16-be
+            intern("utf-16le-with-signature"), // coding-category-utf-16-le
+            intern("utf-16be"),                // coding-category-utf-16-be-nosig
+            intern("utf-16le"),                // coding-category-utf-16-le-nosig
+            intern("japanese-shift-jis"),      // coding-category-sjis
+            intern("chinese-big5"),            // coding-category-big5
+            intern("undecided"),               // coding-category-undecided
         ];
 
         mgr
@@ -1455,6 +1475,33 @@ fn compute_coding_category(info: &CodingSystemInfo) -> &'static str {
         "raw-text" => "coding-category-raw-text",
         _ => "coding-category-undecided",
     }
+}
+
+/// Return the detection category symbol name for a coding system named `name`,
+/// mirroring exactly the `:category` value that `coding-system-plist` reports
+/// (which `coding-system-category` reads).  This is the runtime equivalent of
+/// GNU's `XFIXNUM (CODING_ATTR_CATEGORY (attrs))` in coding.c.
+///
+/// Returns `None` if `name` does not resolve to a known coding system.
+fn coding_category_of(mgr: &CodingSystemManager, name: &str) -> Option<&'static str> {
+    let resolved = resolve_runtime_name(mgr, name)?;
+    let bucket = runtime_bucket_name(mgr, &resolved)?;
+    let info = mgr.get(&bucket)?;
+    // Systems defined via `define-coding-system-internal` carry a verbatim
+    // plist; their category is computed from the full coding-type info.
+    if info.int_properties.contains_key(&PLIST_VERBATIM_KEY) {
+        return Some(compute_coding_category(info));
+    }
+    // Built-in `no-conversion`/`undecided` and the statically registered
+    // systems fall back to the per-coding-type mapping used by the generic
+    // `coding-system-plist` reconstruction (see `builtin_coding_system_plist`).
+    let base = strip_eol_suffix(&resolved);
+    let coding_type = coding_type_for_base(base).unwrap_or(resolve_sym(info.coding_type));
+    Some(if coding_type == "charset" {
+        "coding-category-charset"
+    } else {
+        coding_category_for_base(base)
+    })
 }
 
 /// Compute `:ascii-compatible-p` for a coding system, mirroring GNU's
@@ -2299,9 +2346,13 @@ pub(crate) fn builtin_define_coding_system_alias(
     Ok(Value::NIL)
 }
 
-/// `(set-coding-system-priority &rest CODING-SYSTEMS)` -- move CODING-SYSTEMS
-/// to the front of the detection priority list in order, keeping relative order
-/// of the remaining systems.
+/// `(set-coding-system-priority &rest CODING-SYSTEMS)` -- assign higher
+/// priority to the categories of CODING-SYSTEMS, in order.  Mirrors GNU's
+/// `Fset_coding_system_priority` (coding.c): the priority list has one entry
+/// per detection *category*; the named coding systems' categories move to the
+/// front (the first system seen for a category wins, later ones of the same
+/// category are ignored), and the remaining categories keep their prior order.
+/// A category is also rebound to the named coding system (GNU `setup_coding_system`).
 pub(crate) fn builtin_set_coding_system_priority(
     mgr: &mut CodingSystemManager,
     args: Vec<Value>,
@@ -2310,7 +2361,9 @@ pub(crate) fn builtin_set_coding_system_priority(
         return Ok(Value::NIL);
     }
 
-    let mut requested: Vec<(String, String)> = Vec::with_capacity(args.len());
+    // Validate and resolve each argument to its category + the coding system
+    // name to bind to that category (GNU `CHECK_CODING_SYSTEM_GET_SPEC`).
+    let mut requested: Vec<(&'static str, SymId)> = Vec::with_capacity(args.len());
     for arg in &args {
         if arg.is_nil() {
             return Err(signal(
@@ -2324,32 +2377,39 @@ pub(crate) fn builtin_set_coding_system_priority(
                 vec![Value::symbol("symbolp"), *arg],
             ));
         };
-        let resolved = resolve_runtime_name(mgr, &name)
+        // Resolve through aliases / EOL variants; GNU prefers the base name.
+        resolve_runtime_name(mgr, &name)
             .ok_or_else(|| signal("coding-system-error", vec![*arg]))?;
-        let canonical = mgr
-            .resolve(&resolved)
-            .map(|id| resolve_sym(id).to_string())
-            .unwrap_or(resolved.clone());
-        requested.push((name, canonical));
+        let category = coding_category_of(mgr, &name)
+            .ok_or_else(|| signal("coding-system-error", vec![*arg]))?;
+        // GNU stores the coding system's *base* name in the priority list.
+        let base = coding_system_base_name(mgr, &name);
+        requested.push((category, intern(&base)));
     }
 
-    let mut seen_canonicals: HashSet<SymId> =
-        HashSet::with_capacity(mgr.priority.len() + requested.len());
-    let mut reordered: Vec<SymId> = Vec::with_capacity(mgr.priority.len() + requested.len());
+    // Determine, per priority entry, the category it currently occupies.
+    let entry_categories: Vec<Option<&'static str>> = mgr
+        .priority
+        .iter()
+        .map(|&sym| coding_category_of(mgr, resolve_sym(sym)))
+        .collect();
 
-    for (display, canonical) in requested {
-        if let Some(display_id) = lookup_interned(&display)
-            && let Some(canonical_id) = lookup_interned(&canonical)
-            && seen_canonicals.insert(canonical_id)
-        {
-            reordered.push(display_id);
+    // Front part: requested categories, first occurrence wins (GNU `changed[]`).
+    let mut fronted: HashSet<&'static str> = HashSet::with_capacity(requested.len());
+    let mut reordered: Vec<SymId> = Vec::with_capacity(mgr.priority.len());
+    for (category, bound) in &requested {
+        if fronted.insert(category) {
+            // GNU rebinds the category to the named system.
+            reordered.push(*bound);
         }
     }
 
-    for &name in &mgr.priority {
-        let canonical = mgr.resolve(resolve_sym(name)).unwrap_or(name);
-        if seen_canonicals.insert(canonical) {
-            reordered.push(name);
+    // Tail: remaining priority entries in their prior order, skipping the ones
+    // whose category was just fronted.
+    for (idx, &sym) in mgr.priority.iter().enumerate() {
+        match entry_categories[idx] {
+            Some(cat) if fronted.contains(cat) => {}
+            _ => reordered.push(sym),
         }
     }
 
@@ -2357,30 +2417,831 @@ pub(crate) fn builtin_set_coding_system_priority(
     Ok(Value::NIL)
 }
 
-/// `(detect-coding-string STRING &optional HIGHEST)` -- detect the encoding of
-/// a string. Since all strings in this runtime are UTF-8, always returns utf-8.
-/// If HIGHEST is non-nil, return a single coding system; otherwise return a list.
+/// Return the base (no-EOL) coding-system name that GNU would store in the
+/// priority list for `name`, resolving aliases and EOL variants.
+fn coding_system_base_name(mgr: &CodingSystemManager, name: &str) -> String {
+    let resolved = resolve_runtime_name(mgr, name)
+        .unwrap_or_else(|| normalize_coding_name_for_lookup(name).to_string());
+    let base = strip_eol_suffix(&resolved);
+    mgr.resolve(base)
+        .map(|id| resolve_sym(id).to_string())
+        .unwrap_or_else(|| base.to_string())
+}
+
+// ===========================================================================
+// Coding-system detection (port of GNU coding.c `detect_coding_system` and the
+// per-category detectors, for unibyte source bytes).
+//
+// `detect-coding-string`/`detect-coding-region` return the list of coding
+// systems (one per detection category) that *could* have produced the bytes,
+// ordered by priority.  The category result for given bytes is computed by
+// running each category's byte-level detector and collecting found/rejected
+// bits, exactly as GNU does.  See coding.c:8690 `detect_coding_system`.
+// ===========================================================================
+
+/// The 21 detection categories, in `enum coding_category` order (coding.c:476).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CodingCat {
+    Iso7,
+    Iso7Tight,
+    Iso81,
+    Iso82,
+    Iso7Else,
+    Iso8Else,
+    Utf8Auto,
+    Utf8Nosig,
+    Utf8Sig,
+    Utf16Auto,
+    Utf16Be,
+    Utf16Le,
+    Utf16BeNosig,
+    Utf16LeNosig,
+    Charset,
+    Sjis,
+    Big5,
+    Ccl,
+    EmacsMule,
+    RawText,
+    Undecided,
+}
+
+const CODING_CAT_MAX: usize = 21;
+const CODING_CAT_RAW_TEXT: usize = CodingCat::RawText as usize;
+
+/// Map a category symbol name (`:category` value) to the enum index.
+fn coding_cat_index(category: &str) -> Option<usize> {
+    Some(match category {
+        "coding-category-iso-7" => CodingCat::Iso7 as usize,
+        "coding-category-iso-7-tight" => CodingCat::Iso7Tight as usize,
+        "coding-category-iso-8-1" => CodingCat::Iso81 as usize,
+        "coding-category-iso-8-2" => CodingCat::Iso82 as usize,
+        "coding-category-iso-7-else" => CodingCat::Iso7Else as usize,
+        "coding-category-iso-8-else" => CodingCat::Iso8Else as usize,
+        "coding-category-utf-8-auto" => CodingCat::Utf8Auto as usize,
+        "coding-category-utf-8" => CodingCat::Utf8Nosig as usize,
+        "coding-category-utf-8-sig" => CodingCat::Utf8Sig as usize,
+        "coding-category-utf-16-auto" => CodingCat::Utf16Auto as usize,
+        "coding-category-utf-16-be" => CodingCat::Utf16Be as usize,
+        "coding-category-utf-16-le" => CodingCat::Utf16Le as usize,
+        "coding-category-utf-16-be-nosig" => CodingCat::Utf16BeNosig as usize,
+        "coding-category-utf-16-le-nosig" => CodingCat::Utf16LeNosig as usize,
+        "coding-category-charset" => CodingCat::Charset as usize,
+        "coding-category-sjis" => CodingCat::Sjis as usize,
+        "coding-category-big5" => CodingCat::Big5 as usize,
+        "coding-category-ccl" => CodingCat::Ccl as usize,
+        "coding-category-emacs-mule" => CodingCat::EmacsMule as usize,
+        "coding-category-raw-text" => CodingCat::RawText as usize,
+        "coding-category-undecided" => CodingCat::Undecided as usize,
+        _ => return None,
+    })
+}
+
+// Category bit-mask helpers (coding.c:504).
+const fn cat_mask(c: CodingCat) -> u32 {
+    1 << (c as u32)
+}
+const MASK_UTF_8: u32 =
+    cat_mask(CodingCat::Utf8Auto) | cat_mask(CodingCat::Utf8Nosig) | cat_mask(CodingCat::Utf8Sig);
+const MASK_UTF_16: u32 = cat_mask(CodingCat::Utf16Auto)
+    | cat_mask(CodingCat::Utf16Be)
+    | cat_mask(CodingCat::Utf16Le)
+    | cat_mask(CodingCat::Utf16BeNosig)
+    | cat_mask(CodingCat::Utf16LeNosig);
+const MASK_ISO_7BIT: u32 = cat_mask(CodingCat::Iso7) | cat_mask(CodingCat::Iso7Tight);
+const MASK_ISO_8BIT: u32 = cat_mask(CodingCat::Iso81) | cat_mask(CodingCat::Iso82);
+const MASK_ISO_ELSE: u32 = cat_mask(CodingCat::Iso7Else) | cat_mask(CodingCat::Iso8Else);
+const MASK_ISO: u32 = MASK_ISO_7BIT | MASK_ISO_8BIT | MASK_ISO_ELSE;
+const MASK_ANY: u32 = MASK_ISO
+    | MASK_UTF_8
+    | MASK_UTF_16
+    | cat_mask(CodingCat::Charset)
+    | cat_mask(CodingCat::Sjis)
+    | cat_mask(CodingCat::Big5)
+    | cat_mask(CodingCat::Ccl)
+    | cat_mask(CodingCat::EmacsMule);
+
+/// Bookkeeping for the detectors (coding.c `struct coding_detection_info`).
+#[derive(Default, Clone, Copy)]
+struct DetectInfo {
+    checked: u32,
+    found: u32,
+    rejected: u32,
+}
+
+/// `latin-extra-code-table` entry test (mule-conf.el sets 0x91-0x96).
+fn latin_extra_code_p(c: u8) -> bool {
+    matches!(c, 0x91..=0x96)
+}
+
+/// `emacs_mule_bytes[c]`: bytes consumed by an emacs-mule leading code
+/// (coding.c:11725 + charset.c:1183).  Built from the charset registry's
+/// emacs-mule ids; default 1.
+fn emacs_mule_bytes(c: u8) -> i32 {
+    // Private composition leading codes (charset.h:538).
+    match c {
+        0x9A | 0x9B => return 3,
+        0x9C | 0x9D => return 4,
+        _ => {}
+    }
+    super::charset::emacs_mule_leading_code_bytes(c).unwrap_or(1)
+}
+
+/// A source cursor implementing GNU's `ONE_MORE_BYTE` semantics (coding.c:633).
+/// In unibyte mode every byte is yielded verbatim.  In multibyte mode an
+/// eight-bit raw byte (stored as a 0xC0/0xC1 2-byte lead) is yielded as its
+/// 0x80-0xFF value, and any other multibyte character is yielded *negated*
+/// (the detectors treat negative codes specially).
+struct DetectSrc<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+    multibytep: bool,
+}
+
+impl<'a> DetectSrc<'a> {
+    fn new(bytes: &'a [u8], pos: usize, multibytep: bool) -> Self {
+        Self {
+            bytes,
+            pos,
+            multibytep,
+        }
+    }
+
+    /// `ONE_MORE_BYTE`: return the next code, or `None` at end of source.
+    fn next(&mut self) -> Option<i32> {
+        if self.pos >= self.bytes.len() {
+            return None;
+        }
+        let c = self.bytes[self.pos];
+        self.pos += 1;
+        if self.multibytep && (c & 0x80) != 0 {
+            if (c & 0xFE) == 0xC0 {
+                // Eight-bit raw byte: ((c & 1) << 6) | next.
+                let next = self.bytes.get(self.pos).copied().unwrap_or(0);
+                self.pos += 1;
+                return Some(i32::from(((c & 1) << 6) | next));
+            }
+            // A genuine multibyte character: decode and negate.
+            self.pos -= 1;
+            let ch = crate::emacs_core::emacs_char::string_char_advance(self.bytes, &mut self.pos);
+            return Some(-(ch as i32));
+        }
+        Some(i32::from(c))
+    }
+
+    /// Peek the raw byte at the current position without consuming it.  Only
+    /// meaningful for the unibyte fast paths that inspect the next raw byte
+    /// (e.g. CR/LF and the ISO-8-2 run length).
+    fn peek_raw(&self) -> Option<u8> {
+        self.bytes.get(self.pos).copied()
+    }
+
+    fn at_end(&self) -> bool {
+        self.pos >= self.bytes.len()
+    }
+}
+
+/// Port of coding.c `detect_coding_utf_8`.
+fn detect_utf_8(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
+    di.checked |= MASK_UTF_8;
+    let nbytes = bytes.len();
+    let mut nchars = head_ascii;
+    let mut bom_found = false;
+    let mut start = head_ascii;
+    if start == 0 && start + 3 < nbytes && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF
+    {
+        bom_found = true;
+        start += 3;
+        nchars += 1;
+    }
+    let mut src = DetectSrc::new(bytes, start, multibytep);
+
+    loop {
+        let src_base = src.pos;
+        let Some(c) = src.next() else {
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+        };
+        if c < 0 || c < 0x80 {
+            nchars += 1;
+            if c == i32::from(b'\r') && src.peek_raw() == Some(b'\n') {
+                src.pos += 1;
+                nchars += 1;
+            }
+            continue;
+        }
+        // c is a positive 8-bit lead; read continuation octets as raw bytes.
+        let c = c as u8;
+        let Some(c1) = src.next() else {
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+        };
+        if c1 < 0 || (c1 as u8 & 0xC0) != 0x80 {
+            di.rejected |= MASK_UTF_8;
+            return false;
+        }
+        if (c & 0xE0) == 0xC0 {
+            nchars += 1;
+            continue;
+        }
+        let Some(c2) = src.next() else {
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+        };
+        if c2 < 0 || (c2 as u8 & 0xC0) != 0x80 {
+            di.rejected |= MASK_UTF_8;
+            return false;
+        }
+        if (c & 0xF0) == 0xE0 {
+            nchars += 1;
+            continue;
+        }
+        let Some(c3) = src.next() else {
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+        };
+        if c3 < 0 || (c3 as u8 & 0xC0) != 0x80 {
+            di.rejected |= MASK_UTF_8;
+            return false;
+        }
+        if (c & 0xF8) == 0xF0 {
+            nchars += 1;
+            continue;
+        }
+        let Some(c4) = src.next() else {
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+        };
+        if c4 < 0 || (c4 as u8 & 0xC0) != 0x80 {
+            di.rejected |= MASK_UTF_8;
+            return false;
+        }
+        // 5-octet leads are above MAX_MULTIBYTE_LEADING_CODE -> reject.
+        di.rejected |= MASK_UTF_8;
+        return false;
+    }
+}
+
+/// The coding.c `no_more_source:` tail of `detect_coding_utf_8`, reached when
+/// the source ends mid-character (`src_base < src`).
+fn detect_utf_8_no_more(
+    nbytes: usize,
+    src_base: usize,
+    src: usize,
+    bom_found: bool,
+    nchars: usize,
+    di: &mut DetectInfo,
+) -> bool {
+    if src_base < src {
+        di.rejected |= MASK_UTF_8;
+        return false;
+    }
+    if bom_found {
+        di.found |= MASK_UTF_8;
+    } else {
+        di.rejected |= cat_mask(CodingCat::Utf8Sig);
+        if nchars < nbytes {
+            di.found |= cat_mask(CodingCat::Utf8Auto) | cat_mask(CodingCat::Utf8Nosig);
+        }
+    }
+    true
+}
+
+/// Port of coding.c `detect_coding_utf_16`.  Operates on raw bytes (the macro
+/// `TWO_MORE_BYTES` skips heading multibyte characters, but UTF-16 detection
+/// inspects the literal byte pairs).
+fn detect_utf_16(bytes: &[u8], src_chars: usize, di: &mut DetectInfo) -> bool {
+    di.checked |= MASK_UTF_16;
+    if src_chars & 1 != 0 {
+        di.rejected |= MASK_UTF_16;
+        return false;
+    }
+    if bytes.len() < 2 {
+        // TWO_MORE_BYTES would hit no_more_source.
+        return true;
+    }
+    let c1 = bytes[0];
+    let c2 = bytes[1];
+    if c1 == 0xFF && c2 == 0xFE {
+        di.found |= cat_mask(CodingCat::Utf16Le) | cat_mask(CodingCat::Utf16Auto);
+        di.rejected |= cat_mask(CodingCat::Utf16Be)
+            | cat_mask(CodingCat::Utf16BeNosig)
+            | cat_mask(CodingCat::Utf16LeNosig);
+        return true;
+    } else if c1 == 0xFE && c2 == 0xFF {
+        di.found |= cat_mask(CodingCat::Utf16Be) | cat_mask(CodingCat::Utf16Auto);
+        di.rejected |= cat_mask(CodingCat::Utf16Le)
+            | cat_mask(CodingCat::Utf16BeNosig)
+            | cat_mask(CodingCat::Utf16LeNosig);
+        return true;
+    }
+    // Dispersion heuristic for the no-signature variants.
+    let mut e = [false; 256];
+    let mut o = [false; 256];
+    let mut e_num = 1u32;
+    let mut o_num = 1u32;
+    e[c1 as usize] = true;
+    o[c2 as usize] = true;
+    di.rejected |= cat_mask(CodingCat::Utf16Auto)
+        | cat_mask(CodingCat::Utf16Be)
+        | cat_mask(CodingCat::Utf16Le);
+    let mut i = 2;
+    while (di.rejected & MASK_UTF_16) != MASK_UTF_16 {
+        if i + 1 >= bytes.len() {
+            break;
+        }
+        let c1 = bytes[i] as usize;
+        let c2 = bytes[i + 1] as usize;
+        i += 2;
+        if !e[c1] {
+            e[c1] = true;
+            e_num += 1;
+            if e_num >= 128 {
+                di.rejected |= cat_mask(CodingCat::Utf16BeNosig);
+            }
+        }
+        if !o[c2] {
+            o[c2] = true;
+            o_num += 1;
+            if o_num >= 128 {
+                di.rejected |= cat_mask(CodingCat::Utf16LeNosig);
+            }
+        }
+    }
+    true
+}
+
+/// Port of coding.c `detect_coding_emacs_mule`.
+fn detect_emacs_mule(
+    bytes: &[u8],
+    head_ascii: usize,
+    multibytep: bool,
+    di: &mut DetectInfo,
+) -> bool {
+    di.checked |= cat_mask(CodingCat::EmacsMule);
+    let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
+    let mut found = 0u32;
+    loop {
+        let src_base = src.pos;
+        let Some(mut c) = src.next() else {
+            if src_base < src.pos {
+                di.rejected |= cat_mask(CodingCat::EmacsMule);
+                return false;
+            }
+            di.found |= found;
+            return true;
+        };
+        if c < 0 {
+            continue;
+        }
+        if c == 0x80 {
+            // Perhaps the start of a composite character.
+            loop {
+                let src_start = src.pos;
+                loop {
+                    match src.next() {
+                        None => {
+                            di.found |= found;
+                            return true;
+                        }
+                        Some(v) => {
+                            c = v;
+                            if c < 0xA0 {
+                                break;
+                            }
+                        }
+                    }
+                }
+                if src.pos - 1 - src_start <= 4 {
+                    di.rejected |= cat_mask(CodingCat::EmacsMule);
+                    return false;
+                }
+                found = cat_mask(CodingCat::EmacsMule);
+                if c == 0x80 {
+                    continue;
+                }
+                break;
+            }
+        }
+        if c < 0x80 {
+            if c < 0x20 && (c == 0x1B || c == 0x0F || c == 0x0E) {
+                di.rejected |= cat_mask(CodingCat::EmacsMule);
+                return false;
+            }
+        } else {
+            let mut more_bytes = emacs_mule_bytes(c as u8) - 1;
+            while more_bytes > 0 {
+                let before = src.pos;
+                match src.next() {
+                    None => {
+                        di.found |= found;
+                        return true;
+                    }
+                    Some(v) => {
+                        c = v;
+                        if c < 0xA0 {
+                            src.pos = before; // unread the last byte
+                            break;
+                        }
+                    }
+                }
+                more_bytes -= 1;
+            }
+            if more_bytes != 0 {
+                di.rejected |= cat_mask(CodingCat::EmacsMule);
+                return false;
+            }
+            found = cat_mask(CodingCat::EmacsMule);
+        }
+    }
+}
+
+/// Port of coding.c `detect_coding_sjis` (japanese-shift-jis has 2 charsets, so
+/// the max first byte of a 2-byte code is 0xEF).
+fn detect_sjis(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
+    di.checked |= cat_mask(CodingCat::Sjis);
+    let max_first = 0xEF;
+    let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
+    let mut found = 0u32;
+    loop {
+        let src_base = src.pos;
+        let Some(c) = src.next() else {
+            if src_base < src.pos {
+                di.rejected |= cat_mask(CodingCat::Sjis);
+                return false;
+            }
+            di.found |= found;
+            return true;
+        };
+        if c < 0x80 {
+            continue;
+        }
+        let c = c as u32;
+        if (0x81..=0x9F).contains(&c) || (0xE0..=max_first).contains(&c) {
+            let Some(c) = src.next() else {
+                di.found |= found;
+                return true;
+            };
+            if c < 0x40 || c == 0x7F || c > 0xFC {
+                di.rejected |= cat_mask(CodingCat::Sjis);
+                return false;
+            }
+            found = cat_mask(CodingCat::Sjis);
+        } else if (0xA0..0xE0).contains(&c) {
+            found = cat_mask(CodingCat::Sjis);
+        } else {
+            di.rejected |= cat_mask(CodingCat::Sjis);
+            return false;
+        }
+    }
+}
+
+/// Port of coding.c `detect_coding_big5`.
+fn detect_big5(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
+    di.checked |= cat_mask(CodingCat::Big5);
+    let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
+    let mut found = 0u32;
+    loop {
+        let src_base = src.pos;
+        let Some(c) = src.next() else {
+            if src_base < src.pos {
+                di.rejected |= cat_mask(CodingCat::Big5);
+                return false;
+            }
+            di.found |= found;
+            return true;
+        };
+        if c < 0x80 {
+            continue;
+        }
+        if c >= 0xA1 {
+            let Some(c) = src.next() else {
+                di.found |= found;
+                return true;
+            };
+            if c < 0x40 || (0x7F..=0xA0).contains(&c) {
+                return false;
+            }
+            found = cat_mask(CodingCat::Big5);
+        } else {
+            di.rejected |= cat_mask(CodingCat::Big5);
+            return false;
+        }
+    }
+}
+
+/// Port of coding.c `detect_coding_charset` specialised for the bound
+/// `iso-latin-1` coding system (the charset category's coding system at
+/// startup).  iso-latin-1 is a 1-dimension charset covering the whole byte
+/// range; 0x80-0x9F are valid only if `latin-extra-code-table` says so.
+fn detect_charset_latin1(
+    bytes: &[u8],
+    head_ascii: usize,
+    multibytep: bool,
+    di: &mut DetectInfo,
+) -> bool {
+    di.checked |= cat_mask(CodingCat::Charset);
+    let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
+    let mut found = 0u32;
+    loop {
+        let src_base = src.pos;
+        let Some(c) = src.next() else {
+            if src_base < src.pos {
+                di.rejected |= cat_mask(CodingCat::Charset);
+                return false;
+            }
+            di.found |= found;
+            return true;
+        };
+        if c < 0 {
+            // A decoded multibyte char: iso-latin-1's valids only cover bytes,
+            // so a non-eight-bit char means this is not iso-latin-1.
+            di.rejected |= cat_mask(CodingCat::Charset);
+            return false;
+        }
+        if c >= 0x80 {
+            if c < 0xA0 && !latin_extra_code_p(c as u8) {
+                di.rejected |= cat_mask(CodingCat::Charset);
+                return false;
+            }
+            found = cat_mask(CodingCat::Charset);
+        }
+    }
+}
+
+/// Port of coding.c `detect_coding_iso_2022` for the non-escape (high-byte)
+/// path, which is what `detect-coding-string` exercises for 8-bit input.  Real
+/// ISO escape sequences (ESC/SI/SO designations) take the early ISO path in the
+/// driver scan; here we classify GL/GR bytes and reject 7-bit on lone controls.
+fn detect_iso_2022(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
+    di.checked |= MASK_ISO;
+    let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
+    let mut rejected = 0u32;
+    let mut found = 0u32;
+    while rejected != MASK_ISO {
+        let Some(c) = src.next() else {
+            // no_more_source
+            di.rejected |= rejected;
+            di.found |= found & !rejected;
+            return true;
+        };
+        match c {
+            0x1B | 0x0E | 0x0F => {
+                rejected |= MASK_ISO_7BIT | MASK_ISO_8BIT;
+            }
+            _ => {
+                if c < 0x80 {
+                    // ASCII or a decoded multibyte char (c < 0): no effect.
+                    continue;
+                }
+                let c = c as u32;
+                rejected |= MASK_ISO_7BIT | cat_mask(CodingCat::Iso7Else);
+                if c >= 0xA0 {
+                    found |= cat_mask(CodingCat::Iso81);
+                    if (rejected & cat_mask(CodingCat::Iso82)) == 0 {
+                        let mut len = 1usize;
+                        while let Some(cc) = src.peek_raw() {
+                            if cc < 0xA0 {
+                                break;
+                            }
+                            src.pos += 1;
+                            len += 1;
+                        }
+                        if len & 1 != 0 && !src.at_end() {
+                            rejected |= cat_mask(CodingCat::Iso82);
+                        } else {
+                            found |= cat_mask(CodingCat::Iso82);
+                        }
+                    }
+                } else if !latin_extra_code_p(c as u8) {
+                    rejected = MASK_ISO;
+                } else {
+                    rejected |= cat_mask(CodingCat::Iso81) | cat_mask(CodingCat::Iso82);
+                }
+            }
+        }
+    }
+    di.rejected |= MASK_ISO;
+    false
+}
+
+/// Detect the coding system(s) of unibyte `bytes` (`src_chars` characters),
+/// returning the value `detect-coding-string`/`detect-coding-region` produce.
+/// Direct port of coding.c `detect_coding_system` with `coding_system = nil`
+/// (`undecided`) and no EOL conversion (inputs without CR/LF keep base names).
+fn detect_coding_systems(
+    mgr: &CodingSystemManager,
+    bytes: &[u8],
+    src_chars: usize,
+    multibytep: bool,
+    highest: bool,
+) -> Value {
+    // Build category -> bound coding-system base name from the priority list,
+    // and the category priority order (coding.c `coding_priorities`).
+    let mut cat_system: [Option<SymId>; CODING_CAT_MAX] = [None; CODING_CAT_MAX];
+    let mut priorities: Vec<usize> = Vec::with_capacity(CODING_CAT_MAX);
+    for &sym in &mgr.priority {
+        if let Some(cat) = coding_category_of(mgr, resolve_sym(sym)).and_then(coding_cat_index) {
+            if cat_system[cat].is_none() {
+                cat_system[cat] = Some(sym);
+            }
+            priorities.push(cat);
+        }
+    }
+    // Append any categories not represented in the priority list, in enum order
+    // (so the priority walk covers all categories like GNU's fixed-size array).
+    for cat in 0..CODING_CAT_MAX {
+        if !priorities.contains(&cat) {
+            priorities.push(cat);
+        }
+    }
+
+    detect_categories(
+        &priorities,
+        &cat_system,
+        bytes,
+        src_chars,
+        multibytep,
+        highest,
+    )
+}
+
+/// The pure detection core: run the per-category detectors over `bytes` and
+/// build the result, given the category priority order and the coding system
+/// bound to each category.  Split out from `detect_coding_systems` so it can be
+/// unit-tested against GNU's bindings without a fully-booted coding manager.
+fn detect_categories(
+    priorities: &[usize],
+    cat_system: &[Option<SymId>; CODING_CAT_MAX],
+    bytes: &[u8],
+    src_chars: usize,
+    multibytep: bool,
+    highest: bool,
+) -> Value {
+    let mut di = DetectInfo::default();
+    let mut null_byte_found = false;
+    let mut eight_bit_found = false;
+    let mut head_ascii = 0usize;
+
+    // ASCII skip loop (coding.c:8732).  ISO escape early-detection runs the ISO
+    // detector when an ESC/SI/SO appears before any 8-bit byte.
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c & 0x80 != 0 {
+            eight_bit_found = true;
+            if null_byte_found {
+                break;
+            }
+        } else if c < 0x20 {
+            if (c == 0x1B || c == 0x0F || c == 0x0E) && di.checked == 0 {
+                if detect_iso_2022(bytes, 0, multibytep, &mut di) {
+                    if (di.rejected & cat_mask(CodingCat::Iso7Else)) == 0 {
+                        i = bytes.len();
+                        head_ascii = i;
+                    }
+                    di.rejected |= !(MASK_ISO_7BIT | MASK_ISO_ELSE);
+                    break;
+                }
+            } else if c == 0 {
+                null_byte_found = true;
+                if eight_bit_found {
+                    break;
+                }
+            }
+            if !eight_bit_found {
+                head_ascii += 1;
+            }
+        } else if !eight_bit_found {
+            head_ascii += 1;
+        }
+        i += 1;
+    }
+
+    if null_byte_found || eight_bit_found || head_ascii < bytes.len() || di.found != 0 {
+        if head_ascii == bytes.len() {
+            // All 7-bit: nothing more to detect beyond what ISO found.
+        } else if null_byte_found {
+            di.checked |= !MASK_UTF_16;
+            di.rejected |= !MASK_UTF_16;
+        } else {
+            // Run each category detector for the first `coding_category_raw_text`
+            // PRIORITY POSITIONS (coding.c:8803 `i < coding_category_raw_text`),
+            // skipping categories whose enum value is >= raw_text (8813) and
+            // categories with no bound coding system (8808).
+            let scan = priorities.len().min(CODING_CAT_RAW_TEXT);
+            for &cat in &priorities[..scan] {
+                if cat_system[cat].is_none() {
+                    di.rejected |= 1 << cat;
+                    continue;
+                }
+                if cat >= CODING_CAT_RAW_TEXT {
+                    continue;
+                }
+                if di.checked & (1 << cat) != 0 {
+                    continue;
+                }
+                run_detector(cat, bytes, head_ascii, src_chars, multibytep, &mut di);
+            }
+        }
+    }
+
+    // Result construction (coding.c:8838).
+    let mut val: Vec<SymId> = Vec::new();
+    if (di.rejected & MASK_ANY) == MASK_ANY || null_byte_found {
+        // Binary / undetectable -> no-conversion.
+        val.push(intern("no-conversion"));
+    } else if di.rejected == 0 && di.found == 0 {
+        val.push(intern("undecided"));
+    } else {
+        // The `highest == nil` branch (coding.c:8868), iterating the first
+        // `coding_category_raw_text` PRIORITY POSITIONS (NOT filtered by the
+        // category enum value -- so the coding system bound to e.g. the
+        // raw-text category at a high priority position is included).
+        let scan = priorities.len().min(CODING_CAT_RAW_TEXT);
+        let mask = di.rejected | di.found;
+        // Tail: GNU's first reverse loop overwrites `val = list1i(id)` for every
+        // "neither rejected nor found" position with id >= 0, so the final tail
+        // is the single highest-priority such category.
+        let mut neither: Option<SymId> = None;
+        for &cat in priorities[..scan].iter().rev() {
+            if mask & (1 << cat) == 0
+                && let Some(sym) = cat_system[cat]
+            {
+                neither = Some(sym);
+            }
+        }
+        // Found categories, prepended in reverse -> priority order.
+        let mut found_list: Vec<SymId> = Vec::new();
+        for &cat in priorities[..scan].iter().rev() {
+            if di.found & (1 << cat) != 0
+                && let Some(sym) = cat_system[cat]
+            {
+                found_list.insert(0, sym);
+            }
+        }
+        val = found_list;
+        if let Some(sym) = neither {
+            val.push(sym);
+        }
+    }
+
+    if highest {
+        return val
+            .first()
+            .map_or(Value::NIL, |&s| Value::symbol(resolve_sym(s)));
+    }
+    Value::list(
+        val.into_iter()
+            .map(|s| Value::symbol(resolve_sym(s)))
+            .collect(),
+    )
+}
+
+fn run_detector(
+    cat: usize,
+    bytes: &[u8],
+    head_ascii: usize,
+    src_chars: usize,
+    multibytep: bool,
+    di: &mut DetectInfo,
+) {
+    if cat == CodingCat::Utf8Nosig as usize
+        || cat == CodingCat::Utf8Auto as usize
+        || cat == CodingCat::Utf8Sig as usize
+    {
+        detect_utf_8(bytes, head_ascii, multibytep, di);
+    } else if (CodingCat::Utf16Auto as usize..=CodingCat::Utf16LeNosig as usize).contains(&cat) {
+        detect_utf_16(bytes, src_chars, di);
+    } else if cat == CodingCat::EmacsMule as usize {
+        detect_emacs_mule(bytes, head_ascii, multibytep, di);
+    } else if cat == CodingCat::Sjis as usize {
+        detect_sjis(bytes, head_ascii, multibytep, di);
+    } else if cat == CodingCat::Big5 as usize {
+        detect_big5(bytes, head_ascii, multibytep, di);
+    } else if cat == CodingCat::Charset as usize {
+        detect_charset_latin1(bytes, head_ascii, multibytep, di);
+    } else if (CodingCat::Iso7 as usize..=CodingCat::Iso8Else as usize).contains(&cat) {
+        detect_iso_2022(bytes, head_ascii, multibytep, di);
+    }
+    // ccl has no byte-level detector; it stays unchecked.
+}
+
+/// `(detect-coding-string STRING &optional HIGHEST)` -- detect the coding
+/// system(s) of STRING.  See `detect_coding_systems` (port of coding.c).
 pub(crate) fn builtin_detect_coding_string(
-    _mgr: &CodingSystemManager,
+    mgr: &CodingSystemManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("detect-coding-string", &args, 1)?;
     expect_max_args("detect-coding-string", &args, 2)?;
-    match args[0].kind() {
-        ValueKind::String => {}
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("stringp"), args[0]],
-            ));
-        }
-    }
+    let Some(s) = args[0].as_lisp_string() else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        ));
+    };
+    let bytes = crate::encoding::lisp_string_coding_source_bytes(&s);
+    let src_chars = s.schars();
+    let multibytep = s.is_multibyte();
     let highest = args.get(1).is_some_and(|v| v.is_truthy());
-    if highest {
-        Ok(Value::symbol("undecided"))
-    } else {
-        Ok(Value::list(vec![Value::symbol("undecided")]))
-    }
+    Ok(detect_coding_systems(
+        mgr, &bytes, src_chars, multibytep, highest,
+    ))
 }
 
 /// `(detect-coding-region START END &optional HIGHEST)` -- detect the encoding
@@ -2408,7 +3269,7 @@ fn validate_detect_coding_region(buffers: &BufferManager, args: &[Value]) -> Res
 }
 
 pub(crate) fn builtin_detect_coding_region(
-    _mgr: &CodingSystemManager,
+    mgr: &CodingSystemManager,
     buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -2416,11 +3277,28 @@ pub(crate) fn builtin_detect_coding_region(
     expect_max_args("detect-coding-region", &args, 3)?;
     validate_detect_coding_region(buffers, &args)?;
     let highest = args.get(2).is_some_and(|v| v.is_truthy());
-    if highest {
-        Ok(Value::symbol("undecided"))
+
+    let start = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[0])?;
+    let end = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[1])?;
+    let (start, end) = if end < start {
+        (end, start)
     } else {
-        Ok(Value::list(vec![Value::symbol("undecided")]))
-    }
+        (start, end)
+    };
+    let buffer = buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let byte_range = EmacsByteRange::new(
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(start)),
+        buffer.lisp_pos_to_full_buffer_emacs_byte_pos(LispCharPos1::new(end)),
+    );
+    let string = buffer.buffer_substring_lisp_string_range(byte_range);
+    let bytes = crate::encoding::lisp_string_coding_source_bytes(&string);
+    let src_chars = string.schars();
+    let multibytep = string.is_multibyte();
+    Ok(detect_coding_systems(
+        mgr, &bytes, src_chars, multibytep, highest,
+    ))
 }
 
 /// `(keyboard-coding-system &optional TERMINAL)` -- return the current

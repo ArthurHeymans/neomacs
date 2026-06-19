@@ -705,6 +705,16 @@ fn coding_system_consumes_utf8_signature(coding_system: &str) -> bool {
     coding_system_base(coding_system) == "utf-8-with-signature"
 }
 
+/// Whether encoding through `coding_system` must prepend a UTF-8 BOM
+/// (`EF BB BF`).  `utf-8-with-signature` always does; `utf-8-auto` does on
+/// encode (GNU `encode_coding_utf_8`, BOM type `utf_with_bom`).
+fn coding_system_prepends_utf8_signature(coding_system: &str) -> bool {
+    matches!(
+        coding_system_base(coding_system),
+        "utf-8-with-signature" | "utf-8-auto"
+    )
+}
+
 #[derive(Clone, Copy)]
 enum Utf16Endian {
     Big,
@@ -1073,7 +1083,18 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
     ) || is_byte_preserving_coding_system(coding_system)
     {
         let bytes = lisp_string_coding_source_bytes(s);
-        return encode_eol_bytes(&bytes, coding_system);
+        let mut out = encode_eol_bytes(&bytes, coding_system);
+        // utf-8-with-signature / utf-8-auto prepend a BOM on encode (GNU
+        // `encode_coding_utf_8`).  Applied here so every caller (write-region,
+        // encode-coding-region, ...) gets it, not just the string codec.
+        if coding_system_prepends_utf8_signature(coding_system)
+            && !out.starts_with(&[0xEF, 0xBB, 0xBF])
+        {
+            let mut with_bom = vec![0xEF, 0xBB, 0xBF];
+            with_bom.append(&mut out);
+            out = with_bom;
+        }
+        return out;
     }
 
     if matches!(
@@ -1241,7 +1262,7 @@ fn is_byte_preserving_coding_system(coding_system: &str) -> bool {
     )
 }
 
-fn lisp_string_coding_source_bytes(s: &crate::heap_types::LispString) -> Vec<u8> {
+pub(crate) fn lisp_string_coding_source_bytes(s: &crate::heap_types::LispString) -> Vec<u8> {
     if s.is_multibyte() {
         crate::emacs_core::emacs_char::str_as_unibyte(s.as_bytes())
     } else {
@@ -1466,18 +1487,9 @@ fn transformed_region_string(
     encode: bool,
 ) -> Result<Value, crate::emacs_core::error::Flow> {
     if encode {
-        let mut bytes = encode_lisp_string(&source, coding);
-        // utf-8-with-signature / utf-8-auto prepend a BOM on encode (the string
-        // codec does this directly; encode_lisp_string does not).
-        if matches!(
-            coding_system_base(coding),
-            "utf-8-with-signature" | "utf-8-auto"
-        ) && !bytes.starts_with(&[0xEF, 0xBB, 0xBF])
-        {
-            let mut with_bom = vec![0xEF, 0xBB, 0xBF];
-            with_bom.extend(bytes);
-            bytes = with_bom;
-        }
+        // `encode_lisp_string` prepends the UTF-8 BOM for
+        // utf-8-with-signature / utf-8-auto, so no extra handling here.
+        let bytes = encode_lisp_string(&source, coding);
         Ok(Value::heap_string(
             crate::heap_types::LispString::from_unibyte(bytes),
         ))

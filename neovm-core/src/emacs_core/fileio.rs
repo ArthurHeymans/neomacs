@@ -5623,6 +5623,19 @@ pub(crate) fn builtin_write_region(
 
     let content = write_region_content_in_state(&eval.buffers, current_id, &args[0], args.get(1))?;
 
+    // GNU `Fwrite_region` runs the chosen coding system through
+    // `Fcheck_coding_system`; an explicit but unknown `coding-system-for-write`
+    // (e.g. `utf-8-sig`) signals `coding-system-error` before anything is
+    // written.  Validate it here so we don't silently produce an empty file.
+    let coding_for_write = eval.visible_variable_value_or_nil("coding-system-for-write");
+    if !coding_for_write.is_nil()
+        && let Some(name) = coding_for_write.as_symbol_name()
+        && name != "nil"
+        && !eval.coding_systems.is_known_or_derived(name)
+    {
+        return Err(signal("coding-system-error", vec![coding_for_write]));
+    }
+
     // --- Encode using the appropriate coding system ---
     // Priority: coding-system-for-write > buffer-file-coding-system > utf-8
     let coding_system = resolve_write_coding_system(eval, &eval.buffers, current_id);
