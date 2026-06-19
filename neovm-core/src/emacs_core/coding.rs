@@ -303,6 +303,15 @@ const ISO2022_KEY_REG_USAGE: i64 = i64::MIN + 3;
 /// Reserved int_properties key holding the verbatim define-coding-system plist
 /// (arg 11), used to reproduce GNU's stored plist order in coding-system-plist.
 const PLIST_VERBATIM_KEY: i64 = i64::MIN + 4;
+/// Reserved int_properties key holding the ordered plist of properties set via
+/// `coding-system-put`.  GNU stores a coding system's plist directly on its
+/// shared spec (`CODING_ATTR_PLIST`, src/coding.c) and `coding-system-put` does
+/// `plist_put` on it; `coding-system-get`/`coding-system-plist` read it back.
+/// neomacs reconstructs the bulk of that plist from typed fields, so the
+/// put-time overrides are kept here as a live Lisp plist (preserving GNU's
+/// `plist_put` order: in-place update for an existing key, append for a new
+/// one) and folded onto every reconstructed `coding-system-plist`.
+const PUT_OVERRIDES_KEY: i64 = i64::MIN + 5;
 
 /// ISO-2022 control flags, one variant per bit. Bit values match
 /// `coding-system-iso-2022-flags` (mule.el) and `CODING_ISO_FLAG_*` (coding.c).
@@ -1147,6 +1156,37 @@ fn plist_push_key(plist: &mut Vec<Value>, key: SymId, value: Value) {
     plist.push(value);
 }
 
+/// Fold the properties set via `coding-system-put` onto a freshly reconstructed
+/// `coding-system-plist`.
+///
+/// GNU keeps one mutable plist on the shared coding spec; `coding-system-put`
+/// does `plist_put` on it (src/coding.c `Fcoding_system_put`), so an
+/// overwrite of an already-present property (e.g. `:mime-charset`) replaces it
+/// in place while a brand-new property is appended at the tail.  neomacs
+/// reconstructs the computed part of the plist, then applies each stored
+/// override with the same `plist_put` semantics to match GNU's ordering for
+/// both built-in (`define-coding-system-internal`) and reconstructed systems.
+fn apply_put_overrides(info: &CodingSystemInfo, mut reconstructed: Vec<Value>) -> Value {
+    let Some(overrides) = info.int_properties.get(&PUT_OVERRIDES_KEY) else {
+        return Value::list(reconstructed);
+    };
+    let Some(pairs) = super::value::list_to_vec(overrides) else {
+        return Value::list(reconstructed);
+    };
+    if pairs.is_empty() {
+        return Value::list(reconstructed);
+    }
+    let mut plist = Value::list(std::mem::take(&mut reconstructed));
+    let mut i = 0;
+    while i + 1 < pairs.len() {
+        if let Ok((next, _)) = super::plist::plist_put(plist, pairs[i], pairs[i + 1]) {
+            plist = next;
+        }
+        i += 2;
+    }
+    plist
+}
+
 fn first_emacs_char_code(value: Value) -> Option<i64> {
     match value.kind() {
         ValueKind::Fixnum(c) => Some(c),
@@ -1314,21 +1354,6 @@ pub(crate) fn builtin_coding_system_get(mgr: &CodingSystemManager, args: Vec<Val
         "wrong-type-argument",
         vec![Value::symbol("symbolp"), args[1]],
     ))
-}
-
-fn plist_contains_key(plist: &[Value], key: &str) -> bool {
-    let needle = key.trim_start_matches(':');
-    let mut idx = 0;
-    while idx + 1 < plist.len() {
-        if plist[idx]
-            .as_symbol_name()
-            .is_some_and(|name| name.trim_start_matches(':') == needle)
-        {
-            return true;
-        }
-        idx += 2;
-    }
-    false
 }
 
 fn coding_category_for_base(base: &str) -> &'static str {
@@ -1681,7 +1706,7 @@ pub(crate) fn builtin_coding_system_plist(
         if let Some(items) = super::value::list_to_vec(verbatim) {
             plist.extend(items);
         }
-        return Ok(Value::list(plist));
+        return Ok(apply_put_overrides(info, plist));
     }
 
     // `no-conversion` and `undecided` are built in C (coding.c `syms_of_coding`)
@@ -1689,7 +1714,7 @@ pub(crate) fn builtin_coding_system_plist(
     // (specific field order, the doubled `:ascii-compatible-p`, the multi-line
     // docstring, and `:eol-type`). Emit GNU's exact plist for them.
     if let Some(plist) = c_init_coding_system_plist(&resolved_name) {
-        return Ok(Value::list(plist));
+        return Ok(apply_put_overrides(info, plist));
     }
 
     let base = strip_eol_suffix(&resolved_name);
@@ -1769,19 +1794,10 @@ pub(crate) fn builtin_coding_system_plist(
         plist_push_key(&mut plist, intern(":for-unibyte"), Value::T);
     }
 
-    // Preserve caller-provided custom properties from coding-system-put.
-    let mut custom_keys: Vec<SymId> = info.properties.keys().copied().collect();
-    custom_keys.sort_by(|left, right| resolve_sym(*left).cmp(resolve_sym(*right)));
-    for key in custom_keys {
-        let key_name = resolve_sym(key);
-        if !plist_contains_key(&plist, key_name) {
-            if let Some(value) = info.properties.get(&key) {
-                plist_push_key(&mut plist, key, *value);
-            }
-        }
-    }
-
-    Ok(Value::list(plist))
+    // Fold in caller-provided properties from `coding-system-put`, preserving
+    // GNU's `plist_put` ordering (in-place update for keys already present,
+    // append at the tail for new keys).
+    Ok(apply_put_overrides(info, plist))
 }
 
 /// `(coding-system-put CODING-SYSTEM PROP VAL)` -- set a property of a coding system.
@@ -1810,27 +1826,46 @@ pub(crate) fn builtin_coding_system_put(
 
     if let Some(prop_id) = args[1].as_symbol_id() {
         let prop_name = resolve_sym(prop_id);
-        if matches!(prop_name, ":mnemonic" | "mnemonic") {
+        // GNU coerces a `:mnemonic` string to its first character (coding.c
+        // `Fcoding_system_put`), and the stored value is the coerced one.
+        let stored_val = if matches!(prop_name, ":mnemonic" | "mnemonic") {
             let Some(code) = first_emacs_char_code(val) else {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("characterp"), val],
                 ));
             };
-            let coerced = Value::fixnum(code);
-            info.properties.insert(prop_id, coerced);
-            return Ok(coerced);
-        }
-        info.properties.insert(prop_id, val);
-        return Ok(val);
+            Value::fixnum(code)
+        } else {
+            val
+        };
+        info.properties.insert(prop_id, stored_val);
+        record_put_override(info, args[1], stored_val);
+        return Ok(stored_val);
     }
 
     if let Some(int_key) = args[1].as_int() {
         info.int_properties.insert(int_key, val);
+        record_put_override(info, args[1], val);
         return Ok(val);
     }
 
     Ok(val)
+}
+
+/// Record a `coding-system-put` into the override plist with GNU `plist_put`
+/// semantics (in-place update of an existing key, append for a new one), so
+/// `coding-system-plist` (and the `coding-system-get` defun that reads it)
+/// surfaces it in the same order as GNU's shared spec plist.
+fn record_put_override(info: &mut CodingSystemInfo, prop: Value, val: Value) {
+    let current = info
+        .int_properties
+        .get(&PUT_OVERRIDES_KEY)
+        .copied()
+        .unwrap_or(Value::NIL);
+    if let Ok((updated, _)) = super::plist::plist_put(current, prop, val) {
+        info.int_properties.insert(PUT_OVERRIDES_KEY, updated);
+    }
 }
 
 /// `(coding-system-base CODING-SYSTEM)` -- return the base coding system
