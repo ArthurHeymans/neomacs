@@ -10,13 +10,18 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
-    DisplayRowActiveFaceState, DisplayRowCurrentTextMeasureState, DisplayRowCurrentTextRenderState,
-    DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy, DisplayRowResolvedMeasuredFace,
-    insert_resolved_display_row_face,
+    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState,
+    DisplayRowCurrentSourceFragmentRenderState, DisplayRowCurrentTextMeasureState,
+    DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
+    DisplayRowRenderIntoRowResult, DisplayRowRenderPolicy, DisplayRowResolvedMeasuredFace,
+    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    insert_resolved_display_row_face, measure_display_item_source_against_current_text_row,
+    render_display_item_source_into_current_text_row_and_emit,
 };
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
+use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
     resolve_display_string_base_face,
@@ -25,7 +30,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
-    TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition,
+    TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput,
     TextWindowRowDecorationRequest, TextWindowRowLifecycleInstaller, WindowOutputEmitter,
 };
 use neovm_core::emacs_core::Context;
@@ -33,9 +38,9 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::DisplayRowSnapshot;
 
 pub(crate) struct TextRowOutputRenderState<'a> {
-    pub(crate) builder: &'a mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: &'a mut WindowOutputEmitter,
-    pub(crate) evaluator: &'a mut Context,
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
 }
 
 impl<'a> TextRowOutputRenderState<'a> {
@@ -98,9 +103,9 @@ impl<'a> TextRowOutputRenderState<'a> {
 }
 
 pub(crate) struct TextRowSourceRenderState<'a> {
-    pub(crate) output_render: TextRowOutputRenderState<'a>,
-    pub(crate) font_metrics: &'a mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'a FaceResolver,
+    output_render: TextRowOutputRenderState<'a>,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
 }
 
 impl<'a> TextRowSourceRenderState<'a> {
@@ -288,6 +293,48 @@ impl<'a> TextRowSourceRenderState<'a> {
         request.into_plan(buffer, self, active_face_state, face_ids)
     }
 
+    pub(crate) fn render_natural_fragment_into_current_row<S: DisplayItemSource>(
+        &mut self,
+        request: DisplayRowSourceFragmentRenderRequest<'_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) -> Option<DisplayRowRenderIntoRowResult> {
+        request.render_natural_fragment_into_current_row(
+            &mut DisplayRowCurrentSourceFragmentRenderState {
+                builder: self.output_render.builder,
+                font_metrics: self.font_metrics,
+                face_resolver: self.face_resolver,
+                display_host: self.output_render.evaluator.display_host.as_deref(),
+                face_ids,
+            },
+            source,
+            source_state,
+        )
+    }
+
+    pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    >(
+        &mut self,
+        face_ids: &mut FrameFaceIdAllocator,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        request: DisplayRowSourceRenderRequest<'_>,
+        output: TextRowOutput,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        render_display_item_source_into_current_text_row_and_emit(
+            &mut current_text_render_state(self, face_ids),
+            source,
+            source_state,
+            request,
+            output,
+            render_policy,
+        )
+    }
+
     pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
         self.output_render()
             .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
@@ -335,7 +382,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     }
 }
 
-pub(crate) fn current_text_render_state<'emit>(
+fn current_text_render_state<'emit>(
     state: &'emit mut TextRowSourceRenderState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
 ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
@@ -352,10 +399,10 @@ pub(crate) fn current_text_render_state<'emit>(
 }
 
 pub(crate) struct TextRowSourceMeasureState<'a> {
-    pub(crate) builder: &'a mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'a mut Context,
-    pub(crate) font_metrics: &'a mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'a FaceResolver,
+    builder: &'a mut GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
+    font_metrics: &'a mut Option<FontMetricsService>,
+    face_resolver: &'a FaceResolver,
 }
 
 impl<'a> TextRowSourceMeasureState<'a> {
@@ -402,9 +449,33 @@ impl<'a> TextRowSourceMeasureState<'a> {
     pub(crate) fn font_metrics(&mut self) -> &mut Option<FontMetricsService> {
         self.font_metrics
     }
+
+    pub(crate) fn current_cluster_tail(&self) -> Option<(char, bool)> {
+        crate::display_row::current_display_row_cluster_tail(self.builder)
+    }
+
+    pub(crate) fn measure_display_item_source_against_current_text_row<
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    >(
+        &mut self,
+        face_ids: &mut FrameFaceIdAllocator,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        request: DisplayRowSourceRenderRequest<'_>,
+        render_policy: &mut P,
+    ) -> Option<CurrentTextRowRenderOutcome> {
+        measure_display_item_source_against_current_text_row(
+            &mut current_text_measure_state(self, face_ids),
+            source,
+            source_state,
+            request,
+            render_policy,
+        )
+    }
 }
 
-pub(crate) fn current_text_measure_state<'emit>(
+fn current_text_measure_state<'emit>(
     state: &'emit mut TextRowSourceMeasureState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
 ) -> DisplayRowCurrentTextMeasureState<'emit, 'emit> {

@@ -8,18 +8,13 @@ use crate::display_row::DisplayRowRenderStop;
 #[cfg(test)]
 use crate::display_row::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_row::{
-    CurrentTextRowRenderOutcome, DisplayRowCurrentTextMeasureState,
-    DisplayRowCurrentTextRenderState, DisplayRowRenderBounds, DisplayRowRenderPolicy,
+    CurrentTextRowRenderOutcome, DisplayRowRenderBounds, DisplayRowRenderPolicy,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, DisplaySourceAppendRenderPolicy,
-    NaturalDisplayRowAppendRenderPolicy, measure_display_item_source_against_current_text_row,
-    render_display_item_source_into_current_text_row_and_emit,
+    NaturalDisplayRowAppendRenderPolicy,
 };
 use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
-use crate::display_row_source_render::{
-    TextRowSourceMeasureState, TextRowSourceRenderState, current_text_measure_state,
-    current_text_render_state,
-};
+use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 use crate::display_source::{DisplayItemOnceSource, DisplayItemSource};
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::TextRowOutput;
@@ -89,7 +84,8 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         P: DisplayRowRenderPolicy,
     >(
         self,
-        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
         render_policy: &mut P,
@@ -97,8 +93,8 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         let Self {
             request, output, ..
         } = self;
-        render_display_item_source_into_current_text_row_and_emit(
-            state,
+        state.render_display_item_source_into_current_text_row_and_emit(
+            face_ids,
             source,
             source_state,
             request,
@@ -111,13 +107,15 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         S: DisplayItemSource,
     >(
         self,
-        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         self.render_display_source_into_current_text_row_and_emit(
             state,
+            face_ids,
             source,
             source_state,
             &mut render_policy,
@@ -129,13 +127,15 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         P: DisplayRowRenderPolicy,
     >(
         self,
-        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         mut source: S,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let mut source_state = DisplayRowSourceState::default();
         self.render_display_source_into_current_text_row_and_emit(
             state,
+            face_ids,
             &mut source,
             &mut source_state,
             render_policy,
@@ -144,13 +144,15 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
 
     pub(crate) fn render_display_item_into_current_text_row_and_emit<P: DisplayRowRenderPolicy>(
         self,
-        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         mut item: DisplayItem,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         item.face = RenderFaceRef::FaceId(self.request.base_face_id());
         self.render_owned_display_source_into_current_text_row_and_emit(
             state,
+            face_ids,
             DisplayItemOnceSource::new(item),
             render_policy,
         )
@@ -161,14 +163,15 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         P: DisplayRowRenderPolicy,
     >(
         self,
-        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
+        state: &mut TextRowSourceMeasureState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let Self { request, .. } = self;
-        measure_display_item_source_against_current_text_row(
-            state,
+        state.measure_display_item_source_against_current_text_row(
+            face_ids,
             source,
             source_state,
             request,
@@ -181,13 +184,15 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
         P: DisplayRowRenderPolicy,
     >(
         self,
-        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
+        state: &mut TextRowSourceMeasureState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         mut source: S,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         let mut source_state = DisplayRowSourceState::default();
         self.measure_display_source_against_current_text_row(
             state,
+            face_ids,
             &mut source,
             &mut source_state,
             render_policy,
@@ -196,13 +201,15 @@ impl<'face> DisplayRowSourceAppendRequest<'face> {
 
     pub(crate) fn measure_display_item_against_current_text_row<P: DisplayRowRenderPolicy>(
         self,
-        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
+        state: &mut TextRowSourceMeasureState<'_>,
+        face_ids: &mut FrameFaceIdAllocator,
         mut item: DisplayItem,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
         item.face = RenderFaceRef::FaceId(self.request.base_face_id());
         self.measure_owned_display_source_against_current_text_row(
             state,
+            face_ids,
             DisplayItemOnceSource::new(item),
             render_policy,
         )
@@ -363,7 +370,8 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
         let start = request.start_position();
         let mut face_ids = FrameFaceIdAllocator::new(self.base_face_id.saturating_add(1));
         let outcome = request.render_display_item_into_current_text_row_and_emit(
-            &mut current_text_render_state(state, &mut face_ids),
+            state,
+            &mut face_ids,
             item,
             render_policy,
         )?;
@@ -382,7 +390,8 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
         let start = request.start_position();
         let mut face_ids = FrameFaceIdAllocator::new(self.base_face_id.saturating_add(1));
         let outcome = request.measure_display_item_against_current_text_row(
-            &mut current_text_measure_state(state, &mut face_ids),
+            state,
+            &mut face_ids,
             item,
             render_policy,
         )?;
@@ -401,7 +410,8 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.request()
             .render_owned_display_source_into_current_text_row_and_emit(
-                &mut current_text_render_state(state, face_ids),
+                state,
+                face_ids,
                 source,
                 render_policy,
             )
@@ -416,7 +426,8 @@ impl<'face> DisplayRowSourceAppendOperation<'face> {
     ) -> Option<CurrentTextRowRenderOutcome> {
         self.request()
             .render_natural_display_source_into_current_text_row_and_emit(
-                &mut current_text_render_state(state, face_ids),
+                state,
+                face_ids,
                 source,
                 source_state,
             )

@@ -1052,11 +1052,11 @@ impl BufferTextWindowWalkSetup {
     ) -> TextWindowRedisplayPositions {
         tail_context
             .body_install_request(self.byte_idx, &self.row_flags)
-            .install_and_apply(BufferTextWindowBodyInstallState {
-                builder: state.builder,
-                output_emitter: state.output_emitter,
-                render_services: state.render_services,
-            })
+            .install_and_apply(BufferTextWindowBodyInstallState::new(
+                state.builder,
+                state.output_emitter,
+                state.render_services,
+            ))
     }
 
     pub(crate) fn install_body_and_publish_redisplay(
@@ -1146,10 +1146,10 @@ impl BufferTextWindowWalkSetup {
         buffer: &B,
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowBodyPassOutcome {
-        let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState {
-            builder: state.builder,
-            evaluator: state.evaluator,
-        });
+        let mut output_emitter = begin_request.begin_and_apply(BufferTextWindowBeginState::new(
+            state.builder,
+            state.evaluator,
+        ));
         let post_loop = self.render_body_and_tail(
             &mut BufferTextWindowBodyRenderState {
                 source_render: TextRowSourceRenderState::new(
@@ -2043,12 +2043,12 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
     pub(crate) fn finish_and_install(&self, state: BufferTextWindowFinishInstallState<'_>) {
         let finished_window =
             self.finish_request()
-                .finish_and_snapshot(BufferTextWindowFinishState {
-                    builder: state.builder,
-                    output_emitter: state.output_emitter,
-                    evaluator: state.evaluator,
-                    hit_rows: state.hit_rows,
-                });
+                .finish_and_snapshot(BufferTextWindowFinishState::new(
+                    state.builder,
+                    state.output_emitter,
+                    state.evaluator,
+                    state.hit_rows,
+                ));
         state.hit_data.push(finished_window.hit_data);
         state.display_snapshots.push(finished_window.snapshot);
     }
@@ -2158,14 +2158,14 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
     ) -> BufferTextWindowTailFinalizeOutcome {
         tail_context
             .tail_finalize_request(text, charpos, point_is_visible_eob)
-            .finalize_and_apply(BufferTextWindowTailFinalizeState {
-                cursor_info: self.cursor_info,
-                row_geometry: self.row_geometry,
-                row_y_positions: self.row_y_positions,
-                hit_row_range: self.hit_row_range,
-                hit_rows: self.hit_rows,
-                output_render: self.source_render.output_render(),
-            })
+            .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+                self.cursor_info,
+                self.row_geometry,
+                self.row_y_positions,
+                self.hit_row_range,
+                self.hit_rows,
+                self.source_render.output_render(),
+            ))
     }
 
     pub(crate) fn decide_visibility_retry<'buf, B: LayoutBufferView>(

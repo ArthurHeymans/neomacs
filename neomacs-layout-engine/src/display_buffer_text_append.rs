@@ -180,8 +180,8 @@ pub(crate) struct BufferTextWindowBeginRequest {
 }
 
 pub(crate) struct BufferTextWindowBeginState<'a> {
-    pub(crate) builder: &'a mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'a mut Context,
+    builder: &'a mut GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
@@ -207,12 +207,12 @@ pub(crate) struct BufferTextWindowTailFinalizeContext<'a> {
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) row_geometry: &'a DisplayRowGeometryState,
-    pub(crate) row_y_positions: &'a DisplayRowYPositions,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) output_render: TextRowOutputRenderState<'emit>,
+    cursor_info: &'emit mut CursorCaptureState,
+    row_geometry: &'a DisplayRowGeometryState,
+    row_y_positions: &'a DisplayRowYPositions,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    hit_rows: &'emit mut Vec<HitRow>,
+    output_render: TextRowOutputRenderState<'emit>,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallRequest<'a> {
@@ -235,9 +235,9 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
 }
 
 pub(crate) struct BufferTextWindowBodyInstallState<'a, 'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: &'a WindowOutputEmitter,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    output_emitter: &'a WindowOutputEmitter,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 pub(crate) struct BufferTextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView> {
@@ -264,10 +264,10 @@ pub(crate) struct BufferTextWindowFinishRequest {
 }
 
 pub(crate) struct BufferTextWindowFinishState<'a> {
-    pub(crate) builder: &'a mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: WindowOutputEmitter,
-    pub(crate) evaluator: &'a mut Context,
-    pub(crate) hit_rows: Vec<HitRow>,
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    hit_rows: Vec<HitRow>,
 }
 
 pub(crate) struct BufferTextWindowFinishOutput {
@@ -339,6 +339,63 @@ impl BufferTextWindowTailFinalizeOutcome {
     #[cfg(test)]
     pub(crate) fn pending_row_finished(self) -> bool {
         self.pending_row_finished
+    }
+}
+
+impl<'a> BufferTextWindowBeginState<'a> {
+    pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder, evaluator: &'a mut Context) -> Self {
+        Self { builder, evaluator }
+    }
+}
+
+impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        cursor_info: &'emit mut CursorCaptureState,
+        row_geometry: &'a DisplayRowGeometryState,
+        row_y_positions: &'a DisplayRowYPositions,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        hit_rows: &'emit mut Vec<HitRow>,
+        output_render: TextRowOutputRenderState<'emit>,
+    ) -> Self {
+        Self {
+            cursor_info,
+            row_geometry,
+            row_y_positions,
+            hit_row_range,
+            hit_rows,
+            output_render,
+        }
+    }
+}
+
+impl<'a, 'emit, 'face> BufferTextWindowBodyInstallState<'a, 'emit, 'face> {
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        output_emitter: &'a WindowOutputEmitter,
+        render_services: ChromeRowRenderServices<'emit, 'face>,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            render_services,
+        }
+    }
+}
+
+impl<'a> BufferTextWindowFinishState<'a> {
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: WindowOutputEmitter,
+        evaluator: &'a mut Context,
+        hit_rows: Vec<HitRow>,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+            hit_rows,
+        }
     }
 }
 

@@ -12,7 +12,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowComplexTextRunAdvancePolicy,
-    DisplaySourceAppendRenderPolicy, current_display_row_cluster_tail,
+    DisplaySourceAppendRenderPolicy,
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
@@ -420,7 +420,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         request: BufferTextSourceDisplayItemPreparationRequest<'_>,
         state: &mut BufferTextSourceCharPreparationState<'_>,
     ) -> BufferTextPreparedSourceCharAppend {
-        let cluster_tail = current_display_row_cluster_tail(state.measure.builder);
+        let cluster_tail = state.measure.current_cluster_tail();
         self.prepare_source_item_char_at(
             &request.geometry,
             state.append_state,

@@ -25,10 +25,10 @@ use crate::display_property::{
     classify_display_property,
 };
 use crate::display_row::{
-    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowCurrentTextRenderState,
-    DisplayRowFallbackMetrics, DisplayRowGeometry, DisplayRowMeasuredFaceMetrics,
-    DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderPolicy,
-    DisplayRowRenderer, DisplayRowSourceFragmentFrame, DisplayRowSourceState,
+    CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
+    DisplayRowGeometry, DisplayRowMeasuredFaceMetrics, DisplayRowMeasurementPolicy,
+    DisplayRowRenderBounds, DisplayRowRenderPolicy, DisplayRowRenderer,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState,
 };
 use crate::display_row_append_context::*;
 use crate::display_row_builder::{
@@ -51,7 +51,9 @@ use crate::display_row_overlay_string::{
     OverlayStringRenderState, OverlayStringRowBreakRenderContext,
 };
 use crate::display_row_replacement::*;
-use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceMeasureState};
+use crate::display_row_source_render::{
+    TextRowOutputRenderState, TextRowSourceMeasureState, TextRowSourceRenderState,
+};
 use crate::display_row_transition::*;
 use crate::display_row_walk_state::{
     BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
@@ -4430,16 +4432,17 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         DisplayRowAppendKind::SourceText,
     );
 
+    let mut source_render = TextRowSourceRenderState::new(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+    );
     let outcome = request
         .render_natural_display_source_into_current_text_row_and_emit(
-            &mut DisplayRowCurrentTextRenderState {
-                builder: &mut builder,
-                output_emitter: &mut output_emitter,
-                evaluator: &mut eval,
-                font_metrics: &mut font_metrics,
-                face_resolver: &face_resolver,
-                face_ids: &mut face_ids,
-            },
+            &mut source_render,
+            &mut face_ids,
             &mut source,
             &mut source_state,
         )
@@ -6312,18 +6315,18 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         point_is_visible_eob: false,
         row_limit: context.row_limit,
     })
-    .finalize_and_apply(BufferTextWindowTailFinalizeState {
-        cursor_info: &mut cursor_info,
-        row_geometry: &context.geometry,
-        row_y_positions: &context.row_y_positions,
-        hit_row_range: &mut hit_row_range,
-        hit_rows: &mut context.hit_rows,
-        output_render: TextRowOutputRenderState::new(
+    .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+        &mut cursor_info,
+        &context.geometry,
+        &context.row_y_positions,
+        &mut hit_row_range,
+        &mut context.hit_rows,
+        TextRowOutputRenderState::new(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
         ),
-    });
+    ));
 
     assert!(outcome.cursor_requested());
     assert_eq!(
@@ -6376,18 +6379,18 @@ fn buffer_text_window_tail_finalize_reports_missing_cursor_capture() {
         point_is_visible_eob: false,
         row_limit: context.row_limit,
     })
-    .finalize_and_apply(BufferTextWindowTailFinalizeState {
-        cursor_info: &mut cursor_info,
-        row_geometry: &context.geometry,
-        row_y_positions: &context.row_y_positions,
-        hit_row_range: &mut hit_row_range,
-        hit_rows: &mut context.hit_rows,
-        output_render: TextRowOutputRenderState::new(
+    .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+        &mut cursor_info,
+        &context.geometry,
+        &context.row_y_positions,
+        &mut hit_row_range,
+        &mut context.hit_rows,
+        TextRowOutputRenderState::new(
             &mut context.builder,
             &mut context.output_emitter,
             &mut context.eval,
         ),
-    });
+    ));
 
     assert!(outcome.cursor_requested());
     assert_eq!(
@@ -6461,15 +6464,15 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             right_edge_face_id: 9,
             char_w: 8.0,
         })
-        .install_and_apply(BufferTextWindowBodyInstallState {
-            builder: &mut builder,
-            output_emitter: &output_emitter,
-            render_services: crate::display_status_line::ChromeRowRenderServices::new(
+        .install_and_apply(BufferTextWindowBodyInstallState::new(
+            &mut builder,
+            &output_emitter,
+            crate::display_status_line::ChromeRowRenderServices::new(
                 &mut font_metrics,
                 &face_resolver,
                 &mut face_ids,
             ),
-        });
+        ));
 
     assert_eq!(positions.window_start, LispCharPos1::new(4));
     assert_eq!(positions.window_end, LispCharPos1::new(8));
@@ -6524,10 +6527,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             x: 18.0,
         },
     )
-    .begin_and_apply(BufferTextWindowBeginState {
-        builder: &mut builder,
-        evaluator: &mut eval,
-    });
+    .begin_and_apply(BufferTextWindowBeginState::new(&mut builder, &mut eval));
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
     crate::window_output::finish_text_matrix_row_output(
@@ -6741,13 +6741,10 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
         charpos_end: 9,
     }];
 
-    let finished = BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5)
-        .finish_and_snapshot(BufferTextWindowFinishState {
-            builder: &mut builder,
-            output_emitter,
-            evaluator: &mut eval,
-            hit_rows,
-        });
+    let finished =
+        BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5).finish_and_snapshot(
+            BufferTextWindowFinishState::new(&mut builder, output_emitter, &mut eval, hit_rows),
+        );
 
     assert_eq!(finished.hit_data.window_id, 41);
     assert_eq!(finished.hit_data.content_x, 12.0);

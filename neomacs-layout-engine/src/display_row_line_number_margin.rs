@@ -1,10 +1,7 @@
 //! Display-line-number left-margin rendering — GNU `maybe_produce_line_number` (xdisp.c:25447). Relocated out of display_row_append.rs (pure move, no behavior change).
 
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_row::{
-    DisplayRowCurrentSourceFragmentRenderState, DisplayRowSourceFragmentFrame,
-    DisplayRowSourceState,
-};
+use crate::display_row::{DisplayRowSourceFragmentFrame, DisplayRowSourceState};
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
@@ -82,20 +79,11 @@ impl BufferLineNumberMarginRenderRequest {
             margin_request.cols.max(1) as usize + 1,
             GlyphArea::LeftMargin,
         );
-        request.render_natural_fragment_into_current_row(
-            &mut DisplayRowCurrentSourceFragmentRenderState {
-                builder: source_render.output_render.builder,
-                font_metrics: source_render.font_metrics,
-                face_resolver: source_render.face_resolver,
-                display_host: source_render
-                    .output_render
-                    .evaluator
-                    .display_host
-                    .as_deref(),
-                face_ids,
-            },
+        source_render.render_natural_fragment_into_current_row(
+            request,
             &mut source,
             &mut source_state,
+            face_ids,
         );
 
         face_scan.invalidate();
