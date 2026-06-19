@@ -70,13 +70,43 @@ impl<'a> DisplayRowOutputInstall<'a> {
     }
 }
 
-struct DisplayRowInstaller<'builder, 'rows> {
-    builder: &'builder mut DisplayOutputBuilder,
-    frame_chrome_rows: Option<&'rows mut Vec<FrameChromeRow>>,
+pub(crate) fn install_display_row(
+    builder: &mut DisplayOutputBuilder,
+    display_row_index: usize,
+    row: &GlyphRow,
+) {
+    DisplayRowOutputInstall::from_row(display_row_index, row).install(builder);
 }
 
-pub(crate) struct DisplayRowInstallSurface<'builder, 'rows> {
-    installer: DisplayRowInstaller<'builder, 'rows>,
+pub(crate) fn install_measured_window_display_row(
+    builder: &mut DisplayOutputBuilder,
+    measured: &MeasuredDisplayRow,
+) {
+    MeasuredWindowDisplayRowInstallRequest { measured }.install(builder);
+}
+
+pub(crate) fn install_measured_frame_chrome_display_row(
+    builder: &mut DisplayOutputBuilder,
+    frame_chrome_rows: &mut Vec<FrameChromeRow>,
+    measured: &MeasuredDisplayRow,
+) {
+    MeasuredFrameChromeRowInstallRequest {
+        frame_chrome_rows,
+        measured,
+    }
+    .install(builder);
+}
+
+pub(crate) fn install_rendered_display_row_fragment_assets(
+    builder: &mut DisplayOutputBuilder,
+    role: GlyphRowRole,
+    display_row_index: usize,
+    faces: &[Face],
+    media: &[RenderedDisplayRowMedia],
+) {
+    RenderedDisplayRowAssetsInstall::fragment(role, display_row_index, faces, media).install(
+        &mut DisplayRowAssetsInstallSurface::from_output_builder(builder),
+    );
 }
 
 struct DisplayRowCurrentRowInstaller<'builder> {
@@ -93,101 +123,6 @@ struct DisplayRowAssetsInstaller<'builder> {
 
 struct DisplayRowAssetsInstallSurface<'builder> {
     installer: DisplayRowAssetsInstaller<'builder>,
-}
-
-impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
-    fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self {
-            builder,
-            frame_chrome_rows: None,
-        }
-    }
-
-    fn from_output_builder_with_frame_chrome_rows(
-        builder: &'builder mut DisplayOutputBuilder,
-        frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
-    ) -> Self {
-        Self {
-            builder,
-            frame_chrome_rows: Some(frame_chrome_rows),
-        }
-    }
-
-    fn install_row(&mut self, display_row_index: usize, row: &GlyphRow) {
-        DisplayRowOutputInstall::from_row(display_row_index, row).install(self.builder);
-    }
-
-    fn install_measured(&mut self, measured: &MeasuredDisplayRow) {
-        match measured.owner {
-            DisplayRowOwner::WindowChrome { .. } => {
-                MeasuredWindowDisplayRowInstallRequest { measured }.install(self.builder);
-            }
-            DisplayRowOwner::FrameChrome { .. } => {
-                let frame_chrome_rows = self
-                    .frame_chrome_rows
-                    .as_deref_mut()
-                    .expect("frame chrome rows are required to install frame chrome");
-                MeasuredFrameChromeRowInstallRequest {
-                    frame_chrome_rows,
-                    measured,
-                }
-                .install(self.builder);
-            }
-        }
-    }
-
-    fn install_fragment_assets(
-        &mut self,
-        role: GlyphRowRole,
-        display_row_index: usize,
-        faces: &[Face],
-        media: &[RenderedDisplayRowMedia],
-    ) {
-        RenderedDisplayRowAssetsInstall::fragment(role, display_row_index, faces, media).install(
-            &mut DisplayRowAssetsInstallSurface::from_output_builder(self.builder),
-        );
-    }
-}
-
-impl<'builder> DisplayRowInstallSurface<'builder, 'static> {
-    pub(crate) fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self {
-            installer: DisplayRowInstaller::new(builder),
-        }
-    }
-}
-
-impl<'builder, 'rows> DisplayRowInstallSurface<'builder, 'rows> {
-    pub(crate) fn from_output_builder_with_frame_chrome_rows(
-        builder: &'builder mut DisplayOutputBuilder,
-        frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
-    ) -> Self {
-        Self {
-            installer: DisplayRowInstaller::from_output_builder_with_frame_chrome_rows(
-                builder,
-                frame_chrome_rows,
-            ),
-        }
-    }
-
-    pub(crate) fn install_row(&mut self, display_row_index: usize, row: &GlyphRow) {
-        self.installer.install_row(display_row_index, row);
-    }
-
-    pub(crate) fn install_measured(&mut self, measured: &MeasuredDisplayRow) {
-        self.installer.install_measured(measured);
-    }
-
-    pub(crate) fn install_fragment_assets(
-        &mut self,
-        role: GlyphRowRole,
-        display_row_index: usize,
-        faces: &[Face],
-        media: &[RenderedDisplayRowMedia],
-    ) {
-        self.installer
-            .install_fragment_assets(role, display_row_index, faces, media);
-    }
 }
 
 impl<'builder> DisplayRowAssetsInstaller<'builder> {

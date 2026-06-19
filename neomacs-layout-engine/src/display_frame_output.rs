@@ -2,7 +2,7 @@ use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderReques
 use crate::display_frame_output_install::{FrameOutputInstallSurface, FrameOutputReadSurface};
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_row::MeasuredDisplayRow;
-use crate::display_row_output_install::DisplayRowInstallSurface;
+use crate::display_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
@@ -291,11 +291,11 @@ impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
     }
 
     pub(crate) fn install_measured_frame_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        DisplayRowInstallSurface::from_output_builder_with_frame_chrome_rows(
+        install_measured_frame_chrome_display_row(
             self.builder,
             self.pending_frame_chrome_rows,
-        )
-        .install_measured(measured);
+            measured,
+        );
     }
 }
 

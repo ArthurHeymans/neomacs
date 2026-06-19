@@ -23,7 +23,10 @@ use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_output_install::{DisplayRowCurrentRowSurface, DisplayRowInstallSurface};
+use crate::display_row_output_install::{
+    DisplayRowCurrentRowSurface, install_measured_window_display_row,
+    install_rendered_display_row_fragment_assets,
+};
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
     text_window_right_edge_marker_decorations,
@@ -727,7 +730,8 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         faces: &[neomacs_display_protocol::face::Face],
         media: &[RenderedDisplayRowMedia],
     ) {
-        DisplayRowInstallSurface::from_output_builder(self.output_builder).install_fragment_assets(
+        install_rendered_display_row_fragment_assets(
+            self.output_builder,
             role,
             display_row_index,
             faces,
@@ -1089,8 +1093,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     }
 
     pub(crate) fn install_measured_window_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        DisplayRowInstallSurface::from_output_builder(self.output_builder)
-            .install_measured(measured);
+        install_measured_window_display_row(self.output_builder, measured);
     }
 
     pub(crate) fn render_chrome_rows(

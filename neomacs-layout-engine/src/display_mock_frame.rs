@@ -10,7 +10,7 @@ use crate::display_row::{
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::DisplayRowMaxX;
-use crate::display_row_output_install::DisplayRowInstallSurface;
+use crate::display_row_output_install::install_display_row;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::font_metrics::FontMetricsService;
 use crate::mock_frame::{MockDisplayProperty, MockFrameContent, MockStyledLine};
@@ -23,7 +23,7 @@ use neomacs_display_protocol::types::Color;
 use neovm_core::face::FaceTable;
 
 fn install_mock_display_row(builder: &mut DisplayOutputBuilder, row_index: usize, row: &GlyphRow) {
-    DisplayRowInstallSurface::from_output_builder(builder).install_row(row_index, row);
+    install_display_row(builder, row_index, row);
 }
 
 const MOCK_DISPLAY_SOURCE_ID: u64 = 0x6d6f_636b;
