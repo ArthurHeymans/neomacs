@@ -100,6 +100,22 @@ impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
         self.measurement
             .advance_for(self.char_offset, self.byte_offset)
     }
+
+    fn resolve_advance_px(
+        self,
+        policy: &DisplayRowTextNaturalAdvancePolicy,
+        glyph_advance_px: impl FnMut(char, u32, usize) -> f32,
+    ) -> f32 {
+        let measured = match self.kind() {
+            DisplayRowTextNaturalAdvanceKind::Tab
+            | DisplayRowTextNaturalAdvanceKind::ClusterContinuation => None,
+            DisplayRowTextNaturalAdvanceKind::ComplexRunMember
+            | DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => self.measured_advance(),
+        };
+        measured.unwrap_or_else(|| {
+            policy.resolve_with(self.natural_advance_request(), glyph_advance_px)
+        })
+    }
 }
 
 impl DisplayTabPolicy {
@@ -1191,23 +1207,13 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn text_char_advance_px(&mut self, request: DisplayRowTextCharAdvanceRequest<'_>) -> f32 {
-        let resolve_natural = |writer: &mut Self| {
-            let policy = DisplayRowTextNaturalAdvancePolicy::new(
-                writer.layout.tab_policy.clone(),
-                writer.layout.char_width_px,
-            );
-            policy.resolve_with(request.natural_advance_request(), |ch, face_id, columns| {
-                writer.glyph_advance_px(ch, face_id, columns)
-            })
-        };
-        match request.kind() {
-            DisplayRowTextNaturalAdvanceKind::Tab
-            | DisplayRowTextNaturalAdvanceKind::ClusterContinuation => resolve_natural(self),
-            DisplayRowTextNaturalAdvanceKind::ComplexRunMember
-            | DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => request
-                .measured_advance()
-                .unwrap_or_else(|| resolve_natural(self)),
-        }
+        let policy = DisplayRowTextNaturalAdvancePolicy::new(
+            self.layout.tab_policy.clone(),
+            self.layout.char_width_px,
+        );
+        request.resolve_advance_px(&policy, |ch, face_id, columns| {
+            self.glyph_advance_px(ch, face_id, columns)
+        })
     }
 
     fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {

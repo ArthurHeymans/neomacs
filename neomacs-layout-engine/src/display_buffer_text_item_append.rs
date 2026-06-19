@@ -16,7 +16,7 @@ use crate::display_row::{
 };
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
-    DisplayRowAppendSurface, DisplayRowTextNaturalAdvanceKind, DisplayRowTextNaturalAdvanceRequest,
+    DisplayRowAppendSurface,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
@@ -35,7 +35,6 @@ use crate::display_source::{
     ResolvedBufferTextSourceAdvance,
 };
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
-use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use crate::types::{LineWrapMode, WindowParams};
 use crate::window_output::WindowOutputEmitter;
@@ -81,29 +80,6 @@ pub(crate) struct BufferTextRowAppendState {
 impl BufferTextRowAppendState {
     fn advance_resolver(&mut self) -> &mut BufferTextSourceAdvanceResolver {
         &mut self.advance_resolver
-    }
-}
-
-impl DisplayRowTextNaturalAdvanceKind {
-    pub(crate) fn resolve_to_text_row(
-        self,
-        font_metrics: &mut Option<FontMetricsService>,
-        active_face_state: &DisplayRowActiveFaceState,
-        frame: &DisplayRowAppendFrame,
-        position: DisplayRowPosition,
-        ch: char,
-    ) -> f32 {
-        let request = DisplayRowTextNaturalAdvanceRequest::new(
-            self,
-            position,
-            ch,
-            active_face_state.face_id(),
-        );
-        frame
-            .natural_text_advance_policy()
-            .resolve_with(request, |ch, _face_id, columns| {
-                active_face_state.advance_for_columns(font_metrics, ch, columns)
-            })
     }
 }
 

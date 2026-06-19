@@ -8,6 +8,7 @@ use crate::display_row::{
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowMaxX};
 use crate::display_row_source_append::DisplayRowSourceAppendRequest;
+use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::TextRowOutput;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -185,6 +186,27 @@ impl DisplayRowTextNaturalAdvanceKind {
                 columns: usize::from(base_width_cols(ch)),
             }
         }
+    }
+
+    pub(crate) fn resolve_to_text_row(
+        self,
+        font_metrics: &mut Option<FontMetricsService>,
+        active_face_state: &DisplayRowActiveFaceState,
+        frame: &DisplayRowAppendFrame,
+        position: DisplayRowPosition,
+        ch: char,
+    ) -> f32 {
+        let request = DisplayRowTextNaturalAdvanceRequest::new(
+            self,
+            position,
+            ch,
+            active_face_state.face_id(),
+        );
+        frame
+            .natural_text_advance_policy()
+            .resolve_with(request, |ch, _face_id, columns| {
+                active_face_state.advance_for_columns(font_metrics, ch, columns)
+            })
     }
 }
 
