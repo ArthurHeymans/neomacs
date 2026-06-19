@@ -3185,52 +3185,47 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
 
     let outcome = BufferTextSpecialOverflowRenderRequest::new(
         &prepared_append,
-        BufferTextSpecialOverflowRenderContext {
+        BufferTextSpecialOverflowRenderContext::new(
             text,
-            text_start_byte: 0,
-            x_px: x,
-            right_edge_px: 80.0,
-            wrap_mode: LineWrapMode::Wrap,
-            row_visibility_limit: DisplayRowVisibilityLimit {
+            0,
+            x,
+            80.0,
+            LineWrapMode::Wrap,
+            DisplayRowVisibilityLimit {
                 max_rows: 4,
                 bottom_y: 64.0,
             },
-            content_x: 0.0,
-            has_prefix: false,
-            row_geometry_defaults: context.defaults,
-            display_text_row_base: 0,
-            max_rows: 4,
+            0.0,
+            false,
+            context.defaults,
+            0,
+            4,
             row_limit,
-        },
+        ),
     )
     .render_if_needed_and_apply(
         &snapshot,
-        BufferTextSpecialOverflowRenderState {
-            progress: BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut x,
-                &mut col,
-            ),
-            source_render: text_row_source_render_state(
+        BufferTextSpecialOverflowRenderState::new(
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            row_extend: &mut row_extend,
-            line_numbers: &mut line_numbers,
-            row_geometry: &mut context.geometry,
-            row_flags: &mut context.row_flags,
-            hit_rows: &mut context.hit_rows,
-            hit_row_range: &mut hit_row_range,
-            prefix_request: &mut prefix_request,
-            hscroll_skip: &mut hscroll_skip,
-            word_wrap: &mut word_wrap,
-            trailing_whitespace: &mut trailing_whitespace,
-            row_y_positions: &mut context.row_y_positions,
-        },
+            &mut row_extend,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut context.row_y_positions,
+        ),
     );
 
     assert_eq!(
@@ -3430,52 +3425,47 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let outcome = BufferTextOverflowRenderRequest::new(
         &prepared_append,
         source_step_char,
-        BufferTextOverflowRenderContext {
-            ch: 'a',
-            right_edge_px: 80.0,
-            wrap_mode: LineWrapMode::Wrap,
+        BufferTextOverflowRenderContext::new(
+            'a',
+            80.0,
+            LineWrapMode::Wrap,
             word_wrap,
-            row_visibility_limit: DisplayRowVisibilityLimit {
+            DisplayRowVisibilityLimit {
                 max_rows: 4,
                 bottom_y: 64.0,
             },
-            content_x: 0.0,
-            has_prefix: false,
-            row_geometry_defaults: context.defaults,
-            display_text_row_base: 0,
-            max_rows: 4,
+            0.0,
+            false,
+            context.defaults,
+            0,
+            4,
             row_limit,
-        },
+        ),
     )
     .render_if_needed_and_apply(
         text,
-        BufferTextOverflowRenderState {
-            progress: BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut x,
-                &mut col,
-            ),
-            source_render: text_row_source_render_state(
+        BufferTextOverflowRenderState::new(
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            row_extend: &mut row_extend,
-            line_numbers: &mut line_numbers,
-            row_geometry: &mut context.geometry,
-            row_flags: &mut context.row_flags,
-            hit_rows: &mut context.hit_rows,
-            hit_row_range: &mut hit_row_range,
-            prefix_request: &mut prefix_request,
-            hscroll_skip: &mut hscroll_skip,
-            word_wrap: &mut word_wrap,
-            trailing_whitespace: &mut trailing_whitespace,
-            face_scan: &mut face_scan,
-            row_y_positions: &mut context.row_y_positions,
-        },
+            &mut row_extend,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut context.row_y_positions,
+        ),
     );
 
     assert_eq!(
@@ -6248,36 +6238,31 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     )
     .render_and_apply(
         &snapshot,
-        BufferTextSourceCharRenderRequestState {
-            append_state: &mut append_state,
-            progress: BufferTextWindowProgressState::new(
-                &mut byte_idx,
-                &mut charpos,
-                &mut x,
-                &mut col,
-            ),
-            source_render: text_row_source_render_state(
+        BufferTextSourceCharRenderRequestState::new(
+            &mut append_state,
+            BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
+            text_row_source_render_state(
                 &mut context.builder,
                 &mut context.output_emitter,
                 &mut context.eval,
                 &mut font_metrics,
                 &face_resolver,
             ),
-            row_extend: &mut row_extend,
-            line_numbers: &mut line_numbers,
-            row_geometry: &mut context.geometry,
-            row_flags: &mut context.row_flags,
-            hit_rows: &mut context.hit_rows,
-            hit_row_range: &mut hit_row_range,
-            prefix_request: &mut prefix_request,
-            hscroll_skip: &mut hscroll_skip,
-            word_wrap: &mut word_wrap,
-            trailing_whitespace: &mut trailing_whitespace,
-            face_scan: &mut face_scan,
-            row_y_positions: &mut context.row_y_positions,
-            cursor_info: &mut cursor_info,
-            face_ids: &mut face_ids,
-        },
+            &mut row_extend,
+            &mut line_numbers,
+            &mut context.geometry,
+            &mut context.row_flags,
+            &mut context.hit_rows,
+            &mut hit_row_range,
+            &mut prefix_request,
+            &mut hscroll_skip,
+            &mut word_wrap,
+            &mut trailing_whitespace,
+            &mut face_scan,
+            &mut context.row_y_positions,
+            &mut cursor_info,
+            &mut face_ids,
+        ),
     );
 
     assert_eq!(outcome, BufferTextSourceCharRenderOutcome::Rendered);

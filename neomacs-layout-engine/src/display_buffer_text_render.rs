@@ -3261,25 +3261,25 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     ) -> BufferTextSourceCharRenderOutcome {
         request.render_and_apply(
             buffer,
-            BufferTextSourceCharRenderRequestState {
-                append_state: self.append_state,
-                progress: self.progress.reborrow(),
-                source_render: self.source_render.reborrow(),
-                row_extend: self.row_extend,
-                line_numbers: self.line_numbers,
-                row_geometry: self.row_geometry,
-                row_flags: self.row_flags,
-                hit_rows: self.hit_rows,
-                hit_row_range: self.hit_row_range,
-                prefix_request: self.prefix_request,
-                hscroll_skip: self.hscroll_skip,
-                word_wrap: self.word_wrap,
-                trailing_whitespace: self.trailing_whitespace,
-                face_scan: self.face_scan,
-                row_y_positions: self.row_y_positions,
-                cursor_info: self.cursor_info,
-                face_ids: self.face_ids,
-            },
+            BufferTextSourceCharRenderRequestState::new(
+                self.append_state,
+                self.progress.reborrow(),
+                self.source_render.reborrow(),
+                self.row_extend,
+                self.line_numbers,
+                self.row_geometry,
+                self.row_flags,
+                self.hit_rows,
+                self.hit_row_range,
+                self.prefix_request,
+                self.hscroll_skip,
+                self.word_wrap,
+                self.trailing_whitespace,
+                self.face_scan,
+                self.row_y_positions,
+                self.cursor_info,
+                self.face_ids,
+            ),
         )
     }
 }
@@ -6480,36 +6480,36 @@ impl<'a, 'source> BufferCurrentFaceResolutionState<'a, 'source> {
 }
 
 pub(crate) struct BufferTextOverflowRenderState<'a, 'emit> {
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) row_flags: &'emit mut DisplayRowFlags,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
-    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
-    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    progress: BufferTextWindowProgressState<'emit>,
+    source_render: TextRowSourceRenderState<'emit>,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    line_numbers: &'emit mut LineNumberRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
+    row_y_positions: &'a mut DisplayRowYPositions,
 }
 
 pub(crate) struct BufferTextSpecialOverflowRenderState<'a, 'emit> {
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) row_flags: &'emit mut DisplayRowFlags,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
-    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
-    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
+    progress: BufferTextWindowProgressState<'emit>,
+    source_render: TextRowSourceRenderState<'emit>,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    line_numbers: &'emit mut LineNumberRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    row_y_positions: &'a mut DisplayRowYPositions,
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
@@ -6541,23 +6541,138 @@ pub(crate) struct BufferTextSourceCharRenderContext<'a> {
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
-    pub(crate) append_state: &'emit mut BufferTextRowAppendState,
-    pub(crate) progress: BufferTextWindowProgressState<'emit>,
-    pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) line_numbers: &'emit mut LineNumberRenderState,
-    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
-    pub(crate) row_flags: &'emit mut DisplayRowFlags,
-    pub(crate) hit_rows: &'emit mut Vec<HitRow>,
-    pub(crate) hit_row_range: &'emit mut HitRowRangeTracker,
-    pub(crate) prefix_request: &'emit mut DisplayRowPrefixRequest,
-    pub(crate) hscroll_skip: &'emit mut HorizontalScrollSkipState,
-    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
-    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
-    pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
-    pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    append_state: &'emit mut BufferTextRowAppendState,
+    progress: BufferTextWindowProgressState<'emit>,
+    source_render: TextRowSourceRenderState<'emit>,
+    row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    line_numbers: &'emit mut LineNumberRenderState,
+    row_geometry: &'emit mut DisplayRowGeometryState,
+    row_flags: &'emit mut DisplayRowFlags,
+    hit_rows: &'emit mut Vec<HitRow>,
+    hit_row_range: &'emit mut HitRowRangeTracker,
+    prefix_request: &'emit mut DisplayRowPrefixRequest,
+    hscroll_skip: &'emit mut HorizontalScrollSkipState,
+    word_wrap: &'emit mut WordWrapRenderState,
+    trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
+    row_y_positions: &'a mut DisplayRowYPositions,
+    cursor_info: &'emit mut CursorCaptureState,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'a, 'emit> BufferTextOverflowRenderState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        progress: BufferTextWindowProgressState<'emit>,
+        source_render: TextRowSourceRenderState<'emit>,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        line_numbers: &'emit mut LineNumberRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        face_scan: &'emit mut FaceScanCheckpoint,
+        row_y_positions: &'a mut DisplayRowYPositions,
+    ) -> Self {
+        Self {
+            progress,
+            source_render,
+            row_extend,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            face_scan,
+            row_y_positions,
+        }
+    }
+}
+
+impl<'a, 'emit> BufferTextSpecialOverflowRenderState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        progress: BufferTextWindowProgressState<'emit>,
+        source_render: TextRowSourceRenderState<'emit>,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        line_numbers: &'emit mut LineNumberRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        row_y_positions: &'a mut DisplayRowYPositions,
+    ) -> Self {
+        Self {
+            progress,
+            source_render,
+            row_extend,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            row_y_positions,
+        }
+    }
+}
+
+impl<'a, 'emit> BufferTextSourceCharRenderRequestState<'a, 'emit> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        append_state: &'emit mut BufferTextRowAppendState,
+        progress: BufferTextWindowProgressState<'emit>,
+        source_render: TextRowSourceRenderState<'emit>,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        line_numbers: &'emit mut LineNumberRenderState,
+        row_geometry: &'emit mut DisplayRowGeometryState,
+        row_flags: &'emit mut DisplayRowFlags,
+        hit_rows: &'emit mut Vec<HitRow>,
+        hit_row_range: &'emit mut HitRowRangeTracker,
+        prefix_request: &'emit mut DisplayRowPrefixRequest,
+        hscroll_skip: &'emit mut HorizontalScrollSkipState,
+        word_wrap: &'emit mut WordWrapRenderState,
+        trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+        face_scan: &'emit mut FaceScanCheckpoint,
+        row_y_positions: &'a mut DisplayRowYPositions,
+        cursor_info: &'emit mut CursorCaptureState,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            append_state,
+            progress,
+            source_render,
+            row_extend,
+            line_numbers,
+            row_geometry,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            prefix_request,
+            hscroll_skip,
+            word_wrap,
+            trailing_whitespace,
+            face_scan,
+            row_y_positions,
+            cursor_info,
+            face_ids,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -6608,17 +6723,48 @@ pub(crate) struct BufferTextOverflowRenderRequest<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferTextOverflowRenderContext {
-    pub(crate) ch: char,
-    pub(crate) right_edge_px: f32,
-    pub(crate) wrap_mode: LineWrapMode,
-    pub(crate) word_wrap: WordWrapRenderState,
-    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
-    pub(crate) content_x: f32,
-    pub(crate) has_prefix: bool,
-    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) max_rows: usize,
-    pub(crate) row_limit: DisplayRowLimit,
+    ch: char,
+    right_edge_px: f32,
+    wrap_mode: LineWrapMode,
+    word_wrap: WordWrapRenderState,
+    row_visibility_limit: DisplayRowVisibilityLimit,
+    content_x: f32,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    display_text_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+}
+
+impl BufferTextOverflowRenderContext {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        ch: char,
+        right_edge_px: f32,
+        wrap_mode: LineWrapMode,
+        word_wrap: WordWrapRenderState,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        display_text_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            ch,
+            right_edge_px,
+            wrap_mode,
+            word_wrap,
+            row_visibility_limit,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            display_text_row_base,
+            max_rows,
+            row_limit,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -6865,26 +7011,26 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             BufferTextPreparedSourceCharAppend::Special(special_prepared_append) => {
                 let special_overflow_outcome = BufferTextSpecialOverflowRenderRequest::new(
                     &special_prepared_append,
-                    BufferTextSpecialOverflowRenderContext {
-                        text: context.text,
-                        text_start_byte: context.text_start_byte,
-                        x_px: *progress.row.x,
-                        right_edge_px: context.append_surface.full_text_right_edge(),
-                        wrap_mode: context.params.wrap_mode,
-                        row_visibility_limit: context.row_visibility_limit,
-                        content_x: context.content_x,
-                        has_prefix: context.has_prefix,
-                        row_geometry_defaults: context.row_geometry_defaults,
-                        display_text_row_base: context.display_text_row_base,
-                        max_rows: context.max_rows,
-                        row_limit: context.row_limit,
-                    },
+                    BufferTextSpecialOverflowRenderContext::new(
+                        context.text,
+                        context.text_start_byte,
+                        *progress.row.x,
+                        context.append_surface.full_text_right_edge(),
+                        context.params.wrap_mode,
+                        context.row_visibility_limit,
+                        context.content_x,
+                        context.has_prefix,
+                        context.row_geometry_defaults,
+                        context.display_text_row_base,
+                        context.max_rows,
+                        context.row_limit,
+                    ),
                 )
                 .render_if_needed_and_apply(
                     buffer,
-                    BufferTextSpecialOverflowRenderState {
-                        progress: progress.reborrow(),
-                        source_render: source_render.reborrow(),
+                    BufferTextSpecialOverflowRenderState::new(
+                        progress.reborrow(),
+                        source_render.reborrow(),
                         row_extend,
                         line_numbers,
                         row_geometry,
@@ -6896,7 +7042,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                         word_wrap,
                         trailing_whitespace,
                         row_y_positions,
-                    },
+                    ),
                 );
                 if special_overflow_outcome.should_break() {
                     return BufferTextSourceCharRenderOutcome::Stop;
@@ -6932,25 +7078,25 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
         let overflow_outcome = BufferTextOverflowRenderRequest::new(
             &prepared_append,
             source_step_char,
-            BufferTextOverflowRenderContext {
+            BufferTextOverflowRenderContext::new(
                 ch,
-                right_edge_px: context.append_surface.right_edge(),
-                wrap_mode: context.params.wrap_mode,
-                word_wrap: *word_wrap,
-                row_visibility_limit: context.row_visibility_limit,
-                content_x: context.content_x,
-                has_prefix: context.has_prefix,
-                row_geometry_defaults: context.row_geometry_defaults,
-                display_text_row_base: context.display_text_row_base,
-                max_rows: context.max_rows,
-                row_limit: context.row_limit,
-            },
+                context.append_surface.right_edge(),
+                context.params.wrap_mode,
+                *word_wrap,
+                context.row_visibility_limit,
+                context.content_x,
+                context.has_prefix,
+                context.row_geometry_defaults,
+                context.display_text_row_base,
+                context.max_rows,
+                context.row_limit,
+            ),
         )
         .render_if_needed_and_apply(
             context.text,
-            BufferTextOverflowRenderState {
-                progress: progress.reborrow(),
-                source_render: source_render.reborrow(),
+            BufferTextOverflowRenderState::new(
+                progress.reborrow(),
+                source_render.reborrow(),
                 row_extend,
                 line_numbers,
                 row_geometry,
@@ -6963,7 +7109,7 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 trailing_whitespace,
                 face_scan,
                 row_y_positions,
-            },
+            ),
         );
         if overflow_outcome.should_break() {
             return BufferTextSourceCharRenderOutcome::Stop;
@@ -7530,18 +7676,51 @@ pub(crate) struct BufferTextSpecialOverflowRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferTextSpecialOverflowRenderContext<'a> {
-    pub(crate) text: &'a [u8],
-    pub(crate) text_start_byte: usize,
-    pub(crate) x_px: f32,
-    pub(crate) right_edge_px: f32,
-    pub(crate) wrap_mode: LineWrapMode,
-    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
-    pub(crate) content_x: f32,
-    pub(crate) has_prefix: bool,
-    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) max_rows: usize,
-    pub(crate) row_limit: DisplayRowLimit,
+    text: &'a [u8],
+    text_start_byte: usize,
+    x_px: f32,
+    right_edge_px: f32,
+    wrap_mode: LineWrapMode,
+    row_visibility_limit: DisplayRowVisibilityLimit,
+    content_x: f32,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    display_text_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+}
+
+impl<'a> BufferTextSpecialOverflowRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'a [u8],
+        text_start_byte: usize,
+        x_px: f32,
+        right_edge_px: f32,
+        wrap_mode: LineWrapMode,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        display_text_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            text,
+            text_start_byte,
+            x_px,
+            right_edge_px,
+            wrap_mode,
+            row_visibility_limit,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            display_text_row_base,
+            max_rows,
+            row_limit,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
