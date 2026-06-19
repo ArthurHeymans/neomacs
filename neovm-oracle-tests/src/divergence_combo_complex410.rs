@@ -1,0 +1,309 @@
+//! Complex combo batch 410 — 20 probes in fresh territory: display-warning,
+//! scroll-up/down in batch, window-size-fixed, fit-window-to-buffer,
+//! balance-windows-area, window-full-height-p, window-parameter/set,
+//! window-margins, window-fringes, display-buffer, pop-to-buffer,
+//! replace-buffer-contents, replace-string, read-char-by-name,
+//! read-number, y-or-n-p/yes-or-no-p in batch, momentary-string-display,
+//! mode-line-format, column-number-mode, and frame-title-format.
+
+use super::common::assert_oracle_parity;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+/// display-warning: issuing warnings via the warning system.
+#[test]
+fn div_cx410_display_warning() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(progn (require 'warnings)
+  (let ((warnings ()))
+    (display-warning 'neo-cx410 "test warning" :warning)
+    (list (warning-numeric-level :warning)
+          (warning-suppress-p 'neo-cx410))))
+"##,
+    );
+}
+
+/// scroll-up / scroll-down in batch: may be no-ops.
+#[test]
+fn div_cx410_scroll_up_down_batch() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert (make-string 200 ?a) "\n" (make-string 200 ?b))
+  (list (condition-case e (scroll-up 1) (error (car e)))
+        (condition-case e (scroll-down 1) (error (car e)))))
+"##,
+    );
+}
+
+/// window-size-fixed: querying and setting fixed window size.
+#[test]
+fn div_cx410_window_size_fixed() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((w (selected-window)))
+  (list (window-size-fixed w)
+        (window-size-fixed w t)
+        (window-size-fixed w nil)))
+"##,
+    );
+}
+
+/// fit-window-to-buffer: resizing window to fit contents.
+#[test]
+fn div_cx410_fit_window_to_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "short")
+  (condition-case e
+      (fit-window-to-buffer (selected-window))
+    (error (car e))))
+"##,
+    );
+}
+
+/// balance-windows-area: balancing window sizes.
+#[test]
+fn div_cx410_balance_windows_area() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(condition-case e
+    (balance-windows-area)
+  (error (car e)))
+"##,
+    );
+}
+
+/// window-full-height-p / window-full-width-p.
+#[test]
+fn div_cx410_window_full_height_width() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((w (selected-window)))
+  (list (window-full-height-p w)
+        (window-full-width-p w)))
+"##,
+    );
+}
+
+/// window-parameter / set-window-parameter:
+/// window-local parameter storage.
+#[test]
+fn div_cx410_window_parameter_store() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((w (selected-window)))
+  (set-window-parameter w 'neo-cx410-param 'test-val)
+  (list (window-parameter w 'neo-cx410-param)
+        (window-parameter w 'nonexistent)
+        (assq 'neo-cx410-param (window-parameters w))))
+"##,
+    );
+}
+
+/// window-margins / set-window-margins: display margins.
+#[test]
+fn div_cx410_window_margins() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((w (selected-window)))
+  (set-window-margins w 2 3)
+  (list (window-margins w)
+        (car (window-margins w))
+        (cdr (window-margins w))))
+"##,
+    );
+}
+
+/// window-fringes / set-window-fringes: fringe widths.
+#[test]
+fn div_cx410_window_fringes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((w (selected-window)))
+  (set-window-fringes w 5 10 nil)
+  (list (window-fringes w)))
+"##,
+    );
+}
+
+/// display-buffer / pop-to-buffer: buffer display in batch.
+#[test]
+fn div_cx410_display_pop_to_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((buf (get-buffer-create "*neo-cx410-display*")))
+  (with-current-buffer buf (insert "test"))
+  (list (windowp (display-buffer buf))
+        (windowp (pop-to-buffer buf))
+        (eq (window-buffer (selected-window)) buf)))
+"##,
+    );
+}
+
+/// replace-buffer-contents: replacing buffer content with
+/// another buffer's content using diff-based replacement.
+#[test]
+fn div_cx410_replace_buffer_contents() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(let ((src (get-buffer-create "*neo-cx410-src*"))
+      (dst (get-buffer-create "*neo-cx410-dst*")))
+  (with-current-buffer src (insert "hello world"))
+  (with-current-buffer dst (insert "hello there"))
+  (prog1 (condition-case e
+             (with-current-buffer dst
+               (replace-buffer-contents src))
+           (error (car e)))
+    (kill-buffer src)
+    (kill-buffer dst)))
+"##,
+    );
+}
+
+/// replace-string / replace-regexp in buffer.
+#[test]
+fn div_cx410_replace_string_in_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "foo bar foo baz foo qux")
+  (goto-char 1)
+  (replace-string "foo" "X" nil (point-min) (point-max))
+  (buffer-string))
+"##,
+    );
+}
+
+/// read-char-by-name with Unicode character names.
+#[test]
+fn div_cx410_read_char_by_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (condition-case e (char-with-name "SNOWMAN") (error (car e)))
+      (condition-case e (char-with-name "LATIN CAPITAL LETTER A") (error (car e)))
+      (get-char-code-property ?☃ 'name))
+"##,
+    );
+}
+
+/// read-number / read-number-history: reading numbers in batch.
+#[test]
+fn div_cx410_read_number_batch() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(progn (require 'cus-edit)
+  (list (condition-case e (read-number "Enter: " 42) (error (car e)))
+        (condition-case e (read-number "Enter: ") (error (car e)))))
+"##,
+    );
+}
+
+/// y-or-n-p / yes-or-no-p in batch mode: should return nil
+/// or signal end-of-file.
+#[test]
+fn div_cx410_y_or_n_p_batch() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (condition-case e (y-or-n-p "Test? ") (error (car e)))
+      (condition-case e (yes-or-no-p "Test? ") (error (car e))))
+"##,
+    );
+}
+
+/// momentary-string-display: showing a string temporarily.
+#[test]
+fn div_cx410_momentary_string_display() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "original content")
+  (condition-case e
+      (momentary-string-display "[displayed]" 3 nil "done")
+    (error (car e)))
+  (buffer-string))
+"##,
+    );
+}
+
+/// mode-line-format / mode-line-position: mode line components.
+#[test]
+fn div_cx410_mode_line_format_position() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "hello\nworld\n")
+  (goto-char 8)
+  (let ((fmt (format-mode-line mode-line-format)))
+    (list (stringp fmt)
+          (> (length fmt) 0))))
+"##,
+    );
+}
+
+/// column-number-mode / line-number-mode:
+/// toggling display modes.
+#[test]
+fn div_cx410_column_line_number_mode() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(with-temp-buffer
+  (insert "abc\ndef\nghi")
+  (column-number-mode 1)
+  (line-number-mode 1)
+  (goto-char 5)
+  (let ((fmt (format-mode-line mode-line-format)))
+    (list (stringp fmt)
+          (string-match-p ":" fmt))))
+"##,
+    );
+}
+
+/// frame-title-format / icon-title-format.
+#[test]
+fn div_cx410_frame_title_format() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(list (format-mode-line frame-title-format)
+      (format-mode-line icon-title-format))
+"##,
+    );
+}
+
+/// with-help-window / print-help-return-message.
+#[test]
+fn div_cx410_with_help_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"
+(progn (require 'help-mode)
+  (with-temp-buffer
+    (help-mode)
+    (insert "test help")
+    (condition-case e
+        (print-help-return-message)
+      (error (car e)))
+    (buffer-string)))
+"##,
+    );
+}
