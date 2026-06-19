@@ -893,6 +893,7 @@ mod process_lines_semantics;
 mod process_property_semantics;
 mod process_string_comprehensive;
 mod process_thread_mutex_overlay_predicates_semantics;
+mod process_wait_semantics;
 mod profiler_memory_semantics;
 mod prog1;
 mod prog1_prog2_advanced;
