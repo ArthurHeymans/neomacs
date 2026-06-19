@@ -79,6 +79,84 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
 }
 
 #[test]
+fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
+    let _eval = Context::new();
+    let keymap = Value::list(vec![
+        KeymapMarker::Keymap.symbol_value(),
+        Value::list(vec![
+            Value::symbol("current-tab"),
+            KeymapMarker::MenuItem.symbol_value(),
+            Value::string("One"),
+        ]),
+        Value::cons(
+            Value::symbol("next-tab"),
+            Value::list(vec![
+                KeymapMarker::MenuItem.symbol_value(),
+                Value::string("Two"),
+            ]),
+        ),
+        Value::list(vec![KeymapMarker::Keymap.symbol_value()]),
+        Value::list(vec![
+            Value::symbol("after-nested-map"),
+            KeymapMarker::MenuItem.symbol_value(),
+            Value::string("After"),
+        ]),
+    ]);
+
+    let source = TabBarDisplaySource::from_keymap(keymap).expect("tab-bar source");
+
+    assert_eq!(
+        source
+            .captions
+            .iter()
+            .map(|caption| caption.as_runtime_string_owned().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["One".to_string(), "Two".to_string()]
+    );
+    assert_eq!(source.items.len(), 2);
+    assert_eq!(source.items[0].index, 0);
+    assert_eq!(source.items[0].label, "One");
+    assert_eq!(source.items[1].index, 1);
+    assert_eq!(source.items[1].label, "Two");
+}
+
+#[test]
+fn tab_bar_display_source_builds_concat_text_and_preserves_items() {
+    let mut eval = Context::new();
+    let source = TabBarDisplaySource {
+        captions: vec![Value::string("One"), Value::string("Two")],
+        items: vec![
+            TabBarItem {
+                index: 0,
+                label: "One".to_string(),
+                help: String::new(),
+                enabled: true,
+                selected: false,
+                is_separator: false,
+            },
+            TabBarItem {
+                index: 1,
+                label: "Two".to_string(),
+                help: String::new(),
+                enabled: true,
+                selected: false,
+                is_separator: false,
+            },
+        ],
+    };
+
+    let built = source.into_built_tab_bar(&mut eval).expect("built tab bar");
+
+    assert_eq!(
+        built.text.as_runtime_string_owned().as_deref(),
+        Some("OneTwo")
+    );
+    assert_eq!(built.items.len(), 2);
+    assert_eq!(built.items[0].label, "One");
+    assert_eq!(built.items[1].label, "Two");
+}
+
+#[test]
 fn window_chrome_target_cols_reserves_right_border_column() {
     assert_eq!(
         WindowChromeTargetColumns::new(80.0, 8.0, false).columns(),

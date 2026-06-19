@@ -32,6 +32,7 @@ use crate::types::WindowParams;
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
 use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::ui_types::TabBarItem;
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
@@ -835,7 +836,156 @@ fn tab_bar_menu_item_caption(entry: Value) -> Option<Value> {
 
 pub(crate) struct BuiltTabBar {
     pub(crate) text: Value,
-    pub(crate) items: Vec<neomacs_display_protocol::ui_types::TabBarItem>,
+    pub(crate) items: Vec<TabBarItem>,
+}
+
+struct TabBarDisplayBuildRequest {
+    frame_id: u64,
+}
+
+impl TabBarDisplayBuildRequest {
+    fn new(frame_id: u64) -> Self {
+        Self { frame_id }
+    }
+
+    fn build(self, evaluator: &mut Context, gc_roots: &ScratchGcRootScope) -> Option<BuiltTabBar> {
+        evaluator.setup_thread_locals();
+        if !evaluator.obarray().fboundp("tab-bar-make-keymap-1") {
+            return None;
+        }
+
+        let restore = TabBarDisplaySelectionRestore::capture(evaluator, gc_roots);
+        let result = self
+            .select_frame(evaluator)
+            .and_then(|()| Self::make_keymap(evaluator))
+            .and_then(TabBarDisplaySource::from_keymap)
+            .and_then(|source| source.into_built_tab_bar(evaluator));
+        if let Some(tab_bar) = &result {
+            gc_roots.root(tab_bar.text);
+        }
+        restore.apply(evaluator);
+        result
+    }
+
+    fn select_frame(self, evaluator: &mut Context) -> Option<()> {
+        evaluator
+            .eval_form(Value::list(vec![
+                Value::symbol("select-frame"),
+                Value::make_frame(self.frame_id),
+                Value::NIL,
+            ]))
+            .ok()
+            .map(|_| ())
+    }
+
+    fn make_keymap(evaluator: &mut Context) -> Option<Value> {
+        evaluator
+            .eval_form(Value::list(vec![Value::symbol("tab-bar-make-keymap-1")]))
+            .ok()
+    }
+}
+
+struct TabBarDisplaySelectionRestore {
+    frame: Option<Value>,
+    window: Option<Value>,
+    buffer_id: Option<BufferId>,
+}
+
+impl TabBarDisplaySelectionRestore {
+    fn capture(evaluator: &mut Context, gc_roots: &ScratchGcRootScope) -> Self {
+        let frame = evaluator
+            .eval_form(Value::list(vec![Value::symbol("selected-frame")]))
+            .ok();
+        if let Some(frame) = frame {
+            gc_roots.root(frame);
+        }
+        let window = evaluator
+            .eval_form(Value::list(vec![Value::symbol("selected-window")]))
+            .ok();
+        if let Some(window) = window {
+            gc_roots.root(window);
+        }
+        let buffer_id = evaluator
+            .buffer_manager()
+            .current_buffer()
+            .map(|buffer| buffer.id());
+        Self {
+            frame,
+            window,
+            buffer_id,
+        }
+    }
+
+    fn apply(self, evaluator: &mut Context) {
+        if let Some(frame) = self.frame {
+            let _ = evaluator.eval_form(Value::list(vec![
+                Value::symbol("select-frame"),
+                frame,
+                Value::NIL,
+            ]));
+        }
+        if let Some(window) = self.window {
+            let _ = evaluator.eval_form(Value::list(vec![
+                Value::symbol("select-window"),
+                window,
+                Value::NIL,
+            ]));
+        }
+        if let Some(buffer_id) = self.buffer_id
+            && evaluator.buffer_manager().get(buffer_id).is_some()
+        {
+            evaluator.buffer_manager_mut().set_current(buffer_id);
+        }
+    }
+}
+
+struct TabBarDisplaySource {
+    captions: Vec<Value>,
+    items: Vec<TabBarItem>,
+}
+
+impl TabBarDisplaySource {
+    fn from_keymap(keymap: Value) -> Option<Self> {
+        let entries = list_to_vec(&keymap)?;
+        let mut captions = Vec::new();
+        let mut items = Vec::new();
+        for (index, entry) in entries.iter().enumerate() {
+            if index == 0 && KeymapMarker::Keymap.is_value(*entry) {
+                continue;
+            }
+
+            if is_list_keymap(entry) {
+                break;
+            }
+
+            if let Some(caption) = tab_bar_menu_item_caption(*entry) {
+                let label = caption.as_runtime_string_owned().unwrap_or_default();
+                captions.push(caption);
+                items.push(TabBarItem {
+                    index: items.len() as u32,
+                    label,
+                    help: String::new(),
+                    enabled: true,
+                    selected: false,
+                    is_separator: false,
+                });
+            }
+        }
+        (!captions.is_empty()).then_some(Self { captions, items })
+    }
+
+    fn into_built_tab_bar(self, evaluator: &mut Context) -> Option<BuiltTabBar> {
+        let mut concat_form = Vec::with_capacity(self.captions.len() + 1);
+        concat_form.push(Value::symbol("concat"));
+        concat_form.extend(self.captions);
+        let text = evaluator.eval_form(Value::list(concat_form)).ok()?;
+        text.as_runtime_string_owned()
+            .is_some_and(|text| !text.is_empty())
+            .then_some(BuiltTabBar {
+                text,
+                items: self.items,
+            })
+    }
 }
 
 pub(crate) struct ScratchGcRootScope {
@@ -865,102 +1015,7 @@ pub(crate) fn build_tab_bar_display(
     frame_id: u64,
     gc_roots: &ScratchGcRootScope,
 ) -> Option<BuiltTabBar> {
-    evaluator.setup_thread_locals();
-    if !evaluator.obarray().fboundp("tab-bar-make-keymap-1") {
-        return None;
-    }
-
-    let saved_frame = evaluator
-        .eval_form(Value::list(vec![Value::symbol("selected-frame")]))
-        .ok();
-    if let Some(frame) = saved_frame {
-        gc_roots.root(frame);
-    }
-    let saved_window = evaluator
-        .eval_form(Value::list(vec![Value::symbol("selected-window")]))
-        .ok();
-    if let Some(window) = saved_window {
-        gc_roots.root(window);
-    }
-    let saved_buffer = evaluator
-        .buffer_manager()
-        .current_buffer()
-        .map(|buffer| buffer.id());
-
-    evaluator
-        .eval_form(Value::list(vec![
-            Value::symbol("select-frame"),
-            Value::make_frame(frame_id),
-            Value::NIL,
-        ]))
-        .ok()?;
-
-    let result = evaluator
-        .eval_form(Value::list(vec![Value::symbol("tab-bar-make-keymap-1")]))
-        .ok()
-        .and_then(|keymap| list_to_vec(&keymap))
-        .and_then(|entries| {
-            let mut text_values = Vec::new();
-            let mut items = Vec::new();
-            for (index, entry) in entries.iter().enumerate() {
-                if index == 0 && KeymapMarker::Keymap.is_value(*entry) {
-                    continue;
-                }
-
-                if is_list_keymap(entry) {
-                    break;
-                }
-
-                if let Some(caption) = tab_bar_menu_item_caption(*entry) {
-                    let label = caption.as_runtime_string_owned().unwrap_or_default();
-                    text_values.push(caption);
-                    items.push(neomacs_display_protocol::ui_types::TabBarItem {
-                        index: items.len() as u32,
-                        label,
-                        help: String::new(),
-                        enabled: true,
-                        selected: false,
-                        is_separator: false,
-                    });
-                }
-            }
-
-            if text_values.is_empty() {
-                return None;
-            }
-            let mut concat_form = Vec::with_capacity(text_values.len() + 1);
-            concat_form.push(Value::symbol("concat"));
-            concat_form.extend(text_values);
-            let text = evaluator.eval_form(Value::list(concat_form)).ok()?;
-            text.as_runtime_string_owned()
-                .is_some_and(|text| !text.is_empty())
-                .then_some(BuiltTabBar { text, items })
-        });
-    if let Some(tab_bar) = &result {
-        gc_roots.root(tab_bar.text);
-    }
-
-    if let Some(frame) = saved_frame {
-        let _ = evaluator.eval_form(Value::list(vec![
-            Value::symbol("select-frame"),
-            frame,
-            Value::NIL,
-        ]));
-    }
-    if let Some(window) = saved_window {
-        let _ = evaluator.eval_form(Value::list(vec![
-            Value::symbol("select-window"),
-            window,
-            Value::NIL,
-        ]));
-    }
-    if let Some(buffer_id) = saved_buffer {
-        if evaluator.buffer_manager().get(buffer_id).is_some() {
-            evaluator.buffer_manager_mut().set_current(buffer_id);
-        }
-    }
-
-    result
+    TabBarDisplayBuildRequest::new(frame_id).build(evaluator, gc_roots)
 }
 
 pub(crate) fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
