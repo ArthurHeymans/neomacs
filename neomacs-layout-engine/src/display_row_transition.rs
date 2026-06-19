@@ -11,13 +11,7 @@ use crate::display_row_walk_state::{
     TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::hit_test::HitRow;
-#[cfg(test)]
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::window_output::{TextMatrixRowGeometryTransition, TextMatrixRowTransition};
-#[cfg(test)]
-use crate::window_output::{TextWindowRowLifecycleInstaller, WindowOutputEmitter};
-#[cfg(test)]
-use neovm_core::emacs_core::Context;
 
 pub(crate) struct DisplayRowBoundaryTransitionRequest<'a> {
     target: DisplayRowBoundaryTarget<'a>,
@@ -101,21 +95,6 @@ pub(crate) struct DisplayRowOverflowTransitionPlan {
 impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
     pub(crate) fn new(target: DisplayRowBoundaryTarget<'a>, max_rows: usize) -> Self {
         Self { target, max_rows }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn emit(
-        self,
-        row_geometry: &mut DisplayRowGeometryState,
-        hit_rows: &mut Vec<HitRow>,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-    ) -> TextMatrixRowTransition {
-        let geometry_transition =
-            row_geometry.finish_boundary_and_record_hit(self.target, hit_rows);
-        TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
-            .transition_with_limit(geometry_transition, self.max_rows)
     }
 
     pub(crate) fn emit_with_output(
@@ -471,25 +450,6 @@ impl<'a> DisplayRowLineBreakTransitionRequest<'a> {
         row_geometry.finish_boundary_and_record_hit(self.boundary_target(), hit_rows)
     }
 
-    #[cfg(test)]
-    pub(crate) fn emit(
-        self,
-        row_geometry: &mut DisplayRowGeometryState,
-        hit_rows: &mut Vec<HitRow>,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-    ) -> TextMatrixRowTransition {
-        let max_rows = self.max_rows;
-        DisplayRowBoundaryTransitionRequest::new(self.boundary_target(), max_rows).emit(
-            row_geometry,
-            hit_rows,
-            builder,
-            output_emitter,
-            evaluator,
-        )
-    }
-
     pub(crate) fn emit_with_output(
         self,
         row_geometry: &mut DisplayRowGeometryState,
@@ -635,48 +595,6 @@ impl<'a> DisplayRowOverflowTransitionRequest<'a> {
                 self.row_y_recording,
             ),
         }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[cfg(test)]
-    pub(crate) fn emit(
-        self,
-        row_geometry: &mut DisplayRowGeometryState,
-        row_flags: &mut DisplayRowFlags,
-        row_limit: DisplayRowLimit,
-        hit_rows: &mut Vec<HitRow>,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
-        evaluator: &mut Context,
-    ) -> TextMatrixRowTransition {
-        match self.kind {
-            DisplayRowOverflowTransitionKind::Truncation => {
-                row_geometry.mark_current_row_flag_kind(
-                    row_flags,
-                    DisplayRowFlagKind::Truncated,
-                    row_limit,
-                );
-            }
-            DisplayRowOverflowTransitionKind::VisualWrap => {
-                row_geometry.mark_current_row_flag_kind(
-                    row_flags,
-                    DisplayRowFlagKind::Continued,
-                    row_limit,
-                );
-            }
-        }
-        let kind = self.kind;
-        let max_rows = self.max_rows;
-        let transition = DisplayRowBoundaryTransitionRequest::new(self.boundary_target(), max_rows)
-            .emit(row_geometry, hit_rows, builder, output_emitter, evaluator);
-        if kind == DisplayRowOverflowTransitionKind::VisualWrap && !transition.is_exhausted() {
-            row_geometry.mark_current_row_flag_kind(
-                row_flags,
-                DisplayRowFlagKind::Continuation,
-                row_limit,
-            );
-        }
-        transition
     }
 
     pub(crate) fn emit_with_output(

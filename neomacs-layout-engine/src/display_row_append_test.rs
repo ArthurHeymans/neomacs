@@ -591,12 +591,10 @@ fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
         ),
         4,
     )
-    .emit(
+    .emit_with_output(
         &mut ctx.geometry,
         &mut ctx.hit_rows,
-        &mut ctx.builder,
-        &mut ctx.output_emitter,
-        &mut ctx.eval,
+        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -624,12 +622,10 @@ fn display_row_line_break_transition_request_records_hit_spacing_and_emits_next_
         ctx.row_y_positions.recording(),
         4,
     )
-    .emit(
+    .emit_with_output(
         &mut ctx.geometry,
         &mut ctx.hit_rows,
-        &mut ctx.builder,
-        &mut ctx.output_emitter,
-        &mut ctx.eval,
+        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -659,12 +655,14 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
         DisplayRowPosition { x_px: 48.0, col: 6 },
         4.0,
     )
-    .emit(
+    .emit_with_output(
         &mut line_ctx.geometry,
         &mut line_ctx.hit_rows,
-        &mut line_ctx.builder,
-        &mut line_ctx.output_emitter,
-        &mut line_ctx.eval,
+        TextRowOutputRenderState::new(
+            &mut line_ctx.builder,
+            &mut line_ctx.output_emitter,
+            &mut line_ctx.eval,
+        ),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -697,14 +695,16 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
         },
         DisplayRowPosition { x_px: 56.0, col: 7 },
     )
-    .emit(
+    .emit_with_output(
         &mut wrap_ctx.geometry,
         &mut wrap_ctx.row_flags,
         wrap_ctx.row_limit,
         &mut wrap_ctx.hit_rows,
-        &mut wrap_ctx.builder,
-        &mut wrap_ctx.output_emitter,
-        &mut wrap_ctx.eval,
+        TextRowOutputRenderState::new(
+            &mut wrap_ctx.builder,
+            &mut wrap_ctx.output_emitter,
+            &mut wrap_ctx.eval,
+        ),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -3534,14 +3534,12 @@ fn display_row_overflow_transition_request_marks_truncated_row_and_emits_boundar
         ctx.row_y_positions.recording(),
         4,
     )
-    .emit(
+    .emit_with_output(
         &mut ctx.geometry,
         &mut ctx.row_flags,
         ctx.row_limit,
         &mut ctx.hit_rows,
-        &mut ctx.builder,
-        &mut ctx.output_emitter,
-        &mut ctx.eval,
+        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
@@ -3571,14 +3569,12 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
         ctx.row_y_positions.recording(),
         4,
     )
-    .emit(
+    .emit_with_output(
         &mut ctx.geometry,
         &mut ctx.row_flags,
         ctx.row_limit,
         &mut ctx.hit_rows,
-        &mut ctx.builder,
-        &mut ctx.output_emitter,
-        &mut ctx.eval,
+        TextRowOutputRenderState::new(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
     assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
