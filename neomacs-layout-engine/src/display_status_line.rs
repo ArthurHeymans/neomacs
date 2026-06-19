@@ -181,10 +181,26 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
 }
 
 pub(crate) struct FrameTabBarDisplayRowRenderState<'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
-    pub(crate) display_host: Option<&'emit dyn DisplayHost>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
+    display_host: Option<&'emit dyn DisplayHost>,
+}
+
+impl<'emit, 'face> FrameTabBarDisplayRowRenderState<'emit, 'face> {
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        pending_frame_chrome_rows: &'emit mut Vec<FrameChromeRow>,
+        render_services: ChromeRowRenderServices<'emit, 'face>,
+        display_host: Option<&'emit dyn DisplayHost>,
+    ) -> Self {
+        Self {
+            builder,
+            pending_frame_chrome_rows,
+            render_services,
+            display_host,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -649,13 +665,27 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
 }
 
 pub(crate) struct WindowChromeRowsRenderState<'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    output_emitter: &'emit mut WindowOutputEmitter,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-impl WindowChromeRowsRenderState<'_, '_> {
+impl<'emit, 'face> WindowChromeRowsRenderState<'emit, 'face> {
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        evaluator: &'emit mut Context,
+        output_emitter: &'emit mut WindowOutputEmitter,
+        render_services: ChromeRowRenderServices<'emit, 'face>,
+    ) -> Self {
+        Self {
+            builder,
+            evaluator,
+            output_emitter,
+            render_services,
+        }
+    }
+
     fn render_display_row(
         &mut self,
         request: WindowChromeDisplayRowRequest<'_>,

@@ -1498,16 +1498,12 @@ impl LayoutEngine {
             base_face: &tab_bar_face,
             text: tab_bar.text,
         })
-        .render(&mut FrameTabBarDisplayRowRenderState {
-            builder: &mut self.matrix_builder,
-            pending_frame_chrome_rows: &mut self.pending_frame_chrome_rows,
-            render_services: ChromeRowRenderServices::new(
-                &mut self.font_metrics,
-                face_resolver,
-                &mut face_ids,
-            ),
-            display_host: evaluator.display_host.as_deref(),
-        }) else {
+        .render(&mut FrameTabBarDisplayRowRenderState::new(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+            ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
+            evaluator.display_host.as_deref(),
+        )) else {
             return None;
         };
         face_ids.finish_into(&mut self.frame_face_id_counter);

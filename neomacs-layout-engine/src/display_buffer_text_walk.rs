@@ -351,9 +351,9 @@ pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
 }
 
 pub(crate) struct BufferTextWindowRenderedBodyInstallPublishState<'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -378,16 +378,16 @@ pub(crate) struct BufferTextWindowRenderedBody<'a> {
 }
 
 pub(crate) struct BufferTextWindowRenderedBodyFinishState<'a> {
-    pub(crate) builder: &'a mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'a mut Context,
-    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
-    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    builder: &'a mut GlyphMatrixBuilder,
+    evaluator: &'a mut Context,
+    hit_data: &'a mut Vec<WindowHitData>,
+    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 pub(crate) struct BufferTextWindowRenderedBodyChromeState<'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
@@ -1303,12 +1303,12 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         request: WindowChromeRowsRenderRequest<'_, '_>,
         state: BufferTextWindowRenderedBodyChromeState<'_, '_>,
     ) {
-        request.render(&mut WindowChromeRowsRenderState {
-            builder: state.builder,
-            evaluator: state.evaluator,
-            output_emitter: &mut self.output_emitter,
-            render_services: state.render_services,
-        });
+        request.render(&mut WindowChromeRowsRenderState::new(
+            state.builder,
+            state.evaluator,
+            &mut self.output_emitter,
+            state.render_services,
+        ));
     }
 
     pub(crate) fn finish_window_and_install(
