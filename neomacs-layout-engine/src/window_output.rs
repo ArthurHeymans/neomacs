@@ -262,12 +262,31 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
     }
 
     pub(crate) fn begin_text_window_matrix(&mut self, request: TextWindowMatrixBegin) {
-        begin_text_window_matrix(self.builder, request);
+        self.builder.window_installer().begin(
+            request.window_id,
+            request.rows,
+            request.cols,
+            request.bounds,
+            request.text_bounds,
+            request.selected,
+        );
     }
 
-    #[cfg(test)]
     pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {
-        record_text_window_display_range_in_matrix(self.builder, range);
+        if let Some(info) = self.builder.window_infos_last_mut()
+            && info.window_id == range.window_id as i64
+        {
+            info.window_start = range.window_start.as_i64();
+            info.window_end = range.window_end.as_i64();
+        }
+    }
+
+    fn record_redisplay_positions(
+        &mut self,
+        window_id: u64,
+        positions: TextWindowRedisplayPositions,
+    ) {
+        self.record_display_range(positions.display_range(window_id));
     }
 
     #[cfg(test)]
@@ -277,15 +296,45 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
-        close_text_window_matrix_output(self.builder);
+        self.builder.window_installer().end();
     }
 
     pub(crate) fn capture_retry_checkpoint(&self) -> TextWindowOutputRetryCheckpoint {
-        TextWindowOutputRetryCheckpoint::capture(self.builder)
+        TextWindowOutputRetryCheckpoint {
+            transition_hints_len: self.builder.transition_hints().len(),
+            effect_hints_len: self.builder.effect_hints().len(),
+        }
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        checkpoint.restore(self.builder);
+        self.builder
+            .truncate_transition_hints(checkpoint.transition_hints_len);
+        self.builder
+            .truncate_effect_hints(checkpoint.effect_hints_len);
+    }
+
+    fn text_matrix_row_metrics(&self, metrics: TextMatrixRowMetrics) -> TextMatrixRowStoredMetrics {
+        let window_y = self.builder.current_window_pixel_bounds().y;
+        TextMatrixRowStoredMetrics {
+            pixel_y: metrics.y - window_y,
+            height_px: metrics.height,
+            ascent_px: metrics.ascent,
+        }
+    }
+
+    fn finish_output_rows(&mut self, output_emitter: &WindowOutputEmitter) {
+        let window_y = self.builder.current_window_pixel_bounds().y;
+        for metric in output_emitter.row_metrics() {
+            DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
+                metric.matrix_row,
+                metric.pixel_y - window_y,
+                metric.height,
+                metric.ascent,
+            );
+        }
+        if let Some(metric) = output_emitter.row_metrics().last() {
+            DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(metric.matrix_row);
+        }
     }
 }
 
@@ -534,7 +583,7 @@ impl<'a> TextWindowFinishOutputSurface<'a> {
         header_line_height: i64,
         tab_line_height: i64,
     ) -> WindowDisplaySnapshot {
-        close_text_window_matrix_output(self.builder);
+        TextWindowMatrixOutputSurface::from_builder(self.builder).close_text_window_output();
         self.output_emitter.finish_snapshot(
             self.evaluator,
             text_area_left_offset,
@@ -726,7 +775,8 @@ impl<'a> TextMatrixRowOutput<'a> {
     }
 
     fn finish(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
-        let matrix_metrics = text_matrix_row_metrics_request(self.builder, metrics);
+        let matrix_metrics = TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .text_matrix_row_metrics(metrics);
         let matrix_row = self.output_emitter.current_text_matrix_row();
         DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
             matrix_row,
@@ -785,7 +835,8 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
 
     fn begin_text_window_output(&mut self, request: TextWindowBegin) {
         let first_row = request.first_row;
-        begin_text_window_matrix(self.output.builder, request.into());
+        TextWindowMatrixOutputSurface::from_builder(self.output.builder)
+            .begin_text_window_matrix(request.into());
         self.output.begin(first_row);
     }
 
@@ -841,29 +892,6 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
     }
 }
 
-fn begin_text_window_matrix(builder: &mut GlyphMatrixBuilder, request: TextWindowMatrixBegin) {
-    builder.window_installer().begin(
-        request.window_id,
-        request.rows,
-        request.cols,
-        request.bounds,
-        request.text_bounds,
-        request.selected,
-    );
-}
-
-fn record_text_window_display_range_in_matrix(
-    builder: &mut GlyphMatrixBuilder,
-    range: TextWindowDisplayRange,
-) {
-    if let Some(info) = builder.window_infos_last_mut()
-        && info.window_id == range.window_id as i64
-    {
-        info.window_start = range.window_start.as_i64();
-        info.window_end = range.window_end.as_i64();
-    }
-}
-
 impl TextWindowRedisplayPositions {
     pub(crate) fn from_output_rows(
         output_emitter: &WindowOutputEmitter,
@@ -900,18 +928,6 @@ impl TextWindowRedisplayPositions {
             window_end: self.window_end,
         }
     }
-}
-
-fn record_text_window_redisplay_positions(
-    builder: &mut GlyphMatrixBuilder,
-    window_id: u64,
-    positions: TextWindowRedisplayPositions,
-) {
-    record_text_window_display_range_in_matrix(builder, positions.display_range(window_id));
-}
-
-fn close_text_window_matrix_output(builder: &mut GlyphMatrixBuilder) {
-    builder.window_installer().end();
 }
 
 fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -> DisplayItem {
@@ -1094,20 +1110,6 @@ pub(crate) struct TextWindowArtifactOutputSurface<'builder> {
 pub(crate) struct TextWindowOutputRetryCheckpoint {
     transition_hints_len: usize,
     effect_hints_len: usize,
-}
-
-impl TextWindowOutputRetryCheckpoint {
-    fn capture(builder: &GlyphMatrixBuilder) -> Self {
-        Self {
-            transition_hints_len: builder.transition_hints().len(),
-            effect_hints_len: builder.effect_hints().len(),
-        }
-    }
-
-    fn restore(self, builder: &mut GlyphMatrixBuilder) {
-        builder.truncate_transition_hints(self.transition_hints_len);
-        builder.truncate_effect_hints(self.effect_hints_len);
-    }
 }
 
 impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
@@ -1350,36 +1352,6 @@ impl TextWindowCursorPublication {
     }
 }
 
-fn finish_text_window_output_rows(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &WindowOutputEmitter,
-) {
-    let window_y = builder.current_window_pixel_bounds().y;
-    for metric in output_emitter.row_metrics() {
-        DisplayRowLifecycleSurface::from_builder(builder).set_metrics(
-            metric.matrix_row,
-            metric.pixel_y - window_y,
-            metric.height,
-            metric.ascent,
-        );
-    }
-    if let Some(metric) = output_emitter.row_metrics().last() {
-        DisplayRowLifecycleSurface::from_builder(builder).finalize_row(metric.matrix_row);
-    }
-}
-
-fn text_matrix_row_metrics_request(
-    builder: &GlyphMatrixBuilder,
-    metrics: TextMatrixRowMetrics,
-) -> TextMatrixRowStoredMetrics {
-    let window_y = builder.current_window_pixel_bounds().y;
-    TextMatrixRowStoredMetrics {
-        pixel_y: metrics.y - window_y,
-        height_px: metrics.height,
-        ascent_px: metrics.ascent,
-    }
-}
-
 struct TextWindowOutputInstaller<'builder, 'output> {
     builder: &'builder mut GlyphMatrixBuilder,
     output_emitter: &'output WindowOutputEmitter,
@@ -1397,7 +1369,8 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
     }
 
     fn install_output(&mut self, _request: TextWindowOutputInstall) {
-        finish_text_window_output_rows(self.builder, self.output_emitter);
+        TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .finish_output_rows(self.output_emitter);
     }
 
     fn install_body_output(
@@ -1411,11 +1384,8 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
             request.text_start_byte,
             request.byte_idx,
         );
-        record_text_window_redisplay_positions(
-            self.builder,
-            request.window_id,
-            redisplay_positions,
-        );
+        TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .record_redisplay_positions(request.window_id, redisplay_positions);
         self.install_output(TextWindowOutputInstall);
         if let Some(markers) = request.right_edge_markers {
             let render_services =
