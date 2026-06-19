@@ -6224,8 +6224,8 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
     let outcome = BufferTextSourceCharRenderRequest::new(
         source_step_char,
         source_item,
-        BufferTextSourceCharRenderContext {
-            layout_resolution_context: BufferCurrentFaceResolutionContext::new(
+        BufferTextSourceCharRenderContext::new(
+            BufferCurrentFaceResolutionContext::new(
                 &snapshot,
                 &face_resolver,
                 measurement_policy,
@@ -6240,26 +6240,26 @@ fn buffer_text_source_char_render_request_appends_ordinary_char_and_updates_walk
             )
             .source_item_layout_resolution_context(),
             text,
-            text_start_byte: 0,
-            buffer_id: buf_id,
-            append_surface: &surface,
+            0,
+            buf_id,
+            &surface,
             overlay_context,
-            active_face_state: &active_face,
-            params: &params,
-            glyph_y_offset: 0.0,
-            char_h: 16.0,
-            point_charpos: 99,
-            row_visibility_limit: DisplayRowVisibilityLimit {
+            &active_face,
+            &params,
+            0.0,
+            16.0,
+            99,
+            DisplayRowVisibilityLimit {
                 max_rows: 4,
                 bottom_y: 64.0,
             },
-            content_x: 0.0,
-            has_prefix: false,
-            row_geometry_defaults: context.defaults,
-            display_text_row_base: 0,
-            max_rows: 4,
-            row_limit: context.row_limit,
-        },
+            0.0,
+            false,
+            context.defaults,
+            0,
+            4,
+            context.row_limit,
+        ),
     )
     .render_and_apply(
         &snapshot,

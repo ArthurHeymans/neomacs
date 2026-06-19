@@ -746,26 +746,26 @@ impl BufferTextWindowLoopRequestContext {
         BufferTextSourceCharRenderRequest::new(
             source_char,
             source_item,
-            BufferTextSourceCharRenderContext {
+            BufferTextSourceCharRenderContext::new(
                 layout_resolution_context,
                 text,
-                text_start_byte: self.text_start_byte,
-                buffer_id: self.buffer_id,
+                self.text_start_byte,
+                self.buffer_id,
                 append_surface,
                 overlay_context,
                 active_face_state,
                 params,
                 glyph_y_offset,
-                char_h: self.char_height,
-                point_charpos: self.point_charpos,
-                row_visibility_limit: self.row_visibility_limit,
-                content_x: self.content_x,
-                has_prefix: self.has_prefix,
-                row_geometry_defaults: self.row_geometry_defaults,
-                display_text_row_base: self.display_text_row_base,
-                max_rows: self.max_rows,
-                row_limit: self.row_limit,
-            },
+                self.char_height,
+                self.point_charpos,
+                self.row_visibility_limit,
+                self.content_x,
+                self.has_prefix,
+                self.row_geometry_defaults,
+                self.display_text_row_base,
+                self.max_rows,
+                self.row_limit,
+            ),
         )
     }
 
@@ -6182,24 +6182,24 @@ pub(crate) struct BufferTextSourceCharRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferTextSourceCharRenderContext<'a> {
-    pub(crate) layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-    pub(crate) text: &'a [u8],
-    pub(crate) text_start_byte: usize,
-    pub(crate) buffer_id: BufferId,
-    pub(crate) append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) params: &'a WindowParams,
-    pub(crate) glyph_y_offset: f32,
-    pub(crate) char_h: f32,
-    pub(crate) point_charpos: i64,
-    pub(crate) row_visibility_limit: DisplayRowVisibilityLimit,
-    pub(crate) content_x: f32,
-    pub(crate) has_prefix: bool,
-    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) max_rows: usize,
-    pub(crate) row_limit: DisplayRowLimit,
+    layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+    text: &'a [u8],
+    text_start_byte: usize,
+    buffer_id: BufferId,
+    append_surface: &'a DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    params: &'a WindowParams,
+    glyph_y_offset: f32,
+    char_h: f32,
+    point_charpos: i64,
+    row_visibility_limit: DisplayRowVisibilityLimit,
+    content_x: f32,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    display_text_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
@@ -6383,6 +6383,51 @@ impl BufferTextOverflowRenderOutcome {
             self,
             Self::Transition(DisplayRowTransitionContinuation::Continue)
         )
+    }
+}
+
+impl<'a> BufferTextSourceCharRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+        text: &'a [u8],
+        text_start_byte: usize,
+        buffer_id: BufferId,
+        append_surface: &'a DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+        char_h: f32,
+        point_charpos: i64,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        display_text_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            layout_resolution_context,
+            text,
+            text_start_byte,
+            buffer_id,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            params,
+            glyph_y_offset,
+            char_h,
+            point_charpos,
+            row_visibility_limit,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            display_text_row_base,
+            max_rows,
+            row_limit,
+        }
     }
 }
 
