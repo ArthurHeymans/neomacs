@@ -9024,7 +9024,7 @@ fn replace_match_rejects_backslash_zero_and_unknown_escape_like_gnu() {
             Err(Flow::Signal(sig))
                 if sig.symbol_name() == "error"
                     && sig.data
-                        == vec![Value::string("Invalid use of `\\' in replacement text")]
+                        == vec![Value::string("Invalid use of \u{2018}\\\u{2019} in replacement text")]
         ),
         "expected Invalid use of backslash error for \\0, got {:?}",
         result
@@ -9046,7 +9046,7 @@ fn replace_match_rejects_backslash_zero_and_unknown_escape_like_gnu() {
             Err(Flow::Signal(sig))
                 if sig.symbol_name() == "error"
                     && sig.data
-                        == vec![Value::string("Invalid use of `\\' in replacement text")]
+                        == vec![Value::string("Invalid use of \u{2018}\\\u{2019} in replacement text")]
         ),
         "expected Invalid use of backslash error for \\n, got {:?}",
         result

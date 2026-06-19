@@ -8457,7 +8457,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "color-distance",
-        |_ctx, args| super::font::builtin_color_distance(args),
+        |ctx, args| super::font::builtin_color_distance(ctx, args),
         2,
         Some(4),
     );

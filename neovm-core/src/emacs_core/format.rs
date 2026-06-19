@@ -249,38 +249,25 @@ pub(crate) fn builtin_format_time_string(args: Vec<Value>) -> EvalResult {
 
     let format_str = require_string("format-time-string", &args[0])?;
 
-    // Determine timestamp.
-    let timestamp: i64 = if args.len() >= 2 && !args[1].is_nil() {
-        match args[1].kind() {
-            ValueKind::Fixnum(n) => n,
-            ValueKind::Float => args[1].xfloat() as i64,
-            ValueKind::Cons => {
-                // Emacs time value: (HIGH LOW) or (HIGH LOW USEC) or (HIGH LOW USEC PSEC).
-                // Decode as HIGH * 65536 + LOW.
-                let items = list_to_vec(&args[1]).unwrap_or_default();
-                if items.len() >= 2 {
-                    let high = items[0].as_int().unwrap_or(0);
-                    let low = items[1].as_int().unwrap_or(0);
-                    high * 65536 + low
-                } else {
-                    current_unix_timestamp()
-                }
-            }
-            _ => current_unix_timestamp(),
-        }
+    // Determine timestamp. Use the shared time-value parser so every Lisp time
+    // form ((TICKS . HZ), (HIGH LOW USEC PSEC), integer, float, nil) decodes
+    // identically to the other time functions, and so the subsecond fraction
+    // is available for the `%N' directive (GNU passes `t.tv_nsec' to nstrftime,
+    // src/timefns.c:1391).
+    let (timestamp, nanos): (i64, i64) = if args.len() >= 2 && !args[1].is_nil() {
+        crate::emacs_core::timefns::time_value_seconds_and_nanos(&args[1])?
     } else {
-        current_unix_timestamp()
+        (current_unix_timestamp(), 0)
     };
 
     let (offset_secs, zone_name) = zone_offset_name_for_time(args.get(2), timestamp)?;
     let tm = unix_to_broken_down(timestamp.saturating_add(offset_secs));
-    let formatted = format_time(&format_str, &tm, timestamp, offset_secs, &zone_name);
+    let formatted = format_time(&format_str, &tm, timestamp, offset_secs, &zone_name, nanos);
     Ok(Value::string(formatted))
 }
 
 /// Get current Unix timestamp using `std::time::SystemTime`.
 fn current_unix_timestamp() -> i64 {
-    use crate::emacs_core::value::ValueKind;
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -312,6 +299,7 @@ fn format_time(
     timestamp: i64,
     zone_offset_secs: i64,
     zone_name: &str,
+    nanos: i64,
 ) -> String {
     let mut result = String::new();
     let chars: Vec<char> = fmt.chars().collect();
@@ -327,11 +315,13 @@ fn format_time(
 
             // Parse strftime flags: '-' (no pad), '_' (space pad), '0' (zero
             // pad = default), '^' (upcase), '#' (swap case). The 'E'/'O' locale
-            // modifiers and a numeric field width are accepted and ignored.
+            // modifiers and a numeric field width are accepted; the width is
+            // significant only for the `%N' directive (see below).
             let mut suppress_pad = false;
             let mut space_pad = false;
             let mut upcase = false;
             let mut swapcase = false;
+            let mut field_width: i64 = 0;
             while i < chars.len() {
                 match chars[i] {
                     '-' => suppress_pad = true,
@@ -339,7 +329,11 @@ fn format_time(
                     '^' => upcase = true,
                     '#' => swapcase = true,
                     '0' | 'E' | 'O' => {}
-                    c if c.is_ascii_digit() => {}
+                    c if c.is_ascii_digit() => {
+                        field_width = field_width
+                            .saturating_mul(10)
+                            .saturating_add((c as i64) - ('0' as i64));
+                    }
                     _ => break,
                 }
                 i += 1;
@@ -455,6 +449,21 @@ fn format_time(
                 'P' => result.push_str(if tm.hour < 12 { "am" } else { "pm" }),
                 'Z' => result.push_str(zone_name),
                 'z' => result.push_str(&format_numeric_zone_offset(zone_offset_secs)),
+                'N' => {
+                    // GNU extension (lib/strftime.c case L_('N')): subsecond
+                    // count. The optional field width selects how many of the
+                    // 9 nanosecond digits to emit; the default (and `%9N') is
+                    // 9. Widths < 9 keep the leading digits (e.g. `%3N' = ms,
+                    // `%6N' = us); widths > 9 zero-pad on the right (`%12N').
+                    let width = if field_width <= 0 { 9 } else { field_width } as usize;
+                    let digits9 = format!("{:09}", nanos.clamp(0, 999_999_999));
+                    if width <= 9 {
+                        result.push_str(&digits9[..width]);
+                    } else {
+                        result.push_str(&digits9);
+                        result.extend(std::iter::repeat_n('0', width - 9));
+                    }
+                }
                 'j' => {
                     if suppress_pad {
                         result.push_str(&(tm.yearday + 1).to_string());

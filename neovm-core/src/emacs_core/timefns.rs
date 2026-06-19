@@ -270,6 +270,20 @@ fn parse_time(val: &Value) -> Result<TimeMicros, Flow> {
     Ok(parse_time_detailed(val)?.time)
 }
 
+/// Decode a Lisp time value into whole `(seconds, nanoseconds)`, using the same
+/// full parser as the other time functions so every accepted form ((TICKS .
+/// HZ), (HIGH LOW USEC PSEC), integer, float, nil) is handled identically.
+/// `nanoseconds` is the subsecond fraction in `[0, 999_999_999]`, matching the
+/// `int ns = t.tv_nsec` that GNU's `format_time_string` passes to nstrftime
+/// (`src/timefns.c:1391`). This is what the `%N` directive consumes.
+pub(crate) fn time_value_seconds_and_nanos(val: &Value) -> Result<(i64, i64), Flow> {
+    let tm = parse_time(val)?;
+    // usecs in [0, 999_999], psecs in [0, 999_999] picoseconds within the
+    // current microsecond. Truncate to nanosecond resolution like tv_nsec.
+    let nanos = tm.usecs * 1000 + tm.psecs / 1000;
+    Ok((tm.secs, nanos))
+}
+
 fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
     use crate::emacs_core::value::VecLikeType;
     // Bignum seconds-since-epoch values get truncated to i64;
@@ -971,6 +985,59 @@ fn require_fixnum_component(value: &Value) -> Result<i64, Flow> {
     })
 }
 
+/// Decode `encode-time`'s SECOND field, which (unlike the other components)
+/// accepts any Lisp time value, mirroring GNU `Fencode_time` /
+/// `decode_lisp_time (secarg, CFORM_TICKS_HZ)` (`src/timefns.c:1659`).
+///
+/// Returns `(sec, subsec_ticks, hz)` where `sec = floor(ticks / hz)` is the
+/// integer-seconds contribution folded into the broken-down time, and
+/// `subsec_ticks` is the remainder carried into the resulting timestamp at the
+/// resolution `hz`. A plain fixnum keeps the historical fast path (`hz == 1`).
+/// As with GNU's later `check_tm_member`, `sec` must be representable as a
+/// fixnum or `wrong-type-argument fixnump` is signalled.
+fn decode_encode_time_second(value: &Value) -> Result<(i64, i64, i64), Flow> {
+    if let Some(n) = value.as_fixnum() {
+        return Ok((n, 0, 1));
+    }
+    // Reject the same shapes `CHECK_FIXNUM' would for a non-numeric scalar
+    // (e.g. nil, a symbol): only numbers and time lists/conses are valid.
+    let fixnump_error = || {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("fixnump"), *value],
+        )
+    };
+    if !matches!(
+        value.kind(),
+        ValueKind::Float | ValueKind::Cons | ValueKind::Veclike(_)
+    ) {
+        return Err(fixnump_error());
+    }
+    let parsed = parse_time_detailed(value)?;
+    let hz = parsed.hz.max(1);
+    let sec = parsed.time.secs;
+    // Subsecond remainder expressed at HZ.
+    let subsec_ticks = match hz {
+        1 => 0,
+        1_000_000 => parsed.time.usecs,
+        1_000_000_000_000 => parsed.time.usecs * 1_000_000 + parsed.time.psecs,
+        _ => {
+            // (TICKS . HZ)/float: recover the remainder from the exact pair.
+            if let Some((ticks, exact_hz)) = parsed.exact_ticks_hz.as_ref() {
+                let hz_i = i64::try_from(exact_hz).unwrap_or(1).max(1);
+                i64::try_from(&(ticks.clone() % Integer::from(hz_i))).unwrap_or(0)
+            } else {
+                0
+            }
+        }
+    };
+    // `sec' becomes tm_sec, which GNU passes through CHECK_FIXNUM later.
+    if Value::make_int(sec).as_fixnum().is_none() {
+        return Err(fixnump_error());
+    }
+    Ok((sec, subsec_ticks.rem_euclid(hz), hz))
+}
+
 fn encode_time_zone_offset(zone: &Value, approx_epoch_secs: i64) -> Result<i64, Flow> {
     let rule = effective_zone_rule(Some(zone))?;
     let initial = zone_rule_to_offset_name(&rule, approx_epoch_secs).0;
@@ -1149,7 +1216,9 @@ pub(crate) fn builtin_current_time_zone(args: Vec<Value>) -> EvalResult {
 
 /// `(encode-time TIME &rest OBSOLESCENT-ARGUMENTS)` -> `(HIGH LOW)`
 pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
-    let (sec, min, hour, day, month, year, zone) = if args.len() == 1 {
+    // The SECOND field accepts any Lisp time value (GNU decodes it via
+    // `decode_lisp_time'); its sub-second resolution carries into the result.
+    let (sec, subsec_ticks, hz, min, hour, day, month, year, zone) = if args.len() == 1 {
         let items = list_to_vec(&args[0])
             .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), args[0]]))?;
         if items.len() < 6 {
@@ -1158,8 +1227,11 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
                 vec![Value::symbol("listp"), args[0]],
             ));
         }
+        let (sec, subsec_ticks, hz) = decode_encode_time_second(&items[0])?;
         (
-            require_fixnum_component(&items[0])?,
+            sec,
+            subsec_ticks,
+            hz,
             require_fixnum_component(&items[1])?,
             require_fixnum_component(&items[2])?,
             require_fixnum_component(&items[3])?,
@@ -1176,8 +1248,11 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
             ],
         ));
     } else {
+        let (sec, subsec_ticks, hz) = decode_encode_time_second(&args[0])?;
         (
-            require_fixnum_component(&args[0])?,
+            sec,
+            subsec_ticks,
+            hz,
             require_fixnum_component(&args[1])?,
             require_fixnum_component(&args[2])?,
             require_fixnum_component(&args[3])?,
@@ -1194,9 +1269,20 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
     let local_secs = encode_to_epoch_secs(sec, min, hour, day, month, year);
     let zone_offset = encode_time_zone_offset(&zone, local_secs)?;
     let total_secs = local_secs - zone_offset;
-    let high = total_secs >> 16;
-    let low = total_secs & 0xFFFF;
-    Ok(Value::list(vec![Value::fixnum(high), Value::fixnum(low)]))
+    if hz <= 1 {
+        // Integer-second SECOND field: keep GNU's (HIGH LOW) result form
+        // (`current-time-list' defaults to t).
+        let high = total_secs >> 16;
+        let low = total_secs & 0xFFFF;
+        return Ok(Value::list(vec![Value::fixnum(high), Value::fixnum(low)]));
+    }
+    // Sub-second resolution: GNU returns the (TICKS . HZ) form
+    // (time_form_to_lisp / CFORM_TICKS_HZ) carrying the original HZ.
+    let ticks = Integer::from(total_secs) * Integer::from(hz) + Integer::from(subsec_ticks);
+    Ok(Value::cons(
+        Value::make_integer(ticks),
+        Value::make_integer(Integer::from(hz)),
+    ))
 }
 
 /// `(decode-time &optional TIME ZONE FORM)`

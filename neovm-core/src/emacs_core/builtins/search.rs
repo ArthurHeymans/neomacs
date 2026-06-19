@@ -1812,6 +1812,17 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
             vec![Value::string(missing_subexp_error), subexp_value],
         )
     };
+    // C-level `error()' messages are requoted via `text-quoting-style' by
+    // GNU's doprnt (e.g. "Invalid use of `\\' ..." -> curly quotes).
+    let quoting_style = crate::emacs_core::coding::effective_text_quoting_style(obarray);
+    let c_error = |msg: String| {
+        signal(
+            "error",
+            vec![Value::string(
+                crate::emacs_core::coding::requote_c_error_message(&msg, quoting_style),
+            )],
+        )
+    };
 
     if let Some(source) = string_arg {
         if md_snapshot.is_none() {
@@ -1839,7 +1850,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         ) {
             Ok(result) => Ok(Value::heap_string(result)),
             Err(msg) if msg == missing_subexp_error => Err(missing_subexp_signal(raw_subexp)),
-            Err(msg) => Err(signal("error", vec![Value::string(msg)])),
+            Err(msg) => Err(c_error(msg)),
         };
     }
 
@@ -1878,7 +1889,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
             if msg == missing_subexp_error {
                 missing_subexp_signal(raw_subexp)
             } else {
-                signal("error", vec![Value::string(msg)])
+                c_error(msg)
             }
         })?;
         let case_action = if fixedcase {
@@ -1994,6 +2005,10 @@ pub(crate) fn builtin_replace_match(
                     let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
                     let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);
                     let missing_subexp_error = super::regex::REPLACE_MATCH_SUBEXP_MISSING;
+                    // C-level `error()' messages are requoted via
+                    // `text-quoting-style' by GNU's doprnt.
+                    let quoting_style =
+                        crate::emacs_core::coding::effective_text_quoting_style(&eval.obarray);
                     let change = {
                         let buf = eval.buffers.current_buffer().ok_or_else(|| {
                             signal("error", vec![Value::string("No current buffer")])
@@ -2014,7 +2029,15 @@ pub(crate) fn builtin_replace_match(
                                         vec![Value::string(missing_subexp_error), raw_subexp],
                                     )
                                 } else {
-                                    signal("error", vec![Value::string(msg)])
+                                    signal(
+                                        "error",
+                                        vec![Value::string(
+                                            crate::emacs_core::coding::requote_c_error_message(
+                                                &msg,
+                                                quoting_style,
+                                            ),
+                                        )],
+                                    )
                                 }
                             })?;
                         let current_id = eval.buffers.current_buffer_id().ok_or_else(|| {

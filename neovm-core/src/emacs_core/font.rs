@@ -5335,15 +5335,65 @@ fn invalid_color_error(value: &Value) -> Flow {
     signal("error", vec![Value::string("Invalid color"), *value])
 }
 
-fn parse_color_distance_input(value: &Value) -> Result<(i64, i64, i64), Flow> {
+/// Parse an `(R G B)` list of fixnums, mirroring GNU `parse_rgb_list`
+/// (`src/xfaces.c`). Returns None unless the value is a 3+ element list whose
+/// first three elements are fixnums.
+fn parse_rgb_list(value: &Value) -> Option<(i64, i64, i64)> {
+    let items = list_to_vec(value)?;
+    if items.len() < 3 {
+        return None;
+    }
+    Some((
+        items[0].as_fixnum()?,
+        items[1].as_fixnum()?,
+        items[2].as_fixnum()?,
+    ))
+}
+
+/// Resolve a `color-distance` argument to a 16-bit `(R G B)` triple, mirroring
+/// GNU `Fcolor_distance` (`src/xfaces.c:4792`): an `(R G B)` list parses
+/// directly via `parse_rgb_list`; a string is resolved through the frame
+/// terminal's `defined_color_hook`. On a graphic frame that hook parses the
+/// raw RGB; on a TTY frame (`tty_defined_color`) it calls `tty_lookup_color`,
+/// which dispatches to the Lisp `tty-color-desc` to find the nearest entry in
+/// the active terminal palette. We reproduce that TTY path so batch results
+/// match GNU (e.g. "#808080" and "#c0c0c0" both quantize to white).
+fn resolve_color_distance_rgb(
+    ctx: &mut super::eval::Context,
+    value: &Value,
+    graphic: bool,
+) -> Result<(i64, i64, i64), Flow> {
+    if let Some(rgb) = parse_rgb_list(value) {
+        return Ok(rgb);
+    }
     if !value.is_string() {
         return Err(invalid_color_error(value));
-    };
+    }
     let color = font_string_text(value).expect("checked string");
-    let Some(rgb) = parse_color_16bit_any(&color).map(approximate_tty_color) else {
-        return Err(invalid_color_error(value));
-    };
-    Ok(rgb)
+    if graphic {
+        return parse_color_16bit_any(&color).ok_or_else(|| invalid_color_error(value));
+    }
+    // TTY frame: resolve via `tty-color-desc' -> (NAME INDEX R G B), exactly as
+    // GNU's `tty_lookup_color' does. GNU guards this with `Ffboundp
+    // (Qtty_color_desc)' and treats a failed lookup as "not resolved" (false),
+    // never an error; mirror that so a bare environment (e.g. unit tests
+    // without term/tty-colors.el loaded, where the call may signal) falls back
+    // to a coarse quantization instead of propagating the signal.
+    if ctx.obarray.fboundp("tty-color-desc")
+        && let Ok(desc) = ctx.funcall_general(Value::symbol("tty-color-desc"), vec![*value])
+        && let Some(items) = list_to_vec(&desc)
+        && items.len() >= 5
+        && let (Some(r), Some(g), Some(b)) = (
+            items[2].as_fixnum(),
+            items[3].as_fixnum(),
+            items[4].as_fixnum(),
+        )
+    {
+        return Ok((r, g, b));
+    }
+    parse_color_16bit_any(&color)
+        .map(approximate_tty_color)
+        .ok_or_else(|| invalid_color_error(value))
 }
 
 fn color_distance_metric(lhs: (i64, i64, i64), rhs: (i64, i64, i64)) -> i64 {
@@ -5361,14 +5411,43 @@ fn color_distance_metric(lhs: (i64, i64, i64), rhs: (i64, i64, i64)) -> i64 {
         >> 16
 }
 
-/// `(color-distance COLOR1 COLOR2 &optional FRAME METRIC-FN)` -- return a
-/// perceptual distance between colors.
-pub(crate) fn builtin_color_distance(args: Vec<Value>) -> EvalResult {
+/// `(color-distance COLOR1 COLOR2 &optional FRAME METRIC)` -- return a
+/// perceptual distance between colors. Mirrors GNU `Fcolor_distance`.
+pub(crate) fn builtin_color_distance(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("color-distance", &args, 2)?;
     expect_max_args("color-distance", &args, 4)?;
     expect_optional_color_distance_frame_arg(&args, 2)?;
-    let lhs = parse_color_distance_input(&args[0])?;
-    let rhs = parse_color_distance_input(&args[1])?;
+    // GNU resolves the frame's terminal type (graphic vs TTY) to pick the
+    // colour-definition hook. When no frame is available (e.g. a bare
+    // headless context), default to the TTY path, which is also the
+    // batch/`--batch' default.
+    let graphic = graphic_color_target_frame_id(ctx, args.get(2))
+        .map(|id| id.is_some())
+        .unwrap_or(false);
+    let lhs = resolve_color_distance_rgb(ctx, &args[0], graphic)?;
+    let rhs = resolve_color_distance_rgb(ctx, &args[1], graphic)?;
+    if let Some(metric) = args.get(3).filter(|m| !m.is_nil()) {
+        // GNU calls METRIC with two (RED GREEN BLUE) lists.
+        let metric = *metric;
+        return ctx.funcall_general(
+            metric,
+            vec![
+                Value::list(vec![
+                    Value::fixnum(lhs.0),
+                    Value::fixnum(lhs.1),
+                    Value::fixnum(lhs.2),
+                ]),
+                Value::list(vec![
+                    Value::fixnum(rhs.0),
+                    Value::fixnum(rhs.1),
+                    Value::fixnum(rhs.2),
+                ]),
+            ],
+        );
+    }
     Ok(Value::fixnum(color_distance_metric(lhs, rhs)))
 }
 

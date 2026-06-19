@@ -3326,21 +3326,33 @@ fn color_gray_and_supported_semantics() {
 #[test]
 fn color_distance_semantics() {
     crate::test_utils::init_test_tracing();
-    let black_white = builtin_color_distance(vec![Value::string("#000"), Value::string("#fff")])
-        .expect("color-distance should evaluate");
+    let mut eval = Context::new();
+    let black_white = builtin_color_distance(
+        &mut eval,
+        vec![Value::string("#000"), Value::string("#fff")],
+    )
+    .expect("color-distance should evaluate");
     match black_white.kind() {
         ValueKind::Fixnum(n) => assert!(n > 0),
         other => panic!("expected integer distance, got {other:?}"),
     }
 
     assert_eq!(
-        builtin_color_distance(vec![Value::string("#000"), Value::string("#000")]).unwrap(),
+        builtin_color_distance(
+            &mut eval,
+            vec![Value::string("#000"), Value::string("#000")]
+        )
+        .unwrap(),
         Value::fixnum(0)
     );
 
     // Both colors collapse to black in tty-approx mode.
     assert_eq!(
-        builtin_color_distance(vec![Value::string("#000"), Value::string("#111")]).unwrap(),
+        builtin_color_distance(
+            &mut eval,
+            vec![Value::string("#000"), Value::string("#111")]
+        )
+        .unwrap(),
         Value::fixnum(0)
     );
 }
@@ -3391,8 +3403,10 @@ fn xw_color_primitives_follow_live_gui_frame_state() {
 #[test]
 fn color_distance_errors_match_oracle_shape() {
     crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
     let invalid_left =
-        builtin_color_distance(vec![Value::string("#00"), Value::string("#fff")]).unwrap_err();
+        builtin_color_distance(&mut eval, vec![Value::string("#00"), Value::string("#fff")])
+            .unwrap_err();
     match invalid_left {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "error");
@@ -3404,8 +3418,9 @@ fn color_distance_errors_match_oracle_shape() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let invalid_type = builtin_color_distance(vec![Value::fixnum(1), Value::string("#fff")])
-        .expect_err("color-distance should signal invalid color for non-string args");
+    let invalid_type =
+        builtin_color_distance(&mut eval, vec![Value::fixnum(1), Value::string("#fff")])
+            .expect_err("color-distance should signal invalid color for non-string args");
     match invalid_type {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "error");
@@ -3417,9 +3432,11 @@ fn color_distance_errors_match_oracle_shape() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let frame_err =
-        builtin_color_distance(vec![Value::string("#000"), Value::string("#fff"), Value::T])
-            .expect_err("color-distance should validate optional FRAME");
+    let frame_err = builtin_color_distance(
+        &mut eval,
+        vec![Value::string("#000"), Value::string("#fff"), Value::T],
+    )
+    .expect_err("color-distance should validate optional FRAME");
     match frame_err {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");

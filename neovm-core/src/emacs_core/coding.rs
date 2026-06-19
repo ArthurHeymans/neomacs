@@ -239,6 +239,46 @@ impl TextQuotingStyle {
     }
 }
 
+/// Resolve the effective text-quoting style from `text-quoting-style`,
+/// mirroring GNU `Ftext_quoting_style` (`src/doc.c:652-678`): `grave',
+/// `straight', and `curve' are returned verbatim; nil (and any other value)
+/// resolve to `curve' (the display-capability fallback always picks `curve'
+/// in batch/UTF-8, matching `builtin_text_quoting_style').
+pub(crate) fn effective_text_quoting_style(obarray: &Obarray) -> TextQuotingStyle {
+    let var = obarray
+        .symbol_value("text-quoting-style")
+        .copied()
+        .unwrap_or(Value::NIL);
+    if var.is_nil() {
+        return TextQuotingStyle::Curve;
+    }
+    TextQuotingStyle::from_symbol_value(var).unwrap_or(TextQuotingStyle::Curve)
+}
+
+/// Requote the grave accent (`` ` ``) and apostrophe (`'`) in a C-level error
+/// message according to STYLE, mirroring GNU `doprnt` (`src/doprnt.c:490-505`),
+/// which every `error()`/`verror()` message passes through:
+///   - `curve'    : `` ` `` -> ‘ (U+2018), `'` -> ’ (U+2019)
+///   - `straight' : `` ` `` -> `'`, `'` unchanged
+///   - `grave'    : unchanged
+pub(crate) fn requote_c_error_message(msg: &str, style: TextQuotingStyle) -> String {
+    match style {
+        TextQuotingStyle::Grave => msg.to_string(),
+        TextQuotingStyle::Straight => msg.replace('`', "'"),
+        TextQuotingStyle::Curve => {
+            let mut out = String::with_capacity(msg.len());
+            for ch in msg.chars() {
+                match ch {
+                    '`' => out.push('\u{2018}'),
+                    '\'' => out.push('\u{2019}'),
+                    other => out.push(other),
+                }
+            }
+            out
+        }
+    }
+}
+
 fn non_nil_symbol_id(value: &Value) -> Option<SymId> {
     if value.is_nil() {
         None

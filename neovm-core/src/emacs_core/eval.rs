@@ -4233,6 +4233,10 @@ impl Context {
 
         // Terminal/display variables (C-level DEFVAR in official Emacs)
         obarray.set_symbol_value("standard-display-table", Value::NIL);
+        // `glyph-table' is a DEFVAR_LISP in dispnew.c, default nil. It must be
+        // bound (and special) so `boundp'/`special-variable-p' agree with GNU.
+        obarray.set_symbol_value("glyph-table", Value::NIL);
+        obarray.make_special("glyph-table");
         obarray.set_symbol_value(
             "image-load-path",
             Value::list(vec![
