@@ -9,10 +9,10 @@ use crate::matrix_builder::{
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::frame_glyphs::{
-    FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
     WindowTransitionKind,
 };
-use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
+use neomacs_display_protocol::glyph_matrix::{CursorItem, ScrollBarItem};
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::{HashMap, HashSet};
 
@@ -68,6 +68,48 @@ impl From<FrameOutputIdentity> for MatrixFrameIdentityInstallRequest {
     }
 }
 
+pub(crate) struct FrameOutputRenderState<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+}
+
+impl<'a> FrameOutputRenderState<'a> {
+    pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    fn builder_mut(&mut self) -> &mut GlyphMatrixBuilder {
+        self.builder
+    }
+
+    fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+        self.builder.install_frame_state(request);
+    }
+
+    fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+        self.builder.install_frame_artifact(request);
+    }
+
+    fn window_infos(&self) -> &[WindowInfo] {
+        self.builder.window_infos()
+    }
+
+    fn transition_hints(&self) -> &[WindowTransitionHint] {
+        self.builder.transition_hints()
+    }
+
+    fn background_color(&self) -> Color {
+        *self.builder.background_color()
+    }
+
+    fn phys_cursor(&self) -> Option<&PhysCursor> {
+        self.builder.phys_cursor()
+    }
+
+    fn cursors(&self) -> &[CursorItem] {
+        self.builder.cursors()
+    }
+}
+
 pub(crate) struct FrameOutputStateRenderRequest<'a> {
     identity: Option<FrameOutputIdentity>,
     background_color: Color,
@@ -93,17 +135,22 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
         if let Some(identity) = self.identity {
-            builder.install_frame_state(MatrixFrameStateInstallRequest::Identity(identity.into()));
+            state.install_frame_state(MatrixFrameStateInstallRequest::Identity(identity.into()));
         }
-        builder.install_frame_state(MatrixFrameStateInstallRequest::BackgroundColor(
+        state.install_frame_state(MatrixFrameStateInstallRequest::BackgroundColor(
             self.background_color,
         ));
-        builder.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(
+        state.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(
             self.font_pixel_size,
         ));
-        insert_resolved_display_row_face(builder, 0, self.default_face, self.default_metrics);
+        insert_resolved_display_row_face(
+            state.builder_mut(),
+            0,
+            self.default_face,
+            self.default_metrics,
+        );
     }
 }
 
@@ -151,12 +198,12 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
         Self { params, metadata }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
-        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Background {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Background {
             bounds: self.params.bounds,
             color: Color::from_pixel(self.params.default_bg),
         });
-        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(WindowInfo {
+        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(WindowInfo {
             window_id: self.params.window_id,
             buffer_id: self.params.buffer_id,
             window_start: self.params.window_start,
@@ -191,27 +238,27 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
 
     pub(crate) fn render_latest_and_apply(
         self,
-        builder: &mut GlyphMatrixBuilder,
+        state: &mut FrameOutputRenderState<'_>,
         curr_window_infos: &mut HashMap<i64, WindowInfo>,
     ) {
-        let Some(curr) = builder.window_infos().last().cloned() else {
+        let Some(curr) = state.window_infos().last().cloned() else {
             return;
         };
-        self.record_transition_hint(builder, &curr);
-        self.record_effect_hints(builder, &curr);
+        self.record_transition_hint(state, &curr);
+        self.record_effect_hints(state, &curr);
         curr_window_infos.insert(curr.window_id, curr);
     }
 
-    fn record_transition_hint(&self, builder: &mut GlyphMatrixBuilder, curr: &WindowInfo) {
+    fn record_transition_hint(&self, state: &mut FrameOutputRenderState<'_>, curr: &WindowInfo) {
         let Some(prev) = self.prev_window_infos.get(&curr.window_id) else {
             return;
         };
         if let Some(hint) = FrameGlyphBuffer::derive_transition_hint(prev, curr) {
-            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(hint));
+            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(hint));
         }
     }
 
-    fn record_effect_hints(&self, builder: &mut GlyphMatrixBuilder, curr: &WindowInfo) {
+    fn record_effect_hints(&self, state: &mut FrameOutputRenderState<'_>, curr: &WindowInfo) {
         if curr.is_minibuffer {
             return;
         }
@@ -224,7 +271,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         }
 
         if prev.buffer_id != curr.buffer_id {
-            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
                 WindowEffectHint::TextFadeIn {
                     window_id: curr.window_id,
                     bounds: curr.bounds,
@@ -243,27 +290,27 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
             -1
         };
         let delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
-        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
             WindowEffectHint::TextFadeIn {
                 window_id: curr.window_id,
                 bounds: curr.bounds,
             },
         ));
-        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
             WindowEffectHint::ScrollLineSpacing {
                 window_id: curr.window_id,
                 bounds: curr.bounds,
                 direction,
             },
         ));
-        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
             WindowEffectHint::ScrollMomentum {
                 window_id: curr.window_id,
                 bounds: curr.bounds,
                 direction,
             },
         ));
-        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
             WindowEffectHint::ScrollVelocityFade {
                 window_id: curr.window_id,
                 bounds: curr.bounds,
@@ -289,7 +336,7 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
         for (window_id, curr) in self.curr_window_infos {
             if curr.is_minibuffer {
                 continue;
@@ -307,13 +354,13 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
                 continue;
             }
 
-            if let Some(edit_y) = find_window_cursor_y_in_builder(builder, curr) {
+            if let Some(edit_y) = find_window_cursor_y_in_state(state, curr) {
                 let offset = if curr.buffer_size > prev.buffer_size {
                     -curr.char_height
                 } else {
                     curr.char_height
                 };
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
                     WindowEffectHint::LineAnimation {
                         window_id: curr.window_id,
                         bounds: curr.bounds,
@@ -337,15 +384,15 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
-        let new_selected = builder
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+        let new_selected = state
             .window_infos()
             .iter()
             .find(|info| info.selected && !info.is_minibuffer)
             .map(|info| (info.window_id, info.bounds));
         if let Some((window_id, bounds)) = new_selected {
             if *self.prev_selected_window_id != 0 && *self.prev_selected_window_id != window_id {
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
                     WindowEffectHint::WindowSwitchFade { window_id, bounds },
                 ));
             }
@@ -373,14 +420,14 @@ impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
-        let bg = builder.background_color();
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
+        let bg = state.background_color();
         let new_bg = (bg.r, bg.g, bg.b, bg.a);
         if let Some(old_bg) = *self.prev_background
             && color_changed_for_theme_transition(old_bg, new_bg)
         {
-            let full_h = frame_content_height_before_minibuffer(builder, self.frame_height);
-            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
+            let full_h = frame_content_height_before_minibuffer(state, self.frame_height);
+            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
                 WindowEffectHint::ThemeTransition {
                     bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
                 },
@@ -412,7 +459,7 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
         if self.prev_window_infos.is_empty() {
             return;
         }
@@ -423,15 +470,15 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
         if prev_non_mini.is_empty()
             || curr_non_mini.is_empty()
             || prev_non_mini == curr_non_mini
-            || builder.transition_hints().iter().any(|hint| {
+            || state.transition_hints().iter().any(|hint| {
                 hint.window_id == 0 && matches!(hint.kind, WindowTransitionKind::Crossfade)
             })
         {
             return;
         }
 
-        let full_h = frame_content_height_before_minibuffer(builder, self.frame_height);
-        builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(
+        let full_h = frame_content_height_before_minibuffer(state, self.frame_height);
+        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(
             WindowTransitionHint {
                 window_id: 0,
                 bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
@@ -443,7 +490,10 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
     }
 }
 
-fn find_window_cursor_y_in_builder(builder: &GlyphMatrixBuilder, info: &WindowInfo) -> Option<f32> {
+fn find_window_cursor_y_in_state(
+    state: &FrameOutputRenderState<'_>,
+    info: &WindowInfo,
+) -> Option<f32> {
     let in_window = |x: f32, y: f32, hollow: bool| -> bool {
         !hollow
             && x >= info.bounds.x
@@ -451,12 +501,12 @@ fn find_window_cursor_y_in_builder(builder: &GlyphMatrixBuilder, info: &WindowIn
             && y >= info.bounds.y
             && y < info.bounds.y + info.bounds.height
     };
-    if let Some(phys) = builder.phys_cursor()
+    if let Some(phys) = state.phys_cursor()
         && in_window(phys.x, phys.y, phys.style.is_hollow())
     {
         return Some(phys.y);
     }
-    for cursor in builder.cursors() {
+    for cursor in state.cursors() {
         if in_window(cursor.x, cursor.y, cursor.style.is_hollow()) {
             return Some(cursor.y);
         }
@@ -473,8 +523,11 @@ fn color_changed_for_theme_transition(
         || (new_bg.2 - old_bg.2).abs() > 0.02
 }
 
-fn frame_content_height_before_minibuffer(builder: &GlyphMatrixBuilder, frame_height: f32) -> f32 {
-    builder
+fn frame_content_height_before_minibuffer(
+    state: &FrameOutputRenderState<'_>,
+    frame_height: f32,
+) -> f32 {
+    state
         .window_infos()
         .iter()
         .find(|w| w.is_minibuffer)
@@ -513,17 +566,17 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
 
     pub(crate) fn render_and_apply(
         self,
-        builder: &mut GlyphMatrixBuilder,
+        state: &mut FrameOutputRenderState<'_>,
         mut render_services: ChromeRowRenderServices<'_, '_>,
     ) {
-        WindowScrollBarsRenderRequest::new(self.params, self.info).render_and_apply(builder);
-        self.render_right_divider(builder, render_services.reborrow());
-        self.render_bottom_divider(builder);
+        WindowScrollBarsRenderRequest::new(self.params, self.info).render_and_apply(state);
+        self.render_right_divider(state, render_services.reborrow());
+        self.render_bottom_divider(state);
     }
 
     fn render_right_divider(
         &self,
-        builder: &mut GlyphMatrixBuilder,
+        state: &mut FrameOutputRenderState<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
         if self.params.is_minibuffer() || self.geometry.is_rightmost {
@@ -547,12 +600,12 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
                 WindowDividerOrientation::Vertical,
                 self.frame_params,
             )
-            .render_and_apply(builder);
+            .render_and_apply(state);
             return;
         }
 
         if self.frame_params.window_system {
-            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                 window_id: self.params.window_id,
                 x: self.geometry.right_edge - 1.0,
                 y: self.params.bounds.y,
@@ -562,11 +615,11 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
             });
         } else {
             BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
-                .install_and_apply(builder, render_services);
+                .install_and_apply(state.builder_mut(), render_services);
         }
     }
 
-    fn render_bottom_divider(&self, builder: &mut GlyphMatrixBuilder) {
+    fn render_bottom_divider(&self, state: &mut FrameOutputRenderState<'_>) {
         if self.params.is_minibuffer()
             || self.geometry.is_bottommost
             || self.frame_params.bottom_divider_width <= 0
@@ -590,7 +643,7 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
             WindowDividerOrientation::Horizontal,
             self.frame_params,
         )
-        .render_and_apply(builder);
+        .render_and_apply(state);
     }
 }
 
@@ -631,14 +684,14 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
         }
     }
 
-    fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+    fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
         if self.width <= 0.0 || self.height <= 0.0 {
             return;
         }
 
         let inner = Color::from_pixel(self.frame_params.divider_fg);
         if self.primary_size() < 3.0 {
-            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                 window_id: self.window_id,
                 x: self.x,
                 y: self.y,
@@ -653,7 +706,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
         let last = Color::from_pixel(self.frame_params.divider_last_fg);
         match self.orientation {
             WindowDividerOrientation::Vertical => {
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                     window_id: self.window_id,
                     x: self.x,
                     y: self.y,
@@ -661,7 +714,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                     height: self.height,
                     color: first,
                 });
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                     window_id: self.window_id,
                     x: self.x + 1.0,
                     y: self.y,
@@ -669,7 +722,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                     height: self.height,
                     color: inner,
                 });
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                     window_id: self.window_id,
                     x: self.x + self.width - 1.0,
                     y: self.y,
@@ -679,7 +732,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                 });
             }
             WindowDividerOrientation::Horizontal => {
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                     window_id: self.window_id,
                     x: self.x,
                     y: self.y,
@@ -687,7 +740,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                     height: 1.0,
                     color: first,
                 });
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                     window_id: self.window_id,
                     x: self.x,
                     y: self.y + 1.0,
@@ -695,7 +748,7 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
                     height: (self.height - 2.0).max(0.0),
                     color: inner,
                 });
-                builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
                     window_id: self.window_id,
                     x: self.x,
                     y: self.y + self.height - 1.0,
@@ -734,7 +787,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
         Self { params, info }
     }
 
-    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+    pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
         let chrome_top = self.params.header_line_height + self.params.tab_line_height;
@@ -764,7 +817,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 track_height,
             );
 
-            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
+            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
                 ScrollBarItem {
                     window_id: self.params.window_id,
                     row_role: GlyphRowRole::Text,
@@ -807,7 +860,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 0.0
             };
 
-            builder.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
+            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
                 ScrollBarItem {
                     window_id: self.params.window_id,
                     row_role: GlyphRowRole::Text,

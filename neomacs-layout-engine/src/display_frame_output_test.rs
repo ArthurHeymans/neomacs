@@ -132,7 +132,8 @@ fn window_frame_info_request_emits_background_and_window_info() {
     };
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
 
-    WindowFrameInfoRenderRequest::new(&params, metadata).render_and_apply(&mut builder);
+    WindowFrameInfoRenderRequest::new(&params, metadata)
+        .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.backgrounds.len(), 1);
@@ -159,8 +160,10 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
         crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(curr),
     );
 
-    WindowFrameInfoEffectsRenderRequest::new(&prev_infos)
-        .render_latest_and_apply(&mut builder, &mut curr_infos);
+    WindowFrameInfoEffectsRenderRequest::new(&prev_infos).render_latest_and_apply(
+        &mut FrameOutputRenderState::new(&mut builder),
+        &mut curr_infos,
+    );
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(curr_infos.len(), 1);
@@ -195,7 +198,7 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     });
 
     FrameLineAnimationHintsRenderRequest::new(&prev_infos, &curr_infos)
-        .render_and_apply(&mut builder);
+        .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.effect_hints.len(), 1);
@@ -220,7 +223,8 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
         crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
     );
 
-    FrameWindowSwitchHintRenderRequest::new(&mut prev_selected).render_and_apply(&mut builder);
+    FrameWindowSwitchHintRenderRequest::new(&mut prev_selected)
+        .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(prev_selected, 41);
@@ -253,7 +257,7 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     );
 
     FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
-        .render_and_apply(&mut builder);
+        .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(prev_background, Some((0.2, 0.0, 0.0, 1.0)));
@@ -276,7 +280,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
 
     FrameTopologyTransitionHintRenderRequest::new(&prev_infos, &curr_infos, 180.0, 140.0)
-        .render_and_apply(&mut builder);
+        .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.transition_hints.len(), 1);
@@ -301,7 +305,7 @@ fn window_divider_request_splits_wide_vertical_divider() {
         WindowDividerOrientation::Vertical,
         &frame,
     )
-    .render_and_apply(&mut builder);
+    .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.borders.len(), 3);
@@ -327,7 +331,8 @@ fn window_scroll_bars_request_emits_vertical_and_horizontal_items() {
     let info = window_info(&params);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
 
-    WindowScrollBarsRenderRequest::new(&params, &info).render_and_apply(&mut builder);
+    WindowScrollBarsRenderRequest::new(&params, &info)
+        .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.scroll_bars.len(), 2);
@@ -369,7 +374,8 @@ fn window_scroll_bars_request_skips_empty_vertical_track() {
     let info = window_info(&params);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
 
-    WindowScrollBarsRenderRequest::new(&params, &info).render_and_apply(&mut builder);
+    WindowScrollBarsRenderRequest::new(&params, &info)
+        .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert!(state.scroll_bars.is_empty());

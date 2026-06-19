@@ -44,11 +44,11 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
-    FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputStateRenderRequest,
-    FrameThemeTransitionHintRenderRequest, FrameTopologyTransitionHintRenderRequest,
-    FrameWindowSwitchHintRenderRequest, WindowFrameDecorationsRenderRequest,
-    WindowFrameGeometryRequest, WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest,
-    WindowFrameMetadata,
+    FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputRenderState,
+    FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
+    FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
+    WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
+    WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
@@ -452,7 +452,7 @@ impl LayoutEngine {
                 default_resolved,
                 default_metrics,
             )
-            .render_and_apply(&mut self.matrix_builder);
+            .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
 
             // Clear hit-test data for new frame
             self.hit_data.clear();
@@ -523,9 +523,12 @@ impl LayoutEngine {
                     }
                 };
                 WindowFrameInfoRenderRequest::new(params, metadata)
-                    .render_and_apply(&mut self.matrix_builder);
+                    .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
                 WindowFrameInfoEffectsRenderRequest::new(&self.prev_window_infos)
-                    .render_latest_and_apply(&mut self.matrix_builder, &mut curr_window_infos);
+                    .render_latest_and_apply(
+                        &mut FrameOutputRenderState::new(&mut self.matrix_builder),
+                        &mut curr_window_infos,
+                    );
 
                 // Simplified layout for this window (no face resolution, no overlays)
                 self.layout_window_rust(
@@ -555,7 +558,7 @@ impl LayoutEngine {
                         &info,
                     )
                     .render_and_apply(
-                        &mut self.matrix_builder,
+                        &mut FrameOutputRenderState::new(&mut self.matrix_builder),
                         ChromeRowRenderServices::new(
                             &mut self.font_metrics,
                             &face_resolver,
@@ -689,22 +692,22 @@ impl LayoutEngine {
             }
 
             FrameLineAnimationHintsRenderRequest::new(&self.prev_window_infos, &curr_window_infos)
-                .render_and_apply(&mut self.matrix_builder);
+                .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
             FrameWindowSwitchHintRenderRequest::new(&mut self.prev_selected_window_id)
-                .render_and_apply(&mut self.matrix_builder);
+                .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
             FrameThemeTransitionHintRenderRequest::new(
                 &mut self.prev_background,
                 frame_params.width,
                 frame_params.height,
             )
-            .render_and_apply(&mut self.matrix_builder);
+            .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
             FrameTopologyTransitionHintRenderRequest::new(
                 &self.prev_window_infos,
                 &curr_window_infos,
                 frame_params.width,
                 frame_params.height,
             )
-            .render_and_apply(&mut self.matrix_builder);
+            .render_and_apply(&mut FrameOutputRenderState::new(&mut self.matrix_builder));
 
             break (frame_params, curr_window_infos);
         };
