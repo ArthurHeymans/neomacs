@@ -25,6 +25,11 @@ use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
+use crate::display_row_output_install::{
+    DisplayOutputRowStoredMetrics, DisplayOutputTextRowMetricsInstallRequest,
+    begin_text_output_row, finalize_text_output_row, finish_text_output_row,
+    install_text_output_row_metrics,
+};
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
     text_window_right_edge_marker_decorations,
@@ -34,9 +39,7 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
-};
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -298,8 +301,7 @@ fn begin_display_text_row(
     output_builder: &mut DisplayOutputBuilder,
     begin: DisplayTextRowBegin,
 ) -> usize {
-    output_builder.begin_output_row(begin.display_row_index, GlyphRowRole::Text, false);
-    begin.display_row_index
+    begin_text_output_row(output_builder, begin.display_row_index)
 }
 
 fn finish_display_text_row(
@@ -307,12 +309,9 @@ fn finish_display_text_row(
     display_row_index: usize,
     metrics: DisplayTextRowMetrics,
 ) -> DisplayTextRowFinish {
-    let matrix_metrics = display_text_row_metrics(output_builder, metrics);
-    output_builder.set_output_row_metrics(
-        display_row_index,
-        matrix_metrics.pixel_y,
-        matrix_metrics.height_px,
-        matrix_metrics.ascent_px,
+    let matrix_metrics = install_text_output_row_metrics(
+        output_builder,
+        display_text_row_metrics_request(display_row_index, metrics),
     );
     DisplayTextRowFinish {
         display_row_index,
@@ -321,7 +320,7 @@ fn finish_display_text_row(
 }
 
 fn finalize_display_text_row(output_builder: &mut DisplayOutputBuilder, display_row_index: usize) {
-    output_builder.finalize_output_row_index(display_row_index);
+    finalize_text_output_row(output_builder, display_row_index);
 }
 
 pub(crate) fn begin_text_window_row(
@@ -359,9 +358,15 @@ pub(crate) fn finish_and_end_text_window_row(
     metrics: DisplayTextRowMetrics,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
-    let finish = finish_text_window_row(output_builder, output_emitter, metrics);
-    finalize_display_text_row(output_builder, display_row_index);
-    finish
+    let matrix_metrics = finish_text_output_row(
+        output_builder,
+        display_text_row_metrics_request(display_row_index, metrics),
+    );
+    output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
+    DisplayTextRowFinish {
+        display_row_index,
+        metrics: matrix_metrics,
+    }
 }
 
 pub(crate) fn transition_text_window_row(
@@ -481,33 +486,46 @@ pub(crate) fn restore_text_window_retry_checkpoint(
     ));
 }
 
-fn display_text_row_metrics(
-    output_builder: &DisplayOutputBuilder,
+fn install_display_text_row_metrics(
+    output_builder: &mut DisplayOutputBuilder,
+    display_row_index: usize,
     metrics: DisplayTextRowMetrics,
 ) -> DisplayTextRowStoredMetrics {
-    let window_y = output_builder.current_window_pixel_bounds().y;
-    DisplayTextRowStoredMetrics {
-        pixel_y: metrics.y - window_y,
-        height_px: metrics.height,
-        ascent_px: metrics.ascent,
-    }
+    install_text_output_row_metrics(
+        output_builder,
+        display_text_row_metrics_request(display_row_index, metrics),
+    )
+}
+
+fn display_text_row_metrics_request(
+    display_row_index: usize,
+    metrics: DisplayTextRowMetrics,
+) -> DisplayOutputTextRowMetricsInstallRequest {
+    DisplayOutputTextRowMetricsInstallRequest::new(
+        display_row_index,
+        metrics.y,
+        metrics.height,
+        metrics.ascent,
+    )
 }
 
 fn finish_output_rows(
     output_builder: &mut DisplayOutputBuilder,
     output_emitter: &WindowOutputEmitter,
 ) {
-    let window_y = output_builder.current_window_pixel_bounds().y;
     for metric in output_emitter.row_metrics() {
-        output_builder.set_output_row_metrics(
+        let _ = install_display_text_row_metrics(
+            output_builder,
             metric.display_row_index,
-            metric.pixel_y - window_y,
-            metric.height,
-            metric.ascent,
+            DisplayTextRowMetrics {
+                y: metric.pixel_y,
+                height: metric.height,
+                ascent: metric.ascent,
+            },
         );
     }
     if let Some(metric) = output_emitter.row_metrics().last() {
-        output_builder.finalize_output_row_index(metric.display_row_index);
+        finalize_display_text_row(output_builder, metric.display_row_index);
     }
 }
 
@@ -709,12 +727,7 @@ pub(crate) struct DisplayTextRowFinish {
     pub(crate) metrics: DisplayTextRowStoredMetrics,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayTextRowStoredMetrics {
-    pub(crate) pixel_y: f32,
-    pub(crate) height_px: f32,
-    pub(crate) ascent_px: f32,
-}
+pub(crate) type DisplayTextRowStoredMetrics = DisplayOutputRowStoredMetrics;
 
 impl TextWindowRedisplayPositions {
     pub(crate) fn from_output_rows(

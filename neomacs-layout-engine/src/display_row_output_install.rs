@@ -28,6 +28,21 @@ struct DisplayRowOutputInstall<'a> {
     ascent_px: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayOutputRowStoredMetrics {
+    pub(crate) pixel_y: f32,
+    pub(crate) height_px: f32,
+    pub(crate) ascent_px: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayOutputTextRowMetricsInstallRequest {
+    display_row_index: usize,
+    absolute_y: f32,
+    height_px: f32,
+    ascent_px: f32,
+}
+
 impl<'a> DisplayRowOutputInstall<'a> {
     fn from_row(display_row_index: usize, row: &'a GlyphRow) -> Self {
         Self {
@@ -68,6 +83,93 @@ impl<'a> DisplayRowOutputInstall<'a> {
         row.ascent_px = self.ascent_px;
         builder.install_complete_output_row(self.display_row_index, row.role, row.mode_line, row);
     }
+}
+
+impl DisplayOutputRowStoredMetrics {
+    fn from_absolute_window_y(
+        builder: &DisplayOutputBuilder,
+        request_y: f32,
+        height_px: f32,
+        ascent_px: f32,
+    ) -> Self {
+        let window_y = builder.current_window_pixel_bounds().y;
+        Self {
+            pixel_y: request_y - window_y,
+            height_px,
+            ascent_px,
+        }
+    }
+}
+
+impl DisplayOutputTextRowMetricsInstallRequest {
+    pub(crate) fn new(
+        display_row_index: usize,
+        absolute_y: f32,
+        height_px: f32,
+        ascent_px: f32,
+    ) -> Self {
+        Self {
+            display_row_index,
+            absolute_y,
+            height_px,
+            ascent_px,
+        }
+    }
+
+    pub(crate) fn display_row_index(self) -> usize {
+        self.display_row_index
+    }
+
+    fn stored_metrics(self, builder: &DisplayOutputBuilder) -> DisplayOutputRowStoredMetrics {
+        DisplayOutputRowStoredMetrics::from_absolute_window_y(
+            builder,
+            self.absolute_y,
+            self.height_px,
+            self.ascent_px,
+        )
+    }
+
+    fn install(self, builder: &mut DisplayOutputBuilder) -> DisplayOutputRowStoredMetrics {
+        let metrics = self.stored_metrics(builder);
+        builder.set_output_row_metrics(
+            self.display_row_index,
+            metrics.pixel_y,
+            metrics.height_px,
+            metrics.ascent_px,
+        );
+        metrics
+    }
+}
+
+pub(crate) fn begin_text_output_row(
+    builder: &mut DisplayOutputBuilder,
+    display_row_index: usize,
+) -> usize {
+    builder.begin_output_row(display_row_index, GlyphRowRole::Text, false);
+    display_row_index
+}
+
+pub(crate) fn install_text_output_row_metrics(
+    builder: &mut DisplayOutputBuilder,
+    request: DisplayOutputTextRowMetricsInstallRequest,
+) -> DisplayOutputRowStoredMetrics {
+    request.install(builder)
+}
+
+pub(crate) fn finish_text_output_row(
+    builder: &mut DisplayOutputBuilder,
+    request: DisplayOutputTextRowMetricsInstallRequest,
+) -> DisplayOutputRowStoredMetrics {
+    let metrics = install_text_output_row_metrics(builder, request);
+    builder.finalize_output_row_index(request.display_row_index());
+    metrics
+}
+
+pub(crate) fn finalize_text_output_row(
+    builder: &mut DisplayOutputBuilder,
+    display_row_index: usize,
+) {
+    builder.finalize_output_row_index(display_row_index);
 }
 
 pub(crate) fn install_display_row(
