@@ -526,7 +526,7 @@ struct BufferTextWindowInitialFaceStateRequest<'a> {
     fallback_metrics: DisplayRowFallbackMetrics,
 }
 
-pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
+struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     append_state: &'emit mut BufferTextRowAppendState,
     text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
@@ -551,7 +551,7 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
-pub(crate) struct BufferTextSourceItemStepRenderRequest<'a> {
+struct BufferTextSourceItemStepRenderRequest<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     source_step: BufferTextSourceItemStep,
     text: &'a [u8],
@@ -560,7 +560,7 @@ pub(crate) struct BufferTextSourceItemStepRenderRequest<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferTextWindowLoopStepOutcome {
+enum BufferTextWindowLoopStepOutcome {
     ContinueBufferWalk,
     StopBufferWalk,
 }
@@ -2661,7 +2661,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         }
     }
 
-    pub(crate) fn hscroll_should_skip(&self) -> bool {
+    fn hscroll_should_skip(&self) -> bool {
         self.hscroll_skip.should_skip()
     }
 
@@ -2805,7 +2805,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         BufferTextWindowPreSourceOutcome::ReadyForSourceItem
     }
 
-    pub(crate) fn render_source_item_step_for_context<'request, B: LayoutBufferView>(
+    fn render_source_item_step_for_context<'request, B: LayoutBufferView>(
         &mut self,
         request: BufferTextSourceItemStepRenderRequest<'request>,
         buffer: &B,
@@ -2862,7 +2862,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         BufferTextWindowLoopStepOutcome::ContinueBufferWalk
     }
 
-    pub(crate) fn render_replacement_source_item_for_context<'request, B: LayoutBufferView>(
+    fn render_replacement_source_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
         replacement: BufferTextReplacementItem,
         item_stepper: &mut BufferTextSourceItemStepper,
@@ -3011,7 +3011,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         source_item
     }
 
-    pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
+    fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
         &mut self,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
@@ -3030,7 +3030,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         self.render_invisible_text_at_checkpoint(request, buffer)
     }
 
-    pub(crate) fn render_hscroll_skip_for_context<'request>(
+    fn render_hscroll_skip_for_context<'request>(
         &mut self,
         text: &'request [u8],
         active_face_state: &'request DisplayRowActiveFaceState,
@@ -3044,7 +3044,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         self.render_hscroll_skip(request)
     }
 
-    pub(crate) fn render_face_checkpoint_for_context<B: LayoutBufferView>(
+    fn render_face_checkpoint_for_context<B: LayoutBufferView>(
         &mut self,
         face_resolution_context: BufferCurrentFaceResolutionContext<'_, B>,
         active_face_state: &mut DisplayRowActiveFaceState,
@@ -3062,7 +3062,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         );
     }
 
-    pub(crate) fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
+    fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
         &mut self,
         buffer: &'request B,
     ) -> BufferDisplayPropertyTextWalkOutcome {
@@ -3072,7 +3072,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         self.render_display_property_checkpoint(request)
     }
 
-    pub(crate) fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
+    fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
         &mut self,
         source_step_char: BufferTextSourceStepChar,
         text: &'request [u8],
@@ -3111,7 +3111,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         self.render_line_break(request, buffer)
     }
 
-    pub(crate) fn render_source_char_for_context<'request, B: LayoutBufferView>(
+    fn render_source_char_for_context<'request, B: LayoutBufferView>(
         &mut self,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_char: BufferTextSourceStepChar,
