@@ -16,6 +16,9 @@ use crate::display_item::{
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_output_builder::{
+    OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
+};
 use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
@@ -33,7 +36,6 @@ use crate::display_row_special_glyphs::{
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
-use crate::display_window_output_install::{WindowOutputInstallSurface, WindowOutputReadSurface};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -265,13 +267,24 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     }
 
     pub(crate) fn begin_text_window_output(&mut self, request: TextWindowOutputBegin) {
-        WindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .begin_text_window_output(request);
+        self.output_builder.begin_output_window(
+            request.window_id,
+            request.rows,
+            request.cols,
+            request.bounds,
+            request.text_bounds,
+            request.selected,
+        );
     }
 
     pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {
-        WindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .record_display_range(range);
+        self.output_builder.install_window_metadata(
+            OutputTextWindowDisplayRangeInstallRequest::new(
+                range.window_id as i64,
+                range.window_start.as_i64(),
+                range.window_end.as_i64(),
+            ),
+        );
     }
 
     fn record_redisplay_positions(
@@ -316,17 +329,22 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
-        WindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .close_text_window_output();
+        self.output_builder.end_output_window();
     }
 
     pub(crate) fn capture_retry_checkpoint(&self) -> TextWindowOutputRetryCheckpoint {
-        WindowOutputReadSurface::from_output_builder(self.output_builder).capture_retry_checkpoint()
+        TextWindowOutputRetryCheckpoint {
+            transition_hints_len: self.output_builder.transition_hints().len(),
+            effect_hints_len: self.output_builder.effect_hints().len(),
+        }
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        WindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .restore_retry_checkpoint(checkpoint);
+        self.output_builder
+            .install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
+                checkpoint.transition_hints_len,
+                checkpoint.effect_hints_len,
+            ));
     }
 
     fn display_text_row_metrics(
