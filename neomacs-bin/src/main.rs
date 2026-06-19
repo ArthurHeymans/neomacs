@@ -2339,6 +2339,13 @@ pub fn run(mode: RuntimeMode) {
     // the default 8 MB stack.
     increase_stack_limit();
 
+    // Initialize the C library locale from the environment (GNU emacs.c main()
+    // calls `setlocale (LC_ALL, "")` + `fixup_locale ()`). This makes
+    // locale-aware C-library facilities — notably `wcscoll`/`towlower` behind
+    // `string-collate-lessp`/`string-collate-equalp` — honor the user's
+    // collation locale instead of defaulting to the "C" (code-point) locale.
+    initialize_system_locale();
+
     // Make the editor immune to a child process suspending it via job control
     // (issue #132): children are spawned in their own process group
     // (callproc::new_child_command), and we ignore SIGTTOU so terminal output
@@ -3506,6 +3513,40 @@ fn install_job_control_signal_hygiene() {
 
 #[cfg(not(unix))]
 fn install_job_control_signal_hygiene() {}
+
+/// Initialize the C library locale from the environment, matching GNU Emacs's
+/// `emacs.c` main(): it calls `setlocale (LC_ALL, "")` (unless `LC_ALL` is the
+/// "C" locale) followed by `fixup_locale ()`, which forces `LC_NUMERIC` back to
+/// "C" so the Elisp reader/printer keep parsing numbers locale-independently.
+///
+/// Without this, the C library stays in its default "C" locale, so the
+/// `wcscoll`/`wcscoll_l` and `towlower`/`towlower_l` calls behind
+/// `string-collate-lessp`/`string-collate-equalp` collate by raw code point
+/// (e.g. "A" < "a", diacritics sorted after all ASCII) instead of honoring the
+/// user's collation locale (`en_US.UTF-8`, etc.), diverging from GNU.
+#[cfg(unix)]
+fn initialize_system_locale() {
+    // GNU skips the setlocale when LC_ALL=="C" (emacs.c:1646-1648); the C
+    // library is already in that locale, so the call is a no-op there.
+    let lc_all_is_c = std::env::var_os("LC_ALL")
+        .map(|v| v == *std::ffi::OsStr::new("C"))
+        .unwrap_or(false);
+    let empty = std::ffi::CString::new("").expect("empty CString");
+    let c_locale = std::ffi::CString::new("C").expect("\"C\" CString");
+    unsafe {
+        if !lc_all_is_c {
+            // setlocale (LC_ALL, "") — pick up the environment's locale.
+            libc::setlocale(libc::LC_ALL, empty.as_ptr());
+        }
+        // fixup_locale (): the Emacs Lisp reader needs LC_NUMERIC == "C" so
+        // numbers are read and printed with '.' as the decimal separator
+        // regardless of the user's locale (emacs.c:3192-3199).
+        libc::setlocale(libc::LC_NUMERIC, c_locale.as_ptr());
+    }
+}
+
+#[cfg(not(unix))]
+fn initialize_system_locale() {}
 
 #[cfg(test)]
 #[path = "main_test.rs"]
