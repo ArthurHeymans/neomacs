@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_row_output_install::{
-    DisplayRowCurrentRowSurface, install_display_row, install_measured_window_display_row,
+    DisplayRowCurrentRowOutput, install_display_row, install_measured_window_display_row,
 };
 use crate::display_row_source_render::TextRowSourceMeasureState;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
@@ -30,7 +30,7 @@ fn text_row_source_measure_state<'a>(
     face_resolver: &'a FaceResolver,
 ) -> TextRowSourceMeasureState<'a> {
     TextRowSourceMeasureState::from_current_row(
-        DisplayRowCurrentRowSurface::from_output_builder(builder),
+        DisplayRowCurrentRowOutput::from_output_builder(builder),
         evaluator,
         font_metrics,
         face_resolver,

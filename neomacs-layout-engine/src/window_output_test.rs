@@ -467,7 +467,7 @@ fn display_progress_sink_records_chrome_row_progress() {
 }
 
 #[test]
-fn text_matrix_row_output_surface_begins_row() {
+fn text_matrix_row_output_begins_row() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -476,7 +476,7 @@ fn text_matrix_row_output_surface_begins_row() {
         .id();
     let frame_id =
         eval.frame_manager_mut()
-            .create_frame("output-emitter-row-surface", 320, 120, buf_id);
+            .create_frame("output-emitter-row-output", 320, 120, buf_id);
     let window_id = eval
         .frame_manager()
         .get(frame_id)
@@ -524,7 +524,7 @@ fn text_matrix_row_output_surface_begins_row() {
 }
 
 #[test]
-fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
+fn text_matrix_row_output_finishes_with_matrix_metrics() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()

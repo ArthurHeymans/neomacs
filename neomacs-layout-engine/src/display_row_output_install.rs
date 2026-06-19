@@ -112,7 +112,7 @@ struct DisplayRowCurrentRowInstaller<'builder> {
     builder: &'builder mut DisplayOutputBuilder,
 }
 
-pub(crate) struct DisplayRowCurrentRowSurface<'builder> {
+pub(crate) struct DisplayRowCurrentRowOutput<'builder> {
     installer: DisplayRowCurrentRowInstaller<'builder>,
 }
 
@@ -170,7 +170,7 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
     }
 }
 
-impl<'builder> DisplayRowCurrentRowSurface<'builder> {
+impl<'builder> DisplayRowCurrentRowOutput<'builder> {
     fn from_installer(installer: DisplayRowCurrentRowInstaller<'builder>) -> Self {
         Self { installer }
     }
@@ -179,8 +179,8 @@ impl<'builder> DisplayRowCurrentRowSurface<'builder> {
         Self::from_installer(DisplayRowCurrentRowInstaller::new(builder))
     }
 
-    pub(crate) fn reborrow(&mut self) -> DisplayRowCurrentRowSurface<'_> {
-        DisplayRowCurrentRowSurface {
+    pub(crate) fn reborrow(&mut self) -> DisplayRowCurrentRowOutput<'_> {
+        DisplayRowCurrentRowOutput {
             installer: self.installer.reborrow(),
         }
     }
