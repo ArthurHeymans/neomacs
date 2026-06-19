@@ -253,160 +253,162 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
     pub(crate) hit_rows: &'a mut Vec<HitRow>,
 }
 
-pub(crate) struct TextWindowOutputInstallSurface<'output_builder> {
-    output_builder: &'output_builder mut DisplayOutputBuilder,
+pub(crate) fn begin_text_window_output(
+    output_builder: &mut DisplayOutputBuilder,
+    request: TextWindowOutputBegin,
+) {
+    output_builder.begin_output_window(
+        request.window_id,
+        request.rows,
+        request.cols,
+        request.bounds,
+        request.text_bounds,
+        request.selected,
+    );
 }
 
-impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
-    pub(crate) fn from_output_builder(
-        output_builder: &'output_builder mut DisplayOutputBuilder,
-    ) -> Self {
-        Self { output_builder }
-    }
+pub(crate) fn record_text_window_display_range(
+    output_builder: &mut DisplayOutputBuilder,
+    range: TextWindowDisplayRange,
+) {
+    output_builder.install_window_metadata(OutputTextWindowDisplayRangeInstallRequest::new(
+        range.window_id as i64,
+        range.window_start.as_i64(),
+        range.window_end.as_i64(),
+    ));
+}
 
-    pub(crate) fn begin_text_window_output(&mut self, request: TextWindowOutputBegin) {
-        self.output_builder.begin_output_window(
-            request.window_id,
-            request.rows,
-            request.cols,
-            request.bounds,
-            request.text_bounds,
-            request.selected,
+fn record_text_window_redisplay_positions(
+    output_builder: &mut DisplayOutputBuilder,
+    window_id: u64,
+    positions: TextWindowRedisplayPositions,
+) {
+    record_text_window_display_range(output_builder, positions.display_range(window_id));
+}
+
+fn install_text_window_row_decoration(
+    output_builder: &mut DisplayOutputBuilder,
+    request: TextWindowRowDecorationRequest,
+) {
+    request.install(output_builder);
+}
+
+fn begin_display_text_row(
+    output_builder: &mut DisplayOutputBuilder,
+    begin: DisplayTextRowBegin,
+) -> usize {
+    output_builder.begin_output_row(begin.display_row_index, GlyphRowRole::Text, false);
+    begin.display_row_index
+}
+
+fn finish_display_text_row(
+    output_builder: &mut DisplayOutputBuilder,
+    display_row_index: usize,
+    metrics: DisplayTextRowMetrics,
+) -> DisplayTextRowFinish {
+    let matrix_metrics = display_text_row_metrics(output_builder, metrics);
+    output_builder.set_output_row_metrics(
+        display_row_index,
+        matrix_metrics.pixel_y,
+        matrix_metrics.height_px,
+        matrix_metrics.ascent_px,
+    );
+    DisplayTextRowFinish {
+        display_row_index,
+        metrics: matrix_metrics,
+    }
+}
+
+fn finalize_display_text_row(output_builder: &mut DisplayOutputBuilder, display_row_index: usize) {
+    output_builder.finalize_output_row_index(display_row_index);
+}
+
+pub(crate) fn close_text_window_output(output_builder: &mut DisplayOutputBuilder) {
+    output_builder.end_output_window();
+}
+
+pub(crate) fn capture_text_window_retry_checkpoint(
+    output_builder: &DisplayOutputBuilder,
+) -> TextWindowOutputRetryCheckpoint {
+    TextWindowOutputRetryCheckpoint {
+        transition_hints_len: output_builder.transition_hints().len(),
+        effect_hints_len: output_builder.effect_hints().len(),
+    }
+}
+
+pub(crate) fn restore_text_window_retry_checkpoint(
+    output_builder: &mut DisplayOutputBuilder,
+    checkpoint: TextWindowOutputRetryCheckpoint,
+) {
+    output_builder.install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
+        checkpoint.transition_hints_len,
+        checkpoint.effect_hints_len,
+    ));
+}
+
+fn display_text_row_metrics(
+    output_builder: &DisplayOutputBuilder,
+    metrics: DisplayTextRowMetrics,
+) -> DisplayTextRowStoredMetrics {
+    let window_y = output_builder.current_window_pixel_bounds().y;
+    DisplayTextRowStoredMetrics {
+        pixel_y: metrics.y - window_y,
+        height_px: metrics.height,
+        ascent_px: metrics.ascent,
+    }
+}
+
+fn finish_output_rows(
+    output_builder: &mut DisplayOutputBuilder,
+    output_emitter: &WindowOutputEmitter,
+) {
+    let window_y = output_builder.current_window_pixel_bounds().y;
+    for metric in output_emitter.row_metrics() {
+        output_builder.set_output_row_metrics(
+            metric.display_row_index,
+            metric.pixel_y - window_y,
+            metric.height,
+            metric.ascent,
         );
     }
-
-    pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {
-        self.output_builder.install_window_metadata(
-            OutputTextWindowDisplayRangeInstallRequest::new(
-                range.window_id as i64,
-                range.window_start.as_i64(),
-                range.window_end.as_i64(),
-            ),
-        );
+    if let Some(metric) = output_emitter.row_metrics().last() {
+        output_builder.finalize_output_row_index(metric.display_row_index);
     }
+}
 
-    fn record_redisplay_positions(
-        &mut self,
-        window_id: u64,
-        positions: TextWindowRedisplayPositions,
-    ) {
-        self.record_display_range(positions.display_range(window_id));
-    }
-
-    pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        request.install(self.output_builder);
-    }
-
-    fn begin_display_text_row(&mut self, begin: DisplayTextRowBegin) -> usize {
-        self.output_builder
-            .begin_output_row(begin.display_row_index, GlyphRowRole::Text, false);
-        begin.display_row_index
-    }
-
-    fn finish_display_text_row(
-        &mut self,
-        display_row_index: usize,
-        metrics: DisplayTextRowMetrics,
-    ) -> DisplayTextRowFinish {
-        let matrix_metrics = self.display_text_row_metrics(metrics);
-        self.output_builder.set_output_row_metrics(
-            display_row_index,
-            matrix_metrics.pixel_y,
-            matrix_metrics.height_px,
-            matrix_metrics.ascent_px,
-        );
-        DisplayTextRowFinish {
-            display_row_index,
-            metrics: matrix_metrics,
-        }
-    }
-
-    fn finalize_display_text_row(&mut self, display_row_index: usize) {
-        self.output_builder
-            .finalize_output_row_index(display_row_index);
-    }
-
-    pub(crate) fn close_text_window_output(&mut self) {
-        self.output_builder.end_output_window();
-    }
-
-    pub(crate) fn capture_retry_checkpoint(&self) -> TextWindowOutputRetryCheckpoint {
-        TextWindowOutputRetryCheckpoint {
-            transition_hints_len: self.output_builder.transition_hints().len(),
-            effect_hints_len: self.output_builder.effect_hints().len(),
-        }
-    }
-
-    pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        self.output_builder
-            .install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
-                checkpoint.transition_hints_len,
-                checkpoint.effect_hints_len,
-            ));
-    }
-
-    fn display_text_row_metrics(
-        &self,
-        metrics: DisplayTextRowMetrics,
-    ) -> DisplayTextRowStoredMetrics {
-        let window_y = self.output_builder.current_window_pixel_bounds().y;
-        DisplayTextRowStoredMetrics {
-            pixel_y: metrics.y - window_y,
-            height_px: metrics.height,
-            ascent_px: metrics.ascent,
-        }
-    }
-
-    fn finish_output_rows(&mut self, output_emitter: &WindowOutputEmitter) {
-        let window_y = self.output_builder.current_window_pixel_bounds().y;
-        for metric in output_emitter.row_metrics() {
-            self.output_builder.set_output_row_metrics(
-                metric.display_row_index,
-                metric.pixel_y - window_y,
-                metric.height,
-                metric.ascent,
-            );
-        }
-        if let Some(metric) = output_emitter.row_metrics().last() {
-            self.output_builder
-                .finalize_output_row_index(metric.display_row_index);
-        }
-    }
-
-    fn install_right_edge_markers(
-        &mut self,
-        mut render_services: ChromeRowRenderServices<'_, '_>,
-        request: TextWindowRightEdgeMarkers<'_>,
-    ) {
-        let base_face = render_services.face_resolver().default_face().clone();
-        for decoration in text_window_right_edge_marker_decorations(&request) {
-            self.output_builder.install_row_decoration(
-                crate::display_output_builder::OutputRowDecorationInstallRequest::current_window_row(
-                    decoration.display_row_index,
-                    RightEdgeMarkerRowDecorator::new(
-                        decoration,
-                        request.face_id,
-                        &base_face,
-                        request.char_width,
-                        &mut render_services,
-                    ),
+fn install_right_edge_markers(
+    output_builder: &mut DisplayOutputBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightEdgeMarkers<'_>,
+) {
+    let base_face = render_services.face_resolver().default_face().clone();
+    for decoration in text_window_right_edge_marker_decorations(&request) {
+        output_builder.install_row_decoration(
+            crate::display_output_builder::OutputRowDecorationInstallRequest::current_window_row(
+                decoration.display_row_index,
+                RightEdgeMarkerRowDecorator::new(
+                    decoration,
+                    request.face_id,
+                    &base_face,
+                    request.char_width,
+                    &mut render_services,
                 ),
-            );
-        }
-    }
-
-    fn install_last_window_right_border(
-        &mut self,
-        mut render_services: ChromeRowRenderServices<'_, '_>,
-        request: TextWindowRightBorder,
-        base_face: &ResolvedFace,
-    ) {
-        self.output_builder.install_row_decoration(
-            crate::display_output_builder::OutputRowDecorationInstallRequest::last_window_rows(
-                RightBorderRowsDecorator::new(request, base_face, &mut render_services),
             ),
         );
     }
+}
+
+fn install_last_window_right_border(
+    output_builder: &mut DisplayOutputBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightBorder,
+    base_face: &ResolvedFace,
+) {
+    output_builder.install_row_decoration(
+        crate::display_output_builder::OutputRowDecorationInstallRequest::last_window_rows(
+            RightBorderRowsDecorator::new(request, base_face, &mut render_services),
+        ),
+    );
 }
 
 pub(crate) struct TextWindowBodyOutputInstall<'a> {
@@ -651,8 +653,7 @@ impl<'a> TextWindowFinishOutputSurface<'a> {
         header_line_height: i64,
         tab_line_height: i64,
     ) -> WindowDisplaySnapshot {
-        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .close_text_window_output();
+        close_text_window_output(self.output_builder);
         self.output_emitter.finish_snapshot(
             self.evaluator,
             text_area_left_offset,
@@ -980,9 +981,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
         evaluator: &mut Context,
         begin: DisplayTextRowBegin,
     ) -> usize {
-        let display_row_index =
-            TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
-                .begin_display_text_row(begin);
+        let display_row_index = begin_display_text_row(self.output_builder, begin);
         self.output_emitter.begin_display_text_row(
             evaluator,
             begin.display_row_index,
@@ -999,8 +998,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
         let display_row_index = self.output_emitter.current_display_text_row_index();
-        let finish = TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .finish_display_text_row(display_row_index, metrics);
+        let finish = finish_display_text_row(self.output_builder, display_row_index, metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
         finish
@@ -1012,8 +1010,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     ) -> DisplayTextRowFinish {
         let display_row_index = self.output_emitter.current_display_text_row_index();
         let finish = self.finish_text_row(metrics);
-        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .finalize_display_text_row(display_row_index);
+        finalize_display_text_row(self.output_builder, display_row_index);
         finish
     }
 
@@ -1041,8 +1038,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     }
 
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .install_row_decoration(request);
+        install_text_window_row_decoration(self.output_builder, request);
     }
 
     pub(crate) fn publish_cursor(
@@ -1131,8 +1127,7 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
         request: TextWindowBegin,
     ) {
         let first_row = request.first_row;
-        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .begin_text_window_output(request.into());
+        begin_text_window_output(self.output_builder, request.into());
         self.begin_text_row(evaluator, first_row);
     }
 
@@ -1228,16 +1223,16 @@ impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
         let border_face_id = render_services.face_ids().allocate();
         self.output_builder
             .install_output_resolved_display_row_face(border_face_id, &border_face, None);
-        TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
-            .install_last_window_right_border(
-                render_services.reborrow(),
-                TextWindowRightBorder {
-                    ch: request.ch,
-                    face_id: border_face_id,
-                    char_width: request.char_width,
-                },
-                &border_face,
-            );
+        install_last_window_right_border(
+            self.output_builder,
+            render_services.reborrow(),
+            TextWindowRightBorder {
+                ch: request.ch,
+                face_id: border_face_id,
+                char_width: request.char_width,
+            },
+            &border_face,
+        );
         border_face_id
     }
 }
@@ -1331,7 +1326,7 @@ impl TextWindowCursorPublication {
 }
 
 struct TextWindowOutputInstaller<'output_builder, 'output> {
-    output_install: TextWindowOutputInstallSurface<'output_builder>,
+    output_builder: &'output_builder mut DisplayOutputBuilder,
     output_emitter: &'output WindowOutputEmitter,
 }
 
@@ -1341,13 +1336,13 @@ impl<'output_builder, 'output> TextWindowOutputInstaller<'output_builder, 'outpu
         output_emitter: &'output WindowOutputEmitter,
     ) -> Self {
         Self {
-            output_install: TextWindowOutputInstallSurface::from_output_builder(output_builder),
+            output_builder,
             output_emitter,
         }
     }
 
     fn install_finished_rows(&mut self) {
-        self.output_install.finish_output_rows(self.output_emitter);
+        finish_output_rows(self.output_builder, self.output_emitter);
     }
 
     fn install_body_output(
@@ -1361,14 +1356,16 @@ impl<'output_builder, 'output> TextWindowOutputInstaller<'output_builder, 'outpu
             request.text_start_byte,
             request.byte_idx,
         );
-        self.output_install
-            .record_redisplay_positions(request.window_id, redisplay_positions);
+        record_text_window_redisplay_positions(
+            self.output_builder,
+            request.window_id,
+            redisplay_positions,
+        );
         self.install_finished_rows();
         if let Some(markers) = request.right_edge_markers {
             let render_services =
                 render_services.expect("right-edge markers require chrome render services");
-            self.output_install
-                .install_right_edge_markers(render_services, markers);
+            install_right_edge_markers(self.output_builder, render_services, markers);
         }
         redisplay_positions
     }

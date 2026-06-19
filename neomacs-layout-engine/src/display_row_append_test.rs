@@ -6836,8 +6836,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             height: 17.0,
             ascent: 12.0,
         });
-    crate::window_output::TextWindowOutputInstallSurface::from_output_builder(&mut builder)
-        .close_text_window_output();
+    crate::window_output::close_text_window_output(&mut builder);
 
     let state = builder.finish(8, 4, 8.0, 16.0);
     assert_eq!(state.window_matrices.len(), 1);

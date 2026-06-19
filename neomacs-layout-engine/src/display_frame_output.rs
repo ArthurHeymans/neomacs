@@ -8,8 +8,8 @@ use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::{
     TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface, TextWindowFinishOutputSurface,
-    TextWindowLiveOutputSurface, TextWindowOutputInstallSurface, TextWindowOutputRetryCheckpoint,
-    WindowOutputEmitter,
+    TextWindowLiveOutputSurface, TextWindowOutputRetryCheckpoint, WindowOutputEmitter,
+    capture_text_window_retry_checkpoint, restore_text_window_retry_checkpoint,
 };
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -255,12 +255,11 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
     }
 
     pub(crate) fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
-        TextWindowOutputInstallSurface::from_output_builder(self.builder).capture_retry_checkpoint()
+        capture_text_window_retry_checkpoint(self.builder)
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        TextWindowOutputInstallSurface::from_output_builder(self.builder)
-            .restore_retry_checkpoint(checkpoint);
+        restore_text_window_retry_checkpoint(self.builder, checkpoint);
     }
 
     pub(crate) fn artifact_surface(&mut self) -> TextWindowArtifactOutputSurface<'_> {
