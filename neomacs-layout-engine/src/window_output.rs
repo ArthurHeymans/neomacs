@@ -30,10 +30,7 @@ use crate::display_row_special_glyphs::{
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
-use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest,
-    MatrixLastWindowRowsDecorationRequest,
-};
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
@@ -1223,7 +1220,7 @@ fn finish_text_window_output_rows(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &WindowOutputEmitter,
 ) {
-    let window_y = builder.current_window_row_install_context().pixel_bounds.y;
+    let window_y = builder.current_window_pixel_bounds().y;
     for metric in output_emitter.row_metrics() {
         builder.row_installer().set_metrics(
             metric.matrix_row,
@@ -1241,7 +1238,7 @@ fn text_matrix_row_metrics_request(
     builder: &GlyphMatrixBuilder,
     metrics: TextMatrixRowMetrics,
 ) -> TextMatrixRowStoredMetrics {
-    let window_y = builder.current_window_row_install_context().pixel_bounds.y;
+    let window_y = builder.current_window_pixel_bounds().y;
     TextMatrixRowStoredMetrics {
         pixel_y: metrics.y - window_y,
         height_px: metrics.height,
@@ -1302,7 +1299,7 @@ fn install_right_edge_markers_from_source_requests(
 ) {
     let base_face = render_services.face_resolver().default_face().clone();
     for decoration in text_window_right_edge_marker_decorations(&request) {
-        builder.decorate_current_window_row(MatrixCurrentWindowRowDecorationRequest::new(
+        builder.decorate_current_window_row(
             decoration.matrix_row,
             RightEdgeMarkerRowDecorator::new(
                 decoration,
@@ -1311,7 +1308,7 @@ fn install_right_edge_markers_from_source_requests(
                 request.char_width,
                 &mut render_services,
             ),
-        ));
+        );
     }
 }
 
@@ -1321,8 +1318,10 @@ fn install_last_window_right_border_from_source_requests(
     request: TextWindowRightBorder,
     base_face: &ResolvedFace,
 ) {
-    builder.decorate_last_window_rows(MatrixLastWindowRowsDecorationRequest::new(
-        RightBorderRowsDecorator::new(request, base_face, &mut render_services),
+    builder.decorate_last_window_rows(RightBorderRowsDecorator::new(
+        request,
+        base_face,
+        &mut render_services,
     ));
 }
 

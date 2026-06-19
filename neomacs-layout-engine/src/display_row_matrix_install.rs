@@ -11,9 +11,7 @@ use crate::display_row_builder::{
     DisplayRowPosition, display_row_text_is_empty, merge_display_row_source_slot_bounds,
 };
 use crate::font_metrics::FontMetrics;
-use crate::matrix_builder::{
-    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, ResolvedMatrixMediaInstallTarget,
-};
+use crate::matrix_builder::{FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder};
 use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
@@ -29,7 +27,7 @@ pub(crate) fn install_mock_display_row_in_matrix_row(
     matrix_row: usize,
     row: &GlyphRow,
 ) {
-    MatrixDisplayRowInstallRequest::from_row(matrix_row, row).install(builder);
+    DisplayRowMatrixInstall::from_row(matrix_row, row).install(builder);
 }
 
 pub(crate) fn install_resolved_display_row_face(
@@ -45,7 +43,7 @@ pub(crate) fn install_resolved_display_row_face(
         .set_face(render_face.face_id, rendered);
 }
 
-struct MatrixDisplayRowInstallRequest<'a> {
+struct DisplayRowMatrixInstall<'a> {
     matrix_row: usize,
     row: &'a GlyphRow,
     source_slots: Option<&'a [crate::display_row_builder::DisplayRowGlyphSlot]>,
@@ -54,7 +52,7 @@ struct MatrixDisplayRowInstallRequest<'a> {
     ascent_px: f32,
 }
 
-impl<'a> MatrixDisplayRowInstallRequest<'a> {
+impl<'a> DisplayRowMatrixInstall<'a> {
     fn from_row(matrix_row: usize, row: &'a GlyphRow) -> Self {
         Self {
             matrix_row,
@@ -84,12 +82,12 @@ impl<'a> MatrixDisplayRowInstallRequest<'a> {
     }
 
     fn install(self, builder: &mut GlyphMatrixBuilder) {
-        let context = builder.current_window_row_install_context();
+        let pixel_bounds = builder.current_window_pixel_bounds();
         let mut row = self.row.clone();
         if let Some(source_slots) = self.source_slots {
             apply_display_row_source_slot_bounds(&mut row, source_slots);
         }
-        row.pixel_y = self.pixel_y - context.pixel_bounds.y;
+        row.pixel_y = self.pixel_y - pixel_bounds.y;
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;
         builder
@@ -152,10 +150,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             panic!("frame chrome rows must install through frame chrome rows");
         };
         debug_assert!(window_id > 0);
-        debug_assert_eq!(
-            builder.current_window_media_install_context().window_id,
-            window_id as i64
-        );
+        debug_assert_eq!(builder.current_window_id_i64(), window_id as i64);
         debug_assert!(matches!(
             kind,
             WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
@@ -169,7 +164,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             },
         )
         .install(builder);
-        MatrixDisplayRowInstallRequest::from_rendered(
+        DisplayRowMatrixInstall::from_rendered(
             matrix_row,
             &measured.rendered,
             measured.bounds,
@@ -323,19 +318,15 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
 
 impl RenderedDisplayRowMedia {
     fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
-        let context = builder.current_window_media_install_context();
+        let window_id = builder.current_window_id_i64();
+        let clip = builder.current_window_text_pixel_bounds();
         let row = matrix_row.min(u32::MAX as usize) as u32;
-        let target = ResolvedMatrixMediaInstallTarget {
-            window_id: context.window_id,
-            role,
-            clip: Some(context.text_pixel_bounds),
-            slot_id: DisplaySlotId {
-                window_id: context.window_id,
-                row,
-                col: self.col,
-            },
+        let slot_id = DisplaySlotId {
+            window_id,
+            row,
+            col: self.col,
         };
-        self.install_with_target(builder, target);
+        self.install_with_target(builder, window_id, role, Some(clip), slot_id);
     }
 
     fn install_window_row(
@@ -345,18 +336,13 @@ impl RenderedDisplayRowMedia {
         row: u32,
         clip: Rect,
     ) {
-        let context = builder.current_window_media_install_context();
-        let target = ResolvedMatrixMediaInstallTarget {
-            window_id: context.window_id,
-            role,
-            clip: Some(clip),
-            slot_id: DisplaySlotId {
-                window_id: context.window_id,
-                row,
-                col: self.col,
-            },
+        let window_id = builder.current_window_id_i64();
+        let slot_id = DisplaySlotId {
+            window_id,
+            row,
+            col: self.col,
         };
-        self.install_with_target(builder, target);
+        self.install_with_target(builder, window_id, role, Some(clip), slot_id);
     }
 
     fn install_frame_chrome(
@@ -366,28 +352,29 @@ impl RenderedDisplayRowMedia {
         row: u32,
         clip: Rect,
     ) {
-        let target = ResolvedMatrixMediaInstallTarget {
+        let slot_id = DisplaySlotId {
             window_id: FRAME_CHROME_WINDOW_ID,
-            role,
-            clip: Some(clip),
-            slot_id: DisplaySlotId {
-                window_id: FRAME_CHROME_WINDOW_ID,
-                row,
-                col: self.col,
-            },
+            row,
+            col: self.col,
         };
-        self.install_with_target(builder, target);
+        self.install_with_target(builder, FRAME_CHROME_WINDOW_ID, role, Some(clip), slot_id);
     }
 
     fn install_with_target(
         &self,
         builder: &mut GlyphMatrixBuilder,
-        target: ResolvedMatrixMediaInstallTarget,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
     ) {
         match self.kind {
             RenderedDisplayRowMediaKind::Image { image_id } => {
                 builder.artifact_installer().add_image_media(
-                    target,
+                    window_id,
+                    role,
+                    clip,
+                    slot_id,
                     image_id,
                     self.x,
                     self.y,
@@ -401,7 +388,10 @@ impl RenderedDisplayRowMedia {
                 autoplay,
             } => {
                 builder.artifact_installer().add_video_media(
-                    target,
+                    window_id,
+                    role,
+                    clip,
+                    slot_id,
                     video_id,
                     loop_count,
                     autoplay,
@@ -413,7 +403,10 @@ impl RenderedDisplayRowMedia {
             }
             RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
                 builder.artifact_installer().add_xwidget_media(
-                    target,
+                    window_id,
+                    role,
+                    clip,
+                    slot_id,
                     xwidget_id,
                     self.x,
                     self.y,

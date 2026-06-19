@@ -48,22 +48,11 @@ struct MatrixMediaInstallRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ResolvedMatrixMediaInstallTarget {
-    pub(crate) window_id: i64,
-    pub(crate) role: GlyphRowRole,
-    pub(crate) clip: Option<Rect>,
-    pub(crate) slot_id: DisplaySlotId,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MatrixCurrentWindowMediaInstallContext {
-    pub(crate) window_id: i64,
-    pub(crate) text_pixel_bounds: Rect,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MatrixCurrentWindowRowInstallContext {
-    pub(crate) pixel_bounds: Rect,
+struct ResolvedMatrixMediaInstallTarget {
+    window_id: i64,
+    role: GlyphRowRole,
+    clip: Option<Rect>,
+    slot_id: DisplaySlotId,
 }
 
 impl MatrixMediaInstallRequest {
@@ -367,27 +356,6 @@ pub(crate) trait MatrixRowDecorator {
     fn decorate_row(&mut self, row: &mut GlyphRow, matrix_cols: usize);
 }
 
-pub(crate) struct MatrixCurrentWindowRowDecorationRequest<D> {
-    pub(crate) row_idx: usize,
-    pub(crate) decorator: D,
-}
-
-impl<D> MatrixCurrentWindowRowDecorationRequest<D> {
-    pub(crate) fn new(row_idx: usize, decorator: D) -> Self {
-        Self { row_idx, decorator }
-    }
-}
-
-pub(crate) struct MatrixLastWindowRowsDecorationRequest<D> {
-    pub(crate) decorator: D,
-}
-
-impl<D> MatrixLastWindowRowsDecorationRequest<D> {
-    pub(crate) fn new(decorator: D) -> Self {
-        Self { decorator }
-    }
-}
-
 pub(crate) struct GlyphMatrixBuilder {
     windows: Vec<WindowMatrixEntry>,
     current_matrix: Option<GlyphMatrix>,
@@ -669,7 +637,10 @@ impl MatrixArtifactInstaller<'_> {
 
     fn add_media(
         &mut self,
-        target: ResolvedMatrixMediaInstallTarget,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
         kind: MatrixMediaInstallKind,
         x: f32,
         y: f32,
@@ -677,13 +648,26 @@ impl MatrixArtifactInstaller<'_> {
         height: f32,
     ) {
         self.install_media(MatrixMediaInstallRequest::new(
-            target, kind, x, y, width, height,
+            ResolvedMatrixMediaInstallTarget {
+                window_id,
+                role,
+                clip,
+                slot_id,
+            },
+            kind,
+            x,
+            y,
+            width,
+            height,
         ));
     }
 
     pub(crate) fn add_image_media(
         &mut self,
-        target: ResolvedMatrixMediaInstallTarget,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
         image_id: u32,
         x: f32,
         y: f32,
@@ -691,7 +675,10 @@ impl MatrixArtifactInstaller<'_> {
         height: f32,
     ) {
         self.add_media(
-            target,
+            window_id,
+            role,
+            clip,
+            slot_id,
             MatrixMediaInstallKind::Image { image_id },
             x,
             y,
@@ -702,7 +689,10 @@ impl MatrixArtifactInstaller<'_> {
 
     pub(crate) fn add_video_media(
         &mut self,
-        target: ResolvedMatrixMediaInstallTarget,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
         video_id: u32,
         loop_count: i32,
         autoplay: bool,
@@ -712,7 +702,10 @@ impl MatrixArtifactInstaller<'_> {
         height: f32,
     ) {
         self.add_media(
-            target,
+            window_id,
+            role,
+            clip,
+            slot_id,
             MatrixMediaInstallKind::Video {
                 video_id,
                 loop_count,
@@ -727,7 +720,10 @@ impl MatrixArtifactInstaller<'_> {
 
     pub(crate) fn add_xwidget_media(
         &mut self,
-        target: ResolvedMatrixMediaInstallTarget,
+        window_id: i64,
+        role: GlyphRowRole,
+        clip: Option<Rect>,
+        slot_id: DisplaySlotId,
         xwidget_id: u32,
         x: f32,
         y: f32,
@@ -735,7 +731,10 @@ impl MatrixArtifactInstaller<'_> {
         height: f32,
     ) {
         self.add_media(
-            target,
+            window_id,
+            role,
+            clip,
+            slot_id,
             MatrixMediaInstallKind::Xwidget { xwidget_id },
             x,
             y,
@@ -1002,9 +1001,9 @@ impl GlyphMatrixBuilder {
 
     #[cfg(test)]
     fn install_display_row(&mut self, row_index: usize, source: &GlyphRow) {
-        let context = self.current_window_row_install_context();
+        let pixel_bounds = self.current_window_pixel_bounds();
         let mut row = source.clone();
-        row.pixel_y -= context.pixel_bounds.y;
+        row.pixel_y -= pixel_bounds.y;
         self.row_installer()
             .install_complete_row(row_index, row.role, row.mode_line, row);
     }
@@ -1061,21 +1060,16 @@ impl GlyphMatrixBuilder {
         request.install(self);
     }
 
-    pub(crate) fn current_window_media_install_context(
-        &self,
-    ) -> MatrixCurrentWindowMediaInstallContext {
-        MatrixCurrentWindowMediaInstallContext {
-            window_id: self.current_window_id as i64,
-            text_pixel_bounds: self.current_text_pixel_bounds,
-        }
+    pub(crate) fn current_window_id_i64(&self) -> i64 {
+        self.current_window_id as i64
     }
 
-    pub(crate) fn current_window_row_install_context(
-        &self,
-    ) -> MatrixCurrentWindowRowInstallContext {
-        MatrixCurrentWindowRowInstallContext {
-            pixel_bounds: self.current_pixel_bounds,
-        }
+    pub(crate) fn current_window_pixel_bounds(&self) -> Rect {
+        self.current_pixel_bounds
+    }
+
+    pub(crate) fn current_window_text_pixel_bounds(&self) -> Rect {
+        self.current_text_pixel_bounds
     }
 
     pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
@@ -1176,25 +1170,21 @@ impl GlyphMatrixBuilder {
         self.phys_cursor.as_ref()
     }
 
-    pub(crate) fn decorate_current_window_row<D>(
-        &mut self,
-        mut request: MatrixCurrentWindowRowDecorationRequest<D>,
-    ) where
+    pub(crate) fn decorate_current_window_row<D>(&mut self, row_idx: usize, mut decorator: D)
+    where
         D: MatrixRowDecorator,
     {
         let Some(matrix) = self.current_matrix.as_mut() else {
             return;
         };
-        let Some(row) = matrix.rows.get_mut(request.row_idx) else {
+        let Some(row) = matrix.rows.get_mut(row_idx) else {
             return;
         };
-        request.decorator.decorate_row(row, matrix.ncols);
+        decorator.decorate_row(row, matrix.ncols);
     }
 
-    pub(crate) fn decorate_last_window_rows<D>(
-        &mut self,
-        mut request: MatrixLastWindowRowsDecorationRequest<D>,
-    ) where
+    pub(crate) fn decorate_last_window_rows<D>(&mut self, mut decorator: D)
+    where
         D: MatrixRowDecorator,
     {
         let Some(entry) = self.windows.last_mut() else {
@@ -1202,7 +1192,7 @@ impl GlyphMatrixBuilder {
         };
         let matrix_cols = entry.matrix.ncols;
         for row in &mut entry.matrix.rows {
-            request.decorator.decorate_row(row, matrix_cols);
+            decorator.decorate_row(row, matrix_cols);
         }
     }
 
