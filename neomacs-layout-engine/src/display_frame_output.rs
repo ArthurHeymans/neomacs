@@ -1,6 +1,6 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_row::MeasuredDisplayRow;
-use crate::display_row_matrix_install::DisplayRowInstaller;
+use crate::display_row_matrix_install::{DisplayRowFaceInstaller, DisplayRowInstaller};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -202,10 +202,11 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
         state.set_background_color(self.background_color);
         state.set_font_pixel_size(self.font_pixel_size);
-        state
-            .builder_mut()
-            .artifact_installer()
-            .set_resolved_display_row_face(0, self.default_face, self.default_metrics);
+        DisplayRowFaceInstaller::new(state.builder_mut()).install_resolved_face(
+            0,
+            self.default_face,
+            self.default_metrics,
+        );
     }
 }
 

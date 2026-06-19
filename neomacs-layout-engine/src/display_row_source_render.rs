@@ -17,8 +17,9 @@ use crate::display_row::{
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
-use crate::display_row_builder::merge_display_row_source_slot_bounds;
-use crate::display_row_matrix_install::RenderedDisplayRowAssetsInstall;
+use crate::display_row_matrix_install::{
+    DisplayRowCurrentRowInstaller, DisplayRowFaceInstaller, RenderedDisplayRowAssetsInstall,
+};
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
@@ -47,7 +48,7 @@ pub(crate) struct TextRowOutputRenderState<'a> {
 }
 
 struct DisplayRowCurrentRowSurface<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    installer: DisplayRowCurrentRowInstaller<'a>,
 }
 
 struct DisplayRowCurrentTextRenderState<'face, 'emit> {
@@ -91,27 +92,27 @@ pub(crate) fn current_display_row_cluster_tail(
 
 impl<'a> DisplayRowCurrentRowSurface<'a> {
     fn new(builder: &'a mut GlyphMatrixBuilder) -> Self {
-        Self { builder }
+        Self {
+            installer: DisplayRowCurrentRowInstaller::new(builder),
+        }
     }
 
     fn edit_current_row<R>(
         &mut self,
         f: impl FnOnce(&mut neomacs_display_protocol::glyph_matrix::GlyphRow) -> R,
     ) -> Option<R> {
-        self.builder.row_installer().edit_current_row(f)
+        self.installer.edit_current_row(f)
     }
 
     fn current_row_snapshot(&self) -> Option<neomacs_display_protocol::glyph_matrix::GlyphRow> {
-        self.builder.current_row_for_render().cloned()
+        self.installer.current_row_snapshot()
     }
 
     fn merge_source_slot_bounds(
         &mut self,
         slots: &[crate::display_row_builder::DisplayRowGlyphSlot],
     ) {
-        let _ = self.edit_current_row(|row| {
-            merge_display_row_source_slot_bounds(row, slots);
-        });
+        self.installer.merge_source_slot_bounds(slots);
     }
 
     fn render_source_step_with_policy<S, P>(
@@ -428,19 +429,15 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        self.builder
-            .artifact_installer()
-            .set_resolved_display_row_face(face_id, face, None);
+        DisplayRowFaceInstaller::new(self.builder).install_resolved_face(face_id, face, None);
     }
 
     fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
-        self.builder
-            .artifact_installer()
-            .set_resolved_display_row_face(
-                face.face_id(),
-                face.resolved_face(),
-                face.font_metrics(),
-            );
+        DisplayRowFaceInstaller::new(self.builder).install_resolved_face(
+            face.face_id(),
+            face.resolved_face(),
+            face.font_metrics(),
+        );
     }
 
     fn display_host(&self) -> Option<&dyn DisplayHost> {

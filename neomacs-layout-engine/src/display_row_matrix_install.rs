@@ -5,11 +5,12 @@ use crate::display_row::{
     RenderedDisplayRowMedia, RenderedDisplayRowMediaKind, WindowChromeKind,
 };
 use crate::display_row_builder::apply_display_row_source_slot_bounds;
+use crate::display_row_builder::{DisplayRowGlyphSlot, merge_display_row_source_slot_bounds};
 #[cfg(test)]
-use crate::display_row_builder::{
-    DisplayRowPosition, display_row_text_is_empty, merge_display_row_source_slot_bounds,
-};
+use crate::display_row_builder::{DisplayRowPosition, display_row_text_is_empty};
+use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::{FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder};
+use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::face::Face;
@@ -77,6 +78,14 @@ pub(crate) struct DisplayRowInstaller<'builder, 'rows> {
     frame_chrome_rows: Option<&'rows mut Vec<FrameChromeRow>>,
 }
 
+pub(crate) struct DisplayRowCurrentRowInstaller<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
+}
+
+pub(crate) struct DisplayRowFaceInstaller<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
+}
+
 impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
     pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self {
@@ -116,6 +125,77 @@ impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
                 .install(self.builder);
             }
         }
+    }
+}
+
+impl<'builder> DisplayRowFaceInstaller<'builder> {
+    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn install_face(&mut self, face: &Face) {
+        self.builder
+            .artifact_installer()
+            .set_face(face.id, face.clone());
+    }
+
+    pub(crate) fn install_resolved_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+    ) {
+        self.builder
+            .artifact_installer()
+            .set_resolved_display_row_face(face_id, face, metrics);
+    }
+}
+
+impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
+    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
+        self.builder.row_installer().edit_current_row(f)
+    }
+
+    pub(crate) fn current_row_snapshot(&self) -> Option<GlyphRow> {
+        self.builder.current_row_for_render().cloned()
+    }
+
+    pub(crate) fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
+        let _ = self.edit_current_row(|row| {
+            merge_display_row_source_slot_bounds(row, slots);
+        });
+    }
+
+    #[cfg(test)]
+    fn append_rendered_fragment(
+        &mut self,
+        rendered: &RenderedDisplayRow,
+    ) -> Option<DisplayRowPosition> {
+        let end = display_row_output_end_position(rendered.progress);
+        self.edit_current_row(|row| {
+            row.enabled = true;
+            row.role = rendered.row.role;
+            row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
+            row.displays_text |=
+                rendered.row.displays_text || !display_row_text_is_empty(&rendered.row);
+            row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()].extend(
+                rendered.row.glyphs
+                    [neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
+                .iter()
+                .cloned(),
+            );
+            row.height_px = row.height_px.max(rendered.row.height_px);
+            row.ascent_px = row
+                .ascent_px
+                .max(rendered.row.ascent_px)
+                .min(row.height_px.max(1.0));
+            merge_display_row_source_slot_bounds(row, &rendered.source_slots);
+        })?;
+        Some(end)
     }
 }
 
@@ -241,8 +321,11 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
     }
 
     pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
-        for face in self.faces {
-            builder.artifact_installer().set_face(face.id, face.clone());
+        {
+            let mut face_installer = DisplayRowFaceInstaller::new(builder);
+            for face in self.faces {
+                face_installer.install_face(face);
+            }
         }
         for media in self.media {
             match self.target {
@@ -266,31 +349,19 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     rendered: &RenderedDisplayRow,
     matrix_row: usize,
 ) -> DisplayRowPosition {
-    for face in &rendered.faces {
-        builder.artifact_installer().set_face(face.id, face.clone());
+    {
+        let mut face_installer = DisplayRowFaceInstaller::new(builder);
+        for face in &rendered.faces {
+            face_installer.install_face(face);
+        }
     }
-    let _ = builder.row_installer().edit_current_row(|row| {
-        row.enabled = true;
-        row.role = rendered.row.role;
-        row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
-        row.displays_text |=
-            rendered.row.displays_text || !display_row_text_is_empty(&rendered.row);
-        row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()].extend(
-            rendered.row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()]
-                .iter()
-                .cloned(),
-        );
-        row.height_px = row.height_px.max(rendered.row.height_px);
-        row.ascent_px = row
-            .ascent_px
-            .max(rendered.row.ascent_px)
-            .min(row.height_px.max(1.0));
-        merge_display_row_source_slot_bounds(row, &rendered.source_slots);
-    });
+    let end = DisplayRowCurrentRowInstaller::new(builder)
+        .append_rendered_fragment(rendered)
+        .expect("current row");
     for media in &rendered.media {
         media.install(builder, rendered.row.role, matrix_row);
     }
-    display_row_output_end_position(rendered.progress)
+    end
 }
 
 #[cfg(test)]
