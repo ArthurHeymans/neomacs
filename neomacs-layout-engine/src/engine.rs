@@ -19,8 +19,8 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{
-    TextWindowMatrixBegin, TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint,
-    begin_text_window_matrix, close_text_window_output,
+    TextWindowMatrixBegin, TextWindowMatrixOutputState, TextWindowOutputRenderState,
+    TextWindowOutputRetryCheckpoint,
 };
 use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
@@ -1633,8 +1633,7 @@ impl LayoutEngine {
         for window in &content.windows {
             let nrows = window.lines.len() + 1;
             let ncols = mock_frame_pixel_width_to_columns(window.pixel_bounds.width, char_w);
-            begin_text_window_matrix(
-                &mut builder,
+            TextWindowMatrixOutputState::new(&mut builder).begin_text_window_matrix(
                 TextWindowMatrixBegin {
                     window_id: window.window_id,
                     rows: nrows,
@@ -1685,7 +1684,7 @@ impl LayoutEngine {
             );
             FrameOutputRenderState::new(&mut builder).install_mock_display_row(mode_line_row, &row);
 
-            close_text_window_output(&mut builder);
+            TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
         }
 
         // Minibuffer at frame bottom — a real window with text rows
@@ -1695,8 +1694,7 @@ impl LayoutEngine {
             let has_mode_line = !mini.mode_line.glyphs.is_empty();
             let nrows = mini.lines.len() + usize::from(has_mode_line);
             let ncols = mock_frame_pixel_width_to_columns(mini.pixel_bounds.width, char_w);
-            begin_text_window_matrix(
-                &mut builder,
+            TextWindowMatrixOutputState::new(&mut builder).begin_text_window_matrix(
                 TextWindowMatrixBegin {
                     window_id: mini.window_id,
                     rows: nrows,
@@ -1749,7 +1747,7 @@ impl LayoutEngine {
                     .install_mock_display_row(mode_line_row, &row);
             }
 
-            close_text_window_output(&mut builder);
+            TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
         }
 
         let main_state = builder.finish(
@@ -1792,8 +1790,7 @@ impl LayoutEngine {
             );
             let nrows = cf.window.lines.len();
             let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
-            begin_text_window_matrix(
-                &mut cb,
+            TextWindowMatrixOutputState::new(&mut cb).begin_text_window_matrix(
                 TextWindowMatrixBegin {
                     window_id: cf.window.window_id,
                     rows: nrows,
@@ -1821,7 +1818,7 @@ impl LayoutEngine {
                 );
                 FrameOutputRenderState::new(&mut cb).install_mock_display_row(ri, &row);
             }
-            close_text_window_output(&mut cb);
+            TextWindowMatrixOutputState::new(&mut cb).close_text_window_output();
             let cs = cb.finish(
                 mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w),
                 cf.window.lines.len().max(1),

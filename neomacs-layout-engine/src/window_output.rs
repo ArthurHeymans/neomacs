@@ -251,6 +251,24 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
 
 pub(crate) struct TextWindowOutputInstall;
 
+pub(crate) struct TextWindowMatrixOutputState<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
+}
+
+impl<'builder> TextWindowMatrixOutputState<'builder> {
+    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn begin_text_window_matrix(&mut self, request: TextWindowMatrixBegin) {
+        begin_text_window_matrix(self.builder, request);
+    }
+
+    pub(crate) fn close_text_window_output(&mut self) {
+        close_text_window_matrix_output(self.builder);
+    }
+}
+
 pub(crate) struct TextWindowBodyOutputInstall<'a> {
     pub(crate) window_id: u64,
     pub(crate) window_start: i64,
@@ -641,10 +659,7 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
     }
 }
 
-pub(crate) fn begin_text_window_matrix(
-    builder: &mut GlyphMatrixBuilder,
-    request: TextWindowMatrixBegin,
-) {
+fn begin_text_window_matrix(builder: &mut GlyphMatrixBuilder, request: TextWindowMatrixBegin) {
     builder.install_window_lifecycle(MatrixWindowLifecycleRequest::Begin(
         MatrixWindowBeginRequest {
             window_id: request.window_id,
@@ -715,8 +730,13 @@ pub(crate) fn record_text_window_redisplay_positions(
     record_text_window_display_range(builder, positions.display_range(window_id));
 }
 
-pub(crate) fn close_text_window_output(builder: &mut GlyphMatrixBuilder) {
+fn close_text_window_matrix_output(builder: &mut GlyphMatrixBuilder) {
     builder.install_window_lifecycle(MatrixWindowLifecycleRequest::End);
+}
+
+#[cfg(test)]
+pub(crate) fn close_text_window_output(builder: &mut GlyphMatrixBuilder) {
+    close_text_window_matrix_output(builder);
 }
 
 #[cfg(test)]
@@ -1128,7 +1148,7 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
-        close_text_window_output(self.builder);
+        close_text_window_matrix_output(self.builder);
     }
 }
 

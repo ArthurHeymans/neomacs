@@ -12,7 +12,6 @@ use crate::display_row_walk_state::{
 };
 use crate::hit_test::HitRow;
 #[cfg(test)]
-#[cfg(test)]
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::window_output::{TextMatrixRowGeometryTransition, TextMatrixRowTransition};
 #[cfg(test)]
