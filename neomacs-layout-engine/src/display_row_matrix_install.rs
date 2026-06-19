@@ -1,3 +1,4 @@
+use crate::composition::last_text_cluster_tail_in_row;
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
@@ -78,8 +79,12 @@ pub(crate) struct DisplayRowInstaller<'builder, 'rows> {
     frame_chrome_rows: Option<&'rows mut Vec<FrameChromeRow>>,
 }
 
-pub(crate) struct DisplayRowCurrentRowInstaller<'builder> {
+struct DisplayRowCurrentRowInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
+}
+
+pub(crate) struct DisplayRowCurrentRowSurface<'builder> {
+    installer: DisplayRowCurrentRowInstaller<'builder>,
 }
 
 pub(crate) struct DisplayRowFaceInstaller<'builder> {
@@ -152,25 +157,25 @@ impl<'builder> DisplayRowFaceInstaller<'builder> {
 }
 
 impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
-    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+    fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 
-    pub(crate) fn reborrow(&mut self) -> DisplayRowCurrentRowInstaller<'_> {
+    fn reborrow(&mut self) -> DisplayRowCurrentRowInstaller<'_> {
         DisplayRowCurrentRowInstaller {
             builder: self.builder,
         }
     }
 
-    pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
+    fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
         self.builder.row_installer().edit_current_row(f)
     }
 
-    pub(crate) fn current_row_snapshot(&self) -> Option<GlyphRow> {
+    fn current_row_snapshot(&self) -> Option<GlyphRow> {
         self.builder.current_row_for_render().cloned()
     }
 
-    pub(crate) fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
+    fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
         let _ = self.edit_current_row(|row| {
             merge_display_row_source_slot_bounds(row, slots);
         });
@@ -202,6 +207,40 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
             merge_display_row_source_slot_bounds(row, &rendered.source_slots);
         })?;
         Some(end)
+    }
+}
+
+impl<'builder> DisplayRowCurrentRowSurface<'builder> {
+    fn from_installer(installer: DisplayRowCurrentRowInstaller<'builder>) -> Self {
+        Self { installer }
+    }
+
+    pub(crate) fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self::from_installer(DisplayRowCurrentRowInstaller::new(builder))
+    }
+
+    pub(crate) fn reborrow(&mut self) -> DisplayRowCurrentRowSurface<'_> {
+        DisplayRowCurrentRowSurface {
+            installer: self.installer.reborrow(),
+        }
+    }
+
+    pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
+        self.installer.edit_current_row(f)
+    }
+
+    pub(crate) fn current_row_snapshot(&self) -> Option<GlyphRow> {
+        self.installer.current_row_snapshot()
+    }
+
+    pub(crate) fn cluster_tail(&self) -> Option<(char, bool)> {
+        self.current_row_snapshot()
+            .as_ref()
+            .and_then(last_text_cluster_tail_in_row)
+    }
+
+    pub(crate) fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
+        self.installer.merge_source_slot_bounds(slots);
     }
 }
 

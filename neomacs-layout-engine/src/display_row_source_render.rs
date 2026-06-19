@@ -6,7 +6,6 @@
 //! helpers in `display_row_append.rs`, so that the append module does not
 //! need to own the render-state facade.
 
-use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
@@ -17,7 +16,7 @@ use crate::display_row::{
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
-use crate::display_row_matrix_install::DisplayRowCurrentRowInstaller;
+use crate::display_row_matrix_install::DisplayRowCurrentRowSurface;
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
@@ -42,10 +41,6 @@ use neovm_core::window::DisplayRowSnapshot;
 
 pub(crate) struct TextRowOutputRenderState<'a> {
     output: TextWindowLiveOutputState<'a>,
-}
-
-struct DisplayRowCurrentRowSurface<'a> {
-    installer: DisplayRowCurrentRowInstaller<'a>,
 }
 
 struct DisplayRowCurrentTextRenderState<'face, 'emit> {
@@ -79,41 +74,45 @@ struct DisplayRowCurrentTextSourceStepResult {
     row_ascent_px: f32,
 }
 
-impl<'a> DisplayRowCurrentRowSurface<'a> {
-    fn from_installer(installer: DisplayRowCurrentRowInstaller<'a>) -> Self {
-        Self { installer }
-    }
-
-    fn edit_current_row<R>(
+trait DisplayRowCurrentRowSourceSurfaceExt {
+    fn render_source_step_with_policy<S, P>(
         &mut self,
-        f: impl FnOnce(&mut neomacs_display_protocol::glyph_matrix::GlyphRow) -> R,
-    ) -> Option<R> {
-        self.installer.edit_current_row(f)
-    }
+        row_request: DisplayRowSourceRenderRequest<'_>,
+        renderer: &mut DisplayRowRenderer<'_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy;
 
-    fn reborrow(&mut self) -> DisplayRowCurrentRowSurface<'_> {
-        DisplayRowCurrentRowSurface {
-            installer: self.installer.reborrow(),
-        }
-    }
-
-    fn current_row_snapshot(&self) -> Option<neomacs_display_protocol::glyph_matrix::GlyphRow> {
-        self.installer.current_row_snapshot()
-    }
-
-    fn cluster_tail(&self) -> Option<(char, bool)> {
-        self.current_row_snapshot()
-            .as_ref()
-            .and_then(last_text_cluster_tail_in_row)
-    }
-
-    fn merge_source_slot_bounds(
+    fn measure_source_step_with_policy<S, P>(
         &mut self,
-        slots: &[crate::display_row_builder::DisplayRowGlyphSlot],
-    ) {
-        self.installer.merge_source_slot_bounds(slots);
-    }
+        row_request: DisplayRowSourceRenderRequest<'_>,
+        renderer: &mut DisplayRowRenderer<'_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        context: &mut DisplayRowRenderContext<'_, '_>,
+        render_policy: &mut P,
+    ) -> Option<(DisplayRowRenderIntoRowResult, f32, f32)>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy;
 
+    fn render_natural_source_fragment_step<S>(
+        &mut self,
+        request: DisplayRowSourceFragmentRenderRequest<'_>,
+        render_executor: &mut DisplayRowRenderExecutor<'_, '_, '_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+    ) -> Option<DisplayRowRenderIntoRowResult>
+    where
+        S: DisplayItemSource;
+}
+
+impl DisplayRowCurrentRowSourceSurfaceExt for DisplayRowCurrentRowSurface<'_> {
     fn render_source_step_with_policy<S, P>(
         &mut self,
         row_request: DisplayRowSourceRenderRequest<'_>,
@@ -461,7 +460,7 @@ impl<'a> TextRowOutputRenderState<'a> {
     ) -> TextRowSourceMeasureState<'emit> {
         let current_row = self.output.current_row_evaluator_state();
         TextRowSourceMeasureState {
-            row_surface: DisplayRowCurrentRowSurface::from_installer(current_row.row_installer),
+            row_surface: current_row.row_surface,
             evaluator: current_row.evaluator,
             font_metrics,
             face_resolver,
@@ -476,7 +475,7 @@ impl<'a> TextRowOutputRenderState<'a> {
     ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
         let current_row = self.output.current_row_evaluator_state();
         DisplayRowCurrentTextRenderState::new(
-            DisplayRowCurrentRowSurface::from_installer(current_row.row_installer),
+            current_row.row_surface,
             current_row.evaluator,
             font_metrics,
             face_resolver,
@@ -492,7 +491,7 @@ impl<'a> TextRowOutputRenderState<'a> {
     ) -> DisplayRowCurrentSourceFragmentRenderState<'emit, 'emit> {
         let current_row = self.output.current_row_host_state();
         DisplayRowCurrentSourceFragmentRenderState::new(
-            DisplayRowCurrentRowSurface::from_installer(current_row.row_installer),
+            current_row.row_surface,
             font_metrics,
             face_resolver,
             current_row.display_host,
@@ -819,9 +818,7 @@ impl<'a> TextRowSourceMeasureState<'a> {
         face_resolver: &'a FaceResolver,
     ) -> Self {
         Self {
-            row_surface: DisplayRowCurrentRowSurface::from_installer(
-                DisplayRowCurrentRowInstaller::new(builder),
-            ),
+            row_surface: DisplayRowCurrentRowSurface::from_builder(builder),
             evaluator,
             font_metrics,
             face_resolver,

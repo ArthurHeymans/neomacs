@@ -23,7 +23,7 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_matrix_install::{
-    DisplayRowCurrentRowInstaller, DisplayRowFaceInstaller, DisplayRowInstaller,
+    DisplayRowCurrentRowSurface, DisplayRowFaceInstaller, DisplayRowInstaller,
     RenderedDisplayRowAssetsInstall,
 };
 use crate::display_row_special_glyphs::{
@@ -465,12 +465,12 @@ pub(crate) struct TextMatrixRowOutput<'a> {
 }
 
 pub(crate) struct TextWindowLiveCurrentRowEvaluatorState<'a> {
-    pub(crate) row_installer: DisplayRowCurrentRowInstaller<'a>,
+    pub(crate) row_surface: DisplayRowCurrentRowSurface<'a>,
     pub(crate) evaluator: &'a mut Context,
 }
 
 pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
-    pub(crate) row_installer: DisplayRowCurrentRowInstaller<'a>,
+    pub(crate) row_surface: DisplayRowCurrentRowSurface<'a>,
     pub(crate) display_host: Option<&'a dyn DisplayHost>,
 }
 
@@ -649,14 +649,14 @@ impl<'a> TextWindowLiveOutputState<'a> {
         &mut self,
     ) -> TextWindowLiveCurrentRowEvaluatorState<'_> {
         TextWindowLiveCurrentRowEvaluatorState {
-            row_installer: DisplayRowCurrentRowInstaller::new(self.builder),
+            row_surface: DisplayRowCurrentRowSurface::from_builder(self.builder),
             evaluator: self.evaluator,
         }
     }
 
     pub(crate) fn current_row_host_state(&mut self) -> TextWindowLiveCurrentRowHostState<'_> {
         TextWindowLiveCurrentRowHostState {
-            row_installer: DisplayRowCurrentRowInstaller::new(self.builder),
+            row_surface: DisplayRowCurrentRowSurface::from_builder(self.builder),
             display_host: self.evaluator.display_host.as_deref(),
         }
     }
