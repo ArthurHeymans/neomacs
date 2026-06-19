@@ -15,9 +15,9 @@ use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
-    DisplayImageItem, DisplayItemKind, DisplayItemLayout, DisplayMediaReplacement,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayVideoItem, DisplayXwidgetItem,
-    GlyphlessMethod, RenderFaceRef,
+    DisplayImageItem, DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayMediaReplacement,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
+    DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
@@ -66,11 +66,11 @@ use crate::display_source::*;
 use crate::display_source::{
     BufferDisplayReplacementStringRequest, BufferTextSourceAdvanceRequest,
     BufferTextSourceSpecialDisplay, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementSourceItem, DisplayReplacementAppendItem, DisplayReplacementBox,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
-    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementSpaceAscentPolicy, DisplayReplacementSpaceHeightPolicy,
+    DisplayReplacementSpaceWidthPolicy, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem,
 };
 use crate::display_source_resolver::{
     DisplayPropertyReplacementAppendRequestResolver, DisplayPropertyReplacementSourceResolveRequest,
@@ -9663,7 +9663,11 @@ fn display_replacement_append_context_uses_face_fallback() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayReplacementAppendItem::Stretch(DisplayReplacementBox::new(13.0, 16.0, 12.0)),
+            DisplayItemKind::Stretch(DisplayStretch {
+                width: DisplayStretchWidth::Length(DisplayLength::Pixels(13.0)),
+                height: Some(DisplayLength::Pixels(16.0)),
+                ascent: Some(DisplayLength::Pixels(12.0)),
+            }),
             DisplayRowPosition { x_px: 0.0, col: 0 },
         )
         .expect("append progress");
@@ -10150,7 +10154,7 @@ fn display_replacement_append_context_installs_image_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayReplacementAppendItem::media(media_item.media()),
+            DisplayItemKind::MediaReplacement(media_item.media()),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");
@@ -10287,7 +10291,7 @@ fn display_replacement_append_context_installs_video_replacements() {
                 &mut font_metrics,
                 &face_resolver,
             ),
-            DisplayReplacementAppendItem::media(media_item.media()),
+            DisplayItemKind::MediaReplacement(media_item.media()),
             DisplayRowPosition { x_px: 16.0, col: 2 },
         )
         .expect("append progress");

@@ -25,9 +25,9 @@ use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::{
     BufferDisplayReplacementSource, BufferDisplayReplacementStringRequest,
     DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementAppendItem, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem,
 };
 use crate::display_source_resolver::DisplayStringBaseFace;
 use crate::font_metrics::FontMetricsService;
@@ -223,7 +223,7 @@ impl DisplayReplacementStringAppendRequest {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayReplacementItemAppendRequest {
-    item: DisplayReplacementAppendItem,
+    kind: DisplayItemKind,
     frame: DisplayReplacementItemAppendFrame,
     position: DisplayRowPosition,
 }
@@ -235,22 +235,22 @@ enum DisplayReplacementItemAppendFrame {
 }
 
 impl DisplayReplacementItemAppendRequest {
-    fn active_face(item: DisplayReplacementAppendItem, position: DisplayRowPosition) -> Self {
+    fn active_face(kind: DisplayItemKind, position: DisplayRowPosition) -> Self {
         Self {
-            item,
+            kind,
             frame: DisplayReplacementItemAppendFrame::ActiveFace,
             position,
         }
     }
 
     fn display_box(
-        item: DisplayReplacementAppendItem,
+        kind: DisplayItemKind,
         height_px: f32,
         ascent_px: f32,
         position: DisplayRowPosition,
     ) -> Self {
         Self {
-            item,
+            kind,
             frame: DisplayReplacementItemAppendFrame::DisplayBox {
                 height_px,
                 ascent_px,
@@ -266,10 +266,7 @@ impl DisplayReplacementStretchSourceItem {
         position: DisplayRowPosition,
     ) -> Option<DisplayReplacementItemAppendRequest> {
         (self.width_px() > 0.0).then(|| {
-            DisplayReplacementItemAppendRequest::active_face(
-                DisplayReplacementAppendItem::stretch(self.geometry()),
-                position,
-            )
+            DisplayReplacementItemAppendRequest::active_face(self.display_item_kind(), position)
         })
     }
 }
@@ -608,7 +605,7 @@ impl DisplayReplacementMediaSourceItem {
         position: DisplayRowPosition,
     ) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest::display_box(
-            DisplayReplacementAppendItem::media(self.media()),
+            DisplayItemKind::MediaReplacement(self.media()),
             self.display_height_px(),
             self.display_ascent_px(),
             position,
@@ -622,7 +619,9 @@ impl DisplayReplacementSourceMappedTextItem {
         position: DisplayRowPosition,
     ) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest::active_face(
-            DisplayReplacementAppendItem::source_mapped_text(self.into_text()),
+            DisplayItemKind::SourceMappedText(crate::display_item::DisplaySourceMappedText::new(
+                self.into_text(),
+            )),
             position,
         )
     }
@@ -734,7 +733,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         request: DisplayReplacementItemAppendRequest,
     ) -> Option<DisplayRowAppendProgress> {
         let DisplayReplacementItemAppendRequest {
-            item,
+            kind,
             frame,
             position,
         } = request;
@@ -752,7 +751,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
                 ascent_px,
             ),
         };
-        append_context.append_replacement_item_to_text_row_and_emit(state, item, position)
+        append_context.append_replacement_item_to_text_row_and_emit(state, kind, position)
     }
 }
 
@@ -782,10 +781,10 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     pub(crate) fn append_replacement_item_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
-        item: DisplayReplacementAppendItem,
+        kind: DisplayItemKind,
         position: DisplayRowPosition,
     ) -> Option<DisplayRowAppendProgress> {
-        let item = item.into_display_item(self.replacement_source, self.face_id);
+        let item = self.replacement_source.display_item(self.face_id, kind);
         DisplayRowSingleItemAppendContext::new(self.base_face, self.face_id, self.frame.clone())
             .render_item_naturally(
                 state,

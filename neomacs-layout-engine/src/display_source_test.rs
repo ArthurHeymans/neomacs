@@ -99,7 +99,14 @@ fn buffer_display_replacement_source_builds_items_without_appending() {
     let source =
         BufferDisplayReplacementSource::new(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12));
 
-    let stretch_item = source.stretch_item(42, DisplayReplacementBox::new(16.0, 9.0, 7.0));
+    let stretch_item = source.display_item(
+        42,
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(16.0)),
+            height: Some(DisplayLength::Pixels(9.0)),
+            ascent: Some(DisplayLength::Pixels(7.0)),
+        }),
+    );
     assert_eq!(stretch_item.face, RenderFaceRef::FaceId(42));
     assert!(matches!(
         stretch_item.kind,
@@ -110,7 +117,10 @@ fn buffer_display_replacement_source_builds_items_without_appending() {
         })
     ));
 
-    let text_item = source.source_mapped_text_item(43, "fallback");
+    let text_item = source.display_item(
+        43,
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("fallback")),
+    );
     assert_eq!(text_item.face, RenderFaceRef::FaceId(43));
     assert!(matches!(
         text_item.kind,
@@ -128,7 +138,10 @@ fn buffer_display_replacement_source_can_span_covered_buffer_text() {
         EmacsBytePos::new(18),
     );
 
-    let text_item = source.source_mapped_text_item(43, "fallback");
+    let text_item = source.display_item(
+        43,
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("fallback")),
+    );
 
     assert_eq!(
         text_item.span.start,

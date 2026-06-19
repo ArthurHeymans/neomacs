@@ -818,6 +818,10 @@ impl BufferDisplayReplacementSource {
         self.item_with_face(RenderFaceRef::FaceId(face_id), kind)
     }
 
+    pub(crate) fn display_item(self, face_id: u32, kind: DisplayItemKind) -> DisplayItem {
+        self.item(face_id, kind)
+    }
+
     fn item_with_face(self, face: RenderFaceRef, kind: DisplayItemKind) -> DisplayItem {
         DisplayItem::new(self.span(), face, kind)
     }
@@ -831,67 +835,6 @@ impl BufferDisplayReplacementSource {
         };
         self.item_with_face(item.face, kind)
             .with_layout(item.layout)
-    }
-
-    pub(crate) fn stretch_item(self, face_id: u32, geometry: DisplayReplacementBox) -> DisplayItem {
-        self.item(
-            face_id,
-            DisplayItemKind::Stretch(DisplayStretch {
-                width: DisplayStretchWidth::Length(DisplayLength::Pixels(geometry.width_px)),
-                height: Some(DisplayLength::Pixels(geometry.height_px)),
-                ascent: Some(DisplayLength::Pixels(geometry.ascent_px)),
-            }),
-        )
-    }
-
-    pub(crate) fn media_item(self, face_id: u32, media: DisplayMediaReplacement) -> DisplayItem {
-        self.item(face_id, DisplayItemKind::MediaReplacement(media))
-    }
-
-    pub(crate) fn source_mapped_text_item(
-        self,
-        face_id: u32,
-        text: impl Into<Box<str>>,
-    ) -> DisplayItem {
-        self.item(
-            face_id,
-            DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text)),
-        )
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum DisplayReplacementAppendItem {
-    Media(DisplayMediaReplacement),
-    Stretch(DisplayReplacementBox),
-    SourceMappedText(Box<str>),
-}
-
-impl DisplayReplacementAppendItem {
-    pub(crate) fn media(media: DisplayMediaReplacement) -> Self {
-        Self::Media(media)
-    }
-
-    pub(crate) fn stretch(geometry: DisplayReplacementBox) -> Self {
-        Self::Stretch(geometry)
-    }
-
-    pub(crate) fn source_mapped_text(text: impl Into<Box<str>>) -> Self {
-        Self::SourceMappedText(text.into())
-    }
-
-    pub(crate) fn into_display_item(
-        self,
-        replacement_source: BufferDisplayReplacementSource,
-        face_id: u32,
-    ) -> DisplayItem {
-        match self {
-            Self::Media(media) => replacement_source.media_item(face_id, media),
-            Self::Stretch(geometry) => replacement_source.stretch_item(face_id, geometry),
-            Self::SourceMappedText(text) => {
-                replacement_source.source_mapped_text_item(face_id, text)
-            }
-        }
     }
 }
 
@@ -1261,6 +1204,15 @@ impl DisplayReplacementStretchSourceItem {
 
     pub(crate) fn geometry(self) -> DisplayReplacementBox {
         self.geometry
+    }
+
+    pub(crate) fn display_item_kind(self) -> DisplayItemKind {
+        let geometry = self.geometry();
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(geometry.width_px)),
+            height: Some(DisplayLength::Pixels(geometry.height_px)),
+            ascent: Some(DisplayLength::Pixels(geometry.ascent_px)),
+        })
     }
 }
 
