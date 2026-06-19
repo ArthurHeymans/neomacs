@@ -772,13 +772,86 @@ fn shell_command_with_legacy_args(command: &Value, args: &[Value]) -> Result<Lis
     Ok(mapconcat_identity_lisp_strings(&parts, b" "))
 }
 
+/// Resolve the coding system used to encode the string arguments of a
+/// synchronous subprocess, mirroring GNU `callproc.c` `Fcall_process`
+/// (~lines 405-440):
+///   * if `coding-system-for-write` is bound and non-nil, use it;
+///   * else if no argument is multibyte, use `raw-text` (byte-faithful);
+///   * else fall back to the cdr of `default-process-coding-system`
+///     (GNU's `complement_process_encoding_system`, since
+///     `find-operation-coding-system` returns nil for `call-process`);
+///   * finally, if the resolved coding is NOT ASCII-compatible, downgrade to
+///     `raw-text` so we never feed a multibyte-shifting codec into argv.
+fn resolve_call_process_arg_coding(eval: &super::eval::Context, cmd_args: &[LispString]) -> String {
+    let raw_text = || "raw-text".to_string();
+
+    let for_write = eval.visible_variable_value_or_nil("coding-system-for-write");
+    let resolved = if let Some(sym) = for_write
+        .is_truthy()
+        .then(|| resolve_sym_value_name(&for_write))
+        .flatten()
+    {
+        sym
+    } else if !cmd_args.iter().any(|arg| arg.is_multibyte()) {
+        // No multibyte argument: GNU uses `raw-text`, leaving bytes untouched.
+        return raw_text();
+    } else {
+        // `complement_process_encoding_system (nil)` falls back to the cdr of
+        // `default-process-coding-system` (default `utf-8-unix`).
+        let default_cs = eval.visible_variable_value_or_nil("default-process-coding-system");
+        default_cs
+            .is_cons()
+            .then(|| resolve_sym_value_name(&default_cs.cons_cdr()))
+            .flatten()
+            .unwrap_or_else(|| "utf-8-unix".to_string())
+    };
+
+    if eval.coding_systems.is_ascii_compatible(&resolved) {
+        resolved
+    } else {
+        raw_text()
+    }
+}
+
+/// Extract the symbol name from a coding-system Lisp value (a symbol), or None
+/// if it is not a symbol we can name.
+fn resolve_sym_value_name(value: &Value) -> Option<String> {
+    match value.kind() {
+        ValueKind::Symbol(id) => Some(resolve_sym(id).to_owned()),
+        _ => None,
+    }
+}
+
+/// Encode each subprocess argument through the resolved write coding system,
+/// matching GNU `Fcall_process`'s per-argument `encode_coding_string` loop.
+/// The result is a unibyte `LispString` whose bytes are passed verbatim to
+/// `execvp`, so EOL conversion (e.g. `utf-8-dos` turning `\n` into `\r\n`) and
+/// charset encoding are honored.
+fn encode_call_process_args(
+    eval: &super::eval::Context,
+    cmd_args: &[LispString],
+) -> Vec<LispString> {
+    if cmd_args.is_empty() {
+        return Vec::new();
+    }
+    let coding = resolve_call_process_arg_coding(eval, cmd_args);
+    cmd_args
+        .iter()
+        .map(|arg| {
+            let bytes = crate::encoding::encode_lisp_string(arg, &coding);
+            LispString::from_unibyte(bytes)
+        })
+        .collect()
+}
+
 fn builtin_call_process_impl(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("call-process", &args, 1)?;
     let program = super::builtins::expect_lisp_string(&args[0])?.clone();
     let infile = parse_optional_infile(&args, 1)?;
     let destination = args.get(2).unwrap_or(&Value::NIL);
     let cmd_args = if args.len() > 4 {
-        super::process::parse_lisp_string_args_strict(&args[4..])?
+        let parsed = super::process::parse_lisp_string_args_strict(&args[4..])?;
+        encode_call_process_args(eval, &parsed)
     } else {
         Vec::new()
     };
@@ -799,6 +872,18 @@ fn builtin_call_process_region_impl(
     let subprocess_env = super::process::process_environment_entries(Some(
         eval.visible_variable_value_or_nil("process-environment"),
     ));
+
+    // Encode the trailing string ARGUMENTS through the write coding system
+    // before borrowing the buffers, exactly like the synchronous `call-process`
+    // path (GNU `Fcall_process_region` delegates argv encoding to
+    // `Fcall_process`).
+    let cmd_args = if args.len() > 6 {
+        let parsed = super::process::parse_lisp_string_args_strict(&args[6..])?;
+        encode_call_process_args(eval, &parsed)
+    } else {
+        Vec::new()
+    };
+
     let buffers = &mut eval.buffers;
 
     let delete = args.len() > 3 && args[3].is_truthy();
@@ -808,12 +893,6 @@ fn builtin_call_process_region_impl(
         &Value::NIL
     };
     let destination_spec = parse_call_process_destination(buffers, destination)?;
-
-    let cmd_args = if args.len() > 6 {
-        super::process::parse_lisp_string_args_strict(&args[6..])?
-    } else {
-        Vec::new()
-    };
 
     let region_text = match args[0].kind() {
         ValueKind::Nil => {

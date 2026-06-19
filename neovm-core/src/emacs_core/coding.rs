@@ -929,6 +929,21 @@ impl CodingSystemManager {
         is_known_or_derived_coding_system(self, name)
     }
 
+    /// Whether the named coding system is ASCII-compatible (GNU
+    /// `CODING_ATTR_ASCII_COMPAT`).  EOL variants share their base's value.
+    /// Unknown coding systems are treated as ASCII-compatible (the byte-faithful
+    /// default), matching how `call-process` only downgrades to `raw-text` when
+    /// it can prove the coding is not ASCII-compatible.
+    pub fn is_ascii_compatible(&self, name: &str) -> bool {
+        let resolved = self
+            .canonical_runtime_name(name)
+            .unwrap_or_else(|| name.to_string());
+        match runtime_bucket_name(self, &resolved).and_then(|bucket| self.get(&bucket)) {
+            Some(info) => compute_coding_ascii_compat(info),
+            None => true,
+        }
+    }
+
     /// Return the canonical runtime name for a coding system or alias.
     pub(crate) fn canonical_runtime_name(&self, name: &str) -> Option<String> {
         canonical_runtime_name(self, name)
