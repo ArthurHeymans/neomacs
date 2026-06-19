@@ -44,8 +44,8 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
-    FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputRenderState,
-    FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
+    FrameChromeOutputRenderState, FrameLineAnimationHintsRenderRequest, FrameOutputIdentity,
+    FrameOutputRenderState, FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
     FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
     WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
@@ -1490,6 +1490,10 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
+        let mut frame_chrome_output = FrameChromeOutputRenderState::new(
+            &mut self.matrix_builder,
+            &mut self.pending_frame_chrome_rows,
+        );
         let Some(rendered_tab_bar) = (FrameTabBarDisplayRowRequest {
             row_index,
             y: tab_bar_y,
@@ -1502,8 +1506,7 @@ impl LayoutEngine {
             text: tab_bar.text,
         })
         .render(&mut FrameTabBarDisplayRowRenderState::new(
-            &mut self.matrix_builder,
-            &mut self.pending_frame_chrome_rows,
+            &mut frame_chrome_output,
             ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
             evaluator.display_host.as_deref(),
         )) else {

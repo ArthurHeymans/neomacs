@@ -1,5 +1,7 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
-use crate::display_row::insert_resolved_display_row_face;
+use crate::display_row::{
+    DisplayRowInstaller, MeasuredDisplayRow, insert_resolved_display_row_face,
+};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::{
@@ -13,7 +15,7 @@ use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
     WindowTransitionKind,
 };
-use neomacs_display_protocol::glyph_matrix::{CursorItem, ScrollBarItem};
+use neomacs_display_protocol::glyph_matrix::{CursorItem, FrameChromeRow, ScrollBarItem};
 use neomacs_display_protocol::types::{Color, Rect};
 use std::collections::{HashMap, HashSet};
 
@@ -73,6 +75,11 @@ pub(crate) struct FrameOutputRenderState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
 }
 
+pub(crate) struct FrameChromeOutputRenderState<'builder, 'rows> {
+    builder: &'builder mut GlyphMatrixBuilder,
+    pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
+}
+
 impl<'a> FrameOutputRenderState<'a> {
     pub(crate) fn new(builder: &'a mut GlyphMatrixBuilder) -> Self {
         Self { builder }
@@ -108,6 +115,23 @@ impl<'a> FrameOutputRenderState<'a> {
 
     fn cursors(&self) -> &[CursorItem] {
         self.builder.cursors()
+    }
+}
+
+impl<'builder, 'rows> FrameChromeOutputRenderState<'builder, 'rows> {
+    pub(crate) fn new(
+        builder: &'builder mut GlyphMatrixBuilder,
+        pending_frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
+    ) -> Self {
+        Self {
+            builder,
+            pending_frame_chrome_rows,
+        }
+    }
+
+    pub(crate) fn install_measured_frame_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
+        DisplayRowInstaller::with_frame_chrome_rows(self.builder, self.pending_frame_chrome_rows)
+            .install_measured(measured);
     }
 }
 
