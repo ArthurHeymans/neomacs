@@ -365,11 +365,8 @@ struct BufferTextWindowOutputSession<'emit> {
     retry_checkpoint: TextWindowOutputRetryCheckpoint,
 }
 
-struct BufferTextWindowCursorEffectsOutput;
-
 struct BufferTextWindowRenderAttemptState<'a, 'face> {
-    builder: &'a mut GlyphMatrixBuilder,
-    evaluator: &'a mut Context,
+    output: BufferTextWindowOutputSurface<'a>,
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
     frame_face_id_counter: &'a mut u32,
@@ -1285,6 +1282,17 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
             .restore_retry_checkpoint(checkpoint);
     }
 
+    fn evaluator(&mut self) -> &mut Context {
+        self.evaluator
+    }
+
+    fn install_cursor_effects(&mut self, params: &WindowParams) -> bool {
+        BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
+            .install_and_apply(&mut TextWindowArtifactOutputSurface::from_builder(
+                self.builder,
+            ))
+    }
+
     fn begin_text_window_output(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
@@ -1344,18 +1352,10 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
     }
 }
 
-impl BufferTextWindowCursorEffectsOutput {
-    fn install_cursor_effects(builder: &mut GlyphMatrixBuilder, params: &WindowParams) -> bool {
-        BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
-            .install_and_apply(&mut TextWindowArtifactOutputSurface::from_builder(builder))
-    }
-}
-
 impl<'a, 'face> BufferTextWindowRenderAttemptState<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        evaluator: &'a mut Context,
+        output: BufferTextWindowOutputSurface<'a>,
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
         frame_face_id_counter: &'a mut u32,
@@ -1363,8 +1363,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptState<'a, 'face> {
         display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self {
-            builder,
-            evaluator,
+            output,
             font_metrics,
             face_resolver,
             frame_face_id_counter,
@@ -1387,8 +1386,7 @@ impl<'a, 'face> BufferTextWindowRenderAttemptSurface<'a, 'face> {
     ) -> Self {
         Self {
             state: BufferTextWindowRenderAttemptState::new(
-                builder,
-                evaluator,
+                BufferTextWindowOutputSurface::from_parts(builder, evaluator),
                 font_metrics,
                 face_resolver,
                 frame_face_id_counter,
@@ -1445,19 +1443,9 @@ where
             buffer_name,
             reserve_right_border_col,
         } = self;
-        let state = surface.into_state();
-        let BufferTextWindowRenderAttemptState {
-            builder,
-            evaluator,
-            font_metrics,
-            face_resolver,
-            frame_face_id_counter,
-            hit_data,
-            display_snapshots,
-        } = state;
-
+        let mut state = surface.into_state();
         let buf_access = RustBufferAccess::new(buffer);
-        BufferTextWindowCursorEffectsOutput::install_cursor_effects(builder, params);
+        state.output.install_cursor_effects(params);
 
         let char_w = params.char_width;
         let char_h = params.char_height;
@@ -1465,8 +1453,8 @@ where
         let local_display_policy = BufferTextWindowLocalDisplayPolicy::from_buffer(buffer);
 
         let default_face = BufferTextWindowDefaultFacePlan::new(
-            face_resolver,
-            font_metrics,
+            state.face_resolver,
+            &mut *state.font_metrics,
             frame_params.window_system,
             char_w,
             char_h,
@@ -1489,8 +1477,8 @@ where
 
         let chrome_plan = WindowChromeRowsPlan::new(
             params,
-            face_resolver,
-            font_metrics,
+            state.face_resolver,
+            &mut *state.font_metrics,
             char_w,
             default_face.ascent(),
             default_face.row_height(),
@@ -1503,9 +1491,9 @@ where
         let max_mini_window_rows = {
             let frame_rows = frame_params.height / char_h.max(1.0);
             if params.is_minibuffer() {
-                max_mini_window_lines_for_buffer(evaluator, buffer, frame_rows)
+                max_mini_window_lines_for_buffer(state.output.evaluator(), buffer, frame_rows)
             } else {
-                max_mini_window_lines(evaluator, frame_rows)
+                max_mini_window_lines(state.output.evaluator(), frame_rows)
             }
             .ceil()
             .max(1.0) as usize
@@ -1573,7 +1561,7 @@ where
             buffer_id,
             text_source,
             params,
-            face_resolver,
+            state.face_resolver,
             &default_face,
             font_ascent,
             frame_params.window_system,
@@ -1584,15 +1572,7 @@ where
         );
         body_plan.render_attempt(
             &mut walk_setup,
-            BufferTextWindowRenderAttemptState::new(
-                builder,
-                evaluator,
-                font_metrics,
-                face_resolver,
-                frame_face_id_counter,
-                hit_data,
-                display_snapshots,
-            ),
+            state,
             chrome_plan.render_request(
                 params,
                 geometry.mode_line_matrix_row,
@@ -1611,14 +1591,12 @@ where
 }
 
 impl<'emit> BufferTextWindowOutputSession<'emit> {
-    fn new(
-        builder: &'emit mut GlyphMatrixBuilder,
-        evaluator: &'emit mut Context,
+    fn from_output_surface(
+        mut output: BufferTextWindowOutputSurface<'emit>,
         font_metrics: &'emit mut Option<FontMetricsService>,
         face_resolver: &'emit FaceResolver,
         frame_face_id_counter: u32,
     ) -> Self {
-        let mut output = BufferTextWindowOutputSurface::from_parts(builder, evaluator);
         let retry_checkpoint = output.capture_retry_checkpoint();
         Self {
             output,
@@ -2342,17 +2320,15 @@ where
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowRenderAttemptOutcome {
         let BufferTextWindowRenderAttemptState {
-            builder,
-            evaluator,
+            output,
             font_metrics,
             face_resolver,
             frame_face_id_counter,
             hit_data,
             display_snapshots,
         } = state;
-        let mut output_session = BufferTextWindowOutputSession::new(
-            builder,
-            evaluator,
+        let mut output_session = BufferTextWindowOutputSession::from_output_surface(
+            output,
             font_metrics,
             face_resolver,
             *frame_face_id_counter,
