@@ -6560,34 +6560,35 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);
 
-    let outcome = BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
-        params: &params,
-        text: b"abc",
-        display_text_row_base: 0,
-        text_area_left: 0.0,
-        window_top: 0.0,
-        text_y: 0.0,
-        text_height: 48.0,
-        char_w: 8.0,
-        char_h: 16.0,
-        window_start: 0,
-        point_charpos: 0,
-        charpos: 3,
-        point_is_visible_eob: false,
-        row_limit: context.row_limit,
-    })
-    .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
-        &mut cursor_info,
-        &context.geometry,
-        &context.row_y_positions,
-        &mut hit_row_range,
-        &mut context.hit_rows,
-        text_row_output_render_state(
-            &mut context.builder,
-            &mut context.output_emitter,
-            &mut context.eval,
-        ),
-    ));
+    let outcome =
+        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext::new(
+            &params,
+            b"abc",
+            0,
+            0.0,
+            0.0,
+            0.0,
+            48.0,
+            8.0,
+            16.0,
+            0,
+            0,
+            3,
+            false,
+            context.row_limit,
+        ))
+        .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+            &mut cursor_info,
+            &context.geometry,
+            &context.row_y_positions,
+            &mut hit_row_range,
+            &mut context.hit_rows,
+            text_row_output_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+            ),
+        ));
 
     assert!(outcome.cursor_requested());
     assert_eq!(
@@ -6624,34 +6625,35 @@ fn buffer_text_window_tail_finalize_reports_missing_cursor_capture() {
     let mut cursor_info = CursorCaptureState::new();
     let mut hit_row_range = HitRowRangeTracker::new(0);
 
-    let outcome = BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
-        params: &params,
-        text: b"abc",
-        display_text_row_base: 0,
-        text_area_left: 0.0,
-        window_top: 0.0,
-        text_y: 0.0,
-        text_height: 48.0,
-        char_w: 8.0,
-        char_h: 16.0,
-        window_start: 0,
-        point_charpos: 0,
-        charpos: 3,
-        point_is_visible_eob: false,
-        row_limit: context.row_limit,
-    })
-    .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
-        &mut cursor_info,
-        &context.geometry,
-        &context.row_y_positions,
-        &mut hit_row_range,
-        &mut context.hit_rows,
-        text_row_output_render_state(
-            &mut context.builder,
-            &mut context.output_emitter,
-            &mut context.eval,
-        ),
-    ));
+    let outcome =
+        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext::new(
+            &params,
+            b"abc",
+            0,
+            0.0,
+            0.0,
+            0.0,
+            48.0,
+            8.0,
+            16.0,
+            0,
+            0,
+            3,
+            false,
+            context.row_limit,
+        ))
+        .finalize_and_apply(BufferTextWindowTailFinalizeState::new(
+            &mut cursor_info,
+            &context.geometry,
+            &context.row_y_positions,
+            &mut hit_row_range,
+            &mut context.hit_rows,
+            text_row_output_render_state(
+                &mut context.builder,
+                &mut context.output_emitter,
+                &mut context.eval,
+            ),
+        ));
 
     assert!(outcome.cursor_requested());
     assert_eq!(
@@ -6715,19 +6717,9 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let positions =
-        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext {
-            window_id: 41,
-            window_start: 3,
-            text_start_byte: 100,
-            byte_idx: 4,
-            reserve_right_special_col: true,
-            reserve_right_border_col: false,
-            display_text_row_base: 0,
-            output_cols: 5,
-            row_flags: &row_flags,
-            right_edge_face_id: 9,
-            char_w: 8.0,
-        })
+        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext::new(
+            41, 3, 100, 4, true, false, 0, 5, &row_flags, 9, 8.0,
+        ))
         .install_and_apply(BufferTextWindowBodyInstallState::new(
             &mut builder,
             &mut output_emitter,
@@ -9007,10 +8999,7 @@ fn buffer_display_property_render_context_ignores_modifier_only_checkpoint() {
     let mut checkpoints = TextPropertyScanCheckpoints::new(0);
 
     let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext {
-            buffer: &buffer,
-            charpos: 0,
-        },
+        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, 0),
     )
     .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
         &mut checkpoints,
@@ -9044,10 +9033,7 @@ fn buffer_display_property_render_context_defers_string_checkpoint_to_source_cur
     let mut checkpoints = TextPropertyScanCheckpoints::new(1);
 
     let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext {
-            buffer: &buffer,
-            charpos: 1,
-        },
+        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, 1),
     )
     .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
         &mut checkpoints,
@@ -9089,10 +9075,7 @@ fn buffer_display_property_render_context_defers_propertized_string_checkpoint_t
     let mut checkpoints = TextPropertyScanCheckpoints::new(1);
 
     let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext {
-            buffer: &buffer,
-            charpos: 1,
-        },
+        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, 1),
     )
     .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
         &mut checkpoints,
@@ -9184,10 +9167,7 @@ fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_displ
     );
 
     let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext {
-            buffer: &buffer,
-            charpos,
-        },
+        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, charpos),
     )
     .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
         &mut checkpoints,

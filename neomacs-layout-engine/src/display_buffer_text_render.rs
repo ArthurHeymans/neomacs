@@ -667,7 +667,7 @@ impl BufferTextWindowLoopRequestContext {
         B: LayoutBufferView,
     {
         BufferDisplayPropertyCheckpointRenderRequest::new(
-            BufferDisplayPropertyCheckpointRenderContext { buffer, charpos },
+            BufferDisplayPropertyCheckpointRenderContext::new(buffer, charpos),
         )
     }
 
@@ -1698,19 +1698,19 @@ impl BufferTextWindowBodyInstallContext {
         row_flags: &DisplayRowFlags,
         char_width: f32,
     ) -> BufferTextWindowBodyInstallRequest<'_> {
-        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext {
-            window_id: self.output_window_id,
+        BufferTextWindowBodyInstallRequest::new(BufferTextWindowBodyInstallRenderContext::new(
+            self.output_window_id,
             window_start,
             text_start_byte,
             byte_idx,
             reserve_right_special_col,
             reserve_right_border_col,
-            display_text_row_base: self.display_text_row_base,
-            output_cols: self.output_cols,
+            self.display_text_row_base,
+            self.output_cols,
             row_flags,
-            right_edge_face_id: 0,
-            char_w: char_width,
-        })
+            0,
+            char_width,
+        ))
     }
 
     #[cfg(test)]
@@ -3364,22 +3364,22 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
         charpos: i64,
         point_is_visible_eob: bool,
     ) -> BufferTextWindowTailFinalizeRequest<'request> {
-        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext {
-            params: self.params,
+        BufferTextWindowTailFinalizeRequest::new(BufferTextWindowTailFinalizeContext::new(
+            self.params,
             text,
-            display_text_row_base: self.display_text_row_base,
-            text_area_left: self.text_area_left,
-            window_top: self.window_top,
-            text_y: self.text_y,
-            text_height: self.text_height,
-            char_w: self.char_width,
-            char_h: self.char_height,
-            window_start: self.window_start,
-            point_charpos: self.params.point_charpos().get(),
+            self.display_text_row_base,
+            self.text_area_left,
+            self.window_top,
+            self.text_y,
+            self.text_height,
+            self.char_width,
+            self.char_height,
+            self.window_start,
+            self.params.point_charpos().get(),
             charpos,
             point_is_visible_eob,
-            row_limit: self.row_limit,
-        })
+            self.row_limit,
+        ))
     }
 
     pub(crate) fn visibility_retry_request<'rows, 'buf, B>(

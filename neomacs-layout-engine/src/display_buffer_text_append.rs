@@ -187,20 +187,20 @@ pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferTextWindowTailFinalizeContext<'a> {
-    pub(crate) params: &'a WindowParams,
-    pub(crate) text: &'a [u8],
-    pub(crate) display_text_row_base: usize,
-    pub(crate) text_area_left: f32,
-    pub(crate) window_top: f32,
-    pub(crate) text_y: f32,
-    pub(crate) text_height: f32,
-    pub(crate) char_w: f32,
-    pub(crate) char_h: f32,
-    pub(crate) window_start: i64,
-    pub(crate) point_charpos: i64,
-    pub(crate) charpos: i64,
-    pub(crate) point_is_visible_eob: bool,
-    pub(crate) row_limit: DisplayRowLimit,
+    params: &'a WindowParams,
+    text: &'a [u8],
+    display_text_row_base: usize,
+    text_area_left: f32,
+    window_top: f32,
+    text_y: f32,
+    text_height: f32,
+    char_w: f32,
+    char_h: f32,
+    window_start: i64,
+    point_charpos: i64,
+    charpos: i64,
+    point_is_visible_eob: bool,
+    row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeState<'a, 'emit> {
@@ -218,17 +218,17 @@ pub(crate) struct BufferTextWindowBodyInstallRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
-    pub(crate) window_id: u64,
-    pub(crate) window_start: i64,
-    pub(crate) text_start_byte: usize,
-    pub(crate) byte_idx: usize,
-    pub(crate) reserve_right_special_col: bool,
-    pub(crate) reserve_right_border_col: bool,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) output_cols: usize,
-    pub(crate) row_flags: &'a DisplayRowFlags,
-    pub(crate) right_edge_face_id: u32,
-    pub(crate) char_w: f32,
+    window_id: u64,
+    window_start: i64,
+    text_start_byte: usize,
+    byte_idx: usize,
+    reserve_right_special_col: bool,
+    reserve_right_border_col: bool,
+    display_text_row_base: usize,
+    output_cols: usize,
+    row_flags: &'a DisplayRowFlags,
+    right_edge_face_id: u32,
+    char_w: f32,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
@@ -479,6 +479,43 @@ impl BufferTextWindowBeginRequest {
     }
 }
 
+impl<'a> BufferTextWindowTailFinalizeContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        text: &'a [u8],
+        display_text_row_base: usize,
+        text_area_left: f32,
+        window_top: f32,
+        text_y: f32,
+        text_height: f32,
+        char_w: f32,
+        char_h: f32,
+        window_start: i64,
+        point_charpos: i64,
+        charpos: i64,
+        point_is_visible_eob: bool,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            params,
+            text,
+            display_text_row_base,
+            text_area_left,
+            window_top,
+            text_y,
+            text_height,
+            char_w,
+            char_h,
+            window_start,
+            point_charpos,
+            charpos,
+            point_is_visible_eob,
+            row_limit,
+        }
+    }
+}
+
 impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
     pub(crate) fn new(context: BufferTextWindowTailFinalizeContext<'a>) -> Self {
         Self { context }
@@ -579,6 +616,37 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             cursor_publish_status,
             visual_cursor_summary,
             pending_row_finished,
+        }
+    }
+}
+
+impl<'a> BufferTextWindowBodyInstallRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        window_id: u64,
+        window_start: i64,
+        text_start_byte: usize,
+        byte_idx: usize,
+        reserve_right_special_col: bool,
+        reserve_right_border_col: bool,
+        display_text_row_base: usize,
+        output_cols: usize,
+        row_flags: &'a DisplayRowFlags,
+        right_edge_face_id: u32,
+        char_w: f32,
+    ) -> Self {
+        Self {
+            window_id,
+            window_start,
+            text_start_byte,
+            byte_idx,
+            reserve_right_special_col,
+            reserve_right_border_col,
+            display_text_row_base,
+            output_cols,
+            row_flags,
+            right_edge_face_id,
+            char_w,
         }
     }
 }

@@ -29,8 +29,8 @@ pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBuff
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderContext<'a, B: LayoutBufferView> {
-    pub(crate) buffer: &'a B,
-    pub(crate) charpos: i64,
+    buffer: &'a B,
+    charpos: i64,
 }
 
 pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'emit> {
@@ -108,6 +108,12 @@ impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B
             checkpoints.record_display_next(next_change);
         }
         BufferDisplayPropertyTextWalkOutcome::Continue
+    }
+}
+
+impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderContext<'a, B> {
+    pub(crate) fn new(buffer: &'a B, charpos: i64) -> Self {
+        Self { buffer, charpos }
     }
 }
 
