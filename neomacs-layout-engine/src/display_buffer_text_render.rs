@@ -74,7 +74,7 @@ use crate::display_row_walk_state::{
     BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
     SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
-    WordWrapBreakCandidate, WordWrapRenderState, skip_to_newline,
+    WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::{DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_source_resolver::{
@@ -7393,8 +7393,11 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
             BufferTextSourceCharOverflowAction::Truncate { transition } => {
                 let truncation_skip =
                     BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
-                        text, byte_idx, charpos,
+                        text,
+                        &mut BufferTextSourcePosition::new(*byte_idx, *charpos),
                     );
+                *byte_idx = truncation_skip.source_position().byte_idx();
+                *charpos = truncation_skip.source_position().charpos();
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,
@@ -7540,25 +7543,40 @@ impl<'a> BufferTextOverflowRenderRequest<'a> {
 pub(crate) struct BufferTextTruncationSkipAction {
     pub(crate) charpos: i64,
     pub(crate) reached_line_break: bool,
+    pub(crate) source_position: BufferTextSourcePosition,
 }
 
 impl BufferTextTruncationSkipAction {
     pub(crate) fn consume_source_step_char_and_rest_of_line(
         text: &[u8],
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
     ) -> Self {
-        *charpos += 1;
-        let reached_line_break = skip_to_newline(text, byte_idx, charpos);
+        position.advance_charpos_by_one();
+        let mut reached_line_break = false;
+        while position.byte_idx() < text.len() {
+            let Some(source_char) = BufferTextSourceStepChar::consume_from_position(text, position)
+            else {
+                break;
+            };
+            if source_char.ch() == '\n' {
+                reached_line_break = true;
+                break;
+            }
+        }
         Self {
-            charpos: *charpos,
+            charpos: position.charpos(),
             reached_line_break,
+            source_position: *position,
         }
     }
 
     #[cfg(test)]
     pub(crate) fn charpos(self) -> i64 {
         self.charpos
+    }
+
+    pub(crate) fn source_position(self) -> BufferTextSourcePosition {
+        self.source_position
     }
 
     pub(crate) fn reached_line_break(self) -> bool {
@@ -7981,9 +7999,10 @@ impl<'a> BufferTextSpecialOverflowRenderRequest<'a> {
                 let truncation_skip =
                     BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
                         context.text,
-                        byte_idx,
-                        charpos,
+                        &mut BufferTextSourcePosition::new(*byte_idx, *charpos),
                     );
+                *byte_idx = truncation_skip.source_position().byte_idx();
+                *charpos = truncation_skip.source_position().charpos();
                 truncation_skip.apply_before_row_transition(
                     line_numbers,
                     row_extend,

@@ -2840,67 +2840,68 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
 #[test]
 fn buffer_text_truncation_skip_action_consumes_source_step_char_and_reaches_newline() {
     let text = b"abc\nnext";
-    let mut byte_idx = 1;
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new(1, 0);
 
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
     );
 
     assert!(action.reached_line_break());
     assert_eq!(action.charpos(), 4);
-    assert_eq!(byte_idx, 4);
-    assert_eq!(charpos, 4);
+    assert_eq!(position, BufferTextSourcePosition::new(4, 4));
+    assert_eq!(
+        action.source_position(),
+        BufferTextSourcePosition::new(4, 4)
+    );
 }
 
 #[test]
 fn buffer_text_truncation_skip_action_consumes_to_text_end_without_newline() {
     let text = b"abc";
-    let mut byte_idx = 1;
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new(1, 0);
 
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
     );
 
     assert!(!action.reached_line_break());
     assert_eq!(action.charpos(), 3);
-    assert_eq!(byte_idx, 3);
-    assert_eq!(charpos, 3);
+    assert_eq!(position, BufferTextSourcePosition::new(3, 3));
+    assert_eq!(
+        action.source_position(),
+        BufferTextSourcePosition::new(3, 3)
+    );
 }
 
 #[test]
 fn buffer_text_truncation_skip_action_counts_multibyte_chars() {
     let text = "a界b\n".as_bytes();
-    let mut byte_idx = "a".len();
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new("a".len(), 0);
 
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
     );
 
     assert!(action.reached_line_break());
     assert_eq!(action.charpos(), 4);
-    assert_eq!(byte_idx, text.len());
-    assert_eq!(charpos, 4);
+    assert_eq!(position, BufferTextSourcePosition::new(text.len(), 4));
+    assert_eq!(
+        action.source_position(),
+        BufferTextSourcePosition::new(text.len(), 4)
+    );
 }
 
 #[test]
 fn buffer_text_truncation_skip_action_applies_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let text = b"abc\nnext";
-    let mut byte_idx = 1;
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new(1, 0);
     let action = BufferTextTruncationSkipAction::consume_source_step_char_and_rest_of_line(
         text,
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
     );
     let mut line_numbers = LineNumberRenderState::new(true, 5, 8);
     let mut row_extend = DisplayRowScopedValue::inactive();
@@ -2933,6 +2934,7 @@ fn buffer_text_truncation_skip_action_reports_transition_continuation() {
     let action = BufferTextTruncationSkipAction {
         charpos: 12,
         reached_line_break: false,
+        source_position: BufferTextSourcePosition::new(0, 12),
     };
 
     assert_eq!(
@@ -2950,6 +2952,7 @@ fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
     let action = BufferTextTruncationSkipAction {
         charpos: 12,
         reached_line_break: true,
+        source_position: BufferTextSourcePosition::new(0, 12),
     };
     let mut charpos = 9;
     let mut hit_row_range = HitRowRangeTracker::new(2);
@@ -2971,6 +2974,7 @@ fn buffer_text_truncation_skip_action_skips_sync_when_transition_exhausted() {
     let action = BufferTextTruncationSkipAction {
         charpos: 12,
         reached_line_break: true,
+        source_position: BufferTextSourcePosition::new(0, 12),
     };
     let mut charpos = 9;
     let mut hit_row_range = HitRowRangeTracker::new(2);
