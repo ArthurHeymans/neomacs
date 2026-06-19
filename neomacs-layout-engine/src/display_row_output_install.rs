@@ -104,9 +104,8 @@ pub(crate) fn install_rendered_display_row_fragment_assets(
     faces: &[Face],
     media: &[RenderedDisplayRowMedia],
 ) {
-    RenderedDisplayRowAssetsInstall::fragment(role, display_row_index, faces, media).install(
-        &mut DisplayRowAssetsInstallSurface::from_output_builder(builder),
-    );
+    RenderedDisplayRowAssetsInstall::fragment(role, display_row_index, faces, media)
+        .install(builder);
 }
 
 struct DisplayRowCurrentRowInstaller<'builder> {
@@ -115,107 +114,6 @@ struct DisplayRowCurrentRowInstaller<'builder> {
 
 pub(crate) struct DisplayRowCurrentRowSurface<'builder> {
     installer: DisplayRowCurrentRowInstaller<'builder>,
-}
-
-struct DisplayRowAssetsInstaller<'builder> {
-    builder: &'builder mut DisplayOutputBuilder,
-}
-
-struct DisplayRowAssetsInstallSurface<'builder> {
-    installer: DisplayRowAssetsInstaller<'builder>,
-}
-
-impl<'builder> DisplayRowAssetsInstaller<'builder> {
-    fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn install_faces(&mut self, faces: &[Face]) {
-        for face in faces {
-            self.builder.install_output_face(face.id, face.clone());
-        }
-    }
-
-    fn install_media(
-        &mut self,
-        role: GlyphRowRole,
-        target: RenderedDisplayRowAssetInstallTarget,
-        media: &[RenderedDisplayRowMedia],
-    ) {
-        for medium in media {
-            self.install_medium(role, target, medium);
-        }
-    }
-
-    fn install_medium(
-        &mut self,
-        role: GlyphRowRole,
-        target: RenderedDisplayRowAssetInstallTarget,
-        medium: &RenderedDisplayRowMedia,
-    ) {
-        let target = DisplayRowMediaInstallTarget::resolve(self.builder, medium.col, target);
-        match medium.kind {
-            RenderedDisplayRowMediaKind::Image { image_id } => {
-                self.builder.add_output_image_media(
-                    target.window_id,
-                    role,
-                    target.clip,
-                    target.slot_id,
-                    image_id,
-                    medium.x,
-                    medium.y,
-                    medium.width,
-                    medium.height,
-                );
-            }
-            RenderedDisplayRowMediaKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => {
-                self.builder.add_output_video_media(
-                    target.window_id,
-                    role,
-                    target.clip,
-                    target.slot_id,
-                    video_id,
-                    loop_count,
-                    autoplay,
-                    medium.x,
-                    medium.y,
-                    medium.width,
-                    medium.height,
-                );
-            }
-            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
-                self.builder.add_output_xwidget_media(
-                    target.window_id,
-                    role,
-                    target.clip,
-                    target.slot_id,
-                    xwidget_id,
-                    medium.x,
-                    medium.y,
-                    medium.width,
-                    medium.height,
-                );
-            }
-        }
-    }
-}
-
-impl<'builder> DisplayRowAssetsInstallSurface<'builder> {
-    fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self {
-            installer: DisplayRowAssetsInstaller::new(builder),
-        }
-    }
-
-    fn install(&mut self, request: RenderedDisplayRowAssetsInstall<'_>) {
-        self.installer.install_faces(request.faces);
-        self.installer
-            .install_media(request.role, request.target, request.media);
-    }
 }
 
 impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
@@ -328,9 +226,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             measured.row_index,
             measured.bounds,
         )
-        .install(&mut DisplayRowAssetsInstallSurface::from_output_builder(
-            builder,
-        ));
+        .install(builder);
         DisplayRowOutputInstall::from_rendered(
             display_row_index,
             &measured.rendered,
@@ -359,9 +255,7 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
             measured.row_index,
             measured.bounds,
         )
-        .install(&mut DisplayRowAssetsInstallSurface::from_output_builder(
-            builder,
-        ));
+        .install(builder);
         let mut row = measured.rendered.row.clone();
         apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
         let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
@@ -431,8 +325,64 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
         )
     }
 
-    fn install(self, surface: &mut DisplayRowAssetsInstallSurface<'_>) {
-        surface.install(self);
+    fn install(self, builder: &mut DisplayOutputBuilder) {
+        for face in self.faces {
+            builder.install_output_face(face.id, face.clone());
+        }
+        for medium in self.media {
+            self.install_medium(builder, medium);
+        }
+    }
+
+    fn install_medium(&self, builder: &mut DisplayOutputBuilder, medium: &RenderedDisplayRowMedia) {
+        let target = DisplayRowMediaInstallTarget::resolve(builder, medium.col, self.target);
+        match medium.kind {
+            RenderedDisplayRowMediaKind::Image { image_id } => {
+                builder.add_output_image_media(
+                    target.window_id,
+                    self.role,
+                    target.clip,
+                    target.slot_id,
+                    image_id,
+                    medium.x,
+                    medium.y,
+                    medium.width,
+                    medium.height,
+                );
+            }
+            RenderedDisplayRowMediaKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => {
+                builder.add_output_video_media(
+                    target.window_id,
+                    self.role,
+                    target.clip,
+                    target.slot_id,
+                    video_id,
+                    loop_count,
+                    autoplay,
+                    medium.x,
+                    medium.y,
+                    medium.width,
+                    medium.height,
+                );
+            }
+            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
+                builder.add_output_xwidget_media(
+                    target.window_id,
+                    self.role,
+                    target.clip,
+                    target.slot_id,
+                    xwidget_id,
+                    medium.x,
+                    medium.y,
+                    medium.width,
+                    medium.height,
+                );
+            }
+        }
     }
 }
 
@@ -507,9 +457,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
         &[],
         &rendered.media,
     )
-    .install(&mut DisplayRowAssetsInstallSurface::from_output_builder(
-        builder,
-    ));
+    .install(builder);
     end
 }
 
