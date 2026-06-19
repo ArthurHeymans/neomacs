@@ -4,10 +4,9 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 #[cfg(test)]
 pub(crate) use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementOutcome;
 pub(crate) use crate::display_buffer_display_property_render::{
-    BufferDisplayPropertyCheckpointRenderContext, BufferDisplayPropertyCheckpointRenderRequest,
-    BufferDisplayPropertyCheckpointRenderState, BufferDisplayPropertyTextReplacementRenderState,
+    BufferDisplayPropertyTextReplacementRenderState,
     BufferDisplayPropertyTextReplacementResolveOutcome,
-    BufferDisplayPropertyTextReplacementResolveRequest, BufferDisplayPropertyTextWalkOutcome,
+    BufferDisplayPropertyTextReplacementResolveRequest,
 };
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_append::{
@@ -73,8 +72,8 @@ use crate::display_row_transition::{
 };
 use crate::display_row_walk_state::{
     BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, LineNumberRenderState, SpecialTextRowOverflowDecision,
-    TextPropertyScanCheckpoints, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
+    HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
+    SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
     WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
 };
 use crate::display_source::{DisplaySourceContext, SyntheticTextItemSource};
@@ -301,7 +300,7 @@ pub(crate) struct BufferTextWindowWalkSetup {
     pub(crate) charpos: i64,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
-    pub(crate) text_property_checkpoints: TextPropertyScanCheckpoints,
+    pub(crate) invisible_text_checkpoint: InvisibleTextScanCheckpoint,
     pub(crate) row_flags: DisplayRowFlags,
     pub(crate) hscroll_skip: HorizontalScrollSkipState,
     pub(crate) word_wrap: WordWrapRenderState,
@@ -669,7 +668,7 @@ struct BufferTextWindowInitialFaceStateRequest<'a> {
 struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     append_state: &'emit mut BufferTextRowAppendState,
-    text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
     progress: BufferTextWindowProgressState<'emit>,
     source_render: TextRowSourceRenderState<'emit>,
     row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
@@ -796,19 +795,6 @@ impl BufferTextWindowLoopRequestContext {
             self.max_rows,
             self.row_limit,
         ))
-    }
-
-    pub(crate) fn display_property_checkpoint_request<'a, B>(
-        self,
-        buffer: &'a B,
-        charpos: i64,
-    ) -> BufferDisplayPropertyCheckpointRenderRequest<'a, B>
-    where
-        B: LayoutBufferView,
-    {
-        BufferDisplayPropertyCheckpointRenderRequest::new(
-            BufferDisplayPropertyCheckpointRenderContext::new(buffer, charpos),
-        )
     }
 
     pub(crate) fn selective_display_tail_request<'a>(
@@ -1300,7 +1286,7 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
             charpos: self.window_start,
             text_area_left: self.text_x,
             window_top: self.window_top,
-            text_property_checkpoints: TextPropertyScanCheckpoints::new(self.window_start),
+            invisible_text_checkpoint: InvisibleTextScanCheckpoint::new(self.window_start),
             row_flags: DisplayRowFlags::new(self.max_rows),
             hscroll_skip: HorizontalScrollSkipState::new(self.wrap_mode, self.hscroll),
             word_wrap: WordWrapRenderState::new(self.word_wrap),
@@ -1908,7 +1894,7 @@ impl BufferTextWindowWalkSetup {
         BufferTextWindowLoopRenderState::new(
             loop_context,
             &mut self.buffer_text_append_state,
-            &mut self.text_property_checkpoints,
+            &mut self.invisible_text_checkpoint,
             BufferTextWindowProgressState::new(
                 &mut self.byte_idx,
                 &mut self.charpos,
@@ -2789,7 +2775,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     pub(crate) fn new(
         loop_context: BufferTextWindowLoopRequestContext,
         append_state: &'emit mut BufferTextRowAppendState,
-        text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
+        invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
         progress: BufferTextWindowProgressState<'emit>,
         source_render: TextRowSourceRenderState<'emit>,
         row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
@@ -2813,7 +2799,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         Self {
             loop_context,
             append_state,
-            text_property_checkpoints,
+            invisible_text_checkpoint,
             progress,
             source_render,
             row_extend,
@@ -2971,11 +2957,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         }
 
         self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
-
-        let display_property_walk = self.render_display_property_checkpoint_for_context(buffer);
-        if display_property_walk.should_continue_buffer_walk() {
-            return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
-        }
 
         BufferTextWindowPreSourceOutcome::ReadyForSourceItem
     }
@@ -3237,16 +3218,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         );
     }
 
-    fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
-        &mut self,
-        buffer: &'request B,
-    ) -> BufferDisplayPropertyTextWalkOutcome {
-        let request = self
-            .loop_context
-            .display_property_checkpoint_request(buffer, self.progress.charpos());
-        self.render_display_property_checkpoint(request)
-    }
-
     fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
         &mut self,
         source_step_char: BufferTextSourceStepChar,
@@ -3321,7 +3292,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request.render_at_checkpoint_and_apply(
             buffer,
             BufferInvisibleTextRenderRequestState::new(
-                self.text_property_checkpoints,
+                self.invisible_text_checkpoint,
                 self.progress.reborrow(),
                 self.source_render.reborrow(),
                 self.row_geometry,
@@ -3353,15 +3324,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             self.hit_row_range,
             self.cursor_info,
             self.row_y_positions,
-        ))
-    }
-
-    fn render_display_property_checkpoint<B: LayoutBufferView>(
-        &mut self,
-        request: BufferDisplayPropertyCheckpointRenderRequest<'_, B>,
-    ) -> BufferDisplayPropertyTextWalkOutcome {
-        request.render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
-            self.text_property_checkpoints,
         ))
     }
 
@@ -4599,7 +4561,7 @@ pub(crate) struct BufferInvisibleTextRenderContext<'a> {
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
-    checkpoints: &'emit mut TextPropertyScanCheckpoints,
+    checkpoints: &'emit mut InvisibleTextScanCheckpoint,
     progress: BufferTextWindowProgressState<'emit>,
     source_render: TextRowSourceRenderState<'emit>,
     row_geometry: &'emit mut DisplayRowGeometryState,
@@ -4691,7 +4653,7 @@ impl<'a, 'emit> BufferSelectiveDisplayTailRenderState<'a, 'emit> {
 impl<'a, 'emit> BufferInvisibleTextRenderRequestState<'a, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        checkpoints: &'emit mut TextPropertyScanCheckpoints,
+        checkpoints: &'emit mut InvisibleTextScanCheckpoint,
         progress: BufferTextWindowProgressState<'emit>,
         source_render: TextRowSourceRenderState<'emit>,
         row_geometry: &'emit mut DisplayRowGeometryState,
@@ -5193,11 +5155,11 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
     pub(crate) fn consume_at_checkpoint<B: LayoutBufferView>(
         &self,
         buffer: &B,
-        checkpoints: &mut TextPropertyScanCheckpoints,
+        checkpoints: &mut InvisibleTextScanCheckpoint,
         byte_idx: &mut usize,
         charpos: &mut i64,
     ) -> BufferInvisibleTextScanAction {
-        if !checkpoints.should_check_invisible(*charpos) {
+        if !checkpoints.should_check(*charpos) {
             return BufferInvisibleTextScanAction::Unchecked;
         }
 
@@ -5205,7 +5167,7 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
         let start_charpos = *charpos;
         let text_props = RustTextPropAccess::new(buffer);
         let (invisible, next_visible) = text_props.check_invisible(start_charpos);
-        checkpoints.record_invisible_next(next_visible);
+        checkpoints.record_next_visible(next_visible);
 
         if !invisible.hidden {
             return BufferInvisibleTextScanAction::Visible { next_visible };

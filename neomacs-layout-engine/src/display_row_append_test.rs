@@ -59,7 +59,7 @@ use crate::display_row_source_render::{
 use crate::display_row_transition::*;
 use crate::display_row_walk_state::{
     BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, LineNumberRenderState, TextPropertyScanCheckpoints,
+    HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
     TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
 };
 use crate::display_source::*;
@@ -1412,7 +1412,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
 #[test]
 fn buffer_invisible_text_scan_context_skips_when_checkpoint_not_reached() {
     let buffer_text = b"visible";
-    let mut checkpoints = TextPropertyScanCheckpoints::new(5);
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(5);
     let mut byte_idx = 2;
     let mut charpos = 2;
     let eval = Context::new();
@@ -1452,7 +1452,7 @@ fn buffer_invisible_text_scan_context_records_visible_boundary() {
             );
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let mut checkpoints = TextPropertyScanCheckpoints::new(0);
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
     let mut byte_idx = 0;
     let mut charpos = 0;
 
@@ -1465,8 +1465,8 @@ fn buffer_invisible_text_scan_context_records_visible_boundary() {
     );
     assert_eq!(byte_idx, 0);
     assert_eq!(charpos, 0);
-    assert!(!checkpoints.should_check_invisible(7));
-    assert!(checkpoints.should_check_invisible(8));
+    assert!(!checkpoints.should_check(7));
+    assert!(checkpoints.should_check(8));
 }
 
 #[test]
@@ -1490,7 +1490,7 @@ fn buffer_invisible_text_scan_context_skips_hidden_region_and_reports_point() {
             );
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let mut checkpoints = TextPropertyScanCheckpoints::new(8);
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(8);
     let mut byte_idx = 8;
     let mut charpos = 8;
 
@@ -1509,8 +1509,8 @@ fn buffer_invisible_text_scan_context_skips_hidden_region_and_reports_point() {
     assert!(!hidden.ellipsis());
     assert_eq!(byte_idx, 14);
     assert_eq!(charpos, 14);
-    assert!(!checkpoints.should_check_invisible(13));
-    assert!(checkpoints.should_check_invisible(14));
+    assert!(!checkpoints.should_check(13));
+    assert!(checkpoints.should_check(14));
 }
 
 #[test]
@@ -1538,7 +1538,7 @@ fn buffer_invisible_text_scan_context_reports_ellipsis_policy() {
             );
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let mut checkpoints = TextPropertyScanCheckpoints::new(0);
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
     let mut byte_idx = 0;
     let mut charpos = 0;
 
@@ -1657,7 +1657,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     );
     let overlay_context =
         BufferOverlayStringTextRowRenderContext::new(false, 1, &surface, 16.0, 12.0, 0.0, 0, 4);
-    let mut checkpoints = TextPropertyScanCheckpoints::new(0);
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
     let mut byte_idx = 0;
     let mut charpos = 0;
     let mut x = 0.0;
@@ -8973,213 +8973,6 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     let metrics = geometry.row_metrics_snapshot(0);
     assert!(metrics.height > 16.0);
     assert!(metrics.ascent > 12.0);
-}
-
-#[test]
-fn buffer_display_property_render_context_ignores_modifier_only_checkpoint() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    {
-        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.insert("abc");
-        let _ = eval
-            .buffer_manager_mut()
-            .put_buffer_text_property_in_emacs_byte_range(
-                buf_id,
-                EmacsByteRange::from_usize(0, 1),
-                Value::symbol("display"),
-                Value::list(vec![Value::keyword("raise"), Value::make_float(0.5)]),
-            );
-    }
-    let buffer = current_buffer_snapshot(&eval, buf_id);
-    let mut checkpoints = TextPropertyScanCheckpoints::new(0);
-
-    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, 0),
-    )
-    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
-        &mut checkpoints,
-    ));
-
-    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
-    assert_eq!(checkpoints.display_next(), 1);
-}
-
-#[test]
-fn buffer_display_property_render_context_defers_string_checkpoint_to_source_cursor() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    {
-        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.insert("abc");
-        let _ = eval
-            .buffer_manager_mut()
-            .put_buffer_text_property_in_emacs_byte_range(
-                buf_id,
-                EmacsByteRange::from_usize(1, 3),
-                Value::symbol("display"),
-                Value::string("YZ"),
-            );
-    }
-    let buffer = current_buffer_snapshot(&eval, buf_id);
-    let mut checkpoints = TextPropertyScanCheckpoints::new(1);
-
-    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, 1),
-    )
-    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
-        &mut checkpoints,
-    ));
-
-    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
-    assert_eq!(checkpoints.display_next(), 3);
-}
-
-#[test]
-fn buffer_display_property_render_context_defers_propertized_string_checkpoint_to_source_cursor() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    {
-        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.insert("abc");
-        let replacement = Value::string_with_text_properties(
-            "YZ",
-            vec![StringTextPropertyRun {
-                start: 0,
-                end: 1,
-                plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
-            }],
-        );
-        let _ = eval
-            .buffer_manager_mut()
-            .put_buffer_text_property_in_emacs_byte_range(
-                buf_id,
-                EmacsByteRange::from_usize(1, 3),
-                Value::symbol("display"),
-                replacement,
-            );
-    }
-    let buffer = current_buffer_snapshot(&eval, buf_id);
-    let mut checkpoints = TextPropertyScanCheckpoints::new(1);
-
-    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, 1),
-    )
-    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
-        &mut checkpoints,
-    ));
-
-    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
-    assert_eq!(checkpoints.display_next(), 3);
-}
-
-#[test]
-fn buffer_display_property_checkpoint_render_request_ignores_modifier_only_display_property() {
-    let mut context = RowTransitionTestContext::new("display-property-checkpoint-request");
-    let buf_id = context
-        .eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    {
-        let buffer = context
-            .eval
-            .buffer_manager_mut()
-            .get_mut(buf_id)
-            .expect("buffer");
-        buffer.insert("abc");
-        let _ = context
-            .eval
-            .buffer_manager_mut()
-            .put_buffer_text_property_in_emacs_byte_range(
-                buf_id,
-                EmacsByteRange::from_usize(0, 1),
-                Value::symbol("display"),
-                Value::list(vec![Value::keyword("height"), Value::fixnum(2)]),
-            );
-    }
-    let buffer = current_buffer_snapshot(&context.eval, buf_id);
-    let table = FaceTable::new();
-    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let default_face = face_resolver.default_face().clone();
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let mut font_metrics = None;
-    let measured = measurement_policy.measured_face(
-        7,
-        &default_face,
-        None,
-        8.0,
-        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        &mut font_metrics,
-    );
-    let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
-    let mut face_scan = FaceScanCheckpoint::initial();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
-    let mut row_extend = DisplayRowScopedValue::inactive();
-    let mut box_face = BoxFaceRowState::inactive();
-    let mut checkpoints = TextPropertyScanCheckpoints::new(0);
-    let byte_idx = 0;
-    let charpos = 0;
-    let x = 0.0;
-    let face_resolution_context = BufferCurrentFaceResolutionContext::new(
-        &buffer,
-        &face_resolver,
-        measurement_policy,
-        &default_face,
-        8.0,
-        12.0,
-        16.0,
-        8.0,
-        16.0,
-        12.0,
-        false,
-    );
-
-    face_resolution_context.resolve_at_checkpoint_with_source_state(
-        &mut text_row_source_render_state(
-            &mut context.builder,
-            &mut context.output_emitter,
-            &mut context.eval,
-            &mut font_metrics,
-            &face_resolver,
-        ),
-        &mut face_scan,
-        &mut face_ids,
-        &mut active_face,
-        &mut context.geometry,
-        &mut row_extend,
-        &mut box_face,
-        x,
-        charpos,
-    );
-
-    let outcome = BufferDisplayPropertyCheckpointRenderRequest::new(
-        BufferDisplayPropertyCheckpointRenderContext::new(&buffer, charpos),
-    )
-    .render_and_apply(BufferDisplayPropertyCheckpointRenderState::new(
-        &mut checkpoints,
-    ));
-
-    assert_eq!(outcome, BufferDisplayPropertyTextWalkOutcome::Continue);
-    assert!(!outcome.should_continue_buffer_walk());
-    assert_eq!(active_face.face_id(), 20);
-    assert_eq!(face_ids.allocate(), 21);
-    assert_eq!(byte_idx, 0);
-    assert_eq!(charpos, 0);
-    assert_eq!(checkpoints.display_next(), 1);
 }
 
 #[test]

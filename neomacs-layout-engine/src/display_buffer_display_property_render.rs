@@ -12,36 +12,12 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::display_row_walk_state::{TextPropertyScanCheckpoints, skip_text_to_charpos};
+use crate::display_row_walk_state::skip_text_to_charpos;
 use crate::display_source_resolver::DisplayPropertyReplacementAppendRequestResolver;
 use crate::font_metrics::FontMetricsService;
-use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
+use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neovm_core::emacs_core::eval::DisplayHost;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BufferDisplayPropertyTextWalkOutcome {
-    Continue,
-}
-
-pub(crate) struct BufferDisplayPropertyCheckpointRenderRequest<'a, B: LayoutBufferView> {
-    context: BufferDisplayPropertyCheckpointRenderContext<'a, B>,
-}
-
-pub(crate) struct BufferDisplayPropertyCheckpointRenderContext<'a, B: LayoutBufferView> {
-    buffer: &'a B,
-    charpos: i64,
-}
-
-pub(crate) struct BufferDisplayPropertyCheckpointRenderState<'emit> {
-    checkpoints: &'emit mut TextPropertyScanCheckpoints,
-}
-
-impl<'emit> BufferDisplayPropertyCheckpointRenderState<'emit> {
-    pub(crate) fn new(checkpoints: &'emit mut TextPropertyScanCheckpoints) -> Self {
-        Self { checkpoints }
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
@@ -85,12 +61,6 @@ pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
     progress: BufferTextWindowProgressState<'emit>,
 }
 
-impl BufferDisplayPropertyTextWalkOutcome {
-    pub(crate) fn should_continue_buffer_walk(self) -> bool {
-        false
-    }
-}
-
 impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -113,32 +83,6 @@ impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
             active_face_state,
             progress,
         }
-    }
-}
-
-impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderRequest<'a, B> {
-    pub(crate) fn new(context: BufferDisplayPropertyCheckpointRenderContext<'a, B>) -> Self {
-        Self { context }
-    }
-
-    pub(crate) fn render_and_apply(
-        self,
-        state: BufferDisplayPropertyCheckpointRenderState<'_>,
-    ) -> BufferDisplayPropertyTextWalkOutcome {
-        let BufferDisplayPropertyCheckpointRenderState { checkpoints } = state;
-        let context = self.context;
-        if checkpoints.should_check_display(context.charpos) {
-            let text_props = RustTextPropAccess::new(context.buffer);
-            let (_, next_change) = text_props.check_display_prop(context.charpos);
-            checkpoints.record_display_next(next_change);
-        }
-        BufferDisplayPropertyTextWalkOutcome::Continue
-    }
-}
-
-impl<'a, B: LayoutBufferView> BufferDisplayPropertyCheckpointRenderContext<'a, B> {
-    pub(crate) fn new(buffer: &'a B, charpos: i64) -> Self {
-        Self { buffer, charpos }
     }
 }
 

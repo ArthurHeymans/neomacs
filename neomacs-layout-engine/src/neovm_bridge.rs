@@ -1796,25 +1796,6 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         (status, next_change as i64)
     }
 
-    /// Check for a display text property at `charpos`.
-    ///
-    /// Returns the display property value if present, along with the
-    /// next position where display properties change.
-    pub fn check_display_prop(&self, charpos: i64) -> (Option<Value>, i64) {
-        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
-        let display = self
-            .buffer
-            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"));
-
-        let next_change = self
-            .buffer
-            .layout_next_text_prop_change_after_emacs_byte_pos(bytepos)
-            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
-            .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get());
-
-        (display, next_change as i64)
-    }
-
     /// Check for line-spacing text property at `charpos`.
     ///
     /// Returns extra line spacing in pixels (0.0 if no property).

@@ -1348,30 +1348,6 @@ fn overlay_invisible_respects_buffer_invisibility_spec() {
 }
 
 #[test]
-fn test_text_prop_check_display() {
-    let mut evaluator = neovm_core::emacs_core::Context::new();
-    let buf_id = evaluator.buffer_manager_mut().create_buffer("*display*");
-    if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
-        set_buffer_text(buf, "abcdef");
-        buf.widen();
-        // Set a display property on positions 2..4
-        buf.put_text_property(2, 4, Value::symbol("display"), Value::fixnum(42));
-    }
-
-    let buf = evaluator.buffer_manager().get(buf_id).unwrap();
-    let access = RustTextPropAccess::new(buf);
-
-    // Position 0: no display prop
-    let (dp, _next) = access.check_display_prop(0);
-    assert!(dp.is_none());
-
-    // Position 2: has display prop
-    let (dp, _next) = access.check_display_prop(2);
-    assert!(dp.is_some());
-    assert_eq!(dp.and_then(Value::as_fixnum), Some(42));
-}
-
-#[test]
 fn test_text_prop_line_spacing() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*spacing*");

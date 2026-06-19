@@ -328,22 +328,16 @@ fn buffer_text_row_overflow_decision_names_main_text_wrap_policy() {
 }
 
 #[test]
-fn text_property_scan_checkpoints_track_next_visibility_and_display_changes() {
-    let mut checkpoints = TextPropertyScanCheckpoints::new(10);
+fn invisible_text_scan_checkpoint_tracks_next_visibility_change() {
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(10);
 
-    assert!(!checkpoints.should_check_invisible(9));
-    assert!(checkpoints.should_check_invisible(10));
-    assert!(checkpoints.should_check_display(10));
+    assert!(!checkpoints.should_check(9));
+    assert!(checkpoints.should_check(10));
 
-    checkpoints.record_invisible_next(15);
-    checkpoints.record_display_next(20);
+    checkpoints.record_next_visible(15);
 
-    assert!(!checkpoints.should_check_invisible(14));
-    assert!(checkpoints.should_check_invisible(15));
-    assert!(!checkpoints.should_check_display(19));
-    assert!(checkpoints.should_check_display(20));
-    assert_eq!(checkpoints.display_skip_to(18), 18);
-    assert_eq!(checkpoints.display_skip_to(25), 20);
+    assert!(!checkpoints.should_check(14));
+    assert!(checkpoints.should_check(15));
 }
 
 #[test]

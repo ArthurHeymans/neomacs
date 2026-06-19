@@ -57,8 +57,8 @@ use crate::display_row_walk_state::FaceScanCheckpoint;
 use crate::display_row_walk_state::WordWrapBreakCandidate;
 #[cfg(test)]
 use crate::display_row_walk_state::{
-    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
-    TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
+    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
+    LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::face::BasicFaceId;

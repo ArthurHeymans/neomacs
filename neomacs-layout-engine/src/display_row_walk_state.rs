@@ -101,9 +101,8 @@ pub(crate) struct HitRowRangeTracker {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct TextPropertyScanCheckpoints {
+pub(crate) struct InvisibleTextScanCheckpoint {
     invisible_next: i64,
-    display_next: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -646,38 +645,19 @@ impl HitRowRangeTracker {
     }
 }
 
-impl TextPropertyScanCheckpoints {
+impl InvisibleTextScanCheckpoint {
     pub(crate) fn new(start_charpos: i64) -> Self {
         Self {
             invisible_next: start_charpos,
-            display_next: start_charpos,
         }
     }
 
-    pub(crate) fn should_check_invisible(self, charpos: i64) -> bool {
+    pub(crate) fn should_check(self, charpos: i64) -> bool {
         charpos >= self.invisible_next
     }
 
-    pub(crate) fn should_check_display(self, charpos: i64) -> bool {
-        charpos >= self.display_next
-    }
-
-    pub(crate) fn record_invisible_next(&mut self, charpos: i64) {
+    pub(crate) fn record_next_visible(&mut self, charpos: i64) {
         self.invisible_next = charpos;
-    }
-
-    pub(crate) fn record_display_next(&mut self, charpos: i64) {
-        self.display_next = charpos;
-    }
-
-    #[cfg(test)]
-    pub(crate) fn display_skip_to(self, accessible_end: i64) -> i64 {
-        self.display_next.min(accessible_end)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn display_next(self) -> i64 {
-        self.display_next
     }
 }
 
