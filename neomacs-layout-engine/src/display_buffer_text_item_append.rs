@@ -1,3 +1,4 @@
+use crate::display_buffer_text_progress::BufferTextWindowProgressState;
 use crate::display_buffer_text_render::{
     BufferTextSourceAppendContinuation, BufferTextSourceCharOverflowAction,
     BufferTextSourceCharRenderState, BufferTextSpecialSourceCharOverflowAction,
@@ -660,9 +661,7 @@ impl BufferTextSourceCharPreparedAppend {
             state.word_wrap,
             ch,
             geometry,
-            state.progress.row.x,
-            state.progress.row.col,
-            state.progress.charpos,
+            &mut state.progress,
         );
         BufferTextSourceAppendContinuation::Rendered
     }
@@ -694,12 +693,16 @@ impl BufferTextSourceCharAppendOutcome {
         word_wrap: &mut WordWrapRenderState,
         ch: char,
         geometry: &DisplayRowGeometryState,
-        x: &mut f32,
-        col: &mut usize,
-        charpos: &mut i64,
+        progress: &mut BufferTextWindowProgressState<'_>,
     ) {
-        self.apply_to_text_row_state(trailing_whitespace, ch, geometry, x, col);
-        *charpos += 1;
+        self.apply_to_text_row_state(
+            trailing_whitespace,
+            ch,
+            geometry,
+            progress.row.x,
+            progress.row.col,
+        );
+        *progress.charpos += 1;
         word_wrap.allow_after_current_char(ch);
     }
 }
@@ -926,9 +929,7 @@ impl BufferTextSpecialSourceCharPreparedAppend {
         outcome.apply_rendered_special_char_to_walk_state(
             state.face_scan,
             state.word_wrap,
-            state.progress.row.x,
-            state.progress.row.col,
-            state.progress.charpos,
+            &mut state.progress,
         );
         BufferTextSourceAppendContinuation::Rendered
     }
@@ -969,12 +970,10 @@ impl BufferTextSpecialSourceCharAppendOutcome {
         &self,
         face_scan: &mut FaceScanCheckpoint,
         word_wrap: &mut WordWrapRenderState,
-        x: &mut f32,
-        col: &mut usize,
-        charpos: &mut i64,
+        progress: &mut BufferTextWindowProgressState<'_>,
     ) {
-        self.apply_to_text_row_state(face_scan, x, col);
-        *charpos += 1;
+        self.apply_to_text_row_state(face_scan, progress.row.x, progress.row.col);
+        *progress.charpos += 1;
         word_wrap.disallow_after_current_char();
     }
 }
