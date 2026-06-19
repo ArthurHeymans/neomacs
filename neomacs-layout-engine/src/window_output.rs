@@ -575,12 +575,6 @@ pub(crate) struct TextMatrixRowStoredMetrics {
     pub(crate) ascent_px: f32,
 }
 
-struct TextMatrixRowOutput<'a> {
-    matrix_output: TextWindowMatrixOutputSurface<'a>,
-    output_emitter: &'a mut WindowOutputEmitter,
-    evaluator: &'a mut Context,
-}
-
 pub(crate) struct TextWindowLiveCurrentRowEvaluatorState<'a> {
     pub(crate) row_surface: DisplayRowCurrentRowSurface<'a>,
     pub(crate) evaluator: &'a mut Context,
@@ -692,23 +686,24 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
 
     #[cfg(test)]
     pub(crate) fn begin_text_row(self, begin: TextMatrixRowBegin) -> usize {
-        TextMatrixRowOutput::new(self.builder, self.output_emitter, self.evaluator).begin(begin)
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+            .begin_text_row(self.evaluator, begin)
     }
 
     #[cfg(test)]
     pub(crate) fn finish_text_row(self, metrics: TextMatrixRowMetrics) {
-        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
-            .finish_row(metrics);
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+            .finish_text_row(metrics);
     }
 
     pub(crate) fn finish_and_end_text_row(self, metrics: TextMatrixRowMetrics) {
-        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
-            .finish_and_end_row(metrics);
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+            .finish_and_end_text_row(metrics);
     }
 
     pub(crate) fn transition_text_row(self, transition: TextMatrixRowGeometryTransition) {
-        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
-            .transition(transition);
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+            .transition_text_row(self.evaluator, transition);
     }
 
     pub(crate) fn transition_text_row_with_limit(
@@ -716,12 +711,12 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         transition: TextMatrixRowGeometryTransition,
         max_rows: usize,
     ) -> TextMatrixRowTransition {
-        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
-            .transition_with_limit(transition, max_rows)
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
+            .transition_text_row_with_limit(self.evaluator, transition, max_rows)
     }
 
     pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
-        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+        TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
             .install_row_decoration(request);
     }
 
@@ -808,142 +803,6 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
 
     pub(crate) fn output_rows_len(&self) -> usize {
         self.output_emitter.rows().len()
-    }
-}
-
-impl<'a> TextMatrixRowOutput<'a> {
-    fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-    ) -> Self {
-        Self {
-            matrix_output: TextWindowMatrixOutputSurface::from_builder(builder),
-            output_emitter,
-            evaluator,
-        }
-    }
-
-    fn begin(&mut self, begin: TextMatrixRowBegin) -> usize {
-        let matrix_row = self.matrix_output.begin_text_matrix_row(begin);
-        self.output_emitter.begin_text_matrix_row(
-            self.evaluator,
-            begin.matrix_row,
-            begin.row,
-            begin.col,
-            begin.y,
-            begin.x,
-        );
-        matrix_row
-    }
-
-    fn finish(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
-        let matrix_row = self.output_emitter.current_text_matrix_row();
-        let finish = self
-            .matrix_output
-            .finish_text_matrix_row(matrix_row, metrics);
-        self.output_emitter
-            .push_text_row(metrics.y, metrics.height, metrics.ascent);
-        finish
-    }
-
-    fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
-        let matrix_row = self.output_emitter.current_text_matrix_row();
-        let finish = self.finish(metrics);
-        self.matrix_output.finalize_text_matrix_row(matrix_row);
-        finish
-    }
-
-    fn emit(&mut self, transition: TextMatrixRowGeometryTransition) -> TextMatrixRowTransition {
-        self.finish_and_end(transition.finished_row);
-        self.begin(transition.begin_row);
-        TextMatrixRowTransition::BeganNextRow
-    }
-
-    fn emit_with_row_limit(
-        &mut self,
-        transition: TextMatrixRowGeometryTransition,
-        max_rows: usize,
-    ) -> TextMatrixRowTransition {
-        if transition.begin_row.row >= max_rows {
-            self.finish_and_end(transition.finished_row);
-            return TextMatrixRowTransition::ExhaustedRows;
-        }
-        self.emit(transition)
-    }
-}
-
-struct TextWindowRowLifecycleInstaller<'a> {
-    output: TextMatrixRowOutput<'a>,
-}
-
-impl<'a> TextWindowRowLifecycleInstaller<'a> {
-    fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: &'a mut WindowOutputEmitter,
-        evaluator: &'a mut Context,
-    ) -> Self {
-        Self {
-            output: TextMatrixRowOutput::new(builder, output_emitter, evaluator),
-        }
-    }
-
-    fn begin_text_window_output(&mut self, request: TextWindowBegin) {
-        let first_row = request.first_row;
-        self.output
-            .matrix_output
-            .begin_text_window_matrix(request.into());
-        self.output.begin(first_row);
-    }
-
-    fn finish_row(&mut self, metrics: TextMatrixRowMetrics) {
-        self.output.finish(metrics);
-    }
-
-    fn finish_pending_row(&mut self, request: TextWindowPendingRowFinish<'_>) -> bool {
-        let has_pending_row_output = self.output.output_emitter.current_row_has_output();
-        if !request.row_geometry.is_within_row_limit(request.row_limit)
-            || !request
-                .hit_row_range
-                .should_finish_current_row(request.charpos, has_pending_row_output)
-        {
-            return false;
-        }
-
-        let row_y_start = request.row_geometry.current_row_y(
-            request.row_y_positions,
-            request.text_y,
-            request.char_height,
-        );
-        let row_cursor = request.row_geometry.with_row_y(row_y_start).cursor();
-        request
-            .hit_rows
-            .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
-        self.finish_row(row_cursor.finish_current_row());
-        true
-    }
-
-    fn finish_and_end_row(&mut self, metrics: TextMatrixRowMetrics) {
-        self.output.finish_and_end(metrics);
-    }
-
-    fn transition(
-        &mut self,
-        transition: TextMatrixRowGeometryTransition,
-    ) -> TextMatrixRowTransition {
-        self.output.emit(transition)
-    }
-
-    fn transition_with_limit(
-        &mut self,
-        transition: TextMatrixRowGeometryTransition,
-        max_rows: usize,
-    ) -> TextMatrixRowTransition {
-        self.output.emit_with_row_limit(transition, max_rows)
-    }
-
-    fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        self.output.matrix_output.install_row_decoration(request);
     }
 }
 
@@ -1102,6 +961,71 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         self.output_emitter().point_for_lisp_buffer_pos(pos)
     }
 
+    pub(crate) fn begin_text_row(
+        &mut self,
+        evaluator: &mut Context,
+        begin: TextMatrixRowBegin,
+    ) -> usize {
+        let matrix_row =
+            TextWindowMatrixOutputSurface::from_builder(self.builder).begin_text_matrix_row(begin);
+        self.output_emitter.begin_text_matrix_row(
+            evaluator,
+            begin.matrix_row,
+            begin.row,
+            begin.col,
+            begin.y,
+            begin.x,
+        );
+        matrix_row
+    }
+
+    pub(crate) fn finish_text_row(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
+        let matrix_row = self.output_emitter.current_text_matrix_row();
+        let finish = TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .finish_text_matrix_row(matrix_row, metrics);
+        self.output_emitter
+            .push_text_row(metrics.y, metrics.height, metrics.ascent);
+        finish
+    }
+
+    pub(crate) fn finish_and_end_text_row(
+        &mut self,
+        metrics: TextMatrixRowMetrics,
+    ) -> TextMatrixRowFinish {
+        let matrix_row = self.output_emitter.current_text_matrix_row();
+        let finish = self.finish_text_row(metrics);
+        TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .finalize_text_matrix_row(matrix_row);
+        finish
+    }
+
+    pub(crate) fn transition_text_row(
+        &mut self,
+        evaluator: &mut Context,
+        transition: TextMatrixRowGeometryTransition,
+    ) -> TextMatrixRowTransition {
+        self.finish_and_end_text_row(transition.finished_row);
+        self.begin_text_row(evaluator, transition.begin_row);
+        TextMatrixRowTransition::BeganNextRow
+    }
+
+    pub(crate) fn transition_text_row_with_limit(
+        &mut self,
+        evaluator: &mut Context,
+        transition: TextMatrixRowGeometryTransition,
+        max_rows: usize,
+    ) -> TextMatrixRowTransition {
+        if transition.begin_row.row >= max_rows {
+            self.finish_and_end_text_row(transition.finished_row);
+            return TextMatrixRowTransition::ExhaustedRows;
+        }
+        self.transition_text_row(evaluator, transition)
+    }
+
+    pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
+        TextWindowMatrixOutputSurface::from_builder(self.builder).install_row_decoration(request);
+    }
+
     pub(crate) fn publish_cursor(
         &mut self,
         cursor: TextWindowCursor,
@@ -1186,17 +1110,37 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         evaluator: &mut Context,
         request: TextWindowBegin,
     ) {
-        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, evaluator)
-            .begin_text_window_output(request);
+        let first_row = request.first_row;
+        TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .begin_text_window_matrix(request.into());
+        self.begin_text_row(evaluator, first_row);
     }
 
     pub(crate) fn finish_pending_row(
         &mut self,
-        evaluator: &mut Context,
+        _evaluator: &mut Context,
         request: TextWindowPendingRowFinish<'_>,
     ) -> bool {
-        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, evaluator)
-            .finish_pending_row(request)
+        let has_pending_row_output = self.output_emitter.current_row_has_output();
+        if !request.row_geometry.is_within_row_limit(request.row_limit)
+            || !request
+                .hit_row_range
+                .should_finish_current_row(request.charpos, has_pending_row_output)
+        {
+            return false;
+        }
+
+        let row_y_start = request.row_geometry.current_row_y(
+            request.row_y_positions,
+            request.text_y,
+            request.char_height,
+        );
+        let row_cursor = request.row_geometry.with_row_y(row_y_start).cursor();
+        request
+            .hit_rows
+            .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
+        self.finish_text_row(row_cursor.finish_current_row());
+        true
     }
 }
 
