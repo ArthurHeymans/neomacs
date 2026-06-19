@@ -42,7 +42,7 @@ pub(crate) struct BufferTextWindowGeometry {
     pub(crate) display_text_row_base: usize,
     pub(crate) display_text_rows: usize,
     pub(crate) bottom_chrome_rows: usize,
-    pub(crate) mode_line_matrix_row: usize,
+    pub(crate) mode_line_display_row: usize,
     pub(crate) cols: usize,
     pub(crate) line_number_pixel_width: f32,
     pub(crate) content_x: f32,
@@ -139,7 +139,7 @@ impl BufferTextWindowGeometryRequest {
         let line_number_pixel_width = line_number_columns as f32 * self.char_width;
         let display_text_row_base = self.top_chrome_rows;
         let display_text_rows = max_rows.max(1);
-        let mode_line_matrix_row = display_text_row_base + display_text_rows;
+        let mode_line_display_row = display_text_row_base + display_text_rows;
         let cols = ((self.text_width - line_number_pixel_width) / self.char_width).floor() as usize;
         let content_x = self.text_x + line_number_pixel_width;
 
@@ -166,7 +166,7 @@ impl BufferTextWindowGeometryRequest {
             display_text_row_base,
             display_text_rows,
             bottom_chrome_rows: self.bottom_chrome_rows,
-            mode_line_matrix_row,
+            mode_line_display_row,
             cols,
             line_number_pixel_width,
             content_x,

@@ -1571,7 +1571,7 @@ where
             state,
             chrome_plan.render_request(
                 params,
-                geometry.mode_line_matrix_row,
+                geometry.mode_line_display_row,
                 reserve_right_border_col,
                 char_w,
                 font_ascent,

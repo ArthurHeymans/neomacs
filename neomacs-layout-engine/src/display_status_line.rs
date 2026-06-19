@@ -304,7 +304,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) window_id: u64,
     pub(crate) kind: WindowChromeKind,
     pub(crate) selected: bool,
-    pub(crate) matrix_row: usize,
+    pub(crate) display_row_index: usize,
     pub(crate) output: ChromeRowOutput,
     pub(crate) bounds: Rect,
     pub(crate) char_width: f32,
@@ -323,7 +323,7 @@ pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
     pub(crate) tab_line_height: f32,
     pub(crate) header_line_height: f32,
     pub(crate) mode_line_height: f32,
-    pub(crate) mode_line_matrix_row: usize,
+    pub(crate) mode_line_display_row: usize,
     pub(crate) reserve_right_border_col: bool,
     pub(crate) char_width: f32,
     pub(crate) font_ascent: f32,
@@ -438,7 +438,7 @@ impl WindowChromeRowsPlan {
     pub(crate) fn render_request<'face, 'params>(
         &'face self,
         params: &'params WindowParams,
-        mode_line_matrix_row: usize,
+        mode_line_display_row: usize,
         reserve_right_border_col: bool,
         char_width: f32,
         font_ascent: f32,
@@ -452,7 +452,7 @@ impl WindowChromeRowsPlan {
             tab_line_height: self.tab_line_height,
             header_line_height: self.header_line_height,
             mode_line_height: self.mode_line_height,
-            mode_line_matrix_row,
+            mode_line_display_row,
             reserve_right_border_col,
             char_width,
             font_ascent,
@@ -506,7 +506,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 window_id: params.window_id as u64,
                 kind: WindowChromeKind::TabLine,
                 selected: params.selected,
-                matrix_row: 0,
+                display_row_index: 0,
                 output: ChromeRowOutput {
                     row: 0,
                     y: tab_line_y,
@@ -542,7 +542,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 window_id: params.window_id as u64,
                 kind: WindowChromeKind::HeaderLine,
                 selected: params.selected,
-                matrix_row: usize::from(self.tab_line_height > 0.0),
+                display_row_index: usize::from(self.tab_line_height > 0.0),
                 output: ChromeRowOutput {
                     row: i64::from(self.tab_line_height > 0.0),
                     y: header_line_y,
@@ -589,9 +589,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 window_id: params.window_id as u64,
                 kind: WindowChromeKind::ModeLine,
                 selected: params.selected,
-                matrix_row: self.mode_line_matrix_row,
+                display_row_index: self.mode_line_display_row,
                 output: ChromeRowOutput {
-                    row: self.mode_line_matrix_row as i64,
+                    row: self.mode_line_display_row as i64,
                     y: mode_line_y,
                 },
                 bounds: Rect::new(
@@ -616,7 +616,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
 struct WindowChromeDisplayRowRenderParts<'face> {
     output: ChromeRowOutput,
     owner: DisplayRowOwner,
-    matrix_row: u32,
+    display_row_index: u32,
     bounds: Rect,
     render_request: DisplayRowLispStringRenderRequest<'face>,
 }
@@ -650,7 +650,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
                 window_id: self.window_id,
                 kind: self.kind,
             },
-            matrix_row: self.matrix_row.min(u32::MAX as usize) as u32,
+            display_row_index: self.display_row_index.min(u32::MAX as usize) as u32,
             bounds: self.bounds,
             render_request,
         }
@@ -692,7 +692,7 @@ impl<'state, 'builder, 'output, 'services, 'face>
         let measured_row = rendered_row.map(|rendered| {
             MeasuredDisplayRow::new(
                 parts.owner,
-                parts.matrix_row,
+                parts.display_row_index,
                 parts.bounds,
                 rendered,
                 DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
