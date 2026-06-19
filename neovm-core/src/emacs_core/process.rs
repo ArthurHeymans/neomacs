@@ -1252,6 +1252,104 @@ fn process_status_signal_value(signal_num: i32) -> Value {
     ])
 }
 
+/// Map a `strsignal`-style description (as produced by `portable_pty::ExitStatus`)
+/// back to a signal number by scanning the platform's signal table. Both the
+/// PTY layer and this lookup call `strsignal`, so the descriptions match exactly.
+#[cfg(unix)]
+fn signal_number_from_description(name: &str) -> Option<i32> {
+    // portable_pty falls back to "Signal N" when strsignal yields NULL.
+    if let Some(rest) = name.strip_prefix("Signal ") {
+        if let Ok(n) = rest.trim().parse::<i32>() {
+            return Some(n);
+        }
+    }
+    for signum in 1..=64i32 {
+        let desc = unsafe {
+            let p = libc::strsignal(signum);
+            if p.is_null() {
+                continue;
+            }
+            std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned()
+        };
+        if desc == name {
+            return Some(signum);
+        }
+    }
+    None
+}
+
+/// Convert a finished `portable_pty::ExitStatus` (PTY child) to an Emacs process
+/// status. GNU distinguishes signal death from a normal exit via
+/// `WIFSIGNALED`/`WTERMSIG`; portable_pty preserves this as `signal()`/`exit_code()`.
+#[cfg(unix)]
+fn process_status_from_pty_exit(status: &portable_pty::ExitStatus) -> Value {
+    if let Some(sig_name) = status.signal() {
+        let signum = signal_number_from_description(sig_name).unwrap_or(0);
+        return process_status_signal_value(signum);
+    }
+    process_status_exit_value(status.exit_code() as i32)
+}
+
+#[cfg(not(unix))]
+fn process_status_from_pty_exit(status: &portable_pty::ExitStatus) -> Value {
+    if status.success() {
+        process_status_exit_value(0)
+    } else {
+        process_status_exit_value(status.exit_code() as i32)
+    }
+}
+
+/// GNU `status_message` (process.c): the human-readable sentinel/buffer message
+/// for a finished process status. Signal/stop death reports the `strsignal`
+/// description with its first character down-cased; a non-zero exit reports
+/// "exited abnormally with code N"; a zero exit reports "finished".
+fn gnu_process_status_message(status: Value) -> String {
+    match ProcessStatusSymbol::from_status_value(status) {
+        Some(ProcessStatusSymbol::Exit) => {
+            let code = process_status_code_value(status);
+            if code == 0 {
+                "finished\n".to_string()
+            } else {
+                format!("exited abnormally with code {code}\n")
+            }
+        }
+        Some(ProcessStatusSymbol::Signal) | Some(ProcessStatusSymbol::Stop) => {
+            let code = process_status_code_value(status);
+            let desc = signal_description(code as i32);
+            format!("{desc}\n")
+        }
+        _ => "finished\n".to_string(),
+    }
+}
+
+/// strsignal description with the first character down-cased, matching GNU's
+/// `status_message`. Falls back to "unknown" when strsignal yields NULL.
+fn signal_description(signum: i32) -> String {
+    #[cfg(unix)]
+    {
+        let raw = unsafe {
+            let p = libc::strsignal(signum);
+            if p.is_null() {
+                None
+            } else {
+                Some(std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned())
+            }
+        };
+        if let Some(s) = raw {
+            let mut chars = s.chars();
+            return match chars.next() {
+                Some(first) => {
+                    let lowered: String = first.to_lowercase().collect();
+                    format!("{lowered}{}", chars.as_str())
+                }
+                None => s,
+            };
+        }
+    }
+    let _ = signum;
+    "unknown".to_string()
+}
+
 fn process_status_symbol_value(status: Value) -> Value {
     list_to_vec(&status)
         .and_then(|items| items.first().copied())
@@ -1918,8 +2016,10 @@ impl ProcessManager {
         if let Some(ref mut pty_child) = proc.pty_child {
             match pty_child.try_wait() {
                 Ok(Some(status)) => {
-                    let code = if status.success() { 0 } else { 1 };
-                    proc.status = process_status_exit_value(code);
+                    // Preserve the real exit code and signal-death status, as GNU
+                    // does (status_notify decodes WIFSIGNALED/WEXITSTATUS); the
+                    // previous `success ? 0 : 1` collapsed every failure to 1.
+                    proc.status = process_status_from_pty_exit(&status);
                     return true;
                 }
                 Ok(None) => return false,
@@ -2860,20 +2960,7 @@ impl super::eval::Context {
                 let exit_msg = self
                     .processes
                     .get(pid)
-                    .map(|p| match ProcessStatusSymbol::from_status_value(p.status) {
-                        Some(ProcessStatusSymbol::Exit) => {
-                            let code = process_status_code_value(p.status);
-                            if code == 0 {
-                                "finished\n".to_string()
-                            } else {
-                                format!("exited abnormally with code {}\n", code)
-                            }
-                        }
-                        Some(ProcessStatusSymbol::Signal) => {
-                            format!("killed by signal {}\n", process_status_code_value(p.status))
-                        }
-                        _ => "finished\n".to_string(),
-                    })
+                    .map(|p| gnu_process_status_message(p.status))
                     .unwrap_or_else(|| "finished\n".to_string());
                 self.run_process_sentinel_callback(pid, sentinel, &exit_msg);
             }
