@@ -290,10 +290,40 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
         self.record_display_range(positions.display_range(window_id));
     }
 
-    #[cfg(test)]
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
         let mut row_lifecycle = DisplayRowLifecycleSurface::from_builder(self.builder);
         request.install(&mut row_lifecycle);
+    }
+
+    fn begin_text_matrix_row(&mut self, begin: TextMatrixRowBegin) -> usize {
+        DisplayRowLifecycleSurface::from_builder(self.builder).begin_row(
+            begin.matrix_row,
+            GlyphRowRole::Text,
+            false,
+        );
+        begin.matrix_row
+    }
+
+    fn finish_text_matrix_row(
+        &mut self,
+        matrix_row: usize,
+        metrics: TextMatrixRowMetrics,
+    ) -> TextMatrixRowFinish {
+        let matrix_metrics = self.text_matrix_row_metrics(metrics);
+        DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
+            matrix_row,
+            matrix_metrics.pixel_y,
+            matrix_metrics.height_px,
+            matrix_metrics.ascent_px,
+        );
+        TextMatrixRowFinish {
+            matrix_row,
+            metrics: matrix_metrics,
+        }
+    }
+
+    fn finalize_text_matrix_row(&mut self, matrix_row: usize) {
+        DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(matrix_row);
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
@@ -340,6 +370,38 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
         if let Some(metric) = output_emitter.row_metrics().last() {
             DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(metric.matrix_row);
         }
+    }
+
+    fn install_right_edge_markers(
+        &mut self,
+        mut render_services: ChromeRowRenderServices<'_, '_>,
+        request: TextWindowRightEdgeMarkers<'_>,
+    ) {
+        let base_face = render_services.face_resolver().default_face().clone();
+        let mut decorations = DisplayRowDecorationSurface::from_builder(self.builder);
+        for decoration in text_window_right_edge_marker_decorations(&request) {
+            decorations.decorate_current_window_row(
+                decoration.matrix_row,
+                RightEdgeMarkerRowDecorator::new(
+                    decoration,
+                    request.face_id,
+                    &base_face,
+                    request.char_width,
+                    &mut render_services,
+                ),
+            );
+        }
+    }
+
+    fn install_last_window_right_border(
+        &mut self,
+        mut render_services: ChromeRowRenderServices<'_, '_>,
+        request: TextWindowRightBorder,
+        base_face: &ResolvedFace,
+    ) {
+        DisplayRowDecorationSurface::from_builder(self.builder).decorate_last_window_rows(
+            RightBorderRowsDecorator::new(request, base_face, &mut render_services),
+        );
     }
 }
 
@@ -514,7 +576,7 @@ pub(crate) struct TextMatrixRowStoredMetrics {
 }
 
 struct TextMatrixRowOutput<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
+    matrix_output: TextWindowMatrixOutputSurface<'a>,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
 }
@@ -756,18 +818,14 @@ impl<'a> TextMatrixRowOutput<'a> {
         evaluator: &'a mut Context,
     ) -> Self {
         Self {
-            builder,
+            matrix_output: TextWindowMatrixOutputSurface::from_builder(builder),
             output_emitter,
             evaluator,
         }
     }
 
     fn begin(&mut self, begin: TextMatrixRowBegin) -> usize {
-        DisplayRowLifecycleSurface::from_builder(self.builder).begin_row(
-            begin.matrix_row,
-            GlyphRowRole::Text,
-            false,
-        );
+        let matrix_row = self.matrix_output.begin_text_matrix_row(begin);
         self.output_emitter.begin_text_matrix_row(
             self.evaluator,
             begin.matrix_row,
@@ -776,31 +834,23 @@ impl<'a> TextMatrixRowOutput<'a> {
             begin.y,
             begin.x,
         );
-        begin.matrix_row
+        matrix_row
     }
 
     fn finish(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
-        let matrix_metrics = TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .text_matrix_row_metrics(metrics);
         let matrix_row = self.output_emitter.current_text_matrix_row();
-        DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
-            matrix_row,
-            matrix_metrics.pixel_y,
-            matrix_metrics.height_px,
-            matrix_metrics.ascent_px,
-        );
+        let finish = self
+            .matrix_output
+            .finish_text_matrix_row(matrix_row, metrics);
         self.output_emitter
             .push_text_row(metrics.y, metrics.height, metrics.ascent);
-        TextMatrixRowFinish {
-            matrix_row,
-            metrics: matrix_metrics,
-        }
+        finish
     }
 
     fn finish_and_end(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
         let matrix_row = self.output_emitter.current_text_matrix_row();
         let finish = self.finish(metrics);
-        DisplayRowLifecycleSurface::from_builder(self.builder).finalize_row(matrix_row);
+        self.matrix_output.finalize_text_matrix_row(matrix_row);
         finish
     }
 
@@ -840,7 +890,8 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
 
     fn begin_text_window_output(&mut self, request: TextWindowBegin) {
         let first_row = request.first_row;
-        TextWindowMatrixOutputSurface::from_builder(self.output.builder)
+        self.output
+            .matrix_output
             .begin_text_window_matrix(request.into());
         self.output.begin(first_row);
     }
@@ -892,8 +943,7 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
     }
 
     fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        let mut row_lifecycle = DisplayRowLifecycleSurface::from_builder(self.output.builder);
-        request.install(&mut row_lifecycle);
+        self.output.matrix_output.install_row_decoration(request);
     }
 }
 
@@ -1003,105 +1053,6 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
-struct TextWindowBorderInstaller<'builder> {
-    builder: &'builder mut GlyphMatrixBuilder,
-}
-
-impl<'builder> TextWindowBorderInstaller<'builder> {
-    fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn install_terminal_right_border(
-        &mut self,
-        request: TextWindowTerminalRightBorder,
-        mut render_services: ChromeRowRenderServices<'_, '_>,
-    ) -> u32 {
-        let border_face = render_services
-            .face_resolver()
-            .resolve_named_face(request.face_name);
-        // GNU draws every realized face id from the single per-frame face cache
-        // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
-        // border's id from the frame-scoped allocator (reconciled into
-        // `frame_face_id_counter` by the decoration render, engine.rs) rather than
-        // a separate `FaceResolver` counter that could collide with it.
-        let border_face_id = render_services.face_ids().allocate();
-        DisplayRowFaceInstallSurface::from_builder(self.builder).install_resolved_face(
-            border_face_id,
-            &border_face,
-            None,
-        );
-        install_last_window_right_border_from_source_requests(
-            self.builder,
-            render_services.reborrow(),
-            TextWindowRightBorder {
-                ch: request.ch,
-                face_id: border_face_id,
-                char_width: request.char_width,
-            },
-            &border_face,
-        );
-        border_face_id
-    }
-}
-
-struct TextWindowCursorInstaller<'builder, 'output> {
-    builder: &'builder mut GlyphMatrixBuilder,
-    output_emitter: Option<&'output mut WindowOutputEmitter>,
-}
-
-impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
-    fn new(
-        builder: &'builder mut GlyphMatrixBuilder,
-        output_emitter: &'output mut WindowOutputEmitter,
-    ) -> Self {
-        Self {
-            builder,
-            output_emitter: Some(output_emitter),
-        }
-    }
-
-    fn without_output(builder: &'builder mut GlyphMatrixBuilder) -> Self {
-        Self {
-            builder,
-            output_emitter: None,
-        }
-    }
-
-    fn publish_cursor(&mut self, cursor: TextWindowCursor) -> TextWindowCursorPublicationOutcome {
-        let output_emitter = self
-            .output_emitter
-            .as_deref_mut()
-            .expect("text-window cursor publication requires an output emitter");
-        TextWindowCursorPublication::resolve(self.builder, cursor)
-            .publish(self.builder, output_emitter)
-    }
-
-    fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
-        if let Some(effects) = cursor.effects {
-            self.install_cursor_effects(TextWindowCursorEffects {
-                window_id: cursor.window_id,
-                effects,
-            });
-        }
-        DisplayRowArtifactInstallSurface::from_builder(self.builder).add_cursor(
-            cursor.window_id,
-            cursor.slot_id,
-            cursor.x,
-            cursor.y,
-            cursor.width,
-            cursor.height,
-            cursor.style,
-            cursor.color,
-        );
-    }
-
-    fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        DisplayRowArtifactInstallSurface::from_builder(self.builder)
-            .set_cursor_effects(request.window_id, request.effects);
-    }
-}
-
 pub(crate) struct TextWindowRowOutputSurface<'builder, 'output> {
     builder: &'builder mut GlyphMatrixBuilder,
     output_emitter: &'output mut WindowOutputEmitter,
@@ -1155,11 +1106,30 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         &mut self,
         cursor: TextWindowCursor,
     ) -> TextWindowCursorPublicationOutcome {
-        TextWindowCursorInstaller::new(self.builder, self.output_emitter).publish_cursor(cursor)
+        let window_context = DisplayRowWindowContextSurface::from_builder(self.builder);
+        let publication = TextWindowCursorPublication::resolve(&window_context, cursor);
+        publication.publish(self)
     }
 
     pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
-        TextWindowCursorInstaller::without_output(self.builder).publish_decorative_cursor(cursor);
+        TextWindowArtifactOutputSurface::from_builder(self.builder)
+            .publish_decorative_cursor(cursor);
+    }
+
+    fn install_matrix_cursor(&mut self, cursor: TextWindowMatrixCursor) {
+        TextWindowArtifactOutputSurface::from_builder(self.builder).install_matrix_cursor(cursor);
+    }
+
+    fn set_matrix_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
+        DisplayRowLifecycleSurface::from_builder(self.builder).set_cursor(row, col, style);
+    }
+
+    fn store_phys_cursor(&mut self, cursor: PhysCursor) {
+        TextWindowArtifactOutputSurface::from_builder(self.builder).store_phys_cursor(cursor);
+    }
+
+    fn set_phys_cursor(&mut self, cursor: WindowCursorSnapshot) {
+        self.output_emitter_mut().set_phys_cursor(cursor);
     }
 
     pub(crate) fn install_body_output(
@@ -1236,16 +1206,75 @@ impl<'builder> TextWindowArtifactOutputSurface<'builder> {
     }
 
     pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        TextWindowCursorInstaller::without_output(self.builder).install_cursor_effects(request);
+        DisplayRowArtifactInstallSurface::from_builder(self.builder)
+            .set_cursor_effects(request.window_id, request.effects);
+    }
+
+    pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
+        if let Some(effects) = cursor.effects {
+            self.install_cursor_effects(TextWindowCursorEffects {
+                window_id: cursor.window_id,
+                effects,
+            });
+        }
+        self.install_matrix_cursor(TextWindowMatrixCursor {
+            window_id: cursor.window_id,
+            slot_id: cursor.slot_id,
+            x: cursor.x,
+            y: cursor.y,
+            width: cursor.width,
+            height: cursor.height,
+            style: cursor.style,
+            color: cursor.color,
+        });
+    }
+
+    fn install_matrix_cursor(&mut self, cursor: TextWindowMatrixCursor) {
+        DisplayRowArtifactInstallSurface::from_builder(self.builder).add_cursor(
+            cursor.window_id,
+            cursor.slot_id,
+            cursor.x,
+            cursor.y,
+            cursor.width,
+            cursor.height,
+            cursor.style,
+            cursor.color,
+        );
+    }
+
+    fn store_phys_cursor(&mut self, cursor: PhysCursor) {
+        DisplayRowArtifactInstallSurface::from_builder(self.builder).store_phys_cursor(cursor);
     }
 
     pub(crate) fn install_terminal_right_border(
         &mut self,
         request: TextWindowTerminalRightBorder,
-        render_services: ChromeRowRenderServices<'_, '_>,
+        mut render_services: ChromeRowRenderServices<'_, '_>,
     ) -> u32 {
-        TextWindowBorderInstaller::new(self.builder)
-            .install_terminal_right_border(request, render_services)
+        let border_face = render_services
+            .face_resolver()
+            .resolve_named_face(request.face_name);
+        // GNU draws every realized face id from the single per-frame face cache
+        // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
+        // border's id from the frame-scoped allocator (reconciled into
+        // `frame_face_id_counter` by the decoration render, engine.rs) rather than
+        // a separate `FaceResolver` counter that could collide with it.
+        let border_face_id = render_services.face_ids().allocate();
+        DisplayRowFaceInstallSurface::from_builder(self.builder).install_resolved_face(
+            border_face_id,
+            &border_face,
+            None,
+        );
+        TextWindowMatrixOutputSurface::from_builder(self.builder).install_last_window_right_border(
+            render_services.reborrow(),
+            TextWindowRightBorder {
+                ch: request.ch,
+                face_id: border_face_id,
+                char_width: request.char_width,
+            },
+            &border_face,
+        );
+        border_face_id
     }
 }
 
@@ -1271,21 +1300,6 @@ struct TextWindowMatrixCursor {
     color: Color,
 }
 
-impl TextWindowMatrixCursor {
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
-        DisplayRowArtifactInstallSurface::from_builder(builder).add_cursor(
-            self.window_id,
-            self.slot_id,
-            self.x,
-            self.y,
-            self.width,
-            self.height,
-            self.style,
-            self.color,
-        );
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublicationOutcome {
     pub(crate) installed_matrix_cursor: bool,
@@ -1296,7 +1310,10 @@ pub(crate) struct TextWindowCursorPublicationOutcome {
 }
 
 impl TextWindowCursorPublication {
-    fn resolve(builder: &GlyphMatrixBuilder, cursor: TextWindowCursor) -> Self {
+    fn resolve(
+        window_context: &DisplayRowWindowContextSurface<'_>,
+        cursor: TextWindowCursor,
+    ) -> Self {
         let matrix_cursor = (!cursor.selected).then_some(TextWindowMatrixCursor {
             window_id: cursor.window_id,
             slot_id: cursor.slot_id,
@@ -1309,7 +1326,6 @@ impl TextWindowCursorPublication {
         });
         let mut phys_cursor = cursor.phys_cursor();
         let row_col = if cursor.selected && !cursor.glyph_row_resolved {
-            let window_context = DisplayRowWindowContextSurface::from_builder(builder);
             if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
                 .resolve_phys_cursor_placement(window_context.cursor_visual_column_context())
             {
@@ -1332,21 +1348,16 @@ impl TextWindowCursorPublication {
 
     fn publish(
         self,
-        builder: &mut GlyphMatrixBuilder,
-        output_emitter: &mut WindowOutputEmitter,
+        output: &mut TextWindowRowOutputSurface<'_, '_>,
     ) -> TextWindowCursorPublicationOutcome {
         let installed_matrix_cursor = self.matrix_cursor.is_some();
         if let Some(cursor) = self.matrix_cursor {
-            cursor.install(builder);
+            output.install_matrix_cursor(cursor);
         }
-        DisplayRowLifecycleSurface::from_builder(builder).set_cursor(
-            self.row,
-            self.row_col,
-            self.style,
-        );
-        output_emitter.set_phys_cursor(self.live_cursor.clone());
+        output.set_matrix_cursor(self.row, self.row_col, self.style);
+        output.set_phys_cursor(self.live_cursor.clone());
         if let Some(cursor) = self.selected_phys_cursor.clone() {
-            DisplayRowArtifactInstallSurface::from_builder(builder).store_phys_cursor(cursor);
+            output.store_phys_cursor(cursor);
         }
         TextWindowCursorPublicationOutcome {
             installed_matrix_cursor,
@@ -1359,7 +1370,7 @@ impl TextWindowCursorPublication {
 }
 
 struct TextWindowOutputInstaller<'builder, 'output> {
-    builder: &'builder mut GlyphMatrixBuilder,
+    matrix_output: TextWindowMatrixOutputSurface<'builder>,
     output_emitter: &'output WindowOutputEmitter,
 }
 
@@ -1369,14 +1380,13 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
         output_emitter: &'output WindowOutputEmitter,
     ) -> Self {
         Self {
-            builder,
+            matrix_output: TextWindowMatrixOutputSurface::from_builder(builder),
             output_emitter,
         }
     }
 
     fn install_output(&mut self, _request: TextWindowOutputInstall) {
-        TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .finish_output_rows(self.output_emitter);
+        self.matrix_output.finish_output_rows(self.output_emitter);
     }
 
     fn install_body_output(
@@ -1390,48 +1400,17 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
             request.text_start_byte,
             request.byte_idx,
         );
-        TextWindowMatrixOutputSurface::from_builder(self.builder)
+        self.matrix_output
             .record_redisplay_positions(request.window_id, redisplay_positions);
         self.install_output(TextWindowOutputInstall);
         if let Some(markers) = request.right_edge_markers {
             let render_services =
                 render_services.expect("right-edge markers require chrome render services");
-            install_right_edge_markers_from_source_requests(self.builder, render_services, markers);
+            self.matrix_output
+                .install_right_edge_markers(render_services, markers);
         }
         redisplay_positions
     }
-}
-
-fn install_right_edge_markers_from_source_requests(
-    builder: &mut GlyphMatrixBuilder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
-    request: TextWindowRightEdgeMarkers<'_>,
-) {
-    let base_face = render_services.face_resolver().default_face().clone();
-    let mut decorations = DisplayRowDecorationSurface::from_builder(builder);
-    for decoration in text_window_right_edge_marker_decorations(&request) {
-        decorations.decorate_current_window_row(
-            decoration.matrix_row,
-            RightEdgeMarkerRowDecorator::new(
-                decoration,
-                request.face_id,
-                &base_face,
-                request.char_width,
-                &mut render_services,
-            ),
-        );
-    }
-}
-
-fn install_last_window_right_border_from_source_requests(
-    builder: &mut GlyphMatrixBuilder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
-    request: TextWindowRightBorder,
-    base_face: &ResolvedFace,
-) {
-    DisplayRowDecorationSurface::from_builder(builder).decorate_last_window_rows(
-        RightBorderRowsDecorator::new(request, base_face, &mut render_services),
-    );
 }
 
 pub(crate) trait DisplayProgressSink {

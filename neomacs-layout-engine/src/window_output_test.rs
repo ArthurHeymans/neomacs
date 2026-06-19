@@ -7,10 +7,10 @@ use super::TextMatrixRowOutput;
 use super::TextMatrixRowStoredMetrics;
 use super::TextMatrixRowTransition;
 use super::TextRowOutput;
+use super::TextWindowArtifactOutputSurface;
 use super::TextWindowBodyOutputInstall;
 use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
-use super::TextWindowCursorInstaller;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
 use super::TextWindowMatrixOutputSurface;
@@ -20,6 +20,7 @@ use super::TextWindowPendingRowFinish;
 use super::TextWindowRedisplayPositions;
 use super::TextWindowRowDecorationRequest;
 use super::TextWindowRowLifecycleInstaller;
+use super::TextWindowRowOutputSurface;
 use super::WindowOutputEmitter;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
@@ -698,8 +699,8 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     write_char_to_current_row(&mut builder, 'H', 3, 100);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
-    let outcome = TextWindowCursorInstaller::new(&mut builder, &mut emitter).publish_cursor(
-        TextWindowCursor {
+    let outcome = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
+        .publish_cursor(TextWindowCursor {
             selected: true,
             window_id: window_id.0 as i64,
             charpos: 100,
@@ -719,8 +720,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
             text_area_left: 16.0,
             window_top: 8.0,
             glyph_row_resolved: false,
-        },
-    );
+        });
 
     builder.end_row();
     builder.end_window();
@@ -748,7 +748,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     let mut builder = GlyphMatrixBuilder::new();
     let effects = EffectsConfig::default();
 
-    TextWindowCursorInstaller::without_output(&mut builder).publish_decorative_cursor(
+    TextWindowArtifactOutputSurface::from_builder(&mut builder).publish_decorative_cursor(
         TextWindowDecorativeCursor {
             window_id: 77,
             slot_id: DisplaySlotId {
@@ -780,7 +780,7 @@ fn install_text_window_cursor_effects_records_window_effect_profile() {
     let mut builder = GlyphMatrixBuilder::new();
     let effects = EffectsConfig::default();
 
-    TextWindowCursorInstaller::without_output(&mut builder).install_cursor_effects(
+    TextWindowArtifactOutputSurface::from_builder(&mut builder).install_cursor_effects(
         TextWindowCursorEffects {
             window_id: 42,
             effects: effects.clone(),
