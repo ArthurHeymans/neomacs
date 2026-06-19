@@ -12,12 +12,14 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState,
     DisplayRowCurrentSourceFragmentRenderState, DisplayRowCurrentTextMeasureState,
-    DisplayRowCurrentTextRenderState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
-    DisplayRowRenderIntoRowResult, DisplayRowRenderPolicy, DisplayRowResolvedMeasuredFace,
-    DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRenderRequest, DisplayRowSourceState,
+    DisplayRowCurrentTextRenderState, DisplayRowCurrentTextSourceStepResult,
+    DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderIntoRowResult,
+    DisplayRowRenderPolicy, DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
+    DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
     insert_resolved_display_row_face, measure_display_item_source_against_current_text_row,
-    render_display_item_source_into_current_text_row_and_emit,
+    render_display_item_source_into_current_text_row,
 };
+use crate::display_row_matrix_install::RenderedDisplayRowAssetsInstall;
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
@@ -145,7 +147,6 @@ impl<'a> TextRowOutputRenderState<'a> {
     ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
         DisplayRowCurrentTextRenderState::new(
             self.builder,
-            self.output_emitter,
             self.evaluator,
             font_metrics,
             face_resolver,
@@ -166,6 +167,32 @@ impl<'a> TextRowOutputRenderState<'a> {
             self.evaluator.display_host.as_deref(),
             face_ids,
         )
+    }
+
+    fn finish_current_text_row_render(
+        &mut self,
+        output: TextRowOutput,
+        result: DisplayRowCurrentTextSourceStepResult,
+    ) -> CurrentTextRowRenderOutcome {
+        let DisplayRowCurrentTextSourceStepResult {
+            role,
+            result,
+            row_height_px,
+            row_ascent_px,
+        } = result;
+        let end = display_row_output_end_position(result.progress);
+        RenderedDisplayRowAssetsInstall::fragment(role, output.row, &result.faces, &result.media)
+            .install(self.builder);
+        let source_slots = result.source_slots;
+        self.output_emitter
+            .emit_text_source_slots(self.evaluator, output, &source_slots, end);
+        CurrentTextRowRenderOutcome {
+            stop: result.stop,
+            source_slots,
+            end,
+            row_height_px,
+            row_ascent_px,
+        }
     }
 }
 
@@ -400,13 +427,16 @@ impl<'a> TextRowSourceRenderState<'a> {
         output: TextRowOutput,
         render_policy: &mut P,
     ) -> Option<CurrentTextRowRenderOutcome> {
-        render_display_item_source_into_current_text_row_and_emit(
+        let result = render_display_item_source_into_current_text_row(
             &mut current_text_render_state(self, face_ids),
             source,
             source_state,
             request,
-            output,
             render_policy,
+        )?;
+        Some(
+            self.output_render
+                .finish_current_text_row_render(output, result),
         )
     }
 

@@ -14,7 +14,6 @@ use crate::display_row_builder::{
 };
 use crate::display_row_geometry::DisplayRowGeometryState;
 pub(crate) use crate::display_row_geometry::DisplayRowMaxX;
-use crate::display_row_matrix_install::RenderedDisplayRowAssetsInstall;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
@@ -32,7 +31,6 @@ use crate::glyph_row_writer;
 use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameStateInstallRequest};
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
-use crate::window_output::{TextRowOutput, WindowOutputEmitter};
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
@@ -1976,7 +1974,6 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
 
 pub(crate) struct DisplayRowCurrentTextRenderState<'face, 'emit> {
     row_surface: DisplayRowCurrentRowSurface<'emit>,
-    output_emitter: &'emit mut WindowOutputEmitter,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
@@ -1995,7 +1992,6 @@ impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         builder: &'emit mut GlyphMatrixBuilder,
-        output_emitter: &'emit mut WindowOutputEmitter,
         evaluator: &'emit mut Context,
         font_metrics: &'emit mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
@@ -2003,7 +1999,6 @@ impl<'face, 'emit> DisplayRowCurrentTextRenderState<'face, 'emit> {
     ) -> Self {
         Self {
             row_surface: DisplayRowCurrentRowSurface::new(builder),
-            output_emitter,
             evaluator,
             font_metrics,
             face_resolver,
@@ -2214,11 +2209,11 @@ struct DisplayRowCurrentTextSourceRenderRequest<'row, 'source, 'state, 'policy, 
     render_policy: &'policy mut P,
 }
 
-struct DisplayRowCurrentTextSourceStepResult {
-    role: GlyphRowRole,
-    result: DisplayRowRenderIntoRowResult,
-    row_height_px: f32,
-    row_ascent_px: f32,
+pub(crate) struct DisplayRowCurrentTextSourceStepResult {
+    pub(crate) role: GlyphRowRole,
+    pub(crate) result: DisplayRowRenderIntoRowResult,
+    pub(crate) row_height_px: f32,
+    pub(crate) row_ascent_px: f32,
 }
 
 struct DisplayRowCurrentRowSurface<'a> {
@@ -2256,17 +2251,6 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         self.builder.with_current_row_mut(|row| {
             merge_display_row_source_slot_bounds(row, slots);
         });
-    }
-
-    fn install_fragment_assets(
-        &mut self,
-        role: GlyphRowRole,
-        matrix_row: usize,
-        faces: &[Face],
-        media: &[RenderedDisplayRowMedia],
-    ) {
-        RenderedDisplayRowAssetsInstall::fragment(role, matrix_row, faces, media)
-            .install(self.builder);
     }
 
     fn render_source_step_with_policy<S, P>(
@@ -2447,6 +2431,7 @@ impl<'state, 'face, 'emit> DisplayRowCurrentTextSourceRenderer<'state, 'face, 'e
             &mut context,
             render_policy,
         )?;
+        row_surface.merge_source_slot_bounds(&result.source_slots);
         Some(DisplayRowCurrentTextSourceStepResult {
             role,
             result,
@@ -2502,21 +2487,6 @@ impl<'state, 'face, 'emit> DisplayRowCurrentTextSourceMeasurer<'state, 'face, 'e
 }
 
 impl DisplayRowCurrentTextSourceStepResult {
-    fn finish_and_emit(
-        self,
-        state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
-        output: TextRowOutput,
-    ) -> CurrentTextRowRenderOutcome {
-        finish_current_text_row_render(
-            state,
-            output,
-            self.role,
-            self.result,
-            self.row_height_px,
-            self.row_ascent_px,
-        )
-    }
-
     fn into_measure_outcome(self) -> CurrentTextRowRenderOutcome {
         let end = display_row_output_end_position(self.result.progress);
         let source_slots = self.result.source_slots;
@@ -2530,7 +2500,7 @@ impl DisplayRowCurrentTextSourceStepResult {
     }
 }
 
-pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
+pub(crate) fn render_display_item_source_into_current_text_row<
     S: DisplayItemSource,
     P: DisplayRowRenderPolicy,
 >(
@@ -2538,12 +2508,10 @@ pub(crate) fn render_display_item_source_into_current_text_row_and_emit<
     source: &mut S,
     source_state: &mut DisplayRowSourceState,
     request: DisplayRowSourceRenderRequest<'_>,
-    output: TextRowOutput,
     render_policy: &mut P,
-) -> Option<CurrentTextRowRenderOutcome> {
+) -> Option<DisplayRowCurrentTextSourceStepResult> {
     DisplayRowCurrentTextSourceRenderRequest::new(request, source, source_state, render_policy)
         .render_into_current_row(state)
-        .map(|result| result.finish_and_emit(state, output))
 }
 
 pub(crate) fn measure_display_item_source_against_current_text_row<
@@ -2559,34 +2527,6 @@ pub(crate) fn measure_display_item_source_against_current_text_row<
     DisplayRowCurrentTextSourceRenderRequest::new(request, source, source_state, render_policy)
         .measure_against_current_row(state)
         .map(DisplayRowCurrentTextSourceStepResult::into_measure_outcome)
-}
-
-fn finish_current_text_row_render(
-    state: &mut DisplayRowCurrentTextRenderState<'_, '_>,
-    output: TextRowOutput,
-    role: GlyphRowRole,
-    result: DisplayRowRenderIntoRowResult,
-    row_height_px: f32,
-    row_ascent_px: f32,
-) -> CurrentTextRowRenderOutcome {
-    let end = display_row_output_end_position(result.progress);
-    state
-        .row_surface
-        .install_fragment_assets(role, output.row, &result.faces, &result.media);
-    state
-        .row_surface
-        .merge_source_slot_bounds(&result.source_slots);
-    let source_slots = result.source_slots;
-    state
-        .output_emitter
-        .emit_text_source_slots(state.evaluator, output, &source_slots, end);
-    CurrentTextRowRenderOutcome {
-        stop: result.stop,
-        source_slots,
-        end,
-        row_height_px,
-        row_ascent_px,
-    }
 }
 
 pub(crate) fn display_row_output_end_position(
