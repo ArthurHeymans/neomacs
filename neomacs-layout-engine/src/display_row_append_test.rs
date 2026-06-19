@@ -1401,8 +1401,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
 fn buffer_invisible_text_scan_context_skips_when_checkpoint_not_reached() {
     let buffer_text = b"visible";
     let mut checkpoints = InvisibleTextScanCheckpoint::new(5);
-    let mut byte_idx = 2;
-    let mut charpos = 2;
+    let mut position = BufferTextSourcePosition::new(2, 2);
     let eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -1412,11 +1411,10 @@ fn buffer_invisible_text_scan_context_skips_when_checkpoint_not_reached() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
 
     let action = BufferInvisibleTextScanContext::new(buffer_text, 7, 2, true)
-        .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut byte_idx, &mut charpos);
+        .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
 
     assert_eq!(action, BufferInvisibleTextScanAction::Unchecked);
-    assert_eq!(byte_idx, 2);
-    assert_eq!(charpos, 2);
+    assert_eq!(position, BufferTextSourcePosition::new(2, 2));
 }
 
 #[test]
@@ -1441,18 +1439,16 @@ fn buffer_invisible_text_scan_context_records_visible_boundary() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
-    let mut byte_idx = 0;
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
     let action = BufferInvisibleTextScanContext::new("visible hidden".as_bytes(), 14, 0, true)
-        .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut byte_idx, &mut charpos);
+        .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
 
     assert_eq!(
         action,
         BufferInvisibleTextScanAction::Visible { next_visible: 8 }
     );
-    assert_eq!(byte_idx, 0);
-    assert_eq!(charpos, 0);
+    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
     assert!(!checkpoints.should_check(7));
     assert!(checkpoints.should_check(8));
 }
@@ -1479,12 +1475,11 @@ fn buffer_invisible_text_scan_context_skips_hidden_region_and_reports_point() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut checkpoints = InvisibleTextScanCheckpoint::new(8);
-    let mut byte_idx = 8;
-    let mut charpos = 8;
+    let mut position = BufferTextSourcePosition::new(8, 8);
 
     let action =
         BufferInvisibleTextScanContext::new("visible hidden visible".as_bytes(), 22, 10, true)
-            .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut byte_idx, &mut charpos);
+            .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
 
     let BufferInvisibleTextScanAction::Hidden(hidden) = action else {
         panic!("expected hidden region");
@@ -1495,8 +1490,7 @@ fn buffer_invisible_text_scan_context_skips_hidden_region_and_reports_point() {
     assert_eq!(hidden.next_visible(), 14);
     assert!(hidden.point_in_hidden_region());
     assert!(!hidden.ellipsis());
-    assert_eq!(byte_idx, 14);
-    assert_eq!(charpos, 14);
+    assert_eq!(position, BufferTextSourcePosition::new(14, 14));
     assert!(!checkpoints.should_check(13));
     assert!(checkpoints.should_check(14));
 }
@@ -1527,11 +1521,10 @@ fn buffer_invisible_text_scan_context_reports_ellipsis_policy() {
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut checkpoints = InvisibleTextScanCheckpoint::new(0);
-    let mut byte_idx = 0;
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
     let action = BufferInvisibleTextScanContext::new("folded rest".as_bytes(), 11, 9, true)
-        .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut byte_idx, &mut charpos);
+        .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
 
     let BufferInvisibleTextScanAction::Hidden(hidden) = action else {
         panic!("expected hidden region");
@@ -1539,8 +1532,43 @@ fn buffer_invisible_text_scan_context_reports_ellipsis_policy() {
     assert_eq!(hidden.skip_to(), 6);
     assert!(!hidden.point_in_hidden_region());
     assert!(hidden.ellipsis());
-    assert_eq!(byte_idx, 6);
-    assert_eq!(charpos, 6);
+    assert_eq!(position, BufferTextSourcePosition::new(6, 6));
+}
+
+#[test]
+fn buffer_invisible_text_scan_context_advances_multibyte_source_position() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a中b");
+        let _ = eval
+            .buffer_manager_mut()
+            .put_buffer_text_property_in_emacs_byte_range(
+                buf_id,
+                EmacsByteRange::from_usize(1, "a中".len()),
+                Value::symbol("invisible"),
+                Value::T,
+            );
+    }
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let mut checkpoints = InvisibleTextScanCheckpoint::new(1);
+    let mut position = BufferTextSourcePosition::new(1, 1);
+
+    let action = BufferInvisibleTextScanContext::new("a中b".as_bytes(), 3, 1, true)
+        .consume_at_checkpoint(&snapshot, &mut checkpoints, &mut position);
+
+    let BufferInvisibleTextScanAction::Hidden(hidden) = action else {
+        panic!("expected hidden region");
+    };
+    assert_eq!(hidden.start_byte_idx(), 1);
+    assert_eq!(hidden.start_charpos(), 1);
+    assert_eq!(hidden.skip_to(), 2);
+    assert_eq!(position, BufferTextSourcePosition::new("a中".len(), 2));
 }
 
 #[test]
@@ -8818,13 +8846,10 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let mut x = 4.0;
     let mut col = 1;
 
-    outcome.apply_to_walk_state(
-        "a界b\n".as_bytes(),
-        &mut byte_idx,
-        &mut charpos,
-        &mut x,
-        &mut col,
-    );
+    let mut progress =
+        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
+
+    outcome.apply_to_walk_state("a界b\n".as_bytes(), &mut progress);
 
     assert_eq!(byte_idx, "a界b\n".len());
     assert_eq!(charpos, 4);

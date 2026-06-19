@@ -74,7 +74,7 @@ use crate::display_row_walk_state::{
     BoxFaceRowState, BufferTextRowOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
     SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy, TrailingWhitespaceRenderState,
-    WordWrapBreakCandidate, WordWrapRenderState, skip_text_to_charpos, skip_to_newline,
+    WordWrapBreakCandidate, WordWrapRenderState, skip_to_newline,
 };
 use crate::display_source::{DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_source_resolver::{
@@ -5060,7 +5060,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
     ) -> BufferInvisibleTextRenderOutcome {
         let BufferInvisibleTextRenderRequestState {
             checkpoints,
-            progress,
+            mut progress,
             source_render,
             row_geometry,
             cursor_info,
@@ -5069,21 +5069,18 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             row_y_positions,
             face_ids,
         } = state;
-        let BufferTextWindowProgressState {
-            byte_idx,
-            charpos,
-            row: BufferTextWindowRowProgressState { x, col },
-        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
+        let mut source_position = progress.source_position();
         let action = BufferInvisibleTextScanContext::new(
             context.text,
             context.accessible_end,
             context.point_charpos,
             cursor_info.is_missing(),
         )
-        .consume_at_checkpoint(buffer, checkpoints, byte_idx, charpos);
+        .consume_at_checkpoint(buffer, checkpoints, &mut source_position);
+        progress.apply_source_position(source_position);
         let BufferInvisibleTextScanAction::Hidden(hidden_text) = action else {
             return BufferInvisibleTextRenderOutcome::Visible;
         };
@@ -5091,7 +5088,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         let mut hidden_text_state = BufferInvisibleTextRenderState::new(
             source_render.reborrow(),
             cursor_info,
-            BufferTextWindowRowProgressState::new(x, col),
+            progress.row.reborrow(),
         );
         hidden_text.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
@@ -5106,10 +5103,11 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
             &mut hidden_text_state,
         );
 
+        let overlay_charpos = progress.charpos();
         let mut overlay_state = OverlayStringRenderState::from_source_render(
             source_render.reborrow(),
-            x,
-            col,
+            progress.row.x,
+            progress.row.col,
             row_geometry,
             cursor_info,
             hit_rows,
@@ -5119,7 +5117,7 @@ impl<'a> BufferInvisibleTextRenderRequest<'a> {
         );
         context.overlay_context.render_at(
             buffer,
-            *charpos,
+            overlay_charpos,
             context.active_face_state,
             &mut overlay_state,
         );
@@ -5153,15 +5151,14 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
         &self,
         buffer: &B,
         checkpoints: &mut InvisibleTextScanCheckpoint,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
     ) -> BufferInvisibleTextScanAction {
-        if !checkpoints.should_check(*charpos) {
+        if !checkpoints.should_check(position.charpos()) {
             return BufferInvisibleTextScanAction::Unchecked;
         }
 
-        let start_byte_idx = *byte_idx;
-        let start_charpos = *charpos;
+        let start_byte_idx = position.byte_idx();
+        let start_charpos = position.charpos();
         let text_props = RustTextPropAccess::new(buffer);
         let (invisible, next_visible) = text_props.check_invisible(start_charpos);
         checkpoints.record_next_visible(next_visible);
@@ -5174,7 +5171,11 @@ impl<'a> BufferInvisibleTextScanContext<'a> {
         let point_in_hidden_region = self.cursor_missing
             && self.point_charpos >= start_charpos
             && self.point_charpos < skip_to;
-        skip_text_to_charpos(self.text, byte_idx, charpos, skip_to);
+        while position.charpos() < skip_to && position.byte_idx() < self.text.len() {
+            if BufferTextSourceStepChar::consume_from_position(self.text, position).is_none() {
+                break;
+            }
+        }
 
         BufferInvisibleTextScanAction::Hidden(BufferInvisibleTextSkip::new(
             start_byte_idx,

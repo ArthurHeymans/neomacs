@@ -23,7 +23,6 @@ use crate::display_row_walk_state::{
     BufferTextRowOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
-    skip_text_to_charpos,
 };
 use crate::display_source::{DisplayReplacementSpaceGeometry, DisplayReplacementStretchSourceItem};
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -6335,23 +6334,6 @@ fn display_space_geometry_accepts_pixel_ascent_expression() {
 
     assert_eq!(geometry.height, 20.0);
     assert_eq!(geometry.ascent, 3.0);
-}
-
-#[test]
-fn skip_text_to_charpos_advances_utf8_character_positions() {
-    let text = "a中b".as_bytes();
-    let mut byte_idx = 0;
-    let mut charpos = 10;
-
-    skip_text_to_charpos(text, &mut byte_idx, &mut charpos, 12);
-
-    assert_eq!(charpos, 12);
-    assert_eq!(byte_idx, "a中".len());
-
-    skip_text_to_charpos(text, &mut byte_idx, &mut charpos, 20);
-
-    assert_eq!(charpos, 13);
-    assert_eq!(byte_idx, text.len());
 }
 
 fn scaled_face_plist() -> Value {

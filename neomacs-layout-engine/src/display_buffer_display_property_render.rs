@@ -1,6 +1,8 @@
 use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
-use crate::display_buffer_text_source::BufferTextSourceItem;
+use crate::display_buffer_text_source::{
+    BufferTextSourceItem, BufferTextSourcePosition, BufferTextSourceStepChar,
+};
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
@@ -12,7 +14,6 @@ use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementAppendRequest,
 };
 use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::display_row_walk_state::skip_text_to_charpos;
 use crate::display_source_resolver::DisplayPropertyReplacementAppendRequestResolver;
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::LayoutBufferView;
@@ -190,7 +191,7 @@ impl BufferDisplayPropertyTextReplacementRenderRequest {
             row_geometry,
             cursor_info,
             active_face_state,
-            progress,
+            mut progress,
         } = state;
         let outcome = self.append_request.append_to_text_row(
             buffer,
@@ -212,13 +213,7 @@ impl BufferDisplayPropertyTextReplacementRenderRequest {
             self.start_charpos,
             *progress.byte_idx,
         );
-        replacement_outcome.apply_to_walk_state(
-            text,
-            progress.byte_idx,
-            progress.charpos,
-            progress.row.x,
-            progress.row.col,
-        );
+        replacement_outcome.apply_to_walk_state(text, &mut progress);
     }
 }
 
@@ -238,10 +233,13 @@ impl BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) fn skip_covered_buffer_text(
         self,
         text: &[u8],
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
     ) {
-        skip_text_to_charpos(text, byte_idx, charpos, self.skip_to);
+        while position.charpos() < self.skip_to && position.byte_idx() < text.len() {
+            if BufferTextSourceStepChar::consume_from_position(text, position).is_none() {
+                break;
+            }
+        }
     }
 
     pub(crate) fn capture_cursor_info_if_point(
@@ -268,15 +266,13 @@ impl BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) fn apply_to_walk_state(
         self,
         text: &[u8],
-        byte_idx: &mut usize,
-        charpos: &mut i64,
-        x: &mut f32,
-        col: &mut usize,
+        progress: &mut BufferTextWindowProgressState<'_>,
     ) {
         let position = self.end_position();
-        *x = position.x_px;
-        *col = position.col;
-        self.skip_covered_buffer_text(text, byte_idx, charpos);
+        progress.row.apply_position(position);
+        let mut source_position = progress.source_position();
+        self.skip_covered_buffer_text(text, &mut source_position);
+        progress.apply_source_position(source_position);
     }
 
     #[cfg(test)]

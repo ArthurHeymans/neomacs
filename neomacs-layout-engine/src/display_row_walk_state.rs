@@ -803,23 +803,6 @@ pub(crate) fn skip_to_newline(text: &[u8], byte_idx: &mut usize, charpos: &mut i
 }
 
 #[inline]
-pub(crate) fn skip_text_to_charpos(
-    text: &[u8],
-    byte_idx: &mut usize,
-    charpos: &mut i64,
-    target: i64,
-) {
-    while *charpos < target && *byte_idx < text.len() {
-        let (_ch, ch_len) = decode_utf8(&text[*byte_idx..]);
-        if ch_len == 0 {
-            break;
-        }
-        *byte_idx += ch_len;
-        *charpos += 1;
-    }
-}
-
-#[inline]
 fn is_word_wrap_whitespace(ch: char) -> bool {
     matches!(ch, ' ' | '\t')
 }
