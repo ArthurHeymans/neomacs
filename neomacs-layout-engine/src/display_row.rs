@@ -2643,11 +2643,47 @@ impl<'a> MatrixDisplayRowInstallRequest<'a> {
     }
 }
 
-pub(crate) fn install_measured_window_display_row(
-    builder: &mut GlyphMatrixBuilder,
-    measured: &MeasuredDisplayRow,
-) {
-    MeasuredWindowDisplayRowInstallRequest { measured }.install(builder);
+pub(crate) struct DisplayRowInstaller<'builder, 'rows> {
+    builder: &'builder mut GlyphMatrixBuilder,
+    frame_chrome_rows: Option<&'rows mut Vec<FrameChromeRow>>,
+}
+
+impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
+    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self {
+            builder,
+            frame_chrome_rows: None,
+        }
+    }
+
+    pub(crate) fn with_frame_chrome_rows(
+        builder: &'builder mut GlyphMatrixBuilder,
+        frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
+    ) -> Self {
+        Self {
+            builder,
+            frame_chrome_rows: Some(frame_chrome_rows),
+        }
+    }
+
+    pub(crate) fn install_measured(&mut self, measured: &MeasuredDisplayRow) {
+        match measured.owner {
+            DisplayRowOwner::WindowChrome { .. } => {
+                MeasuredWindowDisplayRowInstallRequest { measured }.install(self.builder);
+            }
+            DisplayRowOwner::FrameChrome { .. } => {
+                let frame_chrome_rows = self
+                    .frame_chrome_rows
+                    .as_deref_mut()
+                    .expect("frame chrome rows are required to install frame chrome");
+                MeasuredFrameChromeRowInstallRequest {
+                    frame_chrome_rows,
+                    measured,
+                }
+                .install(self.builder);
+            }
+        }
+    }
 }
 
 struct MeasuredWindowDisplayRowInstallRequest<'a> {
@@ -2658,7 +2694,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         let measured = self.measured;
         let DisplayRowOwner::WindowChrome { window_id, kind } = measured.owner else {
-            panic!("frame chrome rows must use install_measured_frame_chrome_row");
+            panic!("frame chrome rows must install through frame chrome rows");
         };
         debug_assert!(window_id > 0);
         debug_assert_eq!(
@@ -2689,18 +2725,6 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
     }
 }
 
-pub(crate) fn install_measured_frame_chrome_row(
-    builder: &mut GlyphMatrixBuilder,
-    frame_chrome_rows: &mut Vec<FrameChromeRow>,
-    measured: &MeasuredDisplayRow,
-) {
-    MeasuredFrameChromeRowInstallRequest {
-        frame_chrome_rows,
-        measured,
-    }
-    .install(builder);
-}
-
 struct MeasuredFrameChromeRowInstallRequest<'a, 'rows> {
     frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
     measured: &'a MeasuredDisplayRow,
@@ -2710,7 +2734,7 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
     fn install(self, builder: &mut GlyphMatrixBuilder) {
         let measured = self.measured;
         let DisplayRowOwner::FrameChrome { kind } = measured.owner else {
-            panic!("window-owned rows must use install_measured_window_display_row");
+            panic!("window-owned rows must install through window chrome");
         };
         debug_assert!(matches!(kind, FrameChromeKind::TabBar));
         RenderedDisplayRowAssetsInstall::from_rendered(

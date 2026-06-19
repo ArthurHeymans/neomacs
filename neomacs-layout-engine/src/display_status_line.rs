@@ -17,10 +17,10 @@ use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmi
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
-    DisplayRowBoundsPolicy, DisplayRowLispStringRenderRequest, DisplayRowOwner,
-    DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest, DisplayRowSourceRequestPolicy,
-    DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow, RenderedDisplayRow,
-    WindowChromeKind, install_measured_frame_chrome_row, install_measured_window_display_row,
+    DisplayRowBoundsPolicy, DisplayRowInstaller, DisplayRowLispStringRenderRequest,
+    DisplayRowOwner, DisplayRowRenderExecutor, DisplayRowSourceFragmentRenderRequest,
+    DisplayRowSourceRequestPolicy, DisplayRowSourceState, FrameChromeKind, MeasuredDisplayRow,
+    RenderedDisplayRow, WindowChromeKind,
 };
 pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProgress};
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
@@ -171,11 +171,11 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             rendered,
             DisplayRowBoundsPolicy::MeasureContent,
         );
-        install_measured_frame_chrome_row(
+        DisplayRowInstaller::with_frame_chrome_rows(
             &mut *state.builder,
             &mut *state.pending_frame_chrome_rows,
-            &measured,
-        );
+        )
+        .install_measured(&measured);
         Some(FrameTabBarDisplayRowRender::Measured(measured))
     }
 }
@@ -677,7 +677,7 @@ impl WindowChromeRowsRenderState<'_, '_> {
             )
         });
         if let Some(ref measured_row) = measured_row {
-            install_measured_window_display_row(&mut *self.builder, measured_row);
+            DisplayRowInstaller::new(&mut *self.builder).install_measured(measured_row);
             self.output_emitter.emit_chrome_progress(
                 self.evaluator,
                 parts.output,

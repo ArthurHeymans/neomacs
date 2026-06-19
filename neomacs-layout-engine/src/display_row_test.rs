@@ -2918,7 +2918,7 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
         rendered,
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
     );
-    install_measured_window_display_row(&mut builder, &measured);
+    DisplayRowInstaller::new(&mut builder).install_measured(&measured);
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
