@@ -2367,6 +2367,53 @@ where
             source_state,
             render_policy,
         } = self;
+        DisplayRowCurrentTextSourceRenderer::new(state).render(
+            row_request,
+            source,
+            source_state,
+            render_policy,
+        )
+    }
+
+    fn measure_against_current_row(
+        self,
+        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
+    ) -> Option<DisplayRowCurrentTextSourceStepResult> {
+        let Self {
+            row_request,
+            source,
+            source_state,
+            render_policy,
+        } = self;
+        DisplayRowCurrentTextSourceMeasurer::new(state).measure(
+            row_request,
+            source,
+            source_state,
+            render_policy,
+        )
+    }
+}
+
+struct DisplayRowCurrentTextSourceRenderer<'state, 'face, 'emit> {
+    state: &'state mut DisplayRowCurrentTextRenderState<'face, 'emit>,
+}
+
+impl<'state, 'face, 'emit> DisplayRowCurrentTextSourceRenderer<'state, 'face, 'emit> {
+    fn new(state: &'state mut DisplayRowCurrentTextRenderState<'face, 'emit>) -> Self {
+        Self { state }
+    }
+
+    fn render<S, P>(
+        &mut self,
+        row_request: DisplayRowSourceRenderRequest<'_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        render_policy: &mut P,
+    ) -> Option<DisplayRowCurrentTextSourceStepResult>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
         let role = row_request.role();
         let DisplayRowCurrentTextRenderState {
             builder,
@@ -2375,7 +2422,7 @@ where
             face_resolver,
             face_ids,
             ..
-        } = state;
+        } = &mut *self.state;
         let mut renderer = DisplayRowRenderer::new(font_metrics);
         let mut context = DisplayRowRenderContext::new(
             face_resolver,
@@ -2398,25 +2445,36 @@ where
             row_ascent_px,
         })
     }
+}
 
-    fn measure_against_current_row(
-        self,
-        state: &mut DisplayRowCurrentTextMeasureState<'_, '_>,
-    ) -> Option<DisplayRowCurrentTextSourceStepResult> {
-        let Self {
-            row_request,
-            source,
-            source_state,
-            render_policy,
-        } = self;
+struct DisplayRowCurrentTextSourceMeasurer<'state, 'face, 'emit> {
+    state: &'state mut DisplayRowCurrentTextMeasureState<'face, 'emit>,
+}
+
+impl<'state, 'face, 'emit> DisplayRowCurrentTextSourceMeasurer<'state, 'face, 'emit> {
+    fn new(state: &'state mut DisplayRowCurrentTextMeasureState<'face, 'emit>) -> Self {
+        Self { state }
+    }
+
+    fn measure<S, P>(
+        &mut self,
+        row_request: DisplayRowSourceRenderRequest<'_>,
+        source: &mut S,
+        source_state: &mut DisplayRowSourceState,
+        render_policy: &mut P,
+    ) -> Option<DisplayRowCurrentTextSourceStepResult>
+    where
+        S: DisplayItemSource,
+        P: DisplayRowRenderPolicy,
+    {
         let role = row_request.role();
-        let mut renderer = DisplayRowRenderer::new(state.font_metrics);
+        let mut renderer = DisplayRowRenderer::new(self.state.font_metrics);
         let mut context = DisplayRowRenderContext::new(
-            state.face_resolver,
-            state.evaluator.display_host.as_deref(),
-            state.face_ids,
+            self.state.face_resolver,
+            self.state.evaluator.display_host.as_deref(),
+            self.state.face_ids,
         );
-        let mut surface = DisplayRowCurrentRowSurface::new(state.builder);
+        let mut surface = DisplayRowCurrentRowSurface::new(self.state.builder);
         let (result, row_height_px, row_ascent_px) = surface.measure_source_step_with_policy(
             row_request,
             &mut renderer,
