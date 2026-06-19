@@ -291,12 +291,12 @@ fn upcase_lisp_string_emacs_compat(text: &LispString) -> LispString {
     LispString::from_emacs_bytes(out)
 }
 
-fn capitalize_lisp_string(text: &LispString) -> LispString {
+fn capitalize_lisp_string(text: &LispString, extra_word: impl Fn(u32) -> bool) -> LispString {
     if !text.is_multibyte() {
         let mut out = Vec::with_capacity(text.sbytes());
         let mut new_word = true;
         for &byte in text.as_bytes() {
-            if ascii_word_byte(byte) {
+            if ascii_word_byte(byte) || extra_word(byte as u32) {
                 out.push(if new_word {
                     byte.to_ascii_uppercase()
                 } else {
@@ -314,18 +314,16 @@ fn capitalize_lisp_string(text: &LispString) -> LispString {
     let mut out = Vec::with_capacity(text.sbytes());
     let mut new_word = true;
     for code in super::builtins::lisp_string_char_codes(text) {
-        if let Some(ch) = code_to_char(code as i64) {
-            if ch.is_alphanumeric() {
-                if new_word {
-                    push_multibyte_chars(&mut out, titlecase_word_initial(ch).chars());
-                    new_word = false;
-                } else {
-                    push_multibyte_chars(&mut out, ch.to_lowercase());
+        let ch = code_to_char(code as i64);
+        if ch.is_some_and(char::is_alphanumeric) || extra_word(code) {
+            match ch {
+                Some(c) if new_word => {
+                    push_multibyte_chars(&mut out, titlecase_word_initial(c).chars())
                 }
-            } else {
-                push_multibyte_char_code(&mut out, code);
-                new_word = true;
+                Some(c) => push_multibyte_chars(&mut out, c.to_lowercase()),
+                None => push_multibyte_char_code(&mut out, code),
             }
+            new_word = false;
         } else {
             push_multibyte_char_code(&mut out, code);
             new_word = true;
@@ -334,12 +332,12 @@ fn capitalize_lisp_string(text: &LispString) -> LispString {
     LispString::from_emacs_bytes(out)
 }
 
-fn upcase_initials_lisp_string(text: &LispString) -> LispString {
+fn upcase_initials_lisp_string(text: &LispString, extra_word: impl Fn(u32) -> bool) -> LispString {
     if !text.is_multibyte() {
         let mut out = Vec::with_capacity(text.sbytes());
         let mut new_word = true;
         for &byte in text.as_bytes() {
-            if ascii_word_byte(byte) {
+            if ascii_word_byte(byte) || extra_word(byte as u32) {
                 out.push(if new_word {
                     byte.to_ascii_uppercase()
                 } else {
@@ -357,18 +355,15 @@ fn upcase_initials_lisp_string(text: &LispString) -> LispString {
     let mut out = Vec::with_capacity(text.sbytes());
     let mut new_word = true;
     for code in super::builtins::lisp_string_char_codes(text) {
-        if let Some(ch) = code_to_char(code as i64) {
-            if ch.is_alphanumeric() {
-                if new_word {
-                    push_multibyte_chars(&mut out, titlecase_word_initial(ch).chars());
-                    new_word = false;
-                } else {
-                    push_multibyte_char_code(&mut out, code);
+        let ch = code_to_char(code as i64);
+        if ch.is_some_and(char::is_alphanumeric) || extra_word(code) {
+            match ch {
+                Some(c) if new_word => {
+                    push_multibyte_chars(&mut out, titlecase_word_initial(c).chars())
                 }
-            } else {
-                push_multibyte_char_code(&mut out, code);
-                new_word = true;
+                _ => push_multibyte_char_code(&mut out, code),
             }
+            new_word = false;
         } else {
             push_multibyte_char_code(&mut out, code);
             new_word = true;
@@ -607,7 +602,7 @@ fn casify_word_in_state(
 
 /// `(capitalize OBJ)` -- if OBJ is a string, capitalize the first letter
 /// (uppercase first, lowercase rest).  If OBJ is a character, uppercase it.
-pub(crate) fn builtin_capitalize(args: Vec<Value>) -> EvalResult {
+fn capitalize_with_word_pred(args: Vec<Value>, extra_word: impl Fn(u32) -> bool) -> EvalResult {
     expect_args("capitalize", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
@@ -616,7 +611,7 @@ pub(crate) fn builtin_capitalize(args: Vec<Value>) -> EvalResult {
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let result = Value::heap_string(capitalize_lisp_string(string));
+            let result = Value::heap_string(capitalize_lisp_string(string, extra_word));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
@@ -626,11 +621,26 @@ pub(crate) fn builtin_capitalize(args: Vec<Value>) -> EvalResult {
             let code = c as i64;
             Ok(Value::fixnum(upcase_char(code)))
         }
-        other => Err(signal(
+        _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
     }
+}
+
+/// Pure form (used by tests); ignores `case-symbols-as-words`.
+#[cfg(test)]
+pub(crate) fn builtin_capitalize(args: Vec<Value>) -> EvalResult {
+    capitalize_with_word_pred(args, |_| false)
+}
+
+/// Dispatched form: honors `case-symbols-as-words` via the buffer syntax table.
+pub(crate) fn builtin_capitalize_in_state(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let extra_word = crate::emacs_core::syntax::case_symbols_as_words_predicate(eval);
+    capitalize_with_word_pred(args, extra_word)
 }
 
 /// Capitalize a string: uppercase the first letter of each word,
@@ -660,7 +670,10 @@ fn capitalize_string(s: &str) -> String {
 
 /// `(upcase-initials OBJ)` -- uppercase the first letter of each word in
 /// a string, leaving the rest unchanged.  For a char, uppercase it.
-pub(crate) fn builtin_upcase_initials(args: Vec<Value>) -> EvalResult {
+fn upcase_initials_with_word_pred(
+    args: Vec<Value>,
+    extra_word: impl Fn(u32) -> bool,
+) -> EvalResult {
     expect_args("upcase-initials", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
@@ -669,7 +682,7 @@ pub(crate) fn builtin_upcase_initials(args: Vec<Value>) -> EvalResult {
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let result = Value::heap_string(upcase_initials_lisp_string(string));
+            let result = Value::heap_string(upcase_initials_lisp_string(string, extra_word));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
@@ -679,11 +692,26 @@ pub(crate) fn builtin_upcase_initials(args: Vec<Value>) -> EvalResult {
             let code = c as i64;
             Ok(Value::fixnum(upcase_char(code)))
         }
-        other => Err(signal(
+        _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
     }
+}
+
+/// Pure form (used by tests); ignores `case-symbols-as-words`.
+#[cfg(test)]
+pub(crate) fn builtin_upcase_initials(args: Vec<Value>) -> EvalResult {
+    upcase_initials_with_word_pred(args, |_| false)
+}
+
+/// Dispatched form: honors `case-symbols-as-words` via the buffer syntax table.
+pub(crate) fn builtin_upcase_initials_in_state(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let extra_word = crate::emacs_core::syntax::case_symbols_as_words_predicate(eval);
+    upcase_initials_with_word_pred(args, extra_word)
 }
 
 /// Uppercase the first letter of each word, leaving the rest unchanged.
@@ -840,7 +868,7 @@ where
     match replace_match_case_action_lisp(matched, is_word_char) {
         ReplaceMatchCaseAction::NoChange => replacement.clone(),
         ReplaceMatchCaseAction::AllCaps => upcase_lisp_string_emacs_compat(replacement),
-        ReplaceMatchCaseAction::CapInitial => upcase_initials_lisp_string(replacement),
+        ReplaceMatchCaseAction::CapInitial => upcase_initials_lisp_string(replacement, |_| false),
     }
 }
 
@@ -941,19 +969,20 @@ pub(crate) fn builtin_capitalize_region(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    casify_region_in_state(ctx, args, "capitalize-region", capitalize_lisp_string)
+    let extra_word = crate::emacs_core::syntax::case_symbols_as_words_predicate(ctx);
+    casify_region_in_state(ctx, args, "capitalize-region", move |s| {
+        capitalize_lisp_string(s, extra_word)
+    })
 }
 
 pub(crate) fn builtin_upcase_initials_region(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    casify_region_in_state(
-        ctx,
-        args,
-        "upcase-initials-region",
-        upcase_initials_lisp_string,
-    )
+    let extra_word = crate::emacs_core::syntax::case_symbols_as_words_predicate(ctx);
+    casify_region_in_state(ctx, args, "upcase-initials-region", move |s| {
+        upcase_initials_lisp_string(s, extra_word)
+    })
 }
 
 pub(crate) fn builtin_downcase_word(
@@ -976,7 +1005,10 @@ pub(crate) fn builtin_capitalize_word(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    casify_word_in_state(ctx, args, "capitalize-word", capitalize_lisp_string)
+    let extra_word = crate::emacs_core::syntax::case_symbols_as_words_predicate(ctx);
+    casify_word_in_state(ctx, args, "capitalize-word", move |s| {
+        capitalize_lisp_string(s, extra_word)
+    })
 }
 
 /// `(char-resolve-modifiers CHAR)` -- resolve modifier bits in character.

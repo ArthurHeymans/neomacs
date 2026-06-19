@@ -2707,6 +2707,33 @@ pub(crate) fn builtin_char_syntax_in_buffers(
     Ok(Value::char(class.to_char()))
 }
 
+/// Extra word-constituent predicate for case operations, honoring
+/// `case-symbols-as-words` (GNU `casefiddle.c` `case_ch_is_word`): when that
+/// variable is non-nil, symbol-constituent characters (`Ssymbol`, e.g. `_` and
+/// `-` in prog modes) also count as word constituents for word-boundary
+/// detection. The returned closure is `true` only for symbol-constituent
+/// characters and only while the variable is set; callers OR it with their base
+/// (`Sword`/alphanumeric) word check. Uses the current buffer's syntax table,
+/// matching GNU's `SETUP_BUFFER_SYNTAX_TABLE`.
+pub(crate) fn case_symbols_as_words_predicate(
+    eval: &super::eval::Context,
+) -> impl Fn(u32) -> bool + Copy + 'static {
+    let chartable = eval
+        .eval_symbol("case-symbols-as-words")
+        .unwrap_or(Value::NIL)
+        .is_truthy()
+        .then(|| {
+            eval.buffers
+                .current_buffer()
+                .map(|buf| SyntaxTable::for_buffer(buf).chartable)
+        })
+        .flatten();
+    move |code: u32| {
+        chartable
+            .is_some_and(|table| syntax_class_at_char_code(&table, code) == SyntaxClass::Symbol)
+    }
+}
+
 /// `(syntax-after POS)` — return syntax descriptor for char at POS.
 pub(crate) fn builtin_syntax_after(
     eval: &mut super::eval::Context,

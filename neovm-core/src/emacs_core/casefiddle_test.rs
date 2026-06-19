@@ -12,6 +12,39 @@ fn capitalize_string_basic() {
 }
 
 #[test]
+fn capitalize_honors_case_symbols_as_words() {
+    // GNU `casefiddle.c` `case_ch_is_word`: with `case-symbols-as-words` set,
+    // symbol-constituent characters (`_`, `-`) count as word constituents, so
+    // `foo_bar` is a single word.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+
+    // Default (nil): `_` is a word boundary.
+    let r = ev.eval_str(r#"(capitalize "foo_bar baz")"#).unwrap();
+    assert_eq!(r.as_utf8_str(), Some("Foo_Bar Baz"));
+
+    // With the flag: `_` (Ssymbol) is part of the word.
+    let r = ev
+        .eval_str(r#"(let ((case-symbols-as-words t)) (capitalize "foo_bar baz"))"#)
+        .unwrap();
+    assert_eq!(r.as_utf8_str(), Some("Foo_bar Baz"));
+
+    // upcase-initials honors it too.
+    let r = ev
+        .eval_str(r#"(let ((case-symbols-as-words t)) (upcase-initials "foo_bar baz"))"#)
+        .unwrap();
+    assert_eq!(r.as_utf8_str(), Some("Foo_bar Baz"));
+
+    // capitalize-region in a buffer.
+    let r = ev
+        .eval_str(
+            r#"(let ((case-symbols-as-words t)) (with-temp-buffer (insert "foo_bar baz") (capitalize-region (point-min) (point-max)) (buffer-string)))"#,
+        )
+        .unwrap();
+    assert_eq!(r.as_utf8_str(), Some("Foo_bar Baz"));
+}
+
+#[test]
 fn capitalize_string_mixed() {
     crate::test_utils::init_test_tracing();
     let result = builtin_capitalize(vec![Value::string("hELLO wORLD")]).unwrap();

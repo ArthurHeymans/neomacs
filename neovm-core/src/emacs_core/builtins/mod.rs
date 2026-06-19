@@ -4630,7 +4630,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "capitalize",
-        |_ctx, args| super::casefiddle::builtin_capitalize(args),
+        super::casefiddle::builtin_capitalize_in_state,
         1,
         Some(1),
     );
@@ -8358,7 +8358,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- Case/char --
     ctx.defsubr(
         "upcase-initials",
-        |_ctx, args| super::casefiddle::builtin_upcase_initials(args),
+        super::casefiddle::builtin_upcase_initials_in_state,
         1,
         Some(1),
     );
