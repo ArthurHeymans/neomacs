@@ -294,10 +294,7 @@ pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit> {
 }
 
 pub(crate) struct BufferTextWindowFinishInstallState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    output_emitter: WindowOutputEmitter,
-    evaluator: &'a mut Context,
-    hit_rows: Vec<HitRow>,
+    finish_state: BufferTextWindowFinishState<'a>,
     hit_data: &'a mut Vec<WindowHitData>,
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
@@ -357,15 +354,13 @@ impl<'emit> BufferTextWindowBodyPassState<'emit> {
     }
 }
 
-pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'face> {
-    builder: &'emit mut GlyphMatrixBuilder,
-    output_emitter: &'emit mut WindowOutputEmitter,
+pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
+    output: TextWindowOutputRenderState<'emit, 'output>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
-    builder: &'emit mut GlyphMatrixBuilder,
-    output_emitter: &'emit mut WindowOutputEmitter,
+pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'output, 'face> {
+    output: TextWindowOutputRenderState<'emit, 'output>,
     evaluator: &'emit mut Context,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
@@ -1049,34 +1044,38 @@ impl BufferTextWindowWalkSetup {
 
     pub(crate) fn install_body(
         &mut self,
-        state: BufferTextWindowBodyInstallRenderState<'_, '_>,
+        state: BufferTextWindowBodyInstallRenderState<'_, '_, '_>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
     ) -> TextWindowRedisplayPositions {
         tail_context
             .body_install_request(self.byte_idx, &self.row_flags)
             .install_and_apply(BufferTextWindowBodyInstallState::new(
-                TextWindowOutputRenderState::new(state.builder, state.output_emitter),
+                state.output,
                 state.render_services,
             ))
     }
 
     pub(crate) fn install_body_and_publish_redisplay(
         &mut self,
-        state: BufferTextWindowBodyInstallPublishState<'_, '_>,
+        state: BufferTextWindowBodyInstallPublishState<'_, '_, '_>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
+        let BufferTextWindowBodyInstallPublishState {
+            output,
+            evaluator,
+            render_services,
+        } = state;
         let redisplay_positions = self.install_body(
             BufferTextWindowBodyInstallRenderState {
-                builder: state.builder,
-                output_emitter: state.output_emitter,
-                render_services: state.render_services,
+                output,
+                render_services,
             },
             tail_context,
         );
         // GNU status-line percent specs read the live window state from the
         // just-produced redisplay. Publish before chrome rows are evaluated.
-        publish_request.publish(state.evaluator, redisplay_positions);
+        publish_request.publish(evaluator, redisplay_positions);
         redisplay_positions
     }
 
@@ -1188,10 +1187,12 @@ impl BufferTextWindowWalkSetup {
         state: BufferTextWindowFinishOutputState<'_>,
     ) {
         tail_context.finish_and_install(BufferTextWindowFinishInstallState {
-            builder: state.builder,
-            output_emitter: state.output_emitter,
-            evaluator: state.evaluator,
-            hit_rows: std::mem::take(&mut self.hit_rows),
+            finish_state: BufferTextWindowFinishState::new(
+                state.builder,
+                state.output_emitter,
+                state.evaluator,
+                std::mem::take(&mut self.hit_rows),
+            ),
             hit_data: state.hit_data,
             display_snapshots: state.display_snapshots,
         });
@@ -1307,8 +1308,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
     ) -> TextWindowRedisplayPositions {
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
-                builder: state.builder,
-                output_emitter: &mut self.output_emitter,
+                output: TextWindowOutputRenderState::new(state.builder, &mut self.output_emitter),
                 evaluator: state.evaluator,
                 render_services: state.render_services,
             },
@@ -2042,14 +2042,9 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
     }
 
     pub(crate) fn finish_and_install(&self, state: BufferTextWindowFinishInstallState<'_>) {
-        let finished_window =
-            self.finish_request()
-                .finish_and_snapshot(BufferTextWindowFinishState::new(
-                    state.builder,
-                    state.output_emitter,
-                    state.evaluator,
-                    state.hit_rows,
-                ));
+        let finished_window = self
+            .finish_request()
+            .finish_and_snapshot(state.finish_state);
         state.hit_data.push(finished_window.hit_data);
         state.display_snapshots.push(finished_window.snapshot);
     }
