@@ -81,7 +81,7 @@ use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::{
     TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
-    TextWindowLiveOutputSurface,
+    TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
 };
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -7041,9 +7041,11 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
         charpos_end: 9,
     }];
 
+    let finish_output =
+        TextWindowFinishOutputSurface::from_builder(&mut builder, output_emitter, &mut eval);
     let finished =
         BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5).finish_and_snapshot(
-            BufferTextWindowFinishState::new(&mut builder, output_emitter, &mut eval, hit_rows),
+            BufferTextWindowFinishState::from_output_surface(finish_output, hit_rows),
         );
 
     assert_eq!(finished.hit_data.window_id, 41);

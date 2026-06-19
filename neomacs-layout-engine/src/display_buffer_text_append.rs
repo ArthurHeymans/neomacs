@@ -17,8 +17,6 @@ use crate::display_row_walk_state::{
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::hit_test::{HitRow, WindowHitData};
-#[cfg(test)]
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -30,8 +28,6 @@ use crate::window_output::{
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
-#[cfg(test)]
-use neovm_core::emacs_core::Context;
 use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
@@ -371,19 +367,6 @@ impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'fa
 }
 
 impl<'a> BufferTextWindowFinishState<'a> {
-    #[cfg(test)]
-    pub(crate) fn new(
-        builder: &'a mut GlyphMatrixBuilder,
-        output_emitter: WindowOutputEmitter,
-        evaluator: &'a mut Context,
-        hit_rows: Vec<HitRow>,
-    ) -> Self {
-        Self::from_output_surface(
-            TextWindowFinishOutputSurface::from_builder(builder, output_emitter, evaluator),
-            hit_rows,
-        )
-    }
-
     pub(crate) fn from_output_surface(
         output: TextWindowFinishOutputSurface<'a>,
         hit_rows: Vec<HitRow>,
