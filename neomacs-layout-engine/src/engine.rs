@@ -36,7 +36,7 @@ use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext}
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
     FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputOwner,
-    FrameOutputStateRenderRequest, FrameOutputSurface, FrameThemeTransitionHintRenderRequest,
+    FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
     FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
     WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
@@ -187,10 +187,6 @@ impl LayoutEngine {
         self.frame_face_id_counter = BasicFaceId::SENTINEL;
     }
 
-    fn frame_output_surface(&mut self) -> FrameOutputSurface<'_> {
-        self.frame_output.surface()
-    }
-
     fn latest_output_window_info(&self, window_id: i64) -> Option<WindowInfo> {
         self.frame_output.latest_window_info(window_id)
     }
@@ -215,12 +211,11 @@ impl LayoutEngine {
         face_resolver: &super::neovm_bridge::FaceResolver,
     ) {
         let mut decoration_face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let frame_output = &mut self.frame_output;
         let font_metrics = &mut self.font_metrics;
-        let mut frame_output = frame_output.surface();
+        let frame_output = self.frame_output.output_builder();
         WindowFrameDecorationsRenderRequest::new(params, frame_params, window_geometry, info)
             .render_and_apply(
-                &mut frame_output,
+                frame_output,
                 ChromeRowRenderServices::new(font_metrics, face_resolver, &mut decoration_face_ids),
             );
         decoration_face_ids.finish_into(&mut self.frame_face_id_counter);
@@ -230,11 +225,10 @@ impl LayoutEngine {
         &mut self,
         curr_window_infos: &mut std::collections::HashMap<i64, WindowInfo>,
     ) {
-        let frame_output = &mut self.frame_output;
         let prev_window_infos = &self.prev_window_infos;
-        let mut frame_output = frame_output.surface();
+        let frame_output = self.frame_output.output_builder();
         WindowFrameInfoEffectsRenderRequest::new(prev_window_infos)
-            .render_latest_and_apply(&mut frame_output, curr_window_infos);
+            .render_latest_and_apply(frame_output, curr_window_infos);
     }
 
     fn render_frame_output_hints(
@@ -242,28 +236,27 @@ impl LayoutEngine {
         curr_window_infos: &std::collections::HashMap<i64, WindowInfo>,
         frame_params: &FrameParams,
     ) {
-        let frame_output = &mut self.frame_output;
         let prev_window_infos = &self.prev_window_infos;
         let prev_selected_window_id = &mut self.prev_selected_window_id;
         let prev_background = &mut self.prev_background;
-        let mut frame_output = frame_output.surface();
+        let frame_output = self.frame_output.output_builder();
         FrameLineAnimationHintsRenderRequest::new(prev_window_infos, curr_window_infos)
-            .render_and_apply(&mut frame_output);
+            .render_and_apply(frame_output);
         FrameWindowSwitchHintRenderRequest::new(prev_selected_window_id)
-            .render_and_apply(&mut frame_output);
+            .render_and_apply(frame_output);
         FrameThemeTransitionHintRenderRequest::new(
             prev_background,
             frame_params.width,
             frame_params.height,
         )
-        .render_and_apply(&mut frame_output);
+        .render_and_apply(frame_output);
         FrameTopologyTransitionHintRenderRequest::new(
             prev_window_infos,
             curr_window_infos,
             frame_params.width,
             frame_params.height,
         )
-        .render_and_apply(&mut frame_output);
+        .render_and_apply(frame_output);
     }
 
     /// Create a new layout engine with cosmic-text font metrics.
@@ -498,7 +491,7 @@ impl LayoutEngine {
                 default_resolved,
                 default_metrics,
             )
-            .render_and_apply(&mut self.frame_output_surface());
+            .render_and_apply(self.frame_output.output_builder());
 
             // Clear hit-test data for new frame
             self.hit_data.clear();
@@ -569,7 +562,7 @@ impl LayoutEngine {
                     }
                 };
                 WindowFrameInfoRenderRequest::new(params, metadata)
-                    .render_and_apply(&mut self.frame_output_surface());
+                    .render_and_apply(self.frame_output.output_builder());
                 self.render_latest_window_output_info_effects(&mut curr_window_infos);
 
                 // Simplified layout for this window (no face resolution, no overlays)

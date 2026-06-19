@@ -1,5 +1,5 @@
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_frame_output::{FrameOutputIdentity, FrameOutputSurface};
+use crate::display_frame_output::FrameOutputIdentity;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -304,6 +304,21 @@ pub(crate) fn mock_frame_pixel_width_to_columns(width_px: f32, char_w: f32) -> u
     (width_px / char_w.max(1.0)) as usize
 }
 
+fn set_mock_frame_identity(builder: &mut DisplayOutputBuilder, identity: FrameOutputIdentity) {
+    builder.set_output_frame_identity(
+        identity.frame_id,
+        identity.parent_id,
+        identity.parent_x,
+        identity.parent_y,
+        identity.z_order,
+        identity.undecorated,
+        identity.border_width,
+        identity.border_color,
+        identity.background_alpha,
+        identity.no_accept_focus,
+    );
+}
+
 /// Layout mock-display frame content into frame snapshots using the shared
 /// typed row renderer for all mock text, mode-line, minibuffer, and child rows.
 pub(crate) fn layout_mock_frame_content(
@@ -314,26 +329,29 @@ pub(crate) fn layout_mock_frame_content(
 ) -> Vec<FrameDisplayState> {
     let mut builder = DisplayOutputBuilder::new();
 
-    FrameOutputSurface::from_output_builder(&mut builder).set_frame_identity(FrameOutputIdentity {
-        frame_id: content.frame_id,
-        parent_id: 0,
-        parent_x: 0.0,
-        parent_y: 0.0,
-        z_order: 0,
-        undecorated: false,
-        border_width: 0.0,
-        border_color: Color::BLACK,
-        background_alpha: 1.0,
-        no_accept_focus: false,
-    });
-    FrameOutputSurface::from_output_builder(&mut builder).set_background_color(content.background);
+    set_mock_frame_identity(
+        &mut builder,
+        FrameOutputIdentity {
+            frame_id: content.frame_id,
+            parent_id: 0,
+            parent_x: 0.0,
+            parent_y: 0.0,
+            z_order: 0,
+            undecorated: false,
+            border_width: 0.0,
+            border_color: Color::BLACK,
+            background_alpha: 1.0,
+            no_accept_focus: false,
+        },
+    );
+    builder.set_output_background_color(content.background);
 
     for face in &content.faces {
         let mut face = face.clone();
         // Mock display faces enter in Emacs point units; frame output carries
         // physical pixels to match the measured row geometry.
         face.font_size = crate::fontconfig::points_to_pixels(face.font_size);
-        FrameOutputSurface::from_output_builder(&mut builder).install_face(&face);
+        builder.install_output_face(face.id, face);
     }
 
     let default_face = content.faces.first();
@@ -505,22 +523,24 @@ pub(crate) fn layout_mock_frame_content(
     let mut child_frames = Vec::new();
     for cf in &content.child_frames {
         let mut cb = DisplayOutputBuilder::new();
-        FrameOutputSurface::from_output_builder(&mut cb).set_frame_identity(FrameOutputIdentity {
-            frame_id: cf.frame_id,
-            parent_id: content.frame_id,
-            parent_x: cf.parent_x,
-            parent_y: cf.parent_y,
-            z_order: cf.z_order,
-            undecorated: true,
-            border_width: 0.0,
-            border_color: Color::BLACK,
-            background_alpha: 1.0,
-            no_accept_focus: false,
-        });
-        FrameOutputSurface::from_output_builder(&mut cb)
-            .set_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
+        set_mock_frame_identity(
+            &mut cb,
+            FrameOutputIdentity {
+                frame_id: cf.frame_id,
+                parent_id: content.frame_id,
+                parent_x: cf.parent_x,
+                parent_y: cf.parent_y,
+                z_order: cf.z_order,
+                undecorated: true,
+                border_width: 0.0,
+                border_color: Color::BLACK,
+                background_alpha: 1.0,
+                no_accept_focus: false,
+            },
+        );
+        cb.set_output_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
         for face in &content.faces {
-            FrameOutputSurface::from_output_builder(&mut cb).install_face(face);
+            cb.install_output_face(face.id, face.clone());
         }
         let nrows = cf.window.lines.len();
         let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
