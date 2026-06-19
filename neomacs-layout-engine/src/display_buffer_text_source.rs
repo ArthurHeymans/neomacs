@@ -1111,6 +1111,73 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         end.max(start.add_len(CharLen::new(1))).min(limit)
     }
 
+    fn display_property_cursor_action(
+        &self,
+        context: &mut DisplaySourceContext<'_>,
+        display_prop: Value,
+        display_property: &DisplayPropertyClassification,
+        face: RenderFaceRef,
+        span: SourceSpan,
+    ) -> DisplayPropertySourceCursorAction {
+        display_property_source_action_from_classification(
+            context,
+            display_prop,
+            display_property,
+            face,
+        )
+        .into_cursor_action(span, face)
+    }
+
+    fn push_display_replacement_string(
+        &mut self,
+        value: Value,
+        base_face: RenderFaceRef,
+        start: CharPos0,
+        end: CharPos0,
+    ) {
+        self.replacement_strings.push_with_replacement_source(
+            value,
+            base_face,
+            Some(self.display_replacement_source(start, end)),
+        );
+    }
+
+    fn next_text_item_with_layout(
+        &mut self,
+        start: CharPos0,
+        property_end: CharPos0,
+        face: RenderFaceRef,
+        layout: DisplayItemLayout,
+    ) -> Option<DisplayItem> {
+        let ch = self.char_at(start)?;
+        if let Some(kind) = display_item_kind_for_text_source_char(ch) {
+            self.char_pos = start.add_len(CharLen::new(1));
+            return Some(
+                DisplayItem::new(self.span(start, self.char_pos), face, kind).with_layout(layout),
+            );
+        }
+
+        let end = self.next_text_run_end(start, property_end);
+        self.char_pos = end;
+        Some(
+            DisplayItem::new(
+                self.span(start, end),
+                face,
+                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+            )
+            .with_layout(layout),
+        )
+    }
+
+    fn next_text_item(
+        &mut self,
+        start: CharPos0,
+        property_end: CharPos0,
+        face: RenderFaceRef,
+    ) -> Option<DisplayItem> {
+        self.next_text_item_with_layout(start, property_end, face, DisplayItemLayout::default())
+    }
+
     #[cfg(test)]
     pub(crate) fn source_position(&self) -> DisplaySourcePosition {
         if !self.replacement_strings.is_empty() {
@@ -1153,14 +1220,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                         ),
                     ));
                 }
-                let item_layout = match display_property_source_action_from_classification(
+                let item_layout = match self.display_property_cursor_action(
                     context,
                     display_prop,
                     &display_property,
                     face,
-                )
-                .into_cursor_action(span, face)
-                {
+                    span,
+                ) {
                     DisplayPropertySourceCursorAction::PushReplacement { value, .. } => {
                         return Some(BufferTextSourceCursorItem::Replacement(
                             self.display_replacement_item(
@@ -1176,43 +1242,16 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     }
                     DisplayPropertySourceCursorAction::FallThrough { layout } => layout,
                 };
-                let ch = self.char_at(start)?;
-                if let Some(kind) = display_item_kind_for_text_source_char(ch) {
-                    self.char_pos = start.add_len(CharLen::new(1));
-                    return Some(BufferTextSourceCursorItem::Item(
-                        DisplayItem::new(self.span(start, self.char_pos), face, kind)
-                            .with_layout(item_layout),
-                    ));
-                }
-
-                let end = self.next_text_run_end(start, property_end);
-                self.char_pos = end;
                 return Some(BufferTextSourceCursorItem::Item(
-                    DisplayItem::new(
-                        self.span(start, end),
-                        face,
-                        DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
-                    )
-                    .with_layout(item_layout),
+                    self.next_text_item_with_layout(start, property_end, face, item_layout)?,
                 ));
             }
 
-            let ch = self.char_at(start)?;
-            if let Some(kind) = display_item_kind_for_text_source_char(ch) {
-                self.char_pos = start.add_len(CharLen::new(1));
-                return Some(BufferTextSourceCursorItem::Item(DisplayItem::new(
-                    self.span(start, self.char_pos),
-                    face,
-                    kind,
-                )));
-            }
-            let end = self.next_text_run_end(start, property_end);
-            self.char_pos = end;
-            return Some(BufferTextSourceCursorItem::Item(DisplayItem::new(
-                self.span(start, end),
+            return Some(BufferTextSourceCursorItem::Item(self.next_text_item(
+                start,
+                property_end,
                 face,
-                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
-            )));
+            )?));
         }
     }
 }
@@ -1239,20 +1278,15 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
                 let display_property = classify_display_property(display_prop);
-                let item_layout = match display_property_source_action_from_classification(
+                let item_layout = match self.display_property_cursor_action(
                     context,
                     display_prop,
                     &display_property,
                     face,
-                )
-                .into_cursor_action(span, face)
-                {
+                    span,
+                ) {
                     DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
-                        self.replacement_strings.push_with_replacement_source(
-                            value,
-                            base_face,
-                            Some(self.display_replacement_source(start, property_end)),
-                        );
+                        self.push_display_replacement_string(value, base_face, start, property_end);
                         continue;
                     }
                     DisplayPropertySourceCursorAction::Emit(item) => {
@@ -1260,43 +1294,10 @@ impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<
                     }
                     DisplayPropertySourceCursorAction::FallThrough { layout } => layout,
                 };
-                let ch = self.char_at(start)?;
-                if let Some(kind) = display_item_kind_for_text_source_char(ch) {
-                    self.char_pos = start.add_len(CharLen::new(1));
-                    return Some(
-                        DisplayItem::new(self.span(start, self.char_pos), face, kind)
-                            .with_layout(item_layout),
-                    );
-                }
-
-                let end = self.next_text_run_end(start, property_end);
-                self.char_pos = end;
-                return Some(
-                    DisplayItem::new(
-                        self.span(start, end),
-                        face,
-                        DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
-                    )
-                    .with_layout(item_layout),
-                );
+                return self.next_text_item_with_layout(start, property_end, face, item_layout);
             }
 
-            let ch = self.char_at(start)?;
-            if let Some(kind) = display_item_kind_for_text_source_char(ch) {
-                self.char_pos = start.add_len(CharLen::new(1));
-                return Some(DisplayItem::new(
-                    self.span(start, self.char_pos),
-                    face,
-                    kind,
-                ));
-            }
-            let end = self.next_text_run_end(start, property_end);
-            self.char_pos = end;
-            return Some(DisplayItem::new(
-                self.span(start, end),
-                face,
-                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
-            ));
+            return self.next_text_item(start, property_end, face);
         }
     }
 }
