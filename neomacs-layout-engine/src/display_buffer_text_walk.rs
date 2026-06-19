@@ -283,7 +283,8 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     tab_line_height: f32,
 }
 
-pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit> {
+pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
+    loop_context: BufferTextWindowLoopRequestContext,
     source_render: TextRowSourceRenderState<'emit>,
     x: &'emit mut f32,
     col: &'emit mut usize,
@@ -296,6 +297,8 @@ pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit> {
     row_flags: &'emit DisplayRowFlags,
     row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
     box_face: &'emit BoxFaceRowState,
+    text_append_surface: &'surface DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
 pub(crate) struct BufferTextWindowFinishInstallState<'a> {
@@ -665,7 +668,8 @@ pub(crate) struct BufferTextWindowLoopRequestContext {
     row_limit: DisplayRowLimit,
 }
 
-pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
+pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
+    loop_context: BufferTextWindowLoopRequestContext,
     append_state: &'emit mut BufferTextRowAppendState,
     text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
     byte_idx: &'emit mut usize,
@@ -688,27 +692,23 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit> {
     row_y_positions: &'rows mut DisplayRowYPositions,
     cursor_info: &'emit mut CursorCaptureState,
     face_ids: &'emit mut FrameFaceIdAllocator,
+    append_surface: &'surface DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
 pub(crate) struct BufferTextSourceItemStepRenderRequest<'a> {
-    loop_context: BufferTextWindowLoopRequestContext,
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     source_step: BufferTextSourceItemStep,
     text: &'a [u8],
-    append_surface: &'a DisplayRowAppendSurface,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
 }
 
 pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
-    loop_context: BufferTextWindowLoopRequestContext,
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     source_item: BufferTextSourceItem,
     item_stepper: &'a mut BufferTextSourceItemStepper,
     text: &'a [u8],
-    append_surface: &'a DisplayRowAppendSurface,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
 }
@@ -1090,6 +1090,7 @@ impl BufferTextWindowWalkSetup {
         let mut item_stepper = BufferTextSourceItemStepper::new(loop_context.text_start_byte());
 
         BufferTextWindowLoopRenderState::new(
+            loop_context,
             &mut self.buffer_text_append_state,
             &mut self.text_property_checkpoints,
             &mut self.byte_idx,
@@ -1112,18 +1113,17 @@ impl BufferTextWindowWalkSetup {
             &mut self.row_y_positions,
             &mut self.cursor_info,
             state.face_ids,
+            &self.text_append_surface,
+            overlay_text_row_context,
         )
         .render_visible_steps(
             &mut source_cursor,
             &mut source_resolve_state,
             &mut item_stepper,
             row_prelude_context,
-            loop_context,
             face_resolution_context,
             text,
             params,
-            &self.text_append_surface,
-            overlay_text_row_context,
             state.active_face_state,
             buffer,
         );
@@ -1143,6 +1143,7 @@ impl BufferTextWindowWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> BufferTextWindowPostLoopRenderOutcome {
         BufferTextWindowPostLoopState::new(
+            loop_context,
             state.source_render.reborrow(),
             &mut self.x,
             &mut self.col,
@@ -1155,16 +1156,15 @@ impl BufferTextWindowWalkSetup {
             &self.row_flags,
             &self.row_extend,
             &self.box_face,
+            &self.text_append_surface,
+            overlay_context,
         )
         .render_tail_and_decide_retry(
-            loop_context,
             tail_context,
             text,
-            &self.text_append_surface,
             self.byte_idx,
             self.charpos,
             has_overlays,
-            overlay_context,
             active_face_state,
             buffer,
             buf_access,
@@ -2161,9 +2161,10 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
     }
 }
 
-impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
+impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
+        loop_context: BufferTextWindowLoopRequestContext,
         source_render: TextRowSourceRenderState<'emit>,
         x: &'emit mut f32,
         col: &'emit mut usize,
@@ -2176,8 +2177,11 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
         row_flags: &'emit DisplayRowFlags,
         row_extend: &'emit DisplayRowScopedValue<(Color, u32)>,
         box_face: &'emit BoxFaceRowState,
+        text_append_surface: &'surface DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
     ) -> Self {
         Self {
+            loop_context,
             source_render,
             x,
             col,
@@ -2190,25 +2194,28 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
             row_flags,
             row_extend,
             box_face,
+            text_append_surface,
+            overlay_context,
         }
     }
 
     pub(crate) fn render_end_of_buffer_tail<'request, B: LayoutBufferView>(
         &mut self,
-        loop_context: BufferTextWindowLoopRequestContext,
         byte_idx: usize,
         charpos: i64,
         has_overlays: bool,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> bool {
-        loop_context
+    ) -> bool
+    where
+        'surface: 'request,
+    {
+        self.loop_context
             .end_of_buffer_tail_request(
                 byte_idx,
                 charpos,
                 has_overlays,
-                overlay_context,
+                self.overlay_context,
                 active_face_state,
             )
             .render_and_apply(
@@ -2231,13 +2238,12 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
     pub(crate) fn apply_tail_decorations(
         &self,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
-        text_append_surface: &DisplayRowAppendSurface,
     ) -> BufferTextWindowTailDecorationOutcome {
         tail_context
             .tail_decoration_request()
             .apply(BufferTextWindowTailDecorationState {
                 x: *self.x,
-                text_append_surface,
+                text_append_surface: self.text_append_surface,
                 row_geometry: self.row_geometry,
                 row_y_positions: self.row_y_positions,
                 row_flags: self.row_flags,
@@ -2289,29 +2295,27 @@ impl<'rows, 'emit> BufferTextWindowPostLoopState<'rows, 'emit> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
         &mut self,
-        loop_context: BufferTextWindowLoopRequestContext,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         text: &'request [u8],
-        text_append_surface: &DisplayRowAppendSurface,
         byte_idx: usize,
         charpos: i64,
         has_overlays: bool,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
         buf_access: &'rows RustBufferAccess<'buf, B>,
-    ) -> BufferTextWindowPostLoopRenderOutcome {
+    ) -> BufferTextWindowPostLoopRenderOutcome
+    where
+        'surface: 'request,
+    {
         let point_is_visible_eob = self.render_end_of_buffer_tail(
-            loop_context,
             byte_idx,
             charpos,
             has_overlays,
-            overlay_context,
             active_face_state,
             buffer,
         );
 
-        self.apply_tail_decorations(tail_context, text_append_surface);
+        self.apply_tail_decorations(tail_context);
         self.finalize_tail(tail_context, text, charpos, point_is_visible_eob);
 
         // GNU redisplay keeps iterating until point visibility converges or no
@@ -2655,9 +2659,10 @@ impl BufferTextWindowLoopRequestContext {
     }
 }
 
-impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
+impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
+        loop_context: BufferTextWindowLoopRequestContext,
         append_state: &'emit mut BufferTextRowAppendState,
         text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
         byte_idx: &'emit mut usize,
@@ -2680,8 +2685,11 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         row_y_positions: &'rows mut DisplayRowYPositions,
         cursor_info: &'emit mut CursorCaptureState,
         face_ids: &'emit mut FrameFaceIdAllocator,
+        append_surface: &'surface DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
     ) -> Self {
         Self {
+            loop_context,
             append_state,
             text_property_checkpoints,
             byte_idx,
@@ -2704,6 +2712,8 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             row_y_positions,
             cursor_info,
             face_ids,
+            append_surface,
+            overlay_context,
         }
     }
 
@@ -2717,19 +2727,18 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         source_resolve_state: &mut DisplaySourceResolveState,
         item_stepper: &mut BufferTextSourceItemStepper,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
         params: &'request WindowParams,
-        append_surface: &'request DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &B,
-    ) {
+    ) where
+        'surface: 'request,
+    {
         while *self.byte_idx < text.len()
             && self
                 .row_geometry
-                .current_row_is_visible(loop_context.row_visibility_limit)
+                .current_row_is_visible(self.loop_context.row_visibility_limit)
         {
             if matches!(
                 self.render_next_step(
@@ -2737,12 +2746,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                     source_resolve_state,
                     item_stepper,
                     row_prelude_context,
-                    loop_context,
                     face_resolution_context.clone(),
                     text,
                     params,
-                    append_surface,
-                    overlay_context,
                     active_face_state,
                     buffer,
                 ),
@@ -2759,23 +2765,20 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         source_resolve_state: &mut DisplaySourceResolveState,
         item_stepper: &mut BufferTextSourceItemStepper,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
         params: &'request WindowParams,
-        append_surface: &'request DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome {
+    ) -> BufferTextWindowLoopStepOutcome
+    where
+        'surface: 'request,
+    {
         match self.render_pre_source_checkpoints_for_context(
             row_prelude_context,
-            loop_context,
             face_resolution_context,
             text,
             params,
-            append_surface,
-            overlay_context,
             active_face_state,
             buffer,
         ) {
@@ -2802,13 +2805,10 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             BufferTextConsumedSourceItem::PendingStep(source_step) => {
                 return self.render_source_item_step_for_context(
                     BufferTextSourceItemStepRenderRequest {
-                        loop_context,
                         layout_resolution_context: face_resolution_context
                             .source_item_layout_resolution_context(),
                         source_step,
                         text,
-                        append_surface,
-                        overlay_context,
                         active_face_state,
                         params,
                     },
@@ -2820,11 +2820,8 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 return self.render_replacement_source_item_for_context(
                     replacement,
                     item_stepper,
-                    loop_context,
                     face_resolution_context.source_item_layout_resolution_context(),
                     text,
-                    append_surface,
-                    overlay_context,
                     active_face_state,
                     params,
                     buffer,
@@ -2834,14 +2831,11 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
         self.render_source_item_for_context(
             BufferTextSourceItemRenderRequest {
-                loop_context,
                 layout_resolution_context: face_resolution_context
                     .source_item_layout_resolution_context(),
                 source_item,
                 item_stepper,
                 text,
-                append_surface,
-                overlay_context,
                 active_face_state,
                 params,
             },
@@ -2853,31 +2847,19 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     fn render_pre_source_checkpoints_for_context<'request, B: LayoutBufferView>(
         &mut self,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-        loop_context: BufferTextWindowLoopRequestContext,
         face_resolution_context: BufferCurrentFaceResolutionContext<'request, B>,
         text: &'request [u8],
         _params: &'request WindowParams,
-        append_surface: &'request DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &mut DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> BufferTextWindowPreSourceOutcome {
-        self.render_row_prelude(
-            row_prelude_context,
-            append_surface,
-            active_face_state,
-            buffer,
-        );
+    ) -> BufferTextWindowPreSourceOutcome
+    where
+        'surface: 'request,
+    {
+        self.render_row_prelude(row_prelude_context, active_face_state, buffer);
 
         if self
-            .render_invisible_text_for_context(
-                loop_context,
-                text,
-                append_surface,
-                overlay_context,
-                active_face_state,
-                buffer,
-            )
+            .render_invisible_text_for_context(text, active_face_state, buffer)
             .should_continue_buffer_walk()
         {
             return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
@@ -2885,12 +2867,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
         if self.hscroll_should_skip() {
             if self
-                .render_hscroll_skip_for_context(
-                    loop_context,
-                    text,
-                    append_surface,
-                    active_face_state,
-                )
+                .render_hscroll_skip_for_context(text, active_face_state)
                 .should_break()
             {
                 return BufferTextWindowPreSourceOutcome::StopBufferWalk;
@@ -2900,8 +2877,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
         self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
 
-        let display_property_walk =
-            self.render_display_property_checkpoint_for_context(loop_context, buffer);
+        let display_property_walk = self.render_display_property_checkpoint_for_context(buffer);
         if display_property_walk.should_continue_buffer_walk() {
             return BufferTextWindowPreSourceOutcome::ContinueBufferWalk;
         }
@@ -2915,20 +2891,15 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         buffer: &B,
     ) -> BufferTextWindowLoopStepOutcome {
         let BufferTextSourceItemStepRenderRequest {
-            loop_context,
             layout_resolution_context,
             source_step,
             text,
-            append_surface,
-            overlay_context,
             active_face_state,
             params,
         } = request;
         let selective_display_outcome = self.render_selective_display_tail_for_context(
-            loop_context,
             source_step.source_char(),
             text,
-            append_surface,
             active_face_state,
             buffer,
         );
@@ -2944,27 +2915,17 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         let (source_char, source_item) = source_step.into_parts();
         if is_explicit_line_break {
             if self
-                .render_line_break_for_context(
-                    loop_context,
-                    source_char,
-                    text,
-                    overlay_context,
-                    active_face_state,
-                    buffer,
-                )
+                .render_line_break_for_context(source_char, text, active_face_state, buffer)
                 .should_break()
             {
                 return BufferTextWindowLoopStepOutcome::StopBufferWalk;
             }
         } else {
             let char_render_outcome = self.render_source_char_for_context(
-                loop_context,
                 layout_resolution_context,
                 source_char,
                 source_item,
                 text,
-                append_surface,
-                overlay_context,
                 active_face_state,
                 params,
                 buffer,
@@ -2987,13 +2948,10 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         buffer: &B,
     ) -> BufferTextWindowLoopStepOutcome {
         let BufferTextSourceItemRenderRequest {
-            loop_context,
             layout_resolution_context,
             source_item,
             item_stepper,
             text,
-            append_surface,
-            overlay_context,
             active_face_state,
             params,
         } = request;
@@ -3006,12 +2964,9 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
         self.render_source_item_step_for_context(
             BufferTextSourceItemStepRenderRequest {
-                loop_context,
                 layout_resolution_context,
                 source_step,
                 text,
-                append_surface,
-                overlay_context,
                 active_face_state,
                 params,
             },
@@ -3023,16 +2978,18 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         &mut self,
         replacement: BufferTextReplacementItem,
         item_stepper: &mut BufferTextSourceItemStepper,
-        context: BufferTextWindowLoopRequestContext,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         text: &'request [u8],
-        append_surface: &'request DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         params: &'request WindowParams,
         buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome {
-        let Some(source_event) = replacement.source_event(context.text_start_byte(), text) else {
+    ) -> BufferTextWindowLoopStepOutcome
+    where
+        'surface: 'request,
+    {
+        let Some(source_event) =
+            replacement.source_event(self.loop_context.text_start_byte(), text)
+        else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
         let display_property = classify_display_property(replacement.value());
@@ -3041,14 +2998,14 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 .with_font_metrics_and_display_host(|font_metrics, host| {
                     DisplayPropertyReplacementAppendRequestResolver::for_source_event(
                         &display_property,
-                        context.buffer_id(),
+                        self.loop_context.buffer_id(),
                         source_event,
                         active_face_state,
                         *self.x,
-                        context.content_x(),
+                        self.loop_context.content_x(),
                         params,
                         0.0,
-                        context.char_height(),
+                        self.loop_context.char_height(),
                         DisplayRowPosition {
                             x_px: *self.x,
                             col: *self.col,
@@ -3058,7 +3015,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 });
         let Some(request) = append_request else {
             let Some(source_item) = replacement.fallback_source_item(
-                context.text_start_byte(),
+                self.loop_context.text_start_byte(),
                 text,
                 RenderFaceRef::FaceId(active_face_state.face_id()),
             ) else {
@@ -3066,13 +3023,10 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             };
             return self.render_source_item_for_context(
                 BufferTextSourceItemRenderRequest {
-                    loop_context: context,
                     layout_resolution_context,
                     source_item,
                     item_stepper,
                     text,
-                    append_surface,
-                    overlay_context,
                     active_face_state,
                     params,
                 },
@@ -3083,7 +3037,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             buffer,
             &mut self.source_render.reborrow(),
             self.face_ids,
-            append_surface,
+            self.append_surface,
             self.row_geometry,
             active_face_state,
         );
@@ -3095,7 +3049,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             self.cursor_info,
             active_face_state,
             self.row_geometry,
-            context.point_charpos,
+            self.loop_context.point_charpos,
             replacement.start_charpos(),
             *self.byte_idx,
         );
@@ -3112,7 +3066,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     pub(crate) fn render_row_prelude<B: LayoutBufferView>(
         &mut self,
         context: BufferTextWindowRowPreludeRequestContext,
-        append_surface: &DisplayRowAppendSurface,
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {
@@ -3129,7 +3082,7 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
         context
             .line_prefix_request(
-                append_surface,
+                self.append_surface,
                 self.row_geometry,
                 active_face_state,
                 0.0,
@@ -3200,17 +3153,17 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
     pub(crate) fn render_invisible_text_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        context: BufferTextWindowLoopRequestContext,
         text: &'request [u8],
-        append_surface: &'request DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> BufferInvisibleTextRenderOutcome {
-        let request = context.invisible_text_request(
+    ) -> BufferInvisibleTextRenderOutcome
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.invisible_text_request(
             text,
-            append_surface,
-            overlay_context,
+            self.append_surface,
+            self.overlay_context,
             active_face_state,
             0.0,
         );
@@ -3218,12 +3171,15 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
     }
     pub(crate) fn render_hscroll_skip_for_context<'request>(
         &mut self,
-        context: BufferTextWindowLoopRequestContext,
         text: &'request [u8],
-        append_surface: &'request DisplayRowAppendSurface,
         active_face_state: &'request DisplayRowActiveFaceState,
-    ) -> DisplayRowTransitionContinuation {
-        let request = context.hscroll_skip_request(text, append_surface, active_face_state);
+    ) -> DisplayRowTransitionContinuation
+    where
+        'surface: 'request,
+    {
+        let request =
+            self.loop_context
+                .hscroll_skip_request(text, self.append_surface, active_face_state);
         self.render_hscroll_skip(request)
     }
 
@@ -3247,26 +3203,28 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
     pub(crate) fn render_display_property_checkpoint_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        context: BufferTextWindowLoopRequestContext,
         buffer: &'request B,
     ) -> BufferDisplayPropertyTextWalkOutcome {
-        let request = context.display_property_checkpoint_request(buffer, *self.charpos);
+        let request = self
+            .loop_context
+            .display_property_checkpoint_request(buffer, *self.charpos);
         self.render_display_property_checkpoint(request)
     }
 
     pub(crate) fn render_selective_display_tail_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        context: BufferTextWindowLoopRequestContext,
         source_step_char: BufferTextSourceStepChar,
         text: &'request [u8],
-        append_surface: &'request DisplayRowAppendSurface,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> BufferSelectiveDisplayTailRenderOutcome {
-        let request = context.selective_display_tail_request(
+    ) -> BufferSelectiveDisplayTailRenderOutcome
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.selective_display_tail_request(
             source_step_char,
             text,
-            append_surface,
+            self.append_surface,
             active_face_state,
             0.0,
         );
@@ -3275,38 +3233,43 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
 
     pub(crate) fn render_line_break_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        context: BufferTextWindowLoopRequestContext,
         source_char: BufferTextSourceStepChar,
         text: &'request [u8],
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         buffer: &B,
-    ) -> DisplayRowTransitionContinuation {
-        let request =
-            context.line_break_request(source_char, text, overlay_context, active_face_state);
+    ) -> DisplayRowTransitionContinuation
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.line_break_request(
+            source_char,
+            text,
+            self.overlay_context,
+            active_face_state,
+        );
         self.render_line_break(request, buffer)
     }
 
     pub(crate) fn render_source_char_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        context: BufferTextWindowLoopRequestContext,
         layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         source_char: BufferTextSourceStepChar,
         source_item: DisplayItem,
         text: &'request [u8],
-        append_surface: &'request DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
         params: &'request WindowParams,
         buffer: &B,
-    ) -> BufferTextSourceCharRenderOutcome {
-        let request = context.source_char_request(
+    ) -> BufferTextSourceCharRenderOutcome
+    where
+        'surface: 'request,
+    {
+        let request = self.loop_context.source_char_request(
             layout_resolution_context,
             source_char,
             source_item,
             text,
-            append_surface,
-            overlay_context,
+            self.append_surface,
+            self.overlay_context,
             active_face_state,
             params,
             0.0,
