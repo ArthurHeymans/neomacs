@@ -1095,14 +1095,9 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
         request: WindowChromeRowsRenderRequest<'_, '_>,
         render_services: ChromeRowRenderServices<'_, '_>,
     ) {
-        let output_emitter = self
-            .output_emitter
-            .as_deref_mut()
-            .expect("text-window chrome rendering requires an output emitter");
         request.render(&mut WindowChromeRowsRenderState::new(
-            self.builder,
+            self,
             evaluator,
-            output_emitter,
             render_services,
         ));
     }

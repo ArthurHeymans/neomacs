@@ -13,7 +13,7 @@
 //! trait and renamed the file to reflect its new role.
 
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
-use super::window_output::{ChromeRowOutput, TextWindowOutputRenderState, WindowOutputEmitter};
+use super::window_output::{ChromeRowOutput, TextWindowOutputRenderState};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::FrameChromeOutputRenderState;
 use crate::display_origin::DisplayOrigin;
@@ -27,7 +27,6 @@ pub(crate) use crate::display_row::{DisplayRowFaceRealizer, DisplayRowOutputProg
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
-use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::types::WindowParams;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
@@ -475,7 +474,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         self.target_columns().columns()
     }
 
-    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_>) {
+    pub(crate) fn render(self, state: &mut WindowChromeRowsRenderState<'_, '_, '_, '_, '_>) {
         let params = self.params;
         let mut status_line_symbol_values = std::collections::HashMap::new();
         if let Some(buffer) = state
@@ -658,21 +657,22 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
     }
 }
 
-pub(crate) struct WindowChromeRowsRenderState<'emit, 'face> {
-    output: TextWindowOutputRenderState<'emit, 'emit>,
-    evaluator: &'emit mut Context,
-    render_services: ChromeRowRenderServices<'emit, 'face>,
+pub(crate) struct WindowChromeRowsRenderState<'state, 'builder, 'output, 'services, 'face> {
+    output: &'state mut TextWindowOutputRenderState<'builder, 'output>,
+    evaluator: &'state mut Context,
+    render_services: ChromeRowRenderServices<'services, 'face>,
 }
 
-impl<'emit, 'face> WindowChromeRowsRenderState<'emit, 'face> {
+impl<'state, 'builder, 'output, 'services, 'face>
+    WindowChromeRowsRenderState<'state, 'builder, 'output, 'services, 'face>
+{
     pub(crate) fn new(
-        builder: &'emit mut GlyphMatrixBuilder,
-        evaluator: &'emit mut Context,
-        output_emitter: &'emit mut WindowOutputEmitter,
-        render_services: ChromeRowRenderServices<'emit, 'face>,
+        output: &'state mut TextWindowOutputRenderState<'builder, 'output>,
+        evaluator: &'state mut Context,
+        render_services: ChromeRowRenderServices<'services, 'face>,
     ) -> Self {
         Self {
-            output: TextWindowOutputRenderState::new(builder, output_emitter),
+            output,
             evaluator,
             render_services,
         }
