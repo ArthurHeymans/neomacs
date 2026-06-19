@@ -44,10 +44,11 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
-    FrameLineAnimationHintsRenderRequest, FrameThemeTransitionHintRenderRequest,
-    FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
-    WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
-    WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
+    FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputStateRenderRequest,
+    FrameThemeTransitionHintRenderRequest, FrameTopologyTransitionHintRenderRequest,
+    FrameWindowSwitchHintRenderRequest, WindowFrameDecorationsRenderRequest,
+    WindowFrameGeometryRequest, WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest,
+    WindowFrameMetadata,
 };
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
@@ -55,8 +56,7 @@ use crate::display_item::{
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
     DisplayRowGeometry, DisplayRowRenderBounds, DisplayRowRenderExecutor,
-    DisplayRowSourceFragmentFrame, DisplayRowSourceState, insert_resolved_display_row_face,
-    install_mock_display_row_in_matrix_row,
+    DisplayRowSourceFragmentFrame, DisplayRowSourceState, install_mock_display_row_in_matrix_row,
 };
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::DisplayRowMaxX;
@@ -422,52 +422,41 @@ impl LayoutEngine {
             self.pending_tab_bar = None;
             let mut curr_window_infos: std::collections::HashMap<i64, WindowInfo> =
                 std::collections::HashMap::new();
+            let default_resolved = face_resolver.default_face();
 
             // Set up frame dimensions in the builder
-            if let Some(frame) = evaluator.frame_manager().get(frame_id) {
+            let frame_identity = if let Some(frame) = evaluator.frame_manager().get(frame_id) {
                 let (origin_x, origin_y) = evaluator
                     .frame_manager()
                     .frame_origin_in_root(frame_id)
                     .unwrap_or((frame.left_pos as f32, frame.top_pos as f32));
-                self.matrix_builder.install_frame_state(
-                    crate::matrix_builder::MatrixFrameStateInstallRequest::Identity(
-                        crate::matrix_builder::MatrixFrameIdentityInstallRequest {
-                            frame_id: frame.id.0,
-                            parent_id: frame.parent_frame.as_frame_id().unwrap_or(0),
-                            parent_x: origin_x,
-                            parent_y: origin_y,
-                            z_order: frame.z_order,
-                            undecorated: frame.undecorated,
-                            border_width: frame.internal_border_width() as f32,
-                            border_color: Color::BLACK,
-                            background_alpha: 1.0,
-                            no_accept_focus: frame.no_accept_focus,
-                        },
-                    ),
-                );
-            }
-            self.matrix_builder.install_frame_state(
-                crate::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(
-                    Color::from_pixel(frame_params.background),
-                ),
-            );
-            self.matrix_builder.install_frame_state(
-                crate::matrix_builder::MatrixFrameStateInstallRequest::FontPixelSize(
-                    frame_params.font_pixel_size,
-                ),
-            );
+                Some(FrameOutputIdentity {
+                    frame_id: frame.id.0,
+                    parent_id: frame.parent_frame.as_frame_id().unwrap_or(0),
+                    parent_x: origin_x,
+                    parent_y: origin_y,
+                    z_order: frame.z_order,
+                    undecorated: frame.undecorated,
+                    border_width: frame.internal_border_width() as f32,
+                    border_color: Color::BLACK,
+                    background_alpha: 1.0,
+                    no_accept_focus: frame.no_accept_focus,
+                })
+            } else {
+                None
+            };
+            FrameOutputStateRenderRequest::new(
+                frame_identity,
+                Color::from_pixel(frame_params.background),
+                frame_params.font_pixel_size,
+                default_resolved,
+                default_metrics,
+            )
+            .render_and_apply(&mut self.matrix_builder);
 
             // Clear hit-test data for new frame
             self.hit_data.clear();
             self.display_snapshots.clear();
-            let default_resolved = face_resolver.default_face();
-
-            insert_resolved_display_row_face(
-                &mut self.matrix_builder,
-                0,
-                default_resolved,
-                default_metrics,
-            );
 
             let tab_bar_height = frame_params.tab_bar_height;
             if tab_bar_height > 0.0 {

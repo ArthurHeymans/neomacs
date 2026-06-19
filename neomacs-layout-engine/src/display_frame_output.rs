@@ -1,6 +1,12 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
+use crate::display_row::insert_resolved_display_row_face;
 use crate::display_status_line::ChromeRowRenderServices;
-use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameArtifactInstallRequest};
+use crate::font_metrics::FontMetrics;
+use crate::matrix_builder::{
+    GlyphMatrixBuilder, MatrixFrameArtifactInstallRequest, MatrixFrameIdentityInstallRequest,
+    MatrixFrameStateInstallRequest,
+};
+use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
@@ -29,6 +35,76 @@ pub(crate) struct WindowFrameGeometryRequest<'a> {
     params: &'a WindowParams,
     frame_params: &'a FrameParams,
     main_area_bottom: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct FrameOutputIdentity {
+    pub(crate) frame_id: u64,
+    pub(crate) parent_id: u64,
+    pub(crate) parent_x: f32,
+    pub(crate) parent_y: f32,
+    pub(crate) z_order: i32,
+    pub(crate) undecorated: bool,
+    pub(crate) border_width: f32,
+    pub(crate) border_color: Color,
+    pub(crate) background_alpha: f32,
+    pub(crate) no_accept_focus: bool,
+}
+
+impl From<FrameOutputIdentity> for MatrixFrameIdentityInstallRequest {
+    fn from(identity: FrameOutputIdentity) -> Self {
+        Self {
+            frame_id: identity.frame_id,
+            parent_id: identity.parent_id,
+            parent_x: identity.parent_x,
+            parent_y: identity.parent_y,
+            z_order: identity.z_order,
+            undecorated: identity.undecorated,
+            border_width: identity.border_width,
+            border_color: identity.border_color,
+            background_alpha: identity.background_alpha,
+            no_accept_focus: identity.no_accept_focus,
+        }
+    }
+}
+
+pub(crate) struct FrameOutputStateRenderRequest<'a> {
+    identity: Option<FrameOutputIdentity>,
+    background_color: Color,
+    font_pixel_size: f32,
+    default_face: &'a ResolvedFace,
+    default_metrics: Option<FontMetrics>,
+}
+
+impl<'a> FrameOutputStateRenderRequest<'a> {
+    pub(crate) fn new(
+        identity: Option<FrameOutputIdentity>,
+        background_color: Color,
+        font_pixel_size: f32,
+        default_face: &'a ResolvedFace,
+        default_metrics: Option<FontMetrics>,
+    ) -> Self {
+        Self {
+            identity,
+            background_color,
+            font_pixel_size,
+            default_face,
+            default_metrics,
+        }
+    }
+
+    pub(crate) fn render_and_apply(self, builder: &mut GlyphMatrixBuilder) {
+        if let Some(identity) = self.identity {
+            builder.install_frame_state(MatrixFrameStateInstallRequest::Identity(identity.into()));
+        }
+        builder.install_frame_state(MatrixFrameStateInstallRequest::BackgroundColor(
+            self.background_color,
+        ));
+        builder.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(
+            self.font_pixel_size,
+        ));
+        insert_resolved_display_row_face(builder, 0, self.default_face, self.default_metrics);
+    }
 }
 
 impl<'a> WindowFrameGeometryRequest<'a> {
