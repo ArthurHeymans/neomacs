@@ -15,14 +15,17 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::MeasuredDisplayRow;
+use crate::display_row::{MeasuredDisplayRow, RenderedDisplayRowMedia};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_matrix_install::{DisplayRowFaceInstaller, DisplayRowInstaller};
+use crate::display_row_matrix_install::{
+    DisplayRowCurrentRowInstaller, DisplayRowFaceInstaller, DisplayRowInstaller,
+    RenderedDisplayRowAssetsInstall,
+};
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
     text_window_right_edge_marker_decorations,
@@ -39,6 +42,7 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
+use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot,
@@ -450,6 +454,138 @@ pub(crate) struct TextMatrixRowOutput<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
+}
+
+pub(crate) struct TextWindowLiveCurrentRowEvaluatorState<'a> {
+    pub(crate) row_installer: DisplayRowCurrentRowInstaller<'a>,
+    pub(crate) evaluator: &'a mut Context,
+}
+
+pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
+    pub(crate) row_installer: DisplayRowCurrentRowInstaller<'a>,
+    pub(crate) display_host: Option<&'a dyn DisplayHost>,
+}
+
+pub(crate) struct TextWindowLiveOutputState<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: &'a mut WindowOutputEmitter,
+    evaluator: &'a mut Context,
+}
+
+impl<'a> TextWindowLiveOutputState<'a> {
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        output_emitter: &'a mut WindowOutputEmitter,
+        evaluator: &'a mut Context,
+    ) -> Self {
+        Self {
+            builder,
+            output_emitter,
+            evaluator,
+        }
+    }
+
+    pub(crate) fn reborrow(&mut self) -> TextWindowLiveOutputState<'_> {
+        TextWindowLiveOutputState {
+            builder: self.builder,
+            output_emitter: self.output_emitter,
+            evaluator: self.evaluator,
+        }
+    }
+
+    pub(crate) fn with_text_window_output<R>(
+        self,
+        f: impl FnOnce(&mut TextWindowOutputRenderState<'_, '_>, &mut Context) -> R,
+    ) -> R {
+        let mut output = TextWindowOutputRenderState::new(self.builder, self.output_emitter);
+        f(&mut output, self.evaluator)
+    }
+
+    pub(crate) fn finish_and_end_text_row(self, metrics: TextMatrixRowMetrics) {
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .finish_and_end_row(metrics);
+    }
+
+    pub(crate) fn transition_text_row(self, transition: TextMatrixRowGeometryTransition) {
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .transition(transition);
+    }
+
+    pub(crate) fn transition_text_row_with_limit(
+        self,
+        transition: TextMatrixRowGeometryTransition,
+        max_rows: usize,
+    ) -> TextMatrixRowTransition {
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .transition_with_limit(transition, max_rows)
+    }
+
+    pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .install_row_decoration(request);
+    }
+
+    pub(crate) fn install_resolved_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<crate::font_metrics::FontMetrics>,
+    ) {
+        DisplayRowFaceInstaller::new(self.builder).install_resolved_face(face_id, face, metrics);
+    }
+
+    pub(crate) fn install_rendered_fragment_assets(
+        &mut self,
+        role: GlyphRowRole,
+        matrix_row: usize,
+        faces: &[neomacs_display_protocol::face::Face],
+        media: &[RenderedDisplayRowMedia],
+    ) {
+        RenderedDisplayRowAssetsInstall::fragment(role, matrix_row, faces, media)
+            .install(self.builder);
+    }
+
+    pub(crate) fn emit_text_source_slots(
+        &mut self,
+        output: TextRowOutput,
+        source_slots: &[DisplayRowGlyphSlot],
+        end: DisplayRowPosition,
+    ) {
+        self.output_emitter
+            .emit_text_source_slots(self.evaluator, output, source_slots, end);
+    }
+
+    pub(crate) fn current_row_evaluator_state(
+        &mut self,
+    ) -> TextWindowLiveCurrentRowEvaluatorState<'_> {
+        TextWindowLiveCurrentRowEvaluatorState {
+            row_installer: DisplayRowCurrentRowInstaller::new(self.builder),
+            evaluator: self.evaluator,
+        }
+    }
+
+    pub(crate) fn current_row_host_state(&mut self) -> TextWindowLiveCurrentRowHostState<'_> {
+        TextWindowLiveCurrentRowHostState {
+            row_installer: DisplayRowCurrentRowInstaller::new(self.builder),
+            display_host: self.evaluator.display_host.as_deref(),
+        }
+    }
+
+    pub(crate) fn display_host(&self) -> Option<&dyn DisplayHost> {
+        self.evaluator.display_host.as_deref()
+    }
+
+    pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
+        self.output_emitter
+    }
+
+    pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {
+        self.output_emitter.rows()
+    }
+
+    pub(crate) fn output_rows_len(&self) -> usize {
+        self.output_emitter.rows().len()
+    }
 }
 
 impl<'a> TextMatrixRowOutput<'a> {
