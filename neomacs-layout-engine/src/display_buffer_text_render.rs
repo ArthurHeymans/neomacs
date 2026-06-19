@@ -166,13 +166,13 @@ pub(crate) struct BufferTextWindowTailRequestContext<'a> {
     tab_line_height: f32,
 }
 
-pub(crate) struct BufferTextWindowFinishInstallState<'a> {
+struct BufferTextWindowFinishInstallState<'a> {
     pub(crate) finish_state: BufferTextWindowFinishState<'a>,
     pub(crate) hit_data: &'a mut Vec<WindowHitData>,
     pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
-pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
+struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     source_render: TextRowSourceRenderState<'emit>,
     row_progress: BufferTextWindowRowProgressState<'emit>,
@@ -190,7 +190,7 @@ pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit, 'surface> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowPostLoopRenderOutcome {
+struct BufferTextWindowPostLoopRenderOutcome {
     pub(crate) retry: BufferTextWindowVisibilityRetryOutcome,
     pub(crate) rendered_rows_len: usize,
 }
@@ -316,7 +316,7 @@ pub(crate) struct BufferTextWindowDefaultFacePlan {
     measurement_policy: DisplayRowMeasurementPolicy,
 }
 
-pub(crate) struct BufferTextWindowWalkRenderState<'emit> {
+struct BufferTextWindowWalkRenderState<'emit> {
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
@@ -324,12 +324,12 @@ pub(crate) struct BufferTextWindowWalkRenderState<'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-pub(crate) struct BufferTextWindowPostLoopRenderState<'emit> {
+struct BufferTextWindowPostLoopRenderState<'emit> {
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-pub(crate) struct BufferTextWindowBodyRenderState<'emit> {
+struct BufferTextWindowBodyRenderState<'emit> {
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
@@ -337,12 +337,12 @@ pub(crate) struct BufferTextWindowBodyRenderState<'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-pub(crate) struct BufferTextWindowBodyPassState<'emit> {
+struct BufferTextWindowBodyPassState<'emit> {
     pub(crate) output: BufferTextWindowBodyOutputState<'emit>,
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-pub(crate) struct BufferTextWindowBodyOutputState<'emit> {
+struct BufferTextWindowBodyOutputState<'emit> {
     builder: &'emit mut GlyphMatrixBuilder,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
@@ -370,30 +370,30 @@ pub(crate) struct BufferTextWindowRenderAttemptState<'a, 'face> {
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
+struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
     pub(crate) output: &'output mut TextWindowLiveOutputState<'emit>,
     pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
+struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
     pub(crate) output: TextWindowLiveOutputState<'emit>,
     pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowRedisplayPublishRequest {
+struct BufferTextWindowRedisplayPublishRequest {
     frame_id: FrameId,
     window_id: WindowId,
     accessible_end_lisp_char: usize,
     accessible_end_emacs_byte: usize,
 }
 
-pub(crate) struct BufferTextWindowBodyPassOutcome {
+struct BufferTextWindowBodyPassOutcome {
     pub(crate) output_emitter: WindowOutputEmitter,
     pub(crate) post_loop: BufferTextWindowPostLoopRenderOutcome,
 }
 
-pub(crate) struct BufferTextWindowRenderedBody<'a> {
+struct BufferTextWindowRenderedBody<'a> {
     output_emitter: WindowOutputEmitter,
     post_loop: BufferTextWindowPostLoopRenderOutcome,
     retry_bounds: BufferTextWindowRetryBounds,
@@ -411,14 +411,14 @@ pub(crate) enum BufferTextWindowRenderAttemptOutcome {
     },
 }
 
-pub(crate) struct BufferTextWindowRenderedBodyFinishState<'a> {
+struct BufferTextWindowRenderedBodyFinishState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
     evaluator: &'a mut Context,
     hit_data: &'a mut Vec<WindowHitData>,
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
-pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
+struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
     builder: &'emit mut GlyphMatrixBuilder,
     evaluator: &'emit mut Context,
     render_services: ChromeRowRenderServices<'emit, 'face>,
@@ -427,7 +427,7 @@ pub(crate) struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct BufferTextWindowRetryPlan {
+struct BufferTextWindowRetryPlan {
     window_id: i64,
     window_start: i64,
     point_charpos: i64,
@@ -437,7 +437,7 @@ pub(crate) struct BufferTextWindowRetryPlan {
     retry: BufferTextWindowVisibilityRetryOutcome,
 }
 
-pub(crate) struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
+struct BufferTextWindowRenderContextsRequest<'a, 'surface, B>
 where
     B: LayoutBufferView,
 {
@@ -459,7 +459,7 @@ where
     max_rows: usize,
 }
 
-pub(crate) struct BufferTextWindowRenderContexts<'a, 'surface, B>
+struct BufferTextWindowRenderContexts<'a, 'surface, B>
 where
     B: LayoutBufferView,
 {
@@ -472,19 +472,19 @@ pub(crate) struct BufferTextWindowBodyPlan<'a, 'surface, B>
 where
     B: LayoutBufferView,
 {
-    pub(crate) begin_request: BufferTextWindowBeginRequest,
-    pub(crate) retry_bounds: BufferTextWindowRetryBounds,
-    pub(crate) publish_request: BufferTextWindowRedisplayPublishRequest,
-    pub(crate) local_display_policy: BufferTextWindowLocalDisplayPolicy,
-    pub(crate) initial_face_state: BufferTextWindowInitialFaceStateRequest<'a>,
-    pub(crate) row_prelude_context: BufferTextWindowRowPreludeRequestContext,
-    pub(crate) loop_context: BufferTextWindowLoopRequestContext,
-    pub(crate) render_contexts: BufferTextWindowRenderContexts<'a, 'surface, B>,
-    pub(crate) tail_context: BufferTextWindowTailRequestContext<'a>,
+    begin_request: BufferTextWindowBeginRequest,
+    retry_bounds: BufferTextWindowRetryBounds,
+    publish_request: BufferTextWindowRedisplayPublishRequest,
+    local_display_policy: BufferTextWindowLocalDisplayPolicy,
+    initial_face_state: BufferTextWindowInitialFaceStateRequest<'a>,
+    row_prelude_context: BufferTextWindowRowPreludeRequestContext,
+    loop_context: BufferTextWindowLoopRequestContext,
+    render_contexts: BufferTextWindowRenderContexts<'a, 'surface, B>,
+    tail_context: BufferTextWindowTailRequestContext<'a>,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct BufferTextWindowInitialFaceStateRequest<'a> {
+struct BufferTextWindowInitialFaceStateRequest<'a> {
     measurement_policy: DisplayRowMeasurementPolicy,
     default_resolved: &'a ResolvedFace,
     default_face_char_width: f32,
@@ -1486,7 +1486,7 @@ impl BufferTextWindowBodyInstallContext {
 
 impl BufferTextWindowWalkSetup {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_visible_steps<'request, B: LayoutBufferView>(
+    fn render_visible_steps<'request, B: LayoutBufferView>(
         &mut self,
         state: &mut BufferTextWindowWalkRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
@@ -1550,7 +1550,7 @@ impl BufferTextWindowWalkSetup {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
+    fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
         &mut self,
         state: &mut BufferTextWindowPostLoopRenderState<'_>,
         loop_context: BufferTextWindowLoopRequestContext,
@@ -1590,7 +1590,7 @@ impl BufferTextWindowWalkSetup {
         )
     }
 
-    pub(crate) fn install_body(
+    fn install_body(
         &mut self,
         state: BufferTextWindowBodyInstallRenderState<'_, '_, '_>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
@@ -1603,7 +1603,7 @@ impl BufferTextWindowWalkSetup {
             ))
     }
 
-    pub(crate) fn install_body_and_publish_redisplay(
+    fn install_body_and_publish_redisplay(
         &mut self,
         state: BufferTextWindowBodyInstallPublishState<'_, '_>,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
@@ -1628,7 +1628,7 @@ impl BufferTextWindowWalkSetup {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
+    fn render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
         state: &mut BufferTextWindowBodyRenderState<'_>,
         row_prelude_context: BufferTextWindowRowPreludeRequestContext,
@@ -1676,7 +1676,7 @@ impl BufferTextWindowWalkSetup {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn begin_render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
+    fn begin_render_body_and_tail<'request, 'buf, B: LayoutBufferView>(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
         state: &mut BufferTextWindowBodyPassState<'_>,
@@ -1720,7 +1720,7 @@ impl BufferTextWindowWalkSetup {
         }
     }
 
-    pub(crate) fn finish_window_and_install(
+    fn finish_window_and_install(
         &mut self,
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         state: BufferTextWindowRenderedBodyFinishState<'_>,
@@ -3243,7 +3243,7 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
         )
     }
 
-    pub(crate) fn finish_and_install(&self, state: BufferTextWindowFinishInstallState<'_>) {
+    fn finish_and_install(&self, state: BufferTextWindowFinishInstallState<'_>) {
         let finished_window = self
             .finish_request()
             .finish_and_snapshot(state.finish_state);
