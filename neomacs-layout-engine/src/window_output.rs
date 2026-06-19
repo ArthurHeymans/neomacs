@@ -15,7 +15,9 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::insert_resolved_display_row_face;
+use crate::display_row::{
+    DisplayRowInstaller, MeasuredDisplayRow, insert_resolved_display_row_face,
+};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
@@ -1058,6 +1060,33 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
             .expect("text-window output state requires an output emitter");
         TextWindowOutputInstaller::new(self.builder, output_emitter)
             .install_body_output(request, render_services)
+    }
+
+    pub(crate) fn begin_chrome_progress(
+        &mut self,
+        evaluator: &mut Context,
+        output: ChromeRowOutput,
+    ) {
+        self.output_emitter_mut()
+            .begin_chrome_progress(evaluator, output);
+    }
+
+    pub(crate) fn emit_chrome_progress(
+        &mut self,
+        evaluator: &mut Context,
+        output: ChromeRowOutput,
+        progress: DisplayRowOutputProgress,
+    ) {
+        self.output_emitter_mut()
+            .emit_chrome_progress(evaluator, output, progress);
+    }
+
+    pub(crate) fn finish_chrome_progress(&mut self, progress: DisplayRowOutputProgress) {
+        self.output_emitter_mut().finish_chrome_progress(progress);
+    }
+
+    pub(crate) fn install_measured_window_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
+        DisplayRowInstaller::new(self.builder).install_measured(measured);
     }
 
     pub(crate) fn render_chrome_rows(

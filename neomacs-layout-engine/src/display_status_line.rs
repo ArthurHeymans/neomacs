@@ -13,7 +13,7 @@
 //! trait and renamed the file to reflect its new role.
 
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
-use super::window_output::{ChromeRowOutput, DisplayProgressSink, WindowOutputEmitter};
+use super::window_output::{ChromeRowOutput, TextWindowOutputRenderState, WindowOutputEmitter};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_row::{
@@ -665,9 +665,8 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
 }
 
 pub(crate) struct WindowChromeRowsRenderState<'emit, 'face> {
-    builder: &'emit mut GlyphMatrixBuilder,
+    output: TextWindowOutputRenderState<'emit, 'emit>,
     evaluator: &'emit mut Context,
-    output_emitter: &'emit mut WindowOutputEmitter,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
@@ -679,9 +678,8 @@ impl<'emit, 'face> WindowChromeRowsRenderState<'emit, 'face> {
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
-            builder,
+            output: TextWindowOutputRenderState::new(builder, output_emitter),
             evaluator,
-            output_emitter,
             render_services,
         }
     }
@@ -691,7 +689,7 @@ impl<'emit, 'face> WindowChromeRowsRenderState<'emit, 'face> {
         request: WindowChromeDisplayRowRequest<'_>,
     ) -> Option<MeasuredDisplayRow> {
         let parts = request.into_render_parts(self.render_services.face_ids());
-        self.output_emitter
+        self.output
             .begin_chrome_progress(self.evaluator, parts.output);
         let rendered_row = self.render_services.render_lisp_string_request(
             parts.render_request,
@@ -707,13 +705,13 @@ impl<'emit, 'face> WindowChromeRowsRenderState<'emit, 'face> {
             )
         });
         if let Some(ref measured_row) = measured_row {
-            DisplayRowInstaller::new(&mut *self.builder).install_measured(measured_row);
-            self.output_emitter.emit_chrome_progress(
+            self.output.install_measured_window_chrome_row(measured_row);
+            self.output.emit_chrome_progress(
                 self.evaluator,
                 parts.output,
                 measured_row.output_progress(),
             );
-            self.output_emitter
+            self.output
                 .finish_chrome_progress(measured_row.output_progress());
         }
         measured_row
