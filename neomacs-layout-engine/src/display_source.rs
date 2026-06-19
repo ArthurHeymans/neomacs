@@ -543,8 +543,8 @@ impl BufferTextSourceItemRequest {
         &self.item
     }
 
-    pub(crate) fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
-        self.item.fallback_width_px(fallback_char_width)
+    pub(crate) fn fallback_width_columns(&self) -> usize {
+        self.item.fallback_width_columns()
     }
 
     pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {
@@ -747,10 +747,6 @@ impl BufferTextSourceAppendItem {
             Self::SourceMappedText { text } => text.chars().count().max(1),
             Self::Glyphless { .. } => 1,
         }
-    }
-
-    pub(crate) fn fallback_width_px(&self, fallback_char_width: f32) -> f32 {
-        self.fallback_width_columns() as f32 * fallback_char_width.max(1.0)
     }
 
     pub(crate) fn into_display_item_kind(self) -> DisplayItemKind {

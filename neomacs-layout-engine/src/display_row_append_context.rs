@@ -336,6 +336,10 @@ pub(crate) struct DisplayRowAppendFrame {
 }
 
 impl DisplayRowAppendFrame {
+    pub(crate) fn width_for_columns(&self, columns: usize) -> f32 {
+        columns as f32 * self.geometry.char_width.max(1.0)
+    }
+
     fn right_edge(&self) -> f32 {
         self.content_x + self.geometry.width
     }

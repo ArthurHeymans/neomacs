@@ -1179,6 +1179,11 @@ impl<'a> BufferTextItemAppendContext<'a> {
         DisplayRowSingleItemAppendContext::new(self.base_face, self.face_id, self.frame.clone())
     }
 
+    fn source_item_fallback_width(&self, source_item: &BufferTextSourceItemRequest) -> f32 {
+        self.frame
+            .width_for_columns(source_item.fallback_width_columns())
+    }
+
     pub(crate) fn append_display_item_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
@@ -1212,7 +1217,7 @@ impl<'a> BufferTextItemAppendContext<'a> {
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width = source_item.fallback_width_px(self.frame.geometry.char_width);
+        let fallback_width = self.source_item_fallback_width(&source_item);
         self.single_item_context()
             .measure_item_width_naturally_or_fallback(
                 state,
@@ -1291,8 +1296,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, 
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width =
-            source_item.fallback_width_px(self.item_context.frame.geometry.char_width);
+        let fallback_width = self.item_context.source_item_fallback_width(&source_item);
         let Some(append_item) = buffer_text_source_item_append_request(
             source_item,
             self.buffer_id,
