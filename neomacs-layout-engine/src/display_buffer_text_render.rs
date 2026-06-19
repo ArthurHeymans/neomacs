@@ -469,17 +469,48 @@ pub(crate) struct BufferTextWindowInitialFaceStateRequest<'a> {
     fallback_metrics: DisplayRowFallbackMetrics,
 }
 
+pub(crate) struct BufferTextWindowProgressState<'emit> {
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+}
+
+impl<'emit> BufferTextWindowProgressState<'emit> {
+    pub(crate) fn new(
+        byte_idx: &'emit mut usize,
+        charpos: &'emit mut i64,
+        x: &'emit mut f32,
+        col: &'emit mut usize,
+    ) -> Self {
+        Self {
+            byte_idx,
+            charpos,
+            x,
+            col,
+        }
+    }
+
+    pub(crate) fn row_position(&self) -> DisplayRowPosition {
+        DisplayRowPosition {
+            x_px: *self.x,
+            col: *self.col,
+        }
+    }
+
+    pub(crate) fn charpos(&self) -> i64 {
+        *self.charpos
+    }
+}
+
 pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
     loop_context: BufferTextWindowLoopRequestContext,
     append_state: &'emit mut BufferTextRowAppendState,
     text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
-    byte_idx: &'emit mut usize,
-    charpos: &'emit mut i64,
-    col: &'emit mut usize,
+    progress: BufferTextWindowProgressState<'emit>,
     source_render: TextRowSourceRenderState<'emit>,
     row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
     box_face: &'emit mut BoxFaceRowState,
-    x: &'emit mut f32,
     line_numbers: &'emit mut LineNumberRenderState,
     row_geometry: &'emit mut DisplayRowGeometryState,
     row_flags: &'emit mut DisplayRowFlags,
@@ -1388,13 +1419,15 @@ impl BufferTextWindowWalkSetup {
             loop_context,
             &mut self.buffer_text_append_state,
             &mut self.text_property_checkpoints,
-            &mut self.byte_idx,
-            &mut self.charpos,
-            &mut self.col,
+            BufferTextWindowProgressState::new(
+                &mut self.byte_idx,
+                &mut self.charpos,
+                &mut self.x,
+                &mut self.col,
+            ),
             state.source_render.reborrow(),
             &mut self.row_extend,
             &mut self.box_face,
-            &mut self.x,
             state.line_numbers,
             &mut self.row_geometry,
             &mut self.row_flags,
@@ -2194,13 +2227,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         loop_context: BufferTextWindowLoopRequestContext,
         append_state: &'emit mut BufferTextRowAppendState,
         text_property_checkpoints: &'emit mut TextPropertyScanCheckpoints,
-        byte_idx: &'emit mut usize,
-        charpos: &'emit mut i64,
-        col: &'emit mut usize,
+        progress: BufferTextWindowProgressState<'emit>,
         source_render: TextRowSourceRenderState<'emit>,
         row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
         box_face: &'emit mut BoxFaceRowState,
-        x: &'emit mut f32,
         line_numbers: &'emit mut LineNumberRenderState,
         row_geometry: &'emit mut DisplayRowGeometryState,
         row_flags: &'emit mut DisplayRowFlags,
@@ -2221,13 +2251,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             loop_context,
             append_state,
             text_property_checkpoints,
-            byte_idx,
-            charpos,
-            col,
+            progress,
             source_render,
             row_extend,
             box_face,
-            x,
             line_numbers,
             row_geometry,
             row_flags,
@@ -2264,7 +2291,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     ) where
         'surface: 'request,
     {
-        while *self.byte_idx < text.len()
+        while *self.progress.byte_idx < text.len()
             && self
                 .row_geometry
                 .current_row_is_visible(self.loop_context.row_visibility_limit())
@@ -2465,7 +2492,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             if char_render_outcome.should_continue_buffer_walk() {
                 return BufferTextWindowLoopStepOutcome::ContinueBufferWalk;
             }
-            *self.charpos = (*self.charpos).max(end_charpos);
+            *self.progress.charpos = (*self.progress.charpos).max(end_charpos);
         }
 
         BufferTextWindowLoopStepOutcome::ContinueBufferWalk
@@ -2485,9 +2512,11 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             params,
         } = request;
 
-        let Some(source_step) =
-            item_stepper.item_step_from_source_item(source_item, self.byte_idx, *self.charpos)
-        else {
+        let Some(source_step) = item_stepper.item_step_from_source_item(
+            source_item,
+            self.progress.byte_idx,
+            *self.progress.charpos,
+        ) else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
@@ -2535,10 +2564,10 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 append_surface: self.append_surface,
                 row_geometry: self.row_geometry,
                 cursor_info: self.cursor_info,
-                byte_idx: self.byte_idx,
-                charpos: self.charpos,
-                x: self.x,
-                col: self.col,
+                byte_idx: self.progress.byte_idx,
+                charpos: self.progress.charpos,
+                x: self.progress.x,
+                col: self.progress.col,
             },
         ) {
             BufferDisplayPropertyTextReplacementRenderOutcome::Continue => {
@@ -2585,19 +2614,16 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 self.row_geometry,
                 active_face_state,
                 0.0,
-                DisplayRowPosition {
-                    x_px: *self.x,
-                    col: *self.col,
-                },
+                self.progress.row_position(),
             )
             .render_requested_with_source_state_and_apply(
                 self.prefix_request,
                 &mut self.source_render,
                 buffer,
-                *self.charpos,
+                self.progress.charpos(),
                 self.face_ids,
-                self.x,
-                self.col,
+                self.progress.x,
+                self.progress.col,
             );
     }
 
@@ -2625,8 +2651,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             item_stepper.next_consumed_source_item(
                 source_cursor,
                 &mut source_context,
-                self.byte_idx,
-                *self.charpos,
+                self.progress.byte_idx,
+                self.progress.charpos(),
             )
         };
         {
@@ -2686,8 +2712,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             self.row_geometry,
             self.row_extend,
             self.box_face,
-            *self.x,
-            *self.charpos,
+            *self.progress.x,
+            self.progress.charpos(),
         );
     }
 
@@ -2697,7 +2723,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
     ) -> BufferDisplayPropertyTextWalkOutcome {
         let request = self
             .loop_context
-            .display_property_checkpoint_request(buffer, *self.charpos);
+            .display_property_checkpoint_request(buffer, self.progress.charpos());
         self.render_display_property_checkpoint(request)
     }
 
@@ -2776,11 +2802,11 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             buffer,
             BufferInvisibleTextRenderRequestState {
                 checkpoints: self.text_property_checkpoints,
-                byte_idx: self.byte_idx,
-                charpos: self.charpos,
+                byte_idx: self.progress.byte_idx,
+                charpos: self.progress.charpos,
                 source_render: self.source_render.reborrow(),
-                x: self.x,
-                col: self.col,
+                x: self.progress.x,
+                col: self.progress.col,
                 row_geometry: self.row_geometry,
                 cursor_info: self.cursor_info,
                 hit_rows: self.hit_rows,
@@ -2796,13 +2822,13 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request: BufferHscrollSkipRenderRequest<'_>,
     ) -> DisplayRowTransitionContinuation {
         request.render_next_and_apply(BufferHscrollSkipRenderState {
-            byte_idx: self.byte_idx,
-            charpos: self.charpos,
+            byte_idx: self.progress.byte_idx,
+            charpos: self.progress.charpos,
             hscroll_skip: self.hscroll_skip,
             row_extend: self.row_extend,
             source_render: self.source_render.reborrow(),
-            x: self.x,
-            col: self.col,
+            x: self.progress.x,
+            col: self.progress.col,
             prefix_request: self.prefix_request,
             line_numbers: self.line_numbers,
             word_wrap: self.word_wrap,
@@ -2833,13 +2859,13 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request.render_if_needed_and_apply(
             buffer,
             BufferSelectiveDisplayTailRenderState {
-                byte_idx: self.byte_idx,
-                charpos: self.charpos,
-                col: self.col,
+                byte_idx: self.progress.byte_idx,
+                charpos: self.progress.charpos,
+                col: self.progress.col,
                 source_render: self.source_render.reborrow(),
                 row_extend: self.row_extend,
                 box_face: self.box_face,
-                x: self.x,
+                x: self.progress.x,
                 line_numbers: self.line_numbers,
                 row_geometry: self.row_geometry,
                 row_flags: self.row_flags,
@@ -2862,16 +2888,16 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         request.render_and_apply(
             buffer,
             BufferTextLineBreakRenderState {
-                byte_idx: self.byte_idx,
-                charpos: self.charpos,
+                byte_idx: self.progress.byte_idx,
+                charpos: self.progress.charpos,
                 cursor_info: self.cursor_info,
                 row_geometry: self.row_geometry,
                 trailing_whitespace: self.trailing_whitespace,
                 row_extend: self.row_extend,
                 box_face: self.box_face,
                 source_render: self.source_render.reborrow(),
-                x: self.x,
-                col: self.col,
+                x: self.progress.x,
+                col: self.progress.col,
                 prefix_request: self.prefix_request,
                 line_numbers: self.line_numbers,
                 hscroll_skip: self.hscroll_skip,
@@ -2894,12 +2920,12 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             buffer,
             BufferTextSourceCharRenderRequestState {
                 append_state: self.append_state,
-                byte_idx: self.byte_idx,
-                charpos: self.charpos,
-                col: self.col,
+                byte_idx: self.progress.byte_idx,
+                charpos: self.progress.charpos,
+                col: self.progress.col,
                 source_render: self.source_render.reborrow(),
                 row_extend: self.row_extend,
-                x: self.x,
+                x: self.progress.x,
                 line_numbers: self.line_numbers,
                 row_geometry: self.row_geometry,
                 row_flags: self.row_flags,
