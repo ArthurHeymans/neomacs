@@ -19,14 +19,6 @@ use neomacs_display_protocol::types::Rect;
 #[cfg(test)]
 use neovm_core::emacs_core::Context;
 
-pub(crate) fn install_mock_display_row_in_matrix_row(
-    builder: &mut GlyphMatrixBuilder,
-    matrix_row: usize,
-    row: &GlyphRow,
-) {
-    DisplayRowMatrixInstall::from_row(matrix_row, row).install(builder);
-}
-
 struct DisplayRowMatrixInstall<'a> {
     matrix_row: usize,
     row: &'a GlyphRow,
@@ -101,6 +93,10 @@ impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
             builder,
             frame_chrome_rows: Some(frame_chrome_rows),
         }
+    }
+
+    pub(crate) fn install_row(&mut self, matrix_row: usize, row: &GlyphRow) {
+        DisplayRowMatrixInstall::from_row(matrix_row, row).install(self.builder);
     }
 
     pub(crate) fn install_measured(&mut self, measured: &MeasuredDisplayRow) {

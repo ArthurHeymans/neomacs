@@ -403,20 +403,17 @@ impl<'a> TextRowOutputRenderState<'a> {
         f(&mut output, self.evaluator)
     }
 
-    pub(crate) fn finish_and_end_text_matrix_row_output(self, metrics: TextMatrixRowMetrics) {
+    pub(crate) fn finish_and_end_text_row(self, metrics: TextMatrixRowMetrics) {
         TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
             .finish_and_end_row(metrics);
     }
 
-    pub(crate) fn emit_text_matrix_row_transition(
-        self,
-        transition: TextMatrixRowGeometryTransition,
-    ) {
+    pub(crate) fn transition_text_row(self, transition: TextMatrixRowGeometryTransition) {
         TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
             .transition(transition);
     }
 
-    pub(crate) fn emit_text_matrix_row_transition_with_limit(
+    pub(crate) fn transition_text_row_with_limit(
         self,
         transition: TextMatrixRowGeometryTransition,
         max_rows: usize,

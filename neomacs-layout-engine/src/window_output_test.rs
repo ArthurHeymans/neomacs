@@ -10,25 +10,17 @@ use super::TextRowOutput;
 use super::TextWindowBodyOutputInstall;
 use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
+use super::TextWindowCursorInstaller;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
+use super::TextWindowMatrixOutputState;
 use super::TextWindowOutputInstall;
+use super::TextWindowOutputInstaller;
 use super::TextWindowPendingRowFinish;
 use super::TextWindowRedisplayPositions;
+use super::TextWindowRowDecorationRequest;
+use super::TextWindowRowLifecycleInstaller;
 use super::WindowOutputEmitter;
-use super::close_text_window_output;
-use super::emit_text_matrix_row_transition;
-use super::emit_text_matrix_row_transition_with_limit;
-use super::finish_and_end_text_matrix_row_output;
-use super::finish_pending_text_window_row;
-use super::finish_text_matrix_row_output;
-use super::install_text_window_body_output;
-use super::install_text_window_cursor_effects;
-use super::install_text_window_output;
-use super::mark_current_text_row_truncated_left;
-use super::publish_text_window_cursor;
-use super::publish_text_window_decorative_cursor;
-use super::record_text_window_display_range;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row_builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
@@ -572,27 +564,21 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
         .artifact_installer()
         .add_window_info(window_info(41));
 
-    record_text_window_display_range(
-        &mut builder,
-        TextWindowDisplayRange {
-            window_id: 41,
-            window_start: LispCharPos1::new(7),
-            window_end: LispCharPos1::new(19),
-        },
-    );
+    TextWindowMatrixOutputState::new(&mut builder).record_display_range(TextWindowDisplayRange {
+        window_id: 41,
+        window_start: LispCharPos1::new(7),
+        window_end: LispCharPos1::new(19),
+    });
 
     let info = builder.window_infos().last().expect("window info");
     assert_eq!(info.window_start, 7);
     assert_eq!(info.window_end, 19);
 
-    record_text_window_display_range(
-        &mut builder,
-        TextWindowDisplayRange {
-            window_id: 42,
-            window_start: LispCharPos1::new(11),
-            window_end: LispCharPos1::new(23),
-        },
-    );
+    TextWindowMatrixOutputState::new(&mut builder).record_display_range(TextWindowDisplayRange {
+        window_id: 42,
+        window_start: LispCharPos1::new(11),
+        window_end: LispCharPos1::new(23),
+    });
 
     let info = builder.window_infos().last().expect("window info");
     assert_eq!(info.window_start, 7);
@@ -632,10 +618,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
         x: 0.0,
     });
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
-    finish_text_matrix_row_output(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
+    TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval).finish_row(
         TextMatrixRowMetrics {
             y: 0.0,
             height: 16.0,
@@ -651,10 +634,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
         y: 16.0,
         x: 0.0,
     });
-    finish_text_matrix_row_output(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
+    TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval).finish_row(
         TextMatrixRowMetrics {
             y: 16.0,
             height: 16.0,
@@ -683,7 +663,7 @@ fn close_text_window_output_closes_active_matrix_window() {
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(9, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
 
-    close_text_window_output(&mut builder);
+    TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
 
     assert_eq!(builder.windows().len(), 1);
     assert_eq!(builder.windows()[0].window_id, 9);
@@ -714,9 +694,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     write_char_to_current_row(&mut builder, 'H', 3, 100);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
-    let outcome = publish_text_window_cursor(
-        &mut builder,
-        &mut emitter,
+    let outcome = TextWindowCursorInstaller::new(&mut builder, &mut emitter).publish_cursor(
         TextWindowCursor {
             selected: true,
             window_id: window_id.0 as i64,
@@ -766,8 +744,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     let mut builder = GlyphMatrixBuilder::new();
     let effects = EffectsConfig::default();
 
-    publish_text_window_decorative_cursor(
-        &mut builder,
+    TextWindowCursorInstaller::without_output(&mut builder).publish_decorative_cursor(
         TextWindowDecorativeCursor {
             window_id: 77,
             slot_id: DisplaySlotId {
@@ -799,8 +776,7 @@ fn install_text_window_cursor_effects_records_window_effect_profile() {
     let mut builder = GlyphMatrixBuilder::new();
     let effects = EffectsConfig::default();
 
-    install_text_window_cursor_effects(
-        &mut builder,
+    TextWindowCursorInstaller::without_output(&mut builder).install_cursor_effects(
         TextWindowCursorEffects {
             window_id: 42,
             effects: effects.clone(),
@@ -859,10 +835,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
         })
     );
 
-    finish_text_matrix_row_output(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
+    TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval).finish_row(
         TextMatrixRowMetrics {
             y: 0.0,
             height: 16.0,
@@ -909,10 +882,7 @@ fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
         x: 0.0,
     });
 
-    finish_and_end_text_matrix_row_output(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
+    TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval).finish_and_end_row(
         TextMatrixRowMetrics {
             y: 0.0,
             height: 16.0,
@@ -961,11 +931,8 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
     let mut hit_rows = Vec::new();
 
-    let finished = finish_pending_text_window_row(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
-        TextWindowPendingRowFinish {
+    let finished = TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval)
+        .finish_pending_row(TextWindowPendingRowFinish {
             row_geometry: &row_geometry,
             row_limit: DisplayRowLimit { max_rows: 1 },
             row_y_positions: &row_y_positions,
@@ -974,8 +941,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
             charpos: 5,
             hit_row_range: &mut hit_row_range,
             hit_rows: &mut hit_rows,
-        },
-    );
+        });
 
     assert!(finished);
     assert_eq!(hit_rows.len(), 1);
@@ -1019,10 +985,7 @@ fn install_text_window_output_installs_row_metrics() {
         x: 0.0,
     });
     write_char_to_current_row(&mut builder, 'x', 7, 0);
-    finish_text_matrix_row_output(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
+    TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval).finish_row(
         TextMatrixRowMetrics {
             y: 2.0,
             height: 20.0,
@@ -1030,7 +993,7 @@ fn install_text_window_output_installs_row_metrics() {
         },
     );
 
-    install_text_window_output(&mut builder, &emitter, TextWindowOutputInstall);
+    TextWindowOutputInstaller::new(&mut builder, &emitter).install_output(TextWindowOutputInstall);
 
     builder.end_window();
     let state = builder.finish(5, 1, 8.0, 16.0);
@@ -1074,10 +1037,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     });
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row(&mut builder, 'x', 7, 0);
-    finish_text_matrix_row_output(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
+    TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval).finish_row(
         TextMatrixRowMetrics {
             y: 2.0,
             height: 20.0,
@@ -1085,9 +1045,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
         },
     );
 
-    let positions = install_text_window_body_output(
-        &mut builder,
-        &emitter,
+    let positions = TextWindowOutputInstaller::new(&mut builder, &emitter).install_body_output(
         TextWindowBodyOutputInstall {
             window_id: 41,
             window_start: 3,
@@ -1095,6 +1053,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
             byte_idx: 4,
             right_edge_markers: None,
         },
+        None,
     );
 
     assert_eq!(positions.window_start, LispCharPos1::new(4));
@@ -1119,7 +1078,8 @@ fn mark_current_text_row_truncated_left_sets_current_row_flag() {
     builder.begin_window(1, 2, 5, Rect::new(0.0, 0.0, 40.0, 32.0), true);
     builder.begin_row(1, GlyphRowRole::Text);
 
-    mark_current_text_row_truncated_left(&mut builder);
+    TextWindowMatrixOutputState::new(&mut builder)
+        .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
 
     builder.end_row();
     builder.end_window();
@@ -1159,26 +1119,24 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
         x: 0.0,
     });
 
-    let transition = emit_text_matrix_row_transition_with_limit(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
-                y: 0.0,
-                height: 16.0,
-                ascent: 12.0,
+    let transition = TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval)
+        .transition_with_limit(
+            TextMatrixRowGeometryTransition {
+                finished_row: TextMatrixRowMetrics {
+                    y: 0.0,
+                    height: 16.0,
+                    ascent: 12.0,
+                },
+                begin_row: TextMatrixRowBegin {
+                    matrix_row: 1,
+                    row: 1,
+                    col: 0,
+                    y: 16.0,
+                    x: 0.0,
+                },
             },
-            begin_row: TextMatrixRowBegin {
-                matrix_row: 1,
-                row: 1,
-                col: 0,
-                y: 16.0,
-                x: 0.0,
-            },
-        },
-        1,
-    );
+            1,
+        );
 
     assert_eq!(transition, TextMatrixRowTransition::ExhaustedRows);
     assert_eq!(emitter.rows().len(), 1);
@@ -1218,10 +1176,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
         x: 0.0,
     });
 
-    emit_text_matrix_row_transition(
-        &mut builder,
-        &mut emitter,
-        &mut eval,
+    TextWindowRowLifecycleInstaller::new(&mut builder, &mut emitter, &mut eval).transition(
         TextMatrixRowGeometryTransition {
             finished_row: TextMatrixRowMetrics {
                 y: 0.0,

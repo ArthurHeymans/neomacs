@@ -1653,7 +1653,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                FrameOutputRenderState::new(&mut builder).install_mock_display_row(row_idx, &row);
+                FrameOutputRenderState::new(&mut builder).install_display_row(row_idx, &row);
             }
 
             // Mode-line pinned to window bottom.
@@ -1674,7 +1674,7 @@ impl LayoutEngine {
                 &mut self.font_metrics,
                 &mut mock_face_ids,
             );
-            FrameOutputRenderState::new(&mut builder).install_mock_display_row(mode_line_row, &row);
+            FrameOutputRenderState::new(&mut builder).install_display_row(mode_line_row, &row);
 
             TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
         }
@@ -1714,7 +1714,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                FrameOutputRenderState::new(&mut builder).install_mock_display_row(row_idx, &row);
+                FrameOutputRenderState::new(&mut builder).install_display_row(row_idx, &row);
             }
 
             if has_mode_line {
@@ -1735,8 +1735,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                FrameOutputRenderState::new(&mut builder)
-                    .install_mock_display_row(mode_line_row, &row);
+                FrameOutputRenderState::new(&mut builder).install_display_row(mode_line_row, &row);
             }
 
             TextWindowMatrixOutputState::new(&mut builder).close_text_window_output();
@@ -1799,7 +1798,7 @@ impl LayoutEngine {
                     &mut self.font_metrics,
                     &mut mock_face_ids,
                 );
-                FrameOutputRenderState::new(&mut cb).install_mock_display_row(ri, &row);
+                FrameOutputRenderState::new(&mut cb).install_display_row(ri, &row);
             }
             TextWindowMatrixOutputState::new(&mut cb).close_text_window_output();
             let cs = cb.finish(

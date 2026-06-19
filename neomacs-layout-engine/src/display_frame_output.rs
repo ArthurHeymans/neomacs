@@ -1,8 +1,6 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_row::MeasuredDisplayRow;
-use crate::display_row_matrix_install::{
-    DisplayRowInstaller, install_mock_display_row_in_matrix_row,
-};
+use crate::display_row_matrix_install::DisplayRowInstaller;
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -151,8 +149,8 @@ impl<'a> FrameOutputRenderState<'a> {
         self.builder.cursors()
     }
 
-    pub(crate) fn install_mock_display_row(&mut self, matrix_row: usize, row: &GlyphRow) {
-        install_mock_display_row_in_matrix_row(self.builder, matrix_row, row);
+    pub(crate) fn install_display_row(&mut self, matrix_row: usize, row: &GlyphRow) {
+        DisplayRowInstaller::new(self.builder).install_row(matrix_row, row);
     }
 }
 

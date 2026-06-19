@@ -300,7 +300,7 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
             state
                 .source_render
                 .output_render()
-                .finish_and_end_text_matrix_row_output(geometry_transition.finished_row);
+                .finish_and_end_text_row(geometry_transition.finished_row);
             return false;
         }
 
@@ -310,7 +310,7 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
         state
             .source_render
             .output_render()
-            .emit_text_matrix_row_transition(geometry_transition);
+            .transition_text_row(geometry_transition);
         true
     }
 }

@@ -126,7 +126,7 @@ impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
     ) -> TextMatrixRowTransition {
         let geometry_transition =
             row_geometry.finish_boundary_and_record_hit(self.target, hit_rows);
-        output_render.emit_text_matrix_row_transition_with_limit(geometry_transition, self.max_rows)
+        output_render.transition_text_row_with_limit(geometry_transition, self.max_rows)
     }
 }
 

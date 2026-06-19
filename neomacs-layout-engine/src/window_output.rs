@@ -261,6 +261,16 @@ impl<'builder> TextWindowMatrixOutputState<'builder> {
         begin_text_window_matrix(self.builder, request);
     }
 
+    #[cfg(test)]
+    pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {
+        record_text_window_display_range_in_matrix(self.builder, range);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
+        request.install(self.builder);
+    }
+
     pub(crate) fn close_text_window_output(&mut self) {
         close_text_window_matrix_output(self.builder);
     }
@@ -611,14 +621,6 @@ fn record_text_window_display_range_in_matrix(
     }
 }
 
-#[cfg(test)]
-pub(crate) fn record_text_window_display_range(
-    builder: &mut GlyphMatrixBuilder,
-    range: TextWindowDisplayRange,
-) {
-    record_text_window_display_range_in_matrix(builder, range);
-}
-
 impl TextWindowRedisplayPositions {
     pub(crate) fn from_output_rows(
         output_emitter: &WindowOutputEmitter,
@@ -667,73 +669,6 @@ fn record_text_window_redisplay_positions(
 
 fn close_text_window_matrix_output(builder: &mut GlyphMatrixBuilder) {
     builder.window_installer().end();
-}
-
-#[cfg(test)]
-pub(crate) fn close_text_window_output(builder: &mut GlyphMatrixBuilder) {
-    close_text_window_matrix_output(builder);
-}
-
-#[cfg(test)]
-pub(crate) fn finish_text_matrix_row_output(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    metrics: TextMatrixRowMetrics,
-) {
-    TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator).finish_row(metrics);
-}
-
-#[cfg(test)]
-pub(crate) fn finish_pending_text_window_row(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    request: TextWindowPendingRowFinish<'_>,
-) -> bool {
-    TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
-        .finish_pending_row(request)
-}
-
-#[cfg(test)]
-pub(crate) fn finish_and_end_text_matrix_row_output(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    metrics: TextMatrixRowMetrics,
-) {
-    TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
-        .finish_and_end_row(metrics);
-}
-
-#[cfg(test)]
-pub(crate) fn emit_text_matrix_row_transition(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    transition: TextMatrixRowGeometryTransition,
-) {
-    TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator).transition(transition);
-}
-
-#[cfg(test)]
-pub(crate) fn emit_text_matrix_row_transition_with_limit(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    evaluator: &mut Context,
-    transition: TextMatrixRowGeometryTransition,
-    max_rows: usize,
-) -> TextMatrixRowTransition {
-    TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
-        .transition_with_limit(transition, max_rows)
-}
-
-#[cfg(test)]
-pub(crate) fn mark_current_text_row_truncated_left(builder: &mut GlyphMatrixBuilder) {
-    install_text_window_row_decoration(
-        builder,
-        TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft,
-    );
 }
 
 fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -> DisplayItem {
@@ -1087,15 +1022,6 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
     }
 }
 
-#[cfg(test)]
-pub(crate) fn publish_text_window_cursor(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &mut WindowOutputEmitter,
-    cursor: TextWindowCursor,
-) -> TextWindowCursorPublicationOutcome {
-    TextWindowCursorInstaller::new(builder, output_emitter).publish_cursor(cursor)
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublication {
     matrix_cursor: Option<TextWindowMatrixCursor>,
@@ -1200,22 +1126,6 @@ impl TextWindowCursorPublication {
             live_cursor: self.live_cursor,
         }
     }
-}
-
-#[cfg(test)]
-pub(crate) fn publish_text_window_decorative_cursor(
-    builder: &mut GlyphMatrixBuilder,
-    cursor: TextWindowDecorativeCursor,
-) {
-    TextWindowCursorInstaller::without_output(builder).publish_decorative_cursor(cursor);
-}
-
-#[cfg(test)]
-pub(crate) fn install_text_window_cursor_effects(
-    builder: &mut GlyphMatrixBuilder,
-    request: TextWindowCursorEffects,
-) {
-    TextWindowCursorInstaller::without_output(builder).install_cursor_effects(request);
 }
 
 fn finish_text_window_output_rows(
@@ -1325,32 +1235,6 @@ fn install_last_window_right_border_from_source_requests(
         base_face,
         &mut render_services,
     ));
-}
-
-#[cfg(test)]
-pub(crate) fn install_text_window_output(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &WindowOutputEmitter,
-    request: TextWindowOutputInstall,
-) {
-    TextWindowOutputInstaller::new(builder, output_emitter).install_output(request);
-}
-
-#[cfg(test)]
-pub(crate) fn install_text_window_body_output(
-    builder: &mut GlyphMatrixBuilder,
-    output_emitter: &WindowOutputEmitter,
-    request: TextWindowBodyOutputInstall<'_>,
-) -> TextWindowRedisplayPositions {
-    TextWindowOutputInstaller::new(builder, output_emitter).install_body_output(request, None)
-}
-
-#[cfg(test)]
-pub(crate) fn install_text_window_row_decoration(
-    builder: &mut GlyphMatrixBuilder,
-    request: TextWindowRowDecorationRequest,
-) {
-    request.install(builder);
 }
 
 pub(crate) trait DisplayProgressSink {
