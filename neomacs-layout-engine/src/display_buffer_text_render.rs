@@ -94,8 +94,8 @@ use crate::neovm_bridge::{
 use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    DisplayTextRowTransition, TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
-    TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
+    DisplayTextRowTransition, TextWindowLiveOutputSurface, TextWindowOutputRetryCheckpoint,
+    TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -1241,7 +1241,7 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
-        begin_request.begin_and_apply(self.output.begin_surface(self.evaluator))
+        begin_request.begin_and_apply(self.output.output_builder(), self.evaluator)
     }
 
     fn source_render_state<'output>(
@@ -1266,11 +1266,17 @@ impl<'emit> BufferTextWindowOutputSurface<'emit> {
         self.output.live_surface(output_emitter, self.evaluator)
     }
 
-    fn into_finish_output_surface(
+    fn into_finish_state(
         self,
         output_emitter: WindowOutputEmitter,
-    ) -> TextWindowFinishOutputSurface<'emit> {
-        self.output.finish_surface(output_emitter, self.evaluator)
+        hit_rows: Vec<HitRow>,
+    ) -> BufferTextWindowFinishState<'emit> {
+        BufferTextWindowFinishState::from_output_builder(
+            self.output.into_output_builder(),
+            output_emitter,
+            self.evaluator,
+            hit_rows,
+        )
     }
 }
 
@@ -1636,10 +1642,7 @@ impl<'a> BufferTextWindowRenderedBodyFinishState<'a> {
         hit_rows: Vec<HitRow>,
     ) -> BufferTextWindowFinishInstallState<'a> {
         BufferTextWindowFinishInstallState {
-            finish_state: BufferTextWindowFinishState::from_output_surface(
-                self.output.into_finish_output_surface(output_emitter),
-                hit_rows,
-            ),
+            finish_state: self.output.into_finish_state(output_emitter, hit_rows),
             hit_data: self.hit_data,
             display_snapshots: self.display_snapshots,
         }

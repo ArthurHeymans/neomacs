@@ -9,9 +9,8 @@ use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::{
-    TextWindowBeginOutputSurface, TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
-    TextWindowOutputRetryCheckpoint, WindowOutputEmitter, capture_text_window_retry_checkpoint,
-    restore_text_window_retry_checkpoint,
+    TextWindowLiveOutputSurface, TextWindowOutputRetryCheckpoint, WindowOutputEmitter,
+    capture_text_window_retry_checkpoint, restore_text_window_retry_checkpoint,
 };
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -268,11 +267,8 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
         request.install_and_apply(self.builder)
     }
 
-    pub(crate) fn begin_surface<'a>(
-        &'a mut self,
-        evaluator: &'a mut Context,
-    ) -> TextWindowBeginOutputSurface<'a> {
-        TextWindowBeginOutputSurface::from_output_builder(self.builder, evaluator)
+    pub(crate) fn output_builder(&mut self) -> &mut DisplayOutputBuilder {
+        self.builder
     }
 
     pub(crate) fn live_surface<'a>(
@@ -283,12 +279,8 @@ impl<'builder> FrameTextWindowOutputSurface<'builder> {
         TextWindowLiveOutputSurface::from_output_builder(self.builder, output_emitter, evaluator)
     }
 
-    pub(crate) fn finish_surface(
-        self,
-        output_emitter: WindowOutputEmitter,
-        evaluator: &'builder mut Context,
-    ) -> TextWindowFinishOutputSurface<'builder> {
-        TextWindowFinishOutputSurface::from_output_builder(self.builder, output_emitter, evaluator)
+    pub(crate) fn into_output_builder(self) -> &'builder mut DisplayOutputBuilder {
+        self.builder
     }
 }
 

@@ -79,10 +79,7 @@ use crate::display_text_run_measurement::{DisplayTextRunAdvance, DisplayTextRunM
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
-use crate::window_output::{
-    DisplayTextRowTransition, TextWindowBeginOutputSurface, TextWindowFinishOutputSurface,
-    TextWindowLiveOutputSurface,
-};
+use crate::window_output::{DisplayTextRowTransition, TextWindowLiveOutputSurface};
 use crate::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -6824,10 +6821,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             x: 18.0,
         },
     )
-    .begin_and_apply(TextWindowBeginOutputSurface::from_output_builder(
-        &mut builder,
-        &mut eval,
-    ));
+    .begin_and_apply(&mut builder, &mut eval);
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
     TextWindowLiveOutputSurface::from_output_builder(&mut builder, &mut output_emitter, &mut eval)
@@ -7037,12 +7031,13 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
         charpos_end: 9,
     }];
 
-    let finish_output =
-        TextWindowFinishOutputSurface::from_output_builder(&mut builder, output_emitter, &mut eval);
-    let finished =
-        BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5).finish_and_snapshot(
-            BufferTextWindowFinishState::from_output_surface(finish_output, hit_rows),
-        );
+    let finished = BufferTextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5)
+        .finish_and_snapshot(BufferTextWindowFinishState::from_output_builder(
+            &mut builder,
+            output_emitter,
+            &mut eval,
+            hit_rows,
+        ));
 
     assert_eq!(finished.hit_data.window_id, 41);
     assert_eq!(finished.hit_data.content_x, 12.0);

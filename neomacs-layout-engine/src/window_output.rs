@@ -591,77 +591,10 @@ pub(crate) struct TextWindowLiveCurrentRowHostState<'a> {
     pub(crate) display_host: Option<&'a dyn DisplayHost>,
 }
 
-pub(crate) struct TextWindowBeginOutputSurface<'a> {
-    output_builder: &'a mut DisplayOutputBuilder,
-    evaluator: &'a mut Context,
-}
-
-pub(crate) struct TextWindowFinishOutputSurface<'a> {
-    output_builder: &'a mut DisplayOutputBuilder,
-    output_emitter: WindowOutputEmitter,
-    evaluator: &'a mut Context,
-}
-
 pub(crate) struct TextWindowLiveOutputSurface<'a> {
     output_builder: &'a mut DisplayOutputBuilder,
     output_emitter: &'a mut WindowOutputEmitter,
     evaluator: &'a mut Context,
-}
-
-impl<'a> TextWindowBeginOutputSurface<'a> {
-    pub(crate) fn from_output_builder(
-        output_builder: &'a mut DisplayOutputBuilder,
-        evaluator: &'a mut Context,
-    ) -> Self {
-        Self {
-            output_builder,
-            evaluator,
-        }
-    }
-
-    pub(crate) fn begin_update(&mut self, output_emitter: &mut WindowOutputEmitter) {
-        output_emitter.begin_update(self.evaluator);
-    }
-
-    pub(crate) fn begin_text_window_output(
-        &mut self,
-        output_emitter: &mut WindowOutputEmitter,
-        begin: TextWindowBegin,
-    ) {
-        TextWindowRowOutputSurface::from_parts(self.output_builder, output_emitter)
-            .begin_text_window_output(self.evaluator, begin);
-    }
-}
-
-impl<'a> TextWindowFinishOutputSurface<'a> {
-    pub(crate) fn from_output_builder(
-        output_builder: &'a mut DisplayOutputBuilder,
-        output_emitter: WindowOutputEmitter,
-        evaluator: &'a mut Context,
-    ) -> Self {
-        Self {
-            output_builder,
-            output_emitter,
-            evaluator,
-        }
-    }
-
-    pub(crate) fn finish_snapshot(
-        self,
-        text_area_left_offset: i64,
-        mode_line_height: i64,
-        header_line_height: i64,
-        tab_line_height: i64,
-    ) -> WindowDisplaySnapshot {
-        close_text_window_output(self.output_builder);
-        self.output_emitter.finish_snapshot(
-            self.evaluator,
-            text_area_left_offset,
-            mode_line_height,
-            header_line_height,
-            tab_line_height,
-        )
-    }
 }
 
 impl<'a> TextWindowLiveOutputSurface<'a> {

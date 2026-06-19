@@ -21,14 +21,15 @@ use crate::hit_test::{HitRow, WindowHitData};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    DisplayTextRowBegin, TextWindowBegin, TextWindowBeginOutputSurface,
-    TextWindowBodyOutputInstall, TextWindowCursorEffects, TextWindowFinishOutputSurface,
+    DisplayTextRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
     TextWindowLiveOutputSurface, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
-    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder, WindowOutputEmitter,
-    install_text_window_cursor_effects, install_text_window_terminal_right_border,
+    TextWindowRightEdgeMarkers, TextWindowRowOutputSurface, TextWindowTerminalRightBorder,
+    WindowOutputEmitter, close_text_window_output, install_text_window_cursor_effects,
+    install_text_window_terminal_right_border,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
+use neovm_core::emacs_core::Context;
 use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
@@ -259,7 +260,9 @@ pub(crate) struct BufferTextWindowFinishRequest {
 }
 
 pub(crate) struct BufferTextWindowFinishState<'a> {
-    output: TextWindowFinishOutputSurface<'a>,
+    output_builder: &'a mut DisplayOutputBuilder,
+    output_emitter: WindowOutputEmitter,
+    evaluator: &'a mut Context,
     hit_rows: Vec<HitRow>,
 }
 
@@ -369,11 +372,18 @@ impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'fa
 }
 
 impl<'a> BufferTextWindowFinishState<'a> {
-    pub(crate) fn from_output_surface(
-        output: TextWindowFinishOutputSurface<'a>,
+    pub(crate) fn from_output_builder(
+        output_builder: &'a mut DisplayOutputBuilder,
+        output_emitter: WindowOutputEmitter,
+        evaluator: &'a mut Context,
         hit_rows: Vec<HitRow>,
     ) -> Self {
-        Self { output, hit_rows }
+        Self {
+            output_builder,
+            output_emitter,
+            evaluator,
+            hit_rows,
+        }
     }
 
     fn finish_snapshot(
@@ -383,7 +393,9 @@ impl<'a> BufferTextWindowFinishState<'a> {
         header_line_height: i64,
         tab_line_height: i64,
     ) -> (Vec<HitRow>, WindowDisplaySnapshot) {
-        let snapshot = self.output.finish_snapshot(
+        close_text_window_output(self.output_builder);
+        let snapshot = self.output_emitter.finish_snapshot(
+            self.evaluator,
             text_area_left_offset,
             mode_line_height,
             header_line_height,
@@ -427,9 +439,9 @@ impl BufferTextWindowBeginRequest {
 
     pub(crate) fn begin_and_apply(
         self,
-        state: TextWindowBeginOutputSurface<'_>,
+        output_builder: &mut DisplayOutputBuilder,
+        evaluator: &mut Context,
     ) -> WindowOutputEmitter {
-        let mut state = state;
         let mut output_emitter = WindowOutputEmitter::new(
             self.frame_id,
             self.window_id,
@@ -437,19 +449,20 @@ impl BufferTextWindowBeginRequest {
             self.text_area_left,
             self.window_top,
         );
-        state.begin_update(&mut output_emitter);
-        state.begin_text_window_output(
-            &mut output_emitter,
-            TextWindowBegin {
-                window_id: self.output_window_id,
-                rows: self.output_rows,
-                cols: self.output_cols,
-                bounds: self.bounds,
-                text_bounds: self.text_bounds,
-                selected: self.selected,
-                first_row: self.first_row,
-            },
-        );
+        output_emitter.begin_update(evaluator);
+        TextWindowRowOutputSurface::from_parts(output_builder, &mut output_emitter)
+            .begin_text_window_output(
+                evaluator,
+                TextWindowBegin {
+                    window_id: self.output_window_id,
+                    rows: self.output_rows,
+                    cols: self.output_cols,
+                    bounds: self.bounds,
+                    text_bounds: self.text_bounds,
+                    selected: self.selected,
+                    first_row: self.first_row,
+                },
+            );
         output_emitter
     }
 
