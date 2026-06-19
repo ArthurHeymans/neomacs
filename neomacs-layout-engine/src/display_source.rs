@@ -830,6 +830,10 @@ impl BufferDisplayReplacementSource {
         )
     }
 
+    pub(crate) fn buffer_id(self) -> BufferId {
+        self.buffer_id
+    }
+
     fn span(self) -> SourceSpan {
         SourceSpan::new(
             DisplaySourcePosition::buffer(self.buffer_id, self.char_pos, self.byte_pos),

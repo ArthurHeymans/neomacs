@@ -28,14 +28,14 @@ use crate::display_buffer_text_render::{
 };
 use crate::display_buffer_text_source::BufferTextWindowSource;
 use crate::display_buffer_text_source::{
-    BufferTextConsumedCursorItem, BufferTextReplacementStringItem, BufferTextSourceCursor,
+    BufferTextConsumedCursorItem, BufferTextReplacementItem, BufferTextSourceCursor,
     BufferTextSourceItem, BufferTextSourceItemStep, BufferTextSourceItemStepper,
     BufferTextSourceStepChar,
 };
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{DisplayItem, RenderFaceRef};
-use crate::display_origin::DisplayPropertySource;
+use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -48,7 +48,6 @@ use crate::display_row_geometry::{
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{DisplayRowPrefixRequest, DisplayRowPrefixValues};
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
-use crate::display_row_replacement::DisplayPropertyReplacementAppendRequest;
 use crate::display_row_source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
 use crate::display_row_transition::DisplayRowTransitionContinuation;
 use crate::display_row_walk_state::FaceScanCheckpoint;
@@ -56,10 +55,11 @@ use crate::display_row_walk_state::{
     BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, LineNumberRenderState,
     TextPropertyScanCheckpoints, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
-use crate::display_source::{
-    DisplayPropertyReplacementSourceItem, DisplayReplacementStringSourceItem, DisplaySourceContext,
+use crate::display_source::DisplaySourceContext;
+use crate::display_source_resolver::{
+    DisplayPropertyReplacementAppendRequestResolver, DisplaySourcePropertyResolver,
+    DisplaySourceResolveState,
 };
-use crate::display_source_resolver::{DisplaySourcePropertyResolver, DisplaySourceResolveState};
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
 use crate::font_metrics::FontMetricsService;
 use crate::hit_test::{HitRow, WindowHitData};
@@ -716,7 +716,7 @@ pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
 pub(crate) enum BufferTextConsumedSourceItem {
     PendingStep(BufferTextSourceItemStep),
     SourceItem(BufferTextSourceItem),
-    ReplacementString(BufferTextReplacementStringItem),
+    Replacement(BufferTextReplacementItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2644,6 +2644,14 @@ impl BufferTextWindowLoopRequestContext {
         self.text_start_byte
     }
 
+    pub(crate) fn content_x(self) -> f32 {
+        self.content_x
+    }
+
+    pub(crate) fn char_height(self) -> f32 {
+        self.char_height
+    }
+
     #[cfg(test)]
     pub(crate) fn accessible_end(self) -> i64 {
         self.accessible_end
@@ -2826,13 +2834,17 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
                 );
             }
             BufferTextConsumedSourceItem::SourceItem(source_item) => source_item,
-            BufferTextConsumedSourceItem::ReplacementString(replacement) => {
-                return self.render_replacement_string_source_item_for_context(
+            BufferTextConsumedSourceItem::Replacement(replacement) => {
+                return self.render_replacement_source_item_for_context(
                     replacement,
+                    item_stepper,
                     loop_context,
+                    face_resolution_context.source_item_layout_resolution_context(),
                     text,
                     append_surface,
+                    overlay_context,
                     active_face_state,
+                    params,
                     buffer,
                 );
             }
@@ -3030,37 +3042,66 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
         )
     }
 
-    pub(crate) fn render_replacement_string_source_item_for_context<
-        'request,
-        B: LayoutBufferView,
-    >(
+    pub(crate) fn render_replacement_source_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
-        replacement: BufferTextReplacementStringItem,
+        replacement: BufferTextReplacementItem,
+        item_stepper: &mut BufferTextSourceItemStepper,
         context: BufferTextWindowLoopRequestContext,
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'request>,
         text: &'request [u8],
         append_surface: &'request DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'request>,
         active_face_state: &'request DisplayRowActiveFaceState,
+        params: &'request WindowParams,
         buffer: &B,
     ) -> BufferTextWindowLoopStepOutcome {
-        let Some(string_item) = DisplayReplacementStringSourceItem::display_property_string(
-            replacement.value(),
-            CharPos0::new(replacement.start_charpos().max(0) as usize),
-            DisplayPropertySource::TextProperty,
-            1,
-            active_face_state.metrics().char_width,
-        ) else {
+        let Some(source_event) = replacement.source_event(context.text_start_byte(), text) else {
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
-        let request = DisplayPropertyReplacementAppendRequest::new(
-            replacement.replacement_source(),
-            DisplayPropertyReplacementSourceItem::String(string_item),
-            0.0,
-            context.char_height,
-            DisplayRowPosition {
-                x_px: *self.x,
-                col: *self.col,
-            },
-        );
+        let display_property = classify_display_property(replacement.value());
+        let append_request =
+            self.source_render
+                .with_font_metrics_and_display_host(|font_metrics, host| {
+                    DisplayPropertyReplacementAppendRequestResolver::for_source_event(
+                        &display_property,
+                        context.buffer_id(),
+                        source_event,
+                        active_face_state,
+                        *self.x,
+                        context.content_x(),
+                        params,
+                        0.0,
+                        context.char_height(),
+                        DisplayRowPosition {
+                            x_px: *self.x,
+                            col: *self.col,
+                        },
+                    )
+                    .resolve(font_metrics, host)
+                });
+        let Some(request) = append_request else {
+            let Some(source_item) = replacement.fallback_source_item(
+                context.text_start_byte(),
+                text,
+                RenderFaceRef::FaceId(active_face_state.face_id()),
+            ) else {
+                return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+            };
+            return self.render_source_item_for_context(
+                BufferTextSourceItemRenderRequest {
+                    loop_context: context,
+                    layout_resolution_context,
+                    source_item,
+                    item_stepper,
+                    text,
+                    append_surface,
+                    overlay_context,
+                    active_face_state,
+                    params,
+                },
+                buffer,
+            );
+        };
         let outcome = request.append_to_text_row(
             buffer,
             &mut self.source_render.reborrow(),
@@ -3174,8 +3215,8 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             BufferTextConsumedCursorItem::SourceItem(item) => {
                 BufferTextConsumedSourceItem::SourceItem(item)
             }
-            BufferTextConsumedCursorItem::ReplacementString(item) => {
-                BufferTextConsumedSourceItem::ReplacementString(item)
+            BufferTextConsumedCursorItem::Replacement(item) => {
+                BufferTextConsumedSourceItem::Replacement(item)
             }
         })
     }

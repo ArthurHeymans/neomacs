@@ -6,6 +6,7 @@ use crate::display_item::{
     DisplaySourceId, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef, SourceSpan,
 };
+use crate::display_property::{DisplayReplacementProperty, classify_display_property};
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
@@ -857,7 +858,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
         panic!("expected leading text item");
     };
     assert_eq!(item_texts(&[first]), ["a"]);
-    let Some(BufferTextSourceCursorItem::ReplacementString(replacement)) =
+    let Some(BufferTextSourceCursorItem::Replacement(replacement)) =
         source.next_buffer_walk_item(&mut context)
     else {
         panic!("expected atomic replacement string item");
@@ -867,6 +868,65 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     assert_eq!(replacement.start_charpos(), 1);
     assert_eq!(replacement.end_charpos(), 2);
     assert_eq!(replacement.value().as_utf8_str(), Some("YZ"));
+}
+
+#[test]
+fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let display_space = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword(":width"),
+        Value::fixnum(2),
+    ]);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("axb");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(2));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("display"),
+            display_space,
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(3),
+    );
+    let mut context = DisplaySourceContext::empty();
+
+    let Some(BufferTextSourceCursorItem::Item(first)) = source.next_buffer_walk_item(&mut context)
+    else {
+        panic!("expected leading text item");
+    };
+    assert_eq!(item_texts(&[first]), ["a"]);
+    let Some(BufferTextSourceCursorItem::Replacement(replacement)) =
+        source.next_buffer_walk_item(&mut context)
+    else {
+        panic!("expected atomic display space item");
+    };
+
+    assert_eq!(replacement.start_byte_idx(0), Some(1));
+    assert_eq!(replacement.start_charpos(), 1);
+    assert_eq!(replacement.end_charpos(), 2);
+    assert!(matches!(
+        classify_display_property(replacement.value()).replacement(),
+        Some(DisplayReplacementProperty::Stretch(_))
+    ));
 }
 
 #[test]

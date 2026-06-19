@@ -2,11 +2,13 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayRowBreakReason, DisplaySourcePosition,
     DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+use crate::display_property::classify_display_property;
 use crate::display_source::{
-    BufferDisplayReplacementSource, BufferTextSourceChar, BufferTextSourceRange, DisplayItemSource,
-    DisplayPropertySourceCursorAction, DisplaySourceContext, LispStringSourceStack,
-    TextSourceCharClassification, classify_text_source_char,
-    display_item_kind_for_text_source_char, display_property_source_action,
+    BufferDisplayPropertyTextSourceEvent, BufferDisplayReplacementSource, BufferTextSourceChar,
+    BufferTextSourceRange, DisplayItemSource, DisplayPropertySourceCursorAction,
+    DisplaySourceContext, LispStringSourceStack, TextSourceCharClassification,
+    classify_text_source_char, display_item_kind_for_text_source_char,
+    display_property_source_action,
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::{WindowKind, WindowParams};
@@ -314,17 +316,17 @@ pub(crate) struct BufferTextSourceItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceCursorItem {
     Item(DisplayItem),
-    ReplacementString(BufferTextReplacementStringItem),
+    Replacement(BufferTextReplacementItem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextConsumedCursorItem {
     SourceItem(BufferTextSourceItem),
-    ReplacementString(BufferTextReplacementStringItem),
+    Replacement(BufferTextReplacementItem),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct BufferTextReplacementStringItem {
+pub(crate) struct BufferTextReplacementItem {
     value: Value,
     replacement_source: BufferDisplayReplacementSource,
     start_byte_pos: EmacsBytePos,
@@ -333,7 +335,7 @@ pub(crate) struct BufferTextReplacementStringItem {
     end_charpos: CharPos0,
 }
 
-impl BufferTextReplacementStringItem {
+impl BufferTextReplacementItem {
     pub(crate) fn new(
         value: Value,
         replacement_source: BufferDisplayReplacementSource,
@@ -356,10 +358,6 @@ impl BufferTextReplacementStringItem {
         self.value
     }
 
-    pub(crate) fn replacement_source(self) -> BufferDisplayReplacementSource {
-        self.replacement_source
-    }
-
     pub(crate) fn start_byte_idx(self, text_start_byte: usize) -> Option<usize> {
         self.start_byte_pos.get().checked_sub(text_start_byte)
     }
@@ -370,6 +368,58 @@ impl BufferTextReplacementStringItem {
 
     pub(crate) fn end_charpos(self) -> i64 {
         self.end_charpos.get() as i64
+    }
+
+    pub(crate) fn source_event<'a>(
+        self,
+        text_start_byte: usize,
+        text: &'a [u8],
+    ) -> Option<BufferDisplayPropertyTextSourceEvent<'a>> {
+        Some(BufferDisplayPropertyTextSourceEvent::new(
+            self.value,
+            text_start_byte,
+            text,
+            self.start_charpos(),
+            self.start_byte_idx(text_start_byte)?,
+            self.end_charpos(),
+        ))
+    }
+
+    pub(crate) fn fallback_source_item(
+        self,
+        text_start_byte: usize,
+        text: &[u8],
+        face: RenderFaceRef,
+    ) -> Option<BufferTextSourceItem> {
+        let start_byte_idx = self.start_byte_idx(text_start_byte)?;
+        let end_byte_idx = self.end_byte_pos.get().checked_sub(text_start_byte)?;
+        let source_text = std::str::from_utf8(text.get(start_byte_idx..end_byte_idx)?).ok()?;
+        if source_text.is_empty() {
+            return None;
+        }
+        let source_char = source_text.chars().next();
+        let item = DisplayItem::new(
+            SourceSpan::new(
+                DisplaySourcePosition::buffer(
+                    self.replacement_source.buffer_id(),
+                    self.start_charpos,
+                    self.start_byte_pos,
+                ),
+                DisplaySourcePosition::buffer(
+                    self.replacement_source.buffer_id(),
+                    self.end_charpos,
+                    self.end_byte_pos,
+                ),
+            ),
+            face,
+            DisplayItemKind::TextRun(DisplayTextRun::new(source_text.to_owned())),
+        );
+        Some(BufferTextSourceItem::new(
+            item,
+            start_byte_idx,
+            self.start_charpos(),
+            source_char,
+        ))
     }
 }
 
@@ -416,7 +466,7 @@ fn display_item_buffer_byte_len(item: &DisplayItem) -> Option<usize> {
 }
 
 impl BufferTextSourceItem {
-    fn new(
+    pub(crate) fn new(
         item: DisplayItem,
         start_byte_idx: usize,
         start_charpos: i64,
@@ -686,7 +736,7 @@ impl BufferTextSourceItemStepper {
             BufferTextSourceCursorItem::Item(item) => self
                 .validate_source_item(item, byte_idx, charpos, source_char)
                 .map(BufferTextConsumedCursorItem::SourceItem),
-            BufferTextSourceCursorItem::ReplacementString(item) => {
+            BufferTextSourceCursorItem::Replacement(item) => {
                 if item.start_byte_idx(self.text_start_byte)? != byte_idx
                     || item.start_charpos() != charpos
                 {
@@ -700,7 +750,7 @@ impl BufferTextSourceItemStepper {
                     );
                     return None;
                 }
-                Some(BufferTextConsumedCursorItem::ReplacementString(item))
+                Some(BufferTextConsumedCursorItem::Replacement(item))
             }
         }
     }
@@ -1038,14 +1088,35 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
 
             if let Some(display_prop) = self.display_prop_at(start) {
                 self.char_pos = property_end;
+                let display_property = classify_display_property(display_prop);
+                if display_property.replacement().is_some() {
+                    let start_byte_pos = self.byte_pos(start);
+                    let end_byte_pos = self.byte_pos(property_end);
+                    return Some(BufferTextSourceCursorItem::Replacement(
+                        BufferTextReplacementItem::new(
+                            display_prop,
+                            BufferDisplayReplacementSource::spanning(
+                                self.buffer_id,
+                                start,
+                                start_byte_pos,
+                                property_end,
+                                end_byte_pos,
+                            ),
+                            start_byte_pos,
+                            end_byte_pos,
+                            start,
+                            property_end,
+                        ),
+                    ));
+                }
                 let item_layout = match display_property_source_action(context, display_prop, face)
                     .into_cursor_action(span, face)
                 {
                     DisplayPropertySourceCursorAction::PushReplacement { value, .. } => {
                         let start_byte_pos = self.byte_pos(start);
                         let end_byte_pos = self.byte_pos(property_end);
-                        return Some(BufferTextSourceCursorItem::ReplacementString(
-                            BufferTextReplacementStringItem::new(
+                        return Some(BufferTextSourceCursorItem::Replacement(
+                            BufferTextReplacementItem::new(
                                 value,
                                 BufferDisplayReplacementSource::spanning(
                                     self.buffer_id,

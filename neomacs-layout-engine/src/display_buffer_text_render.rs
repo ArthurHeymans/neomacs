@@ -14,7 +14,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_item::{DisplayItem, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_property::{DisplayReplacementProperty, classify_display_property};
+use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
@@ -2772,10 +2772,7 @@ impl<'a> BufferDisplayPropertyTextRenderContext<'a> {
             return BufferDisplayPropertyTextAppendAction::None;
         };
         let display_property = classify_display_property(value);
-        if matches!(
-            display_property.replacement(),
-            Some(DisplayReplacementProperty::String)
-        ) {
+        if display_property.replacement().is_some() {
             return BufferDisplayPropertyTextAppendAction::None;
         }
 
