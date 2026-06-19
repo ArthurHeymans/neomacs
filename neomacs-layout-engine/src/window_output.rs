@@ -32,8 +32,8 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
     GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest, MatrixCursorInstallRequest,
-    MatrixFrameStateInstallRequest, MatrixLastWindowRowsDecorationRequest, MatrixRowBeginRequest,
-    MatrixRowMetricsRequest, MatrixWindowBeginRequest,
+    MatrixLastWindowRowsDecorationRequest, MatrixRowBeginRequest, MatrixRowMetricsRequest,
+    MatrixWindowBeginRequest,
 };
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -893,12 +893,9 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
     }
 
     pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        self.builder.artifact_installer().install_frame_state(
-            MatrixFrameStateInstallRequest::CursorEffects {
-                window_id: request.window_id,
-                effects: request.effects,
-            },
-        );
+        self.builder
+            .artifact_installer()
+            .set_cursor_effects(request.window_id, request.effects);
     }
 }
 

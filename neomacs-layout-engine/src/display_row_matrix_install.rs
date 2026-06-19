@@ -12,9 +12,8 @@ use crate::display_row_builder::{
 };
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::{
-    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixFrameStateInstallRequest,
-    MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixRowBeginRequest,
-    ResolvedMatrixMediaInstallTarget,
+    FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixMediaInstallKind, MatrixMediaInstallRequest,
+    MatrixRowBeginRequest, ResolvedMatrixMediaInstallTarget,
 };
 use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
@@ -44,10 +43,7 @@ pub(crate) fn install_resolved_display_row_face(
     let rendered = render_face.render_face();
     builder
         .artifact_installer()
-        .install_frame_state(MatrixFrameStateInstallRequest::Face {
-            id: render_face.face_id,
-            face: rendered,
-        });
+        .set_face(render_face.face_id, rendered);
 }
 
 struct MatrixDisplayRowInstallRequest<'a> {
@@ -267,12 +263,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
 
     pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
         for face in self.faces {
-            builder.artifact_installer().install_frame_state(
-                MatrixFrameStateInstallRequest::Face {
-                    id: face.id,
-                    face: face.clone(),
-                },
-            );
+            builder.artifact_installer().set_face(face.id, face.clone());
         }
         for media in self.media {
             match self.target {
@@ -297,12 +288,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     matrix_row: usize,
 ) -> DisplayRowPosition {
     for face in &rendered.faces {
-        builder
-            .artifact_installer()
-            .install_frame_state(MatrixFrameStateInstallRequest::Face {
-                id: face.id,
-                face: face.clone(),
-            });
+        builder.artifact_installer().set_face(face.id, face.clone());
     }
     let _ = builder.row_installer().edit_current_row(|row| {
         row.enabled = true;

@@ -159,7 +159,7 @@ impl MatrixCursorInstallRequest {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum MatrixFrameArtifactInstallRequest {
+enum MatrixFrameArtifactInstallRequest {
     Background {
         bounds: Rect,
         color: Color,
@@ -224,7 +224,7 @@ pub(crate) struct MatrixFrameIdentityInstallRequest {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum MatrixFrameStateInstallRequest {
+enum MatrixFrameStateInstallRequest {
     Identity(MatrixFrameIdentityInstallRequest),
     BackgroundColor(Color),
     FontPixelSize(f32),
@@ -500,12 +500,81 @@ pub(crate) struct MatrixArtifactInstaller<'a> {
 }
 
 impl MatrixArtifactInstaller<'_> {
-    pub(crate) fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+    fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
         self.builder.install_frame_state(request);
     }
 
-    pub(crate) fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+    pub(crate) fn set_frame_identity(&mut self, identity: MatrixFrameIdentityInstallRequest) {
+        self.install_frame_state(MatrixFrameStateInstallRequest::Identity(identity));
+    }
+
+    pub(crate) fn set_background_color(&mut self, color: Color) {
+        self.install_frame_state(MatrixFrameStateInstallRequest::BackgroundColor(color));
+    }
+
+    pub(crate) fn set_font_pixel_size(&mut self, size: f32) {
+        self.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(size));
+    }
+
+    pub(crate) fn set_faces(&mut self, faces: HashMap<u32, Face>) {
+        self.install_frame_state(MatrixFrameStateInstallRequest::Faces(faces));
+    }
+
+    pub(crate) fn set_face(&mut self, id: u32, face: Face) {
+        self.install_frame_state(MatrixFrameStateInstallRequest::Face { id, face });
+    }
+
+    pub(crate) fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
+        self.install_frame_state(MatrixFrameStateInstallRequest::CursorEffects {
+            window_id,
+            effects,
+        });
+    }
+
+    fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
         self.builder.install_frame_artifact(request);
+    }
+
+    pub(crate) fn add_background(&mut self, bounds: Rect, color: Color) {
+        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::Background {
+            bounds,
+            color,
+        });
+    }
+
+    pub(crate) fn add_border(
+        &mut self,
+        window_id: i64,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: Color,
+    ) {
+        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+            color,
+        });
+    }
+
+    pub(crate) fn add_scroll_bar(&mut self, item: ScrollBarItem) {
+        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(item));
+    }
+
+    pub(crate) fn add_window_info(&mut self, info: WindowInfo) {
+        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(info));
+    }
+
+    pub(crate) fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
+        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(hint));
+    }
+
+    pub(crate) fn add_effect_hint(&mut self, hint: WindowEffectHint) {
+        self.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(hint));
     }
 
     pub(crate) fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {

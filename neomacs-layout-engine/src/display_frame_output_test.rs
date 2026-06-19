@@ -156,9 +156,7 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.artifact_installer().install_frame_artifact(
-        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(curr),
-    );
+    builder.artifact_installer().add_window_info(curr);
 
     WindowFrameInfoEffectsRenderRequest::new(&prev_infos).render_latest_and_apply(
         &mut FrameOutputRenderState::new(&mut builder),
@@ -221,9 +219,7 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let info = window_info(&params);
     let mut prev_selected = 7;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.artifact_installer().install_frame_artifact(
-        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
-    );
+    builder.artifact_installer().add_window_info(info);
 
     FrameWindowSwitchHintRenderRequest::new(&mut prev_selected)
         .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
@@ -246,17 +242,11 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.artifact_installer().install_frame_state(
-        crate::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(Color::new(
-            0.2, 0.0, 0.0, 1.0,
-        )),
-    );
-    builder.artifact_installer().install_frame_artifact(
-        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
-    );
-    builder.artifact_installer().install_frame_artifact(
-        crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(mini),
-    );
+    builder
+        .artifact_installer()
+        .set_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
+    builder.artifact_installer().add_window_info(info);
+    builder.artifact_installer().add_window_info(mini);
 
     FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
         .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));

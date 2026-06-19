@@ -1121,22 +1121,12 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
     let mut active = Face::new(10);
     active.foreground = Color::rgb(0.0, 0.0, 0.0);
     active.background = Color::rgb(0.75, 0.75, 0.75);
-    builder
-        .artifact_installer()
-        .install_frame_state(MatrixFrameStateInstallRequest::Face {
-            id: 10,
-            face: active.clone(),
-        });
+    builder.artifact_installer().set_face(10, active.clone());
 
     let mut inactive = Face::new(11);
     inactive.foreground = Color::rgb(0.8, 0.8, 0.8);
     inactive.background = Color::rgb(0.30, 0.30, 0.30);
-    builder
-        .artifact_installer()
-        .install_frame_state(MatrixFrameStateInstallRequest::Face {
-            id: 11,
-            face: inactive.clone(),
-        });
+    builder.artifact_installer().set_face(11, inactive.clone());
 
     // Window 1 (top, selected): references the active face on
     // its mode-line row.

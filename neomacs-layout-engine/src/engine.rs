@@ -1540,27 +1540,23 @@ impl LayoutEngine {
 
         let mut builder = GlyphMatrixBuilder::new();
 
-        builder.artifact_installer().install_frame_state(
-            super::matrix_builder::MatrixFrameStateInstallRequest::Identity(
-                super::matrix_builder::MatrixFrameIdentityInstallRequest {
-                    frame_id: content.frame_id,
-                    parent_id: 0,
-                    parent_x: 0.0,
-                    parent_y: 0.0,
-                    z_order: 0,
-                    undecorated: false,
-                    border_width: 0.0,
-                    border_color: Color::BLACK,
-                    background_alpha: 1.0,
-                    no_accept_focus: false,
-                },
-            ),
+        builder.artifact_installer().set_frame_identity(
+            super::matrix_builder::MatrixFrameIdentityInstallRequest {
+                frame_id: content.frame_id,
+                parent_id: 0,
+                parent_x: 0.0,
+                parent_y: 0.0,
+                z_order: 0,
+                undecorated: false,
+                border_width: 0.0,
+                border_color: Color::BLACK,
+                background_alpha: 1.0,
+                no_accept_focus: false,
+            },
         );
-        builder.artifact_installer().install_frame_state(
-            super::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(
-                content.background,
-            ),
-        );
+        builder
+            .artifact_installer()
+            .set_background_color(content.background);
 
         let mut face_map = std::collections::HashMap::new();
         for face in &content.faces {
@@ -1570,9 +1566,7 @@ impl LayoutEngine {
             f.font_size = crate::fontconfig::points_to_pixels(f.font_size);
             face_map.insert(f.id, f);
         }
-        builder.artifact_installer().install_frame_state(
-            super::matrix_builder::MatrixFrameStateInstallRequest::Faces(face_map),
-        );
+        builder.artifact_installer().set_faces(face_map);
 
         let default_face = content.faces.first();
         // Face.font_size is in points (matching GNU Emacs).  Convert to
@@ -1760,34 +1754,27 @@ impl LayoutEngine {
         let mut child_frames = Vec::new();
         for cf in &content.child_frames {
             let mut cb = GlyphMatrixBuilder::new();
-            cb.artifact_installer().install_frame_state(
-                super::matrix_builder::MatrixFrameStateInstallRequest::Identity(
-                    super::matrix_builder::MatrixFrameIdentityInstallRequest {
-                        frame_id: cf.frame_id,
-                        parent_id: content.frame_id,
-                        parent_x: cf.parent_x,
-                        parent_y: cf.parent_y,
-                        z_order: cf.z_order,
-                        undecorated: true,
-                        border_width: 0.0,
-                        border_color: Color::BLACK,
-                        background_alpha: 1.0,
-                        no_accept_focus: false,
-                    },
-                ),
+            cb.artifact_installer().set_frame_identity(
+                super::matrix_builder::MatrixFrameIdentityInstallRequest {
+                    frame_id: cf.frame_id,
+                    parent_id: content.frame_id,
+                    parent_x: cf.parent_x,
+                    parent_y: cf.parent_y,
+                    z_order: cf.z_order,
+                    undecorated: true,
+                    border_width: 0.0,
+                    border_color: Color::BLACK,
+                    background_alpha: 1.0,
+                    no_accept_focus: false,
+                },
             );
-            cb.artifact_installer().install_frame_state(
-                super::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(Color::new(
-                    0.0, 0.0, 0.0, 0.0,
-                )),
-            );
+            cb.artifact_installer()
+                .set_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
             let mut cfm = std::collections::HashMap::new();
             for face in &content.faces {
                 cfm.insert(face.id, face.clone());
             }
-            cb.artifact_installer().install_frame_state(
-                super::matrix_builder::MatrixFrameStateInstallRequest::Faces(cfm),
-            );
+            cb.artifact_installer().set_faces(cfm);
             let nrows = cf.window.lines.len();
             let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);
             TextWindowMatrixOutputState::new(&mut cb).begin_text_window_matrix(

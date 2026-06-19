@@ -5,10 +5,7 @@ use crate::display_row_matrix_install::{
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
-use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixFrameArtifactInstallRequest, MatrixFrameIdentityInstallRequest,
-    MatrixFrameStateInstallRequest,
-};
+use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameIdentityInstallRequest};
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputRenderState;
@@ -90,16 +87,56 @@ impl<'a> FrameOutputRenderState<'a> {
         self.builder
     }
 
-    fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+    fn set_frame_identity(&mut self, identity: MatrixFrameIdentityInstallRequest) {
         self.builder
             .artifact_installer()
-            .install_frame_state(request);
+            .set_frame_identity(identity);
     }
 
-    fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+    fn set_background_color(&mut self, color: Color) {
         self.builder
             .artifact_installer()
-            .install_frame_artifact(request);
+            .set_background_color(color);
+    }
+
+    fn set_font_pixel_size(&mut self, size: f32) {
+        self.builder.artifact_installer().set_font_pixel_size(size);
+    }
+
+    fn add_background(&mut self, bounds: Rect, color: Color) {
+        self.builder
+            .artifact_installer()
+            .add_background(bounds, color);
+    }
+
+    fn add_window_info(&mut self, info: WindowInfo) {
+        self.builder.artifact_installer().add_window_info(info);
+    }
+
+    fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
+        self.builder.artifact_installer().add_transition_hint(hint);
+    }
+
+    fn add_effect_hint(&mut self, hint: WindowEffectHint) {
+        self.builder.artifact_installer().add_effect_hint(hint);
+    }
+
+    fn add_border(
+        &mut self,
+        window_id: i64,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: Color,
+    ) {
+        self.builder
+            .artifact_installer()
+            .add_border(window_id, x, y, width, height, color);
+    }
+
+    fn add_scroll_bar(&mut self, item: ScrollBarItem) {
+        self.builder.artifact_installer().add_scroll_bar(item);
     }
 
     fn window_infos(&self) -> &[WindowInfo] {
@@ -171,14 +208,10 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
 
     pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
         if let Some(identity) = self.identity {
-            state.install_frame_state(MatrixFrameStateInstallRequest::Identity(identity.into()));
+            state.set_frame_identity(identity.into());
         }
-        state.install_frame_state(MatrixFrameStateInstallRequest::BackgroundColor(
-            self.background_color,
-        ));
-        state.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(
-            self.font_pixel_size,
-        ));
+        state.set_background_color(self.background_color);
+        state.set_font_pixel_size(self.font_pixel_size);
         install_resolved_display_row_face(
             state.builder_mut(),
             0,
@@ -233,11 +266,11 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
     }
 
     pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
-        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Background {
-            bounds: self.params.bounds,
-            color: Color::from_pixel(self.params.default_bg),
-        });
-        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::WindowInfo(WindowInfo {
+        state.add_background(
+            self.params.bounds,
+            Color::from_pixel(self.params.default_bg),
+        );
+        state.add_window_info(WindowInfo {
             window_id: self.params.window_id,
             buffer_id: self.params.buffer_id,
             window_start: self.params.window_start,
@@ -257,7 +290,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
             char_height: self.params.char_height,
             buffer_file_name: self.metadata.buffer_file_name,
             modified: self.metadata.modified,
-        }));
+        });
     }
 }
 
@@ -288,7 +321,7 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
             return;
         };
         if let Some(hint) = FrameGlyphBuffer::derive_transition_hint(prev, curr) {
-            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(hint));
+            state.add_transition_hint(hint);
         }
     }
 
@@ -305,12 +338,10 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         }
 
         if prev.buffer_id != curr.buffer_id {
-            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-                WindowEffectHint::TextFadeIn {
-                    window_id: curr.window_id,
-                    bounds: curr.bounds,
-                },
-            ));
+            state.add_effect_hint(WindowEffectHint::TextFadeIn {
+                window_id: curr.window_id,
+                bounds: curr.bounds,
+            });
             return;
         }
 
@@ -324,33 +355,25 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
             -1
         };
         let delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
-        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-            WindowEffectHint::TextFadeIn {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-            },
-        ));
-        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-            WindowEffectHint::ScrollLineSpacing {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                direction,
-            },
-        ));
-        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-            WindowEffectHint::ScrollMomentum {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                direction,
-            },
-        ));
-        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-            WindowEffectHint::ScrollVelocityFade {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                delta,
-            },
-        ));
+        state.add_effect_hint(WindowEffectHint::TextFadeIn {
+            window_id: curr.window_id,
+            bounds: curr.bounds,
+        });
+        state.add_effect_hint(WindowEffectHint::ScrollLineSpacing {
+            window_id: curr.window_id,
+            bounds: curr.bounds,
+            direction,
+        });
+        state.add_effect_hint(WindowEffectHint::ScrollMomentum {
+            window_id: curr.window_id,
+            bounds: curr.bounds,
+            direction,
+        });
+        state.add_effect_hint(WindowEffectHint::ScrollVelocityFade {
+            window_id: curr.window_id,
+            bounds: curr.bounds,
+            delta,
+        });
     }
 }
 
@@ -394,14 +417,12 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
                 } else {
                     curr.char_height
                 };
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-                    WindowEffectHint::LineAnimation {
-                        window_id: curr.window_id,
-                        bounds: curr.bounds,
-                        edit_y: edit_y + curr.char_height,
-                        offset,
-                    },
-                ));
+                state.add_effect_hint(WindowEffectHint::LineAnimation {
+                    window_id: curr.window_id,
+                    bounds: curr.bounds,
+                    edit_y: edit_y + curr.char_height,
+                    offset,
+                });
             }
         }
     }
@@ -426,9 +447,7 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
             .map(|info| (info.window_id, info.bounds));
         if let Some((window_id, bounds)) = new_selected {
             if *self.prev_selected_window_id != 0 && *self.prev_selected_window_id != window_id {
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-                    WindowEffectHint::WindowSwitchFade { window_id, bounds },
-                ));
+                state.add_effect_hint(WindowEffectHint::WindowSwitchFade { window_id, bounds });
             }
             *self.prev_selected_window_id = window_id;
         }
@@ -461,11 +480,9 @@ impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
             && color_changed_for_theme_transition(old_bg, new_bg)
         {
             let full_h = frame_content_height_before_minibuffer(state, self.frame_height);
-            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::EffectHint(
-                WindowEffectHint::ThemeTransition {
-                    bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
-                },
-            ));
+            state.add_effect_hint(WindowEffectHint::ThemeTransition {
+                bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
+            });
         }
         *self.prev_background = Some(new_bg);
     }
@@ -512,15 +529,13 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
         }
 
         let full_h = frame_content_height_before_minibuffer(state, self.frame_height);
-        state.install_frame_artifact(MatrixFrameArtifactInstallRequest::TransitionHint(
-            WindowTransitionHint {
-                window_id: 0,
-                bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
-                kind: WindowTransitionKind::Crossfade,
-                effect: None,
-                easing: None,
-            },
-        ));
+        state.add_transition_hint(WindowTransitionHint {
+            window_id: 0,
+            bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
+            kind: WindowTransitionKind::Crossfade,
+            effect: None,
+            easing: None,
+        });
     }
 }
 
@@ -639,14 +654,14 @@ impl<'a> WindowFrameDecorationsRenderRequest<'a> {
         }
 
         if self.frame_params.window_system {
-            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                window_id: self.params.window_id,
-                x: self.geometry.right_edge - 1.0,
-                y: self.params.bounds.y,
-                width: 1.0,
-                height: self.params.bounds.height.max(0.0),
-                color: Color::from_pixel(self.frame_params.vertical_border_fg),
-            });
+            state.add_border(
+                self.params.window_id,
+                self.geometry.right_edge - 1.0,
+                self.params.bounds.y,
+                1.0,
+                self.params.bounds.height.max(0.0),
+                Color::from_pixel(self.frame_params.vertical_border_fg),
+            );
         } else {
             BufferTextWindowTerminalRightBorderRequest::new(self.frame_params.char_width)
                 .install_and_apply(
@@ -728,14 +743,14 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
 
         let inner = Color::from_pixel(self.frame_params.divider_fg);
         if self.primary_size() < 3.0 {
-            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                window_id: self.window_id,
-                x: self.x,
-                y: self.y,
-                width: self.width,
-                height: self.height,
-                color: inner,
-            });
+            state.add_border(
+                self.window_id,
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                inner,
+            );
             return;
         }
 
@@ -743,56 +758,42 @@ impl<'a> WindowDividerRectsRenderRequest<'a> {
         let last = Color::from_pixel(self.frame_params.divider_last_fg);
         match self.orientation {
             WindowDividerOrientation::Vertical => {
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                    window_id: self.window_id,
-                    x: self.x,
-                    y: self.y,
-                    width: 1.0,
-                    height: self.height,
-                    color: first,
-                });
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                    window_id: self.window_id,
-                    x: self.x + 1.0,
-                    y: self.y,
-                    width: (self.width - 2.0).max(0.0),
-                    height: self.height,
-                    color: inner,
-                });
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                    window_id: self.window_id,
-                    x: self.x + self.width - 1.0,
-                    y: self.y,
-                    width: 1.0,
-                    height: self.height,
-                    color: last,
-                });
+                state.add_border(self.window_id, self.x, self.y, 1.0, self.height, first);
+                state.add_border(
+                    self.window_id,
+                    self.x + 1.0,
+                    self.y,
+                    (self.width - 2.0).max(0.0),
+                    self.height,
+                    inner,
+                );
+                state.add_border(
+                    self.window_id,
+                    self.x + self.width - 1.0,
+                    self.y,
+                    1.0,
+                    self.height,
+                    last,
+                );
             }
             WindowDividerOrientation::Horizontal => {
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                    window_id: self.window_id,
-                    x: self.x,
-                    y: self.y,
-                    width: self.width,
-                    height: 1.0,
-                    color: first,
-                });
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                    window_id: self.window_id,
-                    x: self.x,
-                    y: self.y + 1.0,
-                    width: self.width,
-                    height: (self.height - 2.0).max(0.0),
-                    color: inner,
-                });
-                state.install_frame_artifact(MatrixFrameArtifactInstallRequest::Border {
-                    window_id: self.window_id,
-                    x: self.x,
-                    y: self.y + self.height - 1.0,
-                    width: self.width,
-                    height: 1.0,
-                    color: last,
-                });
+                state.add_border(self.window_id, self.x, self.y, self.width, 1.0, first);
+                state.add_border(
+                    self.window_id,
+                    self.x,
+                    self.y + 1.0,
+                    self.width,
+                    (self.height - 2.0).max(0.0),
+                    inner,
+                );
+                state.add_border(
+                    self.window_id,
+                    self.x,
+                    self.y + self.height - 1.0,
+                    self.width,
+                    1.0,
+                    last,
+                );
             }
         }
     }
@@ -854,25 +855,23 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 track_height,
             );
 
-            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
-                ScrollBarItem {
-                    window_id: self.params.window_id,
-                    row_role: GlyphRowRole::Text,
-                    clip_rect: Some(self.params.bounds),
-                    horizontal: false,
-                    x,
-                    y,
-                    width: track_width,
-                    height: track_height,
-                    position: metrics.position,
-                    portion: metrics.portion,
-                    whole: metrics.whole,
-                    thumb_start: metrics.thumb_start,
-                    thumb_size: metrics.thumb_size,
-                    track_color,
-                    thumb_color,
-                },
-            ));
+            state.add_scroll_bar(ScrollBarItem {
+                window_id: self.params.window_id,
+                row_role: GlyphRowRole::Text,
+                clip_rect: Some(self.params.bounds),
+                horizontal: false,
+                x,
+                y,
+                width: track_width,
+                height: track_height,
+                position: metrics.position,
+                portion: metrics.portion,
+                whole: metrics.whole,
+                thumb_start: metrics.thumb_start,
+                thumb_size: metrics.thumb_size,
+                track_color,
+                thumb_color,
+            });
         }
 
         if self.params.horizontal_scroll_bar {
@@ -897,25 +896,23 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 0.0
             };
 
-            state.install_frame_artifact(MatrixFrameArtifactInstallRequest::ScrollBar(
-                ScrollBarItem {
-                    window_id: self.params.window_id,
-                    row_role: GlyphRowRole::Text,
-                    clip_rect: Some(self.params.bounds),
-                    horizontal: true,
-                    x,
-                    y,
-                    width: track_width,
-                    height: track_height,
-                    position: self.params.hscroll as i64,
-                    portion: visible_px.round().max(1.0) as i64,
-                    whole: (visible_px + hscroll_px).round().max(1.0) as i64,
-                    thumb_start,
-                    thumb_size,
-                    track_color,
-                    thumb_color,
-                },
-            ));
+            state.add_scroll_bar(ScrollBarItem {
+                window_id: self.params.window_id,
+                row_role: GlyphRowRole::Text,
+                clip_rect: Some(self.params.bounds),
+                horizontal: true,
+                x,
+                y,
+                width: track_width,
+                height: track_height,
+                position: self.params.hscroll as i64,
+                portion: visible_px.round().max(1.0) as i64,
+                whole: (visible_px + hscroll_px).round().max(1.0) as i64,
+                thumb_start,
+                thumb_size,
+                track_color,
+                thumb_color,
+            });
         }
     }
 }
