@@ -15,14 +15,14 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplaySourcePosition, DisplayStretch,
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_row::{MeasuredDisplayRow, insert_resolved_display_row_face};
+use crate::display_row::MeasuredDisplayRow;
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_matrix_install::DisplayRowInstaller;
+use crate::display_row_matrix_install::{DisplayRowInstaller, install_resolved_display_row_face};
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
     text_window_right_edge_marker_decorations,
@@ -872,7 +872,7 @@ impl<'builder> TextWindowBorderInstaller<'builder> {
         // `frame_face_id_counter` by the decoration render, engine.rs) rather than
         // a separate `FaceResolver` counter that could collide with it.
         let border_face_id = render_services.face_ids().allocate();
-        insert_resolved_display_row_face(self.builder, border_face_id, &border_face, None);
+        install_resolved_display_row_face(self.builder, border_face_id, &border_face, None);
         install_last_window_right_border_from_source_requests(
             self.builder,
             render_services.reborrow(),

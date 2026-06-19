@@ -16,10 +16,12 @@ use crate::display_row::{
     DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy, DisplayRowRenderIntoRowResult,
     DisplayRowRenderPolicy, DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
-    insert_resolved_display_row_face, measure_display_item_source_against_current_text_row,
+    measure_display_item_source_against_current_text_row,
     render_display_item_source_into_current_text_row,
 };
-use crate::display_row_matrix_install::RenderedDisplayRowAssetsInstall;
+use crate::display_row_matrix_install::{
+    RenderedDisplayRowAssetsInstall, install_resolved_display_row_face,
+};
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };
@@ -103,11 +105,16 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        insert_resolved_display_row_face(self.builder, face_id, face, None);
+        install_resolved_display_row_face(self.builder, face_id, face, None);
     }
 
     fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
-        face.install_into(self.builder);
+        install_resolved_display_row_face(
+            self.builder,
+            face.face_id(),
+            face.resolved_face(),
+            face.font_metrics(),
+        );
     }
 
     fn display_host(&self) -> Option<&dyn DisplayHost> {

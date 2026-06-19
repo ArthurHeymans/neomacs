@@ -1,7 +1,7 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
-use crate::display_row::{MeasuredDisplayRow, insert_resolved_display_row_face};
+use crate::display_row::MeasuredDisplayRow;
 use crate::display_row_matrix_install::{
-    DisplayRowInstaller, install_mock_display_row_in_matrix_row,
+    DisplayRowInstaller, install_mock_display_row_in_matrix_row, install_resolved_display_row_face,
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
@@ -175,7 +175,7 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         state.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(
             self.font_pixel_size,
         ));
-        insert_resolved_display_row_face(
+        install_resolved_display_row_face(
             state.builder_mut(),
             0,
             self.default_face,

@@ -28,7 +28,7 @@ use crate::display_text_run_measurement::{
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::glyph_row_writer;
-use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameStateInstallRequest};
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
@@ -197,20 +197,6 @@ pub(crate) fn resolved_display_row_face(
         render_face.font_descent = metrics.descent.max(0.0).ceil() as i32;
     }
     render_face
-}
-
-pub(crate) fn insert_resolved_display_row_face(
-    builder: &mut GlyphMatrixBuilder,
-    face_id: u32,
-    face: &ResolvedFace,
-    metrics: Option<FontMetrics>,
-) {
-    let render_face = resolved_display_row_face(face_id, face, metrics);
-    let rendered = render_face.render_face();
-    builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-        id: render_face.face_id,
-        face: rendered,
-    });
 }
 
 pub(crate) struct DisplayRowFaceRealizer<'a> {
@@ -733,8 +719,12 @@ impl DisplayRowResolvedMeasuredFace {
         DisplayRowActiveFaceState::new(self.face, self.measured_face)
     }
 
-    pub(crate) fn install_into(&self, builder: &mut GlyphMatrixBuilder) {
-        insert_resolved_display_row_face(builder, self.face_id(), &self.face, self.metrics);
+    pub(crate) fn resolved_face(&self) -> &ResolvedFace {
+        &self.face
+    }
+
+    pub(crate) fn font_metrics(&self) -> Option<FontMetrics> {
+        self.metrics
     }
 }
 

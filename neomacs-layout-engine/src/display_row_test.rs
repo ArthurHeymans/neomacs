@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_row_matrix_install::{
-    DisplayRowInstaller, install_mock_display_row_in_matrix_row,
+    DisplayRowInstaller, install_mock_display_row_in_matrix_row, install_resolved_display_row_face,
 };
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
@@ -199,7 +199,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     let face = base_face();
 
-    insert_resolved_display_row_face(
+    install_resolved_display_row_face(
         &mut builder,
         9,
         &face,
@@ -489,7 +489,12 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
         &mut font_metrics,
     );
 
-    realized.install_into(&mut builder);
+    install_resolved_display_row_face(
+        &mut builder,
+        realized.face_id(),
+        realized.resolved_face(),
+        realized.font_metrics(),
+    );
 
     let rendered = builder.faces().get(&12).expect("installed face");
     assert_eq!(realized.face_id(), 12);
