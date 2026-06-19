@@ -440,6 +440,56 @@ pub(crate) struct GlyphMatrixBuilder {
     no_accept_focus: bool,
 }
 
+pub(crate) struct MatrixRowInstaller<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+}
+
+impl MatrixRowInstaller<'_> {
+    pub(crate) fn install(&mut self, request: MatrixRowLifecycleRequest) {
+        self.builder.install_row_lifecycle(request);
+    }
+
+    pub(crate) fn replace_current_row(&mut self, row: GlyphRow) {
+        self.install(MatrixRowLifecycleRequest::ReplaceCurrent { row });
+    }
+}
+
+pub(crate) struct MatrixWindowInstaller<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+}
+
+impl MatrixWindowInstaller<'_> {
+    pub(crate) fn install(&mut self, request: MatrixWindowLifecycleRequest) {
+        self.builder.install_window_lifecycle(request);
+    }
+}
+
+pub(crate) struct MatrixArtifactInstaller<'a> {
+    builder: &'a mut GlyphMatrixBuilder,
+}
+
+impl MatrixArtifactInstaller<'_> {
+    pub(crate) fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+        self.builder.install_frame_state(request);
+    }
+
+    pub(crate) fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+        self.builder.install_frame_artifact(request);
+    }
+
+    pub(crate) fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
+        self.builder.install_cursor(request);
+    }
+
+    pub(crate) fn install_media(&mut self, request: MatrixMediaInstallRequest) {
+        self.builder.install_media(request);
+    }
+
+    pub(crate) fn store_phys_cursor(&mut self, cursor: PhysCursor) {
+        self.builder.store_phys_cursor(cursor);
+    }
+}
+
 impl GlyphMatrixBuilder {
     fn write_row_metrics(row: &mut GlyphRow, pixel_y_rel: f32, height_px: f32, ascent_px: f32) {
         row.pixel_y = pixel_y_rel;
@@ -568,29 +618,43 @@ impl GlyphMatrixBuilder {
         text_pixel_bounds: Rect,
         selected: bool,
     ) {
-        self.install_window_lifecycle(MatrixWindowLifecycleRequest::Begin(
-            MatrixWindowBeginRequest {
-                window_id,
-                nrows,
-                ncols,
-                pixel_bounds,
-                text_pixel_bounds,
-                selected,
-            },
-        ));
+        self.window_installer()
+            .install(MatrixWindowLifecycleRequest::Begin(
+                MatrixWindowBeginRequest {
+                    window_id,
+                    nrows,
+                    ncols,
+                    pixel_bounds,
+                    text_pixel_bounds,
+                    selected,
+                },
+            ));
     }
 
     #[cfg(test)]
     pub(crate) fn end_window(&mut self) {
-        self.install_window_lifecycle(MatrixWindowLifecycleRequest::End);
+        self.window_installer()
+            .install(MatrixWindowLifecycleRequest::End);
     }
 
-    pub(crate) fn install_window_lifecycle(&mut self, request: MatrixWindowLifecycleRequest) {
+    fn install_window_lifecycle(&mut self, request: MatrixWindowLifecycleRequest) {
         request.install(self);
     }
 
-    pub(crate) fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest) {
+    fn install_row_lifecycle(&mut self, request: MatrixRowLifecycleRequest) {
         request.install(self);
+    }
+
+    pub(crate) fn row_installer(&mut self) -> MatrixRowInstaller<'_> {
+        MatrixRowInstaller { builder: self }
+    }
+
+    pub(crate) fn window_installer(&mut self) -> MatrixWindowInstaller<'_> {
+        MatrixWindowInstaller { builder: self }
+    }
+
+    pub(crate) fn artifact_installer(&mut self) -> MatrixArtifactInstaller<'_> {
+        MatrixArtifactInstaller { builder: self }
     }
 
     #[cfg(test)]
@@ -757,15 +821,15 @@ impl GlyphMatrixBuilder {
     // Non-grid item installation
     // -----------------------------------------------------------------------
 
-    pub(crate) fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
+    fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
         request.install(self);
     }
 
-    pub(crate) fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
+    fn install_cursor(&mut self, request: MatrixCursorInstallRequest) {
         self.cursors.push(request.cursor_item());
     }
 
-    pub(crate) fn install_media(&mut self, request: MatrixMediaInstallRequest) {
+    fn install_media(&mut self, request: MatrixMediaInstallRequest) {
         request.install(self);
     }
 
@@ -794,7 +858,7 @@ impl GlyphMatrixBuilder {
         )
     }
 
-    pub(crate) fn store_phys_cursor(&mut self, cursor: PhysCursor) {
+    fn store_phys_cursor(&mut self, cursor: PhysCursor) {
         self.phys_cursor = Some(cursor);
     }
 
@@ -835,7 +899,7 @@ impl GlyphMatrixBuilder {
         self.phys_cursor = Some(cursor);
     }
 
-    pub(crate) fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
+    fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
         request.install(self);
     }
 

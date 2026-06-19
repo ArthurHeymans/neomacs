@@ -156,7 +156,7 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.install_frame_artifact(
+    builder.artifact_installer().install_frame_artifact(
         crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(curr),
     );
 
@@ -182,20 +182,22 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     let mut curr_infos = std::collections::HashMap::new();
     curr_infos.insert(curr.window_id, curr);
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.install_cursor(crate::matrix_builder::MatrixCursorInstallRequest {
-        window_id: params.window_id,
-        slot_id: DisplaySlotId {
+    builder.artifact_installer().install_cursor(
+        crate::matrix_builder::MatrixCursorInstallRequest {
             window_id: params.window_id,
-            row: 1,
-            col: 2,
+            slot_id: DisplaySlotId {
+                window_id: params.window_id,
+                row: 1,
+                col: 2,
+            },
+            x: 24.0,
+            y: 48.0,
+            width: 8.0,
+            height: 16.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
         },
-        x: 24.0,
-        y: 48.0,
-        width: 8.0,
-        height: 16.0,
-        style: CursorStyle::FilledBox,
-        color: Color::WHITE,
-    });
+    );
 
     FrameLineAnimationHintsRenderRequest::new(&prev_infos, &curr_infos)
         .render_and_apply(&mut FrameOutputRenderState::new(&mut builder));
@@ -219,7 +221,7 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let info = window_info(&params);
     let mut prev_selected = 7;
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.install_frame_artifact(
+    builder.artifact_installer().install_frame_artifact(
         crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
     );
 
@@ -244,15 +246,15 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
-    builder.install_frame_state(
+    builder.artifact_installer().install_frame_state(
         crate::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(Color::new(
             0.2, 0.0, 0.0, 1.0,
         )),
     );
-    builder.install_frame_artifact(
+    builder.artifact_installer().install_frame_artifact(
         crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(info),
     );
-    builder.install_frame_artifact(
+    builder.artifact_installer().install_frame_artifact(
         crate::matrix_builder::MatrixFrameArtifactInstallRequest::WindowInfo(mini),
     );
 

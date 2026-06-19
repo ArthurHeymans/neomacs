@@ -91,11 +91,15 @@ impl<'a> FrameOutputRenderState<'a> {
     }
 
     fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
-        self.builder.install_frame_state(request);
+        self.builder
+            .artifact_installer()
+            .install_frame_state(request);
     }
 
     fn install_frame_artifact(&mut self, request: MatrixFrameArtifactInstallRequest) {
-        self.builder.install_frame_artifact(request);
+        self.builder
+            .artifact_installer()
+            .install_frame_artifact(request);
     }
 
     fn window_infos(&self) -> &[WindowInfo] {

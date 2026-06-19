@@ -1540,7 +1540,7 @@ impl LayoutEngine {
 
         let mut builder = GlyphMatrixBuilder::new();
 
-        builder.install_frame_state(
+        builder.artifact_installer().install_frame_state(
             super::matrix_builder::MatrixFrameStateInstallRequest::Identity(
                 super::matrix_builder::MatrixFrameIdentityInstallRequest {
                     frame_id: content.frame_id,
@@ -1556,7 +1556,7 @@ impl LayoutEngine {
                 },
             ),
         );
-        builder.install_frame_state(
+        builder.artifact_installer().install_frame_state(
             super::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(
                 content.background,
             ),
@@ -1570,7 +1570,7 @@ impl LayoutEngine {
             f.font_size = crate::fontconfig::points_to_pixels(f.font_size);
             face_map.insert(f.id, f);
         }
-        builder.install_frame_state(
+        builder.artifact_installer().install_frame_state(
             super::matrix_builder::MatrixFrameStateInstallRequest::Faces(face_map),
         );
 
@@ -1760,7 +1760,7 @@ impl LayoutEngine {
         let mut child_frames = Vec::new();
         for cf in &content.child_frames {
             let mut cb = GlyphMatrixBuilder::new();
-            cb.install_frame_state(
+            cb.artifact_installer().install_frame_state(
                 super::matrix_builder::MatrixFrameStateInstallRequest::Identity(
                     super::matrix_builder::MatrixFrameIdentityInstallRequest {
                         frame_id: cf.frame_id,
@@ -1776,7 +1776,7 @@ impl LayoutEngine {
                     },
                 ),
             );
-            cb.install_frame_state(
+            cb.artifact_installer().install_frame_state(
                 super::matrix_builder::MatrixFrameStateInstallRequest::BackgroundColor(Color::new(
                     0.0, 0.0, 0.0, 0.0,
                 )),
@@ -1785,7 +1785,7 @@ impl LayoutEngine {
             for face in &content.faces {
                 cfm.insert(face.id, face.clone());
             }
-            cb.install_frame_state(
+            cb.artifact_installer().install_frame_state(
                 super::matrix_builder::MatrixFrameStateInstallRequest::Faces(cfm),
             );
             let nrows = cf.window.lines.len();

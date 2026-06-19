@@ -159,31 +159,41 @@ fn row_lifecycle_request_installs_prebuilt_row_metrics_and_cursor() {
 
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 4.0, 80.0, 32.0), true);
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
-        begin: MatrixRowBeginRequest {
+    builder
+        .row_installer()
+        .install(MatrixRowLifecycleRequest::InstallPrebuilt {
+            begin: MatrixRowBeginRequest {
+                row: 0,
+                role: GlyphRowRole::Text,
+                mode_line: false,
+            },
+            row,
+        });
+    builder
+        .row_installer()
+        .install(MatrixRowLifecycleRequest::Metrics {
             row: 0,
-            role: GlyphRowRole::Text,
-            mode_line: false,
-        },
-        row,
-    });
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::Metrics {
-        row: 0,
-        metrics: MatrixRowMetricsRequest {
-            pixel_y: 12.0,
-            height_px: 18.0,
-            ascent_px: 13.0,
-        },
-    });
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::Cursor {
-        row: 0,
-        col: 1,
-        style: CursorStyle::Bar(2.0),
-    });
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::CurrentDecoration(
-        MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
-    ));
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::Finalize { row: 0 });
+            metrics: MatrixRowMetricsRequest {
+                pixel_y: 12.0,
+                height_px: 18.0,
+                ascent_px: 13.0,
+            },
+        });
+    builder
+        .row_installer()
+        .install(MatrixRowLifecycleRequest::Cursor {
+            row: 0,
+            col: 1,
+            style: CursorStyle::Bar(2.0),
+        });
+    builder
+        .row_installer()
+        .install(MatrixRowLifecycleRequest::CurrentDecoration(
+            MatrixCurrentRowDecorationRequest::MarkTruncatedLeft,
+        ));
+    builder
+        .row_installer()
+        .install(MatrixRowLifecycleRequest::Finalize { row: 0 });
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);
@@ -873,16 +883,18 @@ fn set_phys_cursor_leaves_window_cursors_untouched() {
         row: 0,
         col: 2,
     };
-    builder.install_cursor(MatrixCursorInstallRequest {
-        window_id: 1,
-        slot_id: captured_slot,
-        x: 0.0,
-        y: 0.0,
-        width: 8.0,
-        height: 16.0,
-        style: CursorStyle::FilledBox,
-        color: neomacs_display_protocol::types::Color::WHITE,
-    });
+    builder
+        .artifact_installer()
+        .install_cursor(MatrixCursorInstallRequest {
+            window_id: 1,
+            slot_id: captured_slot,
+            x: 0.0,
+            y: 0.0,
+            width: 8.0,
+            height: 16.0,
+            style: CursorStyle::FilledBox,
+            color: neomacs_display_protocol::types::Color::WHITE,
+        });
     builder.set_phys_cursor(PhysCursor {
         window_id: 1,
         charpos: 102,
@@ -1123,18 +1135,22 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
     let mut active = Face::new(10);
     active.foreground = Color::rgb(0.0, 0.0, 0.0);
     active.background = Color::rgb(0.75, 0.75, 0.75);
-    builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-        id: 10,
-        face: active.clone(),
-    });
+    builder
+        .artifact_installer()
+        .install_frame_state(MatrixFrameStateInstallRequest::Face {
+            id: 10,
+            face: active.clone(),
+        });
 
     let mut inactive = Face::new(11);
     inactive.foreground = Color::rgb(0.8, 0.8, 0.8);
     inactive.background = Color::rgb(0.30, 0.30, 0.30);
-    builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-        id: 11,
-        face: inactive.clone(),
-    });
+    builder
+        .artifact_installer()
+        .install_frame_state(MatrixFrameStateInstallRequest::Face {
+            id: 11,
+            face: inactive.clone(),
+        });
 
     // Window 1 (top, selected): references the active face on
     // its mode-line row.

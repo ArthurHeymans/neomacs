@@ -42,10 +42,12 @@ pub(crate) fn install_resolved_display_row_face(
 ) {
     let render_face = resolved_display_row_face(face_id, face, metrics);
     let rendered = render_face.render_face();
-    builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-        id: render_face.face_id,
-        face: rendered,
-    });
+    builder
+        .artifact_installer()
+        .install_frame_state(MatrixFrameStateInstallRequest::Face {
+            id: render_face.face_id,
+            face: rendered,
+        });
 }
 
 pub(crate) fn current_display_row_artifact(builder: &GlyphMatrixBuilder) -> Option<GlyphRow> {
@@ -56,7 +58,7 @@ pub(crate) fn install_current_display_row_artifact(
     builder: &mut GlyphMatrixBuilder,
     row: GlyphRow,
 ) {
-    builder.install_row_lifecycle(MatrixRowLifecycleRequest::ReplaceCurrent { row });
+    builder.row_installer().replace_current_row(row);
 }
 
 struct MatrixDisplayRowInstallRequest<'a> {
@@ -106,14 +108,16 @@ impl<'a> MatrixDisplayRowInstallRequest<'a> {
         row.pixel_y = self.pixel_y - context.pixel_bounds.y;
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;
-        builder.install_row_lifecycle(MatrixRowLifecycleRequest::InstallPrebuilt {
-            begin: MatrixRowBeginRequest {
-                row: self.matrix_row,
-                role: row.role,
-                mode_line: row.mode_line,
-            },
-            row,
-        });
+        builder
+            .row_installer()
+            .install(MatrixRowLifecycleRequest::InstallPrebuilt {
+                begin: MatrixRowBeginRequest {
+                    row: self.matrix_row,
+                    role: row.role,
+                    mode_line: row.mode_line,
+                },
+                row,
+            });
     }
 }
 
@@ -276,10 +280,12 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
 
     pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
         for face in self.faces {
-            builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-                id: face.id,
-                face: face.clone(),
-            });
+            builder.artifact_installer().install_frame_state(
+                MatrixFrameStateInstallRequest::Face {
+                    id: face.id,
+                    face: face.clone(),
+                },
+            );
         }
         for media in self.media {
             match self.target {
@@ -304,10 +310,12 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     matrix_row: usize,
 ) -> DisplayRowPosition {
     for face in &rendered.faces {
-        builder.install_frame_state(MatrixFrameStateInstallRequest::Face {
-            id: face.id,
-            face: face.clone(),
-        });
+        builder
+            .artifact_installer()
+            .install_frame_state(MatrixFrameStateInstallRequest::Face {
+                id: face.id,
+                face: face.clone(),
+            });
     }
     if let Some(mut row) = current_display_row_artifact(builder) {
         row.enabled = true;
@@ -410,14 +418,16 @@ impl RenderedDisplayRowMedia {
         builder: &mut GlyphMatrixBuilder,
         target: ResolvedMatrixMediaInstallTarget,
     ) {
-        builder.install_media(MatrixMediaInstallRequest::new(
-            target,
-            self.matrix_media_kind(),
-            self.x,
-            self.y,
-            self.width,
-            self.height,
-        ));
+        builder
+            .artifact_installer()
+            .install_media(MatrixMediaInstallRequest::new(
+                target,
+                self.matrix_media_kind(),
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+            ));
     }
 
     fn matrix_media_kind(&self) -> MatrixMediaInstallKind {
