@@ -12,7 +12,6 @@ use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
-use super::TextWindowOutputInstall;
 use super::TextWindowOutputInstallSurface;
 use super::TextWindowOutputInstaller;
 use super::TextWindowPendingRowFinish;
@@ -1024,7 +1023,7 @@ fn install_text_window_output_installs_row_metrics() {
         },
     );
 
-    TextWindowOutputInstaller::new(&mut builder, &emitter).install_output(TextWindowOutputInstall);
+    TextWindowOutputInstaller::new(&mut builder, &emitter).install_finished_rows();
 
     builder.end_window();
     let state = builder.finish(5, 1, 8.0, 16.0);

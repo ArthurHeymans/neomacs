@@ -253,8 +253,6 @@ pub(crate) struct TextWindowPendingRowFinish<'a> {
     pub(crate) hit_rows: &'a mut Vec<HitRow>,
 }
 
-pub(crate) struct TextWindowOutputInstall;
-
 pub(crate) struct TextWindowOutputInstallSurface<'output_builder> {
     output_builder: &'output_builder mut DisplayOutputBuilder,
 }
@@ -1348,7 +1346,7 @@ impl<'output_builder, 'output> TextWindowOutputInstaller<'output_builder, 'outpu
         }
     }
 
-    fn install_output(&mut self, _request: TextWindowOutputInstall) {
+    fn install_finished_rows(&mut self) {
         self.output_install.finish_output_rows(self.output_emitter);
     }
 
@@ -1365,7 +1363,7 @@ impl<'output_builder, 'output> TextWindowOutputInstaller<'output_builder, 'outpu
         );
         self.output_install
             .record_redisplay_positions(request.window_id, redisplay_positions);
-        self.install_output(TextWindowOutputInstall);
+        self.install_finished_rows();
         if let Some(markers) = request.right_edge_markers {
             let render_services =
                 render_services.expect("right-edge markers require chrome render services");
