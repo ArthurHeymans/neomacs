@@ -172,6 +172,7 @@ impl BufferTextSourceRangeItemAppendRequest {
         Self { item, append_kind }
     }
 
+    #[cfg(test)]
     pub(crate) fn append_kind(&self) -> DisplayRowAppendKind {
         self.append_kind
     }
@@ -246,41 +247,32 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     fn item_active_face(
         &self,
         geometry: &DisplayRowGeometryState,
-    ) -> BufferTextItemAppendContext<'source, B> {
+    ) -> BufferTextItemAppendContext<'source> {
         let frame = self.active_face_context(geometry).active_face_frame();
         BufferTextItemAppendContext::new(
-            self.buffer,
-            self.buffer_id,
             self.active_face.face_id(),
             self.active_face.resolved_face(),
             frame,
         )
     }
 
-    fn measure_item_source_request_width_or_item_fallback_to_text_row(
+    fn source_display_item_for_special_source_char(
         &self,
-        geometry: &DisplayRowGeometryState,
-        state: &mut TextRowSourceMeasureState<'_>,
-        source_item: BufferTextSourceItemRequest,
-        position: DisplayRowPosition,
-    ) -> f32 {
-        self.item_active_face(geometry)
-            .measure_source_request_width_or_item_fallback_to_text_row(state, source_item, position)
-    }
+        request: &BufferTextSpecialSourceCharRequest,
+        source_item: &DisplayItem,
+    ) -> DisplayItem {
+        if let Some(source_item) = matching_special_display_item(source_item, request.kind()) {
+            return source_item.clone();
+        }
 
-    fn measure_special_source_char_request_width_or_item_fallback_to_text_row(
-        &self,
-        geometry: &DisplayRowGeometryState,
-        state: &mut TextRowSourceMeasureState<'_>,
-        request: BufferTextSpecialSourceCharMeasureRequest,
-    ) -> f32 {
-        let position = request.position();
-        self.measure_item_source_request_width_or_item_fallback_to_text_row(
-            geometry,
-            state,
-            request.source_item(),
-            position,
+        buffer_text_source_item_append_request(
+            request.source_item_request(),
+            self.buffer_id,
+            self.buffer,
+            self.active_face.face_id(),
         )
+        .map(BufferTextSourceRangeItemAppendRequest::into_item)
+        .unwrap_or_else(|| source_item.clone())
     }
 
     pub(crate) fn prepare_special_source_char_at(
@@ -289,37 +281,19 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         state: &mut TextRowSourceMeasureState<'_>,
         request: BufferTextSpecialSourceCharRequest,
         position: DisplayRowPosition,
-        source_item: Option<&DisplayItem>,
+        source_item: &DisplayItem,
     ) -> BufferTextSpecialSourceCharPreparedAppend {
+        let display_item = self.source_display_item_for_special_source_char(&request, source_item);
         let measured_width_px = request.requires_overflow_measurement().then(|| {
-            if let Some(source_item) = source_item {
-                self.item_active_face(geometry)
-                    .measure_source_display_item_width_or_item_fallback_to_text_row(
-                        state,
-                        source_item,
-                        request.source_item_request(),
-                        position,
-                    )
-            } else {
-                self.measure_special_source_char_request_width_or_item_fallback_to_text_row(
-                    geometry,
+            self.item_active_face(geometry)
+                .measure_source_display_item_width_or_item_fallback_to_text_row(
                     state,
-                    request.measure_at(position),
+                    &display_item,
+                    request.source_item_request(),
+                    position,
                 )
-            }
         });
-        request.prepared_append_at(position, measured_width_px, source_item.cloned())
-    }
-
-    fn append_item_source_request_to_text_row_and_emit(
-        &self,
-        geometry: &DisplayRowGeometryState,
-        state: &mut TextRowSourceRenderState<'_>,
-        source_item: BufferTextSourceItemRequest,
-        position: DisplayRowPosition,
-    ) -> Option<DisplayRowAppendProgress> {
-        self.item_active_face(geometry)
-            .append_source_request_to_text_row_and_emit(state, source_item, position)
+        request.prepared_append_at(position, measured_width_px, display_item)
     }
 
     fn append_special_source_char_plan_to_text_row_and_emit(
@@ -330,17 +304,13 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<DisplayRowAppendProgress> {
         let position = plan.position();
         let fallback_kind = plan.source_item().append_kind();
-        if let Some(item) = plan.display_item {
-            return self
-                .item_active_face(geometry)
-                .append_display_item_to_text_row_and_emit(state, item, position, fallback_kind);
-        }
-        self.append_item_source_request_to_text_row_and_emit(
-            geometry,
-            state,
-            plan.source_item(),
-            position,
-        )
+        self.item_active_face(geometry)
+            .append_display_item_to_text_row_and_emit(
+                state,
+                plan.display_item,
+                position,
+                fallback_kind,
+            )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -422,7 +392,6 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         cluster_tail: Option<(char, bool)>,
     ) -> BufferTextPreparedSourceCharAppend {
         if let Some(request) = source_char.special_request(cluster_tail) {
-            let source_item = matching_special_display_item(source_item, request.kind());
             return BufferTextPreparedSourceCharAppend::Special(
                 self.prepare_special_source_char_at(
                     geometry,
@@ -856,11 +825,12 @@ impl BufferTextSpecialSourceCharRequest {
     pub(crate) fn append_plan_at(
         &self,
         position: DisplayRowPosition,
+        display_item: DisplayItem,
     ) -> BufferTextSpecialSourceCharAppendPlan {
         BufferTextSpecialSourceCharAppendPlan {
             source_item: self.source_item_request(),
             position,
-            display_item: None,
+            display_item,
         }
     }
 
@@ -868,24 +838,12 @@ impl BufferTextSpecialSourceCharRequest {
         self,
         position: DisplayRowPosition,
         measured_width_px: Option<f32>,
-        display_item: Option<DisplayItem>,
+        display_item: DisplayItem,
     ) -> BufferTextSpecialSourceCharPreparedAppend {
         BufferTextSpecialSourceCharPreparedAppend {
             kind: self.kind(),
-            append_plan: self
-                .append_plan_at(position)
-                .with_display_item(display_item),
+            append_plan: self.append_plan_at(position, display_item),
             measured_width_px,
-        }
-    }
-
-    fn measure_at(
-        &self,
-        position: DisplayRowPosition,
-    ) -> BufferTextSpecialSourceCharMeasureRequest {
-        BufferTextSpecialSourceCharMeasureRequest {
-            source_item: self.source_item_request(),
-            position,
         }
     }
 }
@@ -1051,31 +1009,10 @@ impl BufferTextSpecialSourceCharAppendOutcome {
 pub(crate) struct BufferTextSpecialSourceCharAppendPlan {
     pub(crate) source_item: BufferTextSourceItemRequest,
     pub(crate) position: DisplayRowPosition,
-    pub(crate) display_item: Option<DisplayItem>,
+    pub(crate) display_item: DisplayItem,
 }
 
 impl BufferTextSpecialSourceCharAppendPlan {
-    fn with_display_item(mut self, display_item: Option<DisplayItem>) -> Self {
-        self.display_item = display_item;
-        self
-    }
-
-    fn position(&self) -> DisplayRowPosition {
-        self.position
-    }
-
-    fn source_item(&self) -> BufferTextSourceItemRequest {
-        self.source_item.clone()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct BufferTextSpecialSourceCharMeasureRequest {
-    source_item: BufferTextSourceItemRequest,
-    position: DisplayRowPosition,
-}
-
-impl BufferTextSpecialSourceCharMeasureRequest {
     fn position(&self) -> DisplayRowPosition {
         self.position
     }
@@ -1188,25 +1125,19 @@ impl BufferTextSourceItemRequest {
     }
 }
 
-pub(crate) struct BufferTextItemAppendContext<'a, B: LayoutBufferView + ?Sized> {
-    buffer: &'a B,
-    buffer_id: BufferId,
+pub(crate) struct BufferTextItemAppendContext<'a> {
     face_id: u32,
     base_face: &'a ResolvedFace,
     frame: DisplayRowAppendFrame,
 }
 
-impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
+impl<'a> BufferTextItemAppendContext<'a> {
     pub(crate) fn new(
-        buffer: &'a B,
-        buffer_id: BufferId,
         face_id: u32,
         base_face: &'a ResolvedFace,
         frame: DisplayRowAppendFrame,
     ) -> Self {
         Self {
-            buffer,
-            buffer_id,
             face_id,
             base_face,
             frame,
@@ -1215,24 +1146,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
 
     fn single_item_context(&self) -> DisplayRowSingleItemAppendContext<'a> {
         DisplayRowSingleItemAppendContext::new(self.base_face, self.face_id, self.frame.clone())
-    }
-
-    pub(crate) fn append_source_request_to_text_row_and_emit(
-        &self,
-        state: &mut TextRowSourceRenderState<'_>,
-        source_item: BufferTextSourceItemRequest,
-        position: DisplayRowPosition,
-    ) -> Option<DisplayRowAppendProgress> {
-        let append_item = buffer_text_source_item_append_request(
-            source_item,
-            self.buffer_id,
-            self.buffer,
-            self.face_id,
-        )?;
-        let kind = append_item.append_kind();
-        let item = append_item.into_item();
-        self.single_item_context()
-            .render_item_naturally(state, item, position, kind)
     }
 
     pub(crate) fn append_display_item_to_text_row_and_emit(
@@ -1244,24 +1157,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
     ) -> Option<DisplayRowAppendProgress> {
         self.single_item_context()
             .render_item_naturally(state, item, position, fallback_kind)
-    }
-
-    pub(crate) fn measure_source_request_width_to_text_row(
-        &self,
-        state: &mut TextRowSourceMeasureState<'_>,
-        source_item: BufferTextSourceItemRequest,
-        position: DisplayRowPosition,
-    ) -> Option<f32> {
-        let append_item = buffer_text_source_item_append_request(
-            source_item,
-            self.buffer_id,
-            self.buffer,
-            self.face_id,
-        )?;
-        let kind = append_item.append_kind();
-        let item = append_item.into_item();
-        self.single_item_context()
-            .measure_item_width_naturally(state, &item, position, kind)
     }
 
     pub(crate) fn measure_display_item_width_to_text_row(
@@ -1295,6 +1190,68 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         )
         .unwrap_or(fallback_width)
     }
+}
+
+#[cfg(test)]
+pub(crate) struct BufferTextSourceRequestAppendContext<'a, B: LayoutBufferView + ?Sized> {
+    buffer: &'a B,
+    buffer_id: BufferId,
+    item_context: BufferTextItemAppendContext<'a>,
+}
+
+#[cfg(test)]
+impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceRequestAppendContext<'a, B> {
+    pub(crate) fn new(
+        buffer: &'a B,
+        buffer_id: BufferId,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            buffer,
+            buffer_id,
+            item_context: BufferTextItemAppendContext::new(face_id, base_face, frame),
+        }
+    }
+
+    pub(crate) fn append_source_request_to_text_row_and_emit(
+        &self,
+        state: &mut TextRowSourceRenderState<'_>,
+        source_item: BufferTextSourceItemRequest,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayRowAppendProgress> {
+        let append_item = buffer_text_source_item_append_request(
+            source_item,
+            self.buffer_id,
+            self.buffer,
+            self.item_context.face_id,
+        )?;
+        let kind = append_item.append_kind();
+        let item = append_item.into_item();
+        self.item_context
+            .single_item_context()
+            .render_item_naturally(state, item, position, kind)
+    }
+
+    pub(crate) fn measure_source_request_width_to_text_row(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        source_item: BufferTextSourceItemRequest,
+        position: DisplayRowPosition,
+    ) -> Option<f32> {
+        let append_item = buffer_text_source_item_append_request(
+            source_item,
+            self.buffer_id,
+            self.buffer,
+            self.item_context.face_id,
+        )?;
+        let kind = append_item.append_kind();
+        let item = append_item.into_item();
+        self.item_context
+            .single_item_context()
+            .measure_item_width_naturally(state, &item, position, kind)
+    }
 
     pub(crate) fn measure_source_request_width_or_item_fallback_to_text_row(
         &self,
@@ -1302,7 +1259,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextItemAppendContext<'a, B> {
         source_item: BufferTextSourceItemRequest,
         position: DisplayRowPosition,
     ) -> f32 {
-        let fallback_width = source_item.fallback_width_px(self.frame.geometry.char_width);
+        let fallback_width =
+            source_item.fallback_width_px(self.item_context.frame.geometry.char_width);
         self.measure_source_request_width_to_text_row(state, source_item, position)
             .unwrap_or(fallback_width)
     }

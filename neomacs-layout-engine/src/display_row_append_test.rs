@@ -106,12 +106,12 @@ fn write_char_to_current_row_with_width(
         .expect("current row");
 }
 
-fn buffer_source_mapped_display_item(
+fn buffer_display_item(
     buffer_id: BufferId,
     start: usize,
     end: usize,
-    text: &str,
     face: RenderFaceRef,
+    kind: DisplayItemKind,
 ) -> crate::display_item::DisplayItem {
     crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::new(
@@ -123,7 +123,37 @@ fn buffer_source_mapped_display_item(
             DisplaySourcePosition::buffer(buffer_id, CharPos0::new(end), EmacsBytePos::new(end)),
         ),
         face,
+        kind,
+    )
+}
+
+fn buffer_source_mapped_display_item(
+    buffer_id: BufferId,
+    start: usize,
+    end: usize,
+    text: &str,
+    face: RenderFaceRef,
+) -> crate::display_item::DisplayItem {
+    buffer_display_item(
+        buffer_id,
+        start,
+        end,
+        face,
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(text)),
+    )
+}
+
+fn buffer_special_request_display_item(
+    request: &BufferTextSpecialSourceCharRequest,
+) -> crate::display_item::DisplayItem {
+    let source_item = request.source_item_request();
+    let range = source_item.range();
+    buffer_display_item(
+        BufferId(7),
+        range.start().get(),
+        range.end().get(),
+        RenderFaceRef::Inherit,
+        source_item.into_display_item_kind(),
     )
 }
 
@@ -2850,7 +2880,13 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
                 x_px: 80.0,
                 col: 10,
             },
-            display_item: None,
+            display_item: buffer_display_item(
+                buf_id,
+                21,
+                22,
+                RenderFaceRef::Inherit,
+                DisplayItemKind::ControlChar { ch: '\n' },
+            ),
         },
         measured_width_px: Some(8.0),
     };
@@ -7142,7 +7178,8 @@ fn buffer_text_item_append_context_builds_control_char_item() {
         item.clone(),
     );
 
-    let append_context = BufferTextItemAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+    let append_context =
+        BufferTextSourceRequestAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
     let measured_width = append_context
         .measure_source_request_width_to_text_row(
             &mut TextRowSourceMeasureState::new(
@@ -7327,15 +7364,21 @@ fn buffer_text_source_char_names_range_and_precluster_policy() {
             .map(|request| request.kind()),
         Some(BufferTextSourceSpecialDisplayKind::Nobreak)
     );
+    let expected_request = BufferTextSpecialSourceCharRequest::new(
+        &source_char,
+        BufferTextSourceSpecialDisplay::Nobreak(BufferTextSourceAppendItem::SourceMappedText {
+            text: "\\ ".into(),
+        }),
+    );
     assert_eq!(
-        request.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 }),
-        BufferTextSpecialSourceCharRequest::new(
-            &source_char,
-            BufferTextSourceSpecialDisplay::Nobreak(BufferTextSourceAppendItem::SourceMappedText {
-                text: "\\ ".into()
-            }),
+        request.append_plan_at(
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            buffer_special_request_display_item(&request),
+        ),
+        expected_request.append_plan_at(
+            DisplayRowPosition { x_px: 0.0, col: 0 },
+            buffer_special_request_display_item(&expected_request),
         )
-        .append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 })
     );
 }
 
@@ -7354,15 +7397,20 @@ fn buffer_text_source_char_names_cluster_policy() {
     assert_eq!(
         standalone_joiner
             .special_request(None)
-            .map(|request| request.append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 })),
+            .map(|request| request.append_plan_at(
+                DisplayRowPosition { x_px: 0.0, col: 0 },
+                buffer_special_request_display_item(&request),
+            )),
         BufferTextSourceSpecialDisplay::for_cluster_state(BufferTextSourceClusterState::for_char(
             '\u{200D}', None
         ))
-        .map(|display| BufferTextSpecialSourceCharRequest::new(
-            &standalone_joiner,
-            display
-        )
-        .append_plan_at(DisplayRowPosition { x_px: 0.0, col: 0 }))
+        .map(|display| {
+            let request = BufferTextSpecialSourceCharRequest::new(&standalone_joiner, display);
+            request.append_plan_at(
+                DisplayRowPosition { x_px: 0.0, col: 0 },
+                buffer_special_request_display_item(&request),
+            )
+        })
     );
 }
 
@@ -7497,6 +7545,14 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let source_request = source_char
         .special_request(None)
         .expect("nobreak source char should map to a display item");
+    let source_item = buffer_text_source_item_append_request(
+        source_request.source_item_request(),
+        buf_id,
+        &snapshot,
+        active_face.face_id(),
+    )
+    .expect("nobreak source item")
+    .into_item();
     let prepared_append = append_context.prepare_special_source_char_at(
         &geometry,
         &mut TextRowSourceMeasureState::new(
@@ -7507,7 +7563,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
         ),
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        None,
+        &source_item,
     );
     assert_eq!(
         prepared_append.kind(),
@@ -7628,18 +7684,14 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
         ),
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        Some(&source_item),
+        &source_item,
     );
 
     assert_eq!(
         prepared_append.kind(),
         BufferTextSourceSpecialDisplayKind::Control
     );
-    let direct_item = prepared_append
-        .append_plan
-        .display_item
-        .as_ref()
-        .expect("direct control item");
+    let direct_item = prepared_append.append_plan.display_item.clone();
     assert!(matches!(
         direct_item.kind,
         DisplayItemKind::ControlChar { ch: '\u{0007}' }
@@ -7691,6 +7743,14 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let source_request = source_char
         .special_request(None)
         .expect("glyphless source char should map to a display item");
+    let source_item = buffer_text_source_item_append_request(
+        source_request.source_item_request(),
+        buf_id,
+        &snapshot,
+        active_face.face_id(),
+    )
+    .expect("glyphless source item")
+    .into_item();
     let prepared_append = append_context.prepare_special_source_char_at(
         &geometry,
         &mut TextRowSourceMeasureState::new(
@@ -7701,7 +7761,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         ),
         source_request,
         DisplayRowPosition { x_px: 0.0, col: 0 },
-        None,
+        &source_item,
     );
     assert_eq!(
         prepared_append.kind(),
