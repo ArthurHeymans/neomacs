@@ -1,5 +1,6 @@
+use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_progress::BufferTextWindowProgressState;
-use crate::display_buffer_text_source::{BufferTextReplacementItem, BufferTextSourceItem};
+use crate::display_buffer_text_source::BufferTextSourceItem;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;

@@ -9,6 +9,7 @@ pub(crate) use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementResolveOutcome,
     BufferDisplayPropertyTextReplacementResolveRequest, BufferDisplayPropertyTextWalkOutcome,
 };
+use crate::display_buffer_display_property_source::BufferTextReplacementItem;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
     BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
@@ -27,9 +28,9 @@ pub(crate) use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_source::{
-    BufferTextConsumedSourceItem, BufferTextReplacementItem, BufferTextSourceCursor,
-    BufferTextSourceItem, BufferTextSourceItemStep, BufferTextSourceItemStepper,
-    BufferTextSourceStepChar, BufferTextWindowSource, BufferTextWindowSourceReadRequest,
+    BufferTextConsumedSourceItem, BufferTextSourceCursor, BufferTextSourceItem,
+    BufferTextSourceItemStep, BufferTextSourceItemStepper, BufferTextSourceStepChar,
+    BufferTextWindowSource, BufferTextWindowSourceReadRequest,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowGeometryPlan,
