@@ -860,16 +860,15 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     let mut byte_idx = 0;
     let mut charpos = 0;
 
-    let Some(BufferTextConsumedSourceItem::SourceItem(first)) =
+    let Some(BufferTextConsumedSourceItem::Step(first)) =
         stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)
     else {
-        panic!("expected leading text item");
+        panic!("expected leading text step");
     };
-    assert_eq!(item_texts(std::slice::from_ref(first.item())), ["a"]);
-    let step = stepper
-        .item_step_from_source_item(first, &mut byte_idx, charpos)
-        .expect("leading text step");
-    charpos = step.end_charpos();
+    let end_charpos = first.end_charpos();
+    let (_, first_item) = first.into_parts();
+    assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
+    charpos = end_charpos;
 
     let Some(BufferTextConsumedSourceItem::Replacement(replacement)) =
         stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)
@@ -925,16 +924,15 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
     let mut byte_idx = 0;
     let mut charpos = 0;
 
-    let Some(BufferTextConsumedSourceItem::SourceItem(first)) =
+    let Some(BufferTextConsumedSourceItem::Step(first)) =
         stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)
     else {
-        panic!("expected leading text item");
+        panic!("expected leading text step");
     };
-    assert_eq!(item_texts(std::slice::from_ref(first.item())), ["a"]);
-    let step = stepper
-        .item_step_from_source_item(first, &mut byte_idx, charpos)
-        .expect("leading text step");
-    charpos = step.end_charpos();
+    let end_charpos = first.end_charpos();
+    let (_, first_item) = first.into_parts();
+    assert_eq!(item_texts(std::slice::from_ref(&first_item)), ["a"]);
+    charpos = end_charpos;
 
     let Some(BufferTextConsumedSourceItem::Replacement(replacement)) =
         stepper.next_consumed_source_item(&mut source, &mut context, &mut byte_idx, charpos)

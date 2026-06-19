@@ -28,9 +28,9 @@ pub(crate) use crate::display_buffer_text_progress::{
     BufferTextWindowProgressState, BufferTextWindowRowProgressState,
 };
 use crate::display_buffer_text_source::{
-    BufferTextConsumedSourceItem, BufferTextSourceCursor, BufferTextSourceItem,
-    BufferTextSourceItemStep, BufferTextSourceItemStepper, BufferTextSourceStepChar,
-    BufferTextWindowSource, BufferTextWindowSourceReadRequest,
+    BufferTextConsumedSourceItem, BufferTextSourceCursor, BufferTextSourceItemStep,
+    BufferTextSourceItemStepper, BufferTextSourceStepChar, BufferTextWindowSource,
+    BufferTextWindowSourceReadRequest,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowGeometryPlan,
@@ -552,15 +552,6 @@ pub(crate) struct BufferTextWindowLoopRenderState<'rows, 'emit, 'surface> {
 pub(crate) struct BufferTextSourceItemStepRenderRequest<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     source_step: BufferTextSourceItemStep,
-    text: &'a [u8],
-    active_face_state: &'a DisplayRowActiveFaceState,
-    params: &'a WindowParams,
-}
-
-pub(crate) struct BufferTextSourceItemRenderRequest<'a> {
-    layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-    source_item: BufferTextSourceItem,
-    item_stepper: &'a mut BufferTextSourceItemStepper,
     text: &'a [u8],
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
@@ -2761,8 +2752,8 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
             return BufferTextWindowLoopStepOutcome::StopBufferWalk;
         };
 
-        let source_item = match consumed_source {
-            BufferTextConsumedSourceItem::PendingStep(source_step) => {
+        match consumed_source {
+            BufferTextConsumedSourceItem::Step(source_step) => {
                 return self.render_source_item_step_for_context(
                     BufferTextSourceItemStepRenderRequest {
                         layout_resolution_context: face_resolution_context
@@ -2775,7 +2766,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     buffer,
                 );
             }
-            BufferTextConsumedSourceItem::SourceItem(source_item) => source_item,
             BufferTextConsumedSourceItem::Replacement(replacement) => {
                 return self.render_replacement_source_item_for_context(
                     replacement,
@@ -2787,20 +2777,7 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                     buffer,
                 );
             }
-        };
-
-        self.render_source_item_for_context(
-            BufferTextSourceItemRenderRequest {
-                layout_resolution_context: face_resolution_context
-                    .source_item_layout_resolution_context(),
-                source_item,
-                item_stepper,
-                text,
-                active_face_state,
-                params,
-            },
-            buffer,
-        )
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2902,40 +2879,6 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
         BufferTextWindowLoopStepOutcome::ContinueBufferWalk
     }
 
-    pub(crate) fn render_source_item_for_context<'request, B: LayoutBufferView>(
-        &mut self,
-        request: BufferTextSourceItemRenderRequest<'request>,
-        buffer: &B,
-    ) -> BufferTextWindowLoopStepOutcome {
-        let BufferTextSourceItemRenderRequest {
-            layout_resolution_context,
-            source_item,
-            item_stepper,
-            text,
-            active_face_state,
-            params,
-        } = request;
-
-        let Some(source_step) = item_stepper.item_step_from_source_item(
-            source_item,
-            self.progress.byte_idx,
-            *self.progress.charpos,
-        ) else {
-            return BufferTextWindowLoopStepOutcome::StopBufferWalk;
-        };
-
-        self.render_source_item_step_for_context(
-            BufferTextSourceItemStepRenderRequest {
-                layout_resolution_context,
-                source_step,
-                text,
-                active_face_state,
-                params,
-            },
-            buffer,
-        )
-    }
-
     pub(crate) fn render_replacement_source_item_for_context<'request, B: LayoutBufferView>(
         &mut self,
         replacement: BufferTextReplacementItem,
@@ -2987,18 +2930,25 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 );
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }
-            BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => self
-                .render_source_item_for_context(
-                    BufferTextSourceItemRenderRequest {
+            BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
+                let Some(source_step) = item_stepper.item_step_from_source_item(
+                    source_item,
+                    self.progress.byte_idx,
+                    *self.progress.charpos,
+                ) else {
+                    return BufferTextWindowLoopStepOutcome::StopBufferWalk;
+                };
+                self.render_source_item_step_for_context(
+                    BufferTextSourceItemStepRenderRequest {
                         layout_resolution_context,
-                        source_item,
-                        item_stepper,
+                        source_step,
                         text,
                         active_face_state,
                         params,
                     },
                     buffer,
-                ),
+                )
+            }
             BufferDisplayPropertyTextReplacementResolveOutcome::Stop => {
                 BufferTextWindowLoopStepOutcome::StopBufferWalk
             }

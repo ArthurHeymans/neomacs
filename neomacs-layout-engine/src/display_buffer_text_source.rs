@@ -337,8 +337,7 @@ impl BufferTextDisplayReplacementMode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum BufferTextConsumedSourceItem {
-    PendingStep(BufferTextSourceItemStep),
-    SourceItem(BufferTextSourceItem),
+    Step(BufferTextSourceItemStep),
     Replacement(BufferTextReplacementItem),
 }
 
@@ -635,7 +634,7 @@ impl BufferTextSourceItemStepper {
         &mut self,
         source: &mut BufferTextSourceCursor<'_, B>,
         context: &mut DisplaySourceContext<'_>,
-        byte_idx: usize,
+        byte_idx: &mut usize,
         charpos: i64,
     ) -> Option<BufferTextConsumedSourceItem> {
         if self.pending_text_run.is_some() {
@@ -652,18 +651,20 @@ impl BufferTextSourceItemStepper {
 
         let source_char = source.char_at(expected_source_pos);
         match source.next_buffer_walk_item(context)? {
-            BufferTextSourceCursorItem::Item(item) => self
-                .validate_source_item(item, byte_idx, charpos, source_char)
-                .map(BufferTextConsumedSourceItem::SourceItem),
+            BufferTextSourceCursorItem::Item(item) => {
+                let item = self.validate_source_item(item, *byte_idx, charpos, source_char)?;
+                self.item_step_from_source_item(item, byte_idx, charpos)
+                    .map(BufferTextConsumedSourceItem::Step)
+            }
             BufferTextSourceCursorItem::Replacement(item) => {
                 let anchor = item.source_anchor(self.text_start_byte)?;
-                if !anchor.matches(byte_idx, charpos) {
+                if !anchor.matches(*byte_idx, charpos) {
                     tracing::error!(
                         "BufferTextSourceItemStepper: display replacement at byte {:?} charpos {} \
                          did not match buffer walk byte {} charpos {}",
                         anchor.byte_idx(),
                         anchor.charpos(),
-                        byte_idx,
+                        *byte_idx,
                         charpos
                     );
                     return None;
@@ -681,10 +682,10 @@ impl BufferTextSourceItemStepper {
         charpos: i64,
     ) -> Option<BufferTextConsumedSourceItem> {
         if let Some(step) = self.next_pending_item_step(byte_idx, charpos) {
-            return Some(BufferTextConsumedSourceItem::PendingStep(step));
+            return Some(BufferTextConsumedSourceItem::Step(step));
         }
 
-        self.next_buffer_walk_item_from_source(source, context, *byte_idx, charpos)
+        self.next_buffer_walk_item_from_source(source, context, byte_idx, charpos)
     }
 
     #[cfg(test)]
