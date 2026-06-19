@@ -412,6 +412,7 @@ impl BufferTextSourceItem {
         self.start_charpos
     }
 
+    #[cfg(test)]
     pub(crate) fn item(&self) -> &DisplayItem {
         &self.item
     }

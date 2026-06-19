@@ -22,8 +22,6 @@ use crate::display_buffer_text_render::{
     BufferSelectiveDisplayTailRenderRequest, BufferSelectiveDisplayTailRenderState,
     BufferSourceItemLayoutResolutionContext, BufferTextLineBreakRenderContext,
     BufferTextLineBreakRenderRequest, BufferTextLineBreakRenderState,
-    BufferTextPlainRunRenderContext, BufferTextPlainRunRenderOutcome,
-    BufferTextPlainRunRenderRequest, BufferTextPlainRunRenderState,
     BufferTextSourceCharRenderContext, BufferTextSourceCharRenderOutcome,
     BufferTextSourceCharRenderRequest, BufferTextSourceCharRenderRequestState,
 };
@@ -2986,41 +2984,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             active_face_state,
             params,
         } = request;
-
-        if let Some(outcome) = BufferTextPlainRunRenderRequest::new(
-            &source_item,
-            BufferTextPlainRunRenderContext {
-                buffer_id: loop_context.buffer_id(),
-                append_surface,
-                overlay_context,
-                active_face_state,
-                params,
-                char_h: loop_context.char_height,
-                point_charpos: loop_context.point_charpos,
-            },
-        )
-        .render_if_eligible_and_apply(
-            buffer,
-            BufferTextPlainRunRenderState {
-                source_render: self.source_render.reborrow(),
-                row_geometry: self.row_geometry,
-                byte_idx: self.byte_idx,
-                charpos: self.charpos,
-                x: self.x,
-                col: self.col,
-                trailing_whitespace: self.trailing_whitespace,
-                word_wrap: self.word_wrap,
-            },
-        ) {
-            return match outcome {
-                BufferTextPlainRunRenderOutcome::Rendered => {
-                    BufferTextWindowLoopStepOutcome::ContinueBufferWalk
-                }
-                BufferTextPlainRunRenderOutcome::Stop => {
-                    BufferTextWindowLoopStepOutcome::StopBufferWalk
-                }
-            };
-        }
 
         let Some(source_step) =
             item_stepper.item_step_from_source_item(source_item, self.byte_idx, *self.charpos)
