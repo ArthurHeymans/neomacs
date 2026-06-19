@@ -6629,8 +6629,6 @@ impl Context {
     /// termination + sweep. The first cycle and non-incremental builds take the
     /// stop-the-world path.
     fn gc_collect_from_current_roots_impl(&mut self, force_complete: bool) {
-        // Per-slice mark budget (objects traced before yielding to the mutator).
-        const INCREMENTAL_MARK_BUDGET: usize = 4096;
         let start = std::time::Instant::now();
         self.lexenv_assq_cache.clear();
         self.lexenv_special_cache.clear();
@@ -6651,9 +6649,6 @@ impl Context {
                 // (GNU `garbage-collect` semantics).
                 if (*heap_ptr).concurrent_mark_running() {
                     self.terminate_concurrent_mark(heap_ptr);
-                }
-                if (*heap_ptr).mark_in_progress() {
-                    self.terminate_incremental_mark(heap_ptr);
                 }
                 if (*heap_ptr).sweep_in_progress() {
                     (*heap_ptr).finish_incremental_sweep_now();
@@ -6681,34 +6676,15 @@ impl Context {
                     return; // sweep deferred; cycle not done yet
                 }
                 return; // GC thread still marking; mutator continues
-            } else if (*heap_ptr).mark_in_progress() {
-                // Phase 2: advance the in-flight mark, unless allocation has
-                // outrun marking past a hard cap (then finish it now so the heap
-                // does not grow unbounded).
-                let cap = (*heap_ptr).gc_threshold().saturating_mul(4);
-                let must_finish = (*heap_ptr).bytes_since_gc() > cap;
-                if !must_finish && !(*heap_ptr).incremental_mark_slice(INCREMENTAL_MARK_BUDGET) {
-                    return; // still marking; defer completion bookkeeping
-                }
-                // Terminate the mark; this defers the sweep to later safe points.
-                self.terminate_incremental_mark(heap_ptr);
-                return; // sweep deferred; cycle not done yet
             } else if (*heap_ptr).should_run_concurrent() {
-                // Phase 5 start handshake: snapshot roots, hand the gray queue to
-                // the GC thread, and return — marking now overlaps the mutator.
+                // Concurrent start handshake: snapshot roots, hand the gray queue
+                // to the GC thread, and return — marking now overlaps the mutator.
                 self.start_concurrent_mark(heap_ptr);
                 return; // marking concurrent; cycle not done yet
-            } else if (*heap_ptr).should_run_incremental() {
-                // Phase 1: start a fresh incremental mark (initial root snapshot).
-                (*heap_ptr).incremental_begin();
-                self.seed_all_context_roots(heap_ptr);
-                if !(*heap_ptr).incremental_mark_slice(INCREMENTAL_MARK_BUDGET) {
-                    return; // still marking; defer completion bookkeeping
-                }
-                self.terminate_incremental_mark(heap_ptr);
-                return; // sweep deferred; cycle not done yet
             } else {
-                // Stop-the-world full collection (first cycle / no-dump heap).
+                // Stop-the-world full collection (first cycle / no-dump heap):
+                // the only non-concurrent path, used to bootstrap the partition
+                // before the concurrent collector can run.
                 (*heap_ptr).begin_collection();
                 self.seed_all_context_roots(heap_ptr);
                 (*heap_ptr).complete_collection();
