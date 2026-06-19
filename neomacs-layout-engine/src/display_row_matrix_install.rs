@@ -1,4 +1,5 @@
 use crate::composition::last_text_cluster_tail_in_row;
+use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
@@ -10,7 +11,7 @@ use crate::display_row_builder::{DisplayRowGlyphSlot, merge_display_row_source_s
 #[cfg(test)]
 use crate::display_row_builder::{DisplayRowPosition, display_row_text_is_empty};
 use crate::font_metrics::FontMetrics;
-use crate::matrix_builder::{FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder};
+use crate::matrix_builder::{FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixRowDecorator};
 use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
@@ -63,7 +64,8 @@ impl<'a> DisplayRowMatrixInstall<'a> {
     }
 
     fn install(self, builder: &mut GlyphMatrixBuilder) {
-        let pixel_bounds = builder.current_window_pixel_bounds();
+        let pixel_bounds =
+            DisplayRowWindowContextSurface::from_builder(builder).current_window_pixel_bounds();
         let mut row = self.row.clone();
         if let Some(source_slots) = self.source_slots {
             apply_display_row_source_slot_bounds(&mut row, source_slots);
@@ -116,6 +118,18 @@ struct DisplayRowArtifactInstaller<'builder> {
 
 pub(crate) struct DisplayRowArtifactInstallSurface<'builder> {
     installer: DisplayRowArtifactInstaller<'builder>,
+}
+
+struct DisplayRowDecorationInstaller<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
+}
+
+pub(crate) struct DisplayRowDecorationSurface<'builder> {
+    installer: DisplayRowDecorationInstaller<'builder>,
+}
+
+pub(crate) struct DisplayRowWindowContextSurface<'builder> {
+    builder: &'builder GlyphMatrixBuilder,
 }
 
 impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
@@ -487,6 +501,71 @@ impl<'builder> DisplayRowArtifactInstallSurface<'builder> {
     }
 }
 
+impl<'builder> DisplayRowDecorationInstaller<'builder> {
+    fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    fn decorate_current_window_row<D>(&mut self, row_idx: usize, decorator: D)
+    where
+        D: MatrixRowDecorator,
+    {
+        self.builder.decorate_current_window_row(row_idx, decorator);
+    }
+
+    fn decorate_last_window_rows<D>(&mut self, decorator: D)
+    where
+        D: MatrixRowDecorator,
+    {
+        self.builder.decorate_last_window_rows(decorator);
+    }
+}
+
+impl<'builder> DisplayRowDecorationSurface<'builder> {
+    pub(crate) fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self {
+            installer: DisplayRowDecorationInstaller::new(builder),
+        }
+    }
+
+    pub(crate) fn decorate_current_window_row<D>(&mut self, row_idx: usize, decorator: D)
+    where
+        D: MatrixRowDecorator,
+    {
+        self.installer
+            .decorate_current_window_row(row_idx, decorator);
+    }
+
+    pub(crate) fn decorate_last_window_rows<D>(&mut self, decorator: D)
+    where
+        D: MatrixRowDecorator,
+    {
+        self.installer.decorate_last_window_rows(decorator);
+    }
+}
+
+impl<'builder> DisplayRowWindowContextSurface<'builder> {
+    pub(crate) fn from_builder(builder: &'builder GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    fn current_window_id_i64(&self) -> i64 {
+        self.builder.current_window_id_i64()
+    }
+
+    pub(crate) fn current_window_pixel_bounds(&self) -> Rect {
+        self.builder.current_window_pixel_bounds()
+    }
+
+    fn current_window_text_pixel_bounds(&self) -> Rect {
+        self.builder.current_window_text_pixel_bounds()
+    }
+
+    pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
+        self.builder.cursor_visual_column_context()
+    }
+}
+
 impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
     fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
@@ -586,7 +665,10 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             panic!("frame chrome rows must install through frame chrome rows");
         };
         debug_assert!(window_id > 0);
-        debug_assert_eq!(builder.current_window_id_i64(), window_id as i64);
+        debug_assert_eq!(
+            DisplayRowWindowContextSurface::from_builder(builder).current_window_id_i64(),
+            window_id as i64
+        );
         debug_assert!(matches!(
             kind,
             WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
@@ -755,8 +837,9 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
 
 impl RenderedDisplayRowMedia {
     fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
-        let window_id = builder.current_window_id_i64();
-        let clip = builder.current_window_text_pixel_bounds();
+        let window_context = DisplayRowWindowContextSurface::from_builder(builder);
+        let window_id = window_context.current_window_id_i64();
+        let clip = window_context.current_window_text_pixel_bounds();
         let row = matrix_row.min(u32::MAX as usize) as u32;
         let slot_id = DisplaySlotId {
             window_id,
@@ -773,7 +856,8 @@ impl RenderedDisplayRowMedia {
         row: u32,
         clip: Rect,
     ) {
-        let window_id = builder.current_window_id_i64();
+        let window_id =
+            DisplayRowWindowContextSurface::from_builder(builder).current_window_id_i64();
         let slot_id = DisplaySlotId {
             window_id,
             row,

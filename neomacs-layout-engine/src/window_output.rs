@@ -23,8 +23,9 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_matrix_install::{
-    DisplayRowArtifactInstallSurface, DisplayRowCurrentRowSurface, DisplayRowFaceInstallSurface,
-    DisplayRowInstallSurface, DisplayRowLifecycleSurface,
+    DisplayRowArtifactInstallSurface, DisplayRowCurrentRowSurface, DisplayRowDecorationSurface,
+    DisplayRowFaceInstallSurface, DisplayRowInstallSurface, DisplayRowLifecycleSurface,
+    DisplayRowWindowContextSurface,
 };
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
@@ -314,7 +315,9 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
     }
 
     fn text_matrix_row_metrics(&self, metrics: TextMatrixRowMetrics) -> TextMatrixRowStoredMetrics {
-        let window_y = self.builder.current_window_pixel_bounds().y;
+        let window_y = DisplayRowWindowContextSurface::from_builder(self.builder)
+            .current_window_pixel_bounds()
+            .y;
         TextMatrixRowStoredMetrics {
             pixel_y: metrics.y - window_y,
             height_px: metrics.height,
@@ -323,7 +326,9 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
     }
 
     fn finish_output_rows(&mut self, output_emitter: &WindowOutputEmitter) {
-        let window_y = self.builder.current_window_pixel_bounds().y;
+        let window_y = DisplayRowWindowContextSurface::from_builder(self.builder)
+            .current_window_pixel_bounds()
+            .y;
         for metric in output_emitter.row_metrics() {
             DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
                 metric.matrix_row,
@@ -1304,8 +1309,9 @@ impl TextWindowCursorPublication {
         });
         let mut phys_cursor = cursor.phys_cursor();
         let row_col = if cursor.selected && !cursor.glyph_row_resolved {
+            let window_context = DisplayRowWindowContextSurface::from_builder(builder);
             if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
-                .resolve_phys_cursor_placement(builder.cursor_visual_column_context())
+                .resolve_phys_cursor_placement(window_context.cursor_visual_column_context())
             {
                 placement.apply_to(&mut phys_cursor);
             }
@@ -1402,8 +1408,9 @@ fn install_right_edge_markers_from_source_requests(
     request: TextWindowRightEdgeMarkers<'_>,
 ) {
     let base_face = render_services.face_resolver().default_face().clone();
+    let mut decorations = DisplayRowDecorationSurface::from_builder(builder);
     for decoration in text_window_right_edge_marker_decorations(&request) {
-        builder.decorate_current_window_row(
+        decorations.decorate_current_window_row(
             decoration.matrix_row,
             RightEdgeMarkerRowDecorator::new(
                 decoration,
@@ -1422,11 +1429,9 @@ fn install_last_window_right_border_from_source_requests(
     request: TextWindowRightBorder,
     base_face: &ResolvedFace,
 ) {
-    builder.decorate_last_window_rows(RightBorderRowsDecorator::new(
-        request,
-        base_face,
-        &mut render_services,
-    ));
+    DisplayRowDecorationSurface::from_builder(builder).decorate_last_window_rows(
+        RightBorderRowsDecorator::new(request, base_face, &mut render_services),
+    );
 }
 
 pub(crate) trait DisplayProgressSink {
