@@ -64,7 +64,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         }
     }
 
-    pub(crate) fn into_parts(
+    fn into_parts(
         self,
     ) -> (
         &'a mut GlyphMatrixBuilder,
@@ -72,6 +72,13 @@ impl<'a> TextRowOutputRenderState<'a> {
         &'a mut Context,
     ) {
         (self.builder, self.output_emitter, self.evaluator)
+    }
+
+    pub(crate) fn apply<R>(
+        self,
+        f: impl FnOnce(&mut GlyphMatrixBuilder, &mut WindowOutputEmitter, &mut Context) -> R,
+    ) -> R {
+        f(self.builder, self.output_emitter, self.evaluator)
     }
 
     pub(crate) fn finish_and_end_text_matrix_row_output(self, metrics: TextMatrixRowMetrics) {
@@ -350,7 +357,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         )
     }
 
-    pub(crate) fn into_parts(
+    fn into_parts(
         self,
     ) -> (
         &'a mut GlyphMatrixBuilder,
@@ -430,7 +437,7 @@ impl<'a> TextRowSourceMeasureState<'a> {
         }
     }
 
-    pub(crate) fn into_parts(
+    fn into_parts(
         self,
     ) -> (
         &'a mut GlyphMatrixBuilder,

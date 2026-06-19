@@ -482,73 +482,81 @@ impl<'a> BufferTextWindowTailFinalizeRequest<'a> {
             hit_rows,
             output_render,
         } = state;
-        let (builder, output_emitter, evaluator) = output_render.into_parts();
         let context = self.context;
 
         let cursor_requested = context.point_charpos >= context.window_start
             && (context.point_charpos <= context.charpos || context.point_is_visible_eob);
-        let mut cursor_publish_status = if cursor_requested {
+        let initial_cursor_publish_status = if cursor_requested {
             BufferTextWindowCursorPublishStatus::MissingCapture
         } else {
             BufferTextWindowCursorPublishStatus::NotRequested
         };
 
-        if cursor_requested {
-            if let Some(cursor) = cursor_info.captured() {
-                let cursor_row_metrics = output_emitter.row_metrics().to_vec();
-                cursor_publish_status = CapturedTextWindowCursorPublishContext::new(
+        let (cursor_publish_status, pending_row_finished, visual_cursor_summary) =
+            output_render.apply(|builder, output_emitter, evaluator| {
+                let mut cursor_publish_status = initial_cursor_publish_status;
+                if cursor_requested {
+                    if let Some(cursor) = cursor_info.captured() {
+                        let cursor_row_metrics = output_emitter.row_metrics().to_vec();
+                        cursor_publish_status = CapturedTextWindowCursorPublishContext::new(
+                            context.params,
+                            context.text,
+                            context.text_matrix_row_base,
+                            context.text_area_left,
+                            context.window_top,
+                            context.text_y,
+                            context.text_height,
+                            context.char_w,
+                            context.char_h,
+                            context.point_charpos,
+                            context.point_is_visible_eob,
+                        )
+                        .publish_captured_cursor(
+                            cursor,
+                            &cursor_row_metrics,
+                            row_geometry.row_metrics_snapshot(context.text_matrix_row_base),
+                            builder,
+                            output_emitter,
+                        )
+                        .into();
+                    } else {
+                        tracing::debug!(
+                            "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",
+                            context.point_charpos,
+                            context.window_start,
+                            context.charpos
+                        );
+                    }
+                }
+
+                let pending_row_finished =
+                    TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
+                        .finish_pending_row(TextWindowPendingRowFinish {
+                            row_geometry,
+                            row_limit: context.row_limit,
+                            row_y_positions,
+                            text_y: context.text_y,
+                            char_height: context.char_h,
+                            charpos: context.charpos,
+                            hit_row_range,
+                            hit_rows,
+                        });
+
+                let visual_cursor_summary = VisualTextWindowCursorPublishContext::new(
                     context.params,
-                    context.text,
-                    context.text_matrix_row_base,
                     context.text_area_left,
                     context.window_top,
                     context.text_y,
                     context.text_height,
                     context.char_w,
-                    context.char_h,
-                    context.point_charpos,
-                    context.point_is_visible_eob,
                 )
-                .publish_captured_cursor(
-                    cursor,
-                    &cursor_row_metrics,
-                    row_geometry.row_metrics_snapshot(context.text_matrix_row_base),
-                    builder,
-                    output_emitter,
+                .publish_visual_cursors(builder, output_emitter);
+                (
+                    cursor_publish_status,
+                    pending_row_finished,
+                    visual_cursor_summary,
                 )
-                .into();
-            } else {
-                tracing::debug!(
-                    "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",
-                    context.point_charpos,
-                    context.window_start,
-                    context.charpos
-                );
-            }
-        }
-
-        let pending_row_finished =
-            TextWindowRowLifecycleInstaller::new(builder, output_emitter, evaluator)
-                .finish_pending_row(TextWindowPendingRowFinish {
-                    row_geometry,
-                    row_limit: context.row_limit,
-                    row_y_positions,
-                    text_y: context.text_y,
-                    char_height: context.char_h,
-                    charpos: context.charpos,
-                    hit_row_range,
-                    hit_rows,
-                });
-
-        let visual_cursor_summary = VisualTextWindowCursorPublishContext::new(
-            context.params,
-            context.text_area_left,
-            context.window_top,
-            context.text_y,
-            context.text_height,
-            context.char_w,
-        )
-        .publish_visual_cursors(builder, output_emitter);
+            });
 
         BufferTextWindowTailFinalizeOutcome {
             cursor_requested,
