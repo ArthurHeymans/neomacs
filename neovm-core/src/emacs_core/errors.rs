@@ -237,7 +237,15 @@ pub fn init_standard_errors(obarray: &mut Obarray) {
         "Attempt to set a constant symbol",
         &["error"],
     );
-    register_simple(obarray, "text-read-only", "Text is read-only", &["error"]);
+    // GNU data.c: PUT_ERROR (Qtext_read_only, Fcons (Qbuffer_read_only,
+    // error_tail), ...) -- text-read-only is a subcondition of
+    // buffer-read-only, so a `(buffer-read-only ...)' handler catches it.
+    register_simple(
+        obarray,
+        "text-read-only",
+        "Text is read-only",
+        &["buffer-read-only"],
+    );
     register_simple(
         obarray,
         "void-function",
@@ -905,7 +913,6 @@ impl ErrorRegistry {
             "scan-error",
             "search-failed",
             "setting-constant",
-            "text-read-only",
             "void-function",
             "void-variable",
             "wrong-number-of-arguments",
@@ -917,6 +924,12 @@ impl ErrorRegistry {
         for name in &simple_children_of_error {
             self.parents.insert(intern(name), vec![intern("error")]);
         }
+
+        // GNU data.c makes text-read-only a subcondition of buffer-read-only
+        // (not a direct child of error), so `(buffer-read-only ...)' handlers
+        // catch a text-read-only signal.
+        self.parents
+            .insert(intern("text-read-only"), vec![intern("buffer-read-only")]);
 
         // arith-error family.
         self.parents

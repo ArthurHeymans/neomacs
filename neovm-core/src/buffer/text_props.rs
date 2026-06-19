@@ -204,6 +204,18 @@ fn plist_value_from_pairs(plist: &[(Value, Value)]) -> Value {
     Value::list(items)
 }
 
+/// Build a fresh plist with new cons cells holding the same keys/values, like
+/// GNU `Fcopy_sequence` of an interval plist.  The (atom-or-not) values are
+/// shared; only the spine cons cells are new, so an in-place value-cell
+/// rewrite of the copy cannot reach the original plist that may have been
+/// handed to Lisp by `text-properties-at`.
+fn copy_plist_value(plist: Value) -> Value {
+    if plist.is_nil() {
+        return Value::NIL;
+    }
+    plist_value_from_pairs(&plist_pairs(plist))
+}
+
 fn plist_pairs(plist: Value) -> Vec<(Value, Value)> {
     let mut pairs = Vec::new();
     let mut tail = plist;
@@ -1024,6 +1036,33 @@ impl IntervalTree {
         let node = &mut self.nodes[id.0];
         node.plist = plist;
         node.refresh_cache();
+    }
+
+    /// Re-home the interval ending exactly at `boundary` (the in-order
+    /// predecessor of the interval starting at `boundary`) onto a fresh
+    /// `copy-sequence` of its plist, mirroring GNU
+    /// `graft_intervals_into_buffer`'s `copy_properties (under, end_unchanged)`.
+    ///
+    /// The boundary must already be a clean interval edge (the caller has split
+    /// there).  This detaches the original plist cons -- which may alias a value
+    /// already returned by `text-properties-at` -- from the buffer so a later
+    /// in-place `put-text-property` cannot mutate the value held in Lisp.  Empty
+    /// plists are left alone (GNU's `copy_properties` short-circuits on
+    /// DEFAULT_INTERVAL_P).
+    fn rehome_predecessor_plist(&mut self, boundary: CharPos0) {
+        if boundary == CharPos0::ZERO {
+            return;
+        }
+        let prev = CharPos0::new(boundary.get() - 1);
+        let Some((_, id)) = self.find_id(prev) else {
+            return;
+        };
+        let node = &self.nodes[id.0];
+        if node.is_empty_plist() {
+            return;
+        }
+        let fresh = copy_plist_value(node.plist);
+        self.set_node_plist(id, fresh);
     }
 
     fn delete_node(&mut self, id: IntervalId) -> Option<IntervalId> {
@@ -2317,6 +2356,16 @@ impl TextPropertyTable {
         // the old splice), preserving the plist ORDER (set, not per-property
         // put which prepends) and NOT merging adjacent intervals, so the insert
         // boundaries that text-property stickiness relies on survive.
+        //
+        // GNU `graft_intervals_into_buffer` copies properties with
+        // `copy_properties`, i.e. `Fcopy_sequence (source->plist)`, so the
+        // grafted buffer intervals never alias the source string's plist cons.
+        // It also splits the existing interval at the graft's start and
+        // `copy_properties (under, end_unchanged)` re-homes the preceding
+        // remainder onto a fresh plist, so the original cons -- which may have
+        // already been returned to Lisp by `text-properties-at' -- is detached
+        // from the buffer and never mutated in place by a later
+        // `put-text-property'.  Mirror both copies here.
         for run in other.intervals.runs() {
             let start = run.start().add_len(offset);
             let end = run.end().add_len(offset);
@@ -2326,14 +2375,24 @@ impl TextPropertyTable {
             self.intervals.ensure_cover(end);
             self.intervals.split_at(start);
             self.intervals.split_at(end);
-            let plist = run.plist;
+            // A propertized graft splits the existing interval at `start`; GNU
+            // re-homes the preceding remainder onto a fresh `copy-sequence` of
+            // its plist (skipped for empty plists, matching `copy_properties`'s
+            // DEFAULT_INTERVAL_P short-circuit).
+            if !run.is_empty_plist() {
+                self.intervals.rehome_predecessor_plist(start);
+            }
             let mut cursor = start;
             while cursor < end {
                 let Some((node_start, id)) = self.intervals.find_id(cursor) else {
                     break;
                 };
                 let node_end = self.intervals.interval_end(node_start, id);
-                self.intervals.set_node_plist(id, plist);
+                // Fresh copy per target interval, like GNU `copy_properties`
+                // (`Fcopy_sequence`), so the buffer never aliases the source
+                // string's plist cons cells.
+                let fresh = copy_plist_value(run.plist);
+                self.intervals.set_node_plist(id, fresh);
                 if node_end <= cursor {
                     break;
                 }
