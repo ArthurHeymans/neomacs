@@ -6,7 +6,6 @@
 //! helpers in `display_row_append.rs`, so that the append module does not
 //! need to own the render-state facade.
 
-use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
@@ -18,7 +17,8 @@ use crate::display_row::{
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
 use crate::display_row_matrix_install::{
-    DisplayRowCurrentRowInstaller, DisplayRowFaceInstaller, RenderedDisplayRowAssetsInstall,
+    DisplayRowCurrentRowInstaller, DisplayRowCurrentRowReader, DisplayRowFaceInstaller,
+    RenderedDisplayRowAssetsInstall,
 };
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
@@ -80,14 +80,6 @@ struct DisplayRowCurrentTextSourceStepResult {
     result: DisplayRowRenderIntoRowResult,
     row_height_px: f32,
     row_ascent_px: f32,
-}
-
-pub(crate) fn current_display_row_cluster_tail(
-    builder: &GlyphMatrixBuilder,
-) -> Option<(char, bool)> {
-    builder
-        .current_row_for_render()
-        .and_then(last_text_cluster_tail_in_row)
 }
 
 impl<'a> DisplayRowCurrentRowSurface<'a> {
@@ -826,7 +818,7 @@ impl<'a> TextRowSourceMeasureState<'a> {
     }
 
     pub(crate) fn current_cluster_tail(&self) -> Option<(char, bool)> {
-        current_display_row_cluster_tail(self.builder)
+        DisplayRowCurrentRowReader::new(self.builder).cluster_tail()
     }
 
     pub(crate) fn measure_display_item_source_against_current_text_row<

@@ -1,3 +1,4 @@
+use crate::composition::last_text_cluster_tail_in_row;
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
@@ -82,6 +83,10 @@ pub(crate) struct DisplayRowCurrentRowInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
 
+pub(crate) struct DisplayRowCurrentRowReader<'builder> {
+    builder: &'builder GlyphMatrixBuilder,
+}
+
 pub(crate) struct DisplayRowFaceInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
@@ -148,6 +153,18 @@ impl<'builder> DisplayRowFaceInstaller<'builder> {
         self.builder
             .artifact_installer()
             .set_resolved_display_row_face(face_id, face, metrics);
+    }
+}
+
+impl<'builder> DisplayRowCurrentRowReader<'builder> {
+    pub(crate) fn new(builder: &'builder GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    pub(crate) fn cluster_tail(&self) -> Option<(char, bool)> {
+        self.builder
+            .current_row_for_render()
+            .and_then(last_text_cluster_tail_in_row)
     }
 }
 

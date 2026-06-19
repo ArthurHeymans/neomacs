@@ -1,6 +1,5 @@
 use super::*;
-use crate::display_row_matrix_install::DisplayRowInstaller;
-use crate::display_row_source_render::current_display_row_cluster_tail;
+use crate::display_row_matrix_install::{DisplayRowCurrentRowReader, DisplayRowInstaller};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -170,7 +169,10 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
 
-    assert_eq!(current_display_row_cluster_tail(&builder), None);
+    assert_eq!(
+        DisplayRowCurrentRowReader::new(&builder).cluster_tail(),
+        None
+    );
 
     builder
         .edit_current_row_for_test(|row| {
@@ -178,7 +180,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
         })
         .expect("current row");
     assert_eq!(
-        current_display_row_cluster_tail(&builder),
+        DisplayRowCurrentRowReader::new(&builder).cluster_tail(),
         Some(('\u{1F1EF}', true))
     );
 
@@ -188,7 +190,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
         })
         .expect("current row");
     assert_eq!(
-        current_display_row_cluster_tail(&builder),
+        DisplayRowCurrentRowReader::new(&builder).cluster_tail(),
         Some(('\u{1F1F5}', false))
     );
 }
