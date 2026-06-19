@@ -2021,6 +2021,7 @@ mod divergence_combo_complex517;
 mod divergence_combo_complex518;
 mod divergence_combo_complex519;
 mod divergence_combo_complex52;
+mod divergence_combo_complex520;
 mod divergence_combo_complex53;
 mod divergence_combo_complex54;
 mod divergence_combo_complex55;
