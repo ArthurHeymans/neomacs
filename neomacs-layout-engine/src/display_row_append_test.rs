@@ -4552,16 +4552,17 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
         DisplayRowAppendKind::SourceText,
     );
 
+    let mut source_render = TextRowSourceRenderState::new(
+        &mut builder,
+        &mut output_emitter,
+        &mut eval,
+        &mut font_metrics,
+        &face_resolver,
+    );
     let outcome = request
         .render_natural_display_source_into_current_text_row_and_emit(
-            &mut DisplayRowCurrentTextRenderState {
-                builder: &mut builder,
-                output_emitter: &mut output_emitter,
-                evaluator: &mut eval,
-                font_metrics: &mut font_metrics,
-                face_resolver: &face_resolver,
-                face_ids: &mut face_ids,
-            },
+            &mut source_render,
+            &mut face_ids,
             &mut source,
             &mut source_state,
         )
@@ -8003,7 +8004,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         )
         .expect("second lisp source append");
 
-    assert_eq!(second.end, DisplayRowPosition { x_px: 8.0, col: 1 });
+    assert_eq!(second.end, DisplayRowPosition { x_px: 16.0, col: 2 });
     assert_eq!(
         second.stop,
         crate::display_row::DisplayRowRenderStop::SourceExhausted

@@ -805,6 +805,7 @@ impl GlyphMatrixBuilder {
         self.store_phys_cursor(cursor);
     }
 
+    #[cfg(test)]
     pub(crate) fn set_glyph_row_resolved_phys_cursor(&mut self, cursor: PhysCursor) {
         if let Some(ref mut matrix) = self.current_matrix
             && cursor.row < matrix.rows.len()
