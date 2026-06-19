@@ -20,7 +20,7 @@ use crate::hit_test::{HitRow, WindowHitData};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    TextMatrixRowBegin, TextWindowArtifactOutputSurface, TextWindowBegin,
+    DisplayTextRowBegin, TextWindowArtifactOutputSurface, TextWindowBegin,
     TextWindowBeginOutputSurface, TextWindowBodyOutputInstall, TextWindowCursorEffects,
     TextWindowFinishOutputSurface, TextWindowLiveOutputSurface, TextWindowPendingRowFinish,
     TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
@@ -175,7 +175,7 @@ pub(crate) struct BufferTextWindowBeginRequest {
     bounds: neomacs_display_protocol::types::Rect,
     text_bounds: neomacs_display_protocol::types::Rect,
     selected: bool,
-    first_row: TextMatrixRowBegin,
+    first_row: DisplayTextRowBegin,
 }
 
 pub(crate) struct BufferTextWindowTailFinalizeRequest<'a> {
@@ -405,7 +405,7 @@ impl BufferTextWindowBeginRequest {
         bounds: neomacs_display_protocol::types::Rect,
         text_bounds: neomacs_display_protocol::types::Rect,
         selected: bool,
-        first_row: TextMatrixRowBegin,
+        first_row: DisplayTextRowBegin,
     ) -> Self {
         Self {
             frame_id,

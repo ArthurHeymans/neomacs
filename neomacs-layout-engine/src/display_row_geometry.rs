@@ -1,6 +1,7 @@
 use crate::hit_test::HitRow;
 use crate::window_output::{
-    RowMetricsSnapshot, TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
+    DisplayTextRowBegin, DisplayTextRowGeometryTransition, DisplayTextRowMetrics,
+    RowMetricsSnapshot,
 };
 
 /// Horizontal append limit for a display row.
@@ -59,7 +60,7 @@ pub(crate) struct CurrentDisplayRowAdvance {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAdvance {
-    pub(crate) finished: TextMatrixRowMetrics,
+    pub(crate) finished: DisplayTextRowMetrics,
     pub(crate) next_y: f32,
     pub(crate) row_extra_y: f32,
     pub(crate) next_height: f32,
@@ -244,14 +245,14 @@ pub(crate) struct DisplayRowBoundaryTarget<'a> {
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayRowBoundaryTransition {
     pub(crate) hit_row: HitRow,
-    pub(crate) transition: TextMatrixRowGeometryTransition,
+    pub(crate) transition: DisplayTextRowGeometryTransition,
 }
 
 impl DisplayRowBoundaryTransition {
     pub(crate) fn record_hit_row(
         self,
         hit_rows: &mut Vec<HitRow>,
-    ) -> TextMatrixRowGeometryTransition {
+    ) -> DisplayTextRowGeometryTransition {
         hit_rows.push(self.hit_row);
         self.transition
     }
@@ -605,7 +606,7 @@ impl DisplayRowGeometryState {
         row_base: usize,
         col: usize,
         x: f32,
-    ) -> TextMatrixRowBegin {
+    ) -> DisplayTextRowBegin {
         DisplayRowGeometryCursor::from_state(*self).text_matrix_row_begin(row_base, col, x)
     }
 
@@ -644,7 +645,7 @@ impl DisplayRowGeometryState {
         &mut self,
         target: DisplayRowBoundaryTarget<'_>,
         hit_rows: &mut Vec<HitRow>,
-    ) -> TextMatrixRowGeometryTransition {
+    ) -> DisplayTextRowGeometryTransition {
         self.finish_boundary_in_place(target)
             .record_hit_row(hit_rows)
     }
@@ -730,8 +731,8 @@ impl CurrentDisplayRowMetrics {
         self.extra_height_over_default(default_height) + line_spacing.max(0.0)
     }
 
-    pub(crate) fn finish_current_row(&self, y: f32) -> TextMatrixRowMetrics {
-        TextMatrixRowMetrics {
+    pub(crate) fn finish_current_row(&self, y: f32) -> DisplayTextRowMetrics {
+        DisplayTextRowMetrics {
             y,
             height: self.height,
             ascent: self.ascent,
@@ -748,7 +749,7 @@ impl CurrentDisplayRowMetrics {
         y: f32,
         default_height: f32,
         default_ascent: f32,
-    ) -> TextMatrixRowMetrics {
+    ) -> DisplayTextRowMetrics {
         let finished = self.finish_current_row(y);
         self.reset(default_height, default_ascent);
         finished
@@ -791,7 +792,7 @@ impl DisplayRowGeometryCursor {
         }
     }
 
-    pub(crate) fn finish_current_row(&self) -> TextMatrixRowMetrics {
+    pub(crate) fn finish_current_row(&self) -> DisplayTextRowMetrics {
         self.metrics.finish_current_row(self.y)
     }
 
@@ -799,7 +800,7 @@ impl DisplayRowGeometryCursor {
         &mut self,
         defaults: DisplayRowGeometryDefaults,
         kind: DisplayRowAdvanceKind,
-    ) -> TextMatrixRowMetrics {
+    ) -> DisplayTextRowMetrics {
         let row_advance = self
             .metrics
             .finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
@@ -826,10 +827,10 @@ impl DisplayRowGeometryCursor {
         row_base: usize,
         col: usize,
         x: f32,
-    ) -> TextMatrixRowGeometryTransition {
+    ) -> DisplayTextRowGeometryTransition {
         let finished_row = self.finish_and_advance_to_next_row(defaults, kind);
         let begin_row = self.text_matrix_row_begin(row_base, col, x);
-        TextMatrixRowGeometryTransition {
+        DisplayTextRowGeometryTransition {
             finished_row,
             begin_row,
         }
@@ -840,8 +841,8 @@ impl DisplayRowGeometryCursor {
         row_base: usize,
         col: usize,
         x: f32,
-    ) -> TextMatrixRowBegin {
-        TextMatrixRowBegin {
+    ) -> DisplayTextRowBegin {
+        DisplayTextRowBegin {
             matrix_row: row_base + self.row,
             row: self.row,
             col,

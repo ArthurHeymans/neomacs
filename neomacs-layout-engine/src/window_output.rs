@@ -135,14 +135,14 @@ pub(crate) struct ChromeRowOutput {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextMatrixRowMetrics {
+pub(crate) struct DisplayTextRowMetrics {
     pub(crate) y: f32,
     pub(crate) height: f32,
     pub(crate) ascent: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextMatrixRowBegin {
+pub(crate) struct DisplayTextRowBegin {
     pub(crate) matrix_row: usize,
     pub(crate) row: usize,
     pub(crate) col: usize,
@@ -158,7 +158,7 @@ pub(crate) struct TextWindowBegin {
     pub(crate) bounds: Rect,
     pub(crate) text_bounds: Rect,
     pub(crate) selected: bool,
-    pub(crate) first_row: TextMatrixRowBegin,
+    pub(crate) first_row: DisplayTextRowBegin,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -295,7 +295,7 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
         request.install(&mut row_lifecycle);
     }
 
-    fn begin_text_matrix_row(&mut self, begin: TextMatrixRowBegin) -> usize {
+    fn begin_display_text_row(&mut self, begin: DisplayTextRowBegin) -> usize {
         DisplayRowLifecycleSurface::from_builder(self.builder).begin_row(
             begin.matrix_row,
             GlyphRowRole::Text,
@@ -307,16 +307,16 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
     fn finish_text_matrix_row(
         &mut self,
         matrix_row: usize,
-        metrics: TextMatrixRowMetrics,
-    ) -> TextMatrixRowFinish {
-        let matrix_metrics = self.text_matrix_row_metrics(metrics);
+        metrics: DisplayTextRowMetrics,
+    ) -> DisplayTextRowFinish {
+        let matrix_metrics = self.display_text_row_metrics(metrics);
         DisplayRowLifecycleSurface::from_builder(self.builder).set_metrics(
             matrix_row,
             matrix_metrics.pixel_y,
             matrix_metrics.height_px,
             matrix_metrics.ascent_px,
         );
-        TextMatrixRowFinish {
+        DisplayTextRowFinish {
             matrix_row,
             metrics: matrix_metrics,
         }
@@ -344,11 +344,14 @@ impl<'builder> TextWindowMatrixOutputSurface<'builder> {
             .truncate_effect_hints(checkpoint.effect_hints_len);
     }
 
-    fn text_matrix_row_metrics(&self, metrics: TextMatrixRowMetrics) -> TextMatrixRowStoredMetrics {
+    fn display_text_row_metrics(
+        &self,
+        metrics: DisplayTextRowMetrics,
+    ) -> DisplayTextRowStoredMetrics {
         let window_y = DisplayRowWindowContextSurface::from_builder(self.builder)
             .current_window_pixel_bounds()
             .y;
-        TextMatrixRowStoredMetrics {
+        DisplayTextRowStoredMetrics {
             pixel_y: metrics.y - window_y,
             height_px: metrics.height,
             ascent_px: metrics.ascent,
@@ -536,18 +539,18 @@ impl TextWindowCursor {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextMatrixRowGeometryTransition {
-    pub(crate) finished_row: TextMatrixRowMetrics,
-    pub(crate) begin_row: TextMatrixRowBegin,
+pub(crate) struct DisplayTextRowGeometryTransition {
+    pub(crate) finished_row: DisplayTextRowMetrics,
+    pub(crate) begin_row: DisplayTextRowBegin,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum TextMatrixRowTransition {
+pub(crate) enum DisplayTextRowTransition {
     BeganNextRow,
     ExhaustedRows,
 }
 
-impl TextMatrixRowTransition {
+impl DisplayTextRowTransition {
     pub(crate) fn is_exhausted(self) -> bool {
         matches!(self, Self::ExhaustedRows)
     }
@@ -563,13 +566,13 @@ fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextMatrixRowFinish {
+pub(crate) struct DisplayTextRowFinish {
     pub(crate) matrix_row: usize,
-    pub(crate) metrics: TextMatrixRowStoredMetrics,
+    pub(crate) metrics: DisplayTextRowStoredMetrics,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextMatrixRowStoredMetrics {
+pub(crate) struct DisplayTextRowStoredMetrics {
     pub(crate) pixel_y: f32,
     pub(crate) height_px: f32,
     pub(crate) ascent_px: f32,
@@ -685,32 +688,32 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
     }
 
     #[cfg(test)]
-    pub(crate) fn begin_text_row(self, begin: TextMatrixRowBegin) -> usize {
+    pub(crate) fn begin_text_row(self, begin: DisplayTextRowBegin) -> usize {
         TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
             .begin_text_row(self.evaluator, begin)
     }
 
     #[cfg(test)]
-    pub(crate) fn finish_text_row(self, metrics: TextMatrixRowMetrics) {
+    pub(crate) fn finish_text_row(self, metrics: DisplayTextRowMetrics) {
         TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
             .finish_text_row(metrics);
     }
 
-    pub(crate) fn finish_and_end_text_row(self, metrics: TextMatrixRowMetrics) {
+    pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
         TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
             .finish_and_end_text_row(metrics);
     }
 
-    pub(crate) fn transition_text_row(self, transition: TextMatrixRowGeometryTransition) {
+    pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
         TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
             .transition_text_row(self.evaluator, transition);
     }
 
     pub(crate) fn transition_text_row_with_limit(
         self,
-        transition: TextMatrixRowGeometryTransition,
+        transition: DisplayTextRowGeometryTransition,
         max_rows: usize,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         TextWindowRowOutputSurface::from_parts(self.builder, self.output_emitter)
             .transition_text_row_with_limit(self.evaluator, transition, max_rows)
     }
@@ -964,11 +967,11 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     pub(crate) fn begin_text_row(
         &mut self,
         evaluator: &mut Context,
-        begin: TextMatrixRowBegin,
+        begin: DisplayTextRowBegin,
     ) -> usize {
         let matrix_row =
-            TextWindowMatrixOutputSurface::from_builder(self.builder).begin_text_matrix_row(begin);
-        self.output_emitter.begin_text_matrix_row(
+            TextWindowMatrixOutputSurface::from_builder(self.builder).begin_display_text_row(begin);
+        self.output_emitter.begin_display_text_row(
             evaluator,
             begin.matrix_row,
             begin.row,
@@ -979,7 +982,10 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
         matrix_row
     }
 
-    pub(crate) fn finish_text_row(&mut self, metrics: TextMatrixRowMetrics) -> TextMatrixRowFinish {
+    pub(crate) fn finish_text_row(
+        &mut self,
+        metrics: DisplayTextRowMetrics,
+    ) -> DisplayTextRowFinish {
         let matrix_row = self.output_emitter.current_text_matrix_row();
         let finish = TextWindowMatrixOutputSurface::from_builder(self.builder)
             .finish_text_matrix_row(matrix_row, metrics);
@@ -990,8 +996,8 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
 
     pub(crate) fn finish_and_end_text_row(
         &mut self,
-        metrics: TextMatrixRowMetrics,
-    ) -> TextMatrixRowFinish {
+        metrics: DisplayTextRowMetrics,
+    ) -> DisplayTextRowFinish {
         let matrix_row = self.output_emitter.current_text_matrix_row();
         let finish = self.finish_text_row(metrics);
         TextWindowMatrixOutputSurface::from_builder(self.builder)
@@ -1002,22 +1008,22 @@ impl<'builder, 'output> TextWindowRowOutputSurface<'builder, 'output> {
     pub(crate) fn transition_text_row(
         &mut self,
         evaluator: &mut Context,
-        transition: TextMatrixRowGeometryTransition,
-    ) -> TextMatrixRowTransition {
+        transition: DisplayTextRowGeometryTransition,
+    ) -> DisplayTextRowTransition {
         self.finish_and_end_text_row(transition.finished_row);
         self.begin_text_row(evaluator, transition.begin_row);
-        TextMatrixRowTransition::BeganNextRow
+        DisplayTextRowTransition::BeganNextRow
     }
 
     pub(crate) fn transition_text_row_with_limit(
         &mut self,
         evaluator: &mut Context,
-        transition: TextMatrixRowGeometryTransition,
+        transition: DisplayTextRowGeometryTransition,
         max_rows: usize,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         if transition.begin_row.row >= max_rows {
             self.finish_and_end_text_row(transition.finished_row);
-            return TextMatrixRowTransition::ExhaustedRows;
+            return DisplayTextRowTransition::ExhaustedRows;
         }
         self.transition_text_row(evaluator, transition)
     }
@@ -1674,7 +1680,7 @@ impl WindowOutputEmitter {
         });
     }
 
-    pub(crate) fn begin_text_matrix_row(
+    pub(crate) fn begin_display_text_row(
         &mut self,
         evaluator: &mut Context,
         matrix_row: usize,
@@ -1714,7 +1720,7 @@ impl WindowOutputEmitter {
         y: f32,
         x: f32,
     ) {
-        self.begin_text_matrix_row(evaluator, self.text_row_base as usize + row, row, col, y, x);
+        self.begin_display_text_row(evaluator, self.text_row_base as usize + row, row, col, y, x);
     }
 
     fn begin_chrome_row(&mut self, evaluator: &mut Context, row: i64, y: f32) {

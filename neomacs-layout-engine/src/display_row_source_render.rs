@@ -28,9 +28,9 @@ use crate::display_source_resolver::{
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
-    TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition, TextRowOutput,
-    TextWindowLiveOutputSurface, TextWindowRowDecorationRequest, TextWindowRowOutputSurface,
-    WindowOutputEmitter,
+    DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
+    TextRowOutput, TextWindowLiveOutputSurface, TextWindowRowDecorationRequest,
+    TextWindowRowOutputSurface, WindowOutputEmitter,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::emacs_core::Context;
@@ -389,19 +389,19 @@ impl<'a> TextRowOutputRenderState<'a> {
         self.output.with_text_window_output(f)
     }
 
-    pub(crate) fn finish_and_end_text_row(self, metrics: TextMatrixRowMetrics) {
+    pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
         self.output.finish_and_end_text_row(metrics);
     }
 
-    pub(crate) fn transition_text_row(self, transition: TextMatrixRowGeometryTransition) {
+    pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
         self.output.transition_text_row(transition);
     }
 
     pub(crate) fn transition_text_row_with_limit(
         self,
-        transition: TextMatrixRowGeometryTransition,
+        transition: DisplayTextRowGeometryTransition,
         max_rows: usize,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         self.output
             .transition_text_row_with_limit(transition, max_rows)
     }

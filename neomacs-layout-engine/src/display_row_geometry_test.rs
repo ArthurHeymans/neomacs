@@ -1,6 +1,6 @@
 use super::*;
 use crate::window_output::{
-    TextMatrixRowBegin, TextMatrixRowGeometryTransition, TextMatrixRowMetrics,
+    DisplayTextRowBegin, DisplayTextRowGeometryTransition, DisplayTextRowMetrics,
 };
 
 #[test]
@@ -14,7 +14,7 @@ fn current_display_row_metrics_tracks_glyph_extents_and_overflow() {
     assert_eq!(metrics.extra_height_over_default(16.0), 8.0);
     assert_eq!(
         metrics.finish_current_row(7.0),
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 7.0,
             height: 24.0,
             ascent: 18.0,
@@ -51,7 +51,7 @@ fn current_display_row_metrics_finishes_row_and_resets_to_default_extents() {
 
     assert_eq!(
         finished,
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 7.0,
             height: 24.0,
             ascent: 18.0,
@@ -70,7 +70,7 @@ fn current_display_row_metrics_finishes_current_row_without_resetting_extents() 
 
     assert_eq!(
         finished,
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 7.0,
             height: 24.0,
             ascent: 18.0,
@@ -98,7 +98,7 @@ fn current_display_row_metrics_advances_to_next_row_from_finished_extents() {
     assert_eq!(
         advance,
         DisplayRowAdvance {
-            finished: TextMatrixRowMetrics {
+            finished: DisplayTextRowMetrics {
                 y: 7.0,
                 height: 24.0,
                 ascent: 18.0,
@@ -161,7 +161,7 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
 
     assert_eq!(
         finished,
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 42.0,
             height: 24.0,
             ascent: 18.0,
@@ -179,7 +179,7 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
     );
     assert_eq!(
         cursor.text_matrix_row_begin(5, 7, 13.0),
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 8,
             row: 3,
             col: 7,
@@ -201,7 +201,7 @@ fn display_row_geometry_cursor_finishes_current_row_without_advancing() {
 
     assert_eq!(
         cursor.finish_current_row(),
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 42.0,
             height: 24.0,
             ascent: 18.0,
@@ -238,7 +238,7 @@ fn display_row_geometry_state_builds_cursor_after_row_y_adjustment() {
     assert_eq!(hit_row.charpos_end, 22);
     assert_eq!(
         cursor.finish_current_row(),
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 48.0,
             height: 24.0,
             ascent: 18.0,
@@ -639,7 +639,7 @@ fn display_row_geometry_state_builds_text_matrix_row_begin() {
 
     assert_eq!(
         begin,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 8,
             row: 3,
             col: 7,
@@ -740,13 +740,13 @@ fn display_row_geometry_cursor_finishes_and_builds_next_text_matrix_row_begin() 
 
     assert_eq!(
         transition,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
+        DisplayTextRowGeometryTransition {
+            finished_row: DisplayTextRowMetrics {
                 y: 42.0,
                 height: 24.0,
                 ascent: 18.0,
             },
-            begin_row: TextMatrixRowBegin {
+            begin_row: DisplayTextRowBegin {
                 matrix_row: 8,
                 row: 3,
                 col: 7,
@@ -810,7 +810,7 @@ fn display_row_geometry_state_can_finish_boundary_and_record_hit_row() {
     assert_eq!(hit_rows[0].charpos_end, 22);
     assert_eq!(
         transition.begin_row,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 8,
             row: 3,
             col: 7,
@@ -856,13 +856,13 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
 
     assert_eq!(
         transition,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
+        DisplayTextRowGeometryTransition {
+            finished_row: DisplayTextRowMetrics {
                 y: 42.0,
                 height: 24.0,
                 ascent: 18.0,
             },
-            begin_row: TextMatrixRowBegin {
+            begin_row: DisplayTextRowBegin {
                 matrix_row: 8,
                 row: 3,
                 col: 7,
@@ -915,7 +915,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
 
     assert_eq!(
         transition.begin_row,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 8,
             row: 3,
             col: 7,
@@ -972,13 +972,13 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
             charpos_start: 11,
             charpos_end: 22,
         },
-        transition: TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
+        transition: DisplayTextRowGeometryTransition {
+            finished_row: DisplayTextRowMetrics {
                 y: 42.0,
                 height: 24.0,
                 ascent: 18.0,
             },
-            begin_row: TextMatrixRowBegin {
+            begin_row: DisplayTextRowBegin {
                 matrix_row: 8,
                 row: 3,
                 col: 7,
@@ -998,13 +998,13 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
     assert_eq!(hit_rows[0].charpos_end, 22);
     assert_eq!(
         transition,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
+        DisplayTextRowGeometryTransition {
+            finished_row: DisplayTextRowMetrics {
                 y: 42.0,
                 height: 24.0,
                 ascent: 18.0,
             },
-            begin_row: TextMatrixRowBegin {
+            begin_row: DisplayTextRowBegin {
                 matrix_row: 8,
                 row: 3,
                 col: 7,

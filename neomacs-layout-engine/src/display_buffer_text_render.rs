@@ -85,7 +85,7 @@ use crate::neovm_bridge::{
 use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
+    DisplayTextRowTransition, TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
     TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
@@ -3861,7 +3861,7 @@ impl BufferHscrollSkipAction {
 
     pub(crate) fn apply_after_line_break_row_transition(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         target: &mut CursorCaptureState,
         active_face_state: &DisplayRowActiveFaceState,
         row_geometry: &DisplayRowGeometryState,
@@ -4910,7 +4910,7 @@ impl BufferSelectiveDisplayLineTailAction {
 
     pub(crate) fn apply_after_hidden_line_break_transition(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
         charpos: &mut i64,
         hit_row_range: &mut HitRowRangeTracker,
@@ -5339,7 +5339,7 @@ impl BufferTextLineBreakSourceAction {
 
     pub(crate) fn apply_after_line_break_row_transition(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
         charpos: &mut i64,
         hit_row_range: &mut HitRowRangeTracker,
@@ -7258,7 +7258,7 @@ impl BufferTextTruncationSkipAction {
 
     pub(crate) fn transition_continuation(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
     ) -> DisplayRowTransitionContinuation {
         if row_transition.is_exhausted() {
             DisplayRowTransitionContinuation::Exhausted
@@ -7269,7 +7269,7 @@ impl BufferTextTruncationSkipAction {
 
     pub(crate) fn sync_after_row_transition_if_visible(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         synced_charpos: i64,
         charpos: &mut i64,
         hit_row_range: &mut HitRowRangeTracker,
@@ -7340,7 +7340,7 @@ impl BufferTextWordWrapSourceAction {
 
     pub(crate) fn apply_after_row_transition_and_prefix(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         transition: DisplayRowOverflowTransitionPlan,
         charpos: &mut i64,
         hit_row_range: &mut HitRowRangeTracker,
@@ -7402,7 +7402,7 @@ impl BufferTextSpecialWrapSourceAction {
 
     pub(crate) fn transition_continuation(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         row_geometry: &DisplayRowGeometryState,
         row_visibility_limit: DisplayRowVisibilityLimit,
     ) -> DisplayRowTransitionContinuation {
@@ -7466,7 +7466,7 @@ impl BufferTextCharacterWrapSourceAction {
 
     pub(crate) fn apply_after_visible_row_transition(
         self,
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         byte_idx: &mut usize,
         charpos: &mut i64,
         hit_row_range: &mut HitRowRangeTracker,

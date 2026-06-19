@@ -11,7 +11,7 @@ use crate::display_row_walk_state::{
     TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::hit_test::HitRow;
-use crate::window_output::{TextMatrixRowGeometryTransition, TextMatrixRowTransition};
+use crate::window_output::{DisplayTextRowGeometryTransition, DisplayTextRowTransition};
 
 pub(crate) struct DisplayRowBoundaryTransitionRequest<'a> {
     target: DisplayRowBoundaryTarget<'a>,
@@ -102,7 +102,7 @@ impl<'a> DisplayRowBoundaryTransitionRequest<'a> {
         row_geometry: &mut DisplayRowGeometryState,
         hit_rows: &mut Vec<HitRow>,
         output_render: TextRowOutputRenderState<'_>,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         let geometry_transition =
             row_geometry.finish_boundary_and_record_hit(self.target, hit_rows);
         output_render.transition_text_row_with_limit(geometry_transition, self.max_rows)
@@ -216,7 +216,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         hit_range: DisplayRowHitRange,
         position: DisplayRowPosition,
         line_spacing: f32,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         DisplayRowTransitionRequestContext::new(
             self.defaults,
             self.row_base,
@@ -235,7 +235,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         line_spacing: f32,
         render_state: DisplayRowTransitionRenderState<'_>,
         col: &mut usize,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         let transition = self.emit_line_break(plan, hit_range, position, line_spacing);
         if !transition.is_exhausted() {
             render_state.apply_line_break_row_start(plan, col);
@@ -248,7 +248,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         plan: DisplayRowOverflowTransitionPlan,
         hit_range: DisplayRowHitRange,
         position: DisplayRowPosition,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         DisplayRowTransitionRequestContext::new(
             self.defaults,
             self.row_base,
@@ -272,7 +272,7 @@ impl<'a, 'emit> DisplayRowTextWindowEmitContext<'a, 'emit> {
         position: DisplayRowPosition,
         render_state: DisplayRowTransitionRenderState<'_>,
         col: &mut usize,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         let transition = self.emit_overflow(plan, hit_range, position);
         if !transition.is_exhausted() {
             render_state.apply_overflow_row_start(plan, col);
@@ -334,7 +334,7 @@ impl<'a> DisplayRowTransitionRenderState<'a> {
 
 impl DisplayRowTransitionContinuation {
     pub(crate) fn after_visible_row_transition(
-        row_transition: TextMatrixRowTransition,
+        row_transition: DisplayTextRowTransition,
         row_geometry: &DisplayRowGeometryState,
         row_visibility_limit: DisplayRowVisibilityLimit,
     ) -> Self {
@@ -446,7 +446,7 @@ impl<'a> DisplayRowLineBreakTransitionRequest<'a> {
         self,
         row_geometry: &mut DisplayRowGeometryState,
         hit_rows: &mut Vec<HitRow>,
-    ) -> TextMatrixRowGeometryTransition {
+    ) -> DisplayTextRowGeometryTransition {
         row_geometry.finish_boundary_and_record_hit(self.boundary_target(), hit_rows)
     }
 
@@ -455,7 +455,7 @@ impl<'a> DisplayRowLineBreakTransitionRequest<'a> {
         row_geometry: &mut DisplayRowGeometryState,
         hit_rows: &mut Vec<HitRow>,
         output_render: TextRowOutputRenderState<'_>,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         let max_rows = self.max_rows;
         DisplayRowBoundaryTransitionRequest::new(self.boundary_target(), max_rows).emit_with_output(
             row_geometry,
@@ -604,7 +604,7 @@ impl<'a> DisplayRowOverflowTransitionRequest<'a> {
         row_limit: DisplayRowLimit,
         hit_rows: &mut Vec<HitRow>,
         output_render: TextRowOutputRenderState<'_>,
-    ) -> TextMatrixRowTransition {
+    ) -> DisplayTextRowTransition {
         match self.kind {
             DisplayRowOverflowTransitionKind::Truncation => {
                 row_geometry.mark_current_row_flag_kind(

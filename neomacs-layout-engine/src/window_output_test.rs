@@ -1,10 +1,10 @@
 use super::ChromeRowOutput;
 use super::DisplayProgressSink;
-use super::TextMatrixRowBegin;
-use super::TextMatrixRowGeometryTransition;
-use super::TextMatrixRowMetrics;
-use super::TextMatrixRowStoredMetrics;
-use super::TextMatrixRowTransition;
+use super::DisplayTextRowBegin;
+use super::DisplayTextRowGeometryTransition;
+use super::DisplayTextRowMetrics;
+use super::DisplayTextRowStoredMetrics;
+use super::DisplayTextRowTransition;
 use super::TextRowOutput;
 use super::TextWindowArtifactOutputSurface;
 use super::TextWindowBodyOutputInstall;
@@ -478,7 +478,7 @@ fn text_matrix_row_output_surface_begins_row() {
     let outcome = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
         .begin_text_row(
             &mut eval,
-            TextMatrixRowBegin {
+            DisplayTextRowBegin {
                 matrix_row: 0,
                 row: 0,
                 col: 0,
@@ -534,7 +534,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
     let mut output = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter);
     output.begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -542,7 +542,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
             x: 0.0,
         },
     );
-    let outcome = output.finish_text_row(TextMatrixRowMetrics {
+    let outcome = output.finish_text_row(DisplayTextRowMetrics {
         y: 20.0,
         height: 16.0,
         ascent: 11.0,
@@ -550,7 +550,7 @@ fn text_matrix_row_output_apply_finishes_with_matrix_metrics() {
 
     assert_eq!(
         outcome.metrics,
-        TextMatrixRowStoredMetrics {
+        DisplayTextRowStoredMetrics {
             pixel_y: 16.0,
             height_px: 16.0,
             ascent_px: 11.0,
@@ -621,7 +621,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
 
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -631,7 +631,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
     );
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 0.0,
             height: 16.0,
             ascent: 12.0,
@@ -641,7 +641,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
 
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 1,
             row: 1,
             col: 0,
@@ -650,7 +650,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
         },
     );
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 16.0,
             height: 16.0,
             ascent: 12.0,
@@ -827,7 +827,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
     emitter.begin_update(&mut eval);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -853,7 +853,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
     );
 
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 0.0,
             height: 16.0,
             ascent: 12.0,
@@ -870,7 +870,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
 }
 
 #[test]
-fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
+fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -893,7 +893,7 @@ fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
     emitter.begin_update(&mut eval);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -903,7 +903,7 @@ fn text_matrix_row_metrics_finish_and_end_closes_matrix_row() {
     );
 
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_and_end_text_row(
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 0.0,
             height: 16.0,
             ascent: 12.0,
@@ -940,7 +940,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
     emitter.begin_update(&mut eval);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -1005,7 +1005,7 @@ fn install_text_window_output_installs_row_metrics() {
     emitter.begin_update(&mut eval);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -1015,7 +1015,7 @@ fn install_text_window_output_installs_row_metrics() {
     );
     write_char_to_current_row(&mut builder, 'x', 7, 0);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 2.0,
             height: 20.0,
             ascent: 15.0,
@@ -1059,7 +1059,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     emitter.begin_update(&mut eval);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -1070,7 +1070,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row(&mut builder, 'x', 7, 0);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).finish_text_row(
-        TextMatrixRowMetrics {
+        DisplayTextRowMetrics {
             y: 2.0,
             height: 20.0,
             ascent: 15.0,
@@ -1145,7 +1145,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
     emitter.begin_update(&mut eval);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -1157,13 +1157,13 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
     let transition = TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter)
         .transition_text_row_with_limit(
             &mut eval,
-            TextMatrixRowGeometryTransition {
-                finished_row: TextMatrixRowMetrics {
+            DisplayTextRowGeometryTransition {
+                finished_row: DisplayTextRowMetrics {
                     y: 0.0,
                     height: 16.0,
                     ascent: 12.0,
                 },
-                begin_row: TextMatrixRowBegin {
+                begin_row: DisplayTextRowBegin {
                     matrix_row: 1,
                     row: 1,
                     col: 0,
@@ -1174,7 +1174,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
             1,
         );
 
-    assert_eq!(transition, TextMatrixRowTransition::ExhaustedRows);
+    assert_eq!(transition, DisplayTextRowTransition::ExhaustedRows);
     assert_eq!(emitter.rows().len(), 1);
 
     builder.end_window();
@@ -1206,7 +1206,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
     emitter.begin_update(&mut eval);
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).begin_text_row(
         &mut eval,
-        TextMatrixRowBegin {
+        DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -1217,13 +1217,13 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
 
     TextWindowRowOutputSurface::from_parts(&mut builder, &mut emitter).transition_text_row(
         &mut eval,
-        TextMatrixRowGeometryTransition {
-            finished_row: TextMatrixRowMetrics {
+        DisplayTextRowGeometryTransition {
+            finished_row: DisplayTextRowMetrics {
                 y: 0.0,
                 height: 16.0,
                 ascent: 12.0,
             },
-            begin_row: TextMatrixRowBegin {
+            begin_row: DisplayTextRowBegin {
                 matrix_row: 1,
                 row: 1,
                 col: 0,

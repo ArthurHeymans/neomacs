@@ -80,7 +80,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::WindowKind;
 use crate::window_output::{
-    TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
+    DisplayTextRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
     TextWindowFinishOutputSurface, TextWindowLiveOutputSurface,
 };
 use crate::{LineWrapMode, WindowParams};
@@ -639,7 +639,7 @@ fn display_row_boundary_transition_request_records_hit_and_emits_next_row() {
         text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(ctx.geometry.row(), 1);
     assert_eq!(ctx.hit_rows.len(), 1);
     assert_eq!(ctx.hit_rows[0].charpos_start, 3);
@@ -670,7 +670,7 @@ fn display_row_line_break_transition_request_records_hit_spacing_and_emits_next_
         text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(ctx.geometry.row(), 1);
     assert_eq!(ctx.hit_rows.len(), 1);
     assert_eq!(ctx.hit_rows[0].charpos_start, 3);
@@ -707,7 +707,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
         ),
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(line_ctx.geometry.row(), 1);
     assert_eq!(line_ctx.hit_rows.len(), 1);
     assert_eq!(line_ctx.hit_rows[0].charpos_start, 3);
@@ -749,7 +749,7 @@ fn display_row_transition_request_context_builds_line_break_and_overflow_request
         ),
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(wrap_ctx.geometry.row(), 1);
     assert_eq!(wrap_ctx.hit_rows.len(), 1);
     assert_eq!(wrap_ctx.hit_rows[0].charpos_start, 4);
@@ -793,7 +793,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         2.0,
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(line_ctx.geometry.row(), 1);
     assert_eq!(line_ctx.hit_rows.len(), 1);
     assert_eq!(line_ctx.hit_rows[0].charpos_start, 1);
@@ -834,7 +834,7 @@ fn display_row_text_window_transition_context_emits_line_break_and_overflow() {
         DisplayRowPosition { x_px: 64.0, col: 8 },
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(overflow_ctx.geometry.row(), 1);
     assert_eq!(overflow_ctx.hit_rows.len(), 1);
     assert_eq!(overflow_ctx.hit_rows[0].charpos_start, 2);
@@ -896,7 +896,7 @@ fn display_row_text_window_emit_context_applies_line_break_render_state_after_tr
         &mut col,
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(col, 0);
     assert_eq!(prefix_request, DisplayRowPrefixRequest::Line);
     assert_eq!(line_numbers.current_line(), 5);
@@ -956,7 +956,7 @@ fn display_row_text_window_emit_context_applies_overflow_render_state_after_tran
         &mut col,
     );
 
-    assert_eq!(row_transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(row_transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(col, 0);
     assert_eq!(prefix_request, DisplayRowPrefixRequest::Wrap);
     assert_eq!(line_numbers.current_line(), 4);
@@ -1282,7 +1282,7 @@ fn buffer_hscroll_skip_action_applies_after_line_break_transition() {
     let mut cursor = CursorCaptureState::new();
 
     let continuation = action.apply_after_line_break_row_transition(
-        TextMatrixRowTransition::BeganNextRow,
+        DisplayTextRowTransition::BeganNextRow,
         &mut cursor,
         &active_face,
         &geometry,
@@ -1307,7 +1307,7 @@ fn buffer_hscroll_skip_action_skips_after_state_when_transition_exhausted() {
     let mut cursor = CursorCaptureState::new();
 
     let continuation = action.apply_after_line_break_row_transition(
-        TextMatrixRowTransition::ExhaustedRows,
+        DisplayTextRowTransition::ExhaustedRows,
         &mut cursor,
         &active_face,
         &geometry,
@@ -2509,7 +2509,7 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_line_break_row_transition(
-        TextMatrixRowTransition::BeganNextRow,
+        DisplayTextRowTransition::BeganNextRow,
         14,
         &mut charpos,
         &mut hit_row_range,
@@ -2541,7 +2541,7 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_line_break_row_transition(
-        TextMatrixRowTransition::ExhaustedRows,
+        DisplayTextRowTransition::ExhaustedRows,
         14,
         &mut charpos,
         &mut hit_row_range,
@@ -2701,7 +2701,7 @@ fn buffer_selective_display_line_tail_action_applies_after_hidden_line_break_tra
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_hidden_line_break_transition(
-        TextMatrixRowTransition::BeganNextRow,
+        DisplayTextRowTransition::BeganNextRow,
         14,
         &mut charpos,
         &mut hit_row_range,
@@ -2719,7 +2719,7 @@ fn buffer_selective_display_line_tail_action_skips_after_state_when_transition_e
     let mut hit_row_range = HitRowRangeTracker::new(3);
 
     let continuation = action.apply_after_hidden_line_break_transition(
-        TextMatrixRowTransition::ExhaustedRows,
+        DisplayTextRowTransition::ExhaustedRows,
         14,
         &mut charpos,
         &mut hit_row_range,
@@ -2942,11 +2942,11 @@ fn buffer_text_truncation_skip_action_reports_transition_continuation() {
     };
 
     assert_eq!(
-        action.transition_continuation(TextMatrixRowTransition::BeganNextRow),
+        action.transition_continuation(DisplayTextRowTransition::BeganNextRow),
         DisplayRowTransitionContinuation::Continue
     );
     assert_eq!(
-        action.transition_continuation(TextMatrixRowTransition::ExhaustedRows),
+        action.transition_continuation(DisplayTextRowTransition::ExhaustedRows),
         DisplayRowTransitionContinuation::Exhausted
     );
 }
@@ -2961,7 +2961,7 @@ fn buffer_text_truncation_skip_action_syncs_after_visible_transition() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     let continuation = action.sync_after_row_transition_if_visible(
-        TextMatrixRowTransition::BeganNextRow,
+        DisplayTextRowTransition::BeganNextRow,
         14,
         &mut charpos,
         &mut hit_row_range,
@@ -2982,7 +2982,7 @@ fn buffer_text_truncation_skip_action_skips_sync_when_transition_exhausted() {
     let mut hit_row_range = HitRowRangeTracker::new(2);
 
     let continuation = action.sync_after_row_transition_if_visible(
-        TextMatrixRowTransition::ExhaustedRows,
+        DisplayTextRowTransition::ExhaustedRows,
         14,
         &mut charpos,
         &mut hit_row_range,
@@ -3081,7 +3081,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     };
 
     let continuation = action.apply_after_row_transition_and_prefix(
-        TextMatrixRowTransition::BeganNextRow,
+        DisplayTextRowTransition::BeganNextRow,
         transition,
         &mut final_charpos,
         &mut hit_row_range,
@@ -3138,7 +3138,7 @@ fn buffer_text_special_wrap_source_action_applies_transition_state() {
     assert_eq!(hit_row_range.start(), 21);
     assert_eq!(
         action.transition_continuation(
-            TextMatrixRowTransition::BeganNextRow,
+            DisplayTextRowTransition::BeganNextRow,
             &geometry,
             DisplayRowVisibilityLimit {
                 max_rows: 2,
@@ -3317,7 +3317,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
     *face_scan.next_check_mut() = 99;
 
     let continuation = action.apply_after_visible_row_transition(
-        TextMatrixRowTransition::BeganNextRow,
+        DisplayTextRowTransition::BeganNextRow,
         &mut byte_idx,
         &mut charpos,
         &mut hit_row_range,
@@ -3347,7 +3347,7 @@ fn buffer_text_character_wrap_source_action_skips_state_when_transition_exhauste
     *face_scan.next_check_mut() = 99;
 
     let continuation = action.apply_after_visible_row_transition(
-        TextMatrixRowTransition::ExhaustedRows,
+        DisplayTextRowTransition::ExhaustedRows,
         &mut byte_idx,
         &mut charpos,
         &mut hit_row_range,
@@ -3377,7 +3377,7 @@ fn buffer_text_character_wrap_source_action_reports_hidden_after_state_sync() {
     *face_scan.next_check_mut() = 99;
 
     let continuation = action.apply_after_visible_row_transition(
-        TextMatrixRowTransition::BeganNextRow,
+        DisplayTextRowTransition::BeganNextRow,
         &mut byte_idx,
         &mut charpos,
         &mut hit_row_range,
@@ -3584,7 +3584,7 @@ fn display_row_overflow_transition_request_marks_truncated_row_and_emits_boundar
         text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(ctx.geometry.row(), 1);
     assert_eq!(ctx.hit_rows.len(), 1);
     assert_eq!(ctx.hit_rows[0].charpos_start, 3);
@@ -3619,7 +3619,7 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
         text_row_output_render_state(&mut ctx.builder, &mut ctx.output_emitter, &mut ctx.eval),
     );
 
-    assert_eq!(transition, TextMatrixRowTransition::BeganNextRow);
+    assert_eq!(transition, DisplayTextRowTransition::BeganNextRow);
     assert_eq!(ctx.geometry.row(), 1);
     assert_eq!(ctx.hit_rows.len(), 1);
     assert_eq!(ctx.hit_rows[0].charpos_start, 3);
@@ -6722,7 +6722,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     output_emitter.begin_update(&mut eval);
     TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
-        .begin_text_row(crate::window_output::TextMatrixRowBegin {
+        .begin_text_row(crate::window_output::DisplayTextRowBegin {
             matrix_row: 0,
             row: 0,
             col: 0,
@@ -6732,7 +6732,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
     write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
     TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
-        .finish_text_row(crate::window_output::TextMatrixRowMetrics {
+        .finish_text_row(crate::window_output::DisplayTextRowMetrics {
             y: 2.0,
             height: 20.0,
             ascent: 15.0,
@@ -6816,7 +6816,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
         Rect::new(3.0, 5.0, 80.0, 64.0),
         Rect::new(10.0, 9.0, 64.0, 48.0),
         true,
-        crate::window_output::TextMatrixRowBegin {
+        crate::window_output::DisplayTextRowBegin {
             matrix_row: 2,
             row: 0,
             col: 1,
@@ -6831,7 +6831,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
 
     output_emitter.move_text_output_to(&mut eval, 0, 3, 9.0, 34.0);
     TextWindowLiveOutputSurface::from_builder(&mut builder, &mut output_emitter, &mut eval)
-        .finish_text_row(crate::window_output::TextMatrixRowMetrics {
+        .finish_text_row(crate::window_output::DisplayTextRowMetrics {
             y: 9.0,
             height: 17.0,
             ascent: 12.0,
