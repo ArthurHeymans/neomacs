@@ -230,8 +230,8 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
     assert_eq!(output_setup.row_visibility_limit.bottom_y, 80.0);
     assert_eq!(output_setup.row_limit.max_rows, 5);
     assert_eq!(output_setup.body_install_context.output_cols(), 1);
-    assert_eq!(output_setup.retry_bounds.text_area_top, 24);
-    assert_eq!(output_setup.retry_bounds.text_area_bottom, 72);
+    assert_eq!(output_setup.retry_bounds.text_area_top(), 24);
+    assert_eq!(output_setup.retry_bounds.text_area_bottom(), 72);
 }
 
 #[test]
@@ -369,17 +369,18 @@ fn tail_decoration_request_reports_rows_considered_for_decorations() {
     assert_eq!(context.window_start(), 11);
     assert_eq!(context.accessible_range(), (1, 80));
 
-    let outcome = context
-        .tail_decoration_request()
-        .apply(BufferTextWindowTailDecorationState {
-            x: 40.0,
-            text_append_surface: &setup.text_append_surface,
-            row_geometry: &setup.row_geometry,
-            row_y_positions: &setup.row_y_positions,
-            row_flags: &setup.row_flags,
-            row_extend: &setup.row_extend,
-            box_face: &setup.box_face,
-        });
+    let outcome =
+        context
+            .tail_decoration_request()
+            .apply(BufferTextWindowTailDecorationState::new(
+                40.0,
+                &setup.text_append_surface,
+                &setup.row_geometry,
+                &setup.row_y_positions,
+                &setup.row_flags,
+                &setup.row_extend,
+                &setup.box_face,
+            ));
 
     assert!(outcome.box_face_active);
     assert!(outcome.row_extend_active);

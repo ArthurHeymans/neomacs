@@ -140,15 +140,15 @@ pub(crate) struct BufferTextWindowRowPreludeRequestContext {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowBodyInstallContext {
-    pub(crate) output_window_id: u64,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) output_cols: usize,
+    output_window_id: u64,
+    display_text_row_base: usize,
+    output_cols: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferTextWindowRetryBounds {
-    pub(crate) text_area_top: i64,
-    pub(crate) text_area_bottom: i64,
+    text_area_top: i64,
+    text_area_bottom: i64,
 }
 
 pub(crate) struct BufferTextWindowTailRequestContext<'a> {
@@ -223,13 +223,36 @@ pub(crate) struct BufferTextWindowTailDecorationRequest<'a> {
 }
 
 pub(crate) struct BufferTextWindowTailDecorationState<'a> {
-    pub(crate) x: f32,
-    pub(crate) text_append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) row_geometry: &'a DisplayRowGeometryState,
-    pub(crate) row_y_positions: &'a DisplayRowYPositions,
-    pub(crate) row_flags: &'a DisplayRowFlags,
-    pub(crate) row_extend: &'a DisplayRowScopedValue<(Color, u32)>,
-    pub(crate) box_face: &'a BoxFaceRowState,
+    x: f32,
+    text_append_surface: &'a DisplayRowAppendSurface,
+    row_geometry: &'a DisplayRowGeometryState,
+    row_y_positions: &'a DisplayRowYPositions,
+    row_flags: &'a DisplayRowFlags,
+    row_extend: &'a DisplayRowScopedValue<(Color, u32)>,
+    box_face: &'a BoxFaceRowState,
+}
+
+impl<'a> BufferTextWindowTailDecorationState<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        x: f32,
+        text_append_surface: &'a DisplayRowAppendSurface,
+        row_geometry: &'a DisplayRowGeometryState,
+        row_y_positions: &'a DisplayRowYPositions,
+        row_flags: &'a DisplayRowFlags,
+        row_extend: &'a DisplayRowScopedValue<(Color, u32)>,
+        box_face: &'a BoxFaceRowState,
+    ) -> Self {
+        Self {
+            x,
+            text_append_surface,
+            row_geometry,
+            row_y_positions,
+            row_flags,
+            row_extend,
+            box_face,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1798,6 +1821,22 @@ impl BufferTextWindowRedisplayPublishRequest {
 }
 
 impl BufferTextWindowBodyInstallContext {
+    pub(crate) fn new(
+        output_window_id: u64,
+        display_text_row_base: usize,
+        output_cols: usize,
+    ) -> Self {
+        Self {
+            output_window_id,
+            display_text_row_base,
+            output_cols,
+        }
+    }
+
+    pub(crate) fn display_text_row_base(self) -> usize {
+        self.display_text_row_base
+    }
+
     pub(crate) fn request(
         self,
         window_start: i64,
@@ -1826,6 +1865,23 @@ impl BufferTextWindowBodyInstallContext {
     #[cfg(test)]
     pub(crate) fn output_cols(self) -> usize {
         self.output_cols
+    }
+}
+
+impl BufferTextWindowRetryBounds {
+    pub(crate) fn new(text_area_top: i64, text_area_bottom: i64) -> Self {
+        Self {
+            text_area_top,
+            text_area_bottom,
+        }
+    }
+
+    pub(crate) fn text_area_top(self) -> i64 {
+        self.text_area_top
+    }
+
+    pub(crate) fn text_area_bottom(self) -> i64 {
+        self.text_area_bottom
     }
 }
 
@@ -2166,16 +2222,15 @@ impl BufferTextWindowOutputSetupRequest {
                 bottom_y: self.visibility_bottom_y,
             },
             row_limit: DisplayRowLimit { max_rows },
-            body_install_context: BufferTextWindowBodyInstallContext {
-                output_window_id: self.output_window_id,
-                display_text_row_base: self.display_text_row_base,
+            body_install_context: BufferTextWindowBodyInstallContext::new(
+                self.output_window_id,
+                self.display_text_row_base,
                 output_cols,
-            },
-            retry_bounds: BufferTextWindowRetryBounds {
-                text_area_top: (self.text_y - walk_setup.window_top).round() as i64,
-                text_area_bottom: (self.text_y + self.text_height - walk_setup.window_top).round()
-                    as i64,
-            },
+            ),
+            retry_bounds: BufferTextWindowRetryBounds::new(
+                (self.text_y - walk_setup.window_top).round() as i64,
+                (self.text_y + self.text_height - walk_setup.window_top).round() as i64,
+            ),
         }
     }
 }
@@ -2278,7 +2333,7 @@ impl BufferTextWindowOutputSetup {
             output_window_id,
             append_surface,
             geometry.text_y,
-            self.body_install_context.display_text_row_base,
+            self.body_install_context.display_text_row_base(),
             geometry.max_rows,
         )
         .into_contexts();
@@ -2295,7 +2350,7 @@ impl BufferTextWindowOutputSetup {
             geometry.char_width,
             self.row_visibility_limit,
             walk_setup.row_geometry_defaults,
-            self.body_install_context.display_text_row_base,
+            self.body_install_context.display_text_row_base(),
             geometry.max_rows,
             self.row_limit,
         );
@@ -2320,7 +2375,7 @@ impl BufferTextWindowOutputSetup {
             source.accessible_start(),
             source.accessible_end(),
             source.text_start_byte(),
-            self.body_install_context.display_text_row_base,
+            self.body_install_context.display_text_row_base(),
             walk_setup.text_area_left,
             walk_setup.window_top,
             geometry.text_y,
@@ -2694,8 +2749,8 @@ impl BufferTextWindowRetryPlan {
             tracing::debug!(
                 "layout_window_rust: point={} row partially visible within {}..{}, new_window_start={:?}",
                 self.point_charpos,
-                self.retry_bounds.text_area_top,
-                self.retry_bounds.text_area_bottom,
+                self.retry_bounds.text_area_top(),
+                self.retry_bounds.text_area_bottom(),
                 self.retry.point_row_window_start()
             );
         }
@@ -3510,8 +3565,8 @@ impl<'a> BufferTextWindowTailRequestContext<'a> {
             self.params.point_charpos().get(),
             charpos,
             point_is_visible_eob,
-            self.retry_bounds.text_area_top,
-            self.retry_bounds.text_area_bottom,
+            self.retry_bounds.text_area_top(),
+            self.retry_bounds.text_area_bottom(),
             buf_access,
         )
     }
@@ -3640,15 +3695,15 @@ impl<'rows, 'emit, 'surface> BufferTextWindowPostLoopState<'rows, 'emit, 'surfac
     ) -> BufferTextWindowTailDecorationOutcome {
         tail_context
             .tail_decoration_request()
-            .apply(BufferTextWindowTailDecorationState {
-                x: *self.row_progress.x,
-                text_append_surface: self.text_append_surface,
-                row_geometry: self.row_geometry,
-                row_y_positions: self.row_y_positions,
-                row_flags: self.row_flags,
-                row_extend: self.row_extend,
-                box_face: self.box_face,
-            })
+            .apply(BufferTextWindowTailDecorationState::new(
+                *self.row_progress.x,
+                self.text_append_surface,
+                self.row_geometry,
+                self.row_y_positions,
+                self.row_flags,
+                self.row_extend,
+                self.box_face,
+            ))
     }
 
     pub(crate) fn finalize_tail(
@@ -6314,6 +6369,33 @@ pub(crate) struct BufferSourceItemLayoutResolutionContext<'a> {
     window_system: bool,
 }
 
+impl<'a> BufferSourceItemLayoutResolutionContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        measurement_policy: DisplayRowMeasurementPolicy,
+        default_resolved: &'a ResolvedFace,
+        default_face_char_w: f32,
+        default_face_ascent: f32,
+        default_face_h: f32,
+        char_w: f32,
+        char_h: f32,
+        font_ascent: f32,
+        window_system: bool,
+    ) -> Self {
+        Self {
+            measurement_policy,
+            default_resolved,
+            default_face_char_w,
+            default_face_ascent,
+            default_face_h,
+            char_w,
+            char_h,
+            font_ascent,
+            window_system,
+        }
+    }
+}
+
 impl<'a, B: LayoutBufferView> Clone for BufferCurrentFaceResolutionContext<'a, B> {
     fn clone(&self) -> Self {
         *self
@@ -6411,17 +6493,17 @@ impl<'a, B: LayoutBufferView> BufferCurrentFaceResolutionContext<'a, B> {
     pub(crate) fn source_item_layout_resolution_context(
         self,
     ) -> BufferSourceItemLayoutResolutionContext<'a> {
-        BufferSourceItemLayoutResolutionContext {
-            measurement_policy: self.measurement_policy,
-            default_resolved: self.default_resolved,
-            default_face_char_w: self.default_face_char_w,
-            default_face_ascent: self.default_face_ascent,
-            default_face_h: self.default_face_h,
-            char_w: self.char_w,
-            char_h: self.char_h,
-            font_ascent: self.font_ascent,
-            window_system: self.window_system,
-        }
+        BufferSourceItemLayoutResolutionContext::new(
+            self.measurement_policy,
+            self.default_resolved,
+            self.default_face_char_w,
+            self.default_face_ascent,
+            self.default_face_h,
+            self.char_w,
+            self.char_h,
+            self.font_ascent,
+            self.window_system,
+        )
     }
 
     pub(crate) fn source_resolve_params(
