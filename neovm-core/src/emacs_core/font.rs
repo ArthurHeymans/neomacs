@@ -1101,6 +1101,558 @@ fn normalize_font_prop_value(prop: &Value, val: &Value) -> EvalResult {
 }
 
 // ===========================================================================
+// Font name parsing (fontconfig / XLFD)
+//
+// Ports GNU Emacs `font_parse_name` (src/font.c) which dispatches between
+// `font_parse_xlfd` (names starting with '-' or containing '*'/'?') and
+// `font_parse_fcname` (fontconfig "Family-Size:key=val" names).  The parsed
+// properties are stored into a font-spec property vector using keyword keys,
+// matching the layout produced by `font-spec`/`font-put`.
+// ===========================================================================
+
+/// Set a basic font-spec property (`:family`, `:size`, etc.) on a property
+/// vector, replacing any existing entry.  Mirrors GNU's `ASET (font, IDX, val)`.
+fn font_parse_set(elems: &mut Vec<Value>, key: &str, val: Value) {
+    let prop = Value::keyword(key);
+    let mut i = 1;
+    while i + 1 < elems.len() {
+        if elems[i]
+            .as_symbol_name()
+            .map(|name| name.trim_start_matches(':'))
+            == Some(key)
+        {
+            elems[i + 1] = val;
+            return;
+        }
+        i += 2;
+    }
+    elems.push(prop);
+    elems.push(val);
+}
+
+/// Canonicalize and store a weight/slant/width style word the way GNU's
+/// `FONT_SET_STYLE` does: look the word up in the style table and store the
+/// canonical symbol (neomacs stores the symbol; `font-face-attributes` reads it
+/// back directly, matching GNU's `font_style_symbolic`).
+fn font_parse_set_style(elems: &mut Vec<Value>, key: &str, word: &str) {
+    if let Some(name) =
+        font_style_table_for_key(key).and_then(|table| font_style_symbol_from_name(table, word))
+    {
+        font_parse_set(elems, key, Value::symbol(name));
+    }
+}
+
+/// Try to interpret a fontconfig property word as a weight, slant or spacing
+/// keyword (the bare-word case from GNU `font_parse_fcname`).
+fn font_parse_fcname_enum_word(elems: &mut Vec<Value>, word: &str) {
+    match word {
+        "thin" | "ultra-light" | "light" | "semi-light" | "book" | "medium" | "normal"
+        | "semibold" | "demibold" | "bold" | "ultra-bold" | "black" | "heavy" | "ultra-heavy" => {
+            font_parse_set_style(elems, "weight", word);
+        }
+        "roman" | "italic" | "oblique" => {
+            font_parse_set_style(elems, "slant", word);
+        }
+        "charcell" => font_parse_set(elems, "spacing", Value::fixnum(110)),
+        "mono" => font_parse_set(elems, "spacing", Value::fixnum(100)),
+        "proportional" => font_parse_set(elems, "spacing", Value::fixnum(0)),
+        _ => {}
+    }
+}
+
+/// Store a `key=val` fontconfig property.  Recognized keys map to basic
+/// font-spec slots; unknown keys are dropped (GNU would route them to the
+/// font driver's `filter_properties`, which has no effect on a bare spec).
+fn font_parse_fcname_keyval(elems: &mut Vec<Value>, key: &str, val: &str) {
+    match key {
+        "pixelsize" => {
+            if let Ok(n) = val.parse::<i64>() {
+                font_parse_set(elems, "size", Value::fixnum(n));
+            }
+        }
+        "size" => {
+            if let Ok(f) = val.parse::<f64>() {
+                font_parse_set(elems, "size", Value::make_float(f));
+            } else if let Ok(n) = val.parse::<i64>() {
+                font_parse_set(elems, "size", Value::fixnum(n));
+            }
+        }
+        "weight" | "slant" | "width" => font_parse_set_style(elems, key, val),
+        "spacing" => {
+            if let Some(spacing) = FontSpacing::from_symbol_name(val) {
+                font_parse_set(
+                    elems,
+                    "spacing",
+                    Value::fixnum(i64::from(spacing.gnu_code())),
+                );
+            } else if let Ok(n) = val.parse::<i64>() {
+                font_parse_set(elems, "spacing", Value::fixnum(n));
+            }
+        }
+        "foundry" | "family" | "adstyle" | "lang" | "script" => {
+            font_parse_set(elems, key, Value::symbol(val));
+        }
+        "registry" => font_parse_set(elems, "registry", Value::symbol(&val.to_ascii_lowercase())),
+        "dpi" => {
+            if let Ok(n) = val.parse::<i64>() {
+                font_parse_set(elems, "dpi", Value::fixnum(n));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Port of GNU `font_parse_fcname` (src/font.c): parse a fontconfig-style name
+/// such as `"Monospace-10"`, `"Family:weight=bold"`, or `"Family-12:bold"` into
+/// font-spec properties.  Returns `false` on an empty name (GNU `-1`).
+fn font_parse_fcname(elems: &mut Vec<Value>, name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let bytes = name.as_bytes();
+    let mut family_end: Option<usize> = None;
+    let mut size_beg: Option<usize> = None;
+    let mut props_beg: Option<usize> = None;
+
+    // Scan forward for the first ':' (property data) or a '-NN[.NN]' size run.
+    let mut p = 0;
+    while p < bytes.len() {
+        let c = bytes[p];
+        if c == b'\\' && p + 1 < bytes.len() {
+            p += 2;
+            continue;
+        } else if c == b':' {
+            props_beg = Some(p);
+            family_end = Some(p);
+            break;
+        } else if c == b'-' {
+            // Everything up to the next ':' must be digits (and at most one '.').
+            let mut decimal = false;
+            let mut size_found = true;
+            let mut q = p + 1;
+            while q < bytes.len() && bytes[q] != b':' {
+                let cq = bytes[q];
+                if !cq.is_ascii_digit() {
+                    if cq != b'.' || decimal {
+                        size_found = false;
+                        break;
+                    }
+                    decimal = true;
+                }
+                q += 1;
+            }
+            // GNU requires at least one char after '-' to count as a size.
+            if size_found && q > p + 1 {
+                family_end = Some(p);
+                size_beg = Some(p + 1);
+                break;
+            }
+        }
+        p += 1;
+    }
+
+    let Some(family_end) = family_end else {
+        // No size and no property data: a plain family name (possibly GTK-style
+        // with trailing style words / size separated by spaces).
+        return font_parse_fcname_plain(elems, name);
+    };
+
+    // Family.
+    if family_end > 0 {
+        let family = unescape_fcname(&name[..family_end]);
+        font_parse_set(elems, "family", Value::symbol(&family));
+    }
+
+    // Point size (stored as a float, matching GNU `make_float`).
+    if let Some(size_beg) = size_beg {
+        // Read the numeric run starting at size_beg.
+        let rest = &name[size_beg..];
+        let end = rest.find(':').unwrap_or(rest.len());
+        let size_str = &rest[..end];
+        if let Ok(f) = size_str.parse::<f64>() {
+            font_parse_set(elems, "size", Value::make_float(f));
+        }
+        // If a ':' follows the size, properties start there.
+        if size_beg + end < bytes.len() && bytes[size_beg + end] == b':' {
+            props_beg = Some(size_beg + end);
+        }
+    }
+
+    // Parse ":KEY=VAL" / ":enumword" properties.
+    if let Some(props_beg) = props_beg {
+        for segment in name[props_beg..].split(':') {
+            if segment.is_empty() {
+                continue;
+            }
+            if let Some(eq) = segment.find('=') {
+                let key = &segment[..eq];
+                let val = &segment[eq + 1..];
+                font_parse_fcname_keyval(elems, key, val);
+            } else {
+                font_parse_fcname_enum_word(elems, segment);
+            }
+        }
+    }
+
+    true
+}
+
+/// Strip fontconfig quoting backslashes from a family name.
+fn unescape_fcname(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// GTK / plain fontconfig name with no size or property delimiters, e.g.
+/// `"Monospace"`, `"DejaVu Sans Bold 12"`.  Ported from the `else` branch of
+/// GNU `font_parse_fcname`: scan backwards for a numeric size, then for known
+/// style words, the remainder being the family.
+fn font_parse_fcname_plain(elems: &mut Vec<Value>, name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let len = bytes.len();
+
+    // Scan backwards for a trailing numeric size (preceded by a space or BOS).
+    let mut p = len;
+    let mut size: Option<f64> = None;
+    {
+        let mut i = len;
+        while i > 0 && bytes[i - 1].is_ascii_digit() {
+            i -= 1;
+        }
+        if i < len && (i == 0 || bytes[i - 1] == b' ') {
+            if let Ok(f) = name[i..].parse::<f64>() {
+                size = Some(f);
+                // Drop the size (and a preceding space) from the family scan.
+                p = if i > 0 { i - 1 } else { i };
+            }
+        }
+    }
+
+    // Scan backwards over space-separated words, recognizing style keywords.
+    let mut weight: Option<&str> = None;
+    let mut slant: Option<&str> = None;
+    let mut width: Option<&str> = None;
+    let mut family_end = p;
+    while p > 0 {
+        // Find the start of the current word.
+        let mut q = p;
+        while q > 0 {
+            if q > 1 && bytes[q - 2] == b'\\' {
+                q -= 1;
+            } else if bytes[q - 1] == b' ' {
+                break;
+            }
+            q -= 1;
+        }
+        let word = &name[q..p];
+        let matched = match word {
+            "Ultra-Light" => {
+                weight.get_or_insert("ultra-light");
+                true
+            }
+            "Light" => {
+                weight.get_or_insert("light");
+                true
+            }
+            "Book" => {
+                weight.get_or_insert("book");
+                true
+            }
+            "Medium" => {
+                weight.get_or_insert("medium");
+                true
+            }
+            "Semi-Bold" => {
+                weight.get_or_insert("semi-bold");
+                true
+            }
+            "Bold" => {
+                weight.get_or_insert("bold");
+                true
+            }
+            "Italic" => {
+                slant.get_or_insert("italic");
+                true
+            }
+            "Oblique" => {
+                slant.get_or_insert("oblique");
+                true
+            }
+            "Semi-Condensed" => {
+                width.get_or_insert("semi-condensed");
+                true
+            }
+            "Condensed" => {
+                width.get_or_insert("condensed");
+                true
+            }
+            _ => false,
+        };
+        if !matched {
+            family_end = p;
+            break;
+        }
+        // Move past the space before this word.
+        p = if q > 0 { q - 1 } else { 0 };
+        family_end = q;
+        if q == 0 {
+            break;
+        }
+    }
+
+    if family_end > 0 {
+        font_parse_set(
+            elems,
+            "family",
+            Value::symbol(&unescape_fcname(&name[..family_end])),
+        );
+    }
+    if let Some(f) = size {
+        font_parse_set(elems, "size", Value::make_float(f));
+    }
+    if let Some(w) = weight {
+        font_parse_set_style(elems, "weight", w);
+    }
+    if let Some(s) = slant {
+        font_parse_set_style(elems, "slant", s);
+    }
+    if let Some(w) = width {
+        font_parse_set_style(elems, "width", w);
+    }
+    true
+}
+
+/// XLFD field indices (GNU `enum xlfd_field_index`).
+const XLFD_FOUNDRY: usize = 0;
+const XLFD_FAMILY: usize = 1;
+const XLFD_WEIGHT: usize = 2;
+const XLFD_SLANT: usize = 3;
+const XLFD_SWIDTH: usize = 4;
+const XLFD_ADSTYLE: usize = 5;
+const XLFD_PIXEL: usize = 6;
+const XLFD_POINT: usize = 7;
+const XLFD_RESX: usize = 8;
+const XLFD_RESY: usize = 9;
+const XLFD_SPACING: usize = 10;
+const XLFD_AVGWIDTH: usize = 11;
+const XLFD_REGISTRY: usize = 12;
+const XLFD_ENCODING: usize = 13;
+const XLFD_LAST: usize = 14;
+
+/// Port of GNU `font_parse_xlfd` (src/font.c): parse a hyphen-delimited XLFD
+/// name such as `"-misc-fixed-medium-r-normal--13-120-..."`.  Only the
+/// fully-specified (14-field) form is handled here, which covers the names
+/// `font-spec :name` is given in practice.  Returns `false` on parse failure.
+fn font_parse_xlfd(elems: &mut Vec<Value>, name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+
+    // Split into fields on '-'.  GNU treats a leading "*-" specially; for the
+    // fully-specified form we simply split on '-'.
+    let fields: Vec<&str> = name.split('-').collect();
+
+    // A fully specified XLFD has a leading '-', so split() yields an empty
+    // first element followed by exactly 14 fields.
+    if fields.len() != XLFD_LAST + 1 || !fields[0].is_empty() {
+        return false;
+    }
+    let f = &fields[1..]; // 14 fields, indices XLFD_FOUNDRY..XLFD_ENCODING
+
+    let intern_field = |idx: usize| -> &str { f[idx] };
+
+    // Foundry / family (interned as symbols).
+    if !f[XLFD_FOUNDRY].is_empty() && f[XLFD_FOUNDRY] != "*" {
+        font_parse_set(elems, "foundry", Value::symbol(f[XLFD_FOUNDRY]));
+    }
+    if !f[XLFD_FAMILY].is_empty() && f[XLFD_FAMILY] != "*" {
+        font_parse_set(elems, "family", Value::symbol(f[XLFD_FAMILY]));
+    }
+
+    // Weight / slant / width style fields.
+    for (xlfd_idx, key) in [
+        (XLFD_WEIGHT, "weight"),
+        (XLFD_SLANT, "slant"),
+        (XLFD_SWIDTH, "width"),
+    ] {
+        let word = intern_field(xlfd_idx);
+        if !word.is_empty() && word != "*" {
+            font_parse_set_style(elems, key, word);
+        }
+    }
+
+    // Adstyle: GNU stores the interned field unconditionally for a fully
+    // specified XLFD (an empty field becomes the empty symbol `##`).
+    let adstyle = intern_field(XLFD_ADSTYLE);
+    if adstyle != "*" {
+        font_parse_set(elems, "adstyle", Value::symbol(adstyle));
+    }
+
+    // Registry-encoding: "registry-encoding" combined.
+    let registry = intern_field(XLFD_REGISTRY);
+    let encoding = intern_field(XLFD_ENCODING);
+    if !(registry == "*" && encoding == "*") {
+        let combined = format!("{registry}-{encoding}");
+        font_parse_set(
+            elems,
+            "registry",
+            Value::symbol(&combined.to_ascii_lowercase()),
+        );
+    }
+
+    // Size: prefer pixel size (fixnum), else point size / 10 (float).
+    let pixel = intern_field(XLFD_PIXEL);
+    if let Ok(px) = pixel.parse::<i64>() {
+        if px > 0 {
+            font_parse_set(elems, "size", Value::fixnum(px));
+        }
+    } else {
+        let point = intern_field(XLFD_POINT);
+        if let Ok(pt) = point.parse::<i64>() {
+            font_parse_set(elems, "size", Value::make_float(pt as f64 / 10.0));
+        }
+    }
+
+    // DPI (resolution-y).
+    let resy = intern_field(XLFD_RESY);
+    if let Ok(dpi) = resy.parse::<i64>() {
+        font_parse_set(elems, "dpi", Value::fixnum(dpi));
+    }
+    let _ = intern_field(XLFD_RESX);
+
+    // Spacing letter (p/d/m/c).
+    let spacing = intern_field(XLFD_SPACING);
+    if let Some(sp) = FontSpacing::from_symbol_name(spacing) {
+        font_parse_set(elems, "spacing", Value::fixnum(i64::from(sp.gnu_code())));
+    }
+
+    // Average width.
+    let avg = intern_field(XLFD_AVGWIDTH).trim_start_matches('~');
+    if let Ok(n) = avg.parse::<i64>() {
+        font_parse_set(elems, "avgwidth", Value::fixnum(n));
+    }
+
+    true
+}
+
+/// Port of GNU `font_parse_name` (src/font.c): dispatch a font NAME string to
+/// the XLFD or fontconfig parser and store the parsed properties into ELEMS
+/// (a font-spec property vector).  Returns `false` if the name cannot be parsed.
+fn font_parse_name(elems: &mut Vec<Value>, name: &str) -> bool {
+    if name.starts_with('-') || name.contains('*') || name.contains('?') {
+        font_parse_xlfd(elems, name)
+    } else {
+        font_parse_fcname(elems, name)
+    }
+}
+
+/// Build a font-spec from a font NAME string (GNU `font_spec_from_name`):
+/// parse NAME, then record it under `:name`.  Returns `None` on parse failure.
+fn font_spec_from_name(name: &str) -> Option<Value> {
+    let mut elems = vec![Value::keyword(FONT_SPEC_TAG)];
+    if !font_parse_name(&mut elems, name) {
+        return None;
+    }
+    font_parse_set(&mut elems, "name", Value::string(name.to_string()));
+    Some(Value::vector(elems))
+}
+
+/// `(font-face-attributes FONT &optional FRAME)` -- return a plist of face
+/// attributes generated by FONT.  Port of GNU `Ffont_face_attributes`
+/// (src/font.c): FONT may be a font name string (parsed via
+/// `font_spec_from_name`), a font-spec, font-entity, or font-object.  The result
+/// is `(:family F :height H :weight W :slant S :width WD)` with absent keys
+/// omitted.
+pub(crate) fn builtin_font_face_attributes(args: Vec<Value>) -> EvalResult {
+    expect_min_args("font-face-attributes", &args, 1)?;
+    expect_max_args("font-face-attributes", &args, 2)?;
+
+    let font = if args[0].is_string() {
+        let name = font_string_text(&args[0]).unwrap_or_default();
+        match font_spec_from_name(&name) {
+            Some(spec) => spec,
+            None => {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid font name"), args[0]],
+                ));
+            }
+        }
+    } else if is_font(&args[0]) {
+        args[0]
+    } else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid font object"), args[0]],
+        ));
+    };
+
+    let elems = font.as_vector_data().unwrap().clone();
+    let mut plist: Vec<Value> = Vec::with_capacity(10);
+
+    // :family (symbol name -> string).
+    if let Some(family) = font_vector_get_flexible(&elems, "family") {
+        if !family.is_nil() {
+            let family_str = match family.kind() {
+                ValueKind::Symbol(id) => Value::string(resolve_sym(id).to_owned()),
+                ValueKind::String => family,
+                _ => Value::NIL,
+            };
+            if !family_str.is_nil() {
+                plist.push(Value::keyword("family"));
+                plist.push(family_str);
+            }
+        }
+    }
+
+    // :height -- GNU maps the font size to a face height (10 * point size).
+    // A fixnum size is a pixel size converted via PIXEL_TO_POINT; with no
+    // display DPI here we follow GNU's float path (point size) for parsed
+    // names, where size is stored as a float.
+    if let Some(size) = font_vector_get_flexible(&elems, "size") {
+        match size.kind() {
+            ValueKind::Float => {
+                let pts = size.xfloat();
+                if pts > 0.0 {
+                    plist.push(Value::keyword("height"));
+                    plist.push(Value::fixnum(10 * (pts as i64)));
+                }
+            }
+            ValueKind::Fixnum(px) if px > 0 => {
+                // Pixel size: GNU converts via the frame resolution.  Without a
+                // live display we approximate point size == pixel size (the
+                // common 72-dpi identity used in batch contexts).
+                plist.push(Value::keyword("height"));
+                plist.push(Value::fixnum(px * 10));
+            }
+            _ => {}
+        }
+    }
+
+    // :weight / :slant / :width -- stored as canonical style symbols.
+    for key in ["weight", "slant", "width"] {
+        if let Some(val) = font_vector_get_flexible(&elems, key) {
+            if !val.is_nil() {
+                plist.push(Value::keyword(key));
+                plist.push(val);
+            }
+        }
+    }
+
+    Ok(Value::list(plist))
+}
+
+// ===========================================================================
 // Font builtins (pure)
 // ===========================================================================
 
@@ -1175,6 +1727,30 @@ pub(crate) fn builtin_font_spec(args: Vec<Value>) -> EvalResult {
                 "wrong-type-argument",
                 vec![Value::symbol("symbolp"), *key],
             ));
+        }
+
+        // GNU `Ffont_spec`: a `:name` argument is a font name string that is
+        // parsed via `font_parse_name` into the spec's basic slots; the name
+        // itself is also recorded under `:name`.
+        if key
+            .as_symbol_name()
+            .map(|name| name.trim_start_matches(':'))
+            == Some("name")
+        {
+            let Some(name) = font_string_text(value) else {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("stringp"), *value],
+                ));
+            };
+            if !font_parse_name(&mut elems, &name) {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(format!("Invalid font name: {name}"))],
+                ));
+            }
+            font_parse_set(&mut elems, "name", *value);
+            continue;
         }
 
         elems.push(*key);

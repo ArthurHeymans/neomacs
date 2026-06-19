@@ -1838,14 +1838,6 @@ fn expect_window_live_or_nil_in_state(frames: &FrameManager, value: &Value) -> R
     }
 }
 
-pub(crate) fn builtin_font_face_attributes(args: Vec<Value>) -> EvalResult {
-    expect_range_args("font-face-attributes", &args, 1, 2)?;
-    if !is_font_object(&args[0]) {
-        return Err(signal("error", vec![Value::string("Invalid font object")]));
-    }
-    Ok(unspecified_face_attributes_vector())
-}
-
 pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
     expect_range_args("font-get-glyphs", &args, 3, 4)?;
     if !is_font_object(&args[0]) {

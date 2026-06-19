@@ -11095,16 +11095,33 @@ fn dispatch_builtin_pure_handles_font_face_placeholders() {
     let font_object = Value::vector(vec![Value::keyword("font-object")]);
     let font_spec = Value::vector(vec![Value::keyword("font-spec")]);
 
+    // GNU `font-face-attributes` returns a face-attribute *plist*, not a face
+    // vector; an empty font yields the empty list.
     let attrs = dispatch_builtin_pure("font-face-attributes", vec![font_object])
         .expect("font-face-attributes should resolve")
         .expect("font-face-attributes should evaluate");
-    if !attrs.is_vector() {
-        panic!("expected vector");
-    };
-    assert_eq!(
-        attrs.as_vector_data().unwrap().len(),
-        FACE_ATTRIBUTES_VECTOR_LEN
+    assert!(
+        attrs.is_nil(),
+        "empty font-object should produce an empty attribute plist, got {attrs:?}"
     );
+
+    // A named font string parses into family/height attributes.
+    let named = dispatch_builtin_pure(
+        "font-face-attributes",
+        vec![Value::string("Monospace-10".to_string())],
+    )
+    .expect("font-face-attributes should resolve")
+    .expect("font-face-attributes should evaluate");
+    let items = list_to_vec(&named).expect("plist should be a proper list");
+    assert_eq!(
+        items.len(),
+        4,
+        "expected (:family .. :height ..), got {items:?}"
+    );
+    assert!(items[0].is_symbol_named(":family"));
+    assert_eq!(items[1].as_utf8_str(), Some("Monospace"));
+    assert!(items[2].is_symbol_named(":height"));
+    assert_eq!(items[3], Value::fixnum(100));
 
     let glyphs = dispatch_builtin_pure(
         "font-get-glyphs",

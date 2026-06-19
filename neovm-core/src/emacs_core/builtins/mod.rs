@@ -5001,7 +5001,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "font-face-attributes",
-        |_ctx, args| builtin_font_face_attributes(args),
+        |_ctx, args| super::font::builtin_font_face_attributes(args),
         1,
         Some(2),
     );
