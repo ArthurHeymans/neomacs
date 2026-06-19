@@ -17,10 +17,9 @@ use crate::display_row::{
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
-use crate::display_row_builder::{DisplayRowGlyphSlot, merge_display_row_source_slot_bounds};
+use crate::display_row_builder::merge_display_row_source_slot_bounds;
 use crate::display_row_matrix_install::{
-    RenderedDisplayRowAssetsInstall, current_display_row_artifact,
-    install_current_display_row_artifact, install_resolved_display_row_face,
+    RenderedDisplayRowAssetsInstall, install_resolved_display_row_face,
 };
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
@@ -87,8 +86,8 @@ struct DisplayRowCurrentTextSourceStepResult {
 pub(crate) fn current_display_row_cluster_tail(
     builder: &GlyphMatrixBuilder,
 ) -> Option<(char, bool)> {
-    current_display_row_artifact(builder)
-        .as_ref()
+    builder
+        .current_row_for_render()
         .and_then(last_text_cluster_tail_in_row)
 }
 
@@ -97,19 +96,24 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         Self { builder }
     }
 
-    fn current_row(&self) -> Option<neomacs_display_protocol::glyph_matrix::GlyphRow> {
-        current_display_row_artifact(self.builder)
+    fn edit_current_row<R>(
+        &mut self,
+        f: impl FnOnce(&mut neomacs_display_protocol::glyph_matrix::GlyphRow) -> R,
+    ) -> Option<R> {
+        self.builder.row_installer().edit_current_row(f)
     }
 
-    fn replace_current_row(&mut self, row: neomacs_display_protocol::glyph_matrix::GlyphRow) {
-        install_current_display_row_artifact(self.builder, row);
+    fn current_row_snapshot(&self) -> Option<neomacs_display_protocol::glyph_matrix::GlyphRow> {
+        self.builder.current_row_for_render().cloned()
     }
 
-    fn merge_source_slot_bounds(&mut self, slots: &[DisplayRowGlyphSlot]) {
-        if let Some(mut row) = self.current_row() {
-            merge_display_row_source_slot_bounds(&mut row, slots);
-            self.replace_current_row(row);
-        }
+    fn merge_source_slot_bounds(
+        &mut self,
+        slots: &[crate::display_row_builder::DisplayRowGlyphSlot],
+    ) {
+        let _ = self.edit_current_row(|row| {
+            merge_display_row_source_slot_bounds(row, slots);
+        });
     }
 
     fn render_source_step_with_policy<S, P>(
@@ -125,19 +129,17 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let mut row = self.current_row()?;
-        let result = row_request.render_fragment_step_into_row_with_policy(
-            renderer,
-            &mut row,
-            source,
-            source_state,
-            context,
-            render_policy,
-        )?;
-        let row_height_px = row.height_px;
-        let row_ascent_px = row.ascent_px;
-        self.replace_current_row(row);
-        Some((result, row_height_px, row_ascent_px))
+        self.edit_current_row(|row| {
+            let result = row_request.render_fragment_step_into_row_with_policy(
+                renderer,
+                row,
+                source,
+                source_state,
+                context,
+                render_policy,
+            )?;
+            Some((result, row.height_px, row.ascent_px))
+        })?
     }
 
     fn measure_source_step_with_policy<S, P>(
@@ -153,7 +155,7 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let mut scratch_row = self.current_row()?;
+        let mut scratch_row = self.current_row_snapshot()?;
         let result = row_request.render_fragment_step_into_row_with_policy(
             renderer,
             &mut scratch_row,
@@ -175,15 +177,9 @@ impl<'a> DisplayRowCurrentRowSurface<'a> {
     where
         S: DisplayItemSource,
     {
-        let mut row = self.current_row()?;
-        let result = render_executor.render_item_source_fragment_into_row(
-            request,
-            &mut row,
-            source,
-            source_state,
-        )?;
-        self.replace_current_row(row);
-        Some(result)
+        self.edit_current_row(|row| {
+            render_executor.render_item_source_fragment_into_row(request, row, source, source_state)
+        })?
     }
 }
 

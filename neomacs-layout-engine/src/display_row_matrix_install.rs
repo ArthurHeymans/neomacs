@@ -14,7 +14,7 @@ use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::{
     FRAME_CHROME_WINDOW_ID, GlyphMatrixBuilder, MatrixFrameStateInstallRequest,
     MatrixMediaInstallKind, MatrixMediaInstallRequest, MatrixRowBeginRequest,
-    MatrixRowLifecycleRequest, ResolvedMatrixMediaInstallTarget,
+    ResolvedMatrixMediaInstallTarget,
 };
 use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
@@ -48,17 +48,6 @@ pub(crate) fn install_resolved_display_row_face(
             id: render_face.face_id,
             face: rendered,
         });
-}
-
-pub(crate) fn current_display_row_artifact(builder: &GlyphMatrixBuilder) -> Option<GlyphRow> {
-    builder.current_row_artifact()
-}
-
-pub(crate) fn install_current_display_row_artifact(
-    builder: &mut GlyphMatrixBuilder,
-    row: GlyphRow,
-) {
-    builder.row_installer().replace_current_row(row);
 }
 
 struct MatrixDisplayRowInstallRequest<'a> {
@@ -108,16 +97,14 @@ impl<'a> MatrixDisplayRowInstallRequest<'a> {
         row.pixel_y = self.pixel_y - context.pixel_bounds.y;
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;
-        builder
-            .row_installer()
-            .install(MatrixRowLifecycleRequest::InstallPrebuilt {
-                begin: MatrixRowBeginRequest {
-                    row: self.matrix_row,
-                    role: row.role,
-                    mode_line: row.mode_line,
-                },
-                row,
-            });
+        builder.row_installer().install_complete_row(
+            MatrixRowBeginRequest {
+                row: self.matrix_row,
+                role: row.role,
+                mode_line: row.mode_line,
+            },
+            row,
+        );
     }
 }
 
@@ -317,7 +304,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
                 face: face.clone(),
             });
     }
-    if let Some(mut row) = current_display_row_artifact(builder) {
+    let _ = builder.row_installer().edit_current_row(|row| {
         row.enabled = true;
         row.role = rendered.row.role;
         row.mode_line = matches!(rendered.row.role, GlyphRowRole::ModeLine);
@@ -333,9 +320,8 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
             .ascent_px
             .max(rendered.row.ascent_px)
             .min(row.height_px.max(1.0));
-        merge_display_row_source_slot_bounds(&mut row, &rendered.source_slots);
-        install_current_display_row_artifact(builder, row);
-    }
+        merge_display_row_source_slot_bounds(row, &rendered.source_slots);
+    });
     for media in &rendered.media {
         media.install(builder, rendered.row.role, matrix_row);
     }

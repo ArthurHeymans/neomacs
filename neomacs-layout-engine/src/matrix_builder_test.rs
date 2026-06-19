@@ -153,22 +153,20 @@ fn builder_tracks_single_window_single_row() {
 }
 
 #[test]
-fn row_lifecycle_request_installs_prebuilt_row_metrics_and_cursor() {
+fn row_installer_installs_complete_row_metrics_and_cursor() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     crate::glyph_row_writer::push_char_to_row(&mut row, 'x', 3, 11, 8.0);
 
     let mut builder = GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 4.0, 80.0, 32.0), true);
-    builder
-        .row_installer()
-        .install(MatrixRowLifecycleRequest::InstallPrebuilt {
-            begin: MatrixRowBeginRequest {
-                row: 0,
-                role: GlyphRowRole::Text,
-                mode_line: false,
-            },
-            row,
-        });
+    builder.row_installer().install_complete_row(
+        MatrixRowBeginRequest {
+            row: 0,
+            role: GlyphRowRole::Text,
+            mode_line: false,
+        },
+        row,
+    );
     builder
         .row_installer()
         .install(MatrixRowLifecycleRequest::Metrics {
