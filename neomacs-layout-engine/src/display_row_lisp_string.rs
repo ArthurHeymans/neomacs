@@ -13,7 +13,7 @@ use crate::display_row_append_context::{
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_geometry::DisplayRowGeometryState;
 #[cfg(test)]
-use crate::display_row_matrix_install::DisplayRowFaceInstallSurface;
+use crate::display_row_output_install::DisplayRowFaceInstallSurface;
 use crate::display_row_source_append::DisplayRowSourceAppendOperation;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
@@ -572,7 +572,7 @@ pub(crate) fn apply_pending_display_source_faces(
     builder: &mut GlyphMatrixBuilder,
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
 ) {
-    let mut face_installer = DisplayRowFaceInstallSurface::from_builder(builder);
+    let mut face_installer = DisplayRowFaceInstallSurface::from_output_builder(builder);
     for pending in pending_faces.drain(..) {
         face_installer.install_resolved_face(pending.face_id, &pending.resolved, None);
     }

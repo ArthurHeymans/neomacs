@@ -22,7 +22,7 @@ use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_matrix_install::{
+use crate::display_row_output_install::{
     DisplayRowArtifactInstallSurface, DisplayRowCurrentRowSurface, DisplayRowDecorationSurface,
     DisplayRowFaceInstallSurface, DisplayRowInstallSurface, DisplayRowLifecycleSurface,
     DisplayRowWindowContextSurface,
@@ -293,12 +293,13 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     }
 
     pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
-        let mut row_lifecycle = DisplayRowLifecycleSurface::from_builder(self.output_builder);
+        let mut row_lifecycle =
+            DisplayRowLifecycleSurface::from_output_builder(self.output_builder);
         request.install(&mut row_lifecycle);
     }
 
     fn begin_display_text_row(&mut self, begin: DisplayTextRowBegin) -> usize {
-        DisplayRowLifecycleSurface::from_builder(self.output_builder).begin_row(
+        DisplayRowLifecycleSurface::from_output_builder(self.output_builder).begin_row(
             begin.display_row_index,
             GlyphRowRole::Text,
             false,
@@ -312,7 +313,7 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowFinish {
         let matrix_metrics = self.display_text_row_metrics(metrics);
-        DisplayRowLifecycleSurface::from_builder(self.output_builder).set_metrics(
+        DisplayRowLifecycleSurface::from_output_builder(self.output_builder).set_metrics(
             display_row_index,
             matrix_metrics.pixel_y,
             matrix_metrics.height_px,
@@ -325,7 +326,7 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     }
 
     fn finalize_display_text_row(&mut self, display_row_index: usize) {
-        DisplayRowLifecycleSurface::from_builder(self.output_builder)
+        DisplayRowLifecycleSurface::from_output_builder(self.output_builder)
             .finalize_row(display_row_index);
     }
 
@@ -351,7 +352,7 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
         &self,
         metrics: DisplayTextRowMetrics,
     ) -> DisplayTextRowStoredMetrics {
-        let window_y = DisplayRowWindowContextSurface::from_builder(self.output_builder)
+        let window_y = DisplayRowWindowContextSurface::from_output_builder(self.output_builder)
             .current_window_pixel_bounds()
             .y;
         DisplayTextRowStoredMetrics {
@@ -362,11 +363,11 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     }
 
     fn finish_output_rows(&mut self, output_emitter: &WindowOutputEmitter) {
-        let window_y = DisplayRowWindowContextSurface::from_builder(self.output_builder)
+        let window_y = DisplayRowWindowContextSurface::from_output_builder(self.output_builder)
             .current_window_pixel_bounds()
             .y;
         for metric in output_emitter.row_metrics() {
-            DisplayRowLifecycleSurface::from_builder(self.output_builder).set_metrics(
+            DisplayRowLifecycleSurface::from_output_builder(self.output_builder).set_metrics(
                 metric.display_row_index,
                 metric.pixel_y - window_y,
                 metric.height,
@@ -374,7 +375,7 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
             );
         }
         if let Some(metric) = output_emitter.row_metrics().last() {
-            DisplayRowLifecycleSurface::from_builder(self.output_builder)
+            DisplayRowLifecycleSurface::from_output_builder(self.output_builder)
                 .finalize_row(metric.display_row_index);
         }
     }
@@ -385,10 +386,10 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
         request: TextWindowRightEdgeMarkers<'_>,
     ) {
         let base_face = render_services.face_resolver().default_face().clone();
-        let mut decorations = DisplayRowDecorationSurface::from_builder(self.output_builder);
+        let mut decorations = DisplayRowDecorationSurface::from_output_builder(self.output_builder);
         for decoration in text_window_right_edge_marker_decorations(&request) {
             decorations.decorate_current_window_row(
-                decoration.matrix_row,
+                decoration.display_row_index,
                 RightEdgeMarkerRowDecorator::new(
                     decoration,
                     request.face_id,
@@ -406,9 +407,12 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
         request: TextWindowRightBorder,
         base_face: &ResolvedFace,
     ) {
-        DisplayRowDecorationSurface::from_builder(self.output_builder).decorate_last_window_rows(
-            RightBorderRowsDecorator::new(request, base_face, &mut render_services),
-        );
+        DisplayRowDecorationSurface::from_output_builder(self.output_builder)
+            .decorate_last_window_rows(RightBorderRowsDecorator::new(
+                request,
+                base_face,
+                &mut render_services,
+            ));
     }
 }
 
@@ -738,19 +742,23 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         face: &ResolvedFace,
         metrics: Option<crate::font_metrics::FontMetrics>,
     ) {
-        DisplayRowFaceInstallSurface::from_builder(self.output_builder)
+        DisplayRowFaceInstallSurface::from_output_builder(self.output_builder)
             .install_resolved_face(face_id, face, metrics);
     }
 
     pub(crate) fn install_rendered_fragment_assets(
         &mut self,
         role: GlyphRowRole,
-        matrix_row: usize,
+        display_row_index: usize,
         faces: &[neomacs_display_protocol::face::Face],
         media: &[RenderedDisplayRowMedia],
     ) {
-        DisplayRowInstallSurface::from_builder(self.output_builder)
-            .install_fragment_assets(role, matrix_row, faces, media);
+        DisplayRowInstallSurface::from_output_builder(self.output_builder).install_fragment_assets(
+            role,
+            display_row_index,
+            faces,
+            media,
+        );
     }
 
     pub(crate) fn emit_text_source_slots(
@@ -785,14 +793,14 @@ impl<'a> TextWindowLiveOutputSurface<'a> {
         &mut self,
     ) -> TextWindowLiveCurrentRowEvaluatorState<'_> {
         TextWindowLiveCurrentRowEvaluatorState {
-            row_surface: DisplayRowCurrentRowSurface::from_builder(self.output_builder),
+            row_surface: DisplayRowCurrentRowSurface::from_output_builder(self.output_builder),
             evaluator: self.evaluator,
         }
     }
 
     pub(crate) fn current_row_host_state(&mut self) -> TextWindowLiveCurrentRowHostState<'_> {
         TextWindowLiveCurrentRowHostState {
-            row_surface: DisplayRowCurrentRowSurface::from_builder(self.output_builder),
+            row_surface: DisplayRowCurrentRowSurface::from_output_builder(self.output_builder),
             display_host: self.evaluator.display_host.as_deref(),
         }
     }
@@ -1047,7 +1055,8 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
         &mut self,
         cursor: TextWindowCursor,
     ) -> TextWindowCursorPublicationOutcome {
-        let window_context = DisplayRowWindowContextSurface::from_builder(self.output_builder);
+        let window_context =
+            DisplayRowWindowContextSurface::from_output_builder(self.output_builder);
         let publication = TextWindowCursorPublication::resolve(&window_context, cursor);
         publication.publish(self)
     }
@@ -1063,7 +1072,8 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     }
 
     fn set_display_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        DisplayRowLifecycleSurface::from_builder(self.output_builder).set_cursor(row, col, style);
+        DisplayRowLifecycleSurface::from_output_builder(self.output_builder)
+            .set_cursor(row, col, style);
     }
 
     fn store_phys_cursor(&mut self, cursor: PhysCursor) {
@@ -1108,7 +1118,8 @@ impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'outp
     }
 
     pub(crate) fn install_measured_window_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        DisplayRowInstallSurface::from_builder(self.output_builder).install_measured(measured);
+        DisplayRowInstallSurface::from_output_builder(self.output_builder)
+            .install_measured(measured);
     }
 
     pub(crate) fn render_chrome_rows(
@@ -1171,7 +1182,7 @@ impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
     }
 
     pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
-        DisplayRowArtifactInstallSurface::from_builder(self.output_builder)
+        DisplayRowArtifactInstallSurface::from_output_builder(self.output_builder)
             .set_cursor_effects(request.window_id, request.effects);
     }
 
@@ -1195,7 +1206,7 @@ impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
     }
 
     fn install_cursor_artifact(&mut self, cursor: TextWindowCursorArtifact) {
-        DisplayRowArtifactInstallSurface::from_builder(self.output_builder).add_cursor(
+        DisplayRowArtifactInstallSurface::from_output_builder(self.output_builder).add_cursor(
             cursor.window_id,
             cursor.slot_id,
             cursor.x,
@@ -1208,7 +1219,7 @@ impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
     }
 
     fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        DisplayRowArtifactInstallSurface::from_builder(self.output_builder)
+        DisplayRowArtifactInstallSurface::from_output_builder(self.output_builder)
             .store_phys_cursor(cursor);
     }
 
@@ -1226,11 +1237,8 @@ impl<'output_builder> TextWindowArtifactOutputSurface<'output_builder> {
         // `frame_face_id_counter` by the decoration render, engine.rs) rather than
         // a separate `FaceResolver` counter that could collide with it.
         let border_face_id = render_services.face_ids().allocate();
-        DisplayRowFaceInstallSurface::from_builder(self.output_builder).install_resolved_face(
-            border_face_id,
-            &border_face,
-            None,
-        );
+        DisplayRowFaceInstallSurface::from_output_builder(self.output_builder)
+            .install_resolved_face(border_face_id, &border_face, None);
         TextWindowOutputInstallSurface::from_output_builder(self.output_builder)
             .install_last_window_right_border(
                 render_services.reborrow(),

@@ -138,7 +138,7 @@ fn install_right_edge_marker_from_source_request(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextWindowRightEdgeMarkerDecoration {
-    pub(crate) matrix_row: usize,
+    pub(crate) display_row_index: usize,
     pub(crate) target_col: usize,
     pub(crate) marker: char,
 }
@@ -192,7 +192,7 @@ pub(crate) fn text_window_right_edge_marker_decorations(
     let target_col = request.column.target_col(request.output_cols);
     let mut decorations = Vec::new();
     for row_idx in 0..request.row_flags.len() {
-        let matrix_row = request.display_text_row_base + row_idx;
+        let display_row_index = request.display_text_row_base + row_idx;
         let marker = if request
             .row_flags
             .is_set(row_idx, DisplayRowFlagKind::Truncated)
@@ -210,7 +210,7 @@ pub(crate) fn text_window_right_edge_marker_decorations(
             continue;
         };
         decorations.push(TextWindowRightEdgeMarkerDecoration {
-            matrix_row,
+            display_row_index,
             target_col,
             marker,
         });

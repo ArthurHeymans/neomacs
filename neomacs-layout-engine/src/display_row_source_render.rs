@@ -16,7 +16,7 @@ use crate::display_row::{
     DisplayRowResolvedMeasuredFace, DisplayRowSourceFragmentRenderRequest,
     DisplayRowSourceRenderRequest, DisplayRowSourceState, display_row_output_end_position,
 };
-use crate::display_row_matrix_install::DisplayRowCurrentRowSurface;
+use crate::display_row_output_install::DisplayRowCurrentRowSurface;
 use crate::display_row_replacement::{
     DisplayPropertyReplacementAppendPlan, DisplayPropertyReplacementAppendRequest,
 };

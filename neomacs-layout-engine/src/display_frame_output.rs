@@ -1,6 +1,6 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_row::MeasuredDisplayRow;
-use crate::display_row_matrix_install::{DisplayRowFaceInstallSurface, DisplayRowInstallSurface};
+use crate::display_row_output_install::{DisplayRowFaceInstallSurface, DisplayRowInstallSurface};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -167,7 +167,7 @@ impl<'a> FrameOutputSurface<'a> {
     }
 
     pub(crate) fn install_face(&mut self, face: &Face) {
-        DisplayRowFaceInstallSurface::from_builder(self.builder).install_face(face);
+        DisplayRowFaceInstallSurface::from_output_builder(self.builder).install_face(face);
     }
 
     fn install_resolved_face(
@@ -176,7 +176,7 @@ impl<'a> FrameOutputSurface<'a> {
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
     ) {
-        DisplayRowFaceInstallSurface::from_builder(self.builder)
+        DisplayRowFaceInstallSurface::from_output_builder(self.builder)
             .install_resolved_face(face_id, face, metrics);
     }
 
@@ -308,7 +308,7 @@ impl<'builder, 'rows> FrameChromeOutputSurface<'builder, 'rows> {
     }
 
     pub(crate) fn install_measured_frame_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        DisplayRowInstallSurface::with_frame_chrome_rows(
+        DisplayRowInstallSurface::from_output_builder_with_frame_chrome_rows(
             self.builder,
             self.pending_frame_chrome_rows,
         )

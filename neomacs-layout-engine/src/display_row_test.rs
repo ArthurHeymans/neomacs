@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_row_matrix_install::{DisplayRowCurrentRowSurface, DisplayRowInstallSurface};
+use crate::display_row_output_install::{DisplayRowCurrentRowSurface, DisplayRowInstallSurface};
 use crate::display_row_source_render::TextRowSourceMeasureState;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
@@ -28,7 +28,7 @@ fn text_row_source_measure_state<'a>(
     face_resolver: &'a FaceResolver,
 ) -> TextRowSourceMeasureState<'a> {
     TextRowSourceMeasureState::from_current_row(
-        DisplayRowCurrentRowSurface::from_builder(builder),
+        DisplayRowCurrentRowSurface::from_output_builder(builder),
         evaluator,
         font_metrics,
         face_resolver,
@@ -2870,7 +2870,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
 }
 
 #[test]
-fn mock_display_row_matrix_install_preserves_row_metadata() {
+fn mock_display_row_output_install_preserves_row_metadata() {
     let mut row = GlyphRow::new(GlyphRowRole::ModeLine);
     row.enabled = true;
     row.pixel_y = 40.0;
@@ -2882,7 +2882,7 @@ fn mock_display_row_matrix_install_preserves_row_metadata() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 16.0, 80.0, 40.0), true);
-    DisplayRowInstallSurface::from_builder(&mut builder).install_row(1, &row);
+    DisplayRowInstallSurface::from_output_builder(&mut builder).install_row(1, &row);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);
@@ -2947,7 +2947,7 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
         rendered,
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
     );
-    DisplayRowInstallSurface::from_builder(&mut builder).install_measured(&measured);
+    DisplayRowInstallSurface::from_output_builder(&mut builder).install_measured(&measured);
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
