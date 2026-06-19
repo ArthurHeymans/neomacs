@@ -210,17 +210,17 @@ impl MatrixFrameArtifactInstallRequest {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct MatrixFrameIdentityInstallRequest {
-    pub(crate) frame_id: u64,
-    pub(crate) parent_id: u64,
-    pub(crate) parent_x: f32,
-    pub(crate) parent_y: f32,
-    pub(crate) z_order: i32,
-    pub(crate) undecorated: bool,
-    pub(crate) border_width: f32,
-    pub(crate) border_color: Color,
-    pub(crate) background_alpha: f32,
-    pub(crate) no_accept_focus: bool,
+struct MatrixFrameIdentityInstallRequest {
+    frame_id: u64,
+    parent_id: u64,
+    parent_x: f32,
+    parent_y: f32,
+    z_order: i32,
+    undecorated: bool,
+    border_width: f32,
+    border_color: Color,
+    background_alpha: f32,
+    no_accept_focus: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -504,8 +504,33 @@ impl MatrixArtifactInstaller<'_> {
         self.builder.install_frame_state(request);
     }
 
-    pub(crate) fn set_frame_identity(&mut self, identity: MatrixFrameIdentityInstallRequest) {
-        self.install_frame_state(MatrixFrameStateInstallRequest::Identity(identity));
+    pub(crate) fn set_frame_identity(
+        &mut self,
+        frame_id: u64,
+        parent_id: u64,
+        parent_x: f32,
+        parent_y: f32,
+        z_order: i32,
+        undecorated: bool,
+        border_width: f32,
+        border_color: Color,
+        background_alpha: f32,
+        no_accept_focus: bool,
+    ) {
+        self.install_frame_state(MatrixFrameStateInstallRequest::Identity(
+            MatrixFrameIdentityInstallRequest {
+                frame_id,
+                parent_id,
+                parent_x,
+                parent_y,
+                z_order,
+                undecorated,
+                border_width,
+                border_color,
+                background_alpha,
+                no_accept_focus,
+            },
+        ));
     }
 
     pub(crate) fn set_background_color(&mut self, color: Color) {

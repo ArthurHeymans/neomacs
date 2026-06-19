@@ -1541,18 +1541,16 @@ impl LayoutEngine {
         let mut builder = GlyphMatrixBuilder::new();
 
         builder.artifact_installer().set_frame_identity(
-            super::matrix_builder::MatrixFrameIdentityInstallRequest {
-                frame_id: content.frame_id,
-                parent_id: 0,
-                parent_x: 0.0,
-                parent_y: 0.0,
-                z_order: 0,
-                undecorated: false,
-                border_width: 0.0,
-                border_color: Color::BLACK,
-                background_alpha: 1.0,
-                no_accept_focus: false,
-            },
+            content.frame_id,
+            0,
+            0.0,
+            0.0,
+            0,
+            false,
+            0.0,
+            Color::BLACK,
+            1.0,
+            false,
         );
         builder
             .artifact_installer()
@@ -1755,18 +1753,16 @@ impl LayoutEngine {
         for cf in &content.child_frames {
             let mut cb = GlyphMatrixBuilder::new();
             cb.artifact_installer().set_frame_identity(
-                super::matrix_builder::MatrixFrameIdentityInstallRequest {
-                    frame_id: cf.frame_id,
-                    parent_id: content.frame_id,
-                    parent_x: cf.parent_x,
-                    parent_y: cf.parent_y,
-                    z_order: cf.z_order,
-                    undecorated: true,
-                    border_width: 0.0,
-                    border_color: Color::BLACK,
-                    background_alpha: 1.0,
-                    no_accept_focus: false,
-                },
+                cf.frame_id,
+                content.frame_id,
+                cf.parent_x,
+                cf.parent_y,
+                cf.z_order,
+                true,
+                0.0,
+                Color::BLACK,
+                1.0,
+                false,
             );
             cb.artifact_installer()
                 .set_background_color(Color::new(0.0, 0.0, 0.0, 0.0));

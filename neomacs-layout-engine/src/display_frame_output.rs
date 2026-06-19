@@ -5,7 +5,7 @@ use crate::display_row_matrix_install::{
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
-use crate::matrix_builder::{GlyphMatrixBuilder, MatrixFrameIdentityInstallRequest};
+use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputRenderState;
@@ -52,23 +52,6 @@ pub(crate) struct FrameOutputIdentity {
     pub(crate) no_accept_focus: bool,
 }
 
-impl From<FrameOutputIdentity> for MatrixFrameIdentityInstallRequest {
-    fn from(identity: FrameOutputIdentity) -> Self {
-        Self {
-            frame_id: identity.frame_id,
-            parent_id: identity.parent_id,
-            parent_x: identity.parent_x,
-            parent_y: identity.parent_y,
-            z_order: identity.z_order,
-            undecorated: identity.undecorated,
-            border_width: identity.border_width,
-            border_color: identity.border_color,
-            background_alpha: identity.background_alpha,
-            no_accept_focus: identity.no_accept_focus,
-        }
-    }
-}
-
 pub(crate) struct FrameOutputRenderState<'a> {
     builder: &'a mut GlyphMatrixBuilder,
 }
@@ -87,10 +70,19 @@ impl<'a> FrameOutputRenderState<'a> {
         self.builder
     }
 
-    fn set_frame_identity(&mut self, identity: MatrixFrameIdentityInstallRequest) {
-        self.builder
-            .artifact_installer()
-            .set_frame_identity(identity);
+    fn set_frame_identity(&mut self, identity: FrameOutputIdentity) {
+        self.builder.artifact_installer().set_frame_identity(
+            identity.frame_id,
+            identity.parent_id,
+            identity.parent_x,
+            identity.parent_y,
+            identity.z_order,
+            identity.undecorated,
+            identity.border_width,
+            identity.border_color,
+            identity.background_alpha,
+            identity.no_accept_focus,
+        );
     }
 
     fn set_background_color(&mut self, color: Color) {
@@ -208,7 +200,7 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
 
     pub(crate) fn render_and_apply(self, state: &mut FrameOutputRenderState<'_>) {
         if let Some(identity) = self.identity {
-            state.set_frame_identity(identity.into());
+            state.set_frame_identity(identity);
         }
         state.set_background_color(self.background_color);
         state.set_font_pixel_size(self.font_pixel_size);
