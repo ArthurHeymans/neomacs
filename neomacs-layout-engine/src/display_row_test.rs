@@ -1,5 +1,6 @@
 use super::*;
-use crate::display_row_matrix_install::{DisplayRowCurrentRowReader, DisplayRowInstaller};
+use crate::display_row_matrix_install::DisplayRowInstaller;
+use crate::display_row_source_render::TextRowSourceMeasureState;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -168,9 +169,14 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut eval = Context::new();
+    let mut font_metrics = None;
 
     assert_eq!(
-        DisplayRowCurrentRowReader::new(&builder).cluster_tail(),
+        TextRowSourceMeasureState::new(&mut builder, &mut eval, &mut font_metrics, &resolver)
+            .current_cluster_tail(),
         None
     );
 
@@ -180,7 +186,8 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
         })
         .expect("current row");
     assert_eq!(
-        DisplayRowCurrentRowReader::new(&builder).cluster_tail(),
+        TextRowSourceMeasureState::new(&mut builder, &mut eval, &mut font_metrics, &resolver)
+            .current_cluster_tail(),
         Some(('\u{1F1EF}', true))
     );
 
@@ -190,7 +197,8 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
         })
         .expect("current row");
     assert_eq!(
-        DisplayRowCurrentRowReader::new(&builder).cluster_tail(),
+        TextRowSourceMeasureState::new(&mut builder, &mut eval, &mut font_metrics, &resolver)
+            .current_cluster_tail(),
         Some(('\u{1F1F5}', false))
     );
 }

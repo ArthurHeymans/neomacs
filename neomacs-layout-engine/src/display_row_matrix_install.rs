@@ -1,4 +1,3 @@
-use crate::composition::last_text_cluster_tail_in_row;
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
@@ -83,10 +82,6 @@ pub(crate) struct DisplayRowCurrentRowInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
 
-pub(crate) struct DisplayRowCurrentRowReader<'builder> {
-    builder: &'builder GlyphMatrixBuilder,
-}
-
 pub(crate) struct DisplayRowFaceInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
@@ -156,21 +151,15 @@ impl<'builder> DisplayRowFaceInstaller<'builder> {
     }
 }
 
-impl<'builder> DisplayRowCurrentRowReader<'builder> {
-    pub(crate) fn new(builder: &'builder GlyphMatrixBuilder) -> Self {
-        Self { builder }
-    }
-
-    pub(crate) fn cluster_tail(&self) -> Option<(char, bool)> {
-        self.builder
-            .current_row_for_render()
-            .and_then(last_text_cluster_tail_in_row)
-    }
-}
-
 impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
     pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
+    }
+
+    pub(crate) fn reborrow(&mut self) -> DisplayRowCurrentRowInstaller<'_> {
+        DisplayRowCurrentRowInstaller {
+            builder: self.builder,
+        }
     }
 
     pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
