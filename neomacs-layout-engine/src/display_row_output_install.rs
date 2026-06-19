@@ -1,5 +1,8 @@
 use crate::composition::last_text_cluster_tail_in_row;
-use crate::display_output_builder::{DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID};
+use crate::display_output_builder::{
+    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRetryCheckpointRestoreRequest,
+    OutputTextWindowDisplayRangeInstallRequest,
+};
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
@@ -191,6 +194,30 @@ pub(crate) fn begin_text_output_window(
 
 pub(crate) fn end_text_output_window(builder: &mut DisplayOutputBuilder) {
     builder.end_output_window();
+}
+
+pub(crate) fn install_text_output_display_range(
+    builder: &mut DisplayOutputBuilder,
+    window_id: i64,
+    window_start: i64,
+    window_end: i64,
+) {
+    builder.install_window_metadata(OutputTextWindowDisplayRangeInstallRequest::new(
+        window_id,
+        window_start,
+        window_end,
+    ));
+}
+
+pub(crate) fn restore_text_output_retry_checkpoint(
+    builder: &mut DisplayOutputBuilder,
+    transition_hints_len: usize,
+    effect_hints_len: usize,
+) {
+    builder.install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
+        transition_hints_len,
+        effect_hints_len,
+    ));
 }
 
 pub(crate) fn begin_text_output_row(

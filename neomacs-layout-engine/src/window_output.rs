@@ -16,9 +16,6 @@ use crate::display_item::{
     DisplayStretchWidth, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_output_builder::{
-    OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
-};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphSlot, DisplayRowPosition};
@@ -29,7 +26,8 @@ use crate::display_row_output_install::{
     DisplayOutputRowStoredMetrics, DisplayOutputTextRowMetricsInstallRequest,
     DisplayOutputTextWindowBeginInstallRequest, begin_text_output_row, begin_text_output_window,
     end_text_output_window, finalize_text_output_row, finish_text_output_row,
-    install_text_output_row_metrics,
+    install_text_output_display_range, install_text_output_row_metrics,
+    restore_text_output_retry_checkpoint,
 };
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
@@ -275,11 +273,12 @@ pub(crate) fn record_text_window_display_range(
     output_builder: &mut DisplayOutputBuilder,
     range: TextWindowDisplayRange,
 ) {
-    output_builder.install_window_metadata(OutputTextWindowDisplayRangeInstallRequest::new(
+    install_text_output_display_range(
+        output_builder,
         range.window_id as i64,
         range.window_start.as_i64(),
         range.window_end.as_i64(),
-    ));
+    );
 }
 
 fn record_text_window_redisplay_positions(
@@ -487,10 +486,11 @@ pub(crate) fn restore_text_window_retry_checkpoint(
     output_builder: &mut DisplayOutputBuilder,
     checkpoint: TextWindowOutputRetryCheckpoint,
 ) {
-    output_builder.install_window_metadata(OutputRetryCheckpointRestoreRequest::new(
+    restore_text_output_retry_checkpoint(
+        output_builder,
         checkpoint.transition_hints_len,
         checkpoint.effect_hints_len,
-    ));
+    );
 }
 
 fn install_display_text_row_metrics(
