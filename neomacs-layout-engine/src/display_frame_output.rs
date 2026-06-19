@@ -66,10 +66,6 @@ struct FrameOutputSession<'builder, 'chrome, 'tab> {
     pending_tab_bar: &'tab mut Option<FrameTabBarState>,
 }
 
-pub(crate) struct FrameOutputView<'builder> {
-    builder: &'builder DisplayOutputBuilder,
-}
-
 impl FrameOutputOwner {
     pub(crate) fn new() -> Self {
         Self {
@@ -101,10 +97,6 @@ impl FrameOutputOwner {
         (&mut self.builder, &mut self.pending_frame_chrome_rows)
     }
 
-    pub(crate) fn view(&self) -> FrameOutputView<'_> {
-        FrameOutputView::from_output_builder(&self.builder)
-    }
-
     pub(crate) fn reset(&mut self) {
         self.session().reset();
     }
@@ -115,6 +107,22 @@ impl FrameOutputOwner {
 
     pub(crate) fn set_tab_bar(&mut self, tab_bar: FrameTabBarState) {
         self.pending_tab_bar = Some(tab_bar);
+    }
+
+    pub(crate) fn latest_window_info(&self, window_id: i64) -> Option<WindowInfo> {
+        self.builder
+            .window_infos()
+            .iter()
+            .rev()
+            .find(|info| info.window_id == window_id)
+            .cloned()
+    }
+
+    pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
+        self.builder
+            .windows()
+            .last()
+            .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
     }
 }
 
@@ -258,28 +266,6 @@ impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
             .extend(std::mem::take(self.pending_frame_chrome_rows));
         frame_display_state.tab_bar = self.pending_tab_bar.take();
         frame_display_state
-    }
-}
-
-impl<'builder> FrameOutputView<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    pub(crate) fn latest_window_info(&self, window_id: i64) -> Option<WindowInfo> {
-        self.builder
-            .window_infos()
-            .iter()
-            .rev()
-            .find(|info| info.window_id == window_id)
-            .cloned()
-    }
-
-    pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
-        self.builder
-            .windows()
-            .last()
-            .map(|entry| entry.matrix.rows.iter().filter(|row| row.enabled).count())
     }
 }
 

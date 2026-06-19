@@ -192,11 +192,11 @@ impl LayoutEngine {
     }
 
     fn latest_output_window_info(&self, window_id: i64) -> Option<WindowInfo> {
-        self.frame_output.view().latest_window_info(window_id)
+        self.frame_output.latest_window_info(window_id)
     }
 
     fn latest_output_window_enabled_rows(&self) -> Option<usize> {
-        self.frame_output.view().latest_window_enabled_rows()
+        self.frame_output.latest_window_enabled_rows()
     }
 
     fn finish_frame_output(
