@@ -1,12 +1,8 @@
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
-use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
-};
+use neomacs_display_protocol::frame_glyphs::{WindowEffectHint, WindowInfo, WindowTransitionHint};
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
 
@@ -69,11 +65,6 @@ impl<'output> OutputArtifactInstallSurface<'output> {
             .install_output_resolved_display_row_face(face_id, face, metrics);
     }
 
-    pub(crate) fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
-        self.output_builder
-            .set_output_cursor_effects(window_id, effects);
-    }
-
     pub(crate) fn add_background(&mut self, bounds: Rect, color: Color) {
         self.output_builder.add_output_background(bounds, color);
     }
@@ -105,77 +96,5 @@ impl<'output> OutputArtifactInstallSurface<'output> {
 
     pub(crate) fn add_effect_hint(&mut self, hint: WindowEffectHint) {
         self.output_builder.add_output_effect_hint(hint);
-    }
-
-    pub(crate) fn add_cursor(
-        &mut self,
-        window_id: i64,
-        slot_id: DisplaySlotId,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        style: CursorStyle,
-        color: Color,
-    ) {
-        self.output_builder
-            .add_output_cursor(window_id, slot_id, x, y, width, height, style, color);
-    }
-
-    pub(crate) fn add_image_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        self.output_builder.add_output_image_media(
-            window_id, role, clip, slot_id, image_id, x, y, width, height,
-        );
-    }
-
-    pub(crate) fn add_video_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        self.output_builder.add_output_video_media(
-            window_id, role, clip, slot_id, video_id, loop_count, autoplay, x, y, width, height,
-        );
-    }
-
-    pub(crate) fn add_xwidget_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        self.output_builder.add_output_xwidget_media(
-            window_id, role, clip, slot_id, xwidget_id, x, y, width, height,
-        );
-    }
-
-    pub(crate) fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        self.output_builder.store_output_phys_cursor(cursor);
     }
 }

@@ -1,10 +1,5 @@
 use crate::composition::last_text_cluster_tail_in_row;
-use crate::display_cursor::CursorVisualColumnResolutionContext;
-use crate::display_output_artifact_install::OutputArtifactInstallSurface;
-use crate::display_output_builder::{
-    DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRowDecorationInstallRequest,
-    OutputRowDecorator,
-};
+use crate::display_output_builder::{DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID};
 #[cfg(test)]
 use crate::display_row::display_row_output_end_position;
 use crate::display_row::{
@@ -15,17 +10,12 @@ use crate::display_row_builder::apply_display_row_source_slot_bounds;
 use crate::display_row_builder::{DisplayRowGlyphSlot, merge_display_row_source_slot_bounds};
 #[cfg(test)]
 use crate::display_row_builder::{DisplayRowPosition, display_row_text_is_empty};
-use crate::font_metrics::FontMetrics;
-use crate::neovm_bridge::ResolvedFace;
 #[cfg(test)]
 use crate::window_output::{TextRowOutput, WindowOutputEmitter};
-use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
-};
+use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphRow};
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::Rect;
 #[cfg(test)]
 use neovm_core::emacs_core::Context;
 
@@ -68,8 +58,7 @@ impl<'a> DisplayRowOutputInstall<'a> {
     }
 
     fn install(self, builder: &mut DisplayOutputBuilder) {
-        let pixel_bounds = DisplayRowWindowContextSurface::from_output_builder(builder)
-            .current_window_pixel_bounds();
+        let pixel_bounds = builder.current_window_pixel_bounds();
         let mut row = self.row.clone();
         if let Some(source_slots) = self.source_slots {
             apply_display_row_source_slot_bounds(&mut row, source_slots);
@@ -98,48 +87,12 @@ pub(crate) struct DisplayRowCurrentRowSurface<'builder> {
     installer: DisplayRowCurrentRowInstaller<'builder>,
 }
 
-struct DisplayRowFaceInstaller<'builder> {
-    builder: &'builder mut DisplayOutputBuilder,
-}
-
-pub(crate) struct DisplayRowFaceInstallSurface<'builder> {
-    installer: DisplayRowFaceInstaller<'builder>,
-}
-
-struct DisplayRowLifecycleInstaller<'builder> {
-    builder: &'builder mut DisplayOutputBuilder,
-}
-
-pub(crate) struct DisplayRowLifecycleSurface<'builder> {
-    installer: DisplayRowLifecycleInstaller<'builder>,
-}
-
-struct DisplayRowArtifactInstaller<'builder> {
-    builder: &'builder mut DisplayOutputBuilder,
-}
-
-pub(crate) struct DisplayRowArtifactInstallSurface<'builder> {
-    installer: DisplayRowArtifactInstaller<'builder>,
-}
-
 struct DisplayRowAssetsInstaller<'builder> {
     builder: &'builder mut DisplayOutputBuilder,
 }
 
 struct DisplayRowAssetsInstallSurface<'builder> {
     installer: DisplayRowAssetsInstaller<'builder>,
-}
-
-struct DisplayRowDecorationInstaller<'builder> {
-    builder: &'builder mut DisplayOutputBuilder,
-}
-
-pub(crate) struct DisplayRowDecorationSurface<'builder> {
-    installer: DisplayRowDecorationInstaller<'builder>,
-}
-
-pub(crate) struct DisplayRowWindowContextSurface<'builder> {
-    builder: &'builder DisplayOutputBuilder,
 }
 
 impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
@@ -237,291 +190,14 @@ impl<'builder, 'rows> DisplayRowInstallSurface<'builder, 'rows> {
     }
 }
 
-impl<'builder> DisplayRowFaceInstaller<'builder> {
-    fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn install_face(&mut self, face: &Face) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder).install_face(face);
-    }
-
-    fn install_resolved_face(
-        &mut self,
-        face_id: u32,
-        face: &ResolvedFace,
-        metrics: Option<FontMetrics>,
-    ) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder)
-            .install_resolved_face(face_id, face, metrics);
-    }
-}
-
-impl<'builder> DisplayRowFaceInstallSurface<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self {
-            installer: DisplayRowFaceInstaller::new(builder),
-        }
-    }
-
-    pub(crate) fn install_face(&mut self, face: &Face) {
-        self.installer.install_face(face);
-    }
-
-    pub(crate) fn install_resolved_face(
-        &mut self,
-        face_id: u32,
-        face: &ResolvedFace,
-        metrics: Option<FontMetrics>,
-    ) {
-        self.installer.install_resolved_face(face_id, face, metrics);
-    }
-}
-
-impl<'builder> DisplayRowLifecycleInstaller<'builder> {
-    fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn begin_row(&mut self, display_row_index: usize, role: GlyphRowRole, mode_line: bool) {
-        self.builder
-            .begin_output_row(display_row_index, role, mode_line);
-    }
-
-    fn set_metrics(&mut self, display_row_index: usize, pixel_y: f32, height: f32, ascent: f32) {
-        self.builder
-            .set_output_row_metrics(display_row_index, pixel_y, height, ascent);
-    }
-
-    fn finalize_row(&mut self, display_row_index: usize) {
-        self.builder.finalize_output_row_index(display_row_index);
-    }
-
-    fn set_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        self.builder.set_output_row_cursor(row, col, style);
-    }
-
-    fn mark_current_truncated_left(&mut self) {
-        self.builder.mark_current_output_row_truncated_left();
-    }
-}
-
-impl<'builder> DisplayRowLifecycleSurface<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self {
-            installer: DisplayRowLifecycleInstaller::new(builder),
-        }
-    }
-
-    pub(crate) fn begin_row(
-        &mut self,
-        display_row_index: usize,
-        role: GlyphRowRole,
-        mode_line: bool,
-    ) {
-        self.installer.begin_row(display_row_index, role, mode_line);
-    }
-
-    pub(crate) fn set_metrics(
-        &mut self,
-        display_row_index: usize,
-        pixel_y: f32,
-        height: f32,
-        ascent: f32,
-    ) {
-        self.installer
-            .set_metrics(display_row_index, pixel_y, height, ascent);
-    }
-
-    pub(crate) fn finalize_row(&mut self, display_row_index: usize) {
-        self.installer.finalize_row(display_row_index);
-    }
-
-    pub(crate) fn set_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        self.installer.set_cursor(row, col, style);
-    }
-
-    pub(crate) fn mark_current_truncated_left(&mut self) {
-        self.installer.mark_current_truncated_left();
-    }
-}
-
-impl<'builder> DisplayRowArtifactInstaller<'builder> {
-    fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn add_cursor(
-        &mut self,
-        window_id: i64,
-        slot_id: DisplaySlotId,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        style: CursorStyle,
-        color: Color,
-    ) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder)
-            .add_cursor(window_id, slot_id, x, y, width, height, style, color);
-    }
-
-    fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder)
-            .set_cursor_effects(window_id, effects);
-    }
-
-    fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder).store_phys_cursor(cursor);
-    }
-
-    fn add_image_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder).add_image_media(
-            window_id, role, clip, slot_id, image_id, x, y, width, height,
-        );
-    }
-
-    fn add_video_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder).add_video_media(
-            window_id, role, clip, slot_id, video_id, loop_count, autoplay, x, y, width, height,
-        );
-    }
-
-    fn add_xwidget_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        OutputArtifactInstallSurface::from_output_builder(self.builder).add_xwidget_media(
-            window_id, role, clip, slot_id, xwidget_id, x, y, width, height,
-        );
-    }
-}
-
-impl<'builder> DisplayRowArtifactInstallSurface<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self {
-            installer: DisplayRowArtifactInstaller::new(builder),
-        }
-    }
-
-    pub(crate) fn add_cursor(
-        &mut self,
-        window_id: i64,
-        slot_id: DisplaySlotId,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        style: CursorStyle,
-        color: Color,
-    ) {
-        self.installer
-            .add_cursor(window_id, slot_id, x, y, width, height, style, color);
-    }
-
-    pub(crate) fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
-        self.installer.set_cursor_effects(window_id, effects);
-    }
-
-    pub(crate) fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        self.installer.store_phys_cursor(cursor);
-    }
-
-    fn add_image_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        image_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        self.installer.add_image_media(
-            window_id, role, clip, slot_id, image_id, x, y, width, height,
-        );
-    }
-
-    fn add_video_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        self.installer.add_video_media(
-            window_id, role, clip, slot_id, video_id, loop_count, autoplay, x, y, width, height,
-        );
-    }
-
-    fn add_xwidget_media(
-        &mut self,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-        xwidget_id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        self.installer.add_xwidget_media(
-            window_id, role, clip, slot_id, xwidget_id, x, y, width, height,
-        );
-    }
-}
-
 impl<'builder> DisplayRowAssetsInstaller<'builder> {
     fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
         Self { builder }
     }
 
     fn install_faces(&mut self, faces: &[Face]) {
-        let mut face_installer = DisplayRowFaceInstallSurface::from_output_builder(self.builder);
         for face in faces {
-            face_installer.install_face(face);
+            self.builder.install_output_face(face.id, face.clone());
         }
     }
 
@@ -543,11 +219,9 @@ impl<'builder> DisplayRowAssetsInstaller<'builder> {
         medium: &RenderedDisplayRowMedia,
     ) {
         let target = DisplayRowMediaInstallTarget::resolve(self.builder, medium.col, target);
-        let mut artifact_installer =
-            DisplayRowArtifactInstallSurface::from_output_builder(self.builder);
         match medium.kind {
             RenderedDisplayRowMediaKind::Image { image_id } => {
-                artifact_installer.add_image_media(
+                self.builder.add_output_image_media(
                     target.window_id,
                     role,
                     target.clip,
@@ -564,7 +238,7 @@ impl<'builder> DisplayRowAssetsInstaller<'builder> {
                 loop_count,
                 autoplay,
             } => {
-                artifact_installer.add_video_media(
+                self.builder.add_output_video_media(
                     target.window_id,
                     role,
                     target.clip,
@@ -579,7 +253,7 @@ impl<'builder> DisplayRowAssetsInstaller<'builder> {
                 );
             }
             RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
-                artifact_installer.add_xwidget_media(
+                self.builder.add_output_xwidget_media(
                     target.window_id,
                     role,
                     target.clip,
@@ -606,77 +280,6 @@ impl<'builder> DisplayRowAssetsInstallSurface<'builder> {
         self.installer.install_faces(request.faces);
         self.installer
             .install_media(request.role, request.target, request.media);
-    }
-}
-
-impl<'builder> DisplayRowDecorationInstaller<'builder> {
-    fn new(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn decorate_current_window_row<D>(&mut self, row_idx: usize, decorator: D)
-    where
-        D: OutputRowDecorator,
-    {
-        self.builder
-            .install_row_decoration(OutputRowDecorationInstallRequest::current_window_row(
-                row_idx, decorator,
-            ));
-    }
-
-    fn decorate_last_window_rows<D>(&mut self, decorator: D)
-    where
-        D: OutputRowDecorator,
-    {
-        self.builder
-            .install_row_decoration(OutputRowDecorationInstallRequest::last_window_rows(
-                decorator,
-            ));
-    }
-}
-
-impl<'builder> DisplayRowDecorationSurface<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder mut DisplayOutputBuilder) -> Self {
-        Self {
-            installer: DisplayRowDecorationInstaller::new(builder),
-        }
-    }
-
-    pub(crate) fn decorate_current_window_row<D>(&mut self, row_idx: usize, decorator: D)
-    where
-        D: OutputRowDecorator,
-    {
-        self.installer
-            .decorate_current_window_row(row_idx, decorator);
-    }
-
-    pub(crate) fn decorate_last_window_rows<D>(&mut self, decorator: D)
-    where
-        D: OutputRowDecorator,
-    {
-        self.installer.decorate_last_window_rows(decorator);
-    }
-}
-
-impl<'builder> DisplayRowWindowContextSurface<'builder> {
-    pub(crate) fn from_output_builder(builder: &'builder DisplayOutputBuilder) -> Self {
-        Self { builder }
-    }
-
-    fn current_window_id_i64(&self) -> i64 {
-        self.builder.current_window_id_i64()
-    }
-
-    pub(crate) fn current_window_pixel_bounds(&self) -> Rect {
-        self.builder.current_window_pixel_bounds()
-    }
-
-    fn current_window_text_pixel_bounds(&self) -> Rect {
-        self.builder.current_window_text_pixel_bounds()
-    }
-
-    pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
-        self.builder.cursor_visual_column_context()
     }
 }
 
@@ -779,10 +382,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             panic!("frame chrome rows must install through frame chrome rows");
         };
         debug_assert!(window_id > 0);
-        debug_assert_eq!(
-            DisplayRowWindowContextSurface::from_output_builder(builder).current_window_id_i64(),
-            window_id as i64
-        );
+        debug_assert_eq!(builder.current_window_id_i64(), window_id as i64);
         debug_assert!(matches!(
             kind,
             WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
@@ -916,9 +516,8 @@ impl DisplayRowMediaInstallTarget {
     ) -> Self {
         match target {
             RenderedDisplayRowAssetInstallTarget::CurrentWindowRow(display_row_index) => {
-                let window_context = DisplayRowWindowContextSurface::from_output_builder(builder);
-                let window_id = window_context.current_window_id_i64();
-                let clip = window_context.current_window_text_pixel_bounds();
+                let window_id = builder.current_window_id_i64();
+                let clip = builder.current_window_text_pixel_bounds();
                 let row = display_row_index.min(u32::MAX as usize) as u32;
                 Self {
                     window_id,
@@ -931,8 +530,7 @@ impl DisplayRowMediaInstallTarget {
                 }
             }
             RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds } => {
-                let window_id = DisplayRowWindowContextSurface::from_output_builder(builder)
-                    .current_window_id_i64();
+                let window_id = builder.current_window_id_i64();
                 Self {
                     window_id,
                     clip: Some(bounds),
@@ -962,11 +560,8 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     rendered: &RenderedDisplayRow,
     display_row_index: usize,
 ) -> DisplayRowPosition {
-    {
-        let mut face_installer = DisplayRowFaceInstallSurface::from_output_builder(builder);
-        for face in &rendered.faces {
-            face_installer.install_face(face);
-        }
+    for face in &rendered.faces {
+        builder.install_output_face(face.id, face.clone());
     }
     let end = DisplayRowCurrentRowInstaller::new(builder)
         .append_rendered_fragment(rendered)
