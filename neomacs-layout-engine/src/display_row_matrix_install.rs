@@ -120,6 +120,14 @@ pub(crate) struct DisplayRowArtifactInstallSurface<'builder> {
     installer: DisplayRowArtifactInstaller<'builder>,
 }
 
+struct DisplayRowAssetsInstaller<'builder> {
+    builder: &'builder mut GlyphMatrixBuilder,
+}
+
+struct DisplayRowAssetsInstallSurface<'builder> {
+    installer: DisplayRowAssetsInstaller<'builder>,
+}
+
 struct DisplayRowDecorationInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
@@ -180,8 +188,9 @@ impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
         faces: &[Face],
         media: &[RenderedDisplayRowMedia],
     ) {
-        RenderedDisplayRowAssetsInstall::fragment(role, matrix_row, faces, media)
-            .install(self.builder);
+        RenderedDisplayRowAssetsInstall::fragment(role, matrix_row, faces, media).install(
+            &mut DisplayRowAssetsInstallSurface::from_builder(self.builder),
+        );
     }
 }
 
@@ -501,6 +510,101 @@ impl<'builder> DisplayRowArtifactInstallSurface<'builder> {
     }
 }
 
+impl<'builder> DisplayRowAssetsInstaller<'builder> {
+    fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self { builder }
+    }
+
+    fn install_faces(&mut self, faces: &[Face]) {
+        let mut face_installer = DisplayRowFaceInstallSurface::from_builder(self.builder);
+        for face in faces {
+            face_installer.install_face(face);
+        }
+    }
+
+    fn install_media(
+        &mut self,
+        role: GlyphRowRole,
+        target: RenderedDisplayRowAssetInstallTarget,
+        media: &[RenderedDisplayRowMedia],
+    ) {
+        for medium in media {
+            self.install_medium(role, target, medium);
+        }
+    }
+
+    fn install_medium(
+        &mut self,
+        role: GlyphRowRole,
+        target: RenderedDisplayRowAssetInstallTarget,
+        medium: &RenderedDisplayRowMedia,
+    ) {
+        let target = DisplayRowMediaInstallTarget::resolve(self.builder, medium.col, target);
+        let mut artifact_installer = DisplayRowArtifactInstallSurface::from_builder(self.builder);
+        match medium.kind {
+            RenderedDisplayRowMediaKind::Image { image_id } => {
+                artifact_installer.add_image_media(
+                    target.window_id,
+                    role,
+                    target.clip,
+                    target.slot_id,
+                    image_id,
+                    medium.x,
+                    medium.y,
+                    medium.width,
+                    medium.height,
+                );
+            }
+            RenderedDisplayRowMediaKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => {
+                artifact_installer.add_video_media(
+                    target.window_id,
+                    role,
+                    target.clip,
+                    target.slot_id,
+                    video_id,
+                    loop_count,
+                    autoplay,
+                    medium.x,
+                    medium.y,
+                    medium.width,
+                    medium.height,
+                );
+            }
+            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
+                artifact_installer.add_xwidget_media(
+                    target.window_id,
+                    role,
+                    target.clip,
+                    target.slot_id,
+                    xwidget_id,
+                    medium.x,
+                    medium.y,
+                    medium.width,
+                    medium.height,
+                );
+            }
+        }
+    }
+}
+
+impl<'builder> DisplayRowAssetsInstallSurface<'builder> {
+    fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self {
+            installer: DisplayRowAssetsInstaller::new(builder),
+        }
+    }
+
+    fn install(&mut self, request: RenderedDisplayRowAssetsInstall<'_>) {
+        self.installer.install_faces(request.faces);
+        self.installer
+            .install_media(request.role, request.target, request.media);
+    }
+}
+
 impl<'builder> DisplayRowDecorationInstaller<'builder> {
     fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
@@ -679,7 +783,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             measured.row_index,
             measured.bounds,
         )
-        .install(builder);
+        .install(&mut DisplayRowAssetsInstallSurface::from_builder(builder));
         DisplayRowMatrixInstall::from_rendered(
             matrix_row,
             &measured.rendered,
@@ -708,7 +812,7 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
             measured.row_index,
             measured.bounds,
         )
-        .install(builder);
+        .install(&mut DisplayRowAssetsInstallSurface::from_builder(builder));
         let mut row = measured.rendered.row.clone();
         apply_display_row_source_slot_bounds(&mut row, &measured.rendered.source_slots);
         let _ = crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
@@ -778,25 +882,62 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
         )
     }
 
-    fn install(self, builder: &mut GlyphMatrixBuilder) {
-        {
-            let mut face_installer = DisplayRowFaceInstallSurface::from_builder(builder);
-            for face in self.faces {
-                face_installer.install_face(face);
+    fn install(self, surface: &mut DisplayRowAssetsInstallSurface<'_>) {
+        surface.install(self);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplayRowMediaInstallTarget {
+    window_id: i64,
+    clip: Option<Rect>,
+    slot_id: DisplaySlotId,
+}
+
+impl DisplayRowMediaInstallTarget {
+    fn resolve(
+        builder: &GlyphMatrixBuilder,
+        col: u16,
+        target: RenderedDisplayRowAssetInstallTarget,
+    ) -> Self {
+        match target {
+            RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row) => {
+                let window_context = DisplayRowWindowContextSurface::from_builder(builder);
+                let window_id = window_context.current_window_id_i64();
+                let clip = window_context.current_window_text_pixel_bounds();
+                let row = matrix_row.min(u32::MAX as usize) as u32;
+                Self {
+                    window_id,
+                    clip: Some(clip),
+                    slot_id: DisplaySlotId {
+                        window_id,
+                        row,
+                        col,
+                    },
+                }
             }
-        }
-        for media in self.media {
-            match self.target {
-                RenderedDisplayRowAssetInstallTarget::MatrixRow(matrix_row) => {
-                    media.install(builder, self.role, matrix_row);
-                }
-                RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds } => {
-                    media.install_window_row(builder, self.role, row_index, bounds);
-                }
-                RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds } => {
-                    media.install_frame_chrome(builder, self.role, row_index, bounds);
+            RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds } => {
+                let window_id =
+                    DisplayRowWindowContextSurface::from_builder(builder).current_window_id_i64();
+                Self {
+                    window_id,
+                    clip: Some(bounds),
+                    slot_id: DisplaySlotId {
+                        window_id,
+                        row: row_index,
+                        col,
+                    },
                 }
             }
+            RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds } => Self {
+                window_id: FRAME_CHROME_WINDOW_ID,
+                clip: Some(bounds),
+                slot_id: DisplaySlotId {
+                    window_id: FRAME_CHROME_WINDOW_ID,
+                    row: row_index,
+                    col,
+                },
+            },
         }
     }
 }
@@ -816,9 +957,8 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     let end = DisplayRowCurrentRowInstaller::new(builder)
         .append_rendered_fragment(rendered)
         .expect("current row");
-    for media in &rendered.media {
-        media.install(builder, rendered.row.role, matrix_row);
-    }
+    RenderedDisplayRowAssetsInstall::fragment(rendered.row.role, matrix_row, &[], &rendered.media)
+        .install(&mut DisplayRowAssetsInstallSurface::from_builder(builder));
     end
 }
 
@@ -833,109 +973,4 @@ pub(crate) fn append_rendered_display_row_fragment_to_text_row_and_emit(
     let end = append_rendered_display_row_fragment_to_current_row(builder, rendered, output.row);
     output_emitter.emit_text_source_slots(evaluator, output, &rendered.source_slots, end);
     end
-}
-
-impl RenderedDisplayRowMedia {
-    fn install(&self, builder: &mut GlyphMatrixBuilder, role: GlyphRowRole, matrix_row: usize) {
-        let window_context = DisplayRowWindowContextSurface::from_builder(builder);
-        let window_id = window_context.current_window_id_i64();
-        let clip = window_context.current_window_text_pixel_bounds();
-        let row = matrix_row.min(u32::MAX as usize) as u32;
-        let slot_id = DisplaySlotId {
-            window_id,
-            row,
-            col: self.col,
-        };
-        self.install_with_target(builder, window_id, role, Some(clip), slot_id);
-    }
-
-    fn install_window_row(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        role: GlyphRowRole,
-        row: u32,
-        clip: Rect,
-    ) {
-        let window_id =
-            DisplayRowWindowContextSurface::from_builder(builder).current_window_id_i64();
-        let slot_id = DisplaySlotId {
-            window_id,
-            row,
-            col: self.col,
-        };
-        self.install_with_target(builder, window_id, role, Some(clip), slot_id);
-    }
-
-    fn install_frame_chrome(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        role: GlyphRowRole,
-        row: u32,
-        clip: Rect,
-    ) {
-        let slot_id = DisplaySlotId {
-            window_id: FRAME_CHROME_WINDOW_ID,
-            row,
-            col: self.col,
-        };
-        self.install_with_target(builder, FRAME_CHROME_WINDOW_ID, role, Some(clip), slot_id);
-    }
-
-    fn install_with_target(
-        &self,
-        builder: &mut GlyphMatrixBuilder,
-        window_id: i64,
-        role: GlyphRowRole,
-        clip: Option<Rect>,
-        slot_id: DisplaySlotId,
-    ) {
-        let mut artifact_installer = DisplayRowArtifactInstallSurface::from_builder(builder);
-        match self.kind {
-            RenderedDisplayRowMediaKind::Image { image_id } => {
-                artifact_installer.add_image_media(
-                    window_id,
-                    role,
-                    clip,
-                    slot_id,
-                    image_id,
-                    self.x,
-                    self.y,
-                    self.width,
-                    self.height,
-                );
-            }
-            RenderedDisplayRowMediaKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => {
-                artifact_installer.add_video_media(
-                    window_id,
-                    role,
-                    clip,
-                    slot_id,
-                    video_id,
-                    loop_count,
-                    autoplay,
-                    self.x,
-                    self.y,
-                    self.width,
-                    self.height,
-                );
-            }
-            RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
-                artifact_installer.add_xwidget_media(
-                    window_id,
-                    role,
-                    clip,
-                    slot_id,
-                    xwidget_id,
-                    self.x,
-                    self.y,
-                    self.width,
-                    self.height,
-                );
-            }
-        }
-    }
 }
