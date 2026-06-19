@@ -2000,22 +2000,33 @@ impl BufferText {
             scan_backward_bytes(&storage.backend, nearest_anchor, target)
         };
 
-        // Mirror GNU marker.c:238-241: insert an anchor when the scan actually
-        // walked more than POSITION_ANCHOR_STRIDE positions.
-        // Store as (charpos, bytepos) like the char→byte direction to keep
-        // anchor_cache entries in one canonical order.
-        let walked = bounds.min_byte_walk(target);
-        if walked.get() > POSITION_ANCHOR_STRIDE {
-            storage
-                .anchor_cache
-                .borrow_mut()
-                .push(TextPositionAnchor::new(result, target));
-        }
+        // Only cache `(char, byte)` pairs whose byte is a character boundary.
+        // A byte in the middle of a multibyte character (a continuation byte,
+        // `(b & 0xC0) == 0x80`) does not begin `result`, so caching it would
+        // seed a bogus anchor: a later forward scan from `(result, mid_byte)`
+        // would over-count, since `mid_byte < real_char_start`. GNU's
+        // charpos<->bytepos cache (marker.c) only ever holds boundary pairs.
+        let target_is_char_boundary = storage
+            .backend
+            .emacs_byte_at_pos(target)
+            .is_none_or(|byte| (byte & 0xC0) != 0x80);
 
-        storage.pos_cache.set(PositionCache {
-            epoch: content_epoch,
-            anchor: TextPositionAnchor::new(result, target),
-        });
+        if target_is_char_boundary {
+            // Mirror GNU marker.c:238-241: insert an anchor when the scan
+            // actually walked more than POSITION_ANCHOR_STRIDE positions.
+            let walked = bounds.min_byte_walk(target);
+            if walked.get() > POSITION_ANCHOR_STRIDE {
+                storage
+                    .anchor_cache
+                    .borrow_mut()
+                    .push(TextPositionAnchor::new(result, target));
+            }
+
+            storage.pos_cache.set(PositionCache {
+                epoch: content_epoch,
+                anchor: TextPositionAnchor::new(result, target),
+            });
+        }
         result
     }
 
