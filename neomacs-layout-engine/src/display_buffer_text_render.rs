@@ -65,6 +65,289 @@ use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferTextWindowLoopRequestContext {
+    buffer_id: BufferId,
+    text_start_byte: usize,
+    accessible_end: i64,
+    point_charpos: i64,
+    selective_display: i32,
+    tab_width: i32,
+    extra_line_spacing: f32,
+    content_x: f32,
+    has_prefix: bool,
+    default_face_ascent: f32,
+    char_height: f32,
+    char_width: f32,
+    row_visibility_limit: DisplayRowVisibilityLimit,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    text_matrix_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+}
+
+impl BufferTextWindowLoopRequestContext {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        buffer_id: BufferId,
+        text_start_byte: usize,
+        accessible_end: i64,
+        point_charpos: i64,
+        params: &WindowParams,
+        content_x: f32,
+        has_prefix: bool,
+        default_face_ascent: f32,
+        char_height: f32,
+        char_width: f32,
+        row_visibility_limit: DisplayRowVisibilityLimit,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        text_matrix_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            buffer_id,
+            text_start_byte,
+            accessible_end,
+            point_charpos,
+            selective_display: params.selective_display,
+            tab_width: params.tab_width,
+            extra_line_spacing: params.extra_line_spacing,
+            content_x,
+            has_prefix,
+            default_face_ascent,
+            char_height,
+            char_width,
+            row_visibility_limit,
+            row_geometry_defaults,
+            text_matrix_row_base,
+            max_rows,
+            row_limit,
+        }
+    }
+
+    pub(crate) fn invisible_text_request<'a>(
+        self,
+        text: &'a [u8],
+        append_surface: &'a DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+    ) -> BufferInvisibleTextRenderRequest<'a> {
+        BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext {
+            text,
+            accessible_end: self.accessible_end,
+            point_charpos: self.point_charpos,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            glyph_y_offset,
+            default_face_ascent: self.default_face_ascent,
+            char_h: self.char_height,
+            char_w: self.char_width,
+        })
+    }
+
+    pub(crate) fn hscroll_skip_request<'a>(
+        self,
+        text: &'a [u8],
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face_state: &'a DisplayRowActiveFaceState,
+    ) -> BufferHscrollSkipRenderRequest<'a> {
+        BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext {
+            text,
+            tab_width: self.tab_width,
+            content_x: self.content_x,
+            append_surface,
+            active_face_state,
+            default_face_ascent: self.default_face_ascent,
+            char_h: self.char_height,
+            char_w: self.char_width,
+            point_charpos: self.point_charpos,
+            has_prefix: self.has_prefix,
+            row_geometry_defaults: self.row_geometry_defaults,
+            text_matrix_row_base: self.text_matrix_row_base,
+            max_rows: self.max_rows,
+            row_limit: self.row_limit,
+        })
+    }
+
+    pub(crate) fn display_property_checkpoint_request<'a, B>(
+        self,
+        buffer: &'a B,
+        charpos: i64,
+    ) -> BufferDisplayPropertyCheckpointRenderRequest<'a, B>
+    where
+        B: LayoutBufferView,
+    {
+        BufferDisplayPropertyCheckpointRenderRequest::new(
+            BufferDisplayPropertyCheckpointRenderContext { buffer, charpos },
+        )
+    }
+
+    pub(crate) fn selective_display_tail_request<'a>(
+        self,
+        source_step_char: BufferTextSourceStepChar,
+        text: &'a [u8],
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+    ) -> BufferSelectiveDisplayTailRenderRequest<'a> {
+        BufferSelectiveDisplayTailRenderRequest::new(
+            source_step_char,
+            BufferSelectiveDisplayTailRenderContext {
+                text,
+                text_start_byte: self.text_start_byte,
+                selective_display: self.selective_display,
+                tab_width: self.tab_width,
+                append_surface,
+                active_face_state,
+                glyph_y_offset,
+                default_face_ascent: self.default_face_ascent,
+                char_h: self.char_height,
+                char_w: self.char_width,
+                content_x: self.content_x,
+                has_prefix: self.has_prefix,
+                row_geometry_defaults: self.row_geometry_defaults,
+                text_matrix_row_base: self.text_matrix_row_base,
+                max_rows: self.max_rows,
+                row_limit: self.row_limit,
+            },
+        )
+    }
+
+    pub(crate) fn line_break_request<'a>(
+        self,
+        source_char: BufferTextSourceStepChar,
+        text: &'a [u8],
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+    ) -> BufferTextLineBreakRenderRequest<'a> {
+        BufferTextLineBreakRenderRequest::new(
+            source_char,
+            BufferTextLineBreakRenderContext {
+                text,
+                text_start_byte: self.text_start_byte,
+                selective_display: self.selective_display,
+                tab_width: self.tab_width,
+                active_face_state,
+                point_charpos: self.point_charpos,
+                char_h: self.char_height,
+                extra_line_spacing: self.extra_line_spacing,
+                content_x: self.content_x,
+                has_prefix: self.has_prefix,
+                row_geometry_defaults: self.row_geometry_defaults,
+                text_matrix_row_base: self.text_matrix_row_base,
+                max_rows: self.max_rows,
+                row_limit: self.row_limit,
+                overlay_context,
+            },
+        )
+    }
+
+    pub(crate) fn source_char_request<'a>(
+        self,
+        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
+        source_char: BufferTextSourceStepChar,
+        source_item: DisplayItem,
+        text: &'a [u8],
+        append_surface: &'a DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        params: &'a WindowParams,
+        glyph_y_offset: f32,
+    ) -> BufferTextSourceCharRenderRequest<'a> {
+        BufferTextSourceCharRenderRequest::new(
+            source_char,
+            source_item,
+            BufferTextSourceCharRenderContext {
+                layout_resolution_context,
+                text,
+                text_start_byte: self.text_start_byte,
+                buffer_id: self.buffer_id,
+                append_surface,
+                overlay_context,
+                active_face_state,
+                params,
+                glyph_y_offset,
+                char_h: self.char_height,
+                point_charpos: self.point_charpos,
+                row_visibility_limit: self.row_visibility_limit,
+                content_x: self.content_x,
+                has_prefix: self.has_prefix,
+                row_geometry_defaults: self.row_geometry_defaults,
+                text_matrix_row_base: self.text_matrix_row_base,
+                max_rows: self.max_rows,
+                row_limit: self.row_limit,
+            },
+        )
+    }
+
+    pub(crate) fn end_of_buffer_tail_request<'a>(
+        self,
+        byte_idx: usize,
+        charpos: i64,
+        has_overlays: bool,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+    ) -> BufferEndOfBufferTailRenderRequest<'a> {
+        BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext {
+            byte_idx,
+            charpos,
+            accessible_end: self.accessible_end,
+            point_charpos: self.point_charpos,
+            has_overlays,
+            overlay_context,
+            active_face_state,
+            row_limit: self.row_limit,
+        })
+    }
+
+    pub(crate) fn buffer_id(self) -> BufferId {
+        self.buffer_id
+    }
+
+    pub(crate) fn text_start_byte(self) -> usize {
+        self.text_start_byte
+    }
+
+    pub(crate) fn content_x(self) -> f32 {
+        self.content_x
+    }
+
+    pub(crate) fn char_height(self) -> f32 {
+        self.char_height
+    }
+
+    pub(crate) fn point_charpos(self) -> i64 {
+        self.point_charpos
+    }
+
+    pub(crate) fn row_visibility_limit(self) -> DisplayRowVisibilityLimit {
+        self.row_visibility_limit
+    }
+
+    #[cfg(test)]
+    pub(crate) fn accessible_end(self) -> i64 {
+        self.accessible_end
+    }
+
+    #[cfg(test)]
+    pub(crate) fn selective_display(self) -> i32 {
+        self.selective_display
+    }
+
+    #[cfg(test)]
+    pub(crate) fn tab_width(self) -> i32 {
+        self.tab_width
+    }
+
+    #[cfg(test)]
+    pub(crate) fn row_limit(self) -> DisplayRowLimit {
+        self.row_limit
+    }
+}
+
 pub(crate) struct BufferHscrollSkipRenderState<'a, 'emit> {
     pub(crate) byte_idx: &'emit mut usize,
     pub(crate) charpos: &'emit mut i64,
