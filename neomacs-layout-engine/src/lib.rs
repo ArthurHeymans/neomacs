@@ -25,6 +25,7 @@ pub mod display_iterator;
 pub(crate) mod display_media;
 pub(crate) mod display_mock_frame;
 pub(crate) mod display_origin;
+pub(crate) mod display_output_artifact_install;
 pub(crate) mod display_output_builder;
 pub mod display_pixel_calc;
 pub(crate) mod display_property;

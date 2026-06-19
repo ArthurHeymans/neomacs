@@ -1,7 +1,7 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_frame_output::FrameOutputIdentity;
+use crate::display_output_artifact_install::OutputArtifactInstallSurface;
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_row_output_install::DisplayRowFaceInstallSurface;
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
@@ -27,7 +27,7 @@ impl<'output> FrameOutputInstallSurface<'output> {
     }
 
     pub(crate) fn set_frame_identity(&mut self, identity: FrameOutputIdentity) {
-        self.output_builder.artifact_installer().set_frame_identity(
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder).set_frame_identity(
             identity.frame_id,
             identity.parent_id,
             identity.parent_x,
@@ -42,19 +42,17 @@ impl<'output> FrameOutputInstallSurface<'output> {
     }
 
     pub(crate) fn set_background_color(&mut self, color: Color) {
-        self.output_builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .set_background_color(color);
     }
 
     pub(crate) fn set_font_pixel_size(&mut self, size: f32) {
-        self.output_builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .set_font_pixel_size(size);
     }
 
     pub(crate) fn install_face(&mut self, face: &Face) {
-        DisplayRowFaceInstallSurface::from_output_builder(self.output_builder).install_face(face);
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder).install_face(face);
     }
 
     pub(crate) fn install_resolved_face(
@@ -63,7 +61,7 @@ impl<'output> FrameOutputInstallSurface<'output> {
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
     ) {
-        DisplayRowFaceInstallSurface::from_output_builder(self.output_builder)
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .install_resolved_face(face_id, face, metrics);
     }
 
@@ -79,26 +77,22 @@ impl<'output> FrameOutputInstallSurface<'output> {
     }
 
     pub(crate) fn add_background(&mut self, bounds: Rect, color: Color) {
-        self.output_builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .add_background(bounds, color);
     }
 
     pub(crate) fn add_window_info(&mut self, info: WindowInfo) {
-        self.output_builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .add_window_info(info);
     }
 
     pub(crate) fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
-        self.output_builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .add_transition_hint(hint);
     }
 
     pub(crate) fn add_effect_hint(&mut self, hint: WindowEffectHint) {
-        self.output_builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .add_effect_hint(hint);
     }
 
@@ -111,15 +105,12 @@ impl<'output> FrameOutputInstallSurface<'output> {
         height: f32,
         color: Color,
     ) {
-        self.output_builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder)
             .add_border(window_id, x, y, width, height, color);
     }
 
     pub(crate) fn add_scroll_bar(&mut self, item: ScrollBarItem) {
-        self.output_builder
-            .artifact_installer()
-            .add_scroll_bar(item);
+        OutputArtifactInstallSurface::from_output_builder(self.output_builder).add_scroll_bar(item);
     }
 }
 

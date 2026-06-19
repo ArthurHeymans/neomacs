@@ -1,5 +1,6 @@
 use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_cursor::CursorVisualColumnResolutionContext;
+use crate::display_output_artifact_install::OutputArtifactInstallSurface;
 use crate::display_output_builder::{
     DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID, OutputRowDecorator,
 };
@@ -246,9 +247,7 @@ impl<'builder> DisplayRowFaceInstaller<'builder> {
     }
 
     fn install_face(&mut self, face: &Face) {
-        self.builder
-            .artifact_installer()
-            .set_face(face.id, face.clone());
+        OutputArtifactInstallSurface::from_output_builder(self.builder).install_face(face);
     }
 
     fn install_resolved_face(
@@ -257,9 +256,8 @@ impl<'builder> DisplayRowFaceInstaller<'builder> {
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
     ) {
-        self.builder
-            .artifact_installer()
-            .set_resolved_display_row_face(face_id, face, metrics);
+        OutputArtifactInstallSurface::from_output_builder(self.builder)
+            .install_resolved_face(face_id, face, metrics);
     }
 }
 
@@ -370,19 +368,17 @@ impl<'builder> DisplayRowArtifactInstaller<'builder> {
         style: CursorStyle,
         color: Color,
     ) {
-        self.builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.builder)
             .add_cursor(window_id, slot_id, x, y, width, height, style, color);
     }
 
     fn set_cursor_effects(&mut self, window_id: i64, effects: EffectsConfig) {
-        self.builder
-            .artifact_installer()
+        OutputArtifactInstallSurface::from_output_builder(self.builder)
             .set_cursor_effects(window_id, effects);
     }
 
     fn store_phys_cursor(&mut self, cursor: PhysCursor) {
-        self.builder.artifact_installer().store_phys_cursor(cursor);
+        OutputArtifactInstallSurface::from_output_builder(self.builder).store_phys_cursor(cursor);
     }
 
     fn add_image_media(
@@ -397,7 +393,7 @@ impl<'builder> DisplayRowArtifactInstaller<'builder> {
         width: f32,
         height: f32,
     ) {
-        self.builder.artifact_installer().add_image_media(
+        OutputArtifactInstallSurface::from_output_builder(self.builder).add_image_media(
             window_id, role, clip, slot_id, image_id, x, y, width, height,
         );
     }
@@ -416,7 +412,7 @@ impl<'builder> DisplayRowArtifactInstaller<'builder> {
         width: f32,
         height: f32,
     ) {
-        self.builder.artifact_installer().add_video_media(
+        OutputArtifactInstallSurface::from_output_builder(self.builder).add_video_media(
             window_id, role, clip, slot_id, video_id, loop_count, autoplay, x, y, width, height,
         );
     }
@@ -433,7 +429,7 @@ impl<'builder> DisplayRowArtifactInstaller<'builder> {
         width: f32,
         height: f32,
     ) {
-        self.builder.artifact_installer().add_xwidget_media(
+        OutputArtifactInstallSurface::from_output_builder(self.builder).add_xwidget_media(
             window_id, role, clip, slot_id, xwidget_id, x, y, width, height,
         );
     }
