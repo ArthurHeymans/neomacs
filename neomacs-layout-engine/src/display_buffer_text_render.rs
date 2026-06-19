@@ -28,8 +28,8 @@ pub(crate) use crate::display_buffer_text_progress::{
 };
 use crate::display_buffer_text_source::{
     BufferTextConsumedSourceItem, BufferTextSourceCursor, BufferTextSourceItem,
-    BufferTextSourceItemStep, BufferTextSourceItemStepper, BufferTextSourceStepChar,
-    BufferTextWindowSource, BufferTextWindowSourceReadRequest,
+    BufferTextSourceItemStep, BufferTextSourceItemStepper, BufferTextSourcePosition,
+    BufferTextSourceStepChar, BufferTextWindowSource, BufferTextWindowSourceReadRequest,
 };
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowGeometry, BufferTextWindowGeometryPlan,
@@ -1704,11 +1704,10 @@ impl<'request, B: LayoutBufferView> BufferTextWindowSourceWalk<'request, B> {
     fn fallback_step_from_source_item(
         &mut self,
         source_item: BufferTextSourceItem,
-        byte_idx: &mut usize,
-        charpos: i64,
+        position: &mut BufferTextSourcePosition,
     ) -> Option<BufferTextSourceItemStep> {
         self.item_stepper
-            .item_step_from_source_item(source_item, byte_idx, charpos)
+            .item_step_from_source_item(source_item, position)
     }
 }
 
@@ -3070,13 +3069,13 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 BufferTextWindowLoopStepOutcome::ContinueBufferWalk
             }
             BufferDisplayPropertyTextReplacementResolveOutcome::Fallback(source_item) => {
-                let Some(source_step) = source_walk.fallback_step_from_source_item(
-                    source_item,
-                    self.progress.byte_idx,
-                    *self.progress.charpos,
-                ) else {
+                let mut source_position = self.progress.source_position();
+                let Some(source_step) =
+                    source_walk.fallback_step_from_source_item(source_item, &mut source_position)
+                else {
                     return BufferTextWindowLoopStepOutcome::StopBufferWalk;
                 };
+                self.progress.apply_source_position(source_position);
                 self.render_source_item_step_for_context(
                     BufferTextSourceItemStepRenderRequest {
                         layout_resolution_context,
@@ -3149,12 +3148,14 @@ impl<'rows, 'emit, 'surface> BufferTextWindowLoopRenderState<'rows, 'emit, 'surf
                 &mut pending_faces,
             );
             let mut source_context = DisplaySourceContext::with_face_resolver(&mut resolver);
-            source_walk.item_stepper.next_consumed_source_item(
+            let mut source_position = self.progress.source_position();
+            let source_item = source_walk.item_stepper.next_consumed_source_item(
                 &mut source_walk.source_cursor,
                 &mut source_context,
-                self.progress.byte_idx,
-                self.progress.charpos(),
-            )
+                &mut source_position,
+            );
+            self.progress.apply_source_position(source_position);
+            source_item
         };
         {
             let mut source_render = self.source_render.reborrow();
@@ -4272,14 +4273,13 @@ impl BufferHscrollSkipSourceStep {
         Self { source_char }
     }
 
-    pub(crate) fn consume_from_text(
+    pub(crate) fn consume_from_position(
         text: &[u8],
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         hscroll_skip: &mut HorizontalScrollSkipState,
         tab_width: i32,
     ) -> Option<BufferHscrollSkipAction> {
-        let source_char = BufferTextSourceStepChar::consume_from_text(text, byte_idx, charpos)?;
+        let source_char = BufferTextSourceStepChar::consume_from_position(text, position)?;
         Some(Self::new(source_char).consume_for_hscroll(hscroll_skip, tab_width))
     }
 
@@ -4345,23 +4345,24 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
             cursor_info,
             row_y_positions,
         } = state;
-        let BufferTextWindowProgressState {
-            byte_idx,
-            charpos,
-            row: BufferTextWindowRowProgressState { x, col },
-        } = progress;
+        let mut progress = progress;
         let mut source_render = source_render;
         let context = self.context;
 
-        let Some(hscroll_action) = BufferHscrollSkipSourceStep::consume_from_text(
+        let mut source_position = progress.source_position();
+        let Some(hscroll_action) = BufferHscrollSkipSourceStep::consume_from_position(
             context.text,
-            byte_idx,
-            charpos,
+            &mut source_position,
             hscroll_skip,
             context.tab_width,
         ) else {
             return DisplayRowTransitionContinuation::Exhausted;
         };
+        progress.apply_source_position(source_position);
+        let BufferTextWindowProgressState {
+            row: BufferTextWindowRowProgressState { x, col },
+            ..
+        } = progress;
 
         if hscroll_action.is_line_break() {
             hscroll_action.apply_line_break_before_row_transition(

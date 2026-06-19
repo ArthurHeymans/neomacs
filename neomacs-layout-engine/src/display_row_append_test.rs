@@ -1007,14 +1007,12 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
 
 #[test]
 fn buffer_hscroll_skip_source_step_preserves_line_break_action() {
-    let mut byte_idx = 0;
-    let mut charpos = 10;
+    let mut position = BufferTextSourcePosition::new(0, 10);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_position(
         b"\nnext",
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
         &mut hscroll_skip,
         8,
     )
@@ -1027,21 +1025,18 @@ fn buffer_hscroll_skip_source_step_preserves_line_break_action() {
             charpos: 11
         }
     );
-    assert_eq!(byte_idx, 1);
-    assert_eq!(charpos, 11);
+    assert_eq!(position, BufferTextSourcePosition::new(1, 11));
     assert!(hscroll_skip.should_skip());
 }
 
 #[test]
 fn buffer_hscroll_skip_source_step_consumes_tab_to_next_stop() {
-    let mut byte_idx = 0;
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_position(
         b"\tabc",
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
         &mut hscroll_skip,
         8,
     )
@@ -1055,21 +1050,18 @@ fn buffer_hscroll_skip_source_step_consumes_tab_to_next_stop() {
             show_left_truncation: true
         }
     );
-    assert_eq!(byte_idx, 1);
-    assert_eq!(charpos, 1);
+    assert_eq!(position, BufferTextSourcePosition::new(1, 1));
     assert!(!hscroll_skip.should_skip());
 }
 
 #[test]
 fn buffer_hscroll_skip_source_step_consumes_wide_char_columns() {
-    let mut byte_idx = 0;
-    let mut charpos = 3;
+    let mut position = BufferTextSourcePosition::new(0, 3);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 2);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_position(
         "界x".as_bytes(),
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
         &mut hscroll_skip,
         8,
     )
@@ -1083,21 +1075,18 @@ fn buffer_hscroll_skip_source_step_consumes_wide_char_columns() {
             show_left_truncation: true
         }
     );
-    assert_eq!(byte_idx, "界".len());
-    assert_eq!(charpos, 4);
+    assert_eq!(position, BufferTextSourcePosition::new("界".len(), 4));
     assert!(!hscroll_skip.should_skip());
 }
 
 #[test]
 fn buffer_hscroll_skip_source_step_keeps_marker_pending_while_still_skipping() {
-    let mut byte_idx = 0;
-    let mut charpos = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 3);
 
-    let action = BufferHscrollSkipSourceStep::consume_from_text(
+    let action = BufferHscrollSkipSourceStep::consume_from_position(
         b"abc",
-        &mut byte_idx,
-        &mut charpos,
+        &mut position,
         &mut hscroll_skip,
         8,
     )
@@ -1111,8 +1100,7 @@ fn buffer_hscroll_skip_source_step_keeps_marker_pending_while_still_skipping() {
             show_left_truncation: false
         }
     );
-    assert_eq!(byte_idx, 1);
-    assert_eq!(charpos, 1);
+    assert_eq!(position, BufferTextSourcePosition::new(1, 1));
     assert!(hscroll_skip.should_skip());
 }
 
@@ -1883,16 +1871,17 @@ fn buffer_text_source_item_stepper_preserves_single_char_source_item() {
         DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos.get(),
         other => panic!("expected buffer source, got {other:?}"),
     };
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceItemStepper::new(text_start_byte)
-        .item_step_from_item(item, &mut byte_idx, 0)
+        .item_step_from_item(item, &mut position)
         .expect("source step");
 
     let source_char = step.source_char();
     let (_, source_item) = step.into_parts();
     assert_eq!(source_char.ch(), 'a');
-    assert_eq!(byte_idx, 1);
+    assert_eq!(position.byte_idx(), 1);
+    assert_eq!(position.charpos(), 0);
     assert_eq!(
         source_item.span.end,
         DisplaySourcePosition::buffer(
@@ -1929,10 +1918,10 @@ fn buffer_text_source_item_stepper_can_return_full_text_run_item() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut item_stepper = BufferTextSourceItemStepper::new(0);
-    let byte_idx = 0;
+    let position = BufferTextSourcePosition::new(0, 0);
 
     let typed_item = item_stepper
-        .next_item_from_source(&mut cursor, &mut source_context, byte_idx, 0)
+        .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
     assert_eq!(typed_item.start_byte_idx(), 0);
@@ -1966,16 +1955,17 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut item_stepper = BufferTextSourceItemStepper::new(0);
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
     let typed_item = item_stepper
-        .next_item_from_source(&mut cursor, &mut source_context, byte_idx, 0)
+        .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
     let step = typed_item
-        .try_into_direct_item_step(&mut byte_idx, 0)
+        .try_into_direct_item_step(&mut position)
         .expect("direct source step");
 
-    assert_eq!(byte_idx, 1);
+    assert_eq!(position.byte_idx(), 1);
+    assert_eq!(position.charpos(), 0);
     assert_eq!(step.source_char().ch(), 'a');
     let (_, source_item) = step.into_parts();
     match &source_item.kind {
@@ -2003,13 +1993,14 @@ fn buffer_text_source_item_can_build_direct_source_mapped_step() {
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
     );
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, Some('\u{00a0}'));
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceItemStepper::new(0)
-        .item_step_from_source_item(typed_item, &mut byte_idx, 0)
+        .item_step_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should retain direct source char");
 
-    assert_eq!(byte_idx, 2);
+    assert_eq!(position.byte_idx(), 2);
+    assert_eq!(position.charpos(), 0);
     assert_eq!(step.source_char().ch(), '\u{00a0}');
     let (_, source_item) = step.into_parts();
     match &source_item.kind {
@@ -2037,13 +2028,14 @@ fn buffer_text_source_item_direct_source_mapped_step_uses_item_span_end() {
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("YZ")),
     );
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 1, 1, Some('b'));
-    let mut byte_idx = 1;
+    let mut position = BufferTextSourcePosition::new(1, 1);
 
     let step = BufferTextSourceItemStepper::new(0)
-        .item_step_from_source_item(typed_item, &mut byte_idx, 1)
+        .item_step_from_source_item(typed_item, &mut position)
         .expect("source-mapped item should advance over covered source span");
 
-    assert_eq!(byte_idx, 4);
+    assert_eq!(position.byte_idx(), 4);
+    assert_eq!(position.charpos(), 1);
     assert_eq!(step.source_char().ch(), 'b');
     assert_eq!(step.end_charpos(), 3);
     let (_, source_item) = step.into_parts();
@@ -2072,13 +2064,13 @@ fn buffer_text_source_item_without_source_char_keeps_source_mapped_for_lowering(
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
     );
     let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, None);
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
     let typed_item = typed_item
-        .try_into_direct_item_step(&mut byte_idx, 0)
+        .try_into_direct_item_step(&mut position)
         .expect_err("source-mapped item without source char needs fallback");
 
-    assert_eq!(byte_idx, 0);
+    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
     match &typed_item.item().kind {
         DisplayItemKind::SourceMappedText(text) => assert_eq!(&*text.text, "\\ "),
         other => panic!("expected source-mapped text, got {other:?}"),
@@ -2107,16 +2099,16 @@ fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut item_stepper = BufferTextSourceItemStepper::new(0);
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
     let typed_item = item_stepper
-        .next_item_from_source(&mut cursor, &mut source_context, byte_idx, 0)
+        .next_item_from_source(&mut cursor, &mut source_context, &position)
         .expect("typed source item");
 
     let typed_item = typed_item
-        .try_into_direct_item_step(&mut byte_idx, 0)
+        .try_into_direct_item_step(&mut position)
         .expect_err("multi-char text runs are not direct single-char steps");
 
-    assert_eq!(byte_idx, 0);
+    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
     match &typed_item.item().kind {
         DisplayItemKind::TextRun(run) => assert_eq!(&*run.text, "ab"),
         other => panic!("expected full text run, got {other:?}"),
@@ -2145,10 +2137,10 @@ fn buffer_text_source_item_stepper_keeps_display_item_layout() {
         raise: Some(0.25),
         height: Some(1.5),
     });
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
     let step = BufferTextSourceItemStepper::new(0)
-        .item_step_from_item(source_item, &mut byte_idx, 0)
+        .item_step_from_item(source_item, &mut position)
         .expect("source step");
 
     let (_, source_item) = step.into_parts();
@@ -2178,30 +2170,35 @@ fn buffer_text_source_item_stepper_splits_persistent_text_run() {
     );
     let mut source_context = DisplaySourceContext::empty();
     let mut item_stepper = BufferTextSourceItemStepper::new(0);
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
     let first = item_stepper
-        .next_item_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 0)
+        .next_item_step_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("first step");
     assert_eq!(first.source_char().ch(), 'a');
     assert_eq!(first.source_char().start_byte_idx(), 0);
-    assert_eq!(byte_idx, 1);
+    assert_eq!(position.byte_idx(), 1);
+    assert_eq!(position.charpos(), 0);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
+    position = BufferTextSourcePosition::new(position.byte_idx(), first.end_charpos());
 
     let second = item_stepper
-        .next_item_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 1)
+        .next_item_step_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("second step");
     assert_eq!(second.source_char().ch(), 'b');
     assert_eq!(second.source_char().start_byte_idx(), 1);
-    assert_eq!(byte_idx, 2);
+    assert_eq!(position.byte_idx(), 2);
+    assert_eq!(position.charpos(), 1);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
+    position = BufferTextSourcePosition::new(position.byte_idx(), second.end_charpos());
 
     let third = item_stepper
-        .next_item_step_from_source(&mut cursor, &mut source_context, &mut byte_idx, 2)
+        .next_item_step_from_source(&mut cursor, &mut source_context, &mut position)
         .expect("third step");
     assert_eq!(third.source_char().ch(), 'c');
     assert_eq!(third.source_char().start_byte_idx(), 2);
-    assert_eq!(byte_idx, 3);
+    assert_eq!(position.byte_idx(), 3);
+    assert_eq!(position.charpos(), 2);
     assert_eq!(cursor.current_char_pos(), CharPos0::new(3));
 }
 
@@ -2212,12 +2209,12 @@ fn buffer_text_source_item_stepper_rejects_non_buffer_items() {
         RenderFaceRef::Inherit,
         DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("x")),
     );
-    let mut byte_idx = 3;
+    let mut position = BufferTextSourcePosition::new(3, 7);
 
-    let step = BufferTextSourceItemStepper::new(0).item_step_from_item(item, &mut byte_idx, 7);
+    let step = BufferTextSourceItemStepper::new(0).item_step_from_item(item, &mut position);
 
     assert!(step.is_none());
-    assert_eq!(byte_idx, 3);
+    assert_eq!(position, BufferTextSourcePosition::new(3, 7));
 }
 
 #[test]
@@ -2244,28 +2241,27 @@ fn buffer_text_source_item_stepper_rejects_replacement_items() {
             ascent: None,
         }),
     );
-    let mut byte_idx = 0;
+    let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let step = BufferTextSourceItemStepper::new(0).item_step_from_item(item, &mut byte_idx, 0);
+    let step = BufferTextSourceItemStepper::new(0).item_step_from_item(item, &mut position);
 
     assert!(step.is_none());
-    assert_eq!(byte_idx, 0);
+    assert_eq!(position, BufferTextSourcePosition::new(0, 0));
 }
 
 #[test]
 fn buffer_text_source_step_char_consumes_multibyte_text_cursor() {
-    let mut byte_idx = "a".len();
-    let mut charpos = 4;
+    let mut position = BufferTextSourcePosition::new("a".len(), 4);
 
     let source_char =
-        BufferTextSourceStepChar::consume_from_text("a界b".as_bytes(), &mut byte_idx, &mut charpos)
+        BufferTextSourceStepChar::consume_from_position("a界b".as_bytes(), &mut position)
             .expect("source char");
 
     assert_eq!(source_char.ch(), '界');
     assert_eq!(source_char.start_byte_idx(), "a".len());
     assert_eq!(source_char.start_charpos(), 4);
-    assert_eq!(byte_idx, "a界".len());
-    assert_eq!(charpos, 5);
+    assert_eq!(position.byte_idx(), "a界".len());
+    assert_eq!(position.charpos(), 5);
 }
 
 #[test]
