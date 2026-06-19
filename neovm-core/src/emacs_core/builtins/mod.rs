@@ -7943,7 +7943,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr("upcase", |_ctx, args| builtin_upcase(args), 1, Some(1));
-    ctx.defsubr("downcase", |_ctx, args| builtin_downcase(args), 1, Some(1));
+    ctx.defsubr("downcase", builtin_downcase_in_state, 1, Some(1));
     ctx.defsubr(
         "char-to-string",
         |_ctx, args| builtin_char_to_string(args),

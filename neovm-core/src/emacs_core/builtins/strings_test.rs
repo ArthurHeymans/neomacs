@@ -323,3 +323,32 @@ fn format_percent_g_uses_gnu_fixed_precision_for_negative_exponents() {
 
     assert_eq!(result.as_utf8_str(), Some("0.00042 0.0042 42"));
 }
+
+#[test]
+fn downcase_greek_final_sigma() {
+    // GNU `casefiddle.c` `case_character`: a down-cased capital sigma becomes
+    // the final form ς at the end of a word (preceding char is a word
+    // constituent, following one is not), σ otherwise.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let cases = [
+        (r#"(downcase "ΑΣ")"#, "ας"),       // Σ ends the word → ς
+        (r#"(downcase "ΣΑ")"#, "σα"),       // Σ starts the word → σ
+        (r#"(downcase "ΑΣΑ")"#, "ασα"),     // medial Σ → σ
+        (r#"(downcase "Σ")"#, "σ"),         // lone Σ (no preceding word) → σ
+        (r#"(downcase "ΟΔΟΣ")"#, "οδος"),   // word ends Σ → ς
+        (r#"(downcase "ΑΣ ΒΣ")"#, "ας βς"), // both at word ends → ς
+        (r#"(downcase "ΑΣ_")"#, "ας_"),     // _ is a non-word boundary → ς
+        // case-symbols-as-words makes _ a word constituent → not at word end → σ
+        (
+            r#"(let ((case-symbols-as-words t)) (downcase "ΑΣ_"))"#,
+            "ασ_",
+        ),
+        // upcase is unaffected.
+        (r#"(upcase "ας")"#, "ΑΣ"),
+    ];
+    for (form, expected) in cases {
+        let result = ev.eval_str(form).expect("eval");
+        assert_eq!(result.as_utf8_str(), Some(expected), "form: {form}");
+    }
+}

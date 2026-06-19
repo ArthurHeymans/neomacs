@@ -678,7 +678,7 @@ pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let result = Value::heap_string(transform_string_case(string, true));
+            let result = Value::heap_string(transform_string_case(string, true, |_| false));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
@@ -760,7 +760,15 @@ fn preserve_emacs_upcase_payload(code: i64) -> bool {
 fn transform_string_case(
     s: &crate::heap_types::LispString,
     upcase: bool,
+    is_word: impl Fn(u32) -> bool,
 ) -> crate::heap_types::LispString {
+    // Greek capital sigma down-cases to the final form ς at the end of a word
+    // (GNU `casefiddle.c` `case_character`): when the preceding character is a
+    // word constituent and the following one is not.
+    const GREEK_CAPITAL_SIGMA: u32 = 0x03A3;
+    const GREEK_SMALL_SIGMA: u32 = 0x03C3;
+    const GREEK_SMALL_FINAL_SIGMA: u32 = 0x03C2;
+
     let bytes = s.as_bytes();
     let multibyte = s.is_multibyte();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -774,6 +782,7 @@ fn transform_string_case(
         }
     };
     let mut pos = 0;
+    let mut prev_word = false;
     while pos < bytes.len() {
         let (code, len) = if multibyte {
             crate::emacs_core::emacs_char::string_char(&bytes[pos..])
@@ -791,6 +800,26 @@ fn transform_string_case(
                     }
                 }
             }
+            Some(_) if code == GREEK_CAPITAL_SIGMA => {
+                let next_word = if pos < bytes.len() {
+                    let (next_code, _) = if multibyte {
+                        crate::emacs_core::emacs_char::string_char(&bytes[pos..])
+                    } else {
+                        (bytes[pos] as u32, 1)
+                    };
+                    is_word(next_code)
+                } else {
+                    false
+                };
+                push(
+                    &mut out,
+                    if prev_word && !next_word {
+                        GREEK_SMALL_FINAL_SIGMA
+                    } else {
+                        GREEK_SMALL_SIGMA
+                    },
+                );
+            }
             Some(ch) => {
                 if ch == '\u{212A}' || preserve_emacs_downcase_string_payload(code as i64) {
                     push(&mut out, code);
@@ -802,6 +831,7 @@ fn transform_string_case(
             }
             None => push(&mut out, code),
         }
+        prev_word = is_word(code);
     }
     if multibyte {
         crate::heap_types::LispString::from_emacs_bytes(out)
@@ -911,7 +941,17 @@ pub(crate) fn downcase_char_code_emacs_compat(code: i64) -> i64 {
     }
 }
 
-pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
+/// Build the casing word-constituent predicate (alphanumeric, plus symbol
+/// constituents when `case-symbols-as-words` is set) used for the Greek
+/// final-sigma rule — mirrors GNU `case_ch_is_word(SYNTAX(ch))`.
+pub(crate) fn casing_word_predicate(
+    eval: &crate::emacs_core::eval::Context,
+) -> impl Fn(u32) -> bool + Copy + 'static {
+    let extra = crate::emacs_core::syntax::case_symbols_as_words_predicate(eval);
+    move |code: u32| char::from_u32(code).is_some_and(char::is_alphanumeric) || extra(code)
+}
+
+fn downcase_with_word_pred(args: Vec<Value>, is_word: impl Fn(u32) -> bool) -> EvalResult {
     expect_args("downcase", &args, 1)?;
     match args[0].kind() {
         ValueKind::String => {
@@ -920,7 +960,7 @@ pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
             let source_props = (!string.is_multibyte())
                 .then(|| get_string_text_properties_table_for_value(source))
                 .flatten();
-            let result = Value::heap_string(transform_string_case(string, false));
+            let result = Value::heap_string(transform_string_case(string, false, is_word));
             if let Some(table) = source_props {
                 set_string_text_properties_table_for_value(result, table);
             }
@@ -943,6 +983,22 @@ pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
     }
+}
+
+/// Pure form (tests + internal callers such as font-name normalization, where
+/// the Greek final-sigma word context does not apply); ignores final sigma.
+pub(crate) fn builtin_downcase(args: Vec<Value>) -> EvalResult {
+    downcase_with_word_pred(args, |_| false)
+}
+
+/// Dispatched form: applies the Greek final-sigma rule via the buffer syntax
+/// table (honoring `case-symbols-as-words`).
+pub(crate) fn builtin_downcase_in_state(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let is_word = casing_word_predicate(eval);
+    downcase_with_word_pred(args, is_word)
 }
 
 fn downcase_string_emacs_compat(s: &str) -> String {

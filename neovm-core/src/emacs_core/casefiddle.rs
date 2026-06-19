@@ -239,7 +239,10 @@ fn ascii_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte >= 0x80
 }
 
-fn downcase_lisp_string_emacs_compat(text: &LispString) -> LispString {
+fn downcase_lisp_string_emacs_compat(
+    text: &LispString,
+    is_word: impl Fn(u32) -> bool,
+) -> LispString {
     if !text.is_multibyte() {
         let bytes = text
             .as_bytes()
@@ -249,18 +252,35 @@ fn downcase_lisp_string_emacs_compat(text: &LispString) -> LispString {
         return LispString::from_unibyte(bytes);
     }
 
+    // Greek capital sigma down-cases to its final form ς at the end of a word
+    // (GNU `casefiddle.c` `case_character`).
+    const GREEK_CAPITAL_SIGMA: u32 = 0x03A3;
+    const GREEK_SMALL_SIGMA: u32 = 0x03C3;
+    const GREEK_SMALL_FINAL_SIGMA: u32 = 0x03C2;
+
+    let codes = super::builtins::lisp_string_char_codes(text);
     let mut out = Vec::with_capacity(text.sbytes());
-    for code in super::builtins::lisp_string_char_codes(text) {
+    let mut prev_word = false;
+    for (i, &code) in codes.iter().enumerate() {
         let code_i64 = code as i64;
-        if code == 0x212A || preserve_downcase_case_string_payload(code_i64) {
+        if code == GREEK_CAPITAL_SIGMA {
+            let next_word = codes.get(i + 1).is_some_and(|&next| is_word(next));
+            push_multibyte_char_code(
+                &mut out,
+                if prev_word && !next_word {
+                    GREEK_SMALL_FINAL_SIGMA
+                } else {
+                    GREEK_SMALL_SIGMA
+                },
+            );
+        } else if code == 0x212A || preserve_downcase_case_string_payload(code_i64) {
             push_multibyte_char_code(&mut out, code);
-            continue;
-        }
-        if let Some(ch) = code_to_char(code_i64) {
+        } else if let Some(ch) = code_to_char(code_i64) {
             push_multibyte_chars(&mut out, ch.to_lowercase());
         } else {
             push_multibyte_char_code(&mut out, code);
         }
+        prev_word = is_word(code);
     }
     LispString::from_emacs_bytes(out)
 }
@@ -950,12 +970,10 @@ pub(crate) fn builtin_downcase_region(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    casify_region_in_state(
-        ctx,
-        args,
-        "downcase-region",
-        downcase_lisp_string_emacs_compat,
-    )
+    let is_word = crate::emacs_core::builtins::casing_word_predicate(ctx);
+    casify_region_in_state(ctx, args, "downcase-region", move |s| {
+        downcase_lisp_string_emacs_compat(s, is_word)
+    })
 }
 
 pub(crate) fn builtin_upcase_region(
@@ -989,12 +1007,10 @@ pub(crate) fn builtin_downcase_word(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    casify_word_in_state(
-        ctx,
-        args,
-        "downcase-word",
-        downcase_lisp_string_emacs_compat,
-    )
+    let is_word = crate::emacs_core::builtins::casing_word_predicate(ctx);
+    casify_word_in_state(ctx, args, "downcase-word", move |s| {
+        downcase_lisp_string_emacs_compat(s, is_word)
+    })
 }
 
 pub(crate) fn builtin_upcase_word(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
