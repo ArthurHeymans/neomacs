@@ -4322,6 +4322,87 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
 }
 
 #[test]
+fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_current_row_tail() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("render-current-row-slot-tail", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 1, 0.0, 8.0);
+    let table = neovm_core::face::FaceTable::new();
+    let face_resolver =
+        crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let mut base_face = face_resolver.default_face().clone();
+    base_face.font_char_width = 8.0;
+    base_face.font_ascent = 12.0;
+    let mut source = crate::display_source::LispStringSourceCursor::new(
+        101,
+        Value::string("x"),
+        RenderFaceRef::FaceId(7),
+    )
+    .expect("lisp string source");
+    let mut source_state = DisplayRowSourceState::default();
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(8);
+
+    let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row_with_width(&mut builder, 'a', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'b', 7, 1, 8.0);
+
+    let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
+    let request = frame.source_append_request(
+        DisplayRowPosition { x_px: 0.0, col: 0 },
+        7,
+        &base_face,
+        DisplayRowAppendKind::SourceText,
+    );
+
+    let outcome = request
+        .render_natural_display_source_into_current_text_row_and_emit(
+            &mut DisplayRowCurrentTextRenderState {
+                builder: &mut builder,
+                output_emitter: &mut output_emitter,
+                evaluator: &mut eval,
+                font_metrics: &mut font_metrics,
+                face_resolver: &face_resolver,
+                face_ids: &mut face_ids,
+            },
+            &mut source,
+            &mut source_state,
+        )
+        .expect("current-row fragment outcome");
+
+    assert_eq!(
+        outcome.source_slots(),
+        &[DisplayRowGlyphSlot {
+            source: DisplaySourcePosition::lisp_string(101, 0, 0),
+            x_px: 16.0,
+            col: 2,
+            width_px: 8.0,
+            width_cols: 1,
+        }]
+    );
+    assert_eq!(
+        outcome.end_position(),
+        DisplayRowPosition { x_px: 24.0, col: 3 }
+    );
+}
+
+#[test]
 fn render_face_ref_id_uses_fallback_for_inherit() {
     assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(12), 7), 12);
     assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, 7), 7);
@@ -6037,6 +6118,7 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         matrix_row: 0,
         slot_width: Some(8.0),
         stretch_like: false,
+        glyph_row_resolved: false,
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);
 

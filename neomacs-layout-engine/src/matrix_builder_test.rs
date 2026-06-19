@@ -691,6 +691,46 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
 }
 
 #[test]
+fn glyph_row_resolved_phys_cursor_preserves_display_string_cursor_slot() {
+    let mut builder = GlyphMatrixBuilder::new();
+    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+
+    for (charpos, ch) in "1/1070 M-x f ".chars().enumerate() {
+        write_char_to_current_row(&mut builder, ch, 0, charpos);
+    }
+    builder.end_row();
+
+    builder.set_glyph_row_resolved_phys_cursor(PhysCursor {
+        window_id: 1,
+        charpos: 5,
+        row: 0,
+        col: 12,
+        slot_id: DisplaySlotId {
+            window_id: 1,
+            row: 0,
+            col: 12,
+        },
+        x: 96.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(80, 3, 8.0, 16.0);
+    let cursor = state.phys_cursor.as_ref().expect("phys cursor");
+    assert_eq!(cursor.col, 12);
+    assert_eq!(cursor.slot_id.col, 12);
+    assert_eq!(cursor.x, 96.0);
+    assert_eq!(state.window_matrices[0].matrix.rows[0].cursor_col, Some(12));
+}
+
+#[test]
 fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
     // Regression for the Doom `gg`-to-title "two cursors on the heading" bug.
     //

@@ -26,11 +26,13 @@ pub(crate) struct CapturedCursorInfo {
     pub(crate) matrix_row: usize,
     pub(crate) slot_width: Option<f32>,
     pub(crate) stretch_like: bool,
+    pub(crate) glyph_row_resolved: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct CursorCaptureState {
     captured: Option<CapturedCursorInfo>,
+    string_cursor_property_captured: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -173,6 +175,7 @@ impl CapturedCursorInfo {
             matrix_row: placement.matrix_row,
             slot_width: Some(placement.slot_width.resolve(visual_state.face_width)),
             stretch_like: placement.stretch_like,
+            glyph_row_resolved: false,
         }
     }
 
@@ -321,20 +324,27 @@ impl ResolvedCursorGeometry {
 
 impl CursorCaptureState {
     pub(crate) fn new() -> Self {
-        Self { captured: None }
+        Self {
+            captured: None,
+            string_cursor_property_captured: false,
+        }
     }
 
     pub(crate) fn is_missing(self) -> bool {
         self.captured.is_none()
     }
 
-    pub(crate) fn is_captured(self) -> bool {
-        self.captured.is_some()
-    }
-
     pub(crate) fn capture_once(&mut self, info: CapturedCursorInfo) {
         if self.captured.is_none() {
             self.captured = Some(info);
+        }
+    }
+
+    pub(crate) fn capture_string_cursor_property(&mut self, mut info: CapturedCursorInfo) {
+        if !self.string_cursor_property_captured {
+            info.glyph_row_resolved = true;
+            self.captured = Some(info);
+            self.string_cursor_property_captured = true;
         }
     }
 
@@ -646,6 +656,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
                 cursor_fg: resolved_cursor.cursor_fg,
                 text_area_left: self.text_area_left,
                 window_top: self.window_top,
+                glyph_row_resolved: cursor.glyph_row_resolved,
             },
         );
 

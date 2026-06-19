@@ -145,7 +145,6 @@ fn render_overlay_string<B: LayoutBufferView>(
     let max_x = row_context.right_edge();
     let row_limit = row_context.row_limit();
     let row_break_context = OverlayStringRowBreakRenderContext::new(anchor_charpos, row_context);
-
     let append_request = source_request.append_request(DisplayRowPosition {
         x_px: *state.x,
         col: *state.col,
@@ -266,9 +265,6 @@ fn capture_overlay_string_cursor(
     visual_state: CapturedCursorVisualState,
     slot_width: CapturedCursorSlotWidth,
 ) {
-    if cursor_info.is_captured() {
-        return;
-    }
     let Some(props) = text_props else {
         return;
     };
@@ -281,7 +277,7 @@ fn capture_overlay_string_cursor(
         return;
     }
 
-    cursor_info.capture_once(CapturedCursorInfo::from_visual_state(
+    let info = CapturedCursorInfo::from_visual_state(
         visual_state,
         CapturedCursorPlacement {
             x,
@@ -292,5 +288,6 @@ fn capture_overlay_string_cursor(
             slot_width,
             stretch_like: false,
         },
-    ));
+    );
+    cursor_info.capture_string_cursor_property(info);
 }

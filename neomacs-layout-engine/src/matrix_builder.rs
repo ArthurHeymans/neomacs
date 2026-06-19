@@ -960,6 +960,17 @@ impl GlyphMatrixBuilder {
         self.phys_cursor = Some(cursor);
     }
 
+    pub(crate) fn set_glyph_row_resolved_phys_cursor(&mut self, cursor: PhysCursor) {
+        if let Some(ref mut matrix) = self.current_matrix
+            && cursor.row < matrix.rows.len()
+        {
+            matrix.rows[cursor.row].cursor_col = Some(cursor.col);
+            matrix.rows[cursor.row].cursor_type = Some(cursor.style);
+        }
+
+        self.phys_cursor = Some(cursor);
+    }
+
     pub(crate) fn install_frame_state(&mut self, request: MatrixFrameStateInstallRequest) {
         request.install(self);
     }

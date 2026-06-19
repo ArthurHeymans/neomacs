@@ -3889,18 +3889,6 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
             context.params.window_start,
         );
 
-        prepared_append.capture_cursor_info_for_main_char_if_point(
-            cursor_info,
-            context.active_face_state,
-            row_geometry,
-            *x,
-            decoded_source_char.start_byte_idx(),
-            *col,
-            ch == '\t',
-            *charpos,
-            context.point_charpos,
-        );
-
         {
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
@@ -3920,6 +3908,18 @@ impl<'a> BufferTextSourceCharRenderRequest<'a> {
                 &mut overlay_state,
             );
         }
+
+        prepared_append.capture_cursor_info_for_main_char_if_point(
+            cursor_info,
+            context.active_face_state,
+            row_geometry,
+            *x,
+            decoded_source_char.start_byte_idx(),
+            *col,
+            ch == '\t',
+            *charpos,
+            context.point_charpos,
+        );
 
         if prepared_append
             .append_to_text_row_and_apply(

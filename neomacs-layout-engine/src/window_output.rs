@@ -309,6 +309,7 @@ pub(crate) struct TextWindowCursor {
     pub(crate) cursor_fg: Color,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
+    pub(crate) glyph_row_resolved: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -799,7 +800,11 @@ pub(crate) fn publish_text_window_cursor(
     ));
     output_emitter.set_phys_cursor(cursor.window_snapshot());
     if cursor.selected {
-        builder.set_phys_cursor(cursor.phys_cursor());
+        if cursor.glyph_row_resolved {
+            builder.set_glyph_row_resolved_phys_cursor(cursor.phys_cursor());
+        } else {
+            builder.set_phys_cursor(cursor.phys_cursor());
+        }
     }
 }
 

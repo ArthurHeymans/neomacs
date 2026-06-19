@@ -450,6 +450,7 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
         matrix_row: 2,
         slot_width: None,
         stretch_like: false,
+        glyph_row_resolved: false,
     };
     let second = CapturedCursorInfo {
         x: 9.0,

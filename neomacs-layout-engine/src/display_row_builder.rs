@@ -458,6 +458,17 @@ pub(crate) struct DisplayRowPosition {
     pub(crate) col: usize,
 }
 
+fn append_start_position(
+    requested: DisplayRowPosition,
+    current_tail: DisplayRowPosition,
+) -> DisplayRowPosition {
+    if current_tail.col > requested.col || current_tail.x_px > requested.x_px {
+        current_tail
+    } else {
+        requested
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowAppendStatus {
     Complete,
@@ -731,8 +742,10 @@ impl<'layout, 'row> DisplayRowProgressWriter<'layout, 'row, '_> {
         position: DisplayRowPosition,
         max_x_px: f32,
     ) -> Self {
+        let writer = DisplayRowWriter::new(layout, row);
+        let position = append_start_position(position, writer.current_text_position());
         Self {
-            writer: DisplayRowWriter::new(layout, row),
+            writer,
             position,
             max_x_px,
             text_run_measurement: None,
@@ -767,13 +780,11 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         max_x_px: f32,
         area: GlyphArea,
     ) -> Self {
+        let writer =
+            DisplayRowWriter::with_glyph_measurer_for_area(layout, row, glyph_measurer, area);
+        let position = append_start_position(position, writer.current_text_position());
         Self {
-            writer: DisplayRowWriter::with_glyph_measurer_for_area(
-                layout,
-                row,
-                glyph_measurer,
-                area,
-            ),
+            writer,
             position,
             max_x_px,
             text_run_measurement: None,
@@ -806,8 +817,10 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         max_x_px: f32,
         area: GlyphArea,
     ) -> Self {
+        let writer = DisplayRowWriter::for_area(layout, row, area);
+        let position = append_start_position(position, writer.current_text_position());
         Self {
-            writer: DisplayRowWriter::for_area(layout, row, area),
+            writer,
             position,
             max_x_px,
             text_run_measurement: Some(text_run_measurement),
