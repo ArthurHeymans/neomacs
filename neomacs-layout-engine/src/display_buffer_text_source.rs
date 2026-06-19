@@ -261,6 +261,10 @@ impl BufferTextSourcePosition {
         self.byte_idx = byte_idx;
     }
 
+    pub(crate) fn advance_charpos_by_one(&mut self) {
+        self.charpos = self.charpos.saturating_add(1);
+    }
+
     fn advance_one_char(&mut self, ch_len: usize) {
         self.byte_idx = self.byte_idx.saturating_add(ch_len);
         self.charpos = self.charpos.saturating_add(1);
@@ -287,18 +291,6 @@ impl BufferTextSourceStepChar {
             start_byte_idx,
             start_charpos,
         }
-    }
-
-    pub(crate) fn consume_from_text(
-        text: &[u8],
-        byte_idx: &mut usize,
-        charpos: &mut i64,
-    ) -> Option<Self> {
-        let mut position = BufferTextSourcePosition::new(*byte_idx, *charpos);
-        let source_char = Self::consume_from_position(text, &mut position)?;
-        *byte_idx = position.byte_idx();
-        *charpos = position.charpos();
-        Some(source_char)
     }
 
     pub(crate) fn consume_from_position(

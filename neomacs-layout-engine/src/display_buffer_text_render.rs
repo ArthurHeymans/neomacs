@@ -4805,7 +4805,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         };
 
         let BufferSelectiveDisplayTailRenderState {
-            progress,
+            mut progress,
             source_render,
             row_extend,
             box_face,
@@ -4820,17 +4820,10 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             trailing_whitespace,
             row_y_positions,
         } = state;
-        let BufferTextWindowProgressState {
-            byte_idx,
-            charpos,
-            row: BufferTextWindowRowProgressState { x, col },
-        } = progress;
         let mut source_render = source_render;
 
-        let mut synthetic_text_state = BufferSyntheticTextRenderState::new(
-            source_render.reborrow(),
-            BufferTextWindowRowProgressState::new(x, col),
-        );
+        let mut synthetic_text_state =
+            BufferSyntheticTextRenderState::new(source_render.reborrow(), progress.row.reborrow());
         marker.append_to_text_row_and_apply(
             BufferSyntheticTextRenderContext::new(
                 context.append_surface,
@@ -4844,8 +4837,10 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             &mut synthetic_text_state,
         );
 
+        let mut source_position = progress.source_position();
         let tail_action =
-            selective_display.skip_rest_of_line_after_carriage_return(byte_idx, charpos);
+            selective_display.skip_rest_of_line_after_carriage_return(&mut source_position);
+        progress.apply_source_position(source_position);
         if !tail_action.is_line_break() {
             return BufferSelectiveDisplayTailRenderOutcome::ContinueBufferWalk;
         }
@@ -4855,7 +4850,7 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
             row_extend,
             box_face,
             context.content_x,
-            x,
+            progress.row.x,
         );
         let line_break_transition = DisplayRowLineBreakTransitionPlan::hidden_line_break();
         let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
@@ -4871,10 +4866,10 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
         )
         .emit_line_break_then_row_start(
             line_break_transition,
-            hit_row_range.range_to(*charpos),
+            hit_row_range.range_to(progress.charpos()),
             DisplayRowPosition {
-                x_px: *x,
-                col: *col,
+                x_px: *progress.row.x,
+                col: *progress.row.col,
             },
             0.0,
             DisplayRowTransitionRenderState::new(
@@ -4885,13 +4880,14 @@ impl<'a> BufferSelectiveDisplayTailRenderRequest<'a> {
                 word_wrap,
                 trailing_whitespace,
             ),
-            col,
+            progress.row.col,
         );
         let synced_charpos = buffer
             .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-                context.text_start_byte + *byte_idx,
+                context.text_start_byte + progress.source_position().byte_idx(),
             ))
             .get() as i64;
+        let charpos = progress.charpos;
         if tail_action
             .apply_after_hidden_line_break_transition(
                 row_transition,
@@ -5329,18 +5325,19 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     pub(crate) fn skip_rest_of_line_after_carriage_return(
         self,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
     ) -> BufferSelectiveDisplayLineTailAction {
-        *charpos += 1;
-        while *byte_idx < self.text.len() {
+        position.advance_charpos_by_one();
+        while position.byte_idx() < self.text.len() {
             let Some(source_char) =
-                BufferTextSourceStepChar::consume_from_text(self.text, byte_idx, charpos)
+                BufferTextSourceStepChar::consume_from_position(self.text, position)
             else {
                 break;
             };
             if source_char.ch() == '\n' {
-                return BufferSelectiveDisplayLineTailAction::LineBreak { charpos: *charpos };
+                return BufferSelectiveDisplayLineTailAction::LineBreak {
+                    charpos: position.charpos(),
+                };
             }
         }
 
@@ -5349,19 +5346,18 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     pub(crate) fn skip_hidden_indented_lines_after_line_break(
         self,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
     ) -> BufferSelectiveDisplayHiddenLines {
         let mut hidden_line_count = 0;
-        while *byte_idx < self.text.len() {
-            let Some(indent) = self.indentation_columns_at(*byte_idx) else {
+        while position.byte_idx() < self.text.len() {
+            let Some(indent) = self.indentation_columns_at(position.byte_idx()) else {
                 break;
             };
             if indent <= self.selective_display {
                 break;
             }
 
-            if self.skip_line(byte_idx, charpos) {
+            if self.skip_line(position) {
                 hidden_line_count += 1;
             }
         }
@@ -5371,14 +5367,13 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
 
     pub(crate) fn apply_hidden_indented_lines_after_line_break(
         self,
-        byte_idx: &mut usize,
-        charpos: &mut i64,
+        position: &mut BufferTextSourcePosition,
         line_numbers: &mut LineNumberRenderState,
     ) -> BufferSelectiveDisplayHiddenLines {
-        if !self.hides_indented_lines_after_line_break(*byte_idx) {
+        if !self.hides_indented_lines_after_line_break(position.byte_idx()) {
             return BufferSelectiveDisplayHiddenLines::new(0);
         }
-        let hidden_lines = self.skip_hidden_indented_lines_after_line_break(byte_idx, charpos);
+        let hidden_lines = self.skip_hidden_indented_lines_after_line_break(position);
         hidden_lines.apply_to_line_numbers(line_numbers);
         hidden_lines
     }
@@ -5405,10 +5400,10 @@ impl<'a> BufferSelectiveDisplayContext<'a> {
         Some(indent)
     }
 
-    fn skip_line(self, byte_idx: &mut usize, charpos: &mut i64) -> bool {
-        while *byte_idx < self.text.len() {
+    fn skip_line(self, position: &mut BufferTextSourcePosition) -> bool {
+        while position.byte_idx() < self.text.len() {
             let Some(source_char) =
-                BufferTextSourceStepChar::consume_from_text(self.text, byte_idx, charpos)
+                BufferTextSourceStepChar::consume_from_position(self.text, position)
             else {
                 break;
             };
@@ -5509,7 +5504,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         state: BufferTextLineBreakRenderState<'_, '_>,
     ) -> DisplayRowTransitionContinuation {
         let BufferTextLineBreakRenderState {
-            progress,
+            mut progress,
             cursor_info,
             row_geometry,
             trailing_whitespace,
@@ -5526,11 +5521,6 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             row_y_positions,
             face_ids,
         } = state;
-        let BufferTextWindowProgressState {
-            byte_idx,
-            charpos,
-            row: BufferTextWindowRowProgressState { x, col },
-        } = progress;
         let mut source_render = source_render;
         let context = self.context;
 
@@ -5541,10 +5531,11 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             context.extra_line_spacing,
         );
         {
+            let overlay_charpos = progress.charpos();
             let mut overlay_state = OverlayStringRenderState::from_source_render(
                 source_render.reborrow(),
-                x,
-                col,
+                progress.row.x,
+                progress.row.col,
                 row_geometry,
                 cursor_info,
                 hit_rows,
@@ -5554,7 +5545,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             );
             context.overlay_context.render_at(
                 buffer,
-                *charpos,
+                overlay_charpos,
                 context.active_face_state,
                 &mut overlay_state,
             );
@@ -5564,8 +5555,8 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             context.active_face_state,
             row_geometry,
             context.point_charpos,
-            *x,
-            *col,
+            *progress.row.x,
+            *progress.row.col,
         );
         line_break_action.apply_before_row_transition(
             row_geometry,
@@ -5574,8 +5565,8 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             box_face,
             source_render.output_emitter(),
             context.content_x,
-            x,
-            charpos,
+            progress.row.x,
+            progress.charpos,
         );
 
         let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
@@ -5592,10 +5583,10 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
         )
         .emit_line_break_then_row_start(
             line_break_transition,
-            hit_row_range.range_to(*charpos),
+            hit_row_range.range_to(progress.charpos()),
             DisplayRowPosition {
-                x_px: *x,
-                col: *col,
+                x_px: *progress.row.x,
+                col: *progress.row.col,
             },
             line_break_action.line_spacing(),
             DisplayRowTransitionRenderState::new(
@@ -5606,18 +5597,18 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
                 word_wrap,
                 trailing_whitespace,
             ),
-            col,
+            progress.row.col,
         );
 
         let synced_charpos = buffer
             .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-                context.text_start_byte + *byte_idx,
+                context.text_start_byte + progress.source_position().byte_idx(),
             ))
             .get() as i64;
         let continuation = line_break_action.apply_after_line_break_row_transition(
             row_transition,
             synced_charpos,
-            charpos,
+            progress.charpos,
             hit_row_range,
             row_geometry,
             box_face,
@@ -5627,12 +5618,14 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             return continuation;
         }
 
+        let mut source_position = progress.source_position();
         BufferSelectiveDisplayContext::new(
             context.text,
             context.selective_display,
             context.tab_width,
         )
-        .apply_hidden_indented_lines_after_line_break(byte_idx, charpos, line_numbers);
+        .apply_hidden_indented_lines_after_line_break(&mut source_position, line_numbers);
+        progress.apply_source_position(source_position);
         DisplayRowTransitionContinuation::Continue
     }
 }
