@@ -670,6 +670,70 @@ fn builtin_try_completion_common_prefix() {
 }
 
 #[test]
+fn builtin_try_completion_ignore_case_matches_gnu_bestmatch_case() {
+    crate::test_utils::init_test_tracing();
+    // Faithful to GNU `Ftry_completion` (src/minibuf.c): with
+    // completion-ignore-case the returned value carries the case pattern of
+    // the candidate GNU selects as `bestmatch', not simply the first match.
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.assign("completion-ignore-case", Value::T);
+
+    // (try-completion "A" '("abc" "ABC" "abd")) => "AB"  (GNU oracle).
+    let coll = Value::list(vec![
+        Value::string("abc"),
+        Value::string("ABC"),
+        Value::string("abd"),
+    ]);
+    let result = builtin_try_completion(&mut eval, vec![Value::string("A"), coll]).unwrap();
+    assert_eq!(result.as_utf8_str().unwrap(), "AB");
+
+    // coll = '("Alpha" "ALPHA" "alpha" "Beta").
+    let coll = || {
+        Value::list(vec![
+            Value::string("Alpha"),
+            Value::string("ALPHA"),
+            Value::string("alpha"),
+            Value::string("Beta"),
+        ])
+    };
+    // (try-completion "a" coll) => "alpha"  (exact-case match preferred).
+    let r = builtin_try_completion(&mut eval, vec![Value::string("a"), coll()]).unwrap();
+    assert_eq!(r.as_utf8_str().unwrap(), "alpha");
+    // (try-completion "A" coll) => "Alpha".
+    let r = builtin_try_completion(&mut eval, vec![Value::string("A"), coll()]).unwrap();
+    assert_eq!(r.as_utf8_str().unwrap(), "Alpha");
+
+    // (try-completion "FOO" '("foobar" "FOOBAR")) => "FOOBAR".
+    let coll = Value::list(vec![Value::string("foobar"), Value::string("FOOBAR")]);
+    let r = builtin_try_completion(&mut eval, vec![Value::string("FOO"), coll]).unwrap();
+    assert_eq!(r.as_utf8_str().unwrap(), "FOOBAR");
+}
+
+#[test]
+fn builtin_try_completion_ignore_case_all_completions_lengths() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.assign("completion-ignore-case", Value::T);
+    let coll = || {
+        Value::list(vec![
+            Value::string("Alpha"),
+            Value::string("ALPHA"),
+            Value::string("alpha"),
+            Value::string("Beta"),
+        ])
+    };
+    let a = builtin_all_completions(&mut eval, vec![Value::string("a"), coll()]).unwrap();
+    let upper_a = builtin_all_completions(&mut eval, vec![Value::string("A"), coll()]).unwrap();
+    assert_eq!(crate::emacs_core::value::list_to_vec(&a).unwrap().len(), 3);
+    assert_eq!(
+        crate::emacs_core::value::list_to_vec(&upper_a)
+            .unwrap()
+            .len(),
+        3
+    );
+}
+
+#[test]
 fn builtin_try_completion_no_match() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

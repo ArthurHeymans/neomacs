@@ -3840,13 +3840,11 @@ impl Context {
                         Value::symbol("substring"),
                     ]),
                 ]),
-                Value::list(vec![
-                    Value::symbol("calendar-month"),
-                    Value::cons(
-                        Value::symbol("display-sort-function"),
-                        Value::symbol("identity"),
-                    ),
-                ]),
+                // NB: GNU's `completion-category-defaults' defvar
+                // (lisp/minibuffer.el) ends at `symbol-help'.  The
+                // `calendar-month' entry is added at runtime by calendar.el's
+                // `add-to-list', which is not loaded under `emacs -Q'; don't
+                // hardcode it here.
             ]),
         );
         // Do NOT hardcode completion-styles-alist here.

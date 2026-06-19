@@ -915,8 +915,14 @@ pub(crate) fn builtin_locate_file_internal(
 
 /// `(read-coding-system PROMPT &optional DEFAULT-CODING-SYSTEM)`
 ///
-/// In batch mode, this prompts for input and signals end-of-file.
-pub(crate) fn builtin_read_coding_system(args: Vec<Value>) -> EvalResult {
+/// Faithful port of GNU's `Fread_coding_system` (src/coding.c): binds
+/// `completion-ignore-case' to t and delegates to `completing-read', then
+/// interns the (non-empty) result.  In batch mode `completing-read' writes the
+/// prompt to stdout and signals `end-of-file' on empty stdin, matching GNU.
+pub(crate) fn builtin_read_coding_system(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("read-coding-system", &args, 1)?;
     expect_max_args("read-coding-system", &args, 2)?;
     if !args[0].is_string() {
@@ -925,16 +931,18 @@ pub(crate) fn builtin_read_coding_system(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
-    Err(signal(
-        "end-of-file",
-        vec![Value::string("Error reading from stdin")],
-    ))
+    read_coding_system_via_completing_read(eval, &args, false)
 }
 
 /// `(read-non-nil-coding-system PROMPT)`
 ///
-/// In batch mode, this prompts for input and signals end-of-file.
-pub(crate) fn builtin_read_non_nil_coding_system(args: Vec<Value>) -> EvalResult {
+/// Like `read-coding-system' but rejects null input.  GNU loops in Lisp until a
+/// non-empty coding system is read; in batch mode the underlying
+/// `completing-read' signals `end-of-file' before any such check.
+pub(crate) fn builtin_read_non_nil_coding_system(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
             "wrong-number-of-arguments",
@@ -950,10 +958,53 @@ pub(crate) fn builtin_read_non_nil_coding_system(args: Vec<Value>) -> EvalResult
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
-    Err(signal(
-        "end-of-file",
-        vec![Value::string("Error reading from stdin")],
-    ))
+    read_coding_system_via_completing_read(eval, &args, true)
+}
+
+/// Shared body for `read-coding-system` / `read-non-nil-coding-system`.
+fn read_coding_system_via_completing_read(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+    require_match: bool,
+) -> EvalResult {
+    // GNU passes the symbol-name string of a symbolic DEFAULT-CODING-SYSTEM.
+    let default = match args.get(1).copied() {
+        Some(value) if value.is_symbol() && !value.is_nil() => Value::string(
+            super::intern::resolve_sym(value.as_symbol_id().expect("checked symbol")),
+        ),
+        Some(value) => value,
+        None => Value::NIL,
+    };
+    let collection = eval
+        .eval_symbol("coding-system-alist")
+        .unwrap_or(Value::NIL);
+    // GNU's `Fread_coding_system` always passes REQUIRE-MATCH = t.
+    let _ = require_match;
+    let completing_args = vec![
+        args[0],
+        collection,
+        Value::NIL,
+        Value::T,
+        Value::NIL,
+        Value::symbol("coding-system-history"),
+        default,
+    ];
+    // GNU `specbind`s `completion-ignore-case` to t around the call; use the
+    // specpdl so the binding is unwound even when `completing-read' signals
+    // (e.g. end-of-file on empty stdin in batch mode).
+    let count = eval.specpdl.len();
+    eval.specbind(super::intern::intern("completion-ignore-case"), Value::T);
+    let val = super::reader::builtin_completing_read(eval, completing_args);
+    let val = eval.unbind_to_with_result(count, val)?;
+    let Some(name) = val.as_lisp_string() else {
+        return Ok(Value::NIL);
+    };
+    if name.schars() == 0 {
+        return Ok(Value::NIL);
+    }
+    Ok(Value::symbol(crate::emacs_core::emacs_char::to_utf8_lossy(
+        name.as_bytes(),
+    )))
 }
 
 // ---------------------------------------------------------------------------

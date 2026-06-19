@@ -1357,7 +1357,11 @@ fn locate_file_internal_rejects_over_arity() {
 #[test]
 fn read_coding_system_signals_batch_eof() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_read_coding_system(vec![Value::string("")]);
+    // Mirrors GNU: `Fread_coding_system` -> `Fcompleting_read` ->
+    // `read_minibuf_noninteractive`, which on empty stdin signals end-of-file
+    // (the harness redirects stdin from /dev/null under test).
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = builtin_read_coding_system(&mut eval, vec![Value::string("")]);
     assert!(matches!(
         result,
         Err(Flow::Signal(sig))
@@ -1369,7 +1373,8 @@ fn read_coding_system_signals_batch_eof() {
 #[test]
 fn read_coding_system_validates_prompt_type_and_arity() {
     crate::test_utils::init_test_tracing();
-    let bad_prompt = builtin_read_coding_system(vec![Value::fixnum(1)]);
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let bad_prompt = builtin_read_coding_system(&mut eval, vec![Value::fixnum(1)]);
     assert!(matches!(
         bad_prompt,
         Err(Flow::Signal(sig))
@@ -1377,7 +1382,8 @@ fn read_coding_system_validates_prompt_type_and_arity() {
                 && sig.data == vec![Value::symbol("stringp"), Value::fixnum(1)]
     ));
 
-    let arity = builtin_read_coding_system(vec![Value::string(""), Value::NIL, Value::NIL]);
+    let arity =
+        builtin_read_coding_system(&mut eval, vec![Value::string(""), Value::NIL, Value::NIL]);
     assert!(matches!(
         arity,
         Err(Flow::Signal(sig))
@@ -1389,7 +1395,8 @@ fn read_coding_system_validates_prompt_type_and_arity() {
 #[test]
 fn read_non_nil_coding_system_signals_batch_eof() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_read_non_nil_coding_system(vec![Value::string("")]);
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = builtin_read_non_nil_coding_system(&mut eval, vec![Value::string("")]);
     assert!(matches!(
         result,
         Err(Flow::Signal(sig))
@@ -1401,7 +1408,8 @@ fn read_non_nil_coding_system_signals_batch_eof() {
 #[test]
 fn read_non_nil_coding_system_validates_prompt_type_and_arity() {
     crate::test_utils::init_test_tracing();
-    let bad_prompt = builtin_read_non_nil_coding_system(vec![Value::fixnum(1)]);
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let bad_prompt = builtin_read_non_nil_coding_system(&mut eval, vec![Value::fixnum(1)]);
     assert!(matches!(
         bad_prompt,
         Err(Flow::Signal(sig))
@@ -1409,7 +1417,7 @@ fn read_non_nil_coding_system_validates_prompt_type_and_arity() {
                 && sig.data == vec![Value::symbol("stringp"), Value::fixnum(1)]
     ));
 
-    let arity = builtin_read_non_nil_coding_system(vec![Value::string(""), Value::NIL]);
+    let arity = builtin_read_non_nil_coding_system(&mut eval, vec![Value::string(""), Value::NIL]);
     assert!(matches!(
         arity,
         Err(Flow::Signal(sig))

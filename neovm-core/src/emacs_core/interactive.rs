@@ -1923,16 +1923,17 @@ fn interactive_args_from_string_code_in_vm_runtime(
                     )?);
                 }
                 InteractiveControlLetter::CodingSystem => {
-                    args.push(super::lread::builtin_read_coding_system(vec![
-                        Value::heap_string(prompt.clone()),
-                    ])?)
+                    args.push(super::lread::builtin_read_coding_system(
+                        shared,
+                        vec![Value::heap_string(prompt.clone())],
+                    )?)
                 }
                 InteractiveControlLetter::CodingSystemWithPrefix => {
                     let raw = interactive_prefix_raw_arg_in_state(&shared.obarray, &[], kind);
                     if raw.is_nil() {
                         args.push(Value::NIL);
                     } else {
-                        args.push(interactive_read_coding_system_optional_arg(prompt)?);
+                        args.push(interactive_read_coding_system_optional_arg(shared, prompt)?);
                     }
                 }
             }
@@ -2077,9 +2078,10 @@ fn interactive_eval_expression_arg_in_vm_runtime(
 }
 
 fn interactive_read_coding_system_optional_arg(
+    eval: &mut super::eval::Context,
     prompt: crate::heap_types::LispString,
 ) -> Result<Value, Flow> {
-    match super::lread::builtin_read_coding_system(vec![Value::heap_string(prompt)]) {
+    match super::lread::builtin_read_coding_system(eval, vec![Value::heap_string(prompt)]) {
         Ok(value) => Ok(value),
         Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" => Ok(Value::NIL),
         Err(flow) => Err(flow),
@@ -2720,16 +2722,17 @@ fn interactive_args_from_string_code(
                     )?)
                 }
                 InteractiveControlLetter::CodingSystem => {
-                    args.push(super::lread::builtin_read_coding_system(vec![
-                        Value::heap_string(prompt),
-                    ])?)
+                    args.push(super::lread::builtin_read_coding_system(
+                        eval,
+                        vec![Value::heap_string(prompt)],
+                    )?)
                 }
                 InteractiveControlLetter::CodingSystemWithPrefix => {
                     let raw = interactive_prefix_raw_arg(eval, kind);
                     if raw.is_nil() {
                         args.push(Value::NIL);
                     } else {
-                        args.push(interactive_read_coding_system_optional_arg(prompt)?);
+                        args.push(interactive_read_coding_system_optional_arg(eval, prompt)?);
                     }
                 }
             }

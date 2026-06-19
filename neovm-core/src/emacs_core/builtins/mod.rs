@@ -33,6 +33,7 @@ pub(crate) use buffers::lisp_string_from_buffer_bytes;
 pub(super) use std::cell::RefCell;
 pub(super) use std::collections::{HashMap, HashSet};
 pub(crate) use strings::downcase_char_code_emacs_compat;
+pub(crate) use strings::upcase_char_code_emacs_compat;
 
 // ---------------------------------------------------------------------------
 // Transitional string character iteration
@@ -9439,13 +9440,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "read-coding-system",
-        |_ctx, args| super::lread::builtin_read_coding_system(args),
+        |ctx, args| super::lread::builtin_read_coding_system(ctx, args),
         1,
         Some(2),
     );
     ctx.defsubr(
         "read-non-nil-coding-system",
-        |_ctx, args| super::lread::builtin_read_non_nil_coding_system(args),
+        |ctx, args| super::lread::builtin_read_non_nil_coding_system(ctx, args),
         1,
         Some(1),
     );

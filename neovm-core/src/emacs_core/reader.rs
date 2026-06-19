@@ -1408,7 +1408,9 @@ pub(crate) fn builtin_completing_read(
         return eval.apply(function, args);
     }
 
-    builtin_completing_read_in_runtime(eval, &args)?;
+    if let Some(result) = builtin_completing_read_in_runtime(eval, &args)? {
+        return Ok(result);
+    }
     finish_completing_read_in_eval(eval, &args)
 }
 
@@ -1445,18 +1447,25 @@ pub(crate) fn finish_completing_read_in_eval(
 pub(crate) fn builtin_completing_read_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
-) -> Result<(), Flow> {
+) -> Result<Option<Value>, Flow> {
     validate_completing_read_arity(args)?;
-    let prompt = args[0];
-    expect_lisp_string(&prompt)?;
+    let prompt = expect_lisp_string(&args[0])?;
     if let Some(initial) = args.get(4) {
         expect_completing_read_initial_input(initial)?;
     }
 
     if runtime.has_input_receiver() {
-        Ok(())
+        Ok(None)
     } else {
-        Err(stdin_end_of_file_error())
+        // Batch/noninteractive: GNU's `Fcompleting_read` routes through
+        // `read_minibuf` -> `read_minibuf_noninteractive` (minibuf.c), which
+        // writes the prompt to stdout and reads the answer from stdin, exactly
+        // like `read-from-minibuffer`.  Mirror that so the prompt is emitted
+        // before the (likely) end-of-file signal on empty stdin.
+        read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
+            prompt.as_bytes(),
+        ))
+        .map(Some)
     }
 }
 
@@ -1806,7 +1815,9 @@ pub(crate) fn finish_completing_read_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    builtin_completing_read_in_runtime(shared, args)?;
+    if let Some(result) = builtin_completing_read_in_runtime(shared, args)? {
+        return Ok(result);
+    }
     let minibuffer_args = completing_read_minibuffer_args(&shared.obarray, args);
     let collection = args[1];
     let predicate = args.get(2).copied().unwrap_or(Value::NIL);

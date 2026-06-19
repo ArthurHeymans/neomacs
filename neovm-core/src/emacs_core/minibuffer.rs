@@ -1021,21 +1021,23 @@ pub(crate) fn finish_read_buffer_in_eval(
     args: &[Value],
 ) -> EvalResult {
     let completing_args = read_buffer_completing_args(eval.obarray(), eval.buffer_manager(), args);
-    super::reader::finish_completing_read_in_eval(eval, &completing_args)
+    // Route through the full `completing-read` entry so the (already
+    // default-formatted) prompt is emitted in batch mode, matching GNU's
+    // `Fread_buffer` -> `Fcompleting_read` -> `read_minibuf_noninteractive`.
+    super::reader::builtin_completing_read(eval, completing_args.to_vec())
 }
 
 pub(crate) fn builtin_read_buffer_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
 ) -> Result<(), Flow> {
+    // Validation only; batch prompt/stdin handling lives in the shared
+    // `completing-read` path reached from `finish_read_buffer_*`.
+    let _ = runtime;
     expect_min_args("read-buffer", args, 1)?;
     expect_max_args("read-buffer", args, 4)?;
     let _prompt = expect_lisp_string(&args[0])?;
-    if runtime.has_input_receiver() {
-        Ok(())
-    } else {
-        Err(end_of_file_stdin_error())
-    }
+    Ok(())
 }
 
 pub(crate) fn read_buffer_completing_args(
@@ -1085,7 +1087,7 @@ pub(crate) fn finish_read_command_in_eval(
     args: &[Value],
 ) -> EvalResult {
     finish_read_command_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_eval(eval, minibuffer_args)
+        super::reader::builtin_read_from_minibuffer(eval, minibuffer_args.to_vec())
     })
 }
 
@@ -1093,14 +1095,16 @@ pub(crate) fn builtin_read_command_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
 ) -> Result<(), Flow> {
+    // Validation only.  GNU's `Fread_command` routes through `Fcompleting_read`
+    // -> `read_minibuf` -> `read_minibuf_noninteractive` in batch mode, which
+    // writes the prompt to stdout before reading stdin; the actual batch
+    // prompt/stdin handling happens in the shared `read-from-minibuffer` path
+    // reached from `finish_read_command_*`.
+    let _ = runtime;
     expect_min_args("read-command", args, 1)?;
     expect_max_args("read-command", args, 2)?;
     let _prompt = expect_lisp_string(&args[0])?;
-    if runtime.has_input_receiver() {
-        Ok(())
-    } else {
-        Err(end_of_file_stdin_error())
-    }
+    Ok(())
 }
 
 fn symbol_reader_minibuffer_args(args: &[Value]) -> [Value; 6] {
@@ -1149,7 +1153,7 @@ pub(crate) fn finish_read_command_in_vm_runtime(
 ) -> EvalResult {
     builtin_read_command_in_runtime(shared, args)?;
     finish_read_command_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
+        super::reader::builtin_read_from_minibuffer(shared, minibuffer_args.to_vec())
     })
 }
 
@@ -1170,7 +1174,7 @@ pub(crate) fn finish_read_variable_in_eval(
     args: &[Value],
 ) -> EvalResult {
     finish_read_variable_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_eval(eval, minibuffer_args)
+        super::reader::builtin_read_from_minibuffer(eval, minibuffer_args.to_vec())
     })
 }
 
@@ -1178,14 +1182,13 @@ pub(crate) fn builtin_read_variable_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
 ) -> Result<(), Flow> {
+    // Validation only; batch prompt/stdin handling lives in the shared
+    // `read-from-minibuffer` path reached from `finish_read_variable_*`.
+    let _ = runtime;
     expect_min_args("read-variable", args, 1)?;
     expect_max_args("read-variable", args, 2)?;
     let _prompt = expect_lisp_string(&args[0])?;
-    if runtime.has_input_receiver() {
-        Ok(())
-    } else {
-        Err(end_of_file_stdin_error())
-    }
+    Ok(())
 }
 
 pub(crate) fn finish_read_variable_with_minibuffer(
@@ -1201,7 +1204,7 @@ pub(crate) fn finish_read_variable_in_vm_runtime(
 ) -> EvalResult {
     builtin_read_variable_in_runtime(shared, args)?;
     finish_read_variable_with_minibuffer(args, |minibuffer_args| {
-        super::reader::finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
+        super::reader::builtin_read_from_minibuffer(shared, minibuffer_args.to_vec())
     })
 }
 
@@ -1772,27 +1775,76 @@ fn completion_text_equals_string(
         })
 }
 
-fn completion_common_prefix_len(matches: &[&CompletionCandidate], ignore_case: bool) -> usize {
-    let Some((first, rest)) = matches.split_first() else {
-        return 0;
-    };
-    let mut prefix = completion_char_codes(first.completion.lisp_string());
-    for candidate in rest {
-        let other = completion_char_codes(candidate.completion.lisp_string());
-        let max = prefix.len().min(other.len());
-        let mut common = 0;
-        while common < max
-            && completion_fold_char(prefix[common], ignore_case)
-                == completion_fold_char(other[common], ignore_case)
-        {
-            common += 1;
-        }
-        prefix.truncate(common);
-        if prefix.is_empty() {
-            break;
+/// GNU-faithful result of `Fcompare_strings` over the first `len` chars of two
+/// char-code slices (each compared from offset 0).  Mirrors `fns.c`
+/// `Fcompare_strings`: returns [`StringCompare::Equal`] when the compared
+/// portions match, otherwise the (1-based) count of leading characters that
+/// matched, tagged with which side was "less".  When `ignore_case` is set,
+/// characters are upcased before comparison, exactly like GNU (which uses
+/// `Fupcase`, not downcase).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StringCompare {
+    /// The two compared portions are equal.
+    Equal,
+    /// First string is "less"; `n` leading chars matched.
+    Less(usize),
+    /// First string is "greater"; `n` leading chars matched.
+    Greater(usize),
+}
+
+impl StringCompare {
+    /// GNU computes `matchsize` as `EQ (tem, Qt) ? compare : eabs (XFIXNUM (tem)) - 1`,
+    /// where `compare` is the number of chars that were compared.  `eabs(N)-1`
+    /// is the count of leading matching characters in both the less/greater
+    /// cases (`-1 - N` for less, `N - 1` for greater both reduce to the leading
+    /// match count).
+    fn match_size(self, compare: usize) -> usize {
+        match self {
+            StringCompare::Equal => compare,
+            StringCompare::Less(n) | StringCompare::Greater(n) => n,
         }
     }
-    prefix.len()
+}
+
+fn upcase_code(code: u32) -> u32 {
+    crate::emacs_core::builtins::upcase_char_code_emacs_compat(code as i64) as u32
+}
+
+/// Compare the first `len` characters of `a` and `b` (each starting at offset 0),
+/// matching GNU `Fcompare_strings` semantics.  `len` is the number of chars to
+/// compare; callers pass `min(SCHARS(a), SCHARS(b))` as in `Ftry_completion`.
+fn gnu_compare_strings(a: &[u32], b: &[u32], len: usize, ignore_case: bool) -> StringCompare {
+    let to1 = len.min(a.len());
+    let to2 = len.min(b.len());
+    let mut i = 0;
+    while i < to1 && i < to2 {
+        let mut c1 = a[i];
+        let mut c2 = b[i];
+        if c1 != c2 {
+            if ignore_case {
+                c1 = upcase_code(c1);
+                c2 = upcase_code(c2);
+            }
+            if c1 != c2 {
+                // GNU returns -(i+1) / (i+1) with `i` already advanced past the
+                // mismatch; both encode `i` leading matching characters.
+                return if c1 < c2 {
+                    StringCompare::Less(i)
+                } else {
+                    StringCompare::Greater(i)
+                };
+            }
+        }
+        i += 1;
+    }
+    // One side ran out of compared range before the other.
+    if i < to1 {
+        StringCompare::Greater(i)
+    } else if i < to2 {
+        StringCompare::Less(i)
+    } else {
+        StringCompare::Equal
+    }
 }
 
 fn is_global_obarray_proxy_in_state(obarray: &Obarray, value: &Value) -> bool {
@@ -1893,7 +1945,19 @@ pub(crate) fn builtin_try_completion_with_candidates(
         return apply(collection, vec![args[0], predicate, Value::NIL]);
     };
 
-    let mut matches = Vec::new();
+    // Faithful port of GNU `Ftry_completion` (src/minibuf.c).  We iterate over
+    // the candidates maintaining a running `bestmatch` whose leading
+    // `bestmatchsize` characters are common to every accepted completion.  When
+    // `completion_ignore_case` is set the *identity* of `bestmatch` can switch
+    // to a later candidate so the returned case pattern matches GNU exactly.
+    let string_codes = completion_char_codes(&string);
+    let string_schars = string_codes.len();
+
+    let mut bestmatch: Option<&CompletionCandidate> = None;
+    let mut best_codes: Vec<u32> = Vec::new();
+    let mut bestmatchsize = 0usize;
+    let mut matchcount = 0i32;
+
     for candidate in &candidates {
         if !completion_text_matches_prefix(&string, &candidate.completion, ignore_case) {
             continue;
@@ -1903,20 +1967,92 @@ pub(crate) fn builtin_try_completion_with_candidates(
         {
             continue;
         }
-        if completion_predicate_matches_with(predicate, candidate, &mut apply)? {
-            matches.push(candidate);
+        if !completion_predicate_matches_with(predicate, candidate, &mut apply)? {
+            continue;
+        }
+
+        let elt_codes = completion_char_codes(candidate.completion.lisp_string());
+        let elt_schars = elt_codes.len();
+
+        if bestmatch.is_none() {
+            matchcount = 1;
+            bestmatch = Some(candidate);
+            bestmatchsize = elt_schars;
+            best_codes = elt_codes;
+            continue;
+        }
+
+        let best_schars = best_codes.len();
+        let compare = bestmatchsize.min(elt_schars);
+        let cmp = gnu_compare_strings(&best_codes, &elt_codes, compare, ignore_case);
+        let matchsize = cmp.match_size(compare);
+
+        // Whether the previous bestmatch (case-sensitively) prefix-matched the
+        // first `compare` chars of this element — used for the matchcount bump.
+        let old_best_prefix_eq =
+            gnu_compare_strings(&best_codes, &elt_codes, compare, false) == StringCompare::Equal;
+
+        let mut switched = false;
+        if ignore_case {
+            // If this is an exact match except for case, prefer it so the
+            // returned value carries the actual match's case pattern.
+            let elt_exact = matchsize == elt_schars;
+            let best_exact = matchsize == best_schars;
+            let cond1 = elt_exact && matchsize < best_schars;
+            // Otherwise: when both (or neither) are exact, prefer the candidate
+            // whose case agrees with the input over the current bestmatch which
+            // does not.
+            let elt_matches_input_case =
+                gnu_compare_strings(&elt_codes, &string_codes, string_schars, false)
+                    == StringCompare::Equal;
+            let best_matches_input_case =
+                gnu_compare_strings(&best_codes, &string_codes, string_schars, false)
+                    == StringCompare::Equal;
+            let cond2 =
+                (elt_exact == best_exact) && elt_matches_input_case && !best_matches_input_case;
+            if cond1 || cond2 {
+                bestmatch = Some(candidate);
+                switched = true;
+            }
+        }
+
+        if best_schars != elt_schars
+            || bestmatchsize != matchsize
+            || (ignore_case && !old_best_prefix_eq)
+        {
+            // Don't count the same string multiple times.
+            if matchcount <= 1 {
+                matchcount += 1;
+            }
+        }
+
+        bestmatchsize = matchsize;
+        if switched {
+            best_codes = elt_codes;
+        }
+
+        if matchsize <= string_schars && !ignore_case && matchcount > 1 {
+            // No need to look any further.
+            break;
         }
     }
 
-    if matches.is_empty() {
+    let Some(best) = bestmatch else {
         return Ok(Value::NIL);
-    }
-    if matches.len() == 1 && completion_text_equals_string(&matches[0].completion, &string, false) {
+    };
+
+    // Return t if the supplied string is an exact (case-sensitive) match.
+    if matchcount == 1
+        && best_codes.len() == string_schars
+        && best_codes
+            .iter()
+            .zip(string_codes.iter())
+            .all(|(l, r)| l == r)
+    {
         return Ok(Value::T);
     }
-    Ok(matches[0]
-        .completion
-        .substring_value(completion_common_prefix_len(&matches, ignore_case)))
+
+    Ok(best.completion.substring_value(bestmatchsize))
 }
 
 pub(crate) fn builtin_all_completions_with_candidates(
