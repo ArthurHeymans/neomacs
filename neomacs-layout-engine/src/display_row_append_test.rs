@@ -1146,22 +1146,22 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut font_metrics = None;
     let row_limit = context.row_limit;
 
-    let continuation = BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext {
-        text: b"\tabc",
-        tab_width: 8,
-        content_x: 0.0,
-        append_surface: &surface,
-        active_face_state: &active_face,
-        default_face_ascent: 12.0,
-        char_h: 16.0,
-        char_w: 8.0,
-        point_charpos: 99,
-        has_prefix: false,
-        row_geometry_defaults: context.defaults,
-        display_text_row_base: 0,
-        max_rows: 4,
+    let continuation = BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext::new(
+        b"\tabc",
+        8,
+        0.0,
+        &surface,
+        &active_face,
+        12.0,
+        16.0,
+        8.0,
+        99,
+        false,
+        context.defaults,
+        0,
+        4,
         row_limit,
-    })
+    ))
     .render_next_and_apply(BufferHscrollSkipRenderState {
         progress: BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col),
         hscroll_skip: &mut hscroll_skip,
@@ -1667,18 +1667,18 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut font_metrics = None;
 
-    let outcome = BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext {
-        text: b"folded rest",
-        accessible_end: 11,
-        point_charpos: 2,
-        append_surface: &surface,
+    let outcome = BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext::new(
+        b"folded rest",
+        11,
+        2,
+        &surface,
         overlay_context,
-        active_face_state: &active_face,
-        glyph_y_offset: 0.0,
-        default_face_ascent: 12.0,
-        char_h: 16.0,
-        char_w: 8.0,
-    })
+        &active_face,
+        0.0,
+        12.0,
+        16.0,
+        8.0,
+    ))
     .render_at_checkpoint_and_apply(
         &snapshot,
         BufferInvisibleTextRenderRequestState {
@@ -2604,23 +2604,23 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
 
     let continuation = BufferTextLineBreakRenderRequest::new(
         source_char,
-        BufferTextLineBreakRenderContext {
+        BufferTextLineBreakRenderContext::new(
             text,
-            text_start_byte: 0,
-            selective_display: 0,
-            tab_width: 8,
-            active_face_state: &active_face,
-            point_charpos: 0,
-            char_h: 16.0,
-            extra_line_spacing: 0.0,
-            content_x: 0.0,
-            has_prefix: false,
-            row_geometry_defaults: context.defaults,
-            display_text_row_base: 0,
-            max_rows: 4,
+            0,
+            0,
+            8,
+            &active_face,
+            0,
+            16.0,
+            0.0,
+            0.0,
+            false,
+            context.defaults,
+            0,
+            4,
             row_limit,
             overlay_context,
-        },
+        ),
     )
     .render_and_apply(
         &snapshot,
@@ -2771,24 +2771,24 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
 
     let outcome = BufferSelectiveDisplayTailRenderRequest::new(
         source_step_char,
-        BufferSelectiveDisplayTailRenderContext {
+        BufferSelectiveDisplayTailRenderContext::new(
             text,
-            text_start_byte: 0,
-            selective_display: 1,
-            tab_width: 8,
-            append_surface: &surface,
-            active_face_state: &active_face,
-            glyph_y_offset: 0.0,
-            default_face_ascent: 12.0,
-            char_h: 16.0,
-            char_w: 8.0,
-            content_x: 0.0,
-            has_prefix: false,
-            row_geometry_defaults: context.defaults,
-            display_text_row_base: 0,
-            max_rows: 4,
-            row_limit: context.row_limit,
-        },
+            0,
+            1,
+            8,
+            &surface,
+            &active_face,
+            0.0,
+            12.0,
+            16.0,
+            8.0,
+            0.0,
+            false,
+            context.defaults,
+            0,
+            4,
+            context.row_limit,
+        ),
     )
     .render_if_needed_and_apply(
         &snapshot,
@@ -6507,16 +6507,16 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     let mut face_ids = FrameFaceIdAllocator::new(7);
     let mut font_metrics = None;
 
-    let outcome = BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext {
-        byte_idx: 3,
-        charpos: 3,
-        accessible_end: 3,
-        point_charpos: 3,
-        has_overlays: true,
+    let outcome = BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext::new(
+        3,
+        3,
+        3,
+        3,
+        true,
         overlay_context,
-        active_face_state: &active_face,
-        row_limit: context.row_limit,
-    })
+        &active_face,
+        context.row_limit,
+    ))
     .render_and_apply(
         &snapshot,
         BufferEndOfBufferTailRenderState {

@@ -620,18 +620,18 @@ impl BufferTextWindowLoopRequestContext {
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
     ) -> BufferInvisibleTextRenderRequest<'a> {
-        BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext {
+        BufferInvisibleTextRenderRequest::new(BufferInvisibleTextRenderContext::new(
             text,
-            accessible_end: self.accessible_end,
-            point_charpos: self.point_charpos,
+            self.accessible_end,
+            self.point_charpos,
             append_surface,
             overlay_context,
             active_face_state,
             glyph_y_offset,
-            default_face_ascent: self.default_face_ascent,
-            char_h: self.char_height,
-            char_w: self.char_width,
-        })
+            self.default_face_ascent,
+            self.char_height,
+            self.char_width,
+        ))
     }
 
     pub(crate) fn hscroll_skip_request<'a>(
@@ -640,22 +640,22 @@ impl BufferTextWindowLoopRequestContext {
         append_surface: &'a DisplayRowAppendSurface,
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferHscrollSkipRenderRequest<'a> {
-        BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext {
+        BufferHscrollSkipRenderRequest::new(BufferHscrollSkipRenderContext::new(
             text,
-            tab_width: self.tab_width,
-            content_x: self.content_x,
+            self.tab_width,
+            self.content_x,
             append_surface,
             active_face_state,
-            default_face_ascent: self.default_face_ascent,
-            char_h: self.char_height,
-            char_w: self.char_width,
-            point_charpos: self.point_charpos,
-            has_prefix: self.has_prefix,
-            row_geometry_defaults: self.row_geometry_defaults,
-            display_text_row_base: self.display_text_row_base,
-            max_rows: self.max_rows,
-            row_limit: self.row_limit,
-        })
+            self.default_face_ascent,
+            self.char_height,
+            self.char_width,
+            self.point_charpos,
+            self.has_prefix,
+            self.row_geometry_defaults,
+            self.display_text_row_base,
+            self.max_rows,
+            self.row_limit,
+        ))
     }
 
     pub(crate) fn display_property_checkpoint_request<'a, B>(
@@ -681,24 +681,24 @@ impl BufferTextWindowLoopRequestContext {
     ) -> BufferSelectiveDisplayTailRenderRequest<'a> {
         BufferSelectiveDisplayTailRenderRequest::new(
             source_step_char,
-            BufferSelectiveDisplayTailRenderContext {
+            BufferSelectiveDisplayTailRenderContext::new(
                 text,
-                text_start_byte: self.text_start_byte,
-                selective_display: self.selective_display,
-                tab_width: self.tab_width,
+                self.text_start_byte,
+                self.selective_display,
+                self.tab_width,
                 append_surface,
                 active_face_state,
                 glyph_y_offset,
-                default_face_ascent: self.default_face_ascent,
-                char_h: self.char_height,
-                char_w: self.char_width,
-                content_x: self.content_x,
-                has_prefix: self.has_prefix,
-                row_geometry_defaults: self.row_geometry_defaults,
-                display_text_row_base: self.display_text_row_base,
-                max_rows: self.max_rows,
-                row_limit: self.row_limit,
-            },
+                self.default_face_ascent,
+                self.char_height,
+                self.char_width,
+                self.content_x,
+                self.has_prefix,
+                self.row_geometry_defaults,
+                self.display_text_row_base,
+                self.max_rows,
+                self.row_limit,
+            ),
         )
     }
 
@@ -711,23 +711,23 @@ impl BufferTextWindowLoopRequestContext {
     ) -> BufferTextLineBreakRenderRequest<'a> {
         BufferTextLineBreakRenderRequest::new(
             source_char,
-            BufferTextLineBreakRenderContext {
+            BufferTextLineBreakRenderContext::new(
                 text,
-                text_start_byte: self.text_start_byte,
-                selective_display: self.selective_display,
-                tab_width: self.tab_width,
+                self.text_start_byte,
+                self.selective_display,
+                self.tab_width,
                 active_face_state,
-                point_charpos: self.point_charpos,
-                char_h: self.char_height,
-                extra_line_spacing: self.extra_line_spacing,
-                content_x: self.content_x,
-                has_prefix: self.has_prefix,
-                row_geometry_defaults: self.row_geometry_defaults,
-                display_text_row_base: self.display_text_row_base,
-                max_rows: self.max_rows,
-                row_limit: self.row_limit,
+                self.point_charpos,
+                self.char_height,
+                self.extra_line_spacing,
+                self.content_x,
+                self.has_prefix,
+                self.row_geometry_defaults,
+                self.display_text_row_base,
+                self.max_rows,
+                self.row_limit,
                 overlay_context,
-            },
+            ),
         )
     }
 
@@ -777,16 +777,16 @@ impl BufferTextWindowLoopRequestContext {
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferEndOfBufferTailRenderRequest<'a> {
-        BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext {
+        BufferEndOfBufferTailRenderRequest::new(BufferEndOfBufferTailRenderContext::new(
             byte_idx,
             charpos,
-            accessible_end: self.accessible_end,
-            point_charpos: self.point_charpos,
+            self.accessible_end,
+            self.point_charpos,
             has_overlays,
             overlay_context,
             active_face_state,
-            row_limit: self.row_limit,
-        })
+            self.row_limit,
+        ))
     }
 
     pub(crate) fn buffer_id(self) -> BufferId {
@@ -3643,14 +3643,14 @@ pub(crate) struct BufferEndOfBufferTailRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferEndOfBufferTailRenderContext<'a> {
-    pub(crate) byte_idx: usize,
-    pub(crate) charpos: i64,
-    pub(crate) accessible_end: i64,
-    pub(crate) point_charpos: i64,
-    pub(crate) has_overlays: bool,
-    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) row_limit: DisplayRowLimit,
+    byte_idx: usize,
+    charpos: i64,
+    accessible_end: i64,
+    point_charpos: i64,
+    has_overlays: bool,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferEndOfBufferTailRenderState<'emit> {
@@ -4026,6 +4026,31 @@ impl<'a> BufferEndOfBufferTailRenderRequest<'a> {
     }
 }
 
+impl<'a> BufferEndOfBufferTailRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        byte_idx: usize,
+        charpos: i64,
+        accessible_end: i64,
+        point_charpos: i64,
+        has_overlays: bool,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            byte_idx,
+            charpos,
+            accessible_end,
+            point_charpos,
+            has_overlays,
+            overlay_context,
+            active_face_state,
+            row_limit,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferHscrollSkipSourceStep {
     source_char: BufferTextSourceStepChar,
@@ -4037,20 +4062,20 @@ pub(crate) struct BufferHscrollSkipRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferHscrollSkipRenderContext<'a> {
-    pub(crate) text: &'a [u8],
-    pub(crate) tab_width: i32,
-    pub(crate) content_x: f32,
-    pub(crate) append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) default_face_ascent: f32,
-    pub(crate) char_h: f32,
-    pub(crate) char_w: f32,
-    pub(crate) point_charpos: i64,
-    pub(crate) has_prefix: bool,
-    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) max_rows: usize,
-    pub(crate) row_limit: DisplayRowLimit,
+    text: &'a [u8],
+    tab_width: i32,
+    content_x: f32,
+    append_surface: &'a DisplayRowAppendSurface,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    default_face_ascent: f32,
+    char_h: f32,
+    char_w: f32,
+    point_charpos: i64,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    display_text_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
 }
 
 impl BufferHscrollSkipSourceStep {
@@ -4230,6 +4255,43 @@ impl<'a> BufferHscrollSkipRenderRequest<'a> {
     }
 }
 
+impl<'a> BufferHscrollSkipRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'a [u8],
+        tab_width: i32,
+        content_x: f32,
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        default_face_ascent: f32,
+        char_h: f32,
+        char_w: f32,
+        point_charpos: i64,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        display_text_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            text,
+            tab_width,
+            content_x,
+            append_surface,
+            active_face_state,
+            default_face_ascent,
+            char_h,
+            char_w,
+            point_charpos,
+            has_prefix,
+            row_geometry_defaults,
+            display_text_row_base,
+            max_rows,
+            row_limit,
+        }
+    }
+}
+
 pub(crate) struct BufferTextLineBreakRenderState<'a, 'emit> {
     pub(crate) progress: BufferTextWindowProgressState<'emit>,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
@@ -4256,22 +4318,22 @@ pub(crate) struct BufferSelectiveDisplayTailRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferSelectiveDisplayTailRenderContext<'a> {
-    pub(crate) text: &'a [u8],
-    pub(crate) text_start_byte: usize,
-    pub(crate) selective_display: i32,
-    pub(crate) tab_width: i32,
-    pub(crate) append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) glyph_y_offset: f32,
-    pub(crate) default_face_ascent: f32,
-    pub(crate) char_h: f32,
-    pub(crate) char_w: f32,
-    pub(crate) content_x: f32,
-    pub(crate) has_prefix: bool,
-    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) max_rows: usize,
-    pub(crate) row_limit: DisplayRowLimit,
+    text: &'a [u8],
+    text_start_byte: usize,
+    selective_display: i32,
+    tab_width: i32,
+    append_surface: &'a DisplayRowAppendSurface,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_face_ascent: f32,
+    char_h: f32,
+    char_w: f32,
+    content_x: f32,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    display_text_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
 }
 
 pub(crate) struct BufferSelectiveDisplayTailRenderState<'a, 'emit> {
@@ -4297,16 +4359,16 @@ pub(crate) struct BufferInvisibleTextRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferInvisibleTextRenderContext<'a> {
-    pub(crate) text: &'a [u8],
-    pub(crate) accessible_end: i64,
-    pub(crate) point_charpos: i64,
-    pub(crate) append_surface: &'a DisplayRowAppendSurface,
-    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) glyph_y_offset: f32,
-    pub(crate) default_face_ascent: f32,
-    pub(crate) char_h: f32,
-    pub(crate) char_w: f32,
+    text: &'a [u8],
+    accessible_end: i64,
+    point_charpos: i64,
+    append_surface: &'a DisplayRowAppendSurface,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    glyph_y_offset: f32,
+    default_face_ascent: f32,
+    char_h: f32,
+    char_w: f32,
 }
 
 pub(crate) struct BufferInvisibleTextRenderRequestState<'a, 'emit> {
@@ -4347,6 +4409,76 @@ impl BufferSelectiveDisplayTailRenderOutcome {
 impl BufferInvisibleTextRenderOutcome {
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         matches!(self, Self::ContinueBufferWalk)
+    }
+}
+
+impl<'a> BufferSelectiveDisplayTailRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'a [u8],
+        text_start_byte: usize,
+        selective_display: i32,
+        tab_width: i32,
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_face_ascent: f32,
+        char_h: f32,
+        char_w: f32,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        display_text_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+    ) -> Self {
+        Self {
+            text,
+            text_start_byte,
+            selective_display,
+            tab_width,
+            append_surface,
+            active_face_state,
+            glyph_y_offset,
+            default_face_ascent,
+            char_h,
+            char_w,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            display_text_row_base,
+            max_rows,
+            row_limit,
+        }
+    }
+}
+
+impl<'a> BufferInvisibleTextRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'a [u8],
+        accessible_end: i64,
+        point_charpos: i64,
+        append_surface: &'a DisplayRowAppendSurface,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        default_face_ascent: f32,
+        char_h: f32,
+        char_w: f32,
+    ) -> Self {
+        Self {
+            text,
+            accessible_end,
+            point_charpos,
+            append_surface,
+            overlay_context,
+            active_face_state,
+            glyph_y_offset,
+            default_face_ascent,
+            char_h,
+            char_w,
+        }
     }
 }
 
@@ -5008,21 +5140,60 @@ pub(crate) struct BufferTextLineBreakRenderRequest<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferTextLineBreakRenderContext<'a> {
-    pub(crate) text: &'a [u8],
-    pub(crate) text_start_byte: usize,
-    pub(crate) selective_display: i32,
-    pub(crate) tab_width: i32,
-    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
-    pub(crate) point_charpos: i64,
-    pub(crate) char_h: f32,
-    pub(crate) extra_line_spacing: f32,
-    pub(crate) content_x: f32,
-    pub(crate) has_prefix: bool,
-    pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
-    pub(crate) display_text_row_base: usize,
-    pub(crate) max_rows: usize,
-    pub(crate) row_limit: DisplayRowLimit,
-    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    text: &'a [u8],
+    text_start_byte: usize,
+    selective_display: i32,
+    tab_width: i32,
+    active_face_state: &'a DisplayRowActiveFaceState,
+    point_charpos: i64,
+    char_h: f32,
+    extra_line_spacing: f32,
+    content_x: f32,
+    has_prefix: bool,
+    row_geometry_defaults: DisplayRowGeometryDefaults,
+    display_text_row_base: usize,
+    max_rows: usize,
+    row_limit: DisplayRowLimit,
+    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+}
+
+impl<'a> BufferTextLineBreakRenderContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        text: &'a [u8],
+        text_start_byte: usize,
+        selective_display: i32,
+        tab_width: i32,
+        active_face_state: &'a DisplayRowActiveFaceState,
+        point_charpos: i64,
+        char_h: f32,
+        extra_line_spacing: f32,
+        content_x: f32,
+        has_prefix: bool,
+        row_geometry_defaults: DisplayRowGeometryDefaults,
+        display_text_row_base: usize,
+        max_rows: usize,
+        row_limit: DisplayRowLimit,
+        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    ) -> Self {
+        Self {
+            text,
+            text_start_byte,
+            selective_display,
+            tab_width,
+            active_face_state,
+            point_charpos,
+            char_h,
+            extra_line_spacing,
+            content_x,
+            has_prefix,
+            row_geometry_defaults,
+            display_text_row_base,
+            max_rows,
+            row_limit,
+            overlay_context,
+        }
+    }
 }
 
 impl<'a> BufferTextLineBreakRenderRequest<'a> {
