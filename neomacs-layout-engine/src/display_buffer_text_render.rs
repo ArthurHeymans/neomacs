@@ -86,8 +86,8 @@ use crate::types::{FrameParams, LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
     TextMatrixRowTransition, TextWindowArtifactOutputSurface, TextWindowBeginOutputSurface,
-    TextWindowLiveOutputSurface, TextWindowMatrixOutputSurface, TextWindowOutputRetryCheckpoint,
-    TextWindowRedisplayPositions, WindowOutputEmitter,
+    TextWindowFinishOutputSurface, TextWindowLiveOutputSurface, TextWindowMatrixOutputSurface,
+    TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -346,16 +346,19 @@ struct BufferTextWindowBodyPassState<'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
-struct BufferTextWindowBodyOutputState<'emit> {
+struct BufferTextWindowOutputSurface<'emit> {
     builder: &'emit mut GlyphMatrixBuilder,
     evaluator: &'emit mut Context,
+}
+
+struct BufferTextWindowBodyOutputState<'emit> {
+    output: BufferTextWindowOutputSurface<'emit>,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'emit FaceResolver,
 }
 
 struct BufferTextWindowOutputSession<'emit> {
-    builder: &'emit mut GlyphMatrixBuilder,
-    evaluator: &'emit mut Context,
+    output: BufferTextWindowOutputSurface<'emit>,
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'emit FaceResolver,
     face_ids: FrameFaceIdAllocator,
@@ -435,15 +438,13 @@ pub(crate) enum BufferTextWindowRenderAttemptOutcome {
 }
 
 struct BufferTextWindowRenderedBodyFinishState<'a> {
-    builder: &'a mut GlyphMatrixBuilder,
-    evaluator: &'a mut Context,
+    output: BufferTextWindowOutputSurface<'a>,
     hit_data: &'a mut Vec<WindowHitData>,
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 struct BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
-    builder: &'emit mut GlyphMatrixBuilder,
-    evaluator: &'emit mut Context,
+    output: BufferTextWindowOutputSurface<'emit>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
     hit_data: &'emit mut Vec<WindowHitData>,
     display_snapshots: &'emit mut Vec<WindowDisplaySnapshot>,
@@ -1263,8 +1264,28 @@ impl<'a> BufferTextWindowWalkSetupRequest<'a> {
     }
 }
 
-impl<'emit> BufferTextWindowBodyOutputState<'emit> {
-    pub(crate) fn begin_text_window_output(
+impl<'emit> BufferTextWindowOutputSurface<'emit> {
+    fn from_parts(builder: &'emit mut GlyphMatrixBuilder, evaluator: &'emit mut Context) -> Self {
+        Self { builder, evaluator }
+    }
+
+    fn reborrow(&mut self) -> BufferTextWindowOutputSurface<'_> {
+        BufferTextWindowOutputSurface {
+            builder: self.builder,
+            evaluator: self.evaluator,
+        }
+    }
+
+    fn capture_retry_checkpoint(&mut self) -> TextWindowOutputRetryCheckpoint {
+        TextWindowMatrixOutputSurface::from_builder(self.builder).capture_retry_checkpoint()
+    }
+
+    fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
+        TextWindowMatrixOutputSurface::from_builder(self.builder)
+            .restore_retry_checkpoint(checkpoint);
+    }
+
+    fn begin_text_window_output(
         &mut self,
         begin_request: BufferTextWindowBeginRequest,
     ) -> WindowOutputEmitter {
@@ -1274,9 +1295,11 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
         ))
     }
 
-    pub(crate) fn source_render_state<'output>(
+    fn source_render_state<'output>(
         &'output mut self,
         output_emitter: &'output mut WindowOutputEmitter,
+        font_metrics: &'output mut Option<FontMetricsService>,
+        face_resolver: &'output FaceResolver,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
             TextRowOutputRenderState::from_live_output(TextWindowLiveOutputSurface::from_builder(
@@ -1284,9 +1307,40 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
                 output_emitter,
                 self.evaluator,
             )),
-            self.font_metrics,
-            self.face_resolver,
+            font_metrics,
+            face_resolver,
         )
+    }
+
+    fn live_output_surface<'output>(
+        &'output mut self,
+        output_emitter: &'output mut WindowOutputEmitter,
+    ) -> TextWindowLiveOutputSurface<'output> {
+        TextWindowLiveOutputSurface::from_builder(self.builder, output_emitter, self.evaluator)
+    }
+
+    fn into_finish_output_surface(
+        self,
+        output_emitter: WindowOutputEmitter,
+    ) -> TextWindowFinishOutputSurface<'emit> {
+        TextWindowFinishOutputSurface::from_builder(self.builder, output_emitter, self.evaluator)
+    }
+}
+
+impl<'emit> BufferTextWindowBodyOutputState<'emit> {
+    pub(crate) fn begin_text_window_output(
+        &mut self,
+        begin_request: BufferTextWindowBeginRequest,
+    ) -> WindowOutputEmitter {
+        self.output.begin_text_window_output(begin_request)
+    }
+
+    pub(crate) fn source_render_state<'output>(
+        &'output mut self,
+        output_emitter: &'output mut WindowOutputEmitter,
+    ) -> TextRowSourceRenderState<'output> {
+        self.output
+            .source_render_state(output_emitter, self.font_metrics, self.face_resolver)
     }
 }
 
@@ -1564,11 +1618,10 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         face_resolver: &'emit FaceResolver,
         frame_face_id_counter: u32,
     ) -> Self {
-        let retry_checkpoint =
-            TextWindowMatrixOutputSurface::from_builder(builder).capture_retry_checkpoint();
+        let mut output = BufferTextWindowOutputSurface::from_parts(builder, evaluator);
+        let retry_checkpoint = output.capture_retry_checkpoint();
         Self {
-            builder,
-            evaluator,
+            output,
             font_metrics,
             face_resolver,
             face_ids: FrameFaceIdAllocator::new(frame_face_id_counter),
@@ -1579,8 +1632,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
     pub(crate) fn body_pass_state(&mut self) -> BufferTextWindowBodyPassState<'_> {
         BufferTextWindowBodyPassState {
             output: BufferTextWindowBodyOutputState {
-                builder: self.builder,
-                evaluator: self.evaluator,
+                output: self.output.reborrow(),
                 font_metrics: self.font_metrics,
                 face_resolver: self.face_resolver,
             },
@@ -1594,8 +1646,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         display_snapshots: &'hit mut Vec<WindowDisplaySnapshot>,
     ) -> BufferTextWindowRenderedBodyCompleteState<'hit, 'hit> {
         BufferTextWindowRenderedBodyCompleteState {
-            builder: self.builder,
-            evaluator: self.evaluator,
+            output: self.output.reborrow(),
             render_services: ChromeRowRenderServices::new(
                 self.font_metrics,
                 self.face_resolver,
@@ -1614,8 +1665,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
     }
 
     fn prepare_retry(&mut self, frame_counter: &mut u32) {
-        TextWindowMatrixOutputSurface::from_builder(self.builder)
-            .restore_retry_checkpoint(self.retry_checkpoint);
+        self.output.restore_retry_checkpoint(self.retry_checkpoint);
         self.publish_face_ids(frame_counter);
     }
 
@@ -1627,8 +1677,7 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
 impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
     pub(crate) fn finish_state(self) -> BufferTextWindowRenderedBodyFinishState<'emit> {
         BufferTextWindowRenderedBodyFinishState {
-            builder: self.builder,
-            evaluator: self.evaluator,
+            output: self.output,
             hit_data: self.hit_data,
             display_snapshots: self.display_snapshots,
         }
@@ -1641,13 +1690,10 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         tail_context: &BufferTextWindowTailRequestContext<'_>,
         publish_request: BufferTextWindowRedisplayPublishRequest,
     ) -> TextWindowRedisplayPositions {
+        let output = self.output.live_output_surface(output_emitter);
         walk_setup.install_body_and_publish_redisplay(
             BufferTextWindowBodyInstallPublishState {
-                output: TextWindowLiveOutputSurface::from_builder(
-                    self.builder,
-                    output_emitter,
-                    self.evaluator,
-                ),
+                output,
                 render_services: self.render_services.reborrow(),
             },
             tail_context,
@@ -1660,7 +1706,8 @@ impl<'emit, 'face> BufferTextWindowRenderedBodyCompleteState<'emit, 'face> {
         output_emitter: &mut WindowOutputEmitter,
         request: WindowChromeRowsRenderRequest<'_, '_>,
     ) {
-        TextWindowLiveOutputSurface::from_builder(self.builder, output_emitter, self.evaluator)
+        self.output
+            .live_output_surface(output_emitter)
             .render_chrome_rows(request, self.render_services.reborrow());
     }
 }
@@ -1672,10 +1719,8 @@ impl<'a> BufferTextWindowRenderedBodyFinishState<'a> {
         hit_rows: Vec<HitRow>,
     ) -> BufferTextWindowFinishInstallState<'a> {
         BufferTextWindowFinishInstallState {
-            finish_state: BufferTextWindowFinishState::new(
-                self.builder,
-                output_emitter,
-                self.evaluator,
+            finish_state: BufferTextWindowFinishState::from_output_surface(
+                self.output.into_finish_output_surface(output_emitter),
                 hit_rows,
             ),
             hit_data: self.hit_data,
