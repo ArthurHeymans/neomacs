@@ -3428,6 +3428,52 @@ pub(crate) fn signal_process_io(action: &str, target: Option<&str>, err: std::io
     signal(file_error_symbol(err.kind()), data)
 }
 
+/// The bare strerror string for an errno, matching GNU's `emacs_strerror`
+/// (e.g. ENOENT -> "No such file or directory").  Rust's
+/// `io::Error::to_string()` appends "(os error N)", which GNU never emits, so
+/// go through libc directly.
+#[cfg(unix)]
+fn errno_message(errno: libc::c_int) -> String {
+    // SAFETY: strerror returns a pointer to a static (per-thread) C string.
+    unsafe {
+        let ptr = libc::strerror(errno);
+        if ptr.is_null() {
+            String::new()
+        } else {
+            std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn errno_message(errno: libc::c_int) -> String {
+    std::io::Error::from_raw_os_error(errno).to_string()
+}
+
+/// GNU `report_file_errno` (fileio.c): signal a file-error-family condition
+/// whose DATA is `(STRING ERRNO-STRING . NAME-LIST)` and whose error SYMBOL is
+/// derived from ERRNO (ENOENT -> `file-missing`, EEXIST -> `file-already-exists`,
+/// EACCES -> `permission-denied`, else `file-error`).  NAME is wrapped in a
+/// one-element list unless it is itself a list (or nil), exactly like
+/// `get_file_errno_data`.
+pub(crate) fn signal_file_errno(string: &str, name: Value, errno: libc::c_int) -> Flow {
+    let symbol = match errno {
+        libc::ENOENT => "file-missing",
+        libc::EEXIST => "file-already-exists",
+        libc::EACCES => "permission-denied",
+        _ => "file-error",
+    };
+    let mut data = vec![Value::string(string), Value::string(errno_message(errno))];
+    if name.is_cons() || name.is_nil() {
+        if let Some(items) = super::value::list_to_vec(&name) {
+            data.extend(items);
+        }
+    } else {
+        data.push(name);
+    }
+    signal(symbol, data)
+}
+
 fn signal_wrong_type_string(value: Value) -> Flow {
     signal("wrong-type-argument", vec![Value::symbol("stringp"), value])
 }
@@ -4695,10 +4741,13 @@ fn resolve_process_connection_type_use_pty(
         Some(value) => ProcessConnectionType::from_symbol_value(value)
             .map(ProcessConnectionType::uses_pty)
             .ok_or_else(|| {
-                signal(
-                    "file-error",
-                    vec![Value::string("Unknown connection type"), *value],
-                )
+                // GNU `is_pty_from_symbol` (process.c) signals this through
+                // `report_file_error ("Unknown connection type", symbol)`, which
+                // reads the live `errno`.  At this point in `make-process` (before
+                // any program lookup) the residual errno is ENOENT, so GNU emits
+                // `(file-missing "Unknown connection type" "No such file or
+                // directory" SYMBOL)`.  Match that data list exactly.
+                signal_file_errno("Unknown connection type", *value, libc::ENOENT)
             }),
     }
 }
