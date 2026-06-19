@@ -31,10 +31,14 @@ use std::cell::Cell;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// Optional heap-write observation, used by tests/introspection to inspect which
+/// owners (and optionally which individual writes) were mutated since the last
+/// reset. This is NOT a GC marking barrier — the concurrent collector's barrier
+/// is the SATB log keyed on `concurrent_mark_running`. The dump remembered set is
+/// maintained unconditionally in `record_heap_write` regardless of this mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WriteTrackingMode {
     Disabled,
-    OwnersOnly,
     OwnersAndRecords,
 }
 
@@ -984,13 +988,6 @@ pub struct TaggedHeap {
     /// Accumulated marking time (slices + final drain) for the in-flight
     /// incremental cycle, reported as `mark_us` at termination. Reset at start.
     incremental_mark_us: u64,
-    /// Run the mark phase on the background GC thread (the concurrent collector).
-    /// DEFAULT ON; set env `NEOVM_GC_CONCURRENT=0` to fall back to the
-    /// (sliced, mutator-side) incremental collector. Phase 5 overlaps cons-spine
-    /// marking with the mutator (verified under ThreadSanitizer). When the
-    /// concurrent collector is fully matured this fallback + the incremental
-    /// slicer can be removed and the path made unconditional.
-    concurrent: bool,
     /// True between a concurrent mark's start and termination handshakes — the
     /// mutator runs while the GC thread marks.
     concurrent_mark_running: bool,
@@ -1076,8 +1073,6 @@ impl TaggedHeap {
             mapped_remembered: FxHashSet::default(),
             mark_in_progress: false,
             incremental_mark_us: 0,
-            // Default ON; only `NEOVM_GC_CONCURRENT=0` disables it (-> incremental).
-            concurrent: std::env::var("NEOVM_GC_CONCURRENT").as_deref() != Ok("0"),
             concurrent_mark_running: false,
             satb_shared: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             deferred_veclikes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
@@ -2943,13 +2938,12 @@ impl TaggedHeap {
         let bytes_before = self.live_bytes;
         let t0 = std::time::Instant::now();
 
-        // -- Mark phase: drain gray queue (optionally on the GC thread) --
+        // -- Mark phase: drain the gray queue on the GC thread. This is the STW
+        //    full/bootstrap path (first cycle, no-dump heaps, explicit
+        //    garbage-collect); the mutator blocks until the GC thread finishes,
+        //    so heap access is exclusive (no concurrency hazard here). --
         let mark_t0 = std::time::Instant::now();
-        if self.concurrent {
-            self.mark_all_on_gc_thread();
-        } else {
-            self.mark_all();
-        }
+        self.mark_all_on_gc_thread();
         // Resolve weak hash tables now that the main mark has drained. Both the
         // sync and concurrent paths converge here with the mutator stopped, so
         // this is single-threaded and path-agnostic.
@@ -3206,16 +3200,11 @@ impl TaggedHeap {
     // mutator runs; only two short stop-the-world handshakes (start + finish).
     // ---------------------------------------------------------------------
 
-    /// True if the concurrent collector is enabled (default on; off only when
-    /// env `NEOVM_GC_CONCURRENT=0`).
-    pub fn concurrent_enabled(&self) -> bool {
-        self.concurrent
-    }
-
-    /// True if a concurrent mark should drive THIS collection: enabled, and on a
-    /// partitioned post-dump heap (the young/old split bounds what is traced).
+    /// True if a concurrent mark should drive THIS collection: a partitioned
+    /// post-dump heap (the young/old split bounds what is traced). The first
+    /// cycle and no-dump heaps fall to the STW full path instead.
     pub fn should_run_concurrent(&self) -> bool {
-        self.concurrent && self.partition_dump && self.dump_blackened
+        self.partition_dump && self.dump_blackened
     }
 
     /// True while the background GC thread is marking (between the start and
