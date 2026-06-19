@@ -9,6 +9,7 @@
 pub mod bidi;
 pub mod composition;
 pub(crate) mod coords;
+pub(crate) mod display_buffer_display_property_render;
 pub(crate) mod display_buffer_text_append;
 pub(crate) mod display_buffer_text_item_append;
 pub(crate) mod display_buffer_text_render;
