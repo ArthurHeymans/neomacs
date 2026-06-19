@@ -1,6 +1,6 @@
 use crate::display_buffer_text_append::BufferTextWindowTerminalRightBorderRequest;
 use crate::display_row::MeasuredDisplayRow;
-use crate::display_row_matrix_install::{DisplayRowFaceInstaller, DisplayRowInstaller};
+use crate::display_row_matrix_install::{DisplayRowFaceInstallSurface, DisplayRowInstaller};
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::font_metrics::FontMetrics;
 use crate::matrix_builder::GlyphMatrixBuilder;
@@ -95,7 +95,7 @@ impl<'a> FrameOutputRenderState<'a> {
     }
 
     pub(crate) fn install_face(&mut self, face: &Face) {
-        DisplayRowFaceInstaller::new(self.builder).install_face(face);
+        DisplayRowFaceInstallSurface::from_builder(self.builder).install_face(face);
     }
 
     fn add_background(&mut self, bounds: Rect, color: Color) {
@@ -207,7 +207,7 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
         state.set_background_color(self.background_color);
         state.set_font_pixel_size(self.font_pixel_size);
-        DisplayRowFaceInstaller::new(state.builder_mut()).install_resolved_face(
+        DisplayRowFaceInstallSurface::from_builder(state.builder_mut()).install_resolved_face(
             0,
             self.default_face,
             self.default_metrics,

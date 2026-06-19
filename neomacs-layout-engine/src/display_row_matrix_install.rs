@@ -87,8 +87,12 @@ pub(crate) struct DisplayRowCurrentRowSurface<'builder> {
     installer: DisplayRowCurrentRowInstaller<'builder>,
 }
 
-pub(crate) struct DisplayRowFaceInstaller<'builder> {
+struct DisplayRowFaceInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
+}
+
+pub(crate) struct DisplayRowFaceInstallSurface<'builder> {
+    installer: DisplayRowFaceInstaller<'builder>,
 }
 
 impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
@@ -134,17 +138,17 @@ impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
 }
 
 impl<'builder> DisplayRowFaceInstaller<'builder> {
-    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+    fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 
-    pub(crate) fn install_face(&mut self, face: &Face) {
+    fn install_face(&mut self, face: &Face) {
         self.builder
             .artifact_installer()
             .set_face(face.id, face.clone());
     }
 
-    pub(crate) fn install_resolved_face(
+    fn install_resolved_face(
         &mut self,
         face_id: u32,
         face: &ResolvedFace,
@@ -153,6 +157,27 @@ impl<'builder> DisplayRowFaceInstaller<'builder> {
         self.builder
             .artifact_installer()
             .set_resolved_display_row_face(face_id, face, metrics);
+    }
+}
+
+impl<'builder> DisplayRowFaceInstallSurface<'builder> {
+    pub(crate) fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self {
+            installer: DisplayRowFaceInstaller::new(builder),
+        }
+    }
+
+    pub(crate) fn install_face(&mut self, face: &Face) {
+        self.installer.install_face(face);
+    }
+
+    pub(crate) fn install_resolved_face(
+        &mut self,
+        face_id: u32,
+        face: &ResolvedFace,
+        metrics: Option<FontMetrics>,
+    ) {
+        self.installer.install_resolved_face(face_id, face, metrics);
     }
 }
 
@@ -367,7 +392,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
 
     pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
         {
-            let mut face_installer = DisplayRowFaceInstaller::new(builder);
+            let mut face_installer = DisplayRowFaceInstallSurface::from_builder(builder);
             for face in self.faces {
                 face_installer.install_face(face);
             }
@@ -395,7 +420,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     matrix_row: usize,
 ) -> DisplayRowPosition {
     {
-        let mut face_installer = DisplayRowFaceInstaller::new(builder);
+        let mut face_installer = DisplayRowFaceInstallSurface::from_builder(builder);
         for face in &rendered.faces {
             face_installer.install_face(face);
         }

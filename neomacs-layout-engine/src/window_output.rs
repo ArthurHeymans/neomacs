@@ -23,7 +23,7 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_matrix_install::{
-    DisplayRowCurrentRowSurface, DisplayRowFaceInstaller, DisplayRowInstaller,
+    DisplayRowCurrentRowSurface, DisplayRowFaceInstallSurface, DisplayRowInstaller,
     RenderedDisplayRowAssetsInstall,
 };
 use crate::display_row_special_glyphs::{
@@ -600,7 +600,8 @@ impl<'a> TextWindowLiveOutputState<'a> {
         face: &ResolvedFace,
         metrics: Option<crate::font_metrics::FontMetrics>,
     ) {
-        DisplayRowFaceInstaller::new(self.builder).install_resolved_face(face_id, face, metrics);
+        DisplayRowFaceInstallSurface::from_builder(self.builder)
+            .install_resolved_face(face_id, face, metrics);
     }
 
     pub(crate) fn install_rendered_fragment_assets(
@@ -992,7 +993,7 @@ impl<'builder> TextWindowBorderInstaller<'builder> {
         // `frame_face_id_counter` by the decoration render, engine.rs) rather than
         // a separate `FaceResolver` counter that could collide with it.
         let border_face_id = render_services.face_ids().allocate();
-        DisplayRowFaceInstaller::new(self.builder).install_resolved_face(
+        DisplayRowFaceInstallSurface::from_builder(self.builder).install_resolved_face(
             border_face_id,
             &border_face,
             None,
