@@ -20,17 +20,19 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_special_glyphs::{
-    install_last_window_right_border_from_source_requests,
-    install_right_edge_markers_from_source_requests,
+    RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
+    text_window_right_edge_marker_decorations,
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::hit_test::HitRow;
 use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCurrentRowDecorationRequest, MatrixCursorInstallRequest,
-    MatrixFrameStateInstallRequest, MatrixRowBeginRequest, MatrixRowLifecycleRequest,
+    GlyphMatrixBuilder, MatrixCurrentRowDecorationRequest, MatrixCurrentWindowRowDecorationRequest,
+    MatrixCursorInstallRequest, MatrixFrameStateInstallRequest,
+    MatrixLastWindowRowsDecorationRequest, MatrixRowBeginRequest, MatrixRowLifecycleRequest,
     MatrixRowMetricsRequest, MatrixWindowBeginRequest, MatrixWindowLifecycleRequest,
 };
+use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
 use neomacs_display_protocol::types::{Color, Rect};
@@ -1249,6 +1251,37 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
         }
         redisplay_positions
     }
+}
+
+fn install_right_edge_markers_from_source_requests(
+    builder: &mut GlyphMatrixBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightEdgeMarkers<'_>,
+) {
+    let base_face = render_services.face_resolver().default_face().clone();
+    for decoration in text_window_right_edge_marker_decorations(&request) {
+        builder.decorate_current_window_row(MatrixCurrentWindowRowDecorationRequest::new(
+            decoration.matrix_row,
+            RightEdgeMarkerRowDecorator::new(
+                decoration,
+                request.face_id,
+                &base_face,
+                request.char_width,
+                &mut render_services,
+            ),
+        ));
+    }
+}
+
+fn install_last_window_right_border_from_source_requests(
+    builder: &mut GlyphMatrixBuilder,
+    mut render_services: ChromeRowRenderServices<'_, '_>,
+    request: TextWindowRightBorder,
+    base_face: &ResolvedFace,
+) {
+    builder.decorate_last_window_rows(MatrixLastWindowRowsDecorationRequest::new(
+        RightBorderRowsDecorator::new(request, base_face, &mut render_services),
+    ));
 }
 
 #[cfg(test)]

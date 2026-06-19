@@ -11,10 +11,7 @@ use crate::display_row_builder::{
 use crate::display_row_geometry::DisplayRowFlagKind;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTextItemSource};
 use crate::display_status_line::ChromeRowRenderServices;
-use crate::matrix_builder::{
-    GlyphMatrixBuilder, MatrixCurrentWindowRowDecorationRequest,
-    MatrixLastWindowRowsDecorationRequest, MatrixRowDecorator,
-};
+use crate::matrix_builder::MatrixRowDecorator;
 use crate::neovm_bridge::ResolvedFace;
 use crate::window_output::{TextWindowRightBorder, TextWindowRightEdgeMarkers};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -139,13 +136,39 @@ fn install_right_edge_marker_from_source_request(
     );
 }
 
-struct RightEdgeMarkerRowDecorator<'a, 'resolver, 'frame> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextWindowRightEdgeMarkerDecoration {
+    pub(crate) matrix_row: usize,
+    pub(crate) target_col: usize,
+    pub(crate) marker: char,
+}
+
+pub(crate) struct RightEdgeMarkerRowDecorator<'a, 'resolver, 'frame> {
     target_col: usize,
     marker: char,
     face_id: u32,
     base_face: &'a ResolvedFace,
     char_width: f32,
     render_services: &'a mut ChromeRowRenderServices<'resolver, 'frame>,
+}
+
+impl<'a, 'resolver, 'frame> RightEdgeMarkerRowDecorator<'a, 'resolver, 'frame> {
+    pub(crate) fn new(
+        decoration: TextWindowRightEdgeMarkerDecoration,
+        face_id: u32,
+        base_face: &'a ResolvedFace,
+        char_width: f32,
+        render_services: &'a mut ChromeRowRenderServices<'resolver, 'frame>,
+    ) -> Self {
+        Self {
+            target_col: decoration.target_col,
+            marker: decoration.marker,
+            face_id,
+            base_face,
+            char_width,
+            render_services,
+        }
+    }
 }
 
 impl MatrixRowDecorator for RightEdgeMarkerRowDecorator<'_, '_, '_> {
@@ -163,13 +186,11 @@ impl MatrixRowDecorator for RightEdgeMarkerRowDecorator<'_, '_, '_> {
     }
 }
 
-pub(crate) fn install_right_edge_markers_from_source_requests(
-    builder: &mut GlyphMatrixBuilder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
-    request: TextWindowRightEdgeMarkers<'_>,
-) {
-    let base_face = render_services.face_resolver().default_face().clone();
+pub(crate) fn text_window_right_edge_marker_decorations(
+    request: &TextWindowRightEdgeMarkers<'_>,
+) -> Vec<TextWindowRightEdgeMarkerDecoration> {
     let target_col = request.column.target_col(request.matrix_cols);
+    let mut decorations = Vec::new();
     for row_idx in 0..request.row_flags.len() {
         let matrix_row = request.text_matrix_row_base + row_idx;
         let marker = if request
@@ -188,18 +209,13 @@ pub(crate) fn install_right_edge_markers_from_source_requests(
         let Some(marker) = marker else {
             continue;
         };
-        builder.decorate_current_window_row(MatrixCurrentWindowRowDecorationRequest::new(
+        decorations.push(TextWindowRightEdgeMarkerDecoration {
             matrix_row,
-            RightEdgeMarkerRowDecorator {
-                target_col,
-                marker,
-                face_id: request.face_id,
-                base_face: &base_face,
-                char_width: request.char_width,
-                render_services: &mut render_services,
-            },
-        ));
+            target_col,
+            marker,
+        });
     }
+    decorations
 }
 
 struct RightBorderTextRenderRequest<'face> {
@@ -334,10 +350,24 @@ fn install_right_border_from_source_request(
     row.displays_text = prior_displays_text;
 }
 
-struct RightBorderRowsDecorator<'a, 'resolver, 'frame> {
+pub(crate) struct RightBorderRowsDecorator<'a, 'resolver, 'frame> {
     request: TextWindowRightBorder,
     base_face: &'a ResolvedFace,
     render_services: &'a mut ChromeRowRenderServices<'resolver, 'frame>,
+}
+
+impl<'a, 'resolver, 'frame> RightBorderRowsDecorator<'a, 'resolver, 'frame> {
+    pub(crate) fn new(
+        request: TextWindowRightBorder,
+        base_face: &'a ResolvedFace,
+        render_services: &'a mut ChromeRowRenderServices<'resolver, 'frame>,
+    ) -> Self {
+        Self {
+            request,
+            base_face,
+            render_services,
+        }
+    }
 }
 
 impl MatrixRowDecorator for RightBorderRowsDecorator<'_, '_, '_> {
@@ -354,19 +384,4 @@ impl MatrixRowDecorator for RightBorderRowsDecorator<'_, '_, '_> {
             self.render_services,
         );
     }
-}
-
-pub(crate) fn install_last_window_right_border_from_source_requests(
-    builder: &mut GlyphMatrixBuilder,
-    mut render_services: ChromeRowRenderServices<'_, '_>,
-    request: TextWindowRightBorder,
-    base_face: &ResolvedFace,
-) {
-    builder.decorate_last_window_rows(MatrixLastWindowRowsDecorationRequest::new(
-        RightBorderRowsDecorator {
-            request,
-            base_face,
-            render_services: &mut render_services,
-        },
-    ));
 }
