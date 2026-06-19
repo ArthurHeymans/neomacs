@@ -6465,8 +6465,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             char_w: 8.0,
         })
         .install_and_apply(BufferTextWindowBodyInstallState::new(
-            &mut builder,
-            &output_emitter,
+            TextWindowOutputRenderState::new(&mut builder, &mut output_emitter),
             crate::display_status_line::ChromeRowRenderServices::new(
                 &mut font_metrics,
                 &face_resolver,

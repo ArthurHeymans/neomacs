@@ -22,9 +22,8 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
     TextMatrixRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
-    TextWindowOutputInstaller, TextWindowOutputRenderState, TextWindowPendingRowFinish,
-    TextWindowRedisplayPositions, TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
-    WindowOutputEmitter, close_text_window_output,
+    TextWindowOutputRenderState, TextWindowPendingRowFinish, TextWindowRedisplayPositions,
+    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder, WindowOutputEmitter,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neovm_core::buffer::LispCharPos1;
@@ -234,9 +233,8 @@ pub(crate) struct BufferTextWindowBodyInstallRenderContext<'a> {
     pub(crate) char_w: f32,
 }
 
-pub(crate) struct BufferTextWindowBodyInstallState<'a, 'emit, 'face> {
-    builder: &'emit mut GlyphMatrixBuilder,
-    output_emitter: &'a WindowOutputEmitter,
+pub(crate) struct BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
+    output: TextWindowOutputRenderState<'emit, 'output>,
     render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
@@ -369,15 +367,13 @@ impl<'a, 'emit> BufferTextWindowTailFinalizeState<'a, 'emit> {
     }
 }
 
-impl<'a, 'emit, 'face> BufferTextWindowBodyInstallState<'a, 'emit, 'face> {
+impl<'emit, 'output, 'face> BufferTextWindowBodyInstallState<'emit, 'output, 'face> {
     pub(crate) fn new(
-        builder: &'emit mut GlyphMatrixBuilder,
-        output_emitter: &'a WindowOutputEmitter,
+        output: TextWindowOutputRenderState<'emit, 'output>,
         render_services: ChromeRowRenderServices<'emit, 'face>,
     ) -> Self {
         Self {
-            builder,
-            output_emitter,
+            output,
             render_services,
         }
     }
@@ -589,18 +585,17 @@ impl<'a> BufferTextWindowBodyInstallRequest<'a> {
             context.char_w,
         );
 
-        let redisplay_positions =
-            TextWindowOutputInstaller::new(state.builder, state.output_emitter)
-                .install_body_output(
-                    TextWindowBodyOutputInstall {
-                        window_id: context.window_id,
-                        window_start: context.window_start,
-                        text_start_byte: context.text_start_byte,
-                        byte_idx: context.byte_idx,
-                        right_edge_markers,
-                    },
-                    Some(state.render_services),
-                );
+        let mut output = state.output;
+        let redisplay_positions = output.install_body_output(
+            TextWindowBodyOutputInstall {
+                window_id: context.window_id,
+                window_start: context.window_start,
+                text_start_byte: context.text_start_byte,
+                byte_idx: context.byte_idx,
+                right_edge_markers,
+            },
+            Some(state.render_services),
+        );
         redisplay_positions
     }
 }
@@ -713,15 +708,21 @@ impl BufferTextWindowFinishRequest {
         self,
         state: BufferTextWindowFinishState<'_>,
     ) -> BufferTextWindowFinishOutput {
-        close_text_window_output(state.builder);
+        let BufferTextWindowFinishState {
+            builder,
+            mut output_emitter,
+            evaluator,
+            hit_rows,
+        } = state;
+        TextWindowOutputRenderState::new(builder, &mut output_emitter).close_text_window_output();
         let hit_data = WindowHitData {
             window_id: self.window_id,
             content_x: self.content_x,
             char_w: self.char_w,
-            rows: state.hit_rows,
+            rows: hit_rows,
         };
-        let snapshot = state.output_emitter.finish_snapshot(
-            state.evaluator,
+        let snapshot = output_emitter.finish_snapshot(
+            evaluator,
             self.text_area_left_offset,
             self.mode_line_height,
             self.header_line_height,

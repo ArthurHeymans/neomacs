@@ -1022,6 +1022,19 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
             .install_terminal_right_border(request, render_services)
     }
 
+    pub(crate) fn install_body_output(
+        &mut self,
+        request: TextWindowBodyOutputInstall<'_>,
+        render_services: Option<ChromeRowRenderServices<'_, '_>>,
+    ) -> TextWindowRedisplayPositions {
+        let output_emitter = self
+            .output_emitter
+            .as_deref()
+            .expect("text-window output state requires an output emitter");
+        TextWindowOutputInstaller::new(self.builder, output_emitter)
+            .install_body_output(request, render_services)
+    }
+
     pub(crate) fn begin_text_window_output(
         &mut self,
         evaluator: &mut Context,
@@ -1046,6 +1059,10 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
             .expect("text-window output state requires an output emitter");
         TextWindowRowLifecycleInstaller::new(self.builder, output_emitter, evaluator)
             .finish_pending_row(request)
+    }
+
+    pub(crate) fn close_text_window_output(&mut self) {
+        close_text_window_output(self.builder);
     }
 }
 

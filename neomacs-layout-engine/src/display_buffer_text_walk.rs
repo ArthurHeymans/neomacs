@@ -65,7 +65,9 @@ use crate::neovm_bridge::{
     buffer_display_line_numbers_mode, buffer_local_bool, buffer_local_int, buffer_local_value,
 };
 use crate::types::{LineWrapMode, WindowKind, WindowParams};
-use crate::window_output::{TextWindowRedisplayPositions, WindowOutputEmitter};
+use crate::window_output::{
+    TextWindowOutputRenderState, TextWindowRedisplayPositions, WindowOutputEmitter,
+};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
@@ -1053,8 +1055,7 @@ impl BufferTextWindowWalkSetup {
         tail_context
             .body_install_request(self.byte_idx, &self.row_flags)
             .install_and_apply(BufferTextWindowBodyInstallState::new(
-                state.builder,
-                state.output_emitter,
+                TextWindowOutputRenderState::new(state.builder, state.output_emitter),
                 state.render_services,
             ))
     }
