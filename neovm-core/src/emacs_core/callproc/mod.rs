@@ -317,6 +317,45 @@ fn configure_subprocess_current_dir(eval: &super::eval::Context, command: &mut C
     }
 }
 
+/// Build the child process environment from the dynamically-bound
+/// `process-environment`, mirroring GNU's `make_environment_block`
+/// (callproc.c). `process-environment` is seeded from the parent OS
+/// environment at startup, so it is the *complete* environment: we clear the
+/// inherited OS env and rebuild it entirely from the list. Each entry is
+/// "VAR=value" (sets VAR) or a bare "VAR" (unsets VAR, per GNU's "Lone
+/// variable names ... mean that variable should be removed"). Honoring the
+/// dynamic binding is what lets `(let ((process-environment ...)) ...)` reach
+/// the subprocess, exactly as in GNU. When `process-environment` is nil/unset
+/// the child simply inherits neomacs's own environment.
+fn configure_subprocess_environment(eval: &super::eval::Context, command: &mut Command) {
+    let process_environment = eval.visible_variable_value_or_nil("process-environment");
+    let entries = super::process::process_environment_entries(Some(process_environment));
+    apply_subprocess_environment_entries(command, entries.as_deref());
+}
+
+/// Apply already-extracted `process-environment` entries to a child command.
+/// Split from `configure_subprocess_environment` for call sites (e.g.
+/// call-process-region) that must capture the environment before taking a
+/// mutable borrow that precludes touching the eval `Context`.
+fn apply_subprocess_environment_entries(
+    command: &mut Command,
+    entries: Option<&[(OsString, Option<OsString>)]>,
+) {
+    if let Some(entries) = entries {
+        command.env_clear();
+        for (key, value) in entries {
+            match value {
+                Some(value) => {
+                    command.env(key, value);
+                }
+                None => {
+                    command.env_remove(key);
+                }
+            }
+        }
+    }
+}
+
 fn is_file_keyword(value: &Value) -> bool {
     value.as_keyword_id().map_or(false, |k| {
         let n = resolve_sym(k);
@@ -589,6 +628,7 @@ fn run_process_command_in_state(
         let mut command = new_child_command(&program_os);
         command.args(&cmd_args_os).stdout(Stdio::null());
         configure_subprocess_current_dir(eval, &mut command);
+        configure_subprocess_environment(eval, &mut command);
         configure_call_process_stdin(&mut command, infile.as_ref())?;
         match destination_spec.stderr {
             StderrTarget::Discard | StderrTarget::ToStdoutTarget => {
@@ -626,6 +666,7 @@ fn run_process_command_in_state(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     configure_subprocess_current_dir(eval, &mut command);
+    configure_subprocess_environment(eval, &mut command);
     configure_call_process_stdin(&mut command, infile.as_ref())?;
     let output = command
         .output()
@@ -652,6 +693,7 @@ fn run_process_capture_output(
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
     configure_subprocess_current_dir(eval, &mut command);
+    configure_subprocess_environment(eval, &mut command);
     let output = command
         .output()
         .map_err(|e| super::process::signal_process_io("Searching for program", None, e))?;
@@ -751,6 +793,12 @@ fn builtin_call_process_region_impl(
     let program = super::builtins::expect_lisp_string(&args[2])?.clone();
     let program_os = resolve_call_process_program(eval, &program)?;
     let subprocess_dir = subprocess_default_directory(eval);
+    // Capture the (possibly let-bound) `process-environment` before we take a
+    // mutable borrow of the buffers; the child env is built from it just like
+    // GNU's `make_environment_block`.
+    let subprocess_env = super::process::process_environment_entries(Some(
+        eval.visible_variable_value_or_nil("process-environment"),
+    ));
     let buffers = &mut eval.buffers;
 
     let delete = args.len() > 3 && args[3].is_truthy();
@@ -833,6 +881,7 @@ fn builtin_call_process_region_impl(
         if let Some(dir) = &subprocess_dir {
             command.current_dir(dir);
         }
+        apply_subprocess_environment_entries(&mut command, subprocess_env.as_deref());
         command
             .args(cmd_args.iter().map(lisp_string_to_os_string))
             .stdin(Stdio::piped())
@@ -876,6 +925,7 @@ fn builtin_call_process_region_impl(
     if let Some(dir) = &subprocess_dir {
         command.current_dir(dir);
     }
+    apply_subprocess_environment_entries(&mut command, subprocess_env.as_deref());
     let mut child = command
         .args(cmd_args.iter().map(lisp_string_to_os_string))
         .stdin(Stdio::piped())

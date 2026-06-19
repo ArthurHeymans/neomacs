@@ -1190,7 +1190,7 @@ fn split_process_environment_entry(entry: &LispString) -> (OsString, Option<OsSt
     }
 }
 
-fn process_environment_entries(
+pub(crate) fn process_environment_entries(
     process_environment: Option<Value>,
 ) -> Option<Vec<(OsString, Option<OsString>)>> {
     let env_list = process_environment?;
@@ -1198,9 +1198,18 @@ fn process_environment_entries(
         return None;
     }
     list_to_vec(&env_list).map(|entries| {
+        // GNU's `make_environment_block`/`add_env` (callproc.c) keeps the
+        // FIRST definition of a given variable that appears in
+        // `process-environment` and drops later duplicates. This applies to
+        // both "VAR=value" entries and bare "VAR" unset entries: whichever
+        // occurs first wins. Dedup by variable name preserving first-seen so
+        // every spawn path (call-process and make-process/pipe/pty) gets the
+        // same precedence.
+        let mut seen: std::collections::HashSet<OsString> = std::collections::HashSet::new();
         entries
             .iter()
             .filter_map(|entry| entry.as_lisp_string().map(split_process_environment_entry))
+            .filter(|(key, _)| seen.insert(key.clone()))
             .collect()
     })
 }
@@ -7019,12 +7028,14 @@ pub(crate) fn builtin_start_process_shell_command(
     );
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
 
+    // Honor the dynamically-bound `process-environment` (let-bindings), not
+    // just the global value, matching GNU's `make_environment_block`.
+    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
     // Actually spawn the OS process.
-    if let Err(e) = eval.processes.spawn_child_with_environment(
-        id,
-        use_pty,
-        eval.obarray.symbol_value("process-environment").copied(),
-    ) {
+    if let Err(e) = eval
+        .processes
+        .spawn_child_with_environment(id, use_pty, process_environment)
+    {
         return Err(signal(
             "file-error",
             vec![Value::string("Searching for program"), Value::string(e)],
@@ -7054,12 +7065,13 @@ pub(crate) fn builtin_start_file_process(
         .create_process_lisp(name, buffer, program, proc_args);
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
 
+    // Honor the dynamically-bound `process-environment` (let-bindings).
+    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
     // NeoVM has no Tramp/remote support, so behave like start-process.
-    if let Err(e) = eval.processes.spawn_child_with_environment(
-        id,
-        use_pty,
-        eval.obarray.symbol_value("process-environment").copied(),
-    ) {
+    if let Err(e) = eval
+        .processes
+        .spawn_child_with_environment(id, use_pty, process_environment)
+    {
         return Err(signal(
             "file-error",
             vec![
@@ -7091,12 +7103,13 @@ pub(crate) fn builtin_start_file_process_shell_command(
     );
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
 
+    // Honor the dynamically-bound `process-environment` (let-bindings).
+    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
     // NeoVM has no Tramp/remote support, so behave like start-process-shell-command.
-    if let Err(e) = eval.processes.spawn_child_with_environment(
-        id,
-        use_pty,
-        eval.obarray.symbol_value("process-environment").copied(),
-    ) {
+    if let Err(e) = eval
+        .processes
+        .spawn_child_with_environment(id, use_pty, process_environment)
+    {
         return Err(signal(
             "file-error",
             vec![Value::string("Searching for program"), Value::string(e)],
@@ -9306,15 +9319,15 @@ pub(crate) fn builtin_getenv_internal(
         }
     }
 
-    // Check process-environment variable first (GNU callproc.c:1720).
-    let proc_env = eval.obarray.symbol_value("process-environment").cloned();
-    if let Some(pe) = proc_env {
-        if pe.is_cons() {
-            match getenv_from_list(varname, pe) {
-                EnvLookup::Value(value) => return Ok(value),
-                EnvLookup::Negative => return Ok(Value::NIL),
-                EnvLookup::Missing => {}
-            }
+    // Check process-environment first (GNU callproc.c:1720 getenv_internal,
+    // which consults Vprocess_environment — i.e. the dynamic binding, so
+    // honor let-bindings rather than only the global value).
+    let proc_env = eval.visible_variable_value_or_nil("process-environment");
+    if proc_env.is_cons() {
+        match getenv_from_list(varname, proc_env) {
+            EnvLookup::Value(value) => return Ok(value),
+            EnvLookup::Negative => return Ok(Value::NIL),
+            EnvLookup::Missing => {}
         }
     }
 
