@@ -4,11 +4,11 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_text_append::{
     BufferTextWindowBeginRequest, BufferTextWindowBodyInstallRenderContext,
     BufferTextWindowBodyInstallRequest, BufferTextWindowBodyInstallState,
-    BufferTextWindowFinishRequest, BufferTextWindowFinishState,
-    BufferTextWindowTailFinalizeContext, BufferTextWindowTailFinalizeOutcome,
-    BufferTextWindowTailFinalizeRequest, BufferTextWindowTailFinalizeState,
-    BufferTextWindowVisibilityRetryOutcome, BufferTextWindowVisibilityRetryRequest,
-    TextWindowAppendSurfaceRequest,
+    BufferTextWindowCursorEffectsRequest, BufferTextWindowFinishRequest,
+    BufferTextWindowFinishState, BufferTextWindowTailFinalizeContext,
+    BufferTextWindowTailFinalizeOutcome, BufferTextWindowTailFinalizeRequest,
+    BufferTextWindowTailFinalizeState, BufferTextWindowVisibilityRetryOutcome,
+    BufferTextWindowVisibilityRetryRequest, TextWindowAppendSurfaceRequest,
 };
 use crate::display_buffer_text_item_append::{
     BufferTextPreparedSourceCharAppend, BufferTextRowAppendContext, BufferTextRowAppendState,
@@ -82,8 +82,8 @@ use crate::types::{LineWrapMode, WindowParams};
 use crate::unicode::is_wide_char;
 use crate::window_output::{
     TextMatrixRowTransition, TextWindowBeginOutputState, TextWindowLiveOutputState,
-    TextWindowMatrixOutputState, TextWindowOutputRetryCheckpoint, TextWindowRedisplayPositions,
-    WindowOutputEmitter,
+    TextWindowMatrixOutputState, TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint,
+    TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::{Color, Rect};
@@ -355,6 +355,7 @@ pub(crate) struct BufferTextWindowOutputSession<'emit> {
     font_metrics: &'emit mut Option<FontMetricsService>,
     face_resolver: &'emit FaceResolver,
     face_ids: &'emit mut FrameFaceIdAllocator,
+    retry_checkpoint: TextWindowOutputRetryCheckpoint,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'output, 'face> {
@@ -386,6 +387,16 @@ pub(crate) struct BufferTextWindowRenderedBody<'a> {
     retry_bounds: BufferTextWindowRetryBounds,
     publish_request: BufferTextWindowRedisplayPublishRequest,
     tail_context: BufferTextWindowTailRequestContext<'a>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextWindowRenderAttemptOutcome {
+    Retry {
+        window_start: i64,
+    },
+    Finished {
+        redisplay_positions: TextWindowRedisplayPositions,
+    },
 }
 
 pub(crate) struct BufferTextWindowRenderedBodyFinishState<'a> {
@@ -1241,6 +1252,14 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
 }
 
 impl<'emit> BufferTextWindowOutputSession<'emit> {
+    pub(crate) fn install_cursor_effects(
+        builder: &mut GlyphMatrixBuilder,
+        params: &WindowParams,
+    ) -> bool {
+        BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
+            .install_and_apply(&mut TextWindowOutputRenderState::without_output(builder))
+    }
+
     pub(crate) fn new(
         builder: &'emit mut GlyphMatrixBuilder,
         evaluator: &'emit mut Context,
@@ -1248,12 +1267,14 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         face_resolver: &'emit FaceResolver,
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> Self {
+        let retry_checkpoint = TextWindowMatrixOutputState::new(builder).capture_retry_checkpoint();
         Self {
             builder,
             evaluator,
             font_metrics,
             face_resolver,
             face_ids,
+            retry_checkpoint,
         }
     }
 
@@ -1294,11 +1315,13 @@ impl<'emit> BufferTextWindowOutputSession<'emit> {
         request.into_active_face_state(self.font_metrics)
     }
 
-    pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        TextWindowMatrixOutputState::new(self.builder).restore_retry_checkpoint(checkpoint);
+    fn prepare_retry(&mut self, frame_counter: &mut u32) {
+        TextWindowMatrixOutputState::new(self.builder)
+            .restore_retry_checkpoint(self.retry_checkpoint);
+        self.publish_face_ids(frame_counter);
     }
 
-    pub(crate) fn publish_face_ids(&self, frame_counter: &mut u32) {
+    fn publish_face_ids(&self, frame_counter: &mut u32) {
         *frame_counter = self.face_ids.finish();
     }
 }
@@ -2018,10 +2041,7 @@ where
 }
 
 impl<'a> BufferTextWindowRenderedBody<'a> {
-    pub(crate) fn retry_plan(
-        &self,
-        walk_setup: &BufferTextWindowWalkSetup,
-    ) -> BufferTextWindowRetryPlan {
+    fn retry_plan(&self, walk_setup: &BufferTextWindowWalkSetup) -> BufferTextWindowRetryPlan {
         BufferTextWindowRetryPlan::from_post_loop(
             self.tail_context.params.window_id,
             self.tail_context.window_start,
@@ -2061,7 +2081,7 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         walk_setup.finish_window_and_install(&self.tail_context, state, self.output_emitter);
     }
 
-    pub(crate) fn install_body_chrome_and_finish(
+    fn install_body_chrome_and_finish(
         mut self,
         walk_setup: &mut BufferTextWindowWalkSetup,
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
@@ -2074,6 +2094,38 @@ impl<'a> BufferTextWindowRenderedBody<'a> {
         self.render_chrome_rows(chrome_request, &mut state);
         self.finish_window_and_install(walk_setup, state.finish_state());
         redisplay_positions
+    }
+
+    pub(crate) fn finish_or_prepare_retry(
+        self,
+        walk_setup: &mut BufferTextWindowWalkSetup,
+        chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
+        output_session: &mut BufferTextWindowOutputSession<'_>,
+        hit_data: &mut Vec<WindowHitData>,
+        display_snapshots: &mut Vec<WindowDisplaySnapshot>,
+        frame_face_id_counter: &mut u32,
+        remaining_visibility_retries: usize,
+    ) -> BufferTextWindowRenderAttemptOutcome {
+        let retry_plan = self.retry_plan(walk_setup);
+        retry_plan.log_visibility_adjustments();
+
+        if let Some(window_start) = retry_plan.should_retry(remaining_visibility_retries) {
+            retry_plan.log_retry(window_start, remaining_visibility_retries);
+            output_session.prepare_retry(frame_face_id_counter);
+            return BufferTextWindowRenderAttemptOutcome::Retry { window_start };
+        }
+
+        let redisplay_positions = self.install_body_chrome_and_finish(
+            walk_setup,
+            chrome_request,
+            output_session,
+            hit_data,
+            display_snapshots,
+        );
+        output_session.publish_face_ids(frame_face_id_counter);
+        BufferTextWindowRenderAttemptOutcome::Finished {
+            redisplay_positions,
+        }
     }
 }
 

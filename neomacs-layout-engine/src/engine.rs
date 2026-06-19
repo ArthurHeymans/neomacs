@@ -18,11 +18,10 @@ use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
-use super::window_output::{TextWindowMatrixOutputState, TextWindowOutputRenderState};
-use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
 use crate::display_buffer_text_render::{
     BufferTextWindowDefaultFacePlan, BufferTextWindowOutputSession,
-    BufferTextWindowOutputSetupRequest, BufferTextWindowWalkSetupRequest,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowRenderAttemptOutcome,
+    BufferTextWindowWalkSetupRequest,
 };
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
@@ -919,10 +918,7 @@ impl LayoutEngine {
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name().to_owned();
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
-        BufferTextWindowCursorEffectsRequest::new(params.window_id, params.cursor_effects.clone())
-            .install_and_apply(&mut TextWindowOutputRenderState::without_output(
-                &mut self.matrix_builder,
-            ));
+        BufferTextWindowOutputSession::install_cursor_effects(&mut self.matrix_builder, params);
 
         let char_w = params.char_width;
         let char_h = params.char_height;
@@ -1014,9 +1010,6 @@ impl LayoutEngine {
         } else {
             &[]
         };
-        let retry_render_checkpoint =
-            TextWindowMatrixOutputState::new(&mut self.matrix_builder).capture_retry_checkpoint();
-
         tracing::debug!(
             "  layout_window_rust id={}: text_y={:.1} text_h={:.1} max_rows={} bytes_read={}",
             params.window_id,
@@ -1097,33 +1090,7 @@ impl LayoutEngine {
             buffer,
             &buf_access,
         );
-        let retry_plan = rendered_body.retry_plan(&walk_setup);
-        retry_plan.log_visibility_adjustments();
-
-        if let Some(new_window_start) = retry_plan.should_retry(remaining_visibility_retries) {
-            retry_plan.log_retry(new_window_start, remaining_visibility_retries);
-            output_session.restore_retry_checkpoint(retry_render_checkpoint);
-
-            let mut retry_params = params.clone();
-            retry_params.window_start = new_window_start;
-            retry_params.window_end = 0;
-            // Persist the counter before recursing so the retry call loads the
-            // parent's bumped value as its base.
-            output_session.publish_face_ids(&mut self.frame_face_id_counter);
-            drop(output_session);
-            self.layout_window_rust(
-                evaluator,
-                frame_id,
-                &retry_params,
-                frame_params,
-                face_resolver,
-                reserve_right_border_col,
-                remaining_visibility_retries.saturating_sub(1),
-            );
-            return;
-        }
-
-        let redisplay_positions = rendered_body.install_body_chrome_and_finish(
+        let render_outcome = rendered_body.finish_or_prepare_retry(
             &mut walk_setup,
             chrome_plan.render_request(
                 params,
@@ -1136,15 +1103,37 @@ impl LayoutEngine {
             &mut output_session,
             &mut self.hit_data,
             &mut self.display_snapshots,
+            &mut self.frame_face_id_counter,
+            remaining_visibility_retries,
         );
+
+        let redisplay_positions = match render_outcome {
+            BufferTextWindowRenderAttemptOutcome::Retry { window_start } => {
+                let mut retry_params = params.clone();
+                retry_params.window_start = window_start;
+                retry_params.window_end = 0;
+                drop(output_session);
+                self.layout_window_rust(
+                    evaluator,
+                    frame_id,
+                    &retry_params,
+                    frame_params,
+                    face_resolver,
+                    reserve_right_border_col,
+                    remaining_visibility_retries.saturating_sub(1),
+                );
+                return;
+            }
+            BufferTextWindowRenderAttemptOutcome::Finished {
+                redisplay_positions,
+            } => redisplay_positions,
+        };
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
             redisplay_positions.window_start.as_i64(),
             redisplay_positions.window_end.as_i64()
         );
-
-        output_session.publish_face_ids(&mut self.frame_face_id_counter);
     }
 
     /// Trigger fontification for a buffer region via the Rust Context.
