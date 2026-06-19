@@ -99,6 +99,74 @@ impl<'a> TextRowOutputRenderState<'a> {
         TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
             .install_row_decoration(request);
     }
+
+    fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
+        insert_resolved_display_row_face(self.builder, face_id, face, None);
+    }
+
+    fn install_resolved_measured_face(&mut self, face: &DisplayRowResolvedMeasuredFace) {
+        face.install_into(self.builder);
+    }
+
+    fn display_host(&self) -> Option<&dyn DisplayHost> {
+        self.evaluator.display_host.as_deref()
+    }
+
+    fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
+        self.output_emitter
+    }
+
+    fn output_rows(&self) -> &[DisplayRowSnapshot] {
+        self.output_emitter.rows()
+    }
+
+    fn output_rows_len(&self) -> usize {
+        self.output_emitter.rows().len()
+    }
+
+    fn measure_state<'emit>(
+        &'emit mut self,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'emit FaceResolver,
+    ) -> TextRowSourceMeasureState<'emit> {
+        TextRowSourceMeasureState {
+            builder: self.builder,
+            evaluator: self.evaluator,
+            font_metrics,
+            face_resolver,
+        }
+    }
+
+    fn current_text_render_state<'emit>(
+        &'emit mut self,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'emit FaceResolver,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
+        DisplayRowCurrentTextRenderState::new(
+            self.builder,
+            self.output_emitter,
+            self.evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+        )
+    }
+
+    fn current_source_fragment_render_state<'emit>(
+        &'emit mut self,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'emit FaceResolver,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> DisplayRowCurrentSourceFragmentRenderState<'emit, 'emit> {
+        DisplayRowCurrentSourceFragmentRenderState::new(
+            self.builder,
+            font_metrics,
+            face_resolver,
+            self.evaluator.display_host.as_deref(),
+            face_ids,
+        )
+    }
 }
 
 pub(crate) struct TextRowSourceRenderState<'a> {
@@ -135,16 +203,12 @@ impl<'a> TextRowSourceRenderState<'a> {
     }
 
     pub(crate) fn measure_state(&mut self) -> TextRowSourceMeasureState<'_> {
-        TextRowSourceMeasureState {
-            builder: self.output_render.builder,
-            evaluator: self.output_render.evaluator,
-            font_metrics: self.font_metrics,
-            face_resolver: self.face_resolver,
-        }
+        self.output_render
+            .measure_state(self.font_metrics, self.face_resolver)
     }
 
     pub(crate) fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
-        insert_resolved_display_row_face(self.output_render.builder, face_id, face, None);
+        self.output_render.insert_resolved_face(face_id, face);
     }
 
     fn install_pending_display_string_base_face(&mut self, base_face: &DisplayStringBaseFace) {
@@ -201,7 +265,8 @@ impl<'a> TextRowSourceRenderState<'a> {
             fallback_char_width,
             fallback_metrics,
         );
-        resolved_face.install_into(self.output_render.builder);
+        self.output_render
+            .install_resolved_measured_face(&resolved_face);
         resolved_face.into_active_face_state()
     }
 
@@ -300,11 +365,9 @@ impl<'a> TextRowSourceRenderState<'a> {
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         request.render_natural_fragment_into_current_row(
-            &mut DisplayRowCurrentSourceFragmentRenderState::new(
-                self.output_render.builder,
+            &mut self.output_render.current_source_fragment_render_state(
                 self.font_metrics,
                 self.face_resolver,
-                self.output_render.evaluator.display_host.as_deref(),
                 face_ids,
             ),
             source,
@@ -343,22 +406,19 @@ impl<'a> TextRowSourceRenderState<'a> {
         &mut self,
         f: impl FnOnce(&mut Option<FontMetricsService>, Option<&dyn DisplayHost>) -> R,
     ) -> R {
-        f(
-            self.font_metrics,
-            self.output_render.evaluator.display_host.as_deref(),
-        )
+        f(self.font_metrics, self.output_render.display_host())
     }
 
     pub(crate) fn output_emitter(&mut self) -> &mut WindowOutputEmitter {
-        self.output_render.output_emitter
+        self.output_render.output_emitter()
     }
 
     pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {
-        self.output_render.output_emitter.rows()
+        self.output_render.output_rows()
     }
 
     pub(crate) fn output_rows_len(&self) -> usize {
-        self.output_render.output_emitter.rows().len()
+        self.output_render.output_rows_len()
     }
 }
 
@@ -366,14 +426,9 @@ fn current_text_render_state<'emit>(
     state: &'emit mut TextRowSourceRenderState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
 ) -> DisplayRowCurrentTextRenderState<'emit, 'emit> {
-    DisplayRowCurrentTextRenderState::new(
-        state.output_render.builder,
-        state.output_render.output_emitter,
-        state.output_render.evaluator,
-        state.font_metrics,
-        state.face_resolver,
-        face_ids,
-    )
+    state
+        .output_render
+        .current_text_render_state(state.font_metrics, state.face_resolver, face_ids)
 }
 
 pub(crate) struct TextRowSourceMeasureState<'a> {
