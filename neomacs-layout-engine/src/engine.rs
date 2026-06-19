@@ -20,12 +20,12 @@ use super::types::*;
 use super::window_output::RowMetricsSnapshot;
 use super::window_output::{TextWindowOutputRenderState, TextWindowOutputRetryCheckpoint};
 use crate::display_buffer_text_append::BufferTextWindowCursorEffectsRequest;
+use crate::display_buffer_text_render::BufferTextWindowOutputSession;
 use crate::display_buffer_text_source::BufferTextWindowSourceReadRequest;
 use crate::display_buffer_text_walk::{
     BufferTextWindowChromeHeights, BufferTextWindowDefaultFacePlan, BufferTextWindowGeometryPlan,
     BufferTextWindowGeometryRequest, BufferTextWindowLocalDisplayPolicy,
-    BufferTextWindowOutputSession, BufferTextWindowOutputSetupRequest,
-    BufferTextWindowWalkSetupRequest,
+    BufferTextWindowOutputSetupRequest, BufferTextWindowWalkSetupRequest,
 };
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
