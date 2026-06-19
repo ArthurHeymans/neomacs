@@ -292,20 +292,20 @@ pub(crate) struct BufferTextWindowPostLoopState<'rows, 'emit> {
 }
 
 pub(crate) struct BufferTextWindowFinishInstallState<'a> {
-    pub(crate) builder: &'a mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: WindowOutputEmitter,
-    pub(crate) evaluator: &'a mut Context,
-    pub(crate) hit_rows: Vec<HitRow>,
-    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
-    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    hit_rows: Vec<HitRow>,
+    hit_data: &'a mut Vec<WindowHitData>,
+    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 pub(crate) struct BufferTextWindowFinishOutputState<'a> {
-    pub(crate) builder: &'a mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: WindowOutputEmitter,
-    pub(crate) evaluator: &'a mut Context,
-    pub(crate) hit_data: &'a mut Vec<WindowHitData>,
-    pub(crate) display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    builder: &'a mut GlyphMatrixBuilder,
+    output_emitter: WindowOutputEmitter,
+    evaluator: &'a mut Context,
+    hit_data: &'a mut Vec<WindowHitData>,
+    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 pub(crate) struct BufferTextWindowWalkRenderState<'emit> {
@@ -330,24 +330,42 @@ pub(crate) struct BufferTextWindowBodyRenderState<'emit> {
 }
 
 pub(crate) struct BufferTextWindowBodyPassState<'emit> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) font_metrics: &'emit mut Option<FontMetricsService>,
-    pub(crate) face_resolver: &'emit FaceResolver,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    builder: &'emit mut GlyphMatrixBuilder,
+    evaluator: &'emit mut Context,
+    font_metrics: &'emit mut Option<FontMetricsService>,
+    face_resolver: &'emit FaceResolver,
+    face_ids: &'emit mut FrameFaceIdAllocator,
+}
+
+impl<'emit> BufferTextWindowBodyPassState<'emit> {
+    pub(crate) fn new(
+        builder: &'emit mut GlyphMatrixBuilder,
+        evaluator: &'emit mut Context,
+        font_metrics: &'emit mut Option<FontMetricsService>,
+        face_resolver: &'emit FaceResolver,
+        face_ids: &'emit mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            builder,
+            evaluator,
+            font_metrics,
+            face_resolver,
+            face_ids,
+        }
+    }
 }
 
 pub(crate) struct BufferTextWindowBodyInstallRenderState<'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    output_emitter: &'emit mut WindowOutputEmitter,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 pub(crate) struct BufferTextWindowBodyInstallPublishState<'emit, 'face> {
-    pub(crate) builder: &'emit mut GlyphMatrixBuilder,
-    pub(crate) output_emitter: &'emit mut WindowOutputEmitter,
-    pub(crate) evaluator: &'emit mut Context,
-    pub(crate) render_services: ChromeRowRenderServices<'emit, 'face>,
+    builder: &'emit mut GlyphMatrixBuilder,
+    output_emitter: &'emit mut WindowOutputEmitter,
+    evaluator: &'emit mut Context,
+    render_services: ChromeRowRenderServices<'emit, 'face>,
 }
 
 pub(crate) struct BufferTextWindowRenderedBodyInstallPublishState<'emit, 'face> {

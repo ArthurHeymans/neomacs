@@ -1092,13 +1092,13 @@ impl LayoutEngine {
         );
         let rendered_body = body_plan.begin_render_body_and_tail(
             &mut walk_setup,
-            &mut BufferTextWindowBodyPassState {
-                builder: &mut self.matrix_builder,
+            &mut BufferTextWindowBodyPassState::new(
+                &mut self.matrix_builder,
                 evaluator,
-                font_metrics: &mut self.font_metrics,
+                &mut self.font_metrics,
                 face_resolver,
-                face_ids: &mut face_ids,
-            },
+                &mut face_ids,
+            ),
             text,
             params,
             buffer,
