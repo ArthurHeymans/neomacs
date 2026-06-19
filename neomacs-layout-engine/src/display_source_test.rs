@@ -1,6 +1,6 @@
 use super::*;
 use crate::display_buffer_text_source::{
-    BufferTextConsumedSourceItem, BufferTextSourceCursor, BufferTextSourceItemStepper,
+    BufferTextConsumedSourceItem, BufferTextSourceCharStepper, BufferTextSourceCursor,
     BufferTextSourcePosition,
 };
 use crate::display_item::{
@@ -870,10 +870,10 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
         RenderFaceRef::FaceId(3),
     );
     let mut context = DisplaySourceContext::empty();
-    let mut stepper = BufferTextSourceItemStepper::new(0);
+    let mut stepper = BufferTextSourceCharStepper::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextConsumedSourceItem::Step(first)) =
+    let Some(BufferTextConsumedSourceItem::CharStep(first)) =
         stepper.next_consumed_source_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected leading text step");
@@ -933,10 +933,10 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
         RenderFaceRef::FaceId(3),
     );
     let mut context = DisplaySourceContext::empty();
-    let mut stepper = BufferTextSourceItemStepper::new(0);
+    let mut stepper = BufferTextSourceCharStepper::new(0);
     let mut position = BufferTextSourcePosition::new(0, 0);
 
-    let Some(BufferTextConsumedSourceItem::Step(first)) =
+    let Some(BufferTextConsumedSourceItem::CharStep(first)) =
         stepper.next_consumed_source_item(&mut source, &mut context, &mut position)
     else {
         panic!("expected leading text step");
