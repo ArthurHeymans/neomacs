@@ -23,8 +23,7 @@ use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row_matrix_install::{
-    DisplayRowCurrentRowSurface, DisplayRowFaceInstallSurface, DisplayRowInstaller,
-    RenderedDisplayRowAssetsInstall,
+    DisplayRowCurrentRowSurface, DisplayRowFaceInstallSurface, DisplayRowInstallSurface,
 };
 use crate::display_row_special_glyphs::{
     RightBorderRowsDecorator, RightEdgeMarkerRowDecorator,
@@ -611,8 +610,8 @@ impl<'a> TextWindowLiveOutputState<'a> {
         faces: &[neomacs_display_protocol::face::Face],
         media: &[RenderedDisplayRowMedia],
     ) {
-        RenderedDisplayRowAssetsInstall::fragment(role, matrix_row, faces, media)
-            .install(self.builder);
+        DisplayRowInstallSurface::from_builder(self.builder)
+            .install_fragment_assets(role, matrix_row, faces, media);
     }
 
     pub(crate) fn emit_text_source_slots(
@@ -970,16 +969,16 @@ impl DisplayItemSource for LineNumberMarginItemSource {
     }
 }
 
-pub(crate) struct TextWindowBorderInstaller<'builder> {
+struct TextWindowBorderInstaller<'builder> {
     builder: &'builder mut GlyphMatrixBuilder,
 }
 
 impl<'builder> TextWindowBorderInstaller<'builder> {
-    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+    fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self { builder }
     }
 
-    pub(crate) fn install_terminal_right_border(
+    fn install_terminal_right_border(
         &mut self,
         request: TextWindowTerminalRightBorder,
         mut render_services: ChromeRowRenderServices<'_, '_>,
@@ -1012,13 +1011,13 @@ impl<'builder> TextWindowBorderInstaller<'builder> {
     }
 }
 
-pub(crate) struct TextWindowCursorInstaller<'builder, 'output> {
+struct TextWindowCursorInstaller<'builder, 'output> {
     builder: &'builder mut GlyphMatrixBuilder,
     output_emitter: Option<&'output mut WindowOutputEmitter>,
 }
 
 impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
-    pub(crate) fn new(
+    fn new(
         builder: &'builder mut GlyphMatrixBuilder,
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> Self {
@@ -1028,17 +1027,14 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
         }
     }
 
-    pub(crate) fn without_output(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+    fn without_output(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self {
             builder,
             output_emitter: None,
         }
     }
 
-    pub(crate) fn publish_cursor(
-        &mut self,
-        cursor: TextWindowCursor,
-    ) -> TextWindowCursorPublicationOutcome {
+    fn publish_cursor(&mut self, cursor: TextWindowCursor) -> TextWindowCursorPublicationOutcome {
         let output_emitter = self
             .output_emitter
             .as_deref_mut()
@@ -1047,7 +1043,7 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
             .publish(self.builder, output_emitter)
     }
 
-    pub(crate) fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
+    fn publish_decorative_cursor(&mut self, cursor: TextWindowDecorativeCursor) {
         if let Some(effects) = cursor.effects {
             self.install_cursor_effects(TextWindowCursorEffects {
                 window_id: cursor.window_id,
@@ -1066,7 +1062,7 @@ impl<'builder, 'output> TextWindowCursorInstaller<'builder, 'output> {
         );
     }
 
-    pub(crate) fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
+    fn install_cursor_effects(&mut self, request: TextWindowCursorEffects) {
         self.builder
             .artifact_installer()
             .set_cursor_effects(request.window_id, request.effects);
@@ -1208,7 +1204,7 @@ impl<'builder, 'output> TextWindowOutputRenderState<'builder, 'output> {
     }
 
     pub(crate) fn install_measured_window_chrome_row(&mut self, measured: &MeasuredDisplayRow) {
-        DisplayRowInstaller::new(self.builder).install_measured(measured);
+        DisplayRowInstallSurface::from_builder(self.builder).install_measured(measured);
     }
 
     pub(crate) fn render_chrome_rows(
@@ -1387,13 +1383,13 @@ fn text_matrix_row_metrics_request(
     }
 }
 
-pub(crate) struct TextWindowOutputInstaller<'builder, 'output> {
+struct TextWindowOutputInstaller<'builder, 'output> {
     builder: &'builder mut GlyphMatrixBuilder,
     output_emitter: &'output WindowOutputEmitter,
 }
 
 impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
-    pub(crate) fn new(
+    fn new(
         builder: &'builder mut GlyphMatrixBuilder,
         output_emitter: &'output WindowOutputEmitter,
     ) -> Self {
@@ -1403,11 +1399,11 @@ impl<'builder, 'output> TextWindowOutputInstaller<'builder, 'output> {
         }
     }
 
-    pub(crate) fn install_output(&mut self, _request: TextWindowOutputInstall) {
+    fn install_output(&mut self, _request: TextWindowOutputInstall) {
         finish_text_window_output_rows(self.builder, self.output_emitter);
     }
 
-    pub(crate) fn install_body_output(
+    fn install_body_output(
         &mut self,
         request: TextWindowBodyOutputInstall<'_>,
         render_services: Option<ChromeRowRenderServices<'_, '_>>,

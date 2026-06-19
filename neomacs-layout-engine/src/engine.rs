@@ -18,7 +18,7 @@ use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use crate::display_buffer_text_render::{
-    BufferTextWindowRenderAttemptOutcome, BufferTextWindowRenderAttemptState,
+    BufferTextWindowRenderAttemptOutcome, BufferTextWindowRenderAttemptSurface,
     BufferTextWindowRenderRequest,
 };
 #[cfg(test)]
@@ -921,7 +921,7 @@ impl LayoutEngine {
             reserve_right_border_col,
         )
         .render_into(
-            BufferTextWindowRenderAttemptState::new(
+            BufferTextWindowRenderAttemptSurface::new(
                 &mut self.matrix_builder,
                 evaluator,
                 &mut self.font_metrics,

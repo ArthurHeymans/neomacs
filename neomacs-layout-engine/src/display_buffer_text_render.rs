@@ -364,7 +364,7 @@ struct BufferTextWindowOutputSession<'emit> {
 
 struct BufferTextWindowCursorEffectsOutput;
 
-pub(crate) struct BufferTextWindowRenderAttemptState<'a, 'face> {
+struct BufferTextWindowRenderAttemptState<'a, 'face> {
     builder: &'a mut GlyphMatrixBuilder,
     evaluator: &'a mut Context,
     font_metrics: &'a mut Option<FontMetricsService>,
@@ -372,6 +372,10 @@ pub(crate) struct BufferTextWindowRenderAttemptState<'a, 'face> {
     frame_face_id_counter: &'a mut u32,
     hit_data: &'a mut Vec<WindowHitData>,
     display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+}
+
+pub(crate) struct BufferTextWindowRenderAttemptSurface<'a, 'face> {
+    state: BufferTextWindowRenderAttemptState<'a, 'face>,
 }
 
 pub(crate) struct BufferTextWindowRenderRequest<'a, B>
@@ -487,7 +491,7 @@ where
     pub(crate) overlay_text_row: BufferOverlayStringTextRowRenderContext<'surface>,
 }
 
-pub(crate) struct BufferTextWindowBodyPlan<'a, 'surface, B>
+struct BufferTextWindowBodyPlan<'a, 'surface, B>
 where
     B: LayoutBufferView,
 {
@@ -1295,7 +1299,7 @@ impl BufferTextWindowCursorEffectsOutput {
 
 impl<'a, 'face> BufferTextWindowRenderAttemptState<'a, 'face> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    fn new(
         builder: &'a mut GlyphMatrixBuilder,
         evaluator: &'a mut Context,
         font_metrics: &'a mut Option<FontMetricsService>,
@@ -1313,6 +1317,35 @@ impl<'a, 'face> BufferTextWindowRenderAttemptState<'a, 'face> {
             hit_data,
             display_snapshots,
         }
+    }
+}
+
+impl<'a, 'face> BufferTextWindowRenderAttemptSurface<'a, 'face> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        builder: &'a mut GlyphMatrixBuilder,
+        evaluator: &'a mut Context,
+        font_metrics: &'a mut Option<FontMetricsService>,
+        face_resolver: &'face FaceResolver,
+        frame_face_id_counter: &'a mut u32,
+        hit_data: &'a mut Vec<WindowHitData>,
+        display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    ) -> Self {
+        Self {
+            state: BufferTextWindowRenderAttemptState::new(
+                builder,
+                evaluator,
+                font_metrics,
+                face_resolver,
+                frame_face_id_counter,
+                hit_data,
+                display_snapshots,
+            ),
+        }
+    }
+
+    fn into_state(self) -> BufferTextWindowRenderAttemptState<'a, 'face> {
+        self.state
     }
 }
 
@@ -1344,7 +1377,7 @@ where
 
     pub(crate) fn render_into(
         self,
-        state: BufferTextWindowRenderAttemptState<'_, '_>,
+        surface: BufferTextWindowRenderAttemptSurface<'_, '_>,
         text_buf: &mut Vec<u8>,
         remaining_visibility_retries: usize,
     ) -> BufferTextWindowRenderAttemptOutcome {
@@ -1358,6 +1391,7 @@ where
             buffer_name,
             reserve_right_border_col,
         } = self;
+        let state = surface.into_state();
         let BufferTextWindowRenderAttemptState {
             builder,
             evaluator,
@@ -2123,7 +2157,7 @@ impl BufferTextWindowDefaultFacePlan {
 
 impl BufferTextWindowOutputSetup {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn into_body_plan<'a, 'surface, B>(
+    fn into_body_plan<'a, 'surface, B>(
         self,
         walk_setup: &BufferTextWindowWalkSetup,
         local_display_policy: BufferTextWindowLocalDisplayPolicy,
@@ -2250,7 +2284,7 @@ where
     B: LayoutBufferView,
 {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_attempt<'buf>(
+    fn render_attempt<'buf>(
         self,
         walk_setup: &mut BufferTextWindowWalkSetup,
         state: BufferTextWindowRenderAttemptState<'_, '_>,

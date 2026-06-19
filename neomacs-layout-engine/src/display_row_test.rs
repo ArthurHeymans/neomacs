@@ -1,5 +1,5 @@
 use super::*;
-use crate::display_row_matrix_install::DisplayRowInstaller;
+use crate::display_row_matrix_install::DisplayRowInstallSurface;
 use crate::display_row_source_render::TextRowSourceMeasureState;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, LayoutBufferView};
 use neomacs_display_protocol::Rect;
@@ -2868,7 +2868,7 @@ fn mock_display_row_matrix_install_preserves_row_metadata() {
 
     let mut builder = crate::matrix_builder::GlyphMatrixBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 16.0, 80.0, 40.0), true);
-    DisplayRowInstaller::new(&mut builder).install_row(1, &row);
+    DisplayRowInstallSurface::from_builder(&mut builder).install_row(1, &row);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);
@@ -2933,7 +2933,7 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
         rendered,
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
     );
-    DisplayRowInstaller::new(&mut builder).install_measured(&measured);
+    DisplayRowInstallSurface::from_builder(&mut builder).install_measured(&measured);
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);

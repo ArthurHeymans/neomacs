@@ -74,9 +74,13 @@ impl<'a> DisplayRowMatrixInstall<'a> {
     }
 }
 
-pub(crate) struct DisplayRowInstaller<'builder, 'rows> {
+struct DisplayRowInstaller<'builder, 'rows> {
     builder: &'builder mut GlyphMatrixBuilder,
     frame_chrome_rows: Option<&'rows mut Vec<FrameChromeRow>>,
+}
+
+pub(crate) struct DisplayRowInstallSurface<'builder, 'rows> {
+    installer: DisplayRowInstaller<'builder, 'rows>,
 }
 
 struct DisplayRowCurrentRowInstaller<'builder> {
@@ -96,14 +100,14 @@ pub(crate) struct DisplayRowFaceInstallSurface<'builder> {
 }
 
 impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
-    pub(crate) fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+    fn new(builder: &'builder mut GlyphMatrixBuilder) -> Self {
         Self {
             builder,
             frame_chrome_rows: None,
         }
     }
 
-    pub(crate) fn with_frame_chrome_rows(
+    fn with_frame_chrome_rows(
         builder: &'builder mut GlyphMatrixBuilder,
         frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
     ) -> Self {
@@ -113,11 +117,11 @@ impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
         }
     }
 
-    pub(crate) fn install_row(&mut self, matrix_row: usize, row: &GlyphRow) {
+    fn install_row(&mut self, matrix_row: usize, row: &GlyphRow) {
         DisplayRowMatrixInstall::from_row(matrix_row, row).install(self.builder);
     }
 
-    pub(crate) fn install_measured(&mut self, measured: &MeasuredDisplayRow) {
+    fn install_measured(&mut self, measured: &MeasuredDisplayRow) {
         match measured.owner {
             DisplayRowOwner::WindowChrome { .. } => {
                 MeasuredWindowDisplayRowInstallRequest { measured }.install(self.builder);
@@ -134,6 +138,55 @@ impl<'builder, 'rows> DisplayRowInstaller<'builder, 'rows> {
                 .install(self.builder);
             }
         }
+    }
+
+    fn install_fragment_assets(
+        &mut self,
+        role: GlyphRowRole,
+        matrix_row: usize,
+        faces: &[Face],
+        media: &[RenderedDisplayRowMedia],
+    ) {
+        RenderedDisplayRowAssetsInstall::fragment(role, matrix_row, faces, media)
+            .install(self.builder);
+    }
+}
+
+impl<'builder> DisplayRowInstallSurface<'builder, 'static> {
+    pub(crate) fn from_builder(builder: &'builder mut GlyphMatrixBuilder) -> Self {
+        Self {
+            installer: DisplayRowInstaller::new(builder),
+        }
+    }
+}
+
+impl<'builder, 'rows> DisplayRowInstallSurface<'builder, 'rows> {
+    pub(crate) fn with_frame_chrome_rows(
+        builder: &'builder mut GlyphMatrixBuilder,
+        frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
+    ) -> Self {
+        Self {
+            installer: DisplayRowInstaller::with_frame_chrome_rows(builder, frame_chrome_rows),
+        }
+    }
+
+    pub(crate) fn install_row(&mut self, matrix_row: usize, row: &GlyphRow) {
+        self.installer.install_row(matrix_row, row);
+    }
+
+    pub(crate) fn install_measured(&mut self, measured: &MeasuredDisplayRow) {
+        self.installer.install_measured(measured);
+    }
+
+    pub(crate) fn install_fragment_assets(
+        &mut self,
+        role: GlyphRowRole,
+        matrix_row: usize,
+        faces: &[Face],
+        media: &[RenderedDisplayRowMedia],
+    ) {
+        self.installer
+            .install_fragment_assets(role, matrix_row, faces, media);
     }
 }
 
@@ -342,7 +395,7 @@ enum RenderedDisplayRowAssetInstallTarget {
     FrameChrome { row_index: u32, bounds: Rect },
 }
 
-pub(crate) struct RenderedDisplayRowAssetsInstall<'a> {
+struct RenderedDisplayRowAssetsInstall<'a> {
     role: GlyphRowRole,
     faces: &'a [Face],
     media: &'a [RenderedDisplayRowMedia],
@@ -350,7 +403,7 @@ pub(crate) struct RenderedDisplayRowAssetsInstall<'a> {
 }
 
 impl<'a> RenderedDisplayRowAssetsInstall<'a> {
-    pub(crate) fn fragment(
+    fn fragment(
         role: GlyphRowRole,
         matrix_row: usize,
         faces: &'a [Face],
@@ -390,7 +443,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
         )
     }
 
-    pub(crate) fn install(self, builder: &mut GlyphMatrixBuilder) {
+    fn install(self, builder: &mut GlyphMatrixBuilder) {
         {
             let mut face_installer = DisplayRowFaceInstallSurface::from_builder(builder);
             for face in self.faces {
