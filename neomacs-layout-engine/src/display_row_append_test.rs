@@ -1956,6 +1956,72 @@ fn buffer_text_source_item_can_build_direct_single_char_step() {
 }
 
 #[test]
+fn buffer_text_source_item_can_build_direct_source_mapped_step() {
+    let source_item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(0),
+                neovm_core::buffer::EmacsBytePos::new(0),
+            ),
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(1),
+                neovm_core::buffer::EmacsBytePos::new(2),
+            ),
+        ),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
+    );
+    let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, Some('\u{00a0}'));
+    let mut byte_idx = 0;
+
+    let step = BufferTextSourceItemStepper::new(0)
+        .item_step_from_source_item(typed_item, &mut byte_idx, 0)
+        .expect("source-mapped item should retain direct source char");
+
+    assert_eq!(byte_idx, 2);
+    assert_eq!(step.source_char().ch(), '\u{00a0}');
+    let (_, source_item) = step.into_parts();
+    match &source_item.kind {
+        DisplayItemKind::SourceMappedText(text) => assert_eq!(&*text.text, "\\ "),
+        other => panic!("expected source-mapped text, got {other:?}"),
+    }
+}
+
+#[test]
+fn buffer_text_source_item_without_source_char_keeps_source_mapped_for_lowering() {
+    let source_item = crate::display_item::DisplayItem::new(
+        crate::display_item::SourceSpan::new(
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(0),
+                neovm_core::buffer::EmacsBytePos::new(0),
+            ),
+            DisplaySourcePosition::buffer(
+                BufferId(1),
+                CharPos0::new(1),
+                neovm_core::buffer::EmacsBytePos::new(1),
+            ),
+        ),
+        RenderFaceRef::Inherit,
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("\\ ")),
+    );
+    let typed_item = BufferTextSourceItem::new_for_test(source_item, 0, 0, None);
+    let mut byte_idx = 0;
+
+    let typed_item = typed_item
+        .try_into_direct_item_step(&mut byte_idx, 0)
+        .expect_err("source-mapped item without source char needs fallback");
+
+    assert_eq!(byte_idx, 0);
+    match &typed_item.item().kind {
+        DisplayItemKind::SourceMappedText(text) => assert_eq!(&*text.text, "\\ "),
+        other => panic!("expected source-mapped text, got {other:?}"),
+    }
+}
+
+#[test]
 fn buffer_text_source_item_keeps_multi_char_runs_for_lowering() {
     let mut eval = Context::new();
     let buf_id = eval

@@ -288,6 +288,7 @@ pub(crate) struct BufferTextSourceItem {
     item: DisplayItem,
     start_byte_idx: usize,
     start_charpos: i64,
+    source_char: Option<char>,
 }
 
 impl BufferTextSourceItemStep {
@@ -313,12 +314,28 @@ impl BufferTextSourceItemStep {
 }
 
 impl BufferTextSourceItem {
-    fn new(item: DisplayItem, start_byte_idx: usize, start_charpos: i64) -> Self {
+    fn new(
+        item: DisplayItem,
+        start_byte_idx: usize,
+        start_charpos: i64,
+        source_char: Option<char>,
+    ) -> Self {
         Self {
             item,
             start_byte_idx,
             start_charpos,
+            source_char,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        item: DisplayItem,
+        start_byte_idx: usize,
+        start_charpos: i64,
+        source_char: Option<char>,
+    ) -> Self {
+        Self::new(item, start_byte_idx, start_charpos, source_char)
     }
 
     fn direct_source_char(&self) -> Option<char> {
@@ -335,6 +352,7 @@ impl BufferTextSourceItem {
             }
             DisplayItemKind::ControlChar { ch } => Some(*ch),
             DisplayItemKind::Glyphless(glyphless) => Some(glyphless.ch),
+            DisplayItemKind::SourceMappedText(_) => self.source_char,
             _ => None,
         }
     }
@@ -504,7 +522,7 @@ impl BufferTextSourceItemStepper {
         }
 
         let item = self.next_item_from_source(source, context, *byte_idx, charpos)?;
-        self.item_step_from_item(item.into_item(), byte_idx, charpos)
+        self.item_step_from_source_item(item, byte_idx, charpos)
     }
 
     pub(crate) fn next_pending_item_step(
@@ -534,8 +552,9 @@ impl BufferTextSourceItemStepper {
             source.reset_to(expected_source_pos);
         }
 
+        let source_char = source.char_at(expected_source_pos);
         let item = source.next_item(context)?;
-        self.validate_source_item(item, byte_idx, charpos)
+        self.validate_source_item(item, byte_idx, charpos, source_char)
     }
 
     #[cfg(test)]
@@ -545,10 +564,8 @@ impl BufferTextSourceItemStepper {
         byte_idx: &mut usize,
         charpos: i64,
     ) -> Option<BufferTextSourceItemStep> {
-        let item = self
-            .validate_source_item(item, *byte_idx, charpos)?
-            .into_item();
-        self.item_step_from_validated_item(item, byte_idx, charpos)
+        let item = self.validate_source_item(item, *byte_idx, charpos, None)?;
+        self.item_step_from_source_item(item, byte_idx, charpos)
     }
 
     pub(crate) fn item_step_from_source_item(
@@ -568,7 +585,11 @@ impl BufferTextSourceItemStepper {
             );
             return None;
         }
-        self.item_step_from_validated_item(item.into_item(), byte_idx, charpos)
+        let item = match item.try_into_direct_item_step(byte_idx, charpos) {
+            Ok(step) => return Some(step),
+            Err(item) => item,
+        };
+        self.item_step_from_validated_item(item, byte_idx, charpos)
     }
 
     fn validate_source_item(
@@ -576,6 +597,7 @@ impl BufferTextSourceItemStepper {
         item: DisplayItem,
         byte_idx: usize,
         charpos: i64,
+        source_char: Option<char>,
     ) -> Option<BufferTextSourceItem> {
         let buffer_byte_pos = match item.span.start {
             DisplaySourcePosition::Buffer { byte_pos, .. } => byte_pos,
@@ -614,15 +636,17 @@ impl BufferTextSourceItemStepper {
             item,
             start_byte_idx,
             start_charpos,
+            source_char,
         ))
     }
 
     fn item_step_from_validated_item(
         &mut self,
-        item: DisplayItem,
+        item: BufferTextSourceItem,
         byte_idx: &mut usize,
         charpos: i64,
     ) -> Option<BufferTextSourceItemStep> {
+        let item = item.into_item();
         let start_byte_idx = match item.span.start {
             DisplaySourcePosition::Buffer { byte_pos, .. } => {
                 byte_pos.get().checked_sub(self.text_start_byte)?

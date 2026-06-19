@@ -3022,26 +3022,6 @@ impl<'rows, 'emit> BufferTextWindowLoopRenderState<'rows, 'emit> {
             };
         }
 
-        let source_item = match source_item.try_into_direct_item_step(self.byte_idx, *self.charpos)
-        {
-            Ok(source_step) => {
-                return self.render_source_item_step_for_context(
-                    BufferTextSourceItemStepRenderRequest {
-                        loop_context,
-                        layout_resolution_context,
-                        source_step,
-                        text,
-                        append_surface,
-                        overlay_context,
-                        active_face_state,
-                        params,
-                    },
-                    buffer,
-                );
-            }
-            Err(source_item) => source_item,
-        };
-
         let Some(source_step) =
             item_stepper.item_step_from_source_item(source_item, self.byte_idx, *self.charpos)
         else {
