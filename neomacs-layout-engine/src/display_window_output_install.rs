@@ -20,7 +20,7 @@ impl<'output> WindowOutputInstallSurface<'output> {
     }
 
     pub(crate) fn begin_text_window_output(&mut self, request: TextWindowOutputBegin) {
-        self.output_builder.window_installer().begin(
+        self.output_builder.begin_output_window(
             request.window_id,
             request.rows,
             request.cols,
@@ -31,7 +31,7 @@ impl<'output> WindowOutputInstallSurface<'output> {
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
-        self.output_builder.window_installer().end();
+        self.output_builder.end_output_window();
     }
 
     pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {

@@ -157,21 +157,17 @@ fn builder_tracks_single_window_single_row() {
 }
 
 #[test]
-fn row_installer_installs_complete_row_metrics_and_cursor() {
+fn output_builder_installs_complete_row_metrics_and_cursor() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     crate::glyph_row_writer::push_char_to_row(&mut row, 'x', 3, 11, 8.0);
 
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 4.0, 80.0, 32.0), true);
-    builder
-        .row_installer()
-        .install_complete_row(0, GlyphRowRole::Text, false, row);
-    builder.row_installer().set_metrics(0, 12.0, 18.0, 13.0);
-    builder
-        .row_installer()
-        .set_cursor(0, 1, CursorStyle::Bar(2.0));
-    builder.row_installer().mark_current_truncated_left();
-    builder.row_installer().finalize(0);
+    builder.install_complete_output_row(0, GlyphRowRole::Text, false, row);
+    builder.set_output_row_metrics(0, 12.0, 18.0, 13.0);
+    builder.set_output_row_cursor(0, 1, CursorStyle::Bar(2.0));
+    builder.mark_current_output_row_truncated_left();
+    builder.finalize_output_row_index(0);
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);

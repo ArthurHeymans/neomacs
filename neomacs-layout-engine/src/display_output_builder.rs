@@ -515,104 +515,6 @@ pub(crate) struct DisplayOutputBuilder {
     no_accept_focus: bool,
 }
 
-pub(crate) struct OutputRowInstaller<'a> {
-    builder: &'a mut DisplayOutputBuilder,
-}
-
-impl OutputRowInstaller<'_> {
-    fn install(&mut self, request: OutputRowLifecycleRequest) {
-        self.builder.install_row_lifecycle(request);
-    }
-
-    pub(crate) fn begin(&mut self, row: usize, role: GlyphRowRole, mode_line: bool) {
-        self.install(OutputRowLifecycleRequest::Begin(OutputRowBeginRequest {
-            row,
-            role,
-            mode_line,
-        }));
-    }
-
-    pub(crate) fn install_complete_row(
-        &mut self,
-        matrix_row: usize,
-        role: GlyphRowRole,
-        mode_line: bool,
-        glyph_row: GlyphRow,
-    ) {
-        self.begin(matrix_row, role, mode_line);
-        self.replace_current_row(glyph_row);
-        self.finalize(self.builder.current_row);
-    }
-
-    pub(crate) fn replace_current_row(&mut self, row: GlyphRow) {
-        self.install(OutputRowLifecycleRequest::ReplaceCurrent { row });
-    }
-
-    pub(crate) fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
-        self.builder.with_current_row_mut(f)
-    }
-
-    pub(crate) fn set_metrics(&mut self, row: usize, pixel_y: f32, height_px: f32, ascent_px: f32) {
-        self.install(OutputRowLifecycleRequest::Metrics {
-            row,
-            metrics: OutputRowMetricsRequest {
-                pixel_y,
-                height_px,
-                ascent_px,
-            },
-        });
-    }
-
-    pub(crate) fn finalize(&mut self, row: usize) {
-        self.install(OutputRowLifecycleRequest::Finalize { row });
-    }
-
-    pub(crate) fn set_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        self.install(OutputRowLifecycleRequest::Cursor { row, col, style });
-    }
-
-    pub(crate) fn mark_current_truncated_left(&mut self) {
-        self.install(OutputRowLifecycleRequest::CurrentDecoration(
-            OutputCurrentRowDecorationRequest::MarkTruncatedLeft,
-        ));
-    }
-}
-
-pub(crate) struct OutputWindowInstaller<'a> {
-    builder: &'a mut DisplayOutputBuilder,
-}
-
-impl OutputWindowInstaller<'_> {
-    fn install(&mut self, request: OutputWindowLifecycleRequest) {
-        self.builder.install_window_lifecycle(request);
-    }
-
-    pub(crate) fn begin(
-        &mut self,
-        window_id: u64,
-        nrows: usize,
-        ncols: usize,
-        pixel_bounds: Rect,
-        text_pixel_bounds: Rect,
-        selected: bool,
-    ) {
-        self.install(OutputWindowLifecycleRequest::Begin(
-            OutputWindowBeginRequest {
-                window_id,
-                nrows,
-                ncols,
-                pixel_bounds,
-                text_pixel_bounds,
-                selected,
-            },
-        ));
-    }
-
-    pub(crate) fn end(&mut self) {
-        self.install(OutputWindowLifecycleRequest::End);
-    }
-}
-
 pub(crate) struct OutputArtifactInstaller<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
@@ -998,7 +900,7 @@ impl DisplayOutputBuilder {
         text_pixel_bounds: Rect,
         selected: bool,
     ) {
-        self.window_installer().begin(
+        self.begin_output_window(
             window_id,
             nrows,
             ncols,
@@ -1010,11 +912,36 @@ impl DisplayOutputBuilder {
 
     #[cfg(test)]
     pub(crate) fn end_window(&mut self) {
-        self.window_installer().end();
+        self.end_output_window();
     }
 
     fn install_window_lifecycle(&mut self, request: OutputWindowLifecycleRequest) {
         request.install(self);
+    }
+
+    pub(crate) fn begin_output_window(
+        &mut self,
+        window_id: u64,
+        nrows: usize,
+        ncols: usize,
+        pixel_bounds: Rect,
+        text_pixel_bounds: Rect,
+        selected: bool,
+    ) {
+        self.install_window_lifecycle(OutputWindowLifecycleRequest::Begin(
+            OutputWindowBeginRequest {
+                window_id,
+                nrows,
+                ncols,
+                pixel_bounds,
+                text_pixel_bounds,
+                selected,
+            },
+        ));
+    }
+
+    pub(crate) fn end_output_window(&mut self) {
+        self.install_window_lifecycle(OutputWindowLifecycleRequest::End);
     }
 
     pub(crate) fn install_window_metadata(
@@ -1028,6 +955,68 @@ impl DisplayOutputBuilder {
         request.install(self);
     }
 
+    pub(crate) fn begin_output_row(&mut self, row: usize, role: GlyphRowRole, mode_line: bool) {
+        self.install_row_lifecycle(OutputRowLifecycleRequest::Begin(OutputRowBeginRequest {
+            row,
+            role,
+            mode_line,
+        }));
+    }
+
+    pub(crate) fn install_complete_output_row(
+        &mut self,
+        matrix_row: usize,
+        role: GlyphRowRole,
+        mode_line: bool,
+        glyph_row: GlyphRow,
+    ) {
+        self.begin_output_row(matrix_row, role, mode_line);
+        self.replace_current_output_row(glyph_row);
+        self.finalize_output_row_index(self.current_row);
+    }
+
+    pub(crate) fn replace_current_output_row(&mut self, row: GlyphRow) {
+        self.install_row_lifecycle(OutputRowLifecycleRequest::ReplaceCurrent { row });
+    }
+
+    pub(crate) fn edit_current_output_row<R>(
+        &mut self,
+        f: impl FnOnce(&mut GlyphRow) -> R,
+    ) -> Option<R> {
+        self.with_current_row_mut(f)
+    }
+
+    pub(crate) fn set_output_row_metrics(
+        &mut self,
+        row: usize,
+        pixel_y: f32,
+        height_px: f32,
+        ascent_px: f32,
+    ) {
+        self.install_row_lifecycle(OutputRowLifecycleRequest::Metrics {
+            row,
+            metrics: OutputRowMetricsRequest {
+                pixel_y,
+                height_px,
+                ascent_px,
+            },
+        });
+    }
+
+    pub(crate) fn finalize_output_row_index(&mut self, row: usize) {
+        self.install_row_lifecycle(OutputRowLifecycleRequest::Finalize { row });
+    }
+
+    pub(crate) fn set_output_row_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
+        self.install_row_lifecycle(OutputRowLifecycleRequest::Cursor { row, col, style });
+    }
+
+    pub(crate) fn mark_current_output_row_truncated_left(&mut self) {
+        self.install_row_lifecycle(OutputRowLifecycleRequest::CurrentDecoration(
+            OutputCurrentRowDecorationRequest::MarkTruncatedLeft,
+        ));
+    }
+
     pub(crate) fn install_row_decoration<D>(
         &mut self,
         request: OutputRowDecorationInstallRequest<D>,
@@ -1037,36 +1026,26 @@ impl DisplayOutputBuilder {
         request.install(self);
     }
 
-    pub(crate) fn row_installer(&mut self) -> OutputRowInstaller<'_> {
-        OutputRowInstaller { builder: self }
-    }
-
-    pub(crate) fn window_installer(&mut self) -> OutputWindowInstaller<'_> {
-        OutputWindowInstaller { builder: self }
-    }
-
     pub(crate) fn artifact_installer(&mut self) -> OutputArtifactInstaller<'_> {
         OutputArtifactInstaller { builder: self }
     }
 
     #[cfg(test)]
     pub(crate) fn begin_row(&mut self, row: usize, role: GlyphRowRole) {
-        self.row_installer()
-            .begin(row, role, matches!(role, GlyphRowRole::ModeLine));
+        self.begin_output_row(row, role, matches!(role, GlyphRowRole::ModeLine));
     }
 
     #[cfg(test)]
     pub(crate) fn end_row(&mut self) {
         let current_row = self.current_row;
-        self.row_installer().finalize(current_row);
+        self.finalize_output_row_index(current_row);
     }
 
     /// Record stored geometry for the currently open row.
     #[cfg(test)]
     pub(crate) fn set_current_row_metrics(&mut self, pixel_y: f32, height_px: f32, ascent_px: f32) {
         let current_row = self.current_row;
-        self.row_installer()
-            .set_metrics(current_row, pixel_y, height_px, ascent_px);
+        self.set_output_row_metrics(current_row, pixel_y, height_px, ascent_px);
     }
 
     fn with_current_row_mut<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
@@ -1142,8 +1121,7 @@ impl DisplayOutputBuilder {
         let pixel_bounds = self.current_window_pixel_bounds();
         let mut row = source.clone();
         row.pixel_y -= pixel_bounds.y;
-        self.row_installer()
-            .install_complete_row(row_index, row.role, row.mode_line, row);
+        self.install_complete_output_row(row_index, row.role, row.mode_line, row);
     }
 
     fn begin_current_row(&mut self, begin: OutputRowBeginRequest) {
@@ -1179,7 +1157,7 @@ impl DisplayOutputBuilder {
         col: u16,
         style: neomacs_display_protocol::frame_glyphs::CursorStyle,
     ) {
-        self.row_installer().set_cursor(row, col, style);
+        self.set_output_row_cursor(row, col, style);
     }
 
     // -----------------------------------------------------------------------

@@ -77,12 +77,7 @@ impl<'a> DisplayRowOutputInstall<'a> {
         row.pixel_y = self.pixel_y - pixel_bounds.y;
         row.height_px = self.height_px;
         row.ascent_px = self.ascent_px;
-        builder.row_installer().install_complete_row(
-            self.display_row_index,
-            row.role,
-            row.mode_line,
-            row,
-        );
+        builder.install_complete_output_row(self.display_row_index, row.role, row.mode_line, row);
     }
 }
 
@@ -290,26 +285,24 @@ impl<'builder> DisplayRowLifecycleInstaller<'builder> {
 
     fn begin_row(&mut self, display_row_index: usize, role: GlyphRowRole, mode_line: bool) {
         self.builder
-            .row_installer()
-            .begin(display_row_index, role, mode_line);
+            .begin_output_row(display_row_index, role, mode_line);
     }
 
     fn set_metrics(&mut self, display_row_index: usize, pixel_y: f32, height: f32, ascent: f32) {
         self.builder
-            .row_installer()
-            .set_metrics(display_row_index, pixel_y, height, ascent);
+            .set_output_row_metrics(display_row_index, pixel_y, height, ascent);
     }
 
     fn finalize_row(&mut self, display_row_index: usize) {
-        self.builder.row_installer().finalize(display_row_index);
+        self.builder.finalize_output_row_index(display_row_index);
     }
 
     fn set_cursor(&mut self, row: usize, col: u16, style: CursorStyle) {
-        self.builder.row_installer().set_cursor(row, col, style);
+        self.builder.set_output_row_cursor(row, col, style);
     }
 
     fn mark_current_truncated_left(&mut self) {
-        self.builder.row_installer().mark_current_truncated_left();
+        self.builder.mark_current_output_row_truncated_left();
     }
 }
 
@@ -699,7 +692,7 @@ impl<'builder> DisplayRowCurrentRowInstaller<'builder> {
     }
 
     fn edit_current_row<R>(&mut self, f: impl FnOnce(&mut GlyphRow) -> R) -> Option<R> {
-        self.builder.row_installer().edit_current_row(f)
+        self.builder.edit_current_output_row(f)
     }
 
     fn current_row_snapshot(&self) -> Option<GlyphRow> {
