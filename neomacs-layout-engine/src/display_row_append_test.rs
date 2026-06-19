@@ -2459,8 +2459,12 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
     );
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(geometry.current_row_marker(), 8.0);
+    let mut byte_idx = 12;
     let mut x = 40.0;
     let mut charpos = 4;
+    let mut col = 6;
+    let mut progress =
+        BufferTextWindowProgressState::new(&mut byte_idx, &mut charpos, &mut x, &mut col);
 
     action.apply_before_row_transition(
         &geometry,
@@ -2469,12 +2473,13 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
         &mut box_face,
         &mut context.output_emitter,
         2.0,
-        &mut x,
-        &mut charpos,
+        &mut progress,
     );
 
     assert_eq!(x, 2.0);
     assert_eq!(charpos, 5);
+    assert_eq!(byte_idx, 12);
+    assert_eq!(col, 6);
     assert_eq!(trailing_whitespace.highlight_start_x(&geometry), None);
     assert_eq!(row_extend.value_on(&geometry), None);
     assert_eq!(box_face.row(), geometry.current_row_marker());

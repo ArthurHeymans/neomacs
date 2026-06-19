@@ -5565,8 +5565,7 @@ impl<'a> BufferTextLineBreakRenderRequest<'a> {
             box_face,
             source_render.output_emitter(),
             context.content_x,
-            progress.row.x,
-            progress.charpos,
+            &mut progress,
         );
 
         let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
@@ -5691,15 +5690,14 @@ impl BufferTextLineBreakSourceAction {
         box_face: &mut BoxFaceRowState,
         output_emitter: &mut WindowOutputEmitter,
         content_x: f32,
-        x: &mut f32,
-        charpos: &mut i64,
+        progress: &mut BufferTextWindowProgressState<'_>,
     ) {
         trailing_whitespace.reset_after_row_transition();
         row_extend.clear();
         box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
-        *charpos = self.next_charpos();
-        *x = content_x;
-        output_emitter.note_display_buffer_pos(LispCharPos1::new(*charpos));
+        *progress.charpos = self.next_charpos();
+        *progress.row.x = content_x;
+        output_emitter.note_display_buffer_pos(LispCharPos1::new(progress.charpos()));
     }
 
     pub(crate) fn apply_after_row_transition(
