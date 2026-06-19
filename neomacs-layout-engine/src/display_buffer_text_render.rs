@@ -5,23 +5,26 @@ use crate::display_buffer_text_item_append::{
     BufferTextSourceCharPreparationState, BufferTextSourceCharPreparedAppend,
     BufferTextSourceDisplayItemPreparationRequest, BufferTextSpecialSourceCharPreparedAppend,
 };
-use crate::display_buffer_text_source::BufferTextSourceStepChar;
+use crate::display_buffer_text_source::{BufferTextSourceItem, BufferTextSourceStepChar};
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
 };
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
-use crate::display_item::{DisplayItem, RenderFaceRef};
+use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::classify_display_property;
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFallbackMetrics, DisplayRowMeasurementPolicy,
 };
 use crate::display_row_append_context::{
-    DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendSurface,
+    DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
+    DisplayRowAppendSurface,
 };
-use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
+use crate::display_row_builder::{
+    DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowPosition,
+};
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
     DisplayRowLimit, DisplayRowScopedValue, DisplayRowTextPosition, DisplayRowVisibilityLimit,
@@ -3048,6 +3051,39 @@ pub(crate) struct BufferTextSourceCharRenderRequestState<'a, 'emit> {
     pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
 }
 
+pub(crate) struct BufferTextPlainRunRenderRequest<'a> {
+    source_item: &'a BufferTextSourceItem,
+    context: BufferTextPlainRunRenderContext<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BufferTextPlainRunRenderContext<'a> {
+    pub(crate) buffer_id: BufferId,
+    pub(crate) append_surface: &'a DisplayRowAppendSurface,
+    pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    pub(crate) active_face_state: &'a DisplayRowActiveFaceState,
+    pub(crate) params: &'a WindowParams,
+    pub(crate) char_h: f32,
+    pub(crate) point_charpos: i64,
+}
+
+pub(crate) struct BufferTextPlainRunRenderState<'emit> {
+    pub(crate) source_render: TextRowSourceRenderState<'emit>,
+    pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
+    pub(crate) byte_idx: &'emit mut usize,
+    pub(crate) charpos: &'emit mut i64,
+    pub(crate) x: &'emit mut f32,
+    pub(crate) col: &'emit mut usize,
+    pub(crate) trailing_whitespace: &'emit mut TrailingWhitespaceRenderState,
+    pub(crate) word_wrap: &'emit mut WordWrapRenderState,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferTextPlainRunRenderOutcome {
+    Rendered,
+    Stop,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum BufferTextSourceCharOverflowAction {
     Fits,
@@ -3126,6 +3162,111 @@ pub(crate) enum BufferTextSourceCharRenderOutcome {
     Rendered,
     ContinueBufferWalk,
     Stop,
+}
+
+impl<'a> BufferTextPlainRunRenderRequest<'a> {
+    pub(crate) fn new(
+        source_item: &'a BufferTextSourceItem,
+        context: BufferTextPlainRunRenderContext<'a>,
+    ) -> Self {
+        Self {
+            source_item,
+            context,
+        }
+    }
+
+    pub(crate) fn render_if_eligible_and_apply<B: LayoutBufferView + ?Sized>(
+        self,
+        buffer: &B,
+        state: BufferTextPlainRunRenderState<'_>,
+    ) -> Option<BufferTextPlainRunRenderOutcome> {
+        let BufferTextPlainRunRenderState {
+            source_render,
+            row_geometry,
+            byte_idx,
+            charpos,
+            x,
+            col,
+            trailing_whitespace,
+            word_wrap,
+        } = state;
+        let mut source_render = source_render;
+        let context = self.context;
+        let item = self.source_item.item();
+        if item.face != RenderFaceRef::Inherit
+            || item.layout.height.is_some()
+            || item.layout.raise.is_some()
+            || context.overlay_context.is_enabled()
+            || context.params.word_wrap
+            || context.params.wrap_mode != LineWrapMode::Truncate
+        {
+            return None;
+        }
+
+        let DisplayItemKind::TextRun(run) = &item.kind else {
+            return None;
+        };
+        let text = run.text.as_ref();
+        if text.is_empty() || text.chars().any(char::is_whitespace) {
+            return None;
+        }
+
+        let char_count = i64::try_from(text.chars().count()).ok()?;
+        if char_count <= 1 {
+            return None;
+        }
+        let start_charpos = self.source_item.start_charpos();
+        let end_charpos = start_charpos.checked_add(char_count)?;
+        if context.point_charpos >= start_charpos && context.point_charpos < end_charpos {
+            return None;
+        }
+
+        let mut direct_item = item.clone();
+        direct_item.face = RenderFaceRef::FaceId(context.active_face_state.face_id());
+        let append_position = DisplayRowPosition {
+            x_px: *x,
+            col: *col,
+        };
+        let row_append_context = BufferTextRowAppendContext::new(
+            buffer,
+            context.buffer_id,
+            context.append_surface,
+            context.active_face_state,
+            0.0,
+            context.char_h,
+        );
+        let measured_width = row_append_context.measure_source_display_item_width_to_text_row(
+            row_geometry,
+            &mut source_render.measure_state(),
+            &direct_item,
+            append_position,
+            DisplayRowAppendKind::SourceText,
+        )?;
+        if append_position.x_px + measured_width > context.append_surface.right_edge() {
+            return None;
+        }
+
+        let progress = row_append_context.append_source_display_item_naturally_to_text_row(
+            row_geometry,
+            &mut source_render,
+            direct_item,
+            append_position,
+            DisplayRowAppendKind::SourceText,
+        )?;
+        if progress.status != DisplayRowAppendStatus::Complete {
+            return Some(BufferTextPlainRunRenderOutcome::Stop);
+        }
+
+        trailing_whitespace.reset_after_row_transition();
+        if let Some(last_char) = text.chars().last() {
+            word_wrap.allow_after_current_char(last_char);
+        }
+        *byte_idx = self.source_item.start_byte_idx() + text.len();
+        *charpos = end_charpos;
+        *x = progress.end.x_px;
+        *col = progress.end.col;
+        Some(BufferTextPlainRunRenderOutcome::Rendered)
+    }
 }
 
 pub(crate) struct BufferTextSourceCharRenderState<'a> {

@@ -492,6 +492,7 @@ impl BufferTextSourceItemStepper {
         self.validate_source_item(item, byte_idx, charpos)
     }
 
+    #[cfg(test)]
     pub(crate) fn item_step_from_item(
         &mut self,
         item: DisplayItem,
@@ -502,6 +503,26 @@ impl BufferTextSourceItemStepper {
             .validate_source_item(item, *byte_idx, charpos)?
             .into_item();
         self.item_step_from_validated_item(item, byte_idx, charpos)
+    }
+
+    pub(crate) fn item_step_from_source_item(
+        &mut self,
+        item: BufferTextSourceItem,
+        byte_idx: &mut usize,
+        charpos: i64,
+    ) -> Option<BufferTextSourceItemStep> {
+        if item.start_byte_idx() != *byte_idx || item.start_charpos() != charpos {
+            tracing::error!(
+                "BufferTextSourceItemStepper: validated source item at byte {} charpos {} \
+                 did not match buffer walk byte {} charpos {}",
+                item.start_byte_idx(),
+                item.start_charpos(),
+                *byte_idx,
+                charpos
+            );
+            return None;
+        }
+        self.item_step_from_validated_item(item.into_item(), byte_idx, charpos)
     }
 
     fn validate_source_item(
