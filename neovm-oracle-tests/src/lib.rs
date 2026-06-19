@@ -2025,6 +2025,7 @@ mod divergence_combo_complex520;
 mod divergence_combo_complex521;
 mod divergence_combo_complex522;
 mod divergence_combo_complex523;
+mod divergence_combo_complex524;
 mod divergence_combo_complex53;
 mod divergence_combo_complex54;
 mod divergence_combo_complex55;
