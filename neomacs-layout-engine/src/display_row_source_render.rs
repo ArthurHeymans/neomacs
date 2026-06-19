@@ -24,9 +24,8 @@ use crate::font_metrics::FontMetricsService;
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
-    TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextWindowRowDecorationRequest,
-    WindowOutputEmitter, emit_text_matrix_row_transition, finish_and_end_text_matrix_row_output,
-    install_text_window_row_decoration,
+    TextMatrixRowGeometryTransition, TextMatrixRowMetrics, TextMatrixRowTransition,
+    TextWindowRowDecorationRequest, TextWindowRowLifecycleInstaller, WindowOutputEmitter,
 };
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -70,24 +69,30 @@ impl<'a> TextRowOutputRenderState<'a> {
     }
 
     pub(crate) fn finish_and_end_text_matrix_row_output(self, metrics: TextMatrixRowMetrics) {
-        finish_and_end_text_matrix_row_output(
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
-            metrics,
-        );
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .finish_and_end_row(metrics);
     }
 
     pub(crate) fn emit_text_matrix_row_transition(
         self,
         transition: TextMatrixRowGeometryTransition,
     ) {
-        emit_text_matrix_row_transition(
-            self.builder,
-            self.output_emitter,
-            self.evaluator,
-            transition,
-        );
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .transition(transition);
+    }
+
+    pub(crate) fn emit_text_matrix_row_transition_with_limit(
+        self,
+        transition: TextMatrixRowGeometryTransition,
+        max_rows: usize,
+    ) -> TextMatrixRowTransition {
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .transition_with_limit(transition, max_rows)
+    }
+
+    pub(crate) fn install_row_decoration(self, request: TextWindowRowDecorationRequest) {
+        TextWindowRowLifecycleInstaller::new(self.builder, self.output_emitter, self.evaluator)
+            .install_row_decoration(request);
     }
 }
 
@@ -269,10 +274,8 @@ impl<'a> TextRowSourceRenderState<'a> {
     }
 
     pub(crate) fn mark_current_text_row_truncated_left(&mut self) {
-        install_text_window_row_decoration(
-            self.output_render.builder,
-            TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft,
-        );
+        self.output_render()
+            .install_row_decoration(TextWindowRowDecorationRequest::MarkCurrentTruncatedLeft);
     }
 
     pub(crate) fn with_font_metrics_and_display_host<R>(

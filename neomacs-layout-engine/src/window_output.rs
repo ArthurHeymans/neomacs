@@ -616,6 +616,10 @@ impl<'a> TextWindowRowLifecycleInstaller<'a> {
             _ => unreachable!("transition with limit returns a transition outcome"),
         }
     }
+
+    pub(crate) fn install_row_decoration(&mut self, request: TextWindowRowDecorationRequest) {
+        request.install(self.output.builder);
+    }
 }
 
 pub(crate) fn begin_text_window_matrix(
@@ -717,6 +721,7 @@ pub(crate) fn finish_pending_text_window_row(
         .finish_pending_row(request)
 }
 
+#[cfg(test)]
 pub(crate) fn finish_and_end_text_matrix_row_output(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -727,6 +732,7 @@ pub(crate) fn finish_and_end_text_matrix_row_output(
         .finish_and_end_row(metrics);
 }
 
+#[cfg(test)]
 pub(crate) fn emit_text_matrix_row_transition(
     builder: &mut GlyphMatrixBuilder,
     output_emitter: &mut WindowOutputEmitter,
@@ -1039,6 +1045,7 @@ pub(crate) fn install_text_window_body_output(
     TextWindowOutputInstaller::new(builder, output_emitter).install_body_output(request)
 }
 
+#[cfg(test)]
 pub(crate) fn install_text_window_row_decoration(
     builder: &mut GlyphMatrixBuilder,
     request: TextWindowRowDecorationRequest,
