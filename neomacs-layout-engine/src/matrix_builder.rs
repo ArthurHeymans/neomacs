@@ -220,7 +220,6 @@ enum MatrixFrameStateInstallRequest {
     Identity(MatrixFrameIdentityInstallRequest),
     BackgroundColor(Color),
     FontPixelSize(f32),
-    Faces(HashMap<u32, Face>),
     Face {
         id: u32,
         face: Face,
@@ -248,7 +247,6 @@ impl MatrixFrameStateInstallRequest {
             }
             Self::BackgroundColor(color) => builder.background_color = color,
             Self::FontPixelSize(size) => builder.font_pixel_size = size,
-            Self::Faces(faces) => builder.faces = faces,
             Self::Face { id, face } => {
                 builder.faces.insert(id, face);
             }
@@ -544,10 +542,6 @@ impl MatrixArtifactInstaller<'_> {
 
     pub(crate) fn set_font_pixel_size(&mut self, size: f32) {
         self.install_frame_state(MatrixFrameStateInstallRequest::FontPixelSize(size));
-    }
-
-    pub(crate) fn set_faces(&mut self, faces: HashMap<u32, Face>) {
-        self.install_frame_state(MatrixFrameStateInstallRequest::Faces(faces));
     }
 
     pub(crate) fn set_face(&mut self, id: u32, face: Face) {

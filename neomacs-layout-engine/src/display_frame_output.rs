@@ -7,6 +7,7 @@ use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputRenderState;
+use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     FrameGlyphBuffer, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
     WindowTransitionKind,
@@ -68,7 +69,7 @@ impl<'a> FrameOutputRenderState<'a> {
         self.builder
     }
 
-    fn set_frame_identity(&mut self, identity: FrameOutputIdentity) {
+    pub(crate) fn set_frame_identity(&mut self, identity: FrameOutputIdentity) {
         self.builder.artifact_installer().set_frame_identity(
             identity.frame_id,
             identity.parent_id,
@@ -83,7 +84,7 @@ impl<'a> FrameOutputRenderState<'a> {
         );
     }
 
-    fn set_background_color(&mut self, color: Color) {
+    pub(crate) fn set_background_color(&mut self, color: Color) {
         self.builder
             .artifact_installer()
             .set_background_color(color);
@@ -91,6 +92,10 @@ impl<'a> FrameOutputRenderState<'a> {
 
     fn set_font_pixel_size(&mut self, size: f32) {
         self.builder.artifact_installer().set_font_pixel_size(size);
+    }
+
+    pub(crate) fn install_face(&mut self, face: &Face) {
+        DisplayRowFaceInstaller::new(self.builder).install_face(face);
     }
 
     fn add_background(&mut self, bounds: Rect, color: Color) {
