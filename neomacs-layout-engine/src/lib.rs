@@ -49,6 +49,7 @@ pub mod display_space;
 pub mod display_spec;
 pub mod display_status_line;
 pub(crate) mod display_text_run_measurement;
+pub(crate) mod display_window_output_install;
 pub mod engine;
 pub mod font_loader;
 pub mod font_match;

@@ -34,6 +34,7 @@ use crate::display_row_special_glyphs::{
 };
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use crate::display_window_output_install::{WindowOutputInstallSurface, WindowOutputReadSurface};
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -265,23 +266,13 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     }
 
     pub(crate) fn begin_text_window_output(&mut self, request: TextWindowOutputBegin) {
-        self.output_builder.window_installer().begin(
-            request.window_id,
-            request.rows,
-            request.cols,
-            request.bounds,
-            request.text_bounds,
-            request.selected,
-        );
+        WindowOutputInstallSurface::from_output_builder(self.output_builder)
+            .begin_text_window_output(request);
     }
 
     pub(crate) fn record_display_range(&mut self, range: TextWindowDisplayRange) {
-        if let Some(info) = self.output_builder.window_infos_last_mut()
-            && info.window_id == range.window_id as i64
-        {
-            info.window_start = range.window_start.as_i64();
-            info.window_end = range.window_end.as_i64();
-        }
+        WindowOutputInstallSurface::from_output_builder(self.output_builder)
+            .record_display_range(range);
     }
 
     fn record_redisplay_positions(
@@ -331,21 +322,17 @@ impl<'output_builder> TextWindowOutputInstallSurface<'output_builder> {
     }
 
     pub(crate) fn close_text_window_output(&mut self) {
-        self.output_builder.window_installer().end();
+        WindowOutputInstallSurface::from_output_builder(self.output_builder)
+            .close_text_window_output();
     }
 
     pub(crate) fn capture_retry_checkpoint(&self) -> TextWindowOutputRetryCheckpoint {
-        TextWindowOutputRetryCheckpoint {
-            transition_hints_len: self.output_builder.transition_hints().len(),
-            effect_hints_len: self.output_builder.effect_hints().len(),
-        }
+        WindowOutputReadSurface::from_output_builder(self.output_builder).capture_retry_checkpoint()
     }
 
     pub(crate) fn restore_retry_checkpoint(&mut self, checkpoint: TextWindowOutputRetryCheckpoint) {
-        self.output_builder
-            .truncate_transition_hints(checkpoint.transition_hints_len);
-        self.output_builder
-            .truncate_effect_hints(checkpoint.effect_hints_len);
+        WindowOutputInstallSurface::from_output_builder(self.output_builder)
+            .restore_retry_checkpoint(checkpoint);
     }
 
     fn display_text_row_metrics(
@@ -943,8 +930,8 @@ pub(crate) struct TextWindowArtifactOutputSurface<'output_builder> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextWindowOutputRetryCheckpoint {
-    transition_hints_len: usize,
-    effect_hints_len: usize,
+    pub(crate) transition_hints_len: usize,
+    pub(crate) effect_hints_len: usize,
 }
 
 impl<'output_builder, 'output> TextWindowRowOutputSurface<'output_builder, 'output> {
