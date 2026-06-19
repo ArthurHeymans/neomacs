@@ -1275,7 +1275,11 @@ impl<'emit> BufferTextWindowBodyOutputState<'emit> {
         output_emitter: &'output mut WindowOutputEmitter,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
-            TextRowOutputRenderState::new(self.builder, output_emitter, self.evaluator),
+            TextRowOutputRenderState::from_live_output(TextWindowLiveOutputState::new(
+                self.builder,
+                output_emitter,
+                self.evaluator,
+            )),
             self.font_metrics,
             self.face_resolver,
         )

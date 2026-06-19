@@ -27,6 +27,7 @@ use crate::display_source_resolver::{
     resolve_display_string_base_face,
 };
 use crate::font_metrics::FontMetricsService;
+#[cfg(test)]
 use crate::matrix_builder::GlyphMatrixBuilder;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::window_output::{
@@ -374,14 +375,21 @@ where
 }
 
 impl<'a> TextRowOutputRenderState<'a> {
+    pub(crate) fn from_live_output(output: TextWindowLiveOutputState<'a>) -> Self {
+        Self { output }
+    }
+
+    #[cfg(test)]
     pub(crate) fn new(
         builder: &'a mut GlyphMatrixBuilder,
         output_emitter: &'a mut WindowOutputEmitter,
         evaluator: &'a mut Context,
     ) -> Self {
-        Self {
-            output: TextWindowLiveOutputState::new(builder, output_emitter, evaluator),
-        }
+        Self::from_live_output(TextWindowLiveOutputState::new(
+            builder,
+            output_emitter,
+            evaluator,
+        ))
     }
 
     pub(crate) fn reborrow(&mut self) -> TextRowOutputRenderState<'_> {
