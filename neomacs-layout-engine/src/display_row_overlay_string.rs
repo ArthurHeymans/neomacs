@@ -424,7 +424,7 @@ fn capture_overlay_string_cursor_at_slot(
     slot: &DisplayRowGlyphSlot,
     cursor_info: &mut CursorCaptureState,
     y: f32,
-    matrix_row: usize,
+    display_row_offset: usize,
     visual_state: CapturedCursorVisualState,
 ) {
     let Some(char_idx) = root_lisp_position_char(&slot.source) else {
@@ -437,7 +437,7 @@ fn capture_overlay_string_cursor_at_slot(
         slot.x_px,
         y,
         slot.col,
-        matrix_row,
+        display_row_offset,
         visual_state,
         CapturedCursorSlotWidth::Explicit(slot.width_px),
     );
@@ -451,7 +451,7 @@ fn capture_overlay_string_cursor(
     x: f32,
     y: f32,
     col: usize,
-    matrix_row: usize,
+    display_row_offset: usize,
     visual_state: CapturedCursorVisualState,
     slot_width: CapturedCursorSlotWidth,
 ) {
@@ -474,7 +474,7 @@ fn capture_overlay_string_cursor(
             y,
             byte_idx: 0,
             col,
-            matrix_row,
+            display_row_offset,
             slot_width,
             stretch_like: false,
         },

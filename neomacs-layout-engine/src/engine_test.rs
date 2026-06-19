@@ -438,7 +438,7 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
         bg: Color::from_pixel(0x00112233),
         byte_idx: 5,
         col: 3,
-        matrix_row: 2,
+        display_row_offset: 2,
         slot_width: None,
         stretch_like: false,
         glyph_row_resolved: false,
@@ -782,7 +782,7 @@ fn captured_cursor_info_builds_from_active_face_state() {
             y: 34.0,
             byte_idx: 5,
             col: 3,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::FaceChar,
             stretch_like: false,
         },
@@ -796,7 +796,7 @@ fn captured_cursor_info_builds_from_active_face_state() {
     assert_eq!(cursor.bg, Color::from_pixel(0x00445566));
     assert_eq!(cursor.byte_idx, 5);
     assert_eq!(cursor.col, 3);
-    assert_eq!(cursor.matrix_row, 2);
+    assert_eq!(cursor.display_row_offset, 2);
     assert_eq!(cursor.slot_width, Some(7.5));
     assert!(!cursor.stretch_like);
 }
@@ -835,7 +835,7 @@ fn captured_cursor_info_builds_display_box_from_active_face_state() {
             y: 34.0,
             byte_idx: 5,
             col: 3,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::Explicit(42.0),
             stretch_like: true,
         },
@@ -851,7 +851,7 @@ fn captured_cursor_info_builds_display_box_from_active_face_state() {
     assert_eq!(cursor.bg, Color::from_pixel(0x00445566));
     assert_eq!(cursor.byte_idx, 5);
     assert_eq!(cursor.col, 3);
-    assert_eq!(cursor.matrix_row, 2);
+    assert_eq!(cursor.display_row_offset, 2);
     assert_eq!(cursor.slot_width, Some(42.0));
     assert!(cursor.stretch_like);
 }
@@ -890,7 +890,7 @@ fn captured_cursor_info_builds_line_break_from_active_face_state() {
             y: 34.0,
             byte_idx: 5,
             col: 3,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::FaceChar,
             stretch_like: false,
         },
@@ -905,7 +905,7 @@ fn captured_cursor_info_builds_line_break_from_active_face_state() {
     assert_eq!(cursor.bg, Color::from_pixel(0x00445566));
     assert_eq!(cursor.byte_idx, 5);
     assert_eq!(cursor.col, 3);
-    assert_eq!(cursor.matrix_row, 2);
+    assert_eq!(cursor.display_row_offset, 2);
     assert_eq!(cursor.slot_width, Some(7.5));
     assert!(!cursor.stretch_like);
 }
@@ -924,7 +924,7 @@ fn captured_cursor_info_builds_from_visual_state() {
             y: 34.0,
             byte_idx: 5,
             col: 3,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::Explicit(18.0),
             stretch_like: true,
         },
@@ -938,7 +938,7 @@ fn captured_cursor_info_builds_from_visual_state() {
     assert_eq!(cursor.bg, Color::from_pixel(0x00112233));
     assert_eq!(cursor.byte_idx, 5);
     assert_eq!(cursor.col, 3);
-    assert_eq!(cursor.matrix_row, 2);
+    assert_eq!(cursor.display_row_offset, 2);
     assert_eq!(cursor.slot_width, Some(18.0));
     assert!(cursor.stretch_like);
 }
@@ -957,7 +957,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
             y: 34.0,
             byte_idx: 5,
             col: 3,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::Explicit(18.0),
             stretch_like: true,
         },
@@ -1058,7 +1058,7 @@ fn captured_cursor_info_resolves_explicit_slot_width_before_style_width() {
             y: 34.0,
             byte_idx: 0,
             col: 1,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::Explicit(18.0),
             stretch_like: true,
         },
@@ -1085,7 +1085,7 @@ fn captured_cursor_info_resolves_missing_slot_width_from_style_width() {
             y: 34.0,
             byte_idx: 0,
             col: 1,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::Explicit(18.0),
             stretch_like: true,
         },
@@ -1113,7 +1113,7 @@ fn captured_cursor_info_builds_logical_cursor_position() {
             y: 34.0,
             byte_idx: 5,
             col: 3,
-            matrix_row: 2,
+            display_row_offset: 2,
             slot_width: CapturedCursorSlotWidth::Explicit(18.0),
             stretch_like: true,
         },
@@ -1166,7 +1166,7 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
             y: 20.0,
             byte_idx: 0,
             col: 3,
-            matrix_row: 0,
+            display_row_offset: 0,
             slot_width: CapturedCursorSlotWidth::Explicit(8.0),
             stretch_like: false,
         },

@@ -23,7 +23,7 @@ pub(crate) struct CapturedCursorInfo {
     pub(crate) bg: Color,
     pub(crate) byte_idx: usize,
     pub(crate) col: usize,
-    pub(crate) matrix_row: usize,
+    pub(crate) display_row_offset: usize,
     pub(crate) slot_width: Option<f32>,
     pub(crate) stretch_like: bool,
     pub(crate) glyph_row_resolved: bool,
@@ -57,7 +57,7 @@ pub(crate) struct CapturedCursorPlacement {
     pub(crate) y: f32,
     pub(crate) byte_idx: usize,
     pub(crate) col: usize,
-    pub(crate) matrix_row: usize,
+    pub(crate) display_row_offset: usize,
     pub(crate) slot_width: CapturedCursorSlotWidth,
     pub(crate) stretch_like: bool,
 }
@@ -238,7 +238,7 @@ impl CapturedCursorPlacement {
             y: position.y,
             byte_idx: position.byte_idx,
             col: position.col,
-            matrix_row: position.row,
+            display_row_offset: position.row,
             slot_width,
             stretch_like,
         }
@@ -298,7 +298,7 @@ impl CapturedCursorInfo {
         WindowCursorPos {
             x: (self.x - text_area_left).round() as i64,
             y: (row_metric.pixel_y - window_top).round() as i64,
-            row: display_text_row_base as i64 + self.matrix_row as i64,
+            row: display_text_row_base as i64 + self.display_row_offset as i64,
             col: self.col as i64,
         }
     }
@@ -337,7 +337,7 @@ impl CapturedCursorInfo {
             bg: visual_state.background,
             byte_idx: placement.byte_idx,
             col: placement.col,
-            matrix_row: placement.matrix_row,
+            display_row_offset: placement.display_row_offset,
             slot_width: Some(placement.slot_width.resolve(visual_state.face_width)),
             stretch_like: placement.stretch_like,
             glyph_row_resolved: false,
@@ -766,7 +766,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
     ) -> CapturedTextWindowCursorPublishOutcome {
         let row_metric = row_metrics_for_cursor(
             row_metrics,
-            self.display_text_row_base + cursor.matrix_row,
+            self.display_text_row_base + cursor.display_row_offset,
             fallback_row_metric,
         );
         output.set_logical_cursor(cursor.logical_cursor_position(
